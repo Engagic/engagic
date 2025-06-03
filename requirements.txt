@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+requests
+pytesseract
+pdf2image
+PyPDF2
+anthropic
+Pillow
+
