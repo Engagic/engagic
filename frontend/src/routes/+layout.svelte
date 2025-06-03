@@ -7,7 +7,7 @@
     import { afterNavigate } from "$app/navigation";
 
     import { device } from "$lib/device";
-    import currentTheme from "$lib/state/theme";
+    import currentTheme from "$lib/state/theme.ts";
 
     import Sidebar from "$components/sidebar/Sidebar.svelte";
     import DialogHolder from "$components/dialog/DialogHolder.svelte";
