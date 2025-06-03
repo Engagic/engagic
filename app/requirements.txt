@@ -6,4 +6,5 @@ pdf2image
 PyPDF2
 anthropic
 Pillow
+nltk
 
