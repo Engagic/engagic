@@ -1,6 +1,7 @@
 <script lang="ts">
     import { tick } from "svelte";
     import { browser } from "$app/environment";
+    import { ApiService } from "$lib/api";
 
     import SearchButton from "$components/agenda/buttons/SearchButton.svelte";
     import ClearButton from "$components/agenda/buttons/ClearButton.svelte";
@@ -14,7 +15,7 @@
 
     let searchInput: HTMLInputElement;
     let searchQuery = $state("");
-    let selectedCity = $state("palo-alto");
+    let selectedCity = $state("cityofpaloalto");
     let searchMode = $state("recent"); // recent, city, url
 
     let isFocused = $state(false);
@@ -29,11 +30,41 @@
         isLoading = true;
         
         try {
-            // Mock API call for now
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            console.log("Processing agenda for:", searchQuery, selectedCity, searchMode);
+            if (searchMode === "url") {
+                // For URL mode, open the PDF directly
+                if (searchQuery.includes("primegov.com") || searchQuery.includes(".pdf")) {
+                    window.open(searchQuery, '_blank');
+                } else {
+                    throw new Error("Please enter a valid PDF URL");
+                }
+            } else {
+                // For city/recent mode, fetch meetings and optionally filter
+                const citySlug = selectedCity === "custom" ? "cityofpaloalto" : selectedCity;
+                const meetings = await ApiService.getMeetings(citySlug);
+                
+                if (meetings.length > 0) {
+                    // If there's a search query, try to find matching meeting
+                    if (searchQuery.trim()) {
+                        const matchingMeeting = meetings.find(meeting => 
+                            meeting.title.toLowerCase().includes(searchQuery.toLowerCase())
+                        );
+                        if (matchingMeeting) {
+                            window.open(matchingMeeting.packet_url, '_blank');
+                        } else {
+                            // Open the most recent meeting if no match found
+                            window.open(meetings[0].packet_url, '_blank');
+                        }
+                    } else {
+                        // Open most recent meeting
+                        window.open(meetings[0].packet_url, '_blank');
+                    }
+                } else {
+                    throw new Error("No meetings found for the selected city");
+                }
+            }
         } catch (error) {
             console.error("Error processing agenda:", error);
+            alert(error instanceof Error ? error.message : "Failed to process agenda");
         } finally {
             isLoading = false;
         }
@@ -56,7 +87,7 @@
     };
 
     const cityOptions = [
-        { value: "palo-alto", label: "Palo Alto" },
+        { value: "cityofpaloalto", label: "Palo Alto" },
         { value: "mountain-view", label: "Mountain View" },
         { value: "san-francisco", label: "San Francisco" },
         { value: "custom", label: "Custom URL" }
