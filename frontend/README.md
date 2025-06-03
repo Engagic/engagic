@@ -1,0 +1,1 @@
+This frontend code is, for now, completely ripped off from cobalt dot tools. Here is [their license](https://github.com/imputnet/cobalt/blob/main/web/LICENSE) and, to abide by their terms this is for now being released under the same [CC-BY-NC-SA-4.0](https://github.com/engagic/engagic/blob/main/engagic-frontend/LICENSE)
