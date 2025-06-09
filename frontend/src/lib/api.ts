@@ -21,7 +21,7 @@ const API_BASE_URL = 'http://165.232.158.241:8000';
 export class ApiService {
     static async lookupZipcode(zipcode: string): Promise<{zipcode: string, city: string, city_slug: string, state: string, county: string}> {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/zipcode-lookup/${encodeURIComponent(zipcode)}`);
+            const response = await fetch(`${API_BASE_URL}/api/zipcode-lookup/${(zipcode)}`);
             
             if (!response.ok) {
                 throw new Error(`Zipcode lookup failed: ${response.status}`);
@@ -34,9 +34,9 @@ export class ApiService {
         }
     }
 
-    static async getMeetings(city: string): Promise<Meeting[]> {
+    static async getMeetings(city_slug: string): Promise<Meeting[]> {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/meetings?city=${encodeURIComponent(city)}`);
+            const response = await fetch(`${API_BASE_URL}/api/meetings?city=${(city_slug)}`);
             
             if (!response.ok) {
                 throw new Error(`API request failed: ${response.status}`);
