@@ -368,7 +368,7 @@ class MeetingDatabase:
                     # Meeting already exists, skip
                     pass
             
-            return cursor.lastrowid
+            return cursor.lastrowid # type: ignore
 
     def get_all_zipcode_entries(self) -> List[Dict[str, Any]]:
         """Get all zipcode entries"""

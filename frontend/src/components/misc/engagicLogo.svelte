@@ -7,7 +7,7 @@
     };
 </script>
 
-<div id="engagic-logo" onclick={startAnimation}>
+<div id="engagic-logo" onclick={startAnimation} onkeydown={(e) => e.key === 'Enter' && startAnimation()} role="button" tabindex="0">
     <div class="logo-container" class:animated>
         <div class="civic-icon">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
