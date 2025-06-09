@@ -122,7 +122,7 @@ class MeetingDatabase:
 
     def store_meeting_summary(
         self, meeting_data: Dict[str, Any], summary: str, processing_time: float, vendor: str
-    ) -> int:
+    ) -> Optional[int]:
         """Store a new meeting summary in the database"""
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -378,7 +378,7 @@ class MeetingDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str = "primegov") -> int:
+    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str = "primegov") -> Optional[int]:
         """Store meeting data in database"""
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -388,7 +388,6 @@ class MeetingDatabase:
                 (
                     vendor,
                     meeting_data["city_slug"],
-                    meeting_data.get("city_name"),
                     meeting_data.get("meeting_name"),
                     meeting_data.get("packet_url"),
                     meeting_data.get("meeting_date"),
@@ -411,12 +410,12 @@ CITY_ZIPCODE_MAPPING = {
 }
 
 
-def get_city_info(city_slug: str) -> Dict[str, str]:
+def get_city_info(city_slug: str) -> Dict[str, Optional[str]]:
     """Get city name and zipcode from city slug"""
-    return CITY_ZIPCODE_MAPPING.get(
-        city_slug,
-        {"zipcode": None, "city_name": city_slug.replace("cityof", "").title()},
-    )
+    mapping = CITY_ZIPCODE_MAPPING.get(city_slug)
+    if mapping:
+        return {"zipcode": mapping["zipcode"], "city_name": mapping["city_name"]}
+    return {"zipcode": None, "city_name": city_slug.replace("cityof", "").title()}
 
 
 # Adapter factory pattern for vendor-specific processing

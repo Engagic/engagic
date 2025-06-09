@@ -70,7 +70,6 @@ async def get_meetings(city: str):
                 # Store the meeting in database
                 db.store_meeting_data({
                     "city_slug": city,
-                    "city_name": meeting.get("title", "").split(" - ")[0] if " - " in meeting.get("title", "") else city,
                     "meeting_name": meeting.get("title"),
                     "packet_url": meeting.get("packet_url"),
                     "meeting_date": meeting.get("start")
