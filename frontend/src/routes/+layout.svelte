@@ -27,7 +27,7 @@
 </script>
 
 <svelte:head>
-    <title>EngageMint - Civic Engagement Made Simple</title>
+    <title>engagic - Civic Engagement Made Simple</title>
     <meta name="description" content="Stay informed about local government decisions that affect your community" />
     <meta property="og:description" content="Stay informed about local government decisions that affect your community" />
 </svelte:head>
@@ -37,7 +37,7 @@
     data-theme={browser ? $currentTheme : undefined}
 >
     <div
-        id="engagemint"
+        id="engagic"
         class:loaded={browser}
         data-mobile={device.is.mobile}
         data-reduce-motion={reduceMotion}
@@ -52,7 +52,7 @@
 </div>
 
 <style>
-    #engagemint {
+    #engagic {
         height: 100%;
         width: 100%;
         display: grid;
@@ -81,7 +81,7 @@
     }
 
     @media screen and (max-width: 535px) {
-        #engagemint {
+        #engagic {
             display: grid;
             grid-template-columns: unset;
             grid-template-rows:

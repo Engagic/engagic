@@ -84,75 +84,80 @@
 
 <style>
     .recent-agendas {
-        position: absolute;
-        top: var(--padding);
-        left: var(--padding);
-        right: var(--padding);
-        max-width: 300px;
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
     }
 
     .recent-agendas h3 {
-        font-size: 14px;
-        color: var(--gray);
-        margin-bottom: 8px;
+        font-size: 1.5rem;
+        color: var(--secondary);
+        margin-bottom: 20px;
         font-weight: 600;
+        text-align: center;
     }
 
     .agenda-list {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
     }
 
     .agenda-item {
         display: block;
-        padding: 10px;
-        background: var(--button);
-        border-radius: var(--border-radius);
+        padding: 20px;
+        background: var(--white);
+        border-radius: 12px;
         text-decoration: none;
         color: inherit;
-        transition: all 0.15s;
-        border-left: 3px solid transparent;
+        transition: all 0.2s ease;
+        border: 1px solid var(--input-border);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
 
     .agenda-item:hover {
-        background: var(--button-hover);
-        transform: translateX(2px);
+        border-color: var(--civic-blue);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     }
 
     .agenda-item.urgent {
-        border-left-color: var(--civic-orange);
+        border-color: var(--civic-orange);
+        background: linear-gradient(135deg, rgba(234, 88, 12, 0.02) 0%, rgba(255, 255, 255, 1) 100%);
     }
 
     .agenda-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 4px;
+        margin-bottom: 8px;
     }
 
     .city-name {
-        font-size: 12px;
+        font-size: 0.875rem;
         font-weight: 600;
         color: var(--civic-blue);
     }
 
     .agenda-date {
-        font-size: 11px;
+        font-size: 0.75rem;
         color: var(--gray);
+        font-weight: 500;
     }
 
     .agenda-title {
-        font-size: 13px;
-        font-weight: 500;
-        margin-bottom: 2px;
-        line-height: 1.3;
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+        line-height: 1.4;
+        color: var(--secondary);
     }
 
     .agenda-summary {
-        font-size: 11px;
+        font-size: 0.875rem;
         color: var(--gray);
-        line-height: 1.3;
+        line-height: 1.5;
     }
 
     .urgent-badge {

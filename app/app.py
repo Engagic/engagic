@@ -7,7 +7,7 @@ from fullstack import AgendaProcessor
 from database import MeetingDatabase
 
 app = FastAPI(
-    title="EngageMint API", description="Civic meeting agenda processing with caching"
+    title="engagic API", description="Civic meeting agenda processing with caching"
 )
 
 app.add_middleware(
@@ -150,7 +150,7 @@ async def cleanup_cache(days_old: int = 90):
 async def root():
     """API status and info"""
     return {
-        "service": "EngageMint API",
+        "service": "engagic API",
         "status": "running",
         "version": "1.0.0",
         "endpoints": {

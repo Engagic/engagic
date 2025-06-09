@@ -1,29 +1,40 @@
 :root {
-    --primary: #ffffff;
-    --secondary: #000000;
+    --primary: #fefefe;
+    --secondary: #1a1a1a;
 
     --white: #ffffff;
-    --gray: #75757e;
+    --gray: #6b7280;
+    --light-gray: #f3f4f6;
 
-    --civic-blue: #2563eb;
-    --civic-green: #16a34a;
+    /* Civic color palette - warm, trustworthy, accessible */
+    --civic-blue: #1d4ed8;
+    --civic-blue-light: #3b82f6;
+    --civic-blue-hover: #1e40af;
+    --civic-green: #059669;
+    --civic-green-light: #10b981;
     --civic-red: #dc2626;
     --civic-orange: #ea580c;
     --civic-purple: #7c3aed;
+    --civic-gold: #f59e0b;
+    
+    /* Warm, welcoming gradients */
+    --civic-gradient: linear-gradient(135deg, var(--civic-blue) 0%, var(--civic-blue-light) 100%);
+    --civic-gradient-warm: linear-gradient(135deg, var(--civic-gold) 0%, var(--civic-orange) 100%);
+    --civic-gradient-success: linear-gradient(135deg, var(--civic-green) 0%, var(--civic-green-light) 100%);
 
     --focus-ring: solid 2px var(--civic-blue);
     --focus-ring-offset: -2px;
 
-    --button: #f4f4f4;
-    --button-hover: #ededed;
-    --button-press: #e8e8e8;
-    --button-active-hover: #2a2a2a;
+    --button: #f8fafc;
+    --button-hover: #e2e8f0;
+    --button-press: #cbd5e1;
+    --button-active-hover: var(--civic-blue-hover);
 
-    --button-hover-transparent: rgba(0, 0, 0, 0.06);
-    --button-press-transparent: rgba(0, 0, 0, 0.09);
-    --button-stroke: rgba(0, 0, 0, 0.06);
-    --button-text: #282828;
-    --button-box-shadow: 0 0 0 1px var(--button-stroke) inset;
+    --button-hover-transparent: rgba(29, 78, 216, 0.08);
+    --button-press-transparent: rgba(29, 78, 216, 0.12);
+    --button-stroke: rgba(29, 78, 216, 0.15);
+    --button-text: var(--secondary);
+    --button-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
 
     --button-elevated: #e3e3e3;
     --button-elevated-hover: #dadada;
@@ -44,7 +55,11 @@
     --content-border: rgba(0, 0, 0, 0.03);
     --content-border-thickness: 1px;
 
-    --input-border: #adadb7;
+    --input-border: #d1d5db;
+    --input-border-focus: var(--civic-blue);
+    --input-bg: var(--white);
+    --input-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --input-shadow-focus: 0 0 0 3px rgba(29, 78, 216, 0.1);
 
     --toggle-bg: var(--input-border);
     --toggle-bg-enabled: var(--secondary);
