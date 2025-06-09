@@ -17,7 +17,7 @@ class DatabaseViewer:
         """Display zipcode_entries table in cell format"""
         with self.db.get_connection() as conn:
             cursor = conn.execute("""
-                SELECT id, zipcode, city_name, city_slug, state, county, 
+                SELECT id, vendor, zipcode, city_name, city_slug, state, county, 
                        created_at, last_accessed 
                 FROM zipcode_entries 
                 ORDER BY id
