@@ -1,5 +1,5 @@
 <script lang="ts">
-    import engagicIcon from "$components/sidebar/engagicIcon.svelte";
+    import EngagicIcon from "$components/sidebar/engagic.svelte";
     import SidebarTab from "$components/sidebar/SidebarTab.svelte";
 
     import IconHome from "$components/icons/Home.svelte";
@@ -15,7 +15,7 @@
 <svelte:window bind:innerWidth={screenWidth} />
 
 <nav id="sidebar" aria-label="Main navigation">
-    <engagicIcon />
+    <EngagicIcon />
     <div id="sidebar-tabs" role="tablist">
         <div id="sidebar-actions" class="sidebar-inner-container">
             <SidebarTab name="home" path="/" icon={IconHome} />
