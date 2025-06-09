@@ -13,7 +13,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://engagic.org"],
+    allow_origins=["https://engagic.org", "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -172,7 +172,7 @@ async def lookup_zipcode(zipcode: str):
         if not city_name:
             raise HTTPException(status_code=404, detail=f"No city found for zipcode {zipcode}")
         
-        # Convert city name to our internal city slug format
+        # Convert city name to city slug format (lowercase, no spaces/hyphens)
         city_slug = city_name.lower().replace(' ', '').replace('-', '')
         
         # Try to fetch meetings for this city
