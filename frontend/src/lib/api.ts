@@ -15,9 +15,7 @@ export interface RecentAgenda {
     packet_url?: string;
 }
 
-// TODO: Replace with your actual DigitalOcean droplet domain
-// Example: https://your-droplet-ip-or-domain.com
-const API_BASE_URL = 'http://http://165.232.158.241:8000'; // Update this to your droplet URL
+const API_BASE_URL = 'http://165.232.158.241:8000';
 
 export class ApiService {
     static async getMeetings(city: string = 'cityofpaloalto'): Promise<Meeting[]> {

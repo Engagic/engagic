@@ -10,7 +10,7 @@ const getSystemTheme = (): "light" | "dark" => {
 
 const getStoredTheme = (): Theme => {
     if (!browser) return "auto";
-    const stored = localStorage.getItem("engagemint-theme");
+    const stored = localStorage.getItem("engagic-theme");
     if (stored && ["light", "dark", "auto"].includes(stored)) {
         return stored as Theme;
     }
@@ -33,7 +33,7 @@ const createThemeStore = () => {
         subscribe,
         set: (theme: Theme) => {
             if (browser) {
-                localStorage.setItem("engagemint-theme", theme);
+                localStorage.setItem("engagic-theme", theme);
             }
             set(resolveTheme(theme));
         },
@@ -41,7 +41,7 @@ const createThemeStore = () => {
             update(current => {
                 const newTheme = current === "light" ? "dark" : "light";
                 if (browser) {
-                    localStorage.setItem("engagemint-theme", newTheme);
+                    localStorage.setItem("engagic-theme", newTheme);
                 }
                 return newTheme;
             });
