@@ -14,7 +14,7 @@ from database import MeetingDatabase, get_city_info
 
 
 class AgendaProcessor:
-    def __init__(self, api_key=None, db_path="meetings.db"):
+    def __init__(self, api_key=None, db_path="/root/engagic/app/meetings.db"):
         """Initialize processor with optional API key and database"""
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
