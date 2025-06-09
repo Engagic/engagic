@@ -19,7 +19,8 @@ app.add_middleware(
         "http://localhost:3000",      # React/Next.js
         "http://localhost:5173",      # Vite
         "http://localhost:5000",      # Other common ports
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "https://165.232.158.241"
     ],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,9 +46,12 @@ class MeetingRequest(BaseModel):
 
 
 @app.get("/api/meetings")
-async def get_meetings(city: str):
+async def get_meetings(city: Optional[str] = None):
     """Get meetings for a city - from database first, scrape if missing"""
     try:
+        if not city:
+            raise HTTPException(status_code=400, detail="city parameter is required")
+        
         # First check database for cached meetings
         meetings = db.get_meetings_by_city(city, 50)
         if meetings:
