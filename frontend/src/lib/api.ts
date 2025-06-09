@@ -1,7 +1,10 @@
 export interface Meeting {
-    meeting_id: number;
-    title: string;
-    start: string;
+    meeting_id?: number;
+    id?: number;
+    title?: string;
+    meeting_name?: string;
+    start?: string;
+    meeting_date?: string;
     packet_url: string;
 }
 
@@ -20,10 +23,16 @@ const API_BASE_URL = 'http://165.232.158.241:8000';
 export class ApiService {
     static async lookupZipcode(zipcode: string): Promise<{zipcode: string, city: string, city_slug: string, state: string, county: string}> {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/zipcode-lookup/${(zipcode)}`);
+            console.log(`Fetching: ${API_BASE_URL}/api/zipcode-lookup/${zipcode}`);
+            const response = await fetch(`${API_BASE_URL}/api/zipcode-lookup/${zipcode}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
             
             if (!response.ok) {
-                throw new Error(`Zipcode lookup failed: ${response.status}`);
+                throw new Error(`Zipcode lookup failed: ${response.status} ${response.statusText}`);
             }
             
             return await response.json();
@@ -35,10 +44,16 @@ export class ApiService {
 
     static async getMeetings(city_slug: string): Promise<Meeting[]> {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/meetings?city=${(city_slug)}`);
+            console.log(`Fetching: ${API_BASE_URL}/api/meetings?city=${city_slug}`);
+            const response = await fetch(`${API_BASE_URL}/api/meetings?city=${city_slug}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
             
             if (!response.ok) {
-                throw new Error(`API request failed: ${response.status}`);
+                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
             }
             
             return await response.json();
@@ -72,8 +87,13 @@ export class ApiService {
     }
 
     static formatMeetingAsAgenda(meeting: Meeting, city: string): RecentAgenda {
+        // Handle both API response format and database format
+        const meetingDate = meeting.start || meeting.meeting_date;
+        const meetingTitle = meeting.title || meeting.meeting_name || 'Untitled Meeting';
+        const meetingId = meeting.meeting_id || meeting.id || 0;
+        
         // Convert ISO date to readable format
-        const date = new Date(meeting.start);
+        const date = new Date(meetingDate || '');
         const formattedDate = date.toISOString().split('T')[0]; // YYYY-MM-DD format
         
         // Determine urgency based on date (meetings within 3 days)
@@ -81,11 +101,11 @@ export class ApiService {
         const urgent = daysUntilMeeting <= 3 && daysUntilMeeting >= 0;
         
         return {
-            id: meeting.meeting_id,
+            id: meetingId,
             city: city,
             date: formattedDate,
-            title: meeting.title,
-            summary: meeting.title,
+            title: meetingTitle,
+            summary: meetingTitle,
             urgent,
             packet_url: meeting.packet_url
         };

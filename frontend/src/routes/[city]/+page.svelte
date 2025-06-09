@@ -64,11 +64,12 @@
             <h2>Upcoming Meetings</h2>
             <div class="meetings-list">
                 {#each meetings as meeting}
-                    {@const formatted = formatMeetingDate(meeting.start)}
-                    {@const upcoming = isUpcoming(meeting.start)}
+                    {@const meetingDate = meeting.start || meeting.meeting_date || ''}
+                    {@const formatted = formatMeetingDate(meetingDate)}
+                    {@const upcoming = isUpcoming(meetingDate)}
                     <div class="meeting-card" class:past={!upcoming}>
                         <div class="meeting-header">
-                            <h3>{meeting.title}</h3>
+                            <h3>{meeting.title || meeting.meeting_name || 'Untitled Meeting'}</h3>
                             <div class="meeting-meta">
                                 <span class="date" class:upcoming={upcoming}>{formatted.date}</span>
                                 <span class="time">{formatted.time}</span>
