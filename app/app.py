@@ -5,6 +5,7 @@ from typing import Optional
 from adapters import PrimeGovAdapter
 from fullstack import AgendaProcessor
 from database import MeetingDatabase
+from uszipcode import SearchEngine
 
 app = FastAPI(
     title="engagic API", description="Civic meeting agenda processing with caching"
@@ -20,6 +21,7 @@ app.add_middleware(
 # Initialize global instances
 processor = AgendaProcessor()
 db = MeetingDatabase()
+zipcode_search = SearchEngine()
 
 
 class MeetingRequest(BaseModel):
@@ -144,6 +146,69 @@ async def cleanup_cache(days_old: int = 90):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error cleaning cache: {str(e)}")
+
+
+@app.get("/api/zipcode-lookup/{zipcode}")
+async def lookup_zipcode(zipcode: str):
+    """Convert zipcode to city information and fetch/store meetings"""
+    try:
+        # Validate zipcode format
+        if not zipcode.isdigit() or len(zipcode) != 5:
+            raise HTTPException(status_code=400, detail="Invalid zipcode format")
+        
+        # Check if we have this zipcode in our database
+        cached_entry = db.get_zipcode_entry(zipcode)
+        if cached_entry:
+            return cached_entry
+        
+        # Use uszipcode to resolve zipcode to city
+        result = zipcode_search.by_zipcode(zipcode)
+        
+        if not result.zipcode:
+            raise HTTPException(status_code=404, detail=f"Zipcode {zipcode} not found")
+        
+        # Create city slug from city name (lowercase, replace spaces with empty)
+        city_name = result.major_city or result.post_office_city
+        if not city_name:
+            raise HTTPException(status_code=404, detail=f"No city found for zipcode {zipcode}")
+        
+        # Convert city name to our internal city slug format
+        city_slug = city_name.lower().replace(' ', '').replace('-', '')
+        
+        # Try to fetch meetings for this city
+        meetings = []
+        try:
+            adapter = PrimeGovAdapter(city_slug)
+            for meeting in adapter.upcoming_packets():
+                meetings.append({
+                    "meeting_id": meeting.get("meeting_id"),
+                    "title": meeting.get("title"),
+                    "start": meeting.get("start"),
+                    "packet_url": meeting.get("packet_url")
+                })
+        except Exception as e:
+            print(f"Warning: Could not fetch meetings for {city_slug}: {e}")
+            # Continue without meetings - we'll store the zipcode entry anyway
+        
+        # Create zipcode entry in database
+        entry_data = {
+            "zipcode": zipcode,
+            "city": city_name,
+            "city_slug": city_slug,
+            "state": result.state,
+            "county": result.county,
+            "meetings": meetings
+        }
+        
+        # Store in database
+        db.store_zipcode_entry(entry_data)
+        
+        return entry_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error looking up zipcode: {str(e)}")
 
 
 @app.get("/")

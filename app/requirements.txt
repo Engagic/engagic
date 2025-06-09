@@ -7,4 +7,5 @@ PyPDF2
 anthropic
 Pillow
 nltk
+uszipcode
 

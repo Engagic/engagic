@@ -1,74 +1,43 @@
 <script lang="ts">
     import { browser } from "$app/environment";
+    import { goto } from "$app/navigation";
     import IconSearch from "$components/icons/Search.svelte";
+    import { ApiService, type Meeting } from "$lib/api";
 
     let searchInput: HTMLInputElement;
-    let zipcode = $state("");
+    let searchQuery = $state("");
     let isFocused = $state(false);
     let isLoading = $state(false);
-    let searchResults = $state<any[]>([]);
-    let hasSearched = $state(false);
+    let errorMessage = $state("");
 
-    let validZipcode = $derived(zipcode.length === 5 && /^\d{5}$/.test(zipcode));
-    let validCityName = $derived(zipcode.length > 2 && /^[a-zA-Z\s]+$/.test(zipcode));
-    let searchable = $derived(validZipcode || validCityName);
-
-    // Mock meeting data - replace with API call
-    const mockMeetings = [
-        {
-            id: 1,
-            title: "City Council Meeting",
-            date: "2025-01-15",
-            time: "7:00 PM",
-            location: "City Hall, Council Chambers",
-            agendaSummary: "Budget discussion for FY2025, housing development proposal on Main St, traffic safety improvements",
-            topics: ["Budget", "Housing", "Transportation"]
-        },
-        {
-            id: 2,
-            title: "Planning Commission",
-            date: "2025-01-18",
-            time: "6:30 PM", 
-            location: "Community Center",
-            agendaSummary: "Review of new residential zoning proposal, environmental impact assessment for downtown development",
-            topics: ["Zoning", "Environment", "Development"]
-        },
-        {
-            id: 3,
-            title: "Parks & Recreation Board",
-            date: "2025-01-22",
-            time: "5:30 PM",
-            location: "Parks Department Office",
-            agendaSummary: "Summer programs planning, playground renovation funding, community garden expansion proposal",
-            topics: ["Parks", "Recreation", "Community"]
-        }
-    ];
+    let validZipcode = $derived(searchQuery.length === 5 && /^\d{5}$/.test(searchQuery));
+    let searchable = $derived(validZipcode);
 
     const searchByZipcode = async () => {
         if (!searchable || isLoading) return;
         
         isLoading = true;
-        hasSearched = true;
+        errorMessage = "";
         
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            // Set mock results
-            searchResults = mockMeetings;
+            const result = await ApiService.searchMeetings(searchQuery);
             
             // Store search in localStorage
             if (browser) {
-                localStorage.setItem('lastSearch', zipcode);
+                localStorage.setItem('lastSearch', searchQuery);
             }
+            
+            // Redirect to city page
+            goto(`/${result.city_slug}`);
             
         } catch (error) {
             console.error("Error searching:", error);
-            searchResults = [];
+            errorMessage = error instanceof Error ? error.message : "Failed to search meetings";
         } finally {
             isLoading = false;
         }
     };
+
 
     const handleKeydown = (e: KeyboardEvent) => {
         if (!searchInput || isLoading) return;
@@ -78,9 +47,8 @@
         }
 
         if (["Escape", "Clear"].includes(e.key) && isFocused) {
-            zipcode = "";
-            searchResults = [];
-            hasSearched = false;
+            searchQuery = "";
+            errorMessage = "";
         }
     };
 </script>
@@ -90,13 +58,13 @@
 <div class="search-container">
     <div class="input-container" class:focused={isFocused} class:valid={searchable}>
         <input
-            bind:value={zipcode}
+            bind:value={searchQuery}
             bind:this={searchInput}
             oninput={() => (isFocused = true)}
             onfocus={() => (isFocused = true)}
             onblur={() => (isFocused = false)}
             type="text"
-            placeholder="Enter zipcode or city name"
+            placeholder="Enter zipcode"
             disabled={isLoading}
         />
 
@@ -116,44 +84,9 @@
         {/if}
     </div>
 
-    {#if hasSearched}
-        <div class="results-section">
-            {#if searchResults.length > 0}
-                <h3>Upcoming Meetings</h3>
-                <div class="meetings-list">
-                    {#each searchResults as meeting}
-                        <div class="meeting-card">
-                            <div class="meeting-header">
-                                <h4>{meeting.title}</h4>
-                                <div class="meeting-meta">
-                                    <span class="date">{new Date(meeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                    <span class="time">{meeting.time}</span>
-                                </div>
-                            </div>
-                            
-                            <div class="meeting-location">
-                                📍 {meeting.location}
-                            </div>
-                            
-                            <div class="agenda-summary">
-                                <h5>Agenda Summary:</h5>
-                                <p>{meeting.agendaSummary}</p>
-                            </div>
-                            
-                            <div class="topics">
-                                {#each meeting.topics as topic}
-                                    <span class="topic-tag">{topic}</span>
-                                {/each}
-                            </div>
-                        </div>
-                    {/each}
-                </div>
-            {:else}
-                <div class="no-results">
-                    <p>No upcoming meetings found for "{zipcode}"</p>
-                    <p>Try searching for a different location.</p>
-                </div>
-            {/if}
+    {#if errorMessage}
+        <div class="error-message">
+            <p>{errorMessage}</p>
         </div>
     {/if}
 </div>
@@ -225,127 +158,21 @@
         transform: none;
     }
 
-    .results-section {
-        margin-top: 1rem;
-    }
 
-    .results-section h3 {
-        margin: 0 0 1.5rem 0;
-        font-size: 1.5rem;
-        color: var(--secondary);
+    .error-message {
+        background: #fee2e2;
+        border: 1px solid #fecaca;
+        color: #dc2626;
+        padding: 1rem;
+        border-radius: 8px;
         text-align: center;
     }
 
-    .meetings-list {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-    }
-
-    .meeting-card {
-        background: var(--white);
-        border: 1px solid var(--input-border);
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        transition: box-shadow 0.2s ease;
-    }
-
-    .meeting-card:hover {
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-    }
-
-    .meeting-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 1rem;
-    }
-
-    .meeting-header h4 {
+    .error-message p {
         margin: 0;
-        font-size: 1.25rem;
-        color: var(--secondary);
-        font-weight: 600;
-    }
-
-    .meeting-meta {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 4px;
-        text-align: right;
-    }
-
-    .date {
-        font-weight: 600;
-        color: var(--civic-blue);
-    }
-
-    .time {
-        font-size: 0.9rem;
-        color: var(--gray);
-    }
-
-    .meeting-location {
-        color: var(--gray);
-        margin-bottom: 1rem;
-        font-size: 0.95rem;
-    }
-
-    .agenda-summary {
-        margin-bottom: 1rem;
-    }
-
-    .agenda-summary h5 {
-        margin: 0 0 0.5rem 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--secondary);
-    }
-
-    .agenda-summary p {
-        margin: 0;
-        color: var(--gray);
-        line-height: 1.5;
-    }
-
-    .topics {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-
-    .topic-tag {
-        background: var(--light-gray);
-        color: var(--gray);
-        padding: 4px 10px;
-        border-radius: 16px;
-        font-size: 0.85rem;
-        font-weight: 500;
-    }
-
-    .no-results {
-        text-align: center;
-        padding: 2rem;
-        color: var(--gray);
-    }
-
-    .no-results p {
-        margin: 0.5rem 0;
     }
 
     @media screen and (max-width: 640px) {
-        .meeting-header {
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .meeting-meta {
-            align-items: flex-start;
-            text-align: left;
-        }
-
         .input-container {
             flex-direction: column;
             gap: 1rem;
