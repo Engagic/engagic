@@ -11,9 +11,16 @@ app = FastAPI(
     title="engagic API", description="Civic meeting agenda processing with caching"
 )
 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://engagic.org", "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "https://engagic.org",
+        "http://localhost:3000",      # React/Next.js
+        "http://localhost:5173",      # Vite
+        "http://localhost:5000",      # Other common ports
+        "http://127.0.0.1:3000"
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
