@@ -15,7 +15,7 @@ export interface RecentAgenda {
     packet_url?: string;
 }
 
-const API_BASE_URL = 'http://165.232.158.241:8000';
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:8000' : 'http://165.232.158.241:8000';
 
 export class ApiService {
     static async lookupZipcode(zipcode: string): Promise<{zipcode: string, city: string, city_slug: string, state: string, county: string}> {
