@@ -17,7 +17,6 @@ export interface RecentAgenda {
 
 const API_BASE_URL = 'http://165.232.158.241:8000';
 
-
 export class ApiService {
     static async lookupZipcode(zipcode: string): Promise<{zipcode: string, city: string, city_slug: string, state: string, county: string}> {
         try {
@@ -68,7 +67,7 @@ export class ApiService {
                 zipcode: zipcodeResult.zipcode
             };
         } catch (error) {
-            throw new Error(`No meetings found for "${normalized}".`);
+            throw new Error(`No meetings found for "${normalized}", error is "${error}".`);
         }
     }
 
