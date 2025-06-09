@@ -227,7 +227,7 @@ def main():
             if not entry_id.isdigit():
                 print("Invalid ID")
                 continue
-            field = input("Enter field to update (zipcode/city_name/city_slug/state/county): ").strip()
+            field = input("Enter field to update (zipcode/city_name/city_slug/vendor/state/county): ").strip()
             new_value = input(f"Enter new value for {field}: ").strip()
             viewer.update_zipcode_entry(int(entry_id), field, new_value)
         

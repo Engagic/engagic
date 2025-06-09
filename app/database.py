@@ -35,6 +35,7 @@ class MeetingDatabase:
                     zipcode TEXT UNIQUE NOT NULL,
                     city_name TEXT NOT NULL,
                     city_slug TEXT NOT NULL,
+                    vendor TEXT NOT NULL,
                     state TEXT,
                     county TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -178,7 +179,7 @@ class MeetingDatabase:
             return [dict(row) for row in cursor.fetchall()]
 
     def search_meetings(
-        self, query: str, city_slug: str = None, limit: int = 50
+        self, query: str, city_slug: str = "", limit: int = 50
     ) -> List[Dict[str, Any]]:
         """Search meetings by summary content or meeting name"""
         query_pattern = f"%{query}%"
