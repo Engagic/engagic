@@ -29,6 +29,19 @@ class MeetingDatabase:
                 )
             """)
             
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS zipcode_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    zipcode TEXT UNIQUE NOT NULL,
+                    city_name TEXT NOT NULL,
+                    city_slug TEXT NOT NULL,
+                    state TEXT,
+                    county TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # Handle migration for existing tables
             self._migrate_add_vendor_column(conn)
 
@@ -47,6 +60,9 @@ class MeetingDatabase:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_vendor ON meetings(vendor)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_zipcode ON zipcode_entries(zipcode)"
             )
 
             conn.commit()
@@ -269,6 +285,87 @@ class MeetingDatabase:
                    AND last_accessed < datetime('now', '-30 days')""".format(days_old)
             )
             return cursor.rowcount
+
+    def get_zipcode_entry(self, zipcode: str) -> Optional[Dict[str, Any]]:
+        """Get zipcode entry with associated meetings"""
+        with self.get_connection() as conn:
+            # Get zipcode entry
+            cursor = conn.execute(
+                """SELECT zipcode, city_name, city_slug, state, county, created_at, last_accessed 
+                   FROM zipcode_entries WHERE zipcode = ?""",
+                (zipcode,),
+            )
+            zipcode_row = cursor.fetchone()
+            
+            if not zipcode_row:
+                return None
+            
+            # Update last_accessed
+            conn.execute(
+                "UPDATE zipcode_entries SET last_accessed = ? WHERE zipcode = ?",
+                (datetime.now(timezone.utc).isoformat(), zipcode),
+            )
+            
+            # Get associated meetings
+            cursor = conn.execute(
+                """SELECT meeting_date, meeting_name, packet_url 
+                   FROM meetings WHERE city_slug = ? 
+                   ORDER BY meeting_date DESC""",
+                (zipcode_row["city_slug"],),
+            )
+            meetings = [{"title": row["meeting_name"], "start": row["meeting_date"], "packet_url": row["packet_url"]} 
+                       for row in cursor.fetchall()]
+            
+            return {
+                "zipcode": zipcode_row["zipcode"],
+                "city": zipcode_row["city_name"],
+                "city_slug": zipcode_row["city_slug"],
+                "state": zipcode_row["state"],
+                "county": zipcode_row["county"],
+                "meetings": meetings
+            }
+
+    def store_zipcode_entry(self, entry_data: Dict[str, Any]) -> int:
+        """Store zipcode entry and associated meetings"""
+        with self.get_connection() as conn:
+            # Store zipcode entry
+            cursor = conn.execute(
+                """INSERT OR REPLACE INTO zipcode_entries 
+                   (zipcode, city_name, city_slug, state, county, created_at, last_accessed)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    entry_data["zipcode"],
+                    entry_data["city"],
+                    entry_data["city_slug"],
+                    entry_data.get("state"),
+                    entry_data.get("county"),
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            
+            # Store meetings (if any)
+            for meeting in entry_data.get("meetings", []):
+                try:
+                    conn.execute(
+                        """INSERT OR IGNORE INTO meetings 
+                           (city_slug, city_name, meeting_name, packet_url, meeting_date, created_at, last_accessed)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            entry_data["city_slug"],
+                            entry_data["city"],
+                            meeting.get("title"),
+                            meeting.get("packet_url"),
+                            meeting.get("start"),
+                            datetime.now(timezone.utc).isoformat(),
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
+                except sqlite3.IntegrityError:
+                    # Meeting already exists, skip
+                    pass
+            
+            return cursor.lastrowid
 
 
 # City to zipcode mapping - can be expanded as needed

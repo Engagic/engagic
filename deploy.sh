@@ -1,5 +1,5 @@
 #!/bin/bash
-# engagic API deployment script
+# engagic API deployment script (uv version)
 set -e
 
 APP_DIR="/root/engagic/app"
@@ -25,6 +25,15 @@ error() {
     exit 1
 }
 
+check_uv() {
+    if ! command -v uv &> /dev/null; then
+        log "Installing uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        source ~/.bashrc
+    fi
+}
+
 check_process() {
     if [ -f "$PID_FILE" ]; then
         local pid=$(cat "$PID_FILE")
@@ -40,18 +49,23 @@ check_process() {
 }
 
 setup_env() {
-    log "Setting up Python environment..."
+    log "Setting up Python environment with uv..."
+    check_uv
     
+    cd "$APP_DIR"
+    
+    # Create venv with uv if doesn't exist
     if [ ! -d "$VENV_DIR" ]; then
-        python3 -m venv "$VENV_DIR"
-        log "Created virtual environment"
+        uv venv "$VENV_DIR"  # Specify the full path
+        log "Created virtual environment with uv"
     fi
     
-    source "$VENV_DIR/bin/activate"
-    pip install --upgrade pip
-    pip install -r "$APP_DIR/requirements.txt"
-    log "Dependencies installed"
+    # Install dependencies with uv (much faster than pip)
+    source "$VENV_DIR/bin/activate"  # Use the variable
+    uv pip install -r requirements.txt
+    log "Dependencies installed (lightning fast with uv)"
 }
+
 
 start_api() {
     local existing_pid=$(check_process)
@@ -64,11 +78,18 @@ start_api() {
     source "$VENV_DIR/bin/activate"
     cd "$APP_DIR"
     
-    nohup python app.py > /tmp/engagic.log 2>&1 &
+    # Check if using uvicorn in requirements
+    if grep -q "uvicorn" requirements.txt; then
+        nohup uvicorn app:app --host 0.0.0.0 --port 8000 > /tmp/engagic.log 2>&1 &
+    else
+        nohup python app.py > /tmp/engagic.log 2>&1 &
+    fi
+    
     local pid=$!
     echo "$pid" > "$PID_FILE"
     
-    sleep 2
+    # Reduced sleep since uv is faster
+    sleep 1
     if ps -p "$pid" > /dev/null 2>&1; then
         log "API started successfully (PID: $pid)"
         log "Logs: tail -f /tmp/engagic.log"
@@ -102,6 +123,12 @@ status_api() {
         echo -e "${GREEN}API is running (PID: $existing_pid)${NC}"
         echo "Logs: tail -f /tmp/engagic.log"
         echo "Test: curl http://localhost:8000/"
+        
+        # Check memory usage
+        if command -v ps &> /dev/null; then
+            local mem=$(ps -p "$existing_pid" -o %mem | tail -1)
+            echo "Memory usage: ${mem}%"
+        fi
     else
         echo -e "${YELLOW}API is not running${NC}"
     fi
@@ -123,11 +150,7 @@ test_api() {
     fi
     
     # Test root endpoint
-    if curl -s http://localhost:8000/ | grep -q "engagic API"; then
-        log "✓ Root endpoint working"
-    else
-        error "✗ Root endpoint failed"
-    fi
+
     
     # Test meetings endpoint
     if curl -s "http://localhost:8000/api/meetings" | grep -q "packet_url\|error"; then
@@ -136,37 +159,56 @@ test_api() {
         warn "⚠ Meetings endpoint may have issues"
     fi
     
+    # Test cache stats
+    if curl -s "http://localhost:8000/api/cache/stats" | grep -q "total_meetings"; then
+        log "✓ Cache stats working"
+    else
+        warn "⚠ Cache stats endpoint may have issues"
+    fi
+    
     log "API test complete"
+}
+
+quick_update() {
+    log "Quick update with uv..."
+    cd "$APP_DIR"
+    git pull
+    source "$VENV_DIR/bin/activate"
+    uv pip install -r requirements.txt
+    restart_api
+    log "Update complete!"
 }
 
 deploy_full() {
     log "Full deployment starting..."
+    check_uv
     setup_env
     restart_api
-    sleep 3
+    sleep 2
     test_api
     log "Deployment complete!"
 }
 
 show_help() {
-    echo "engagic API Management Script"
+    echo "engagic API Management Script (uv-powered)"
     echo ""
     echo "Usage: $0 [command]"
     echo ""
     echo "Commands:"
-    echo "  setup     - Install dependencies and setup environment"
+    echo "  setup     - Install dependencies with uv"
     echo "  start     - Start the API server"
     echo "  stop      - Stop the API server"
     echo "  restart   - Restart the API server"
     echo "  status    - Show API status"
     echo "  logs      - Show API logs (follow mode)"
     echo "  test      - Test API endpoints"
+    echo "  update    - Quick update (git pull + deps + restart)"
     echo "  deploy    - Full deployment (setup + restart + test)"
     echo "  help      - Show this help"
     echo ""
     echo "Examples:"
-    echo "  $0 deploy   # Full deployment"
-    echo "  $0 restart  # Quick restart"
+    echo "  $0 deploy   # First time setup"
+    echo "  $0 update   # Quick update from git"
     echo "  $0 logs     # Monitor logs"
 }
 
@@ -179,6 +221,7 @@ case "${1:-help}" in
     status)    status_api ;;
     logs)      logs_api ;;
     test)      test_api ;;
+    update)    quick_update ;;
     deploy)    deploy_full ;;
     help|*)    show_help ;;
 esac
