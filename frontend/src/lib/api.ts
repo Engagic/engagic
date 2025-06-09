@@ -34,7 +34,7 @@ export class ApiService {
         }
     }
 
-    static async getMeetings(city: string = 'cityofpaloalto'): Promise<Meeting[]> {
+    static async getMeetings(city: string): Promise<Meeting[]> {
         try {
             const response = await fetch(`${API_BASE_URL}/api/meetings?city=${encodeURIComponent(city)}`);
             
