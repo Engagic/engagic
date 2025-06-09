@@ -188,15 +188,13 @@ html,
 body {
     margin: 0;
     height: 100vh;
-    overflow: hidden;
+    overflow: auto;
     overscroll-behavior-y: none;
 }
 
 * {
     font-family: "IBM Plex Mono", monospace;
-    user-select: none;
     scrollbar-width: none;
-    -webkit-user-select: none;
     -webkit-user-drag: none;
     -webkit-tap-highlight-color: transparent;
 }
@@ -305,7 +303,12 @@ button[disabled] {
     cursor: default;
 }
 
-input {
+input,
+p,
+a,
+span,
+.meeting-content,
+.civic-content {
     user-select: text;
     -webkit-user-select: text;
 }

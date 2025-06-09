@@ -61,9 +61,11 @@ setup_env() {
     fi
     
     # Install dependencies with uv (much faster than pip)
-    source "$VENV_DIR/bin/activate"  # Use the variable
+      # Use the variable
+    uv venv
+    source "$VENV_DIR/bin/activate"
+    source ".venv/bin/activate"
     uv pip install -r requirements.txt
-    log "Dependencies installed (lightning fast with uv)"
 }
 
 

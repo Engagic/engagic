@@ -27,7 +27,7 @@
                 localStorage.setItem('lastSearch', searchQuery);
             }
             
-            // Redirect to city page
+            // Redirect to city page using city_slug
             goto(`/${result.city_slug}`);
             
         } catch (error) {

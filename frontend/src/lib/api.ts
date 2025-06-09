@@ -49,7 +49,7 @@ export class ApiService {
         }
     }
 
-    static async searchMeetings(searchInput: string): Promise<{meetings: Meeting[], city: string, zipcode: string}> {
+    static async searchMeetings(searchInput: string): Promise<{meetings: Meeting[], city: string, city_slug: string, zipcode: string}> {
         const normalized = searchInput.trim();
         
         // Only accept zipcode input (5 digits)
@@ -64,10 +64,11 @@ export class ApiService {
             return {
                 meetings,
                 city: zipcodeResult.city,
+                city_slug: zipcodeResult.city_slug,
                 zipcode: zipcodeResult.zipcode
             };
         } catch (error) {
-            throw new Error(`No meetings found for zipcode "${normalized}".`);
+            throw new Error(`No meetings found for "${normalized}".`);
         }
     }
 
