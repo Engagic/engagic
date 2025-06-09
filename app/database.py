@@ -179,7 +179,7 @@ class MeetingDatabase:
             return [dict(row) for row in cursor.fetchall()]
 
     def search_meetings(
-        self, query: str, city_slug: str = "", limit: int = 50
+        self, query: str, city_slug: Optional[str] = None, limit: int = 50
     ) -> List[Dict[str, Any]]:
         """Search meetings by summary content or meeting name"""
         query_pattern = f"%{query}%"
@@ -292,7 +292,7 @@ class MeetingDatabase:
         with self.get_connection() as conn:
             # Get zipcode entry
             cursor = conn.execute(
-                """SELECT zipcode, city_name, city_slug, state, county, created_at, last_accessed 
+                """SELECT zipcode, city_name, city_slug, vendor, state, county, created_at, last_accessed 
                    FROM zipcode_entries WHERE zipcode = ?""",
                 (zipcode,),
             )
@@ -321,6 +321,7 @@ class MeetingDatabase:
                 "zipcode": zipcode_row["zipcode"],
                 "city": zipcode_row["city_name"],
                 "city_slug": zipcode_row["city_slug"],
+                "vendor": zipcode_row["vendor"],
                 "state": zipcode_row["state"],
                 "county": zipcode_row["county"],
                 "meetings": meetings
@@ -332,12 +333,13 @@ class MeetingDatabase:
             # Store zipcode entry
             cursor = conn.execute(
                 """INSERT OR REPLACE INTO zipcode_entries 
-                   (zipcode, city_name, city_slug, state, county, created_at, last_accessed)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (zipcode, city_name, city_slug, vendor, state, county, created_at, last_accessed)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     entry_data["zipcode"],
                     entry_data["city"],
                     entry_data["city_slug"],
+                    entry_data.get("vendor", "primegov"),
                     entry_data.get("state"),
                     entry_data.get("county"),
                     datetime.now(timezone.utc).isoformat(),
@@ -366,6 +368,34 @@ class MeetingDatabase:
                     # Meeting already exists, skip
                     pass
             
+            return cursor.lastrowid
+
+    def get_all_zipcode_entries(self) -> List[Dict[str, Any]]:
+        """Get all zipcode entries"""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT zipcode, city_name, city_slug, vendor, state, county FROM zipcode_entries"
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str = "primegov") -> int:
+        """Store meeting data in database"""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """INSERT OR IGNORE INTO meetings 
+                   (vendor, city_slug, city_name, meeting_name, packet_url, meeting_date, created_at, last_accessed)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    vendor,
+                    meeting_data["city_slug"],
+                    meeting_data.get("city_name"),
+                    meeting_data.get("meeting_name"),
+                    meeting_data.get("packet_url"),
+                    meeting_data.get("meeting_date"),
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
             return cursor.lastrowid
 
 

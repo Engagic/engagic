@@ -38,16 +38,42 @@ class MeetingRequest(BaseModel):
 
 
 @app.get("/api/meetings")
-async def get_meetings(city: str = "cityofpaloalto"):
-    """Get upcoming meetings for a city"""
+async def get_meetings(city: str):
+    """Get meetings for a city - from database first, scrape if missing"""
     try:
-        adapter = PrimeGovAdapter(city)
-        meetings = []
-        for meeting in adapter.upcoming_packets():
-            # Add city_slug to each meeting
-            meeting["city_slug"] = city
-            meetings.append(meeting)
-        return meetings
+        # First check database for cached meetings
+        meetings = db.get_meetings_by_city(city, 50)
+        if meetings:
+            return meetings
+        
+        # If no cached meetings, find the vendor for this city and scrape
+        # Get zipcode entry to find vendor info
+        all_zipcode_entries = db.get_all_zipcode_entries()
+        vendor = "primegov"  # default
+        for entry in all_zipcode_entries:
+            if entry["city_slug"] == city:
+                vendor = entry.get("vendor", "primegov")
+                break
+        
+        # Scrape fresh meetings using the appropriate adapter
+        if vendor == "primegov":
+            adapter = PrimeGovAdapter(city)
+            scraped_meetings = []
+            for meeting in adapter.upcoming_packets():
+                # Store the meeting in database
+                db.store_meeting_data({
+                    "city_slug": city,
+                    "city_name": meeting.get("title", "").split(" - ")[0] if " - " in meeting.get("title", "") else city,
+                    "meeting_name": meeting.get("title"),
+                    "packet_url": meeting.get("packet_url"),
+                    "meeting_date": meeting.get("start")
+                }, vendor)
+                scraped_meetings.append(meeting)
+            return scraped_meetings
+        else:
+            # For other vendors, implement adapters as needed
+            raise HTTPException(status_code=501, detail=f"Vendor {vendor} not yet implemented")
+            
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error fetching meetings: {str(e)}"
@@ -171,6 +197,7 @@ async def lookup_zipcode(zipcode: str):
         
         # Use uszipcode to resolve zipcode to city
         result = zipcode_search.by_zipcode(zipcode)
+        print(f"the result is: {result}")
         
         if not result.zipcode:
             raise HTTPException(status_code=404, detail=f"Zipcode {zipcode} not found")
@@ -203,6 +230,7 @@ async def lookup_zipcode(zipcode: str):
             "zipcode": zipcode,
             "city": city_name,
             "city_slug": city_slug,
+            "vendor": "primegov",  # Default vendor
             "state": result.state,
             "county": result.county,
             "meetings": meetings
