@@ -7,6 +7,8 @@ import pytesseract
 from pdf2image import convert_from_path
 from PyPDF2 import PdfReader
 import anthropic
+import argparse
+import sys
 from typing import List, Dict, Any
 from database import MeetingDatabase, get_city_info
 
@@ -670,28 +672,220 @@ class AgendaProcessor:
             f.write(text)
         print(f"Saved to {filename} ({len(text)} characters)")
 
+    def download_packet(self, url: str, output_path: str = None) -> str:
+        """Download PDF packet and save to file"""
+        if not url.startswith(('http://', 'https://')):
+            raise ValueError("URL must start with http:// or https://")
+        
+        if not output_path:
+            output_path = "downloaded_packet.pdf"
+        
+        print(f"Downloading packet from: {url}")
+        
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise Exception(f"Failed to download PDF: {e}")
+        
+        with open(output_path, "wb") as f:
+            f.write(response.content)
+        
+        print(f"Packet saved to {output_path} ({len(response.content)} bytes)")
+        return output_path
+
+    def download_and_process(self, url: str, english_threshold: float = 0.7, 
+                           save_files: bool = True) -> Dict[str, str]:
+        """Download packet and extract/clean text without summarizing"""
+        raw_text = self.download_and_extract_text(url)
+        cleaned_text = self.clean_text(raw_text, english_threshold)
+        
+        result = {
+            "raw_text": raw_text,
+            "cleaned_text": cleaned_text
+        }
+        
+        if save_files:
+            self._save_text(raw_text, "raw_extracted_text.txt")
+            self._save_text(cleaned_text, "cleaned_extracted_text.txt")
+            print("Text extraction complete - files saved")
+        
+        return result
+
+    def process_packet(self, file_path: str, english_threshold: float = 0.7,
+                      save_files: bool = True) -> Dict[str, str]:
+        """Process a local PDF file"""
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        if not file_path.lower().endswith('.pdf'):
+            raise ValueError("File must be a PDF")
+        
+        print(f"Processing local packet: {file_path}")
+        
+        raw_text = self._extract_text_smart(file_path)
+        raw_text = self._normalize_text_formatting(raw_text)
+        cleaned_text = self.clean_text(raw_text, english_threshold)
+        
+        result = {
+            "raw_text": raw_text,
+            "cleaned_text": cleaned_text
+        }
+        
+        if save_files:
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            self._save_text(raw_text, f"{base_name}_raw.txt")
+            self._save_text(cleaned_text, f"{base_name}_cleaned.txt")
+            print("Text processing complete - files saved")
+        
+        return result
+
+    def full_pipeline(self, url: str, english_threshold: float = 0.7,
+                     save_files: bool = True) -> Dict[str, str]:
+        """Complete pipeline: download → process → summarize"""
+        print("Starting full pipeline...")
+        
+        raw_text = self.download_and_extract_text(url)
+        cleaned_text = self.clean_text(raw_text, english_threshold)
+        summary = self.summarize(cleaned_text)
+        
+        result = {
+            "raw_text": raw_text,
+            "cleaned_text": cleaned_text,
+            "summary": summary
+        }
+        
+        if save_files:
+            self._save_text(raw_text, "pipeline_raw.txt")
+            self._save_text(cleaned_text, "pipeline_cleaned.txt")
+            self._save_text(summary, "pipeline_summary.txt")
+            print("Full pipeline complete - all files saved")
+        
+        return result
+
+
+def create_cli_parser():
+    """Create CLI argument parser"""
+    parser = argparse.ArgumentParser(
+        description="Engagic Agenda Processor - Process city council meeting packets",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python fullstack.py --download-packet https://example.com/packet.pdf
+  python fullstack.py --download-process https://example.com/packet.pdf
+  python fullstack.py --process-packet local_file.pdf
+  python fullstack.py --full-pipeline https://example.com/packet.pdf
+  python fullstack.py --full-pipeline https://example.com/packet.pdf --no-save --threshold 0.8
+        """
+    )
+    
+    # Action flags (mutually exclusive)
+    action_group = parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument(
+        '--download-packet', 
+        metavar='URL',
+        help='Download PDF packet from URL and save to file'
+    )
+    action_group.add_argument(
+        '--download-process', 
+        metavar='URL',
+        help='Download and process packet (extract/clean text) without summarizing'
+    )
+    action_group.add_argument(
+        '--process-packet', 
+        metavar='FILE',
+        help='Process a local PDF file (extract/clean text)'
+    )
+    action_group.add_argument(
+        '--full-pipeline', 
+        metavar='URL',
+        help='Complete pipeline: download → process → summarize'
+    )
+    
+    # Optional parameters
+    parser.add_argument(
+        '--output', '-o',
+        help='Output filename for downloaded packet (only with --download-packet)'
+    )
+    parser.add_argument(
+        '--threshold', '-t',
+        type=float,
+        default=0.7,
+        help='English word threshold for text cleaning (0.0-1.0, default: 0.7)'
+    )
+    parser.add_argument(
+        '--no-save',
+        action='store_true',
+        help='Do not save intermediate files'
+    )
+    parser.add_argument(
+        '--api-key',
+        help='Anthropic API key (or set ANTHROPIC_API_KEY env var)'
+    )
+    
+    return parser
 
 def main():
-    """Example usage"""
+    """CLI main function"""
+    parser = create_cli_parser()
+    args = parser.parse_args()
+    
+    # Validate threshold
+    if not 0.0 <= args.threshold <= 1.0:
+        print("Error: threshold must be between 0.0 and 1.0")
+        sys.exit(1)
+    
     try:
-        processor = AgendaProcessor()
-
-        # url = "https://cityofpaloalto.primegov.com/Public/CompiledDocument?meetingTemplateId=16124&compileOutputType=1"
-
-        """raw_text = processor.download_and_extract_text(url)
-        processor._save_text(raw_text, "raw_agenda.txt")
-
-        cleaned_text = processor.clean_text(raw_text, 0.7)
-        processor._save_text(cleaned_text, "cleaned_agenda.txt")"""
-
-        with open("cleaned_agenda.txt", "r", encoding="utf-8") as f:
-            cleaned_text = f.read()
-
-        summary = processor.summarize(cleaned_text)
-        processor._save_text(summary, "agenda_summary.txt")
-
+        # Initialize processor
+        processor = AgendaProcessor(api_key=args.api_key)
+        save_files = not args.no_save
+        
+        if args.download_packet:
+            print(f"=== DOWNLOADING PACKET ===")
+            output_path = processor.download_packet(args.download_packet, args.output)
+            print(f"Success! Packet saved to: {output_path}")
+            
+        elif args.download_process:
+            print(f"=== DOWNLOADING AND PROCESSING ===")
+            result = processor.download_and_process(
+                args.download_process, 
+                args.threshold, 
+                save_files
+            )
+            print(f"Success! Extracted {len(result['cleaned_text'])} characters of cleaned text")
+            
+        elif args.process_packet:
+            print(f"=== PROCESSING LOCAL PACKET ===")
+            result = processor.process_packet(
+                args.process_packet, 
+                args.threshold, 
+                save_files
+            )
+            print(f"Success! Extracted {len(result['cleaned_text'])} characters of cleaned text")
+            
+        elif args.full_pipeline:
+            print(f"=== FULL PIPELINE ===")
+            result = processor.full_pipeline(
+                args.full_pipeline, 
+                args.threshold, 
+                save_files
+            )
+            print(f"Success! Generated summary with {len(result['summary'])} characters")
+            print("=" * 50)
+            print("SUMMARY PREVIEW:")
+            print("=" * 50)
+            # Show first 500 characters of summary
+            preview = result['summary'][:500]
+            if len(result['summary']) > 500:
+                preview += "...\n[truncated - see full summary in saved file]"
+            print(preview)
+            
+    except KeyboardInterrupt:
+        print("\nOperation cancelled by user")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error in main: {e}")
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
