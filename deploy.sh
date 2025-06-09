@@ -153,6 +153,11 @@ test_api() {
     
     # Test root endpoint
 
+    if curl -s "http://localhost:8000/" | grep -q "engagic API"; then
+        log "✓ Root endpoint responding"
+    else
+        warn "⚠ Root endpoint may have issues"
+    fi
     
     # Test meetings endpoint
     if curl -s "http://localhost:8000/api/meetings" | grep -q "packet_url\|error"; then
