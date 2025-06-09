@@ -19,7 +19,12 @@ app.add_middleware(
 )
 
 # Initialize global instances
-processor = AgendaProcessor()
+try:
+    processor = AgendaProcessor()
+except ValueError:
+    print("Warning: ANTHROPIC_API_KEY not found - LLM processing will be disabled")
+    processor = None
+
 db = MeetingDatabase()
 zipcode_search = SearchEngine()
 
@@ -52,6 +57,9 @@ async def get_meetings(city: str = "cityofpaloalto"):
 @app.post("/api/process-agenda")
 async def process_agenda(request: MeetingRequest):
     """Process an agenda with caching - returns cached or newly processed summary"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="LLM processing not available - ANTHROPIC_API_KEY required")
+    
     try:
         # Convert request to meeting data format
         meeting_data = {
