@@ -112,7 +112,7 @@ export class ApiService {
                 vendor: zipcodeResult.vendor
             };
         } catch (error) {
-            throw new Error(`No meetings found for "${normalized}", error is "${error}" .);
+            throw new Error(`No meetings found for ${normalized}, error is ${error}`);
         }
     }
 }
