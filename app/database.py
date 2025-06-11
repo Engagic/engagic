@@ -410,34 +410,17 @@ class MeetingDatabase:
             return cursor.lastrowid
 
 
-# City to zipcode mapping - can be expanded as needed
-CITY_ZIPCODE_MAPPING = {
-    "cityofpaloalto": {"zipcode": "94301", "city_name": "Palo Alto"},
-    "menlopark": {"zipcode": "94025", "city_name": "Menlo Park"},
-    "mountainview": {"zipcode": "94041", "city_name": "Mountain View"},
-    "sunnyvale": {"zipcode": "94086", "city_name": "Sunnyvale"},
-    "cupertino": {"zipcode": "95014", "city_name": "Cupertino"},
-    "losaltos": {"zipcode": "94022", "city_name": "Los Altos"},
-    "redwoodcity": {"zipcode": "94063", "city_name": "Redwood City"},
-}
-
-
 def get_city_info(city_slug: str) -> Dict[str, Optional[str]]:
-    """Get city name and zipcode from city slug"""
-    mapping = CITY_ZIPCODE_MAPPING.get(city_slug)
-    if mapping:
-        return {"zipcode": mapping["zipcode"], "city_name": mapping["city_name"]}
+    """Get city name and zipcode from city slug using database"""
+    db = MeetingDatabase()
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT zipcode, city_name FROM zipcode_entries WHERE city_slug = ?",
+            (city_slug,)
+        )
+        row = cursor.fetchone()
+        if row:
+            return {"zipcode": row["zipcode"], "city_name": row["city_name"]}
+    
+    # Fallback for unknown cities
     return {"zipcode": None, "city_name": city_slug.replace("cityof", "").title()}
-
-
-# Adapter factory pattern for vendor-specific processing
-ADAPTERS = {
-    "primegov": "PrimeGovAdapter",
-    "granicus": "GranicusAdapter",
-    "civicplus": "CivicPlusAdapter",
-}
-
-
-def get_adapter_class(vendor: str) -> str:
-    """Return adapter class name for given vendor"""
-    return ADAPTERS.get(vendor)
