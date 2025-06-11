@@ -610,7 +610,7 @@ class AgendaProcessor:
             processing_time = time.time() - start_time
 
             # Store in database
-            vendor = meeting_data.get("vendor", "primegov")  # Default to primegov
+            vendor = meeting_data.get("vendor")
             meeting_id = self.db.store_meeting_summary(
                 full_meeting_data, summary, processing_time, vendor
             )

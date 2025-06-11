@@ -7,6 +7,8 @@
     let meetings = $state<Meeting[]>([]);
     let isLoading = $state(true);
     let errorMessage = $state('');
+    let isNewCity = $state(false);
+    let needsManualConfig = $state(false);
 
     const formatMeetingDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -26,8 +28,21 @@
         const city = $page.params.city;
         
         try {
-            // For now, we'll get meetings by city slug
-            // Later we could enhance this to load from a city API endpoint
+            // Check if we have recent search result in localStorage
+            const lastSearchResult = localStorage.getItem('lastSearchResult');
+            if (lastSearchResult) {
+                const result = JSON.parse(lastSearchResult);
+                if (result.city_slug === city) {
+                    meetings = result.meetings || [];
+                    cityName = result.city;
+                    isNewCity = result.is_new_city || false;
+                    needsManualConfig = result.needs_manual_config || false;
+                    isLoading = false;
+                    return;
+                }
+            }
+            
+            // Fallback to API call
             const cityMeetings = await ApiService.getMeetings(city);
             meetings = cityMeetings;
             cityName = city.replace(/([a-z])([A-Z])/g, '$1 $2'); // Add spaces between words
@@ -50,6 +65,13 @@
         <h1>Meetings in {cityName}</h1>
         <a href="/" class="back-link">← Back to Search</a>
     </div>
+
+    {#if isNewCity}
+        <div class="new-city-notice">
+            <h3>🆕 New City Discovered!</h3>
+            <p>We've added <strong>{cityName}</strong> to our system. {needsManualConfig ? 'We\'re working on finding the right meeting sources for this city.' : 'Meetings are now being tracked.'}</p>
+        </div>
+    {/if}
 
     {#if isLoading}
         <div class="loading">
@@ -147,6 +169,27 @@
         border: 1px solid #fecaca;
         color: #dc2626;
         border-radius: 8px;
+    }
+
+    .new-city-notice {
+        background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
+        border: 2px solid var(--civic-green);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    .new-city-notice h3 {
+        margin: 0 0 0.5rem 0;
+        color: var(--civic-green);
+        font-size: 1.25rem;
+    }
+
+    .new-city-notice p {
+        margin: 0;
+        color: #166534;
+        line-height: 1.5;
     }
 
     .meetings-section h2 {
