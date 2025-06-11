@@ -376,7 +376,7 @@ class MeetingDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str = None) -> Optional[int]:
+    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str) -> Optional[int]:
         """Store meeting data in database"""
         with self.get_connection() as conn:
             cursor = conn.execute(
