@@ -28,21 +28,21 @@ class MeetingDatabase:
                     last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS zipcode_entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     zipcode TEXT UNIQUE NOT NULL,
                     city_name TEXT NOT NULL,
                     city_slug TEXT NOT NULL,
-                    vendor TEXT NOT NULL,
+                    vendor TEXT,
                     state TEXT,
                     county TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             # Handle migration for existing tables
             self._migrate_add_vendor_column(conn)
 
@@ -59,9 +59,7 @@ class MeetingDatabase:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_last_accessed ON meetings(last_accessed)"
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_vendor ON meetings(vendor)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_vendor ON meetings(vendor)")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_zipcode ON zipcode_entries(zipcode)"
             )
@@ -74,8 +72,8 @@ class MeetingDatabase:
             # Check if vendor column exists
             cursor = conn.execute("PRAGMA table_info(meetings)")
             columns = [row[1] for row in cursor.fetchall()]
-            
-            if 'vendor' not in columns:
+
+            if "vendor" not in columns:
                 print("Adding vendor column to existing database...")
                 conn.execute("ALTER TABLE meetings ADD COLUMN vendor TEXT")
                 print("Migration complete: vendor column added")
@@ -119,7 +117,11 @@ class MeetingDatabase:
             return None
 
     def store_meeting_summary(
-        self, meeting_data: Dict[str, Any], summary: str, processing_time: float, vendor: str
+        self,
+        meeting_data: Dict[str, Any],
+        summary: str,
+        processing_time: float,
+        vendor: str,
     ) -> Optional[int]:
         """Store a new meeting summary in the database"""
         with self.get_connection() as conn:
@@ -209,7 +211,9 @@ class MeetingDatabase:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_meetings_by_vendor(self, vendor: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_meetings_by_vendor(
+        self, vendor: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
         """Get meetings from specific vendor"""
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -227,9 +231,11 @@ class MeetingDatabase:
     def get_adapter_for_meeting(self, packet_url: str) -> Optional[str]:
         """Return which adapter to use for re-processing this meeting"""
         with self.get_connection() as conn:
-            cursor = conn.execute('SELECT vendor FROM meetings WHERE packet_url = ?', (packet_url,))
+            cursor = conn.execute(
+                "SELECT vendor FROM meetings WHERE packet_url = ?", (packet_url,)
+            )
             row = cursor.fetchone()
-            return row['vendor'] if row else None
+            return row["vendor"] if row else None
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the cache"""
@@ -295,16 +301,16 @@ class MeetingDatabase:
                 (zipcode,),
             )
             zipcode_row = cursor.fetchone()
-            
+
             if not zipcode_row:
                 return None
-            
+
             # Update last_accessed
             conn.execute(
                 "UPDATE zipcode_entries SET last_accessed = ? WHERE zipcode = ?",
                 (datetime.now(timezone.utc).isoformat(), zipcode),
             )
-            
+
             # Get associated meetings
             cursor = conn.execute(
                 """SELECT meeting_date, meeting_name, packet_url 
@@ -312,9 +318,15 @@ class MeetingDatabase:
                    ORDER BY meeting_date DESC""",
                 (zipcode_row["city_slug"],),
             )
-            meetings = [{"title": row["meeting_name"], "start": row["meeting_date"], "packet_url": row["packet_url"]} 
-                       for row in cursor.fetchall()]
-            
+            meetings = [
+                {
+                    "title": row["meeting_name"],
+                    "start": row["meeting_date"],
+                    "packet_url": row["packet_url"],
+                }
+                for row in cursor.fetchall()
+            ]
+
             return {
                 "zipcode": zipcode_row["zipcode"],
                 "city": zipcode_row["city_name"],
@@ -322,7 +334,7 @@ class MeetingDatabase:
                 "vendor": zipcode_row["vendor"],
                 "state": zipcode_row["state"],
                 "county": zipcode_row["county"],
-                "meetings": meetings
+                "meetings": meetings,
             }
 
     def store_zipcode_entry(self, entry_data: Dict[str, Any]) -> int:
@@ -344,7 +356,7 @@ class MeetingDatabase:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
-            
+
             # Store meetings (if any)
             for meeting in entry_data.get("meetings", []):
                 try:
@@ -365,8 +377,8 @@ class MeetingDatabase:
                 except sqlite3.IntegrityError:
                     # Meeting already exists, skip
                     pass
-            
-            return cursor.lastrowid # type: ignore
+
+            return cursor.lastrowid  # type: ignore
 
     def get_all_zipcode_entries(self) -> List[Dict[str, Any]]:
         """Get all zipcode entries"""
@@ -376,7 +388,9 @@ class MeetingDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str) -> Optional[int]:
+    def store_meeting_data(
+        self, meeting_data: Dict[str, Any], vendor: str
+    ) -> Optional[int]:
         """Store meeting data in database"""
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -418,10 +432,11 @@ def get_city_info(city_slug: str) -> Dict[str, Optional[str]]:
 
 # Adapter factory pattern for vendor-specific processing
 ADAPTERS = {
-    'primegov': 'PrimeGovAdapter',
-    'granicus': 'GranicusAdapter',
-    'civicplus': 'CivicPlusAdapter',
+    "primegov": "PrimeGovAdapter",
+    "granicus": "GranicusAdapter",
+    "civicplus": "CivicPlusAdapter",
 }
+
 
 def get_adapter_class(vendor: str) -> str:
     """Return adapter class name for given vendor"""
