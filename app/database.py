@@ -15,7 +15,7 @@ class MeetingDatabase:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS meetings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    vendor TEXT NOT NULL DEFAULT 'primegov',
+                    vendor TEXT,
                     zipcode TEXT,
                     city_name TEXT,
                     city_slug TEXT NOT NULL,
@@ -77,9 +77,7 @@ class MeetingDatabase:
             
             if 'vendor' not in columns:
                 print("Adding vendor column to existing database...")
-                conn.execute("ALTER TABLE meetings ADD COLUMN vendor TEXT DEFAULT 'primegov'")
-                # Update existing records to have vendor set
-                conn.execute("UPDATE meetings SET vendor = 'primegov' WHERE vendor IS NULL")
+                conn.execute("ALTER TABLE meetings ADD COLUMN vendor TEXT")
                 print("Migration complete: vendor column added")
         except Exception as e:
             print(f"Migration warning: {e}")
@@ -339,7 +337,7 @@ class MeetingDatabase:
                     entry_data["zipcode"],
                     entry_data["city"],
                     entry_data["city_slug"],
-                    entry_data.get("vendor", "primegov"),
+                    entry_data.get("vendor"),
                     entry_data.get("state"),
                     entry_data.get("county"),
                     datetime.now(timezone.utc).isoformat(),
@@ -378,7 +376,7 @@ class MeetingDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str = "primegov") -> Optional[int]:
+    def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str) -> Optional[int]:
         """Store meeting data in database"""
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -427,4 +425,4 @@ ADAPTERS = {
 
 def get_adapter_class(vendor: str) -> str:
     """Return adapter class name for given vendor"""
-    return ADAPTERS.get(vendor, 'PrimeGovAdapter')  # Default to primegov
+    return ADAPTERS.get(vendor)

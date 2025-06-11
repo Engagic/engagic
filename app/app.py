@@ -8,7 +8,7 @@ from database import MeetingDatabase
 from uszipcode import SearchEngine
 
 app = FastAPI(
-    title="engagic API", description="Civic meeting agenda processing with caching"
+    title="engagic API", description="EGMI"
 )
 
 
@@ -16,14 +16,18 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://engagic.org",
+        "https://www.engagic.org",
+        "https://api.engagic.org", 
+        "https://engagic.pages.dev",        # Cloudflare Pages preview domains
         "http://localhost:3000",      # React/Next.js
-        "http://localhost:5173",      # Vite
+        "http://localhost:5173",      # Vite (SvelteKit)
         "http://localhost:5000",      # Other common ports
         "http://127.0.0.1:3000",
         "https://165.232.158.241"
     ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 # Initialize global instances
@@ -60,11 +64,14 @@ async def get_meetings(city: Optional[str] = None):
         # If no cached meetings, find the vendor for this city and scrape
         # Get zipcode entry to find vendor info
         all_zipcode_entries = db.get_all_zipcode_entries()
-        vendor = "primegov"  # default
+        vendor = None
         for entry in all_zipcode_entries:
             if entry["city_slug"] == city:
-                vendor = entry.get("vendor", "primegov")
+                vendor = entry.get("vendor")
                 break
+        
+        if not vendor:
+            raise HTTPException(status_code=404, detail=f"No vendor configured for city {city}")
         
         # Scrape fresh meetings using the appropriate adapter
         if vendor == "primegov":
@@ -147,24 +154,6 @@ async def get_recent_meetings(limit: int = 20):
         )
 
 
-@app.get("/api/search")
-async def search_meetings(q: str, city_slug: Optional[str] = None, limit: int = 50):
-    """Search meetings by content or meeting name"""
-    try:
-        if not q.strip():
-            raise HTTPException(status_code=400, detail="Search query required")
-
-        meetings = db.search_meetings(q, city_slug, limit)
-        return {
-            "query": q,
-            "city_slug": city_slug,
-            "meetings": meetings,
-            "count": len(meetings),
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error searching meetings: {str(e)}"
-        )
 
 
 @app.get("/api/cache/stats")
@@ -192,69 +181,88 @@ async def cleanup_cache(days_old: int = 90):
         raise HTTPException(status_code=500, detail=f"Error cleaning cache: {str(e)}")
 
 
-@app.get("/api/zipcode-lookup/{zipcode}")
-async def lookup_zipcode(zipcode: str):
-    """Convert zipcode to city information and fetch/store meetings"""
+@app.get("/api/search/{query}")
+async def unified_search(query: str):
+    """Unified search endpoint that handles both zipcode and city name input"""
     try:
-        # Validate zipcode format
-        if not zipcode.isdigit() or len(zipcode) != 5:
-            raise HTTPException(status_code=400, detail="Invalid zipcode format")
+        query = query.strip()
         
-        # Check if we have this zipcode in our database
-        cached_entry = db.get_zipcode_entry(zipcode)
-        if cached_entry:
-            return cached_entry
+        # Determine if input is zipcode (5 digits) or city name
+        is_zipcode = query.isdigit() and len(query) == 5
         
-        # Use uszipcode to resolve zipcode to city
-        result = zipcode_search.by_zipcode(zipcode)
-        print(f"the result is: {result}")
-        
-        if not result.zipcode:
-            raise HTTPException(status_code=404, detail=f"Zipcode {zipcode} not found")
-        
-        # Create city slug from city name (lowercase, replace spaces with empty)
-        city_name = result.major_city or result.post_office_city
-        if not city_name:
-            raise HTTPException(status_code=404, detail=f"No city found for zipcode {zipcode}")
-        
-        # Convert city name to city slug format (lowercase, no spaces/hyphens)
-        city_slug = city_name.lower().replace(' ', '').replace('-', '')
-        
-        # Try to fetch meetings for this city
-        meetings = []
-        try:
-            adapter = PrimeGovAdapter(city_slug)
-            for meeting in adapter.upcoming_packets():
-                meetings.append({
-                    "meeting_id": meeting.get("meeting_id"),
-                    "title": meeting.get("title"),
-                    "start": meeting.get("start"),
-                    "packet_url": meeting.get("packet_url")
-                })
-        except Exception as e:
-            print(f"Warning: Could not fetch meetings for {city_slug}: {e}")
-            # Continue without meetings - we'll store the zipcode entry anyway
-        
-        # Create zipcode entry in database
-        entry_data = {
-            "zipcode": zipcode,
-            "city": city_name,
-            "city_slug": city_slug,
-            "vendor": "primegov",  # Default vendor
-            "state": result.state,
-            "county": result.county,
-            "meetings": meetings
-        }
-        
-        # Store in database
-        db.store_zipcode_entry(entry_data)
-        
-        return entry_data
-        
+        if is_zipcode:
+            return await handle_zipcode_search(query)
+        else:
+            return await handle_city_search(query)
+            
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error looking up zipcode: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+
+async def handle_zipcode_search(zipcode: str):
+    """Handle zipcode-based search"""
+    # Check if we have this zipcode in our database
+    cached_entry = db.get_zipcode_entry(zipcode)
+    if cached_entry:
+        return cached_entry
+    
+    # Use uszipcode to resolve zipcode to city
+    result = zipcode_search.by_zipcode(zipcode)
+    print(f"Zipcode lookup result: {result}")
+    
+    if not result.zipcode:
+        raise HTTPException(status_code=404, detail=f"Zipcode {zipcode} not found")
+    
+    # Create city slug from city name
+    city_name = result.major_city or result.post_office_city
+    if not city_name:
+        raise HTTPException(status_code=404, detail=f"No city found for zipcode {zipcode}")
+    
+    city_slug = city_name.lower().replace(' ', '').replace('-', '')
+    
+    # Try to fetch meetings and create entry
+    return await create_city_entry(zipcode, city_name, city_slug, result.state, result.county)
+
+
+async def handle_city_search(city_input: str):
+    """Handle city name-based search"""
+    # Convert city input to potential slug format
+    city_slug = city_input.lower().replace(' ', '').replace('-', '')
+    
+    # Check if we already have this city in our database
+    all_entries = db.get_all_zipcode_entries()
+    for entry in all_entries:
+        if entry.get("city_slug") == city_slug or entry.get("city", "").lower() == city_input.lower():
+            return entry
+    
+    # First time encountering this city - create placeholder entry
+    print(f"🆕 NEW CITY ADDED: {city_input} (slug: {city_slug})")
+    
+    return await create_city_entry(None, city_input, city_slug, None, None, is_new=True)
+
+
+async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new=False):
+    """Create a new city entry with optional meeting lookup"""
+    meetings = []
+    # Create entry data
+    entry_data = {
+        "zipcode": zipcode,
+        "city": city_name,
+        "city_slug": city_slug,
+        "vendor": None,
+        "state": state,
+        "county": county,
+        "meetings": meetings,
+        "is_new_city": is_new,
+    }
+    
+    # Store in database
+    if zipcode:
+        db.store_zipcode_entry(entry_data)
+    
+    return entry_data
 
 
 @app.get("/")
@@ -265,11 +273,11 @@ async def root():
         "status": "running",
         "version": "1.0.0",
         "endpoints": {
-            "meetings": "/api/meetings/{city}",
+            "search": "/api/search/{zipcode_or_city}",
+            "meetings": "/api/meetings?city={city}",
             "process": "/api/process-agenda",
             "city_meetings": "/api/meetings/{city_slug}",
             "recent": "/api/meetings/recent",
-            "search": "/api/search",
             "cache_stats": "/api/cache/stats",
         },
     }
