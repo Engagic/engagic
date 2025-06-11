@@ -287,7 +287,6 @@ async def handle_city_search(city_input: str):
 async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new=False):
     """Create a new city entry with optional meeting lookup"""
     meetings = []
-    vendor_found = False
     
     # Create entry data (no automatic vendor detection)
     entry_data = {
