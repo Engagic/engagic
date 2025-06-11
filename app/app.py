@@ -63,40 +63,68 @@ async def get_meetings(city: Optional[str] = None):
         # Get zipcode entry to find vendor info
         all_zipcode_entries = db.get_all_zipcode_entries()
         vendor = None
+        city_name = None
         for entry in all_zipcode_entries:
             if entry["city_slug"] == city:
                 vendor = entry.get("vendor")
+                city_name = entry.get("city_name")
                 break
 
         if not vendor:
-            raise HTTPException(
-                status_code=404, detail=f"No vendor configured for city {city}"
-            )
+            print(f"ERROR: No vendor configured for city {city}")
+            if city_name:
+                return {
+                    "message": f"{city_name} has been registered and will be integrated soon",
+                    "meetings": [],
+                    "city_slug": city,
+                    "status": "pending_integration"
+                }
+            else:
+                print(f"ERROR: City {city} not found in database")
+                raise HTTPException(
+                    status_code=404, detail=f"City {city} not found"
+                )
 
         # Scrape fresh meetings using the appropriate adapter
         if vendor == "primegov":
-            adapter = PrimeGovAdapter(city)
-            scraped_meetings = []
-            for meeting in adapter.upcoming_packets():
-                # Store the meeting in database
-                db.store_meeting_data(
-                    {
-                        "city_slug": city,
-                        "meeting_name": meeting.get("title"),
-                        "packet_url": meeting.get("packet_url"),
-                        "meeting_date": meeting.get("start"),
-                    },
-                    vendor,
-                )
-                scraped_meetings.append(meeting)
-            return scraped_meetings
+            try:
+                adapter = PrimeGovAdapter(city)
+                scraped_meetings = []
+                for meeting in adapter.upcoming_packets():
+                    # Store the meeting in database
+                    db.store_meeting_data(
+                        {
+                            "city_slug": city,
+                            "meeting_name": meeting.get("title"),
+                            "packet_url": meeting.get("packet_url"),
+                            "meeting_date": meeting.get("start"),
+                        },
+                        vendor,
+                    )
+                    scraped_meetings.append(meeting)
+                return scraped_meetings
+            except Exception as scrape_error:
+                print(f"ERROR: Failed to scrape {city} with PrimeGov: {scrape_error}")
+                return {
+                    "message": f"{city_name} integration is experiencing issues and will be fixed soon",
+                    "meetings": [],
+                    "city_slug": city,
+                    "status": "integration_error"
+                }
         else:
             # For other vendors, implement adapters as needed
-            raise HTTPException(
-                status_code=501, detail=f"Vendor {vendor} not yet implemented"
-            )
+            print(f"ERROR: Vendor {vendor} not yet implemented for city {city}")
+            return {
+                "message": f"{city_name} has been registered and will be integrated soon",
+                "meetings": [],
+                "city_slug": city,
+                "status": "vendor_not_implemented"
+            }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"ERROR: Unexpected error fetching meetings for {city}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error fetching meetings: {str(e)}"
         )
@@ -251,7 +279,7 @@ async def handle_city_search(city_input: str):
             return entry
 
     # First time encountering this city - create placeholder entry
-    print(f"🆕 NEW CITY ADDED: {city_input} (slug: {city_slug})")
+    print(f"NEW CITY ADDED: {city_input} (slug: {city_slug})")
 
     return await create_city_entry(None, city_input, city_slug, None, None, is_new=True)
 
@@ -271,12 +299,17 @@ async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new
         "county": county,
         "meetings": meetings,
         "is_new_city": is_new,
-        "needs_manual_config": True
+        "needs_manual_config": True,
+        "message": f"{city_name} has been registered and will be integrated soon",
+        "status": "pending_integration"
     }
 
     # Store in database
     if zipcode:
         db.store_zipcode_entry(entry_data)
+    
+    # Log for backend visibility
+    print(f"NEW CITY REGISTERED: {city_name} (slug: {city_slug}, zipcode: {zipcode})")
 
     return entry_data
 
