@@ -8,7 +8,7 @@ from database import MeetingDatabase
 from uszipcode import SearchEngine
 
 app = FastAPI(
-    title="engagic API", description="Civic meeting agenda processing with caching"
+    title="engagic API", description="EGMI"
 )
 
 
@@ -246,34 +246,16 @@ async def handle_city_search(city_input: str):
 async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new=False):
     """Create a new city entry with optional meeting lookup"""
     meetings = []
-    vendor_found = False
-    
-    # Try to fetch meetings for this city
-    try:
-        adapter = PrimeGovAdapter(city_slug)
-        for meeting in adapter.upcoming_packets():
-            meetings.append({
-                "meeting_id": meeting.get("meeting_id"),
-                "title": meeting.get("title"),
-                "start": meeting.get("start"),
-                "packet_url": meeting.get("packet_url")
-            })
-        vendor_found = True
-        print(f"✅ Found meetings for {city_name} via PrimeGov")
-    except Exception as e:
-        print(f"⚠️  Could not fetch meetings for {city_slug}: {e}")
-    
     # Create entry data
     entry_data = {
         "zipcode": zipcode,
         "city": city_name,
         "city_slug": city_slug,
-        "vendor": "primegov" if vendor_found else None,
+        "vendor": None,
         "state": state,
         "county": county,
         "meetings": meetings,
         "is_new_city": is_new,
-        "needs_manual_config": not vendor_found
     }
     
     # Store in database
