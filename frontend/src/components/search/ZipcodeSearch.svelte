@@ -11,9 +11,10 @@
     let errorMessage = $state("");
 
     let validZipcode = $derived(searchQuery.length === 5 && /^\d{5}$/.test(searchQuery));
-    let searchable = $derived(validZipcode);
+    let validCityName = $derived(searchQuery.length >= 2 && /^[a-zA-Z\s-]+$/.test(searchQuery));
+    let searchable = $derived(validZipcode || validCityName);
 
-    const searchByZipcode = async () => {
+    const performSearch = async () => {
         if (!searchable || isLoading) return;
         
         isLoading = true;
@@ -25,6 +26,12 @@
             // Store search in localStorage
             if (browser) {
                 localStorage.setItem('lastSearch', searchQuery);
+                localStorage.setItem('lastSearchResult', JSON.stringify(result));
+            }
+            
+            // Show acknowledgment for new cities
+            if (result.is_new_city) {
+                console.log(`🆕 New city discovered: ${result.city}`);
             }
             
             // Redirect to city page using city_slug
@@ -43,7 +50,7 @@
         if (!searchInput || isLoading) return;
 
         if (e.key === "Enter" && searchable && isFocused) {
-            searchByZipcode();
+            performSearch();
         }
 
         if (["Escape", "Clear"].includes(e.key) && isFocused) {
@@ -64,14 +71,14 @@
             onfocus={() => (isFocused = true)}
             onblur={() => (isFocused = false)}
             type="text"
-            placeholder="Enter zipcode"
+            placeholder="Enter zipcode or city name"
             disabled={isLoading}
         />
 
         {#if searchable}
             <button
                 class="search-button"
-                onclick={searchByZipcode}
+                onclick={performSearch}
                 disabled={isLoading}
             >
                 {#if isLoading}

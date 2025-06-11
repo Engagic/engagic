@@ -12,7 +12,7 @@
     <div class="hero">
         <EngagicLogo />
         <h1>Find Local Government Meetings</h1>
-        <p>Enter your zipcode or city to see upcoming meetings and agendas</p>
+        <p>Enter your zipcode or city name to see upcoming meetings and agendas</p>
     </div>
 
     <div class="search-section">

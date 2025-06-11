@@ -19,62 +19,25 @@ export interface RecentAgenda {
 }
 
 /**
- * Information returned when looking up a zipcode.
+ * Information returned by the unified search endpoint.
  * Includes vendor metadata and any cached meetings for the city.
  */
-export interface ZipcodeLookupResult {
-    zipcode: string;
+export interface SearchResult {
+    zipcode?: string;
     city: string;
     city_slug: string;
-    state: string;
-    county: string;
+    state?: string;
+    county?: string;
     vendor: string;
     meetings: Meeting[];
+    is_new_city?: boolean;
+    needs_manual_config?: boolean;
 }
 
-/**
- * Information returned when looking up a zipcode.
- * Includes vendor metadata and any cached meetings for the city.
- */
-export interface ZipcodeLookupResult {
-    zipcode: string;
-    city: string;
-    city_slug: string;
-    state: string;
-    county: string;
-    vendor: string;
-    meetings: Meeting[];
-}
-
-const API_BASE_URL = 'https://165.232.158.241:8000';
+// Production API endpoint with SSL certificate
+const API_BASE_URL = 'https://api.engagic.org';
 
 export class ApiService {
-    /**
-     * Resolve a zipcode to city information.
-     *
-     * The API response also provides the packet vendor for the city and any
-     * cached meetings that were discovered during the lookup.
-     */
-    static async lookupZipcode(zipcode: string): Promise<ZipcodeLookupResult> {
-        try {
-            console.log(`Fetching: ${API_BASE_URL}/api/zipcode-lookup/${zipcode}`);
-            const response = await fetch(`${API_BASE_URL}/api/zipcode-lookup/${zipcode}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Zipcode lookup failed: ${response.status} ${response.statusText}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('Error looking up zipcode:', error);
-            throw error;
-        }
-    }
 
     static async getMeetings(city_slug: string): Promise<Meeting[]> {
         try {
@@ -97,22 +60,27 @@ export class ApiService {
         }
     }
 
-    static async searchMeetings(searchInput: string): Promise<{meetings: Meeting[], city: string, city_slug: string, zipcode: string, vendor: string}> {
+    static async searchMeetings(searchInput: string): Promise<SearchResult> {
         const normalized = searchInput.trim();
         
         try {
-            const zipcodeResult = await this.lookupZipcode(normalized);
-            const meetings = await this.getMeetings(zipcodeResult.city_slug);
+            console.log(`Searching: ${API_BASE_URL}/api/search/${encodeURIComponent(normalized)}`);
+            const response = await fetch(`${API_BASE_URL}/api/search/${encodeURIComponent(normalized)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
             
-            return {
-                meetings,
-                city: zipcodeResult.city,
-                city_slug: zipcodeResult.city_slug,
-                zipcode: zipcodeResult.zipcode,
-                vendor: zipcodeResult.vendor
-            };
+            if (!response.ok) {
+                throw new Error(`Search failed: ${response.status} ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            
+            return result;
         } catch (error) {
-            throw new Error(`No meetings found for ${normalized}, error is ${error}`);
+            throw new Error(`No results found for "${normalized}": ${error}`);
         }
     }
 }
