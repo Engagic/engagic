@@ -54,49 +54,80 @@ async def get_meetings(city: Optional[str] = None):
         if not city:
             raise HTTPException(status_code=400, detail="city parameter is required")
 
+        print(f"Fetching meetings for city: {city}")
+
         # First check database for cached meetings
         meetings = db.get_meetings_by_city(city, 50)
         if meetings:
+            print(f"Found {len(meetings)} cached meetings for {city}")
             return meetings
 
         # If no cached meetings, find the vendor for this city and scrape
-        # Get zipcode entry to find vendor info
         all_zipcode_entries = db.get_all_zipcode_entries()
         vendor = None
+        city_name = None
         for entry in all_zipcode_entries:
             if entry["city_slug"] == city:
                 vendor = entry.get("vendor")
+                city_name = entry.get("city")
                 break
 
         if not vendor:
-            raise HTTPException(
-                status_code=404, detail=f"No vendor configured for city {city}"
-            )
+            print(f"No vendor configured for city {city}")
+            if city_name:
+                return {
+                    "message": f"{city_name} has been registered and will be integrated soon",
+                    "meetings": [],
+                    "city_slug": city,
+                    "status": "pending_integration"
+                }
+            else:
+                print(f"City {city} not found in database")
+                raise HTTPException(
+                    status_code=404, detail=f"City {city} not found"
+                )
 
         # Scrape fresh meetings using the appropriate adapter
         if vendor == "primegov":
-            adapter = PrimeGovAdapter(city)
-            scraped_meetings = []
-            for meeting in adapter.upcoming_packets():
-                # Store the meeting in database
-                db.store_meeting_data(
-                    {
-                        "city_slug": city,
-                        "meeting_name": meeting.get("title"),
-                        "packet_url": meeting.get("packet_url"),
-                        "meeting_date": meeting.get("start"),
-                    },
-                    vendor,
-                )
-                scraped_meetings.append(meeting)
-            return scraped_meetings
+            try:
+                print(f"Scraping meetings for {city} using PrimeGov")
+                adapter = PrimeGovAdapter(city)
+                scraped_meetings = []
+                for meeting in adapter.upcoming_packets():
+                    # Store the meeting in database
+                    db.store_meeting_data(
+                        {
+                            "city_slug": city,
+                            "meeting_name": meeting.get("title"),
+                            "packet_url": meeting.get("packet_url"),
+                            "meeting_date": meeting.get("start"),
+                        },
+                        vendor,
+                    )
+                    scraped_meetings.append(meeting)
+                print(f"Successfully scraped {len(scraped_meetings)} meetings for {city}")
+                return scraped_meetings
+            except Exception as scrape_error:
+                print(f"Failed to scrape {city} with PrimeGov: {scrape_error}")
+                return {
+                    "message": f"{city_name} integration is experiencing issues and will be fixed soon",
+                    "meetings": [],
+                    "city_slug": city,
+                    "status": "integration_error"
+                }
         else:
-            # For other vendors, implement adapters as needed
-            raise HTTPException(
-                status_code=501, detail=f"Vendor {vendor} not yet implemented"
-            )
+            print(f"Vendor {vendor} not yet implemented for city {city}")
+            return {
+                "message": f"{city_name} has been registered and will be integrated soon",
+                "meetings": [],
+                "city_slug": city,
+                "status": "vendor_not_implemented"
+            }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"Unexpected error fetching meetings for {city}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error fetching meetings: {str(e)}"
         )
@@ -192,18 +223,25 @@ async def unified_search(query: str):
     """Unified search endpoint that handles both zipcode and city name input"""
     try:
         query = query.strip()
+        print(f"Search request: '{query}'")
+
+        if not query:
+            raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
         # Determine if input is zipcode (5 digits) or city name
         is_zipcode = query.isdigit() and len(query) == 5
 
         if is_zipcode:
+            print(f"Processing as zipcode: {query}")
             return await handle_zipcode_search(query)
         else:
+            print(f"Processing as city name: {query}")
             return await handle_city_search(query)
 
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Unexpected search error for '{query}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 
@@ -212,13 +250,18 @@ async def handle_zipcode_search(zipcode: str):
     # Check if we have this zipcode in our database
     cached_entry = db.get_zipcode_entry(zipcode)
     if cached_entry:
+        print(f"Found cached entry for zipcode {zipcode}: {cached_entry.get('city')}")
         return cached_entry
 
     # Use uszipcode to resolve zipcode to city
-    result = zipcode_search.by_zipcode(zipcode)
-    print(f"Zipcode lookup result: {result}")
+    try:
+        result = zipcode_search.by_zipcode(zipcode)
+        print(f"Zipcode lookup result for {zipcode}: {result}")
+    except Exception as e:
+        print(f"Error looking up zipcode {zipcode}: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid zipcode: {zipcode}")
 
-    if not result.zipcode:
+    if not result or not result.zipcode:
         raise HTTPException(status_code=404, detail=f"Zipcode {zipcode} not found")
 
     # Create city slug from city name
@@ -229,15 +272,21 @@ async def handle_zipcode_search(zipcode: str):
         )
 
     city_slug = city_name.lower().replace(" ", "").replace("-", "")
+    print(f"Creating entry for new zipcode {zipcode} -> {city_name} ({city_slug})")
 
-    # Try to fetch meetings and create entry
+    # Create entry for new zipcode/city
     return await create_city_entry(
-        zipcode, city_name, city_slug, result.state, result.county
+        zipcode, city_name, city_slug, result.state, result.county, is_new=True
     )
 
 
 async def handle_city_search(city_input: str):
     """Handle city name-based search"""
+    # Clean and validate city input
+    city_input = city_input.strip()
+    if len(city_input) < 2:
+        raise HTTPException(status_code=400, detail="City name must be at least 2 characters")
+    
     # Convert city input to potential slug format
     city_slug = city_input.lower().replace(" ", "").replace("-", "")
 
@@ -248,10 +297,11 @@ async def handle_city_search(city_input: str):
             entry.get("city_slug") == city_slug
             or entry.get("city", "").lower() == city_input.lower()
         ):
+            print(f"Found cached entry for city {city_input}: {entry.get('city')}")
             return entry
 
     # First time encountering this city - create placeholder entry
-    print(f"🆕 NEW CITY ADDED: {city_input} (slug: {city_slug})")
+    print(f"NEW CITY REGISTERED: {city_input} (slug: {city_slug})")
 
     return await create_city_entry(None, city_input, city_slug, None, None, is_new=True)
 
@@ -259,9 +309,8 @@ async def handle_city_search(city_input: str):
 async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new=False):
     """Create a new city entry with optional meeting lookup"""
     meetings = []
-    vendor_found = False
     
-    # Create entry data (no automatic vendor detection)
+    # Create entry data with better messaging
     entry_data = {
         "zipcode": zipcode,
         "city": city_name,
@@ -271,12 +320,22 @@ async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new
         "county": county,
         "meetings": meetings,
         "is_new_city": is_new,
-        "needs_manual_config": True
+        "needs_manual_config": True,
+        "status": "registered",
+        "message": f"Great! We've added {city_name} to our system and we're working to integrate their meeting data."
     }
 
     # Store in database
-    if zipcode:
-        db.store_zipcode_entry(entry_data)
+    try:
+        if zipcode:
+            db.store_zipcode_entry(entry_data)
+            print(f"Successfully stored new zipcode entry: {zipcode} -> {city_name}")
+        else:
+            # For city-only searches, we still want to track them but may not store permanently
+            print(f"New city search logged: {city_name} ({city_slug})")
+    except Exception as e:
+        print(f"Error storing city entry for {city_name}: {e}")
+        # Don't fail the request if storage fails
 
     return entry_data
 
@@ -295,11 +354,39 @@ async def root():
             "city_meetings": "/api/meetings/{city_slug}",
             "recent": "/api/meetings/recent",
             "cache_stats": "/api/cache/stats",
+            "health": "/api/health",
         },
     }
 
 
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    try:
+        # Test database connection
+        stats = db.get_cache_stats()
+        
+        # Test zipcode service
+        test_result = zipcode_search.by_zipcode("90210")
+        
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "zipcode_service": "available",
+            "llm_processor": "available" if processor else "disabled",
+            "cache_entries": stats.get("total_entries", 0)
+        }
+    except Exception as e:
+        print(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+
+
 if __name__ == "__main__":
     import uvicorn
-
+    
+    print("Starting engagic API server...")
+    print(f"LLM processor: {'enabled' if processor else 'disabled'}")
     uvicorn.run(app, host="0.0.0.0", port=8000)
