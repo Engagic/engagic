@@ -74,6 +74,7 @@ async def get_meetings(city: Optional[str] = None):
 
         if not vendor:
             print(f"No vendor configured for city {city}")
+
             if city_name:
                 return {
                     "message": f"{city_name} has been registered and will be integrated soon",
@@ -83,6 +84,7 @@ async def get_meetings(city: Optional[str] = None):
                 }
             else:
                 print(f"City {city} not found in database")
+
                 raise HTTPException(
                     status_code=404, detail=f"City {city} not found"
                 )
