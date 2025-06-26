@@ -14,16 +14,19 @@
     let validZipcode = $derived(searchQuery.length === 5 && /^\d{5}$/.test(searchQuery));
     let validCityName = $derived(searchQuery.length >= 2 && /^[a-zA-Z\s-'.,]+$/.test(searchQuery));
     let searchable = $derived(validZipcode || validCityName);
-    let inputHint = $derived(() => {
-        if (searchQuery.length === 0) return "";
-        if (searchQuery.length > 0 && searchQuery.length < 2) return "Enter at least 2 characters";
-        if (searchQuery.length > 2 && searchQuery.length < 5 && /^\d+$/.test(searchQuery)) return "Enter full 5-digit zipcode";
-        if (searchQuery.length === 5 && !/^\d{5}$/.test(searchQuery)) return "Zipcode must be 5 digits";
-        if (searchQuery.length >= 2 && !/^[a-zA-Z\s-'.,\d]+$/.test(searchQuery)) return "Please use only letters, numbers, spaces, and basic punctuation";
-        if (validZipcode) return "Valid zipcode ✓";
-        if (validCityName) return "Valid city name ✓";
+    
+    function getInputHint(query: string, isValidZip: boolean, isValidCity: boolean): string {
+        if (query.length === 0) return "";
+        if (query.length > 0 && query.length < 2) return "Enter at least 2 characters";
+        if (query.length > 2 && query.length < 5 && /^\d+$/.test(query)) return "Enter full 5-digit zipcode";
+        if (query.length === 5 && !/^\d{5}$/.test(query)) return "Zipcode must be 5 digits";
+        if (query.length >= 2 && !/^[a-zA-Z\s-'.,\d]+$/.test(query)) return "Please use only letters, numbers, spaces, and basic punctuation";
+        if (isValidZip) return "Valid zipcode ✓";
+        if (isValidCity) return "Valid city name ✓";
         return "";
-    });
+    }
+    
+    let inputHint = $derived(getInputHint(searchQuery, validZipcode, validCityName));
 
     const performSearch = async () => {
         if (!searchable || isLoading) return;
@@ -33,7 +36,14 @@
         successMessage = "";
         
         try {
+            console.log('Starting search for:', searchQuery);
             const result = await ApiService.searchMeetings(searchQuery);
+            console.log('Search result received:', result);
+            
+            // Validate we got a proper response
+            if (!result || !result.city_slug) {
+                throw new Error('Invalid response from server');
+            }
             
             // Store search in localStorage
             if (browser) {
@@ -44,35 +54,48 @@
             // Show success message for new cities before redirecting
             if (result.is_new_city) {
                 successMessage = `Great! We've added ${result.city} to our system.`;
+                console.log('New city registered:', result.city);
                 // Brief delay to show success message
                 setTimeout(() => {
                     goto(`/${result.city_slug}`);
                 }, 1500);
             } else {
+                console.log('Existing city found:', result.city);
                 // Existing city - redirect immediately
                 goto(`/${result.city_slug}`);
             }
             
         } catch (error) {
-            console.error("Error searching:", error);
+            console.error("Search failed:", error);
+            console.error("Error details:", {
+                message: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : 'No stack trace',
+                searchQuery,
+                validZipcode,
+                validCityName
+            });
             
             // Handle different error types
             if (error instanceof Error) {
                 const errorMsg = error.message.toLowerCase();
                 
-                if (errorMsg.includes('not found') || errorMsg.includes('404')) {
+                if (errorMsg.includes('timeout') || errorMsg.includes('abort')) {
+                    errorMessage = "Search timed out. Please try again.";
+                } else if (errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
+                    errorMessage = "Connection failed. Please check your internet and try again.";
+                } else if (errorMsg.includes('not found') || errorMsg.includes('404')) {
                     if (validZipcode) {
                         errorMessage = "That zipcode wasn't found. Please check and try again.";
                     } else {
                         errorMessage = "That city wasn't found. Try a different spelling or nearby city.";
                     }
-                } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
-                    errorMessage = "Connection failed. Please check your internet and try again.";
+                } else if (errorMsg.includes('invalid response')) {
+                    errorMessage = "Server returned invalid data. Please try again.";
                 } else {
-                    errorMessage = "Something went wrong (404 / not found). Please try again in a moment.";
+                    errorMessage = `Search error: ${error.message}`;
                 }
             } else {
-                errorMessage = "Something went wrong (error). Please try again in a moment.";
+                errorMessage = "Something went wrong. Please try again in a moment.";
             }
         } finally {
             isLoading = false;
