@@ -6,5 +6,15 @@
   "assets": {
     "binding": "ASSETS",
     "directory": ".svelte-kit/cloudflare"
-  }
+  },
+  "routes": [
+    {
+      "pattern": "engagic.org/*",
+      "zone_name": "engagic.org"
+    },
+    {
+      "pattern": "www.engagic.org/*", 
+      "zone_name": "engagic.org"
+    }
+  ]
 }
