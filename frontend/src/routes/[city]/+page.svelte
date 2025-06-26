@@ -68,8 +68,24 @@
 
     {#if isNewCity}
         <div class="new-city-notice">
-            <h3>🆕 New City Discovered!</h3>
-            <p>We've added <strong>{cityName}</strong> to our system. {needsManualConfig ? 'We\'re working on finding the right meeting sources for this city.' : 'Meetings are now being tracked.'}</p>
+            <div class="notice-header">
+                <div class="success-icon">✅</div>
+                <h3>Welcome to engagic, {cityName}!</h3>
+            </div>
+            <div class="notice-content">
+                <p><strong>Great news!</strong> We've successfully added your city to our system.</p>
+                <div class="integration-status">
+                    <h4>What happens next?</h4>
+                    <ul>
+                        <li>🔍 We're identifying your city's meeting websites</li>
+                        <li>🤖 Setting up automated agenda processing</li>
+                        <li>📅 You'll start seeing meetings here within 24-48 hours</li>
+                    </ul>
+                </div>
+                <div class="help-text">
+                    <p><strong>Want to help speed this up?</strong> Email us at <a href="mailto:hello@engagic.org">hello@engagic.org</a> with your city's meeting website URL.</p>
+                </div>
+            </div>
         </div>
     {/if}
 
@@ -115,8 +131,29 @@
         </div>
     {:else}
         <div class="no-meetings">
-            <p>No meetings found for {cityName}</p>
-            <p>This city may not have meetings available through our system yet.</p>
+            {#if isNewCity}
+                <div class="integration-pending">
+                    <div class="pending-icon">⏳</div>
+                    <h3>Integration in Progress</h3>
+                    <p>We're working on connecting to {cityName}'s meeting system. This usually takes 24-48 hours.</p>
+                    <div class="what-to-expect">
+                        <h4>What to expect:</h4>
+                        <ul>
+                            <li>Upcoming city council meetings</li>
+                            <li>Planning commission meetings</li>
+                            <li>AI-generated agenda summaries</li>
+                            <li>Direct links to meeting documents</li>
+                        </ul>
+                    </div>
+                </div>
+            {:else}
+                <div class="no-data">
+                    <div class="info-icon">ℹ️</div>
+                    <h3>No Recent Meetings</h3>
+                    <p>{cityName} may not have upcoming meetings scheduled, or we're still working on integrating their system.</p>
+                    <p>Try checking back in a day or two, or <a href="mailto:hello@engagic.org">contact us</a> if you think this is an error.</p>
+                </div>
+            {/if}
         </div>
     {/if}
 </div>
@@ -158,10 +195,76 @@
         color: white;
     }
 
-    .loading, .error-message, .no-meetings {
+    .loading, .error-message {
         text-align: center;
         padding: 2rem;
         color: var(--gray);
+    }
+
+    .no-meetings {
+        padding: 2rem;
+    }
+
+    .integration-pending, .no-data {
+        text-align: center;
+        background: var(--white);
+        border: 2px solid var(--input-border);
+        border-radius: 12px;
+        padding: 2rem;
+    }
+
+    .pending-icon, .info-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
+
+    .integration-pending h3, .no-data h3 {
+        margin: 0 0 1rem 0;
+        color: var(--secondary);
+        font-size: 1.5rem;
+    }
+
+    .integration-pending p, .no-data p {
+        color: var(--gray);
+        line-height: 1.6;
+        margin-bottom: 1rem;
+    }
+
+    .what-to-expect {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-top: 1.5rem;
+        text-align: left;
+    }
+
+    .what-to-expect h4 {
+        margin: 0 0 1rem 0;
+        color: var(--secondary);
+        font-size: 1.1rem;
+    }
+
+    .what-to-expect ul {
+        margin: 0;
+        padding-left: 1.5rem;
+        color: var(--gray);
+    }
+
+    .what-to-expect li {
+        margin-bottom: 0.5rem;
+        line-height: 1.4;
+    }
+
+    .no-data a {
+        color: var(--civic-blue);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .no-data a:hover {
+        text-decoration: underline;
     }
 
     .error-message {
@@ -175,21 +278,82 @@
         background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
         border: 2px solid var(--civic-green);
         border-radius: 12px;
-        padding: 1.5rem;
+        padding: 2rem;
         margin-bottom: 2rem;
-        text-align: center;
     }
 
-    .new-city-notice h3 {
-        margin: 0 0 0.5rem 0;
-        color: var(--civic-green);
-        font-size: 1.25rem;
+    .notice-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
 
-    .new-city-notice p {
+    .success-icon {
+        font-size: 2rem;
+    }
+
+    .notice-header h3 {
         margin: 0;
+        color: var(--civic-green);
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+
+    .notice-content {
+        text-align: left;
+    }
+
+    .notice-content p {
+        margin: 0 0 1rem 0;
         color: #166534;
-        line-height: 1.5;
+        line-height: 1.6;
+    }
+
+    .integration-status {
+        background: rgba(255, 255, 255, 0.7);
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+
+    .integration-status h4 {
+        margin: 0 0 0.75rem 0;
+        color: #166534;
+        font-size: 1rem;
+    }
+
+    .integration-status ul {
+        margin: 0;
+        padding-left: 1.5rem;
+        color: #166534;
+    }
+
+    .integration-status li {
+        margin-bottom: 0.5rem;
+        line-height: 1.4;
+    }
+
+    .help-text {
+        background: rgba(255, 255, 255, 0.5);
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid var(--civic-green);
+    }
+
+    .help-text p {
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    .help-text a {
+        color: var(--civic-blue);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .help-text a:hover {
+        text-decoration: underline;
     }
 
     .meetings-section h2 {
