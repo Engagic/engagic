@@ -69,10 +69,10 @@
                 } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
                     errorMessage = "Connection failed. Please check your internet and try again.";
                 } else {
-                    errorMessage = "Something went wrong. Please try again in a moment.";
+                    errorMessage = "Something went wrong (404 / not found). Please try again in a moment.";
                 }
             } else {
-                errorMessage = "Something went wrong. Please try again in a moment.";
+                errorMessage = "Something went wrong (error). Please try again in a moment.";
             }
         } finally {
             isLoading = false;
