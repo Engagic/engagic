@@ -9,16 +9,28 @@
     let isFocused = $state(false);
     let isLoading = $state(false);
     let errorMessage = $state("");
+    let successMessage = $state("");
 
     let validZipcode = $derived(searchQuery.length === 5 && /^\d{5}$/.test(searchQuery));
-    let validCityName = $derived(searchQuery.length >= 2 && /^[a-zA-Z\s-]+$/.test(searchQuery));
+    let validCityName = $derived(searchQuery.length >= 2 && /^[a-zA-Z\s-'.,]+$/.test(searchQuery));
     let searchable = $derived(validZipcode || validCityName);
+    let inputHint = $derived(() => {
+        if (searchQuery.length === 0) return "";
+        if (searchQuery.length > 0 && searchQuery.length < 2) return "Enter at least 2 characters";
+        if (searchQuery.length > 2 && searchQuery.length < 5 && /^\d+$/.test(searchQuery)) return "Enter full 5-digit zipcode";
+        if (searchQuery.length === 5 && !/^\d{5}$/.test(searchQuery)) return "Zipcode must be 5 digits";
+        if (searchQuery.length >= 2 && !/^[a-zA-Z\s-'.,\d]+$/.test(searchQuery)) return "Please use only letters, numbers, spaces, and basic punctuation";
+        if (validZipcode) return "Valid zipcode ✓";
+        if (validCityName) return "Valid city name ✓";
+        return "";
+    });
 
     const performSearch = async () => {
         if (!searchable || isLoading) return;
         
         isLoading = true;
         errorMessage = "";
+        successMessage = "";
         
         try {
             const result = await ApiService.searchMeetings(searchQuery);
@@ -29,17 +41,39 @@
                 localStorage.setItem('lastSearchResult', JSON.stringify(result));
             }
             
-            // Show acknowledgment for new cities
+            // Show success message for new cities before redirecting
             if (result.is_new_city) {
-                console.log(`🆕 New city discovered: ${result.city}`);
+                successMessage = `Great! We've added ${result.city} to our system.`;
+                // Brief delay to show success message
+                setTimeout(() => {
+                    goto(`/${result.city_slug}`);
+                }, 1500);
+            } else {
+                // Existing city - redirect immediately
+                goto(`/${result.city_slug}`);
             }
-            
-            // Redirect to city page using city_slug
-            goto(`/${result.city_slug}`);
             
         } catch (error) {
             console.error("Error searching:", error);
-            errorMessage = error instanceof Error ? error.message : "Failed to search meetings";
+            
+            // Handle different error types
+            if (error instanceof Error) {
+                const errorMsg = error.message.toLowerCase();
+                
+                if (errorMsg.includes('not found') || errorMsg.includes('404')) {
+                    if (validZipcode) {
+                        errorMessage = "That zipcode wasn't found. Please check and try again.";
+                    } else {
+                        errorMessage = "That city wasn't found. Try a different spelling or nearby city.";
+                    }
+                } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
+                    errorMessage = "Connection failed. Please check your internet and try again.";
+                } else {
+                    errorMessage = "Something went wrong. Please try again in a moment.";
+                }
+            } else {
+                errorMessage = "Something went wrong. Please try again in a moment.";
+            }
         } finally {
             isLoading = false;
         }
@@ -56,6 +90,7 @@
         if (["Escape", "Clear"].includes(e.key) && isFocused) {
             searchQuery = "";
             errorMessage = "";
+            successMessage = "";
         }
     };
 </script>
@@ -71,7 +106,7 @@
             onfocus={() => (isFocused = true)}
             onblur={() => (isFocused = false)}
             type="text"
-            placeholder="Enter zipcode or city name"
+            placeholder="Enter zipcode (12345) or city name"
             disabled={isLoading}
         />
 
@@ -82,6 +117,7 @@
                 disabled={isLoading}
             >
                 {#if isLoading}
+                    <div class="loading-spinner"></div>
                     Searching...
                 {:else}
                     <IconSearch />
@@ -90,10 +126,22 @@
             </button>
         {/if}
     </div>
+    
+    {#if inputHint && !isLoading}
+        <div class="input-hint" class:valid={searchable} class:invalid={!searchable && searchQuery.length > 0}>
+            {inputHint}
+        </div>
+    {/if}
 
-    {#if errorMessage}
+    {#if successMessage}
+        <div class="success-message">
+            <p>{successMessage}</p>
+            <div class="loading-dots">Loading your city page...</div>
+        </div>
+    {:else if errorMessage}
         <div class="error-message">
             <p>{errorMessage}</p>
+            <button class="retry-button" onclick={() => { errorMessage = ''; performSearch(); }}>Try Again</button>
         </div>
     {/if}
 </div>
@@ -166,6 +214,39 @@
     }
 
 
+    .loading-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top: 2px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .success-message {
+        background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
+        border: 2px solid var(--civic-green);
+        color: #166534;
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .success-message p {
+        margin: 0 0 0.5rem 0;
+        font-weight: 600;
+    }
+
+    .loading-dots {
+        font-size: 0.9rem;
+        opacity: 0.8;
+    }
+
     .error-message {
         background: #fee2e2;
         border: 1px solid #fecaca;
@@ -176,7 +257,40 @@
     }
 
     .error-message p {
-        margin: 0;
+        margin: 0 0 0.75rem 0;
+    }
+
+    .retry-button {
+        background: var(--civic-blue);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .retry-button:hover {
+        background: var(--civic-blue-hover);
+        transform: translateY(-1px);
+    }
+
+    .input-hint {
+        font-size: 0.875rem;
+        padding: 0.5rem 0;
+        text-align: center;
+        transition: all 0.2s ease;
+    }
+
+    .input-hint.valid {
+        color: var(--civic-green);
+        font-weight: 500;
+    }
+
+    .input-hint.invalid {
+        color: #dc2626;
     }
 
     @media screen and (max-width: 640px) {
