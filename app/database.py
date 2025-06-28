@@ -496,51 +496,6 @@ class MeetingDatabase:
                 "meetings": meetings,
             }
 
-    def get_city_by_slug(self, city_slug: str) -> Optional[Dict[str, Any]]:
-        """Get city entry by city slug"""
-        with self.get_connection() as conn:
-            cursor = conn.execute("""
-                SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
-                FROM cities 
-                WHERE city_slug = ?
-            """, (city_slug,))
-            
-            city_row = cursor.fetchone()
-            if not city_row:
-                return None
-            
-            # Update last_accessed
-            conn.execute(
-                "UPDATE cities SET last_accessed = ? WHERE id = ?",
-                (datetime.now(timezone.utc).isoformat(), city_row["id"])
-            )
-            
-            # Get associated meetings
-            cursor = conn.execute("""
-                SELECT meeting_date, meeting_name, packet_url 
-                FROM meetings WHERE city_slug = ? 
-                ORDER BY meeting_date DESC
-            """, (city_row["city_slug"],))
-            
-            meetings = [
-                {
-                    "title": row["meeting_name"],
-                    "start": row["meeting_date"],
-                    "packet_url": row["packet_url"],
-                }
-                for row in cursor.fetchall()
-            ]
-            
-            return {
-                "city": city_row["city_name"],
-                "city_slug": city_row["city_slug"],
-                "vendor": city_row["vendor"],
-                "state": city_row["state"],
-                "county": city_row["county"],
-                "primary_zipcode": city_row["primary_zipcode"],
-                "all_zipcodes": json.loads(city_row["zipcodes"]) if city_row["zipcodes"] else [],
-                "meetings": meetings,
-            }
 
     def store_city_entry(self, entry_data: Dict[str, Any]) -> int:
         """Store city entry with automatic zipcode aggregation"""
@@ -662,15 +617,17 @@ class MeetingDatabase:
 
 
 def get_city_info(city_slug: str) -> Dict[str, Optional[str]]:
-    """Get city name and zipcode from city slug using cities table"""
+    """Get city name and zipcode from city slug - searches all cities"""
     db = MeetingDatabase()
-    city_data = db.get_city_by_slug(city_slug)
     
-    if city_data:
-        return {
-            "zipcode": city_data["primary_zipcode"], 
-            "city_name": city_data["city"]
-        }
+    # Search through all cities to find matching slug
+    all_cities = db.get_all_cities()
+    for city in all_cities:
+        if city.get("city_slug") == city_slug:
+            return {
+                "zipcode": city["primary_zipcode"], 
+                "city_name": city["city_name"]
+            }
     
     # Fallback for unknown cities
     return {"zipcode": None, "city_name": city_slug.replace("cityof", "").title()}
