@@ -38,6 +38,67 @@ except ValueError:
 db = MeetingDatabase()
 zipcode_search = SearchEngine()
 
+def parse_city_state_input(input_str: str) -> tuple[str, str]:
+    """Parse city, state from user input
+    
+    Handles formats like:
+    - "Palo Alto, CA"
+    - "Palo Alto, California" 
+    - "Boston Massachusetts"
+    - "New York NY"
+    
+    Returns: (city_name, state_abbreviation)
+    """
+    input_str = input_str.strip()
+    
+    # Common state name to abbreviation mapping
+    state_map = {
+        'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR', 'california': 'CA',
+        'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE', 'florida': 'FL', 'georgia': 'GA',
+        'hawaii': 'HI', 'idaho': 'ID', 'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA',
+        'kansas': 'KS', 'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+        'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS', 'missouri': 'MO',
+        'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
+        'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH',
+        'oklahoma': 'OK', 'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+        'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT', 'vermont': 'VT',
+        'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV', 'wisconsin': 'WI', 'wyoming': 'WY'
+    }
+    
+    # Try comma-separated format first: "City, State"
+    if ',' in input_str:
+        parts = [p.strip() for p in input_str.split(',')]
+        if len(parts) == 2:
+            city, state = parts
+            state_lower = state.lower()
+            
+            # Check if it's already an abbreviation
+            if len(state) == 2 and state.upper() in state_map.values():
+                return city, state.upper()
+            # Check if it's a full state name
+            elif state_lower in state_map:
+                return city, state_map[state_lower]
+    
+    # Try space-separated format: "City State" or "City Full State Name"
+    words = input_str.split()
+    if len(words) >= 2:
+        # Try last word as state abbreviation
+        last_word = words[-1].lower()
+        if len(last_word) == 2 and last_word.upper() in state_map.values():
+            city = ' '.join(words[:-1])
+            return city, last_word.upper()
+        
+        # Try last 1-2 words as full state name
+        for num_state_words in [2, 1]:
+            if len(words) > num_state_words:
+                potential_state = ' '.join(words[-num_state_words:]).lower()
+                if potential_state in state_map:
+                    city = ' '.join(words[:-num_state_words])
+                    return city, state_map[potential_state]
+    
+    # No state found
+    return input_str, None
+
 
 class MeetingRequest(BaseModel):
     packet_url: str
@@ -221,7 +282,7 @@ async def cleanup_cache(days_old: int = 90):
 
 @app.get("/api/search/{query}")
 async def unified_search(query: str):
-    """Unified search endpoint that handles both zipcode and city name input"""
+    """Unified search endpoint that handles zipcode and city, state input"""
     try:
         query = query.strip()
         print(f"Search request: '{query}'")
@@ -236,7 +297,7 @@ async def unified_search(query: str):
             print(f"Processing as zipcode: {query}")
             return await handle_zipcode_search(query)
         else:
-            print(f"Processing as city name: {query}")
+            print(f"Processing as city, state: {query}")
             return await handle_city_search(query)
 
     except HTTPException:
@@ -282,46 +343,53 @@ async def handle_zipcode_search(zipcode: str):
 
 
 async def handle_city_search(city_input: str):
-    """Handle city name-based search"""
+    """Handle city name-based search - requires city, state format"""
     # Clean and validate city input
     city_input = city_input.strip()
     if len(city_input) < 2:
         raise HTTPException(status_code=400, detail="City name must be at least 2 characters")
 
-    # Check if we already have this city in our database by name
-    # Try without state first (most common case)
-    cached_entry = db.get_city_by_name(city_input)
+    # Parse city, state from input
+    city_name, state = parse_city_state_input(city_input)
+    
+    if not state:
+        raise HTTPException(
+            status_code=400, 
+            detail="Please specify both city and state (e.g., 'Palo Alto, CA' or 'Boston Massachusetts')"
+        )
+
+    # Check if we already have this city in our database
+    cached_entry = db.get_city_by_name(city_name, state)
     if cached_entry:
-        print(f"Found cached entry for city {city_input}: {cached_entry.get('city')}")
+        print(f"Found cached entry for {city_name}, {state}")
         return cached_entry
 
     # First time encountering this city - resolve using uszipcode
-    print(f"NEW CITY REGISTERED: {city_input}")
+    print(f"NEW CITY REGISTERED: {city_name}, {state}")
     
     # Use uszipcode to resolve city to get complete information
     try:
-        city_results = zipcode_search.by_city(city_input)
-        print(f"City lookup result for {city_input}: found {len(city_results)} zipcodes")
+        city_results = zipcode_search.by_city_and_state(city_name, state)
+        print(f"City lookup result for {city_name}, {state}: found {len(city_results)} zipcodes")
     except Exception as e:
-        print(f"Error looking up city {city_input}: {e}")
-        raise HTTPException(status_code=400, detail="Please enter a valid city name and try again")
+        print(f"Error looking up city {city_name}, {state}: {e}")
+        raise HTTPException(status_code=400, detail="Please enter a valid city name and state and try again")
     
     if not city_results:
-        print(f"Invalid city name {city_input}: not found in database")
-        raise HTTPException(status_code=400, detail="Please enter a valid city name and try again")
+        print(f"Invalid city name {city_name}, {state}: not found in database")
+        raise HTTPException(status_code=400, detail="Please enter a valid city name and state and try again")
     
     # Use the first/primary result for the city
     primary_result = city_results[0]
     primary_zipcode = primary_result.zipcode
-    state = primary_result.state
     county = primary_result.county
     
     # Generate city slug for URL purposes (but not for DB searching)
-    city_slug = city_input.lower().replace(" ", "").replace("-", "")
+    city_slug = city_name.lower().replace(" ", "").replace("-", "")
     
-    print(f"Creating entry for new city {city_input} -> {primary_zipcode} ({state}, {county})")
+    print(f"Creating entry for new city {city_name}, {state} -> {primary_zipcode} ({county})")
     
-    return await create_city_entry(primary_zipcode, city_input, city_slug, state, county, is_new=True)
+    return await create_city_entry(primary_zipcode, city_name, city_slug, state, county, is_new=True)
 
 
 async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new=False):
