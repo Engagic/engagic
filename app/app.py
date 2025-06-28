@@ -261,17 +261,17 @@ async def handle_zipcode_search(zipcode: str):
         print(f"Zipcode lookup result for {zipcode}: {result}")
     except Exception as e:
         print(f"Error looking up zipcode {zipcode}: {e}")
-        raise HTTPException(status_code=400, detail=f"Invalid zipcode: {zipcode}")
+        raise HTTPException(status_code=400, detail="Please enter a valid zipcode and try again")
 
     if not result or not result.zipcode:
-        raise HTTPException(status_code=404, detail=f"Zipcode {zipcode} not found")
+        print(f"Invalid zipcode {zipcode}: not found in database")
+        raise HTTPException(status_code=400, detail="Please enter a valid zipcode and try again")
 
     # Create city slug from city name
     city_name = result.major_city or result.post_office_city
     if not city_name:
-        raise HTTPException(
-            status_code=404, detail=f"No city found for zipcode {zipcode}"
-        )
+        print(f"Invalid zipcode {zipcode}: no associated city found")
+        raise HTTPException(status_code=400, detail="Please enter a valid zipcode and try again")
 
     city_slug = city_name.lower().replace(" ", "").replace("-", "")
     print(f"Creating entry for new zipcode {zipcode} -> {city_name} ({city_slug})")
@@ -302,10 +302,30 @@ async def handle_city_search(city_input: str):
             print(f"Found cached entry for city {city_input}: {entry.get('city')}")
             return entry
 
-    # First time encountering this city - create placeholder entry
+    # First time encountering this city - resolve using uszipcode
     print(f"NEW CITY REGISTERED: {city_input} (slug: {city_slug})")
-
-    return await create_city_entry(None, city_input, city_slug, None, None, is_new=True)
+    
+    # Use uszipcode to resolve city to get complete information
+    try:
+        city_results = zipcode_search.by_city(city_input)
+        print(f"City lookup result for {city_input}: found {len(city_results)} zipcodes")
+    except Exception as e:
+        print(f"Error looking up city {city_input}: {e}")
+        raise HTTPException(status_code=400, detail="Please enter a valid city name and try again")
+    
+    if not city_results:
+        print(f"Invalid city name {city_input}: not found in database")
+        raise HTTPException(status_code=400, detail="Please enter a valid city name and try again")
+    
+    # Use the first/primary result for the city
+    primary_result = city_results[0]
+    primary_zipcode = primary_result.zipcode
+    state = primary_result.state
+    county = primary_result.county
+    
+    print(f"Creating entry for new city {city_input} -> {primary_zipcode} ({state}, {county})")
+    
+    return await create_city_entry(primary_zipcode, city_input, city_slug, state, county, is_new=True)
 
 
 async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new=False):
@@ -327,17 +347,16 @@ async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new
         "message": f"Great! We've added {city_name} to our system and we're working to integrate their meeting data."
     }
 
-    # Store in database
+    # Store in database - always attempt to store new cities
     try:
+        db.store_zipcode_entry(entry_data)
         if zipcode:
-            db.store_zipcode_entry(entry_data)
             print(f"Successfully stored new zipcode entry: {zipcode} -> {city_name}")
         else:
-            # For city-only searches, we still want to track them but may not store permanently
-            print(f"New city search logged: {city_name} ({city_slug})")
+            print(f"Successfully stored new city entry: {city_name} ({city_slug})")
     except Exception as e:
         print(f"Error storing city entry for {city_name}: {e}")
-        # Don't fail the request if storage fails
+        # Don't fail the request if storage fails - continue to show welcome message
 
     return entry_data
 
