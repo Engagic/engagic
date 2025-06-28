@@ -454,16 +454,18 @@ class MeetingDatabase:
         """Get city entry by name and optional state"""
         with self.get_connection() as conn:
             if state:
+                # Exact match with state
                 cursor = conn.execute("""
                     SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
                     FROM cities 
                     WHERE city_name = ? AND state = ?
                 """, (city_name, state))
             else:
+                # Try case-insensitive match first
                 cursor = conn.execute("""
                     SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
                     FROM cities 
-                    WHERE city_name = ?
+                    WHERE LOWER(city_name) = LOWER(?)
                 """, (city_name,))
             
             city_row = cursor.fetchone()
