@@ -287,24 +287,16 @@ async def handle_city_search(city_input: str):
     city_input = city_input.strip()
     if len(city_input) < 2:
         raise HTTPException(status_code=400, detail="City name must be at least 2 characters")
-    
-    # Convert city input to potential slug format
-    city_slug = city_input.lower().replace(" ", "").replace("-", "")
 
-    # Check if we already have this city in our database by slug
-    cached_entry = db.get_city_by_slug(city_slug)
-    if cached_entry:
-        print(f"Found cached entry for city {city_input}: {cached_entry.get('city')}")
-        return cached_entry
-    
-    # Also try direct city name search
+    # Check if we already have this city in our database by name
+    # Try without state first (most common case)
     cached_entry = db.get_city_by_name(city_input)
     if cached_entry:
         print(f"Found cached entry for city {city_input}: {cached_entry.get('city')}")
         return cached_entry
 
     # First time encountering this city - resolve using uszipcode
-    print(f"NEW CITY REGISTERED: {city_input} (slug: {city_slug})")
+    print(f"NEW CITY REGISTERED: {city_input}")
     
     # Use uszipcode to resolve city to get complete information
     try:
@@ -323,6 +315,9 @@ async def handle_city_search(city_input: str):
     primary_zipcode = primary_result.zipcode
     state = primary_result.state
     county = primary_result.county
+    
+    # Generate city slug for URL purposes (but not for DB searching)
+    city_slug = city_input.lower().replace(" ", "").replace("-", "")
     
     print(f"Creating entry for new city {city_input} -> {primary_zipcode} ({state}, {county})")
     
