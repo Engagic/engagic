@@ -63,14 +63,13 @@ async def get_meetings(city: Optional[str] = None):
             return meetings
 
         # If no cached meetings, find the vendor for this city and scrape
-        all_zipcode_entries = db.get_all_zipcode_entries()
-        vendor = None
-        city_name = None
-        for entry in all_zipcode_entries:
-            if entry["city_slug"] == city:
-                vendor = entry.get("vendor")
-                city_name = entry.get("city")
-                break
+        city_entry = db.get_city_by_slug(city)
+        if city_entry:
+            vendor = city_entry.get("vendor")
+            city_name = city_entry.get("city")
+        else:
+            vendor = None
+            city_name = None
 
         if not vendor:
             print(f"No vendor configured for city {city}")
@@ -250,7 +249,7 @@ async def unified_search(query: str):
 async def handle_zipcode_search(zipcode: str):
     """Handle zipcode-based search"""
     # Check if we have this zipcode in our database
-    cached_entry = db.get_zipcode_entry(zipcode)
+    cached_entry = db.get_city_by_zipcode(zipcode)
     if cached_entry:
         print(f"Found cached entry for zipcode {zipcode}: {cached_entry.get('city')}")
         return cached_entry
@@ -292,15 +291,17 @@ async def handle_city_search(city_input: str):
     # Convert city input to potential slug format
     city_slug = city_input.lower().replace(" ", "").replace("-", "")
 
-    # Check if we already have this city in our database
-    all_entries = db.get_all_zipcode_entries()
-    for entry in all_entries:
-        if (
-            entry.get("city_slug") == city_slug
-            or entry.get("city", "").lower() == city_input.lower()
-        ):
-            print(f"Found cached entry for city {city_input}: {entry.get('city')}")
-            return entry
+    # Check if we already have this city in our database by slug
+    cached_entry = db.get_city_by_slug(city_slug)
+    if cached_entry:
+        print(f"Found cached entry for city {city_input}: {cached_entry.get('city')}")
+        return cached_entry
+    
+    # Also try direct city name search
+    cached_entry = db.get_city_by_name(city_input)
+    if cached_entry:
+        print(f"Found cached entry for city {city_input}: {cached_entry.get('city')}")
+        return cached_entry
 
     # First time encountering this city - resolve using uszipcode
     print(f"NEW CITY REGISTERED: {city_input} (slug: {city_slug})")
@@ -349,7 +350,7 @@ async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new
 
     # Store in database - always attempt to store new cities
     try:
-        db.store_zipcode_entry(entry_data)
+        db.store_city_entry(entry_data)
         if zipcode:
             print(f"Successfully stored new zipcode entry: {zipcode} -> {city_name}")
         else:
