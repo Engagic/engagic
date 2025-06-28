@@ -124,10 +124,18 @@ async def get_meetings(city: Optional[str] = None):
             return meetings
 
         # If no cached meetings, find the vendor for this city and scrape
-        city_entry = db.get_city_by_slug(city)
+        # The 'city' parameter here is actually a city_slug from URL
+        # We need to find the city entry that has this slug
+        all_cities = db.get_all_cities()
+        city_entry = None
+        for entry in all_cities:
+            if entry.get("city_slug") == city:
+                city_entry = entry
+                break
+        
         if city_entry:
             vendor = city_entry.get("vendor")
-            city_name = city_entry.get("city")
+            city_name = city_entry.get("city_name")
         else:
             vendor = None
             city_name = None
