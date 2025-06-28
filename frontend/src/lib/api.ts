@@ -44,13 +44,20 @@ export class ApiService {
     static async getMeetings(city_slug: string): Promise<Meeting[]> {
         try {
             console.log(`Fetching: ${API_BASE_URL}/api/meetings?city=${city_slug}`);
+            
+            // Create timeout controller
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
             const response = await fetch(`${API_BASE_URL}/api/meetings?city=${city_slug}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                signal: AbortSignal.timeout(10000) // 10 second timeout
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             if (!response.ok) {
                 let errorMessage = 'Failed to load meetings';
@@ -71,12 +78,16 @@ export class ApiService {
             return result;
         } catch (error) {
             console.error('Error fetching meetings:', error);
+            
             if (error instanceof Error) {
                 if (error.name === 'AbortError') {
                     throw new Error('Request timed out. Please try again.');
                 }
-                if (error.message.includes('Failed to fetch')) {
+                if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
                     throw new Error('Network error. Please check your connection.');
+                }
+                if (error.message.includes('JSON')) {
+                    throw new Error('Server returned invalid data. Please try again.');
                 }
                 throw error;
             }
@@ -93,14 +104,20 @@ export class ApiService {
         
         try {
             console.log(`Searching: ${API_BASE_URL}/api/search/${encodeURIComponent(normalized)}`);
+            
+            // Create timeout controller
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
             const response = await fetch(`${API_BASE_URL}/api/search/${encodeURIComponent(normalized)}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                // Add timeout
-                signal: AbortSignal.timeout(15000) // 15 second timeout
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             if (!response.ok) {
                 let errorMessage = 'Search failed';
@@ -121,12 +138,17 @@ export class ApiService {
             
             return result;
         } catch (error) {
+            console.error('API search error:', error);
+            
             if (error instanceof Error) {
                 if (error.name === 'AbortError') {
                     throw new Error('Search timed out. Please try again.');
                 }
-                if (error.message.includes('Failed to fetch')) {
+                if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
                     throw new Error('Network error. Please check your connection and try again.');
+                }
+                if (error.message.includes('JSON')) {
+                    throw new Error('Server returned invalid data. Please try again.');
                 }
                 throw error;
             }
