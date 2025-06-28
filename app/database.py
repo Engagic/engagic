@@ -69,14 +69,23 @@ class MeetingDatabase:
     def _migrate_add_vendor_column(self, conn):
         """Add vendor column to existing tables if it doesn't exist"""
         try:
-            # Check if vendor column exists
+            # Check if vendor column exists in meetings table
             cursor = conn.execute("PRAGMA table_info(meetings)")
             columns = [row[1] for row in cursor.fetchall()]
 
             if "vendor" not in columns:
-                print("Adding vendor column to existing database...")
+                print("Adding vendor column to meetings table...")
                 conn.execute("ALTER TABLE meetings ADD COLUMN vendor TEXT")
-                print("Migration complete: vendor column added")
+                print("Migration complete: vendor column added to meetings")
+                
+            # Check if vendor column exists in zipcode_entries table
+            cursor = conn.execute("PRAGMA table_info(zipcode_entries)")
+            zipcode_columns = [row[1] for row in cursor.fetchall()]
+            
+            if "vendor" not in zipcode_columns:
+                print("Adding vendor column to zipcode_entries table...")
+                conn.execute("ALTER TABLE zipcode_entries ADD COLUMN vendor TEXT")
+                print("Migration complete: vendor column added to zipcode_entries")
         except Exception as e:
             print(f"Migration warning: {e}")
 
