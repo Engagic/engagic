@@ -450,23 +450,14 @@ class MeetingDatabase:
                 "meetings": meetings,
             }
 
-    def get_city_by_name(self, city_name: str, state: str = None) -> Optional[Dict[str, Any]]:
-        """Get city entry by name and optional state"""
+    def get_city_by_name(self, city_name: str, state: str) -> Optional[Dict[str, Any]]:
+        """Get city entry by name and state (both required)"""
         with self.get_connection() as conn:
-            if state:
-                # Exact match with state
-                cursor = conn.execute("""
-                    SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
-                    FROM cities 
-                    WHERE city_name = ? AND state = ?
-                """, (city_name, state))
-            else:
-                # Try case-insensitive match first
-                cursor = conn.execute("""
-                    SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
-                    FROM cities 
-                    WHERE LOWER(city_name) = LOWER(?)
-                """, (city_name,))
+            cursor = conn.execute("""
+                SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
+                FROM cities 
+                WHERE LOWER(city_name) = LOWER(?) AND UPPER(state) = UPPER(?)
+            """, (city_name, state))
             
             city_row = cursor.fetchone()
             if not city_row:
