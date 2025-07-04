@@ -316,42 +316,23 @@ async def unified_search(query: str):
 
 
 async def handle_zipcode_search(zipcode: str):
-    """Handle zipcode-based search"""
-    # Check if we have this zipcode in our database
+    """Handle zipcode-based search using pre-populated database"""
+    # Check pre-populated database first
     cached_entry = db.get_city_by_zipcode(zipcode)
     if cached_entry:
-        print(f"Found cached entry for zipcode {zipcode}: {cached_entry.get('city')}")
+        print(f"Found pre-populated entry for zipcode {zipcode}: {cached_entry.get('city')}")
         return cached_entry
 
-    # Use uszipcode to resolve zipcode to city
-    try:
-        result = zipcode_search.by_zipcode(zipcode)
-        print(f"Zipcode lookup result for {zipcode}: {result}")
-    except Exception as e:
-        print(f"Error looking up zipcode {zipcode}: {e}")
-        raise HTTPException(status_code=400, detail="Please enter a valid zipcode and try again")
-
-    if not result or not result.zipcode:
-        print(f"Invalid zipcode {zipcode}: not found in database")
-        raise HTTPException(status_code=400, detail="Please enter a valid zipcode and try again")
-
-    # Create city slug from city name
-    city_name = result.major_city or result.post_office_city
-    if not city_name:
-        print(f"Invalid zipcode {zipcode}: no associated city found")
-        raise HTTPException(status_code=400, detail="Please enter a valid zipcode and try again")
-
-    city_slug = city_name.lower().replace(" ", "").replace("-", "")
-    print(f"Creating entry for new zipcode {zipcode} -> {city_name} ({city_slug})")
-
-    # Create entry for new zipcode/city
-    return await create_city_entry(
-        zipcode, city_name, city_slug, result.state, result.county, is_new=True
+    # Fallback: zipcode not in our database
+    print(f"Zipcode {zipcode} not found in pre-populated database")
+    raise HTTPException(
+        status_code=404, 
+        detail="That zipcode isn't in our database yet. Try searching by city name instead."
     )
 
 
 async def handle_city_search(city_input: str):
-    """Handle city name-based search - requires city, state format"""
+    """Handle city name-based search using pre-populated database"""
     # Clean and validate city input
     city_input = city_input.strip()
     if len(city_input) < 2:
@@ -366,71 +347,18 @@ async def handle_city_search(city_input: str):
             detail="Please specify both city and state (e.g., 'Palo Alto, CA' or 'Boston Massachusetts')"
         )
 
-    # Check if we already have this city in our database
+    # Check pre-populated database
     cached_entry = db.get_city_by_name(city_name, state)
     if cached_entry:
-        print(f"Found cached entry for {city_name}, {state}")
+        print(f"Found pre-populated entry for {city_name}, {state}")
         return cached_entry
 
-    # First time encountering this city - resolve using uszipcode
-    print(f"NEW CITY REGISTERED: {city_name}, {state}")
-    
-    # Use uszipcode to resolve city to get complete information
-    try:
-        city_results = zipcode_search.by_city_and_state(city_name, state)
-        print(f"City lookup result for {city_name}, {state}: found {len(city_results)} zipcodes")
-    except Exception as e:
-        print(f"Error looking up city {city_name}, {state}: {e}")
-        raise HTTPException(status_code=400, detail="Please enter a valid city name and state and try again")
-    
-    if not city_results:
-        print(f"Invalid city name {city_name}, {state}: not found in database")
-        raise HTTPException(status_code=400, detail="Please enter a valid city name and state and try again")
-    
-    # Use the first/primary result for the city
-    primary_result = city_results[0]
-    primary_zipcode = primary_result.zipcode
-    county = primary_result.county
-    
-    # Generate city slug for URL purposes (but not for DB searching)
-    city_slug = city_name.lower().replace(" ", "").replace("-", "")
-    
-    print(f"Creating entry for new city {city_name}, {state} -> {primary_zipcode} ({county})")
-    
-    return await create_city_entry(primary_zipcode, city_name, city_slug, state, county, is_new=True)
-
-
-async def create_city_entry(zipcode, city_name, city_slug, state, county, is_new=False):
-    """Create a new city entry with optional meeting lookup"""
-    meetings = []
-    
-    # Create entry data with better messaging
-    entry_data = {
-        "zipcode": zipcode,
-        "city": city_name,
-        "city_slug": city_slug,
-        "vendor": None,
-        "state": state,
-        "county": county,
-        "meetings": meetings,
-        "is_new_city": is_new,
-        "needs_manual_config": True,
-        "status": "registered",
-        "message": f"Great! We've added {city_name} to our system and we're working to integrate their meeting data."
-    }
-
-    # Store in database - always attempt to store new cities
-    try:
-        db.store_city_entry(entry_data)
-        if zipcode:
-            print(f"Successfully stored new zipcode entry: {zipcode} -> {city_name}")
-        else:
-            print(f"Successfully stored new city entry: {city_name} ({city_slug})")
-    except Exception as e:
-        print(f"Error storing city entry for {city_name}: {e}")
-        # Don't fail the request if storage fails - continue to show welcome message
-
-    return entry_data
+    # City not in pre-populated database
+    print(f"City {city_name}, {state} not found in pre-populated database")
+    raise HTTPException(
+        status_code=404, 
+        detail=f"We don't have {city_name}, {state} in our database yet. We're working to add more cities regularly."
+    )
 
 
 @app.get("/")
