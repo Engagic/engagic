@@ -1,0 +1,30 @@
+name: Ruff Lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python with pip cache
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install uv
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Run Ruff with fix
+        run: uv run ruff check --fix
