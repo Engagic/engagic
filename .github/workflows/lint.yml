@@ -1,32 +1,21 @@
 name: Ruff Lint
-
 on:
   push:
   pull_request:
-
 jobs:
-  lint:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python with pip cache
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-          cache: 'pip'
-
+          python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install uv
-          uv tool install ruff@latest
-          uv tool update-shell
-
-      - name: Sync dependencies
-        run: uv sync --locked
-
-      - name: Run Ruff with fix
-        run: uv run ruff check --fix
+          python -m pip install --upgrade pip
+          pip install ruff
+      - name: Run Ruff
+      - uses: astral-sh/ruff-action@v3
+      - run: ruff check --fix
+      - run: ruff format
