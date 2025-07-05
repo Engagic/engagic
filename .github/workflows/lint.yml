@@ -2,7 +2,6 @@ name: Ruff Lint
 
 on:
   push:
-    branches: [main, develop]
   pull_request:
 
 jobs:
@@ -10,34 +9,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Ruff via action
+      - name: Install Ruff
         uses: astral-sh/ruff-action@v3
         with:
-          # will install the version from pyproject.toml or latest if none found
+          # installs Ruff into your PATH, but doesn't run any check yet
           args: --version
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Generate Ruff JSON report
+      # Always try to auto-fix; ruff will be a no-op if there's nothing to fix
+      - name: Apply auto-fixes
         run: |
-          ruff check -- --format json . > ruff-report.json
+          # ignore exit code here so we can still fail later on unfixable issues
+          ruff check --fix . || true
 
-      - name: Count fixable issues
-        id: count
-        run: |
-          FIX_COUNT=$(jq '[.[] | select(.fixable == true)] | length' ruff-report.json)
-          echo "fix_count=$FIX_COUNT" >> $GITHUB_OUTPUT
-
-      - name: Apply Ruff fixes
-        if: steps.count.outputs.fix_count != '0'
-        run: ruff check --fix .
-
+      # Enforce formatting (this will fail if any format issues remain)
       - name: Check formatting
         run: ruff format --check --diff .
 
-      - name: Final lint pass
+      # Final fail-fast lint pass for anything ruff can’t fix
+      - name: Final lint check
         run: ruff check .
+
