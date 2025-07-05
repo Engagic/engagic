@@ -38,64 +38,105 @@ except ValueError:
 db = MeetingDatabase()
 zipcode_search = SearchEngine()
 
+
 def parse_city_state_input(input_str: str) -> tuple[str, str]:
     """Parse city, state from user input
-    
+
     Handles formats like:
     - "Palo Alto, CA"
-    - "Palo Alto, California" 
+    - "Palo Alto, California"
     - "Boston Massachusetts"
     - "New York NY"
-    
+
     Returns: (city_name, state_abbreviation)
     """
     input_str = input_str.strip()
-    
+
     # Common state name to abbreviation mapping
     state_map = {
-        'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR', 'california': 'CA',
-        'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE', 'florida': 'FL', 'georgia': 'GA',
-        'hawaii': 'HI', 'idaho': 'ID', 'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA',
-        'kansas': 'KS', 'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
-        'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS', 'missouri': 'MO',
-        'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
-        'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH',
-        'oklahoma': 'OK', 'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
-        'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT', 'vermont': 'VT',
-        'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV', 'wisconsin': 'WI', 'wyoming': 'WY'
+        "alabama": "AL",
+        "alaska": "AK",
+        "arizona": "AZ",
+        "arkansas": "AR",
+        "california": "CA",
+        "colorado": "CO",
+        "connecticut": "CT",
+        "delaware": "DE",
+        "florida": "FL",
+        "georgia": "GA",
+        "hawaii": "HI",
+        "idaho": "ID",
+        "illinois": "IL",
+        "indiana": "IN",
+        "iowa": "IA",
+        "kansas": "KS",
+        "kentucky": "KY",
+        "louisiana": "LA",
+        "maine": "ME",
+        "maryland": "MD",
+        "massachusetts": "MA",
+        "michigan": "MI",
+        "minnesota": "MN",
+        "mississippi": "MS",
+        "missouri": "MO",
+        "montana": "MT",
+        "nebraska": "NE",
+        "nevada": "NV",
+        "new hampshire": "NH",
+        "new jersey": "NJ",
+        "new mexico": "NM",
+        "new york": "NY",
+        "north carolina": "NC",
+        "north dakota": "ND",
+        "ohio": "OH",
+        "oklahoma": "OK",
+        "oregon": "OR",
+        "pennsylvania": "PA",
+        "rhode island": "RI",
+        "south carolina": "SC",
+        "south dakota": "SD",
+        "tennessee": "TN",
+        "texas": "TX",
+        "utah": "UT",
+        "vermont": "VT",
+        "virginia": "VA",
+        "washington": "WA",
+        "west virginia": "WV",
+        "wisconsin": "WI",
+        "wyoming": "WY",
     }
-    
+
     # Try comma-separated format first: "City, State"
-    if ',' in input_str:
-        parts = [p.strip() for p in input_str.split(',')]
+    if "," in input_str:
+        parts = [p.strip() for p in input_str.split(",")]
         if len(parts) == 2:
             city, state = parts
             state_lower = state.lower()
-            
+
             # Check if it's already an abbreviation
             if len(state) == 2 and state.upper() in state_map.values():
                 return city, state.upper()
             # Check if it's a full state name
             elif state_lower in state_map:
                 return city, state_map[state_lower]
-    
+
     # Try space-separated format: "City State" or "City Full State Name"
     words = input_str.split()
     if len(words) >= 2:
         # Try last word as state abbreviation
         last_word = words[-1].lower()
         if len(last_word) == 2 and last_word.upper() in state_map.values():
-            city = ' '.join(words[:-1])
+            city = " ".join(words[:-1])
             return city, last_word.upper()
-        
+
         # Try last 1-2 words as full state name
         for num_state_words in [2, 1]:
             if len(words) > num_state_words:
-                potential_state = ' '.join(words[-num_state_words:]).lower()
+                potential_state = " ".join(words[-num_state_words:]).lower()
                 if potential_state in state_map:
-                    city = ' '.join(words[:-num_state_words])
+                    city = " ".join(words[:-num_state_words])
                     return city, state_map[potential_state]
-    
+
     # No state found
     return input_str, None
 
@@ -132,7 +173,7 @@ async def get_meetings(city: Optional[str] = None):
             if entry.get("city_slug") == city:
                 city_entry = entry
                 break
-        
+
         if city_entry:
             vendor = city_entry.get("vendor")
             city_name = city_entry.get("city_name")
@@ -148,14 +189,12 @@ async def get_meetings(city: Optional[str] = None):
                     "message": f"{city_name} has been registered and will be integrated soon",
                     "meetings": [],
                     "city_slug": city,
-                    "status": "pending_integration"
+                    "status": "pending_integration",
                 }
             else:
                 print(f"City {city} not found in database")
 
-                raise HTTPException(
-                    status_code=404, detail=f"City {city} not found"
-                )
+                raise HTTPException(status_code=404, detail=f"City {city} not found")
 
         # Scrape fresh meetings using the appropriate adapter
         if vendor == "primegov":
@@ -175,7 +214,9 @@ async def get_meetings(city: Optional[str] = None):
                         vendor,
                     )
                     scraped_meetings.append(meeting)
-                print(f"Successfully scraped {len(scraped_meetings)} meetings for {city}")
+                print(
+                    f"Successfully scraped {len(scraped_meetings)} meetings for {city}"
+                )
                 return scraped_meetings
             except Exception as scrape_error:
                 print(f"Failed to scrape {city} with PrimeGov: {scrape_error}")
@@ -183,7 +224,7 @@ async def get_meetings(city: Optional[str] = None):
                     "message": f"{city_name} integration is experiencing issues and will be fixed soon",
                     "meetings": [],
                     "city_slug": city,
-                    "status": "integration_error"
+                    "status": "integration_error",
                 }
         else:
             print(f"Vendor {vendor} not yet implemented for city {city}")
@@ -191,7 +232,7 @@ async def get_meetings(city: Optional[str] = None):
                 "message": f"{city_name} has been registered and will be integrated soon",
                 "meetings": [],
                 "city_slug": city,
-                "status": "vendor_not_implemented"
+                "status": "vendor_not_implemented",
             }
 
     except HTTPException:
@@ -320,14 +361,16 @@ async def handle_zipcode_search(zipcode: str):
     # Check pre-populated database first
     cached_entry = db.get_city_by_zipcode(zipcode)
     if cached_entry:
-        print(f"Found pre-populated entry for zipcode {zipcode}: {cached_entry.get('city')}")
+        print(
+            f"Found pre-populated entry for zipcode {zipcode}: {cached_entry.get('city')}"
+        )
         return cached_entry
 
     # Fallback: zipcode not in our database
     print(f"Zipcode {zipcode} not found in pre-populated database")
     raise HTTPException(
-        status_code=404, 
-        detail="That zipcode isn't in our database yet. Try searching by city name instead."
+        status_code=404,
+        detail="That zipcode isn't in our database yet. Try searching by city name instead.",
     )
 
 
@@ -336,15 +379,17 @@ async def handle_city_search(city_input: str):
     # Clean and validate city input
     city_input = city_input.strip()
     if len(city_input) < 2:
-        raise HTTPException(status_code=400, detail="City name must be at least 2 characters")
+        raise HTTPException(
+            status_code=400, detail="City name must be at least 2 characters"
+        )
 
     # Parse city, state from input
     city_name, state = parse_city_state_input(city_input)
-    
+
     if not state:
         raise HTTPException(
-            status_code=400, 
-            detail="Please specify both city and state (e.g., 'Palo Alto, CA' or 'Boston Massachusetts')"
+            status_code=400,
+            detail="Please specify both city and state (e.g., 'Palo Alto, CA' or 'Boston Massachusetts')",
         )
 
     # Check pre-populated database
@@ -356,8 +401,8 @@ async def handle_city_search(city_input: str):
     # City not in pre-populated database
     print(f"City {city_name}, {state} not found in pre-populated database")
     raise HTTPException(
-        status_code=404, 
-        detail=f"We don't have {city_name}, {state} in our database yet. We're working to add more cities regularly."
+        status_code=404,
+        detail=f"We don't have {city_name}, {state} in our database yet. We're working to add more cities regularly.",
     )
 
 
@@ -386,28 +431,25 @@ async def health_check():
     try:
         # Test database connection
         stats = db.get_cache_stats()
-        
+
         # Test zipcode service
         test_result = zipcode_search.by_zipcode("90210")
-        
+
         return {
             "status": "healthy",
             "database": "connected",
             "zipcode_service": "available",
             "llm_processor": "available" if processor else "disabled",
-            "cache_entries": stats.get("total_entries", 0)
+            "cache_entries": stats.get("total_entries", 0),
         }
     except Exception as e:
         print(f"Health check failed: {e}")
-        return {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        return {"status": "unhealthy", "error": str(e)}
 
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     print("Starting engagic API server...")
     print(f"LLM processor: {'enabled' if processor else 'disabled'}")
     uvicorn.run(app, host="0.0.0.0", port=8000)
