@@ -4,16 +4,14 @@ Complete batch population system for US cities database.
 Combines zipcode data with vendor discovery for comprehensive city coverage.
 """
 
-import json
 import time
 import argparse
-from typing import Dict, List, Optional
+from typing import Dict, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
-from dataclasses import asdict
 
 from database import MeetingDatabase
-from vendor_detector import VendorDetector, VendorMatch
+from vendor_detector import VendorDetector
 from uszipcode import SearchEngine
 
 
@@ -227,7 +225,7 @@ class BatchPopulator:
             # Progress report every 25 cities
             if i % 25 == 0:
                 stats = self.get_stats()
-                print(f"\n--- Progress Report ---")
+                print("\n--- Progress Report ---")
                 print(f"Processed: {stats['total_processed']}/{total}")
                 print(f"Successful: {stats['successful_stores']}")
                 print(f"Vendors found: {stats['vendor_discoveries']}")
@@ -246,7 +244,7 @@ class BatchPopulator:
             if f"{city['city_name'].lower()},{city['state'].lower()}" not in existing_cities
         ]
         
-        print(f"Starting parallel processing...")
+        print("Starting parallel processing...")
         print(f"Total cities: {total}, New cities: {len(new_cities)}")
         print(f"Vendor discovery: {'enabled' if discover_vendors else 'disabled'}")
         
@@ -275,7 +273,7 @@ class BatchPopulator:
                 # Progress report
                 if i % 50 == 0:
                     stats = self.get_stats()
-                    print(f"\n--- Progress Report ---")
+                    print("\n--- Progress Report ---")
                     print(f"Processed: {i}/{len(new_cities)}")
                     print(f"Successful: {stats['successful_stores']}")
                     print(f"Vendors found: {stats['vendor_discoveries']}")
@@ -329,7 +327,7 @@ class BatchPopulator:
         duration = end_time - start_time
         stats = self.get_stats()
         
-        print(f"\n=== Population Complete ===")
+        print("\n=== Population Complete ===")
         print(f"Duration: {duration/60:.1f} minutes")
         print(f"Total processed: {stats['total_processed']}")
         print(f"Successful stores: {stats['successful_stores']}")

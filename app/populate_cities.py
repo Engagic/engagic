@@ -4,7 +4,6 @@ Database population script for all US cities.
 Populates the cities table with comprehensive zipcode data and discovers city council websites.
 """
 
-import json
 import time
 import requests
 from typing import Dict, List, Optional, Tuple
@@ -233,7 +232,7 @@ class CityPopulator:
             if i % 50 == 0:
                 print(f"\nProgress: {i}/{total} cities processed ({success_count} successful)")
                 
-        print(f"\n\nPopulation complete!")
+        print("\n\nPopulation complete!")
         print(f"Total cities processed: {total}")
         print(f"Successfully stored: {success_count}")
         print(f"Failed: {total - success_count}")

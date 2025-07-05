@@ -7,7 +7,7 @@ Improves accuracy of city council website discovery and vendor identification.
 import requests
 import time
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from urllib.parse import urlparse, quote_plus
 from dataclasses import dataclass
 
@@ -320,7 +320,7 @@ def main():
     
     results = detector.batch_discover_vendors(test_cities)
     
-    print(f"\n\nResults Summary:")
+    print("\n\nResults Summary:")
     print(f"Cities processed: {len(test_cities)}")
     print(f"Vendors discovered: {len(results)}")
     
