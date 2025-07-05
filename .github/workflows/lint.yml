@@ -24,7 +24,7 @@ jobs:
 
       - name: Generate Ruff JSON report
         run: |
-          ruff check --format json . > ruff-report.json
+          ruff check -- --format json . > ruff-report.json
 
       - name: Count fixable issues
         id: count
