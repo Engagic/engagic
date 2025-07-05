@@ -22,6 +22,8 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install uv
+          uv tool install ruff@latest
+          uv tool update-shell
 
       - name: Sync dependencies
         run: uv sync --locked
