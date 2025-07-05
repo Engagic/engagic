@@ -38,6 +38,7 @@ class PrimeGovAdapter:
                 "packet_url": self._packet_url(pkt),
             }
 
+
 class CivicClerkAdapter:
     def __init__(self, city_slug: str):
         if not city_slug:
@@ -47,21 +48,24 @@ class CivicClerkAdapter:
 
     def _packet_url(self, doc):
         return f"https://{self.slug}.api.civicclerk.com/v1/Meetings/GetMeetingFileStream(fileId={doc['fileId']},plainText=false)"
-    
+
     def upcoming_packets(self):
         current_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-3] + "Z"
         params = {
             "$filter": f"startDateTime gt {current_date}",
-            "$orderby": "startDateTime asc, eventName asc"
+            "$orderby": "startDateTime asc, eventName asc",
         }
-        response = requests.get(
-            f"{self.base}/v1/Events", params=params
-        )
+        response = requests.get(f"{self.base}/v1/Events", params=params)
         response.raise_for_status()
         response = response.json()
         for mtg in response.get("value", []):
             pkt = next(
-                (d for d in mtg.get("publishedFiles", []) if d.get("type") == "Agenda Packet"), None
+                (
+                    d
+                    for d in mtg.get("publishedFiles", [])
+                    if d.get("type") == "Agenda Packet"
+                ),
+                None,
             )
             if not pkt:
                 continue
@@ -72,5 +76,3 @@ class CivicClerkAdapter:
                 "start": mtg.get("startDateTime", ""),
                 "packet_url": self._packet_url(pkt),
             }
-
-

@@ -8,7 +8,7 @@ with SearchEngine() as search:
         session.query(
             SimpleZipcode.major_city,
             SimpleZipcode.state,
-            func.sum(SimpleZipcode.population).label("population")
+            func.sum(SimpleZipcode.population).label("population"),
         )
         .group_by(SimpleZipcode.major_city, SimpleZipcode.state)
         .order_by(func.sum(SimpleZipcode.population).desc())

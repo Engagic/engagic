@@ -80,12 +80,12 @@ class MeetingDatabase:
                 "CREATE INDEX IF NOT EXISTS idx_last_accessed ON meetings(last_accessed)"
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_vendor ON meetings(vendor)")
-            
+
             # Legacy indices
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_zipcode ON zipcode_entries(zipcode)"
             )
-            
+
             # New city table indices
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_cities_city_slug ON cities(city_slug)"
@@ -110,11 +110,11 @@ class MeetingDatabase:
                 print("Adding vendor column to meetings table...")
                 conn.execute("ALTER TABLE meetings ADD COLUMN vendor TEXT")
                 print("Migration complete: vendor column added to meetings")
-                
+
             # Check if vendor column exists in zipcode_entries table
             cursor = conn.execute("PRAGMA table_info(zipcode_entries)")
             zipcode_columns = [row[1] for row in cursor.fetchall()]
-            
+
             if "vendor" not in zipcode_columns:
                 print("Adding vendor column to zipcode_entries table...")
                 conn.execute("ALTER TABLE zipcode_entries ADD COLUMN vendor TEXT")
@@ -129,19 +129,21 @@ class MeetingDatabase:
             try:
                 cursor = conn.execute("SELECT COUNT(*) as count FROM cities")
                 cities_count = cursor.fetchone()[0]
-                
+
                 cursor = conn.execute("SELECT COUNT(*) as count FROM zipcode_entries")
                 zipcode_count = cursor.fetchone()[0]
             except (sqlite3.OperationalError, TypeError):
                 # Tables may not exist yet
                 return
-            
+
             if cities_count > 0 or zipcode_count == 0:
                 # Migration already done or no data to migrate
                 return
-                
-            print(f"Migrating {zipcode_count} zipcode entries to city-centric schema...")
-            
+
+            print(
+                f"Migrating {zipcode_count} zipcode entries to city-centric schema..."
+            )
+
             # Group zipcode entries by (city_name, state) and aggregate zipcodes
             cursor = conn.execute("""
                 SELECT 
@@ -158,36 +160,45 @@ class MeetingDatabase:
                 GROUP BY city_name, state, city_slug, vendor, county
                 ORDER BY city_name, state
             """)
-            
+
             migrated_count = 0
             for row in cursor.fetchall():
                 # Convert comma-separated zipcodes to JSON array
-                zipcode_list = row["zipcodes_str"].split(",") if row["zipcodes_str"] else []
+                zipcode_list = (
+                    row["zipcodes_str"].split(",") if row["zipcodes_str"] else []
+                )
                 zipcodes_json = json.dumps(zipcode_list)
-                
+
                 # Insert into cities table
                 try:
-                    conn.execute("""
+                    conn.execute(
+                        """
                         INSERT OR IGNORE INTO cities 
                         (city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        row["city_name"],
-                        row["state"],
-                        row["city_slug"],
-                        row["vendor"],
-                        row["county"],
-                        row["primary_zipcode"],
-                        zipcodes_json,
-                        row["earliest_created"],
-                        row["latest_accessed"]
-                    ))
+                    """,
+                        (
+                            row["city_name"],
+                            row["state"],
+                            row["city_slug"],
+                            row["vendor"],
+                            row["county"],
+                            row["primary_zipcode"],
+                            zipcodes_json,
+                            row["earliest_created"],
+                            row["latest_accessed"],
+                        ),
+                    )
                     migrated_count += 1
                 except sqlite3.IntegrityError as e:
-                    print(f"Skipping duplicate city entry: {row['city_name']}, {row['state']} - {e}")
-            
-            print(f"Migration complete: {migrated_count} cities created from {zipcode_count} zipcode entries")
-            
+                    print(
+                        f"Skipping duplicate city entry: {row['city_name']}, {row['state']} - {e}"
+                    )
+
+            print(
+                f"Migration complete: {migrated_count} cities created from {zipcode_count} zipcode entries"
+            )
+
         except Exception as e:
             print(f"Migration warning: {e}")
 
@@ -406,29 +417,35 @@ class MeetingDatabase:
         """Get city entry by zipcode using new cities table"""
         with self.get_connection() as conn:
             # Search in cities table using JSON zipcode array
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
                 FROM cities 
                 WHERE primary_zipcode = ? OR json_extract(zipcodes, '$') LIKE '%' || ? || '%'
-            """, (zipcode, zipcode))
-            
+            """,
+                (zipcode, zipcode),
+            )
+
             city_row = cursor.fetchone()
             if not city_row:
                 return None
-            
+
             # Update last_accessed
             conn.execute(
                 "UPDATE cities SET last_accessed = ? WHERE id = ?",
-                (datetime.now(timezone.utc).isoformat(), city_row["id"])
+                (datetime.now(timezone.utc).isoformat(), city_row["id"]),
             )
-            
+
             # Get associated meetings
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT meeting_date, meeting_name, packet_url 
                 FROM meetings WHERE city_slug = ? 
                 ORDER BY meeting_date DESC
-            """, (city_row["city_slug"],))
-            
+            """,
+                (city_row["city_slug"],),
+            )
+
             meetings = [
                 {
                     "title": row["meeting_name"],
@@ -437,7 +454,7 @@ class MeetingDatabase:
                 }
                 for row in cursor.fetchall()
             ]
-            
+
             return {
                 "zipcode": zipcode,  # The searched zipcode
                 "city": city_row["city_name"],
@@ -446,36 +463,44 @@ class MeetingDatabase:
                 "state": city_row["state"],
                 "county": city_row["county"],
                 "primary_zipcode": city_row["primary_zipcode"],
-                "all_zipcodes": json.loads(city_row["zipcodes"]) if city_row["zipcodes"] else [],
+                "all_zipcodes": json.loads(city_row["zipcodes"])
+                if city_row["zipcodes"]
+                else [],
                 "meetings": meetings,
             }
 
     def get_city_by_name(self, city_name: str, state: str) -> Optional[Dict[str, Any]]:
         """Get city entry by name and state (both required)"""
         with self.get_connection() as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT id, city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed
                 FROM cities 
                 WHERE LOWER(city_name) = LOWER(?) AND UPPER(state) = UPPER(?)
-            """, (city_name, state))
-            
+            """,
+                (city_name, state),
+            )
+
             city_row = cursor.fetchone()
             if not city_row:
                 return None
-            
+
             # Update last_accessed
             conn.execute(
                 "UPDATE cities SET last_accessed = ? WHERE id = ?",
-                (datetime.now(timezone.utc).isoformat(), city_row["id"])
+                (datetime.now(timezone.utc).isoformat(), city_row["id"]),
             )
-            
+
             # Get associated meetings
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT meeting_date, meeting_name, packet_url 
                 FROM meetings WHERE city_slug = ? 
                 ORDER BY meeting_date DESC
-            """, (city_row["city_slug"],))
-            
+            """,
+                (city_row["city_slug"],),
+            )
+
             meetings = [
                 {
                     "title": row["meeting_name"],
@@ -484,7 +509,7 @@ class MeetingDatabase:
                 }
                 for row in cursor.fetchall()
             ]
-            
+
             return {
                 "city": city_row["city_name"],
                 "city_slug": city_row["city_slug"],
@@ -492,10 +517,11 @@ class MeetingDatabase:
                 "state": city_row["state"],
                 "county": city_row["county"],
                 "primary_zipcode": city_row["primary_zipcode"],
-                "all_zipcodes": json.loads(city_row["zipcodes"]) if city_row["zipcodes"] else [],
+                "all_zipcodes": json.loads(city_row["zipcodes"])
+                if city_row["zipcodes"]
+                else [],
                 "meetings": meetings,
             }
-
 
     def store_city_entry(self, entry_data: Dict[str, Any]) -> int:
         """Store city entry with automatic zipcode aggregation"""
@@ -503,20 +529,23 @@ class MeetingDatabase:
             # Check if city already exists to merge zipcodes
             existing_city = None
             try:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT zipcodes, primary_zipcode FROM cities 
                     WHERE city_name = ? AND state = ?
-                """, (entry_data["city"], entry_data.get("state")))
+                """,
+                    (entry_data["city"], entry_data.get("state")),
+                )
                 row = cursor.fetchone()
                 if row:
                     existing_city = row
             except sqlite3.OperationalError:
                 pass
-            
+
             # Handle zipcode aggregation
             zipcode = entry_data.get("zipcode") or entry_data.get("primary_zipcode")
             existing_zipcodes = entry_data.get("all_zipcodes", [])
-            
+
             # Merge with existing zipcodes if city exists
             if existing_city and existing_city["zipcodes"]:
                 try:
@@ -524,55 +553,63 @@ class MeetingDatabase:
                     existing_zipcodes.extend(old_zipcodes)
                 except (json.JSONDecodeError, TypeError):
                     pass
-            
+
             # Add current zipcode if not in list
             if zipcode and zipcode not in existing_zipcodes:
                 existing_zipcodes.append(zipcode)
-            
+
             # Remove duplicates and sort
             existing_zipcodes = sorted(list(set(existing_zipcodes)))
             zipcodes_json = json.dumps(existing_zipcodes)
-            
+
             # Use existing primary zipcode if available, otherwise use current
-            primary_zipcode = (existing_city and existing_city["primary_zipcode"]) or zipcode
-            
+            primary_zipcode = (
+                existing_city and existing_city["primary_zipcode"]
+            ) or zipcode
+
             # Store or update city entry
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 INSERT OR REPLACE INTO cities 
                 (city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes, created_at, last_accessed)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                entry_data["city"],
-                entry_data.get("state"),
-                entry_data["city_slug"],
-                entry_data.get("vendor"),
-                entry_data.get("county"),
-                primary_zipcode,
-                zipcodes_json,
-                datetime.now(timezone.utc).isoformat(),
-                datetime.now(timezone.utc).isoformat(),
-            ))
-            
+            """,
+                (
+                    entry_data["city"],
+                    entry_data.get("state"),
+                    entry_data["city_slug"],
+                    entry_data.get("vendor"),
+                    entry_data.get("county"),
+                    primary_zipcode,
+                    zipcodes_json,
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+
             # Store meetings (if any)
             for meeting in entry_data.get("meetings", []):
                 try:
-                    conn.execute("""
+                    conn.execute(
+                        """
                         INSERT OR IGNORE INTO meetings 
                         (city_slug, city_name, meeting_name, packet_url, meeting_date, created_at, last_accessed)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        entry_data["city_slug"],
-                        entry_data["city"],
-                        meeting.get("title"),
-                        meeting.get("packet_url"),
-                        meeting.get("start"),
-                        datetime.now(timezone.utc).isoformat(),
-                        datetime.now(timezone.utc).isoformat(),
-                    ))
+                    """,
+                        (
+                            entry_data["city_slug"],
+                            entry_data["city"],
+                            meeting.get("title"),
+                            meeting.get("packet_url"),
+                            meeting.get("start"),
+                            datetime.now(timezone.utc).isoformat(),
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
                 except sqlite3.IntegrityError:
                     # Meeting already exists, skip
                     pass
-            
+
             return cursor.lastrowid
 
     def get_all_cities(self) -> List[Dict[str, Any]]:
@@ -582,17 +619,17 @@ class MeetingDatabase:
                 SELECT city_name, state, city_slug, vendor, county, primary_zipcode, zipcodes 
                 FROM cities ORDER BY city_name, state
             """)
-            
+
             result = []
             for row in cursor.fetchall():
                 city_data = dict(row)
                 # Parse zipcodes JSON
-                city_data["all_zipcodes"] = json.loads(row["zipcodes"]) if row["zipcodes"] else []
+                city_data["all_zipcodes"] = (
+                    json.loads(row["zipcodes"]) if row["zipcodes"] else []
+                )
                 result.append(city_data)
-            
+
             return result
-
-
 
     def store_meeting_data(
         self, meeting_data: Dict[str, Any], vendor: str
@@ -619,15 +656,12 @@ class MeetingDatabase:
 def get_city_info(city_slug: str) -> Dict[str, Optional[str]]:
     """Get city name and zipcode from city slug - searches all cities"""
     db = MeetingDatabase()
-    
+
     # Search through all cities to find matching slug
     all_cities = db.get_all_cities()
     for city in all_cities:
         if city.get("city_slug") == city_slug:
-            return {
-                "zipcode": city["primary_zipcode"], 
-                "city_name": city["city_name"]
-            }
-    
+            return {"zipcode": city["primary_zipcode"], "city_name": city["city_name"]}
+
     # Fallback for unknown cities
     return {"zipcode": None, "city_name": city_slug.replace("cityof", "").title()}
