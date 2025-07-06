@@ -23,7 +23,7 @@ class MeetingDatabase:
                     city_name TEXT NOT NULL,
                     state TEXT NOT NULL,
                     city_slug TEXT NOT NULL UNIQUE,
-                    vendor TEXT NOT NULL,
+                    vendor TEXT,
                     county TEXT,
                     status TEXT DEFAULT 'active',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
