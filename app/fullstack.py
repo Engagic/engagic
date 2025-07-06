@@ -9,8 +9,11 @@ from PyPDF2 import PdfReader
 import anthropic
 import argparse
 import sys
+import logging
 from typing import List, Dict, Any
 from database import MeetingDatabase, get_city_info
+
+logger = logging.getLogger("engagic")
 
 
 class AgendaProcessor:
@@ -119,7 +122,7 @@ class AgendaProcessor:
 
     def download_and_extract_text(self, url: str) -> str:
         """Download PDF and extract text using smart extraction strategy"""
-        print(f"Downloading and processing PDF from: {url}")
+        logger.info(f"Downloading and processing PDF from: {url}")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Download PDF
@@ -141,13 +144,13 @@ class AgendaProcessor:
 
     def _extract_text_smart(self, pdf_path: str) -> str:
         """Try PDFReader first, fall back to OCR for problematic pages"""
-        print("Attempting digital text extraction...")
+        logger.info("Attempting digital text extraction...")
 
         try:
             with open(pdf_path, "rb") as f:
                 reader = PdfReader(f)
                 total_pages = len(reader.pages)
-                print(f"Processing {total_pages} pages...")
+                logger.info(f"Processing {total_pages} pages...")
 
                 all_text = ""
                 ocr_pages = []
@@ -160,22 +163,20 @@ class AgendaProcessor:
                         if self._is_good_digital_extraction(page_text):
                             all_text += f"\n--- PAGE {page_num} ---\n{page_text}\n"
                             if page_num % 10 == 0:
-                                print(
-                                    f"Digital extraction: {page_num}/{total_pages} pages..."
-                                )
+                                logger.info(f"Digital extraction: {page_num}/{total_pages} pages...")
                         else:
                             # Mark for OCR
                             ocr_pages.append(page_num)
                             all_text += f"\n--- PAGE {page_num} ---\n[NEEDS_OCR]\n"
 
                     except Exception as e:
-                        print(f"Error extracting page {page_num}: {e}")
+                        logger.warning(f"Error extracting page {page_num}: {e}")
                         ocr_pages.append(page_num)
                         all_text += f"\n--- PAGE {page_num} ---\n[NEEDS_OCR]\n"
 
                 # OCR the problematic pages
                 if ocr_pages:
-                    print(f"Running OCR on {len(ocr_pages)} pages...")
+                    logger.info(f"Running OCR on {len(ocr_pages)} pages...")
                     ocr_text = self._ocr_specific_pages(pdf_path, ocr_pages)
 
                     # Replace [NEEDS_OCR] markers with actual OCR text
@@ -190,13 +191,13 @@ class AgendaProcessor:
                 return all_text
 
         except Exception as e:
-            print(f"Digital extraction failed: {e}")
-            print("Falling back to full OCR...")
+            logger.error(f"Digital extraction failed: {e}")
+            logger.info("Falling back to full OCR...")
             return self._full_ocr(pdf_path)
 
     def _normalize_text_formatting(self, raw_text: str) -> str:
         """Fix weird PDFReader formatting by reconstructing proper lines"""
-        print("Normalizing text formatting...")
+        logger.info("Normalizing text formatting...")
 
         pages = raw_text.split("--- PAGE")
         normalized_pages = []
@@ -319,9 +320,7 @@ class AgendaProcessor:
         # Check for excessive single-word lines (sign of fragmented extraction)
         single_word_lines = sum(1 for line in valid_lines if len(line.split()) == 1)
         if len(valid_lines) > 10 and (single_word_lines / len(valid_lines)) > 0.5:
-            print(
-                f"Digital extraction appears fragmented: {single_word_lines}/{len(valid_lines)} single-word lines"
-            )
+            logger.warning(f"Digital extraction appears fragmented: {single_word_lines}/{len(valid_lines)} single-word lines")
             return False
 
         # Check for reasonable sentence structure in first few lines
@@ -331,7 +330,7 @@ class AgendaProcessor:
             # Should have some longer words and reasonable punctuation
             long_words = sum(1 for word in words if len(word) > 3)
             if (long_words / len(words)) < 0.3:
-                print("Digital extraction lacks proper word structure")
+                logger.warning("Digital extraction lacks proper word structure")
                 return False
 
         return True
@@ -348,14 +347,14 @@ class AgendaProcessor:
                 ocr_text = pytesseract.image_to_string(pages[0])
                 ocr_results[page_num] = ocr_text
             except Exception as e:
-                print(f"OCR failed for page {page_num}: {e}")
+                logger.error(f"OCR failed for page {page_num}: {e}")
                 ocr_results[page_num] = f"[OCR_ERROR: {str(e)}]"
 
         return ocr_results
 
     def _full_ocr(self, pdf_path: str) -> str:
         """Full OCR fallback for entire document"""
-        print("Running full OCR...")
+        logger.info("Running full OCR...")
 
         with open(pdf_path, "rb") as f:
             reader = PdfReader(f)
@@ -372,19 +371,17 @@ class AgendaProcessor:
                 all_text += f"\n--- PAGE {page_num} ---\n{ocr_text}\n"
 
                 if page_num % 10 == 0:
-                    print(f"OCR progress: {page_num}/{total_pages} pages...")
+                    logger.info(f"OCR progress: {page_num}/{total_pages} pages...")
 
             except Exception as e:
-                print(f"OCR error on page {page_num}: {e}")
+                logger.error(f"OCR error on page {page_num}: {e}")
                 all_text += f"\n--- PAGE {page_num} ---\n[OCR_ERROR: {str(e)}]\n"
 
         return all_text
 
     def clean_text(self, raw_text: str, english_threshold: float = 0.7) -> str:
         """Clean text using simple English word percentage check"""
-        print(
-            f"Cleaning text with {english_threshold * 100}% English word threshold..."
-        )
+        logger.info(f"Cleaning text with {english_threshold * 100}% English word threshold...")
 
         pages = raw_text.split("--- PAGE")
         cleaned_pages = []
@@ -435,10 +432,8 @@ class AgendaProcessor:
                 pages_skipped += 1
 
         result = "\n".join(cleaned_pages)
-        print(
-            f"Cleaning complete: {total_lines_kept}/{total_lines_processed} lines kept"
-        )
-        print(f"Pages: {pages_kept} kept, {pages_skipped} skipped")
+        logger.info(f"Cleaning complete: {total_lines_kept}/{total_lines_processed} lines kept")
+        logger.info(f"Pages: {pages_kept} kept, {pages_skipped} skipped")
 
         return result
 
@@ -526,12 +521,12 @@ class AgendaProcessor:
     def summarize(self, text: str, rate_limit_delay: int = 5) -> str:
         """Summarize text with improved prompting"""
         chunks = self._chunk_by_agenda_items(text)
-        print(f"Split into {len(chunks)} chunks for processing")
+        logger.info(f"Split into {len(chunks)} chunks for processing")
 
         summaries = []
 
         for i, chunk in enumerate(chunks):
-            print(f"Processing chunk {i + 1}/{len(chunks)}...")
+            logger.info(f"Processing chunk {i + 1}/{len(chunks)}...")
 
             try:
                 response = self.client.messages.create(
@@ -565,11 +560,11 @@ class AgendaProcessor:
 
                 # Rate limiting
                 if i < len(chunks) - 1:
-                    print(f"Waiting {rate_limit_delay} seconds...")
+                    logger.info(f"Waiting {rate_limit_delay} seconds...")
                     time.sleep(rate_limit_delay)
 
             except Exception as e:
-                print(f"Error processing chunk {i + 1}: {e}")
+                logger.error(f"Error processing chunk {i + 1}: {e}")
                 summaries.append(
                     f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Could not process this section - {str(e)}]\n"
                 )
@@ -583,7 +578,7 @@ class AgendaProcessor:
         # Check cache first
         cached_meeting = self.db.get_cached_summary(packet_url)
         if cached_meeting:
-            print(f"Cache hit for {packet_url}")
+            logger.info(f"Cache hit for {packet_url}")
             return {
                 "summary": cached_meeting["processed_summary"],
                 "processing_time": cached_meeting["processing_time_seconds"],
@@ -592,7 +587,7 @@ class AgendaProcessor:
             }
 
         # Cache miss - process the agenda
-        print(f"Cache miss for {packet_url} - processing...")
+        logger.info(f"Cache miss for {packet_url} - processing...")
         start_time = time.time()
 
         try:
@@ -615,9 +610,7 @@ class AgendaProcessor:
                 full_meeting_data, summary, processing_time, vendor
             )
 
-            print(
-                f"Processed and cached agenda {packet_url} in {processing_time:.1f}s (ID: {meeting_id})"
-            )
+            logger.info(f"Processed and cached agenda {packet_url} in {processing_time:.1f}s (ID: {meeting_id})")
 
             return {
                 "summary": summary,
@@ -628,7 +621,7 @@ class AgendaProcessor:
             }
 
         except Exception as e:
-            print(f"Error processing agenda {packet_url}: {e}")
+            logger.error(f"Error processing agenda {packet_url}: {e}")
             raise
 
     def process_agenda(
@@ -653,24 +646,24 @@ class AgendaProcessor:
                 self._save_text(cleaned_text, "cleaned_agenda.txt")
 
             # Summarize
-            print("Starting summarization...")
+            logger.info("Starting summarization...")
             summary = self.summarize(cleaned_text)
 
             if save_raw or save_cleaned:  # Only save if we're saving other files
                 self._save_text(summary, "agenda_summary.txt")
-                print("Complete! Summary saved to agenda_summary.txt")
+                logger.info("Complete! Summary saved to agenda_summary.txt")
 
             return summary
 
         except Exception as e:
-            print(f"Error processing agenda: {e}")
+            logger.error(f"Error processing agenda: {e}")
             raise
 
     def _save_text(self, text: str, filename: str) -> None:
         """Save text to file with UTF-8 encoding"""
         with open(filename, "w", encoding="utf-8") as f:
             f.write(text)
-        print(f"Saved to {filename} ({len(text)} characters)")
+        logger.info(f"Saved to {filename} ({len(text)} characters)")
 
     def download_packet(self, url: str, output_path: str = None) -> str:
         """Download PDF packet and save to file"""
@@ -680,7 +673,7 @@ class AgendaProcessor:
         if not output_path:
             output_path = "downloaded_packet.pdf"
 
-        print(f"Downloading packet from: {url}")
+        logger.info(f"Downloading packet from: {url}")
 
         try:
             response = requests.get(url, timeout=30)
@@ -691,7 +684,7 @@ class AgendaProcessor:
         with open(output_path, "wb") as f:
             f.write(response.content)
 
-        print(f"Packet saved to {output_path} ({len(response.content)} bytes)")
+        logger.info(f"Packet saved to {output_path} ({len(response.content)} bytes)")
         return output_path
 
     def download_and_process(
@@ -706,7 +699,7 @@ class AgendaProcessor:
         if save_files:
             self._save_text(raw_text, "raw_extracted_text.txt")
             self._save_text(cleaned_text, "cleaned_extracted_text.txt")
-            print("Text extraction complete - files saved")
+            logger.info("Text extraction complete - files saved")
 
         return result
 
@@ -720,7 +713,7 @@ class AgendaProcessor:
         if not file_path.lower().endswith(".pdf"):
             raise ValueError("File must be a PDF")
 
-        print(f"Processing local packet: {file_path}")
+        logger.info(f"Processing local packet: {file_path}")
 
         raw_text = self._extract_text_smart(file_path)
         raw_text = self._normalize_text_formatting(raw_text)
@@ -732,7 +725,7 @@ class AgendaProcessor:
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             self._save_text(raw_text, f"{base_name}_raw.txt")
             self._save_text(cleaned_text, f"{base_name}_cleaned.txt")
-            print("Text processing complete - files saved")
+            logger.info("Text processing complete - files saved")
 
         return result
 
@@ -740,7 +733,7 @@ class AgendaProcessor:
         self, url: str, english_threshold: float = 0.7, save_files: bool = True
     ) -> Dict[str, str]:
         """Complete pipeline: download → process → summarize"""
-        print("Starting full pipeline...")
+        logger.info("Starting full pipeline...")
 
         raw_text = self.download_and_extract_text(url)
         cleaned_text = self.clean_text(raw_text, english_threshold)
@@ -756,7 +749,7 @@ class AgendaProcessor:
             self._save_text(raw_text, "pipeline_raw.txt")
             self._save_text(cleaned_text, "pipeline_cleaned.txt")
             self._save_text(summary, "pipeline_summary.txt")
-            print("Full pipeline complete - all files saved")
+            logger.info("Full pipeline complete - all files saved")
 
         return result
 

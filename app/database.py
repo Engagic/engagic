@@ -1,16 +1,20 @@
 import sqlite3
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Dict, Optional, List, Any, Tuple
 from contextlib import contextmanager
 import hashlib
 from uszipcode import SearchEngine
 
+logger = logging.getLogger("engagic")
+
 
 class MeetingDatabase:
     def __init__(self, db_path: str = "/root/engagic/app/meetings.db"):
         self.db_path = db_path
         self.zipcode_search = SearchEngine()
+        logger.info(f"Initializing database at {db_path}")
         self._init_database()
 
     def _init_database(self):
@@ -120,6 +124,7 @@ class MeetingDatabase:
     def add_city(self, city_name: str, state: str, city_slug: str, vendor: str, 
                  county: str = None, zipcodes: List[str] = None) -> int:
         """Add a new city with optional zipcodes"""
+        logger.info(f"Adding city: {city_name}, {state} with vendor {vendor}")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -141,6 +146,7 @@ class MeetingDatabase:
                     """, (zipcode, city_id, is_primary))
             
             conn.commit()
+            logger.info(f"Successfully added city {city_name} with ID {city_id}")
             return city_id
 
     def get_city_by_zipcode(self, zipcode: str) -> Optional[Dict[str, Any]]:
@@ -205,6 +211,8 @@ class MeetingDatabase:
 
     def store_meeting_data(self, meeting_data: Dict[str, Any], vendor: str = None) -> int:
         """Store meeting data linked to city"""
+        city_slug = meeting_data.get('city_slug')
+        logger.debug(f"Storing meeting data for {city_slug}: {meeting_data.get('meeting_name', 'Unknown')}")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -239,6 +247,8 @@ class MeetingDatabase:
     def store_meeting_summary(self, meeting_data: Dict[str, Any], summary: str, 
                             processing_time: float, vendor: str = None) -> int:
         """Store processed meeting summary"""
+        city_slug = meeting_data.get('city_slug')
+        logger.info(f"Storing meeting summary for {city_slug}: {len(summary)} chars, {processing_time:.2f}s")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -290,6 +300,7 @@ class MeetingDatabase:
 
     def get_cached_summary(self, packet_url: str) -> Optional[Dict[str, Any]]:
         """Get cached meeting summary by packet URL"""
+        logger.debug(f"Checking cache for packet: {packet_url}")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -307,7 +318,9 @@ class MeetingDatabase:
                     WHERE packet_url = ?
                 """, (packet_url,))
                 conn.commit()
+                logger.debug(f"Cache hit for packet: {packet_url}")
                 return dict(row)
+            logger.debug(f"Cache miss for packet: {packet_url}")
             return None
 
     def get_recent_meetings(self, limit: int = 20) -> List[Dict[str, Any]]:
@@ -372,6 +385,7 @@ class MeetingDatabase:
 
     def cleanup_old_entries(self, days_old: int = 90) -> int:
         """Clean up old cache entries"""
+        logger.info(f"Cleaning up cache entries older than {days_old} days")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -380,6 +394,7 @@ class MeetingDatabase:
             """.format(days_old))
             deleted_count = cursor.rowcount
             conn.commit()
+            logger.info(f"Cleaned up {deleted_count} old cache entries")
             return deleted_count
 
     def get_all_cities(self) -> List[Dict[str, Any]]:
