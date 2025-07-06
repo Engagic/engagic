@@ -1,14 +1,50 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+import logging
+import time
+import uuid
 from adapters import PrimeGovAdapter, CivicClerkAdapter
 from fullstack import AgendaProcessor
 from database import MeetingDatabase
 from uszipcode import SearchEngine
 
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('/root/engagic/app/engagic.log', mode='a')
+    ]
+)
+logger = logging.getLogger("engagic")
+
 app = FastAPI(title="engagic API", description="EGMI")
 
+# Request/Response logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    request_id = str(uuid.uuid4())[:8]
+    start_time = time.time()
+    
+    # Log incoming request
+    logger.info(f"[{request_id}] {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}")
+    
+    # Process request
+    try:
+        response = await call_next(request)
+        duration = time.time() - start_time
+        
+        # Log response
+        logger.info(f"[{request_id}] Response: {response.status_code} - Duration: {duration:.3f}s")
+        return response
+        
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(f"[{request_id}] Error: {str(e)} - Duration: {duration:.3f}s")
+        raise
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,8 +67,9 @@ app.add_middleware(
 # Initialize global instances
 try:
     processor = AgendaProcessor()
-except ValueError:
-    print("Warning: ANTHROPIC_API_KEY not found - LLM processing will be disabled")
+    logger.info("LLM processor initialized successfully")
+except ValueError as e:
+    logger.warning("ANTHROPIC_API_KEY not found - LLM processing will be disabled")
     processor = None
 
 db = MeetingDatabase()
@@ -160,7 +197,7 @@ async def search_meetings(request: SearchRequest):
         if not query:
             raise HTTPException(status_code=400, detail="Search query cannot be empty")
         
-        print(f"Search request: '{query}'")
+        logger.info(f"Search request: '{query}'")
         
         # Log the search
         db.log_search(query, "unknown")  # We'll determine type below
@@ -176,7 +213,7 @@ async def search_meetings(request: SearchRequest):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Unexpected search error for '{query}': {str(e)}")
+        logger.error(f"Unexpected search error for '{query}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 
@@ -203,7 +240,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
     meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
     
     if meetings:
-        print(f"Found {len(meetings)} cached meetings for {city_info['city_name']}")
+        logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info.get('state', 'Unknown')}")
         return {
             "success": True,
             "city_name": city_info['city_name'],
@@ -255,7 +292,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
     meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
     
     if meetings:
-        print(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
+        logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
         return {
             "success": True,
             "city_name": city_info['city_name'],
@@ -294,7 +331,7 @@ async def scrape_meetings_for_city(city_info: Dict[str, Any]) -> Dict[str, Any]:
         scraped_meetings = []
         
         if vendor == "primegov":
-            print(f"Scraping meetings for {city_name} using PrimeGov")
+            logger.info(f"Scraping meetings for {city_name} using PrimeGov")
             adapter = PrimeGovAdapter(city_slug)
             for meeting in adapter.upcoming_packets():
                 # Store in database
@@ -308,7 +345,7 @@ async def scrape_meetings_for_city(city_info: Dict[str, Any]) -> Dict[str, Any]:
                 scraped_meetings.append(meeting)
                 
         elif vendor == "civicclerk":
-            print(f"Scraping meetings for {city_name} using CivicClerk")
+            logger.info(f"Scraping meetings for {city_name} using CivicClerk")
             adapter = CivicClerkAdapter(city_slug)
             for meeting in adapter.upcoming_packets():
                 # Store in database
@@ -333,7 +370,7 @@ async def scrape_meetings_for_city(city_info: Dict[str, Any]) -> Dict[str, Any]:
                 "status": "vendor_not_implemented"
             }
         
-        print(f"Successfully scraped {len(scraped_meetings)} meetings for {city_name}")
+        logger.info(f"Successfully scraped {len(scraped_meetings)} meetings for {city_name}")
         return {
             "success": True,
             "city_name": city_name,
@@ -346,7 +383,7 @@ async def scrape_meetings_for_city(city_info: Dict[str, Any]) -> Dict[str, Any]:
         }
         
     except Exception as scrape_error:
-        print(f"Failed to scrape {city_name} with {vendor}: {scrape_error}")
+        logger.error(f"Failed to scrape {city_name} with {vendor}: {scrape_error}")
         return {
             "success": True,
             "city_name": city_name,
@@ -363,12 +400,12 @@ async def scrape_meetings_for_city(city_info: Dict[str, Any]) -> Dict[str, Any]:
 async def auto_create_city_from_zipcode(zipcode: str) -> Optional[Dict[str, Any]]:
     """Auto-create city entry from zipcode using uszipcode"""
     try:
-        print(f"Auto-creating city entry for zipcode {zipcode}")
+        logger.info(f"Auto-creating city entry for zipcode {zipcode}")
         
         # Look up zipcode info
         result = zipcode_search.by_zipcode(zipcode)
         if not result or not result.major_city:
-            print(f"No city found for zipcode {zipcode}")
+            logger.warning(f"No city found for zipcode {zipcode}")
             return None
         
         city_name = result.major_city
@@ -388,25 +425,25 @@ async def auto_create_city_from_zipcode(zipcode: str) -> Optional[Dict[str, Any]
             zipcodes=[zipcode]
         )
         
-        print(f"Auto-created city: {city_name}, {state} (ID: {city_id})")
+        logger.info(f"Auto-created city: {city_name}, {state} (ID: {city_id})")
         
         # Return the created city info
         return db.get_city_by_zipcode(zipcode)
         
     except Exception as e:
-        print(f"Error auto-creating city from zipcode {zipcode}: {e}")
+        logger.error(f"Error auto-creating city from zipcode {zipcode}: {e}")
         return None
 
 
 async def auto_create_city_from_city_name(city_name: str, state: str) -> Optional[Dict[str, Any]]:
     """Auto-create city entry from city name using uszipcode"""
     try:
-        print(f"Auto-creating city entry for {city_name}, {state}")
+        logger.info(f"Auto-creating city entry for {city_name}, {state}")
         
         # Search for city in uszipcode
         results = zipcode_search.by_city_and_state(city_name, state)
         if not results:
-            print(f"No zipcode data found for {city_name}, {state}")
+            logger.warning(f"No zipcode data found for {city_name}, {state}")
             return None
         
         # Get primary zipcode and county from first result
@@ -430,13 +467,13 @@ async def auto_create_city_from_city_name(city_name: str, state: str) -> Optiona
             zipcodes=zipcodes
         )
         
-        print(f"Auto-created city: {city_name}, {state} with {len(zipcodes)} zipcodes (ID: {city_id})")
+        logger.info(f"Auto-created city: {city_name}, {state} with {len(zipcodes)} zipcodes (ID: {city_id})")
         
         # Return the created city info
         return db.get_city_by_name(city_name, state)
         
     except Exception as e:
-        print(f"Error auto-creating city from name {city_name}, {state}: {e}")
+        logger.error(f"Error auto-creating city from name {city_name}, {state}: {e}")
         return None
 
 
@@ -530,13 +567,13 @@ async def health_check():
             "meetings": stats.get("meetings_count", 0)
         }
     except Exception as e:
-        print(f"Health check failed: {e}")
+        logger.error(f"Health check failed: {e}")
         return {"status": "unhealthy", "error": str(e)}
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    print("Starting engagic API server...")
-    print(f"LLM processor: {'enabled' if processor else 'disabled'}")
+    logger.info("Starting engagic API server...")
+    logger.info(f"LLM processor: {'enabled' if processor else 'disabled'}")
     uvicorn.run(app, host="0.0.0.0", port=8000)
