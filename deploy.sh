@@ -154,23 +154,30 @@ test_api() {
     # Test root endpoint
 
     if curl -s "http://localhost:8000/" | grep -q "engagic API"; then
-        log "✓ Root endpoint responding"
+        log "Root endpoint responding"
     else
-        warn "⚠ Root endpoint may have issues"
+        warn "Root endpoint may have issues"
     fi
     
-    # Test meetings endpoint
-    if curl -s "http://localhost:8000/api/meetings" | grep -q "packet_url\|error"; then
-        log "✓ Meetings endpoint responding"
+    # Test health endpoint
+    if curl -s "http://localhost:8000/api/health" | grep -q "healthy\|status"; then
+        log "Health endpoint responding"
     else
-        warn "⚠ Meetings endpoint may have issues"
+        warn "Health endpoint may have issues"
     fi
     
-    # Test cache stats
-    if curl -s "http://localhost:8000/api/cache/stats" | grep -q "total_meetings"; then
-        log "✓ Cache stats working"
+    # Test stats endpoint (updated for new API)
+    if curl -s "http://localhost:8000/api/stats" | grep -q "cities\|meetings"; then
+        log "Stats endpoint working"
     else
-        warn "⚠ Cache stats endpoint may have issues"
+        warn "Stats endpoint may have issues"
+    fi
+    
+    # Test search endpoint with POST
+    if curl -s -X POST "http://localhost:8000/api/search" -H "Content-Type: application/json" -d '{"query":"90210"}' | grep -q "success\|message"; then
+        log "Search endpoint responding"
+    else
+        warn "Search endpoint may have issues"
     fi
     
     log "API test complete"
