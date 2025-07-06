@@ -1,4 +1,6 @@
-import '../app.css';
+<script>
+	import '../app.css';
+</script>
 
 <main>
 	<slot />
