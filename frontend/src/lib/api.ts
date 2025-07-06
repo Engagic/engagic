@@ -1,158 +1,70 @@
-export interface Meeting {
-    meeting_id?: number;
-    id?: number;
-    title?: string;
-    meeting_name?: string;
-    start?: string;
-    meeting_date?: string;
-    packet_url: string;
-}
+const API_BASE = 'https://api.engagic.org';
 
-export interface RecentAgenda {
-    id: number;
-    city: string;
-    date: string;
-    title: string;
-    summary: string;
-    urgent: boolean;
-    packet_url?: string;
-}
-
-/**
- * Information returned by the unified search endpoint.
- * Includes vendor metadata and any cached meetings for the city.
- */
 export interface SearchResult {
-    zipcode?: string;
-    city: string;
-    city_slug: string;
-    state?: string;
-    county?: string;
-    vendor: string;
-    meetings: Meeting[];
-    is_new_city?: boolean;
-    needs_manual_config?: boolean;
-    status?: string;
-    message?: string;
+	success: boolean;
+	city_name?: string;
+	state?: string;
+	city_slug?: string;
+	vendor?: string;
+	meetings?: Meeting[];
+	message?: string;
+	cached?: boolean;
+	query?: string;
+	type?: string;
 }
 
-// Production API endpoint with SSL certificate
-const API_BASE_URL = 'https://api.engagic.org';
+export interface Meeting {
+	meeting_id?: string;
+	title?: string;
+	start?: string;
+	packet_url?: string;
+	meeting_name?: string;
+	meeting_date?: string;
+}
 
-export class ApiService {
+export interface ProcessResult {
+	success: boolean;
+	summary?: string;
+	processing_time_seconds?: number;
+	cached?: boolean;
+	meeting_data?: any;
+	error?: string;
+}
 
-    static async getMeetings(city_slug: string): Promise<Meeting[]> {
-        try {
-            console.log(`Fetching: ${API_BASE_URL}/api/meetings?city=${city_slug}`);
-            
-            // Create timeout controller
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-            
-            const response = await fetch(`${API_BASE_URL}/api/meetings?city=${city_slug}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                let errorMessage = 'Failed to load meetings';
-                
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.detail || errorMessage;
-                } catch {
-                    errorMessage = `${response.status} ${response.statusText}`;
-                }
-                
-                throw new Error(errorMessage);
-            }
-            
-            const result = await response.json();
-            console.log('Meetings result:', result);
-            
-            return result;
-        } catch (error) {
-            console.error('Error fetching meetings:', error);
-            
-            if (error instanceof Error) {
-                if (error.name === 'AbortError') {
-                    throw new Error('Request timed out. Please try again.');
-                }
-                if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
-                    throw new Error('Network error. Please check your connection.');
-                }
-                if (error.message.includes('JSON')) {
-                    throw new Error('Server returned invalid data. Please try again.');
-                }
-                throw error;
-            }
-            throw new Error(`Failed to load meetings: ${error}`);
-        }
-    }
+export async function searchMeetings(query: string): Promise<SearchResult> {
+	const response = await fetch(`${API_BASE}/api/search`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ query }),
+	});
 
-    static async searchMeetings(searchInput: string): Promise<SearchResult> {
-        const normalized = searchInput.trim();
-        
-        if (!normalized) {
-            throw new Error('Please enter a zipcode or city name');
-        }
-        
-        try {
-            console.log(`Searching: ${API_BASE_URL}/api/search/${encodeURIComponent(normalized)}`);
-            
-            // Create timeout controller
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            
-            const response = await fetch(`${API_BASE_URL}/api/search/${encodeURIComponent(normalized)}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                let errorMessage = 'Search failed';
-                
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.detail || errorMessage;
-                } catch {
-                    // If we can't parse the error response, use status text
-                    errorMessage = `${response.status} ${response.statusText}`;
-                }
-                
-                throw new Error(errorMessage);
-            }
-            
-            const result = await response.json();
-            console.log('Search result:', result);
-            
-            return result;
-        } catch (error) {
-            console.error('API search error:', error);
-            
-            if (error instanceof Error) {
-                if (error.name === 'AbortError') {
-                    throw new Error('Search timed out. Please try again.');
-                }
-                if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
-                    throw new Error('Network error. Please check your connection and try again.');
-                }
-                if (error.message.includes('JSON')) {
-                    throw new Error('Server returned invalid data. Please try again.');
-                }
-                throw error;
-            }
-            throw new Error(`Search failed: ${error}`);
-        }
-    }
+	if (!response.ok) {
+		throw new Error(`Search failed: ${response.status}`);
+	}
+
+	return response.json();
+}
+
+export async function processAgenda(meeting: Meeting, citySlug: string): Promise<ProcessResult> {
+	const response = await fetch(`${API_BASE}/api/process-agenda`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({
+			packet_url: meeting.packet_url,
+			city_slug: citySlug,
+			meeting_name: meeting.title || meeting.meeting_name,
+			meeting_date: meeting.start || meeting.meeting_date,
+			meeting_id: meeting.meeting_id,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Processing failed: ${response.status}`);
+	}
+
+	return response.json();
 }
