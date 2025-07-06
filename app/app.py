@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
-from adapters import PrimeGovAdapter
+from typing import Optional, List, Dict, Any
+from adapters import PrimeGovAdapter, CivicClerkAdapter
 from fullstack import AgendaProcessor
 from database import MeetingDatabase
 from uszipcode import SearchEngine
@@ -141,7 +141,10 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
     return input_str, None
 
 
-class MeetingRequest(BaseModel):
+class SearchRequest(BaseModel):
+    query: str  # zipcode or "city, state"
+
+class ProcessRequest(BaseModel):
     packet_url: str
     city_slug: str
     meeting_name: Optional[str] = None
@@ -149,103 +152,296 @@ class MeetingRequest(BaseModel):
     meeting_id: Optional[str] = None
 
 
-@app.get("/api/meetings")
-async def get_meetings(city: Optional[str] = None):
-    """Get meetings for a city - from database first, scrape if missing"""
+@app.post("/api/search")
+async def search_meetings(request: SearchRequest):
+    """Single endpoint for all meeting searches - handles zipcode or city name"""
     try:
-        if not city:
-            raise HTTPException(status_code=400, detail="city parameter is required")
-
-        print(f"Fetching meetings for city: {city}")
-
-        # First check database for cached meetings
-        meetings = db.get_meetings_by_city(city, 50)
-        if meetings:
-            print(f"Found {len(meetings)} cached meetings for {city}")
-            return meetings
-
-        # If no cached meetings, find the vendor for this city and scrape
-        # The 'city' parameter here is actually a city_slug from URL
-        # We need to find the city entry that has this slug
-        all_cities = db.get_all_cities()
-        city_entry = None
-        for entry in all_cities:
-            if entry.get("city_slug") == city:
-                city_entry = entry
-                break
-
-        if city_entry:
-            vendor = city_entry.get("vendor")
-            city_name = city_entry.get("city_name")
+        query = request.query.strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="Search query cannot be empty")
+        
+        print(f"Search request: '{query}'")
+        
+        # Log the search
+        db.log_search(query, "unknown")  # We'll determine type below
+        
+        # Determine if input is zipcode or city name
+        is_zipcode = query.isdigit() and len(query) == 5
+        
+        if is_zipcode:
+            return await handle_zipcode_search(query)
         else:
-            vendor = None
-            city_name = None
-
-        if not vendor:
-            print(f"No vendor configured for city {city}")
-
-            if city_name:
-                return {
-                    "message": f"{city_name} has been registered and will be integrated soon",
-                    "meetings": [],
-                    "city_slug": city,
-                    "status": "pending_integration",
-                }
-            else:
-                print(f"City {city} not found in database")
-
-                raise HTTPException(status_code=404, detail=f"City {city} not found")
-
-        # Scrape fresh meetings using the appropriate adapter
-        if vendor == "primegov":
-            try:
-                print(f"Scraping meetings for {city} using PrimeGov")
-                adapter = PrimeGovAdapter(city)
-                scraped_meetings = []
-                for meeting in adapter.upcoming_packets():
-                    # Store the meeting in database
-                    db.store_meeting_data(
-                        {
-                            "city_slug": city,
-                            "meeting_name": meeting.get("title"),
-                            "packet_url": meeting.get("packet_url"),
-                            "meeting_date": meeting.get("start"),
-                        },
-                        vendor,
-                    )
-                    scraped_meetings.append(meeting)
-                print(
-                    f"Successfully scraped {len(scraped_meetings)} meetings for {city}"
-                )
-                return scraped_meetings
-            except Exception as scrape_error:
-                print(f"Failed to scrape {city} with PrimeGov: {scrape_error}")
-                return {
-                    "message": f"{city_name} integration is experiencing issues and will be fixed soon",
-                    "meetings": [],
-                    "city_slug": city,
-                    "status": "integration_error",
-                }
-        else:
-            print(f"Vendor {vendor} not yet implemented for city {city}")
-            return {
-                "message": f"{city_name} has been registered and will be integrated soon",
-                "meetings": [],
-                "city_slug": city,
-                "status": "vendor_not_implemented",
-            }
-
+            return await handle_city_search(query)
+            
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Unexpected error fetching meetings for {city}: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching meetings: {str(e)}"
+        print(f"Unexpected search error for '{query}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+
+async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
+    """Handle zipcode search with cache-first approach"""
+    # Update search log
+    db.log_search(zipcode, "zipcode", zipcode=zipcode)
+    
+    # Check database first
+    city_info = db.get_city_by_zipcode(zipcode)
+    if not city_info:
+        # Try to auto-create city from uszipcode data
+        city_info = await auto_create_city_from_zipcode(zipcode)
+        if not city_info:
+            return {
+                "success": False,
+                "message": "Thanks for asking! We don't have that zipcode yet, but we're working on adding more cities regularly. Try searching by city name instead.",
+                "query": zipcode,
+                "type": "zipcode",
+                "meetings": []
+            }
+    
+    # Get cached meetings
+    meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+    
+    if meetings:
+        print(f"Found {len(meetings)} cached meetings for {city_info['city_name']}")
+        return {
+            "success": True,
+            "city_name": city_info['city_name'],
+            "state": city_info['state'],
+            "city_slug": city_info['city_slug'],
+            "vendor": city_info['vendor'],
+            "meetings": meetings,
+            "cached": True,
+            "query": zipcode,
+            "type": "zipcode"
+        }
+    
+    # Try to scrape fresh meetings
+    return await scrape_meetings_for_city(city_info)
+
+
+async def handle_city_search(city_input: str) -> Dict[str, Any]:
+    """Handle city name search with cache-first approach"""
+    # Parse city, state
+    city_name, state = parse_city_state_input(city_input)
+    
+    if not state:
+        return {
+            "success": False,
+            "message": "Please specify both city and state (e.g., 'Palo Alto, CA' or 'Boston Massachusetts')",
+            "query": city_input,
+            "type": "city_name",
+            "meetings": []
+        }
+    
+    # Check database first
+    city_info = db.get_city_by_name(city_name, state)
+    if not city_info:
+        # Try to auto-create city from uszipcode data
+        city_info = await auto_create_city_from_city_name(city_name, state)
+        if not city_info:
+            return {
+                "success": False,
+                "message": f"Thanks for asking! We don't have {city_name}, {state} yet, but we're working on adding more cities regularly.",
+                "query": city_input,
+                "type": "city_name",
+                "meetings": []
+            }
+    
+    # Log search with city_id
+    db.log_search(city_input, "city_name", city_id=city_info['id'])
+    
+    # Get cached meetings
+    meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+    
+    if meetings:
+        print(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
+        return {
+            "success": True,
+            "city_name": city_info['city_name'],
+            "state": city_info['state'],
+            "city_slug": city_info['city_slug'],
+            "vendor": city_info['vendor'],
+            "meetings": meetings,
+            "cached": True,
+            "query": city_input,
+            "type": "city_name"
+        }
+    
+    # Try to scrape fresh meetings
+    return await scrape_meetings_for_city(city_info)
+
+
+async def scrape_meetings_for_city(city_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Scrape meetings for a city using appropriate adapter"""
+    vendor = city_info.get('vendor')
+    city_slug = city_info['city_slug']
+    city_name = city_info['city_name']
+    
+    if not vendor:
+        return {
+            "success": True,
+            "city_name": city_name,
+            "state": city_info['state'],
+            "city_slug": city_slug,
+            "message": f"{city_name} has been registered and will be integrated soon",
+            "meetings": [],
+            "cached": False,
+            "status": "pending_integration"
+        }
+    
+    try:
+        scraped_meetings = []
+        
+        if vendor == "primegov":
+            print(f"Scraping meetings for {city_name} using PrimeGov")
+            adapter = PrimeGovAdapter(city_slug)
+            for meeting in adapter.upcoming_packets():
+                # Store in database
+                db.store_meeting_data({
+                    "city_slug": city_slug,
+                    "meeting_name": meeting.get("title"),
+                    "packet_url": meeting.get("packet_url"),
+                    "meeting_date": meeting.get("start"),
+                    "meeting_id": meeting.get("meeting_id")
+                })
+                scraped_meetings.append(meeting)
+                
+        elif vendor == "civicclerk":
+            print(f"Scraping meetings for {city_name} using CivicClerk")
+            adapter = CivicClerkAdapter(city_slug)
+            for meeting in adapter.upcoming_packets():
+                # Store in database
+                db.store_meeting_data({
+                    "city_slug": city_slug,
+                    "meeting_name": meeting.get("title"),
+                    "packet_url": meeting.get("packet_url"),
+                    "meeting_date": meeting.get("start"),
+                    "meeting_id": meeting.get("meeting_id")
+                })
+                scraped_meetings.append(meeting)
+        else:
+            return {
+                "success": True,
+                "city_name": city_name,
+                "state": city_info['state'],
+                "city_slug": city_slug,
+                "vendor": vendor,
+                "message": f"{city_name} integration is in progress - meetings will be available soon",
+                "meetings": [],
+                "cached": False,
+                "status": "vendor_not_implemented"
+            }
+        
+        print(f"Successfully scraped {len(scraped_meetings)} meetings for {city_name}")
+        return {
+            "success": True,
+            "city_name": city_name,
+            "state": city_info['state'],
+            "city_slug": city_slug,
+            "vendor": vendor,
+            "meetings": scraped_meetings,
+            "cached": False,
+            "scraped_count": len(scraped_meetings)
+        }
+        
+    except Exception as scrape_error:
+        print(f"Failed to scrape {city_name} with {vendor}: {scrape_error}")
+        return {
+            "success": True,
+            "city_name": city_name,
+            "state": city_info['state'],
+            "city_slug": city_slug,
+            "vendor": vendor,
+            "message": f"{city_name} integration is experiencing temporary issues but will be fixed soon",
+            "meetings": [],
+            "cached": False,
+            "status": "integration_error"
+        }
+
+
+async def auto_create_city_from_zipcode(zipcode: str) -> Optional[Dict[str, Any]]:
+    """Auto-create city entry from zipcode using uszipcode"""
+    try:
+        print(f"Auto-creating city entry for zipcode {zipcode}")
+        
+        # Look up zipcode info
+        result = zipcode_search.by_zipcode(zipcode)
+        if not result or not result.major_city:
+            print(f"No city found for zipcode {zipcode}")
+            return None
+        
+        city_name = result.major_city
+        state = result.state
+        county = result.county
+        
+        # Create a basic city slug (we don't know the vendor yet)
+        city_slug = f"{city_name.lower().replace(' ', '').replace('.', '')}{state.lower()}"
+        
+        # Add city to database with no vendor (pending integration)
+        city_id = db.add_city(
+            city_name=city_name,
+            state=state,
+            city_slug=city_slug,
+            vendor=None,  # No vendor yet - pending integration
+            county=county,
+            zipcodes=[zipcode]
         )
+        
+        print(f"Auto-created city: {city_name}, {state} (ID: {city_id})")
+        
+        # Return the created city info
+        return db.get_city_by_zipcode(zipcode)
+        
+    except Exception as e:
+        print(f"Error auto-creating city from zipcode {zipcode}: {e}")
+        return None
+
+
+async def auto_create_city_from_city_name(city_name: str, state: str) -> Optional[Dict[str, Any]]:
+    """Auto-create city entry from city name using uszipcode"""
+    try:
+        print(f"Auto-creating city entry for {city_name}, {state}")
+        
+        # Search for city in uszipcode
+        results = zipcode_search.by_city_and_state(city_name, state)
+        if not results:
+            print(f"No zipcode data found for {city_name}, {state}")
+            return None
+        
+        # Get primary zipcode and county from first result
+        primary_result = results[0]
+        primary_zipcode = primary_result.zipcode
+        county = primary_result.county
+        
+        # Collect all zipcodes for this city
+        zipcodes = [r.zipcode for r in results[:10]]  # Limit to first 10 zipcodes
+        
+        # Create city slug
+        city_slug = f"{city_name.lower().replace(' ', '').replace('.', '')}{state.lower()}"
+        
+        # Add city to database
+        city_id = db.add_city(
+            city_name=city_name,
+            state=state,
+            city_slug=city_slug,
+            vendor=None,  # No vendor yet - pending integration
+            county=county,
+            zipcodes=zipcodes
+        )
+        
+        print(f"Auto-created city: {city_name}, {state} with {len(zipcodes)} zipcodes (ID: {city_id})")
+        
+        # Return the created city info
+        return db.get_city_by_name(city_name, state)
+        
+    except Exception as e:
+        print(f"Error auto-creating city from name {city_name}, {state}: {e}")
+        return None
 
 
 @app.post("/api/process-agenda")
-async def process_agenda(request: MeetingRequest):
+async def process_agenda(request: ProcessRequest):
     """Process an agenda with caching - returns cached or newly processed summary"""
     if not processor:
         raise HTTPException(
@@ -280,130 +476,22 @@ async def process_agenda(request: MeetingRequest):
         )
 
 
-@app.get("/api/meetings/{city_slug}")
-async def get_city_meetings(city_slug: str, limit: int = 50):
-    """Get cached meetings for a specific city"""
-    try:
-        meetings = db.get_meetings_by_city(city_slug, limit)
-        return {"city_slug": city_slug, "meetings": meetings, "count": len(meetings)}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching city meetings: {str(e)}"
-        )
-
-
-@app.get("/api/meetings/recent")
-async def get_recent_meetings(limit: int = 20):
-    """Get most recently accessed meetings across all cities"""
-    try:
-        meetings = db.get_recent_meetings(limit)
-        return {"meetings": meetings, "count": len(meetings)}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching recent meetings: {str(e)}"
-        )
-
-
-@app.get("/api/cache/stats")
-async def get_cache_stats():
-    """Get cache statistics"""
+@app.get("/api/stats")
+async def get_stats():
+    """Get system statistics"""
     try:
         stats = db.get_cache_stats()
-        return stats
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching cache stats: {str(e)}"
-        )
-
-
-@app.delete("/api/cache/cleanup")
-async def cleanup_cache(days_old: int = 90):
-    """Clean up old cache entries"""
-    try:
-        deleted_count = db.cleanup_old_entries(days_old)
         return {
-            "deleted_count": deleted_count,
-            "message": f"Cleaned up {deleted_count} entries older than {days_old} days",
+            "status": "healthy",
+            "cities": stats.get("cities_count", 0),
+            "meetings": stats.get("meetings_count", 0),
+            "processed": stats.get("processed_count", 0),
+            "recent_activity": stats.get("recent_activity", 0)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error cleaning cache: {str(e)}")
-
-
-@app.get("/api/search/{query}")
-async def unified_search(query: str):
-    """Unified search endpoint that handles zipcode and city, state input"""
-    try:
-        query = query.strip()
-        print(f"Search request: '{query}'")
-
-        if not query:
-            raise HTTPException(status_code=400, detail="Search query cannot be empty")
-
-        # Determine if input is zipcode (5 digits) or city name
-        is_zipcode = query.isdigit() and len(query) == 5
-
-        if is_zipcode:
-            print(f"Processing as zipcode: {query}")
-            return await handle_zipcode_search(query)
-        else:
-            print(f"Processing as city, state: {query}")
-            return await handle_city_search(query)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Unexpected search error for '{query}': {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
-
-
-async def handle_zipcode_search(zipcode: str):
-    """Handle zipcode-based search using pre-populated database"""
-    # Check pre-populated database first
-    cached_entry = db.get_city_by_zipcode(zipcode)
-    if cached_entry:
-        print(
-            f"Found pre-populated entry for zipcode {zipcode}: {cached_entry.get('city')}"
-        )
-        return cached_entry
-
-    # Fallback: zipcode not in our database
-    print(f"Zipcode {zipcode} not found in pre-populated database")
-    raise HTTPException(
-        status_code=404,
-        detail="That zipcode isn't in our database yet. Try searching by city name instead.",
-    )
-
-
-async def handle_city_search(city_input: str):
-    """Handle city name-based search using pre-populated database"""
-    # Clean and validate city input
-    city_input = city_input.strip()
-    if len(city_input) < 2:
         raise HTTPException(
-            status_code=400, detail="City name must be at least 2 characters"
+            status_code=500, detail=f"Error fetching stats: {str(e)}"
         )
-
-    # Parse city, state from input
-    city_name, state = parse_city_state_input(city_input)
-
-    if not state:
-        raise HTTPException(
-            status_code=400,
-            detail="Please specify both city and state (e.g., 'Palo Alto, CA' or 'Boston Massachusetts')",
-        )
-
-    # Check pre-populated database
-    cached_entry = db.get_city_by_name(city_name, state)
-    if cached_entry:
-        print(f"Found pre-populated entry for {city_name}, {state}")
-        return cached_entry
-
-    # City not in pre-populated database
-    print(f"City {city_name}, {state} not found in pre-populated database")
-    raise HTTPException(
-        status_code=404,
-        detail=f"We don't have {city_name}, {state} in our database yet. We're working to add more cities regularly.",
-    )
 
 
 @app.get("/")
@@ -412,16 +500,18 @@ async def root():
     return {
         "service": "engagic API",
         "status": "running",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "description": "Simplified civic engagement API",
         "endpoints": {
-            "search": "/api/search/{zipcode_or_city}",
-            "meetings": "/api/meetings?city={city}",
-            "process": "/api/process-agenda",
-            "city_meetings": "/api/meetings/{city_slug}",
-            "recent": "/api/meetings/recent",
-            "cache_stats": "/api/cache/stats",
-            "health": "/api/health",
+            "search": "POST /api/search - Search for meetings by zipcode or city name",
+            "process": "POST /api/process-agenda - Process meeting agenda with LLM",
+            "stats": "GET /api/stats - System statistics",
+            "health": "GET /api/health - Health check"
         },
+        "usage": {
+            "search_zipcode": {"method": "POST", "url": "/api/search", "body": {"query": "94301"}},
+            "search_city": {"method": "POST", "url": "/api/search", "body": {"query": "Palo Alto, CA"}}
+        }
     }
 
 
@@ -432,15 +522,12 @@ async def health_check():
         # Test database connection
         stats = db.get_cache_stats()
 
-        # Test zipcode service
-        test_result = zipcode_search.by_zipcode("90210")
-
         return {
             "status": "healthy",
             "database": "connected",
-            "zipcode_service": "available",
             "llm_processor": "available" if processor else "disabled",
-            "cache_entries": stats.get("total_entries", 0),
+            "cities": stats.get("cities_count", 0),
+            "meetings": stats.get("meetings_count", 0)
         }
     except Exception as e:
         print(f"Health check failed: {e}")

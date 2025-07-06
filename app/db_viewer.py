@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Simple database viewer and editor for engagic SQLite database
-Provides cell-based representation for viewing and editing entries
+Database viewer and editor for the new engagic database schema
+Clean interface for managing cities, zipcodes, meetings, and analytics
 """
 
+import json
+from datetime import datetime
 from database import MeetingDatabase
 
 
@@ -11,223 +13,366 @@ class DatabaseViewer:
     def __init__(self):
         self.db = MeetingDatabase()
 
-    def show_zipcode_table(self):
-        """Display zipcode_entries table in cell format"""
+    def show_cities_table(self, limit=50):
+        """Display cities table with zipcode counts"""
         with self.db.get_connection() as conn:
             cursor = conn.execute("""
-                SELECT id, vendor, zipcode, city_name, city_slug, state, county, 
-                       created_at, last_accessed 
-                FROM zipcode_entries 
-                ORDER BY id
-            """)
+                SELECT c.id, c.city_name, c.state, c.city_slug, c.vendor, c.status,
+                       c.county, c.created_at,
+                       COUNT(z.zipcode) as zipcode_count,
+                       GROUP_CONCAT(z.zipcode) as zipcodes
+                FROM cities c
+                LEFT JOIN zipcodes z ON c.id = z.city_id
+                GROUP BY c.id
+                ORDER BY c.city_name, c.state
+                LIMIT ?
+            """, (limit,))
             rows = cursor.fetchall()
 
             if not rows:
-                print("No zipcode entries found.")
+                print("No cities found.")
                 return
 
-            # Headers
-            headers = [
-                "ID",
-                "Zipcode",
-                "City Name",
-                "City Slug",
-                "State",
-                "County",
-                "Created",
-                "Last Accessed",
-            ]
-            print("\n=== ZIPCODE ENTRIES ===")
-            print(" | ".join(f"{h:<15}" for h in headers))
-            print("-" * (len(headers) * 17))
+            print(f"\n=== CITIES TABLE (showing {len(rows)}) ===")
+            print(f"{'ID':<4} {'City':<20} {'State':<6} {'Slug':<20} {'Vendor':<12} {'Status':<8} {'ZIPs':<4} {'Zipcodes':<30}")
+            print("-" * 110)
 
-            # Data rows
             for row in rows:
-                values = [str(v)[:15] if v else "" for v in row]
-                print(" | ".join(f"{v:<15}" for v in values))
+                zipcodes = row['zipcodes'][:30] if row['zipcodes'] else ""
+                print(f"{row['id']:<4} {row['city_name'][:19]:<20} {row['state']:<6} "
+                     f"{row['city_slug'][:19]:<20} {row['vendor'] or '':<12} "
+                     f"{row['status']:<8} {row['zipcode_count']:<4} {zipcodes}")
+
+    def show_zipcodes_table(self, limit=50):
+        """Display zipcodes table with city information"""
+        with self.db.get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT z.id, z.zipcode, z.is_primary, z.created_at,
+                       c.city_name, c.state, c.city_slug
+                FROM zipcodes z
+                JOIN cities c ON z.city_id = c.id
+                ORDER BY z.zipcode
+                LIMIT ?
+            """, (limit,))
+            rows = cursor.fetchall()
+
+            if not rows:
+                print("No zipcodes found.")
+                return
+
+            print(f"\n=== ZIPCODES TABLE (showing {len(rows)}) ===")
+            print(f"{'ID':<4} {'Zipcode':<8} {'Primary':<8} {'City':<20} {'State':<6} {'Slug':<20} {'Created':<12}")
+            print("-" * 85)
+
+            for row in rows:
+                primary = "YES" if row['is_primary'] else "NO"
+                created = row['created_at'][:10] if row['created_at'] else ""
+                print(f"{row['id']:<4} {row['zipcode']:<8} {primary:<8} "
+                     f"{row['city_name'][:19]:<20} {row['state']:<6} "
+                     f"{row['city_slug'][:19]:<20} {created:<12}")
 
     def show_meetings_table(self, limit=20):
-        """Display meetings table in cell format"""
+        """Display meetings table with city information"""
         with self.db.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT id, vendor, city_name, city_slug, meeting_date, 
-                       meeting_name, packet_url, created_at 
-                FROM meetings 
-                ORDER BY id DESC 
+            cursor = conn.execute("""
+                SELECT m.id, m.meeting_name, m.meeting_date, m.packet_url,
+                       m.processed_summary IS NOT NULL as has_summary,
+                       m.created_at, m.last_accessed,
+                       c.city_name, c.state, c.vendor
+                FROM meetings m
+                JOIN cities c ON m.city_id = c.id
+                ORDER BY m.created_at DESC
                 LIMIT ?
-            """,
-                (limit,),
-            )
+            """, (limit,))
             rows = cursor.fetchall()
 
             if not rows:
-                print("No meeting entries found.")
+                print("No meetings found.")
                 return
 
-            # Headers
-            headers = [
-                "ID",
-                "Vendor",
-                "City Name",
-                "City Slug",
-                "Date",
-                "Meeting Name",
-                "Packet URL",
-                "Created",
-            ]
-            print(f"\n=== MEETINGS (last {limit}) ===")
-            print(" | ".join(f"{h:<15}" for h in headers))
-            print("-" * (len(headers) * 17))
+            print(f"\n=== MEETINGS TABLE (last {len(rows)}) ===")
+            print(f"{'ID':<4} {'City':<20} {'Meeting':<25} {'Date':<12} {'Summary':<8} {'Created':<12}")
+            print("-" * 90)
 
-            # Data rows
             for row in rows:
-                values = [str(v)[:15] if v else "" for v in row]
-                print(" | ".join(f"{v:<15}" for v in values))
+                meeting_name = row['meeting_name'][:24] if row['meeting_name'] else "Unknown"
+                meeting_date = row['meeting_date'][:10] if row['meeting_date'] else ""
+                has_summary = "YES" if row['has_summary'] else "NO"
+                created = row['created_at'][:10] if row['created_at'] else ""
+                print(f"{row['id']:<4} {row['city_name'][:19]:<20} {meeting_name:<25} "
+                     f"{meeting_date:<12} {has_summary:<8} {created:<12}")
 
-    def update_zipcode_entry(self, entry_id: int, field: str, new_value: str):
-        """Update a specific field in zipcode_entries table"""
-        valid_fields = ["zipcode", "city_name", "city_slug", "state", "county"]
+    def show_usage_metrics(self, limit=20):
+        """Display recent usage metrics"""
+        with self.db.get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT u.id, u.search_query, u.search_type, u.zipcode, u.created_at,
+                       c.city_name, c.state
+                FROM usage_metrics u
+                LEFT JOIN cities c ON u.city_id = c.id
+                ORDER BY u.created_at DESC
+                LIMIT ?
+            """, (limit,))
+            rows = cursor.fetchall()
 
-        if field not in valid_fields:
-            print(f"Invalid field. Valid fields: {valid_fields}")
+            if not rows:
+                print("No usage metrics found.")
+                return
+
+            print(f"\n=== USAGE METRICS (last {len(rows)}) ===")
+            print(f"{'ID':<4} {'Query':<20} {'Type':<12} {'City Found':<20} {'When':<12}")
+            print("-" * 75)
+
+            for row in rows:
+                query = row['search_query'][:19] if row['search_query'] else ""
+                city_found = row['city_name'][:19] if row['city_name'] else "Not Found"
+                when = row['created_at'][:10] if row['created_at'] else ""
+                print(f"{row['id']:<4} {query:<20} {row['search_type']:<12} {city_found:<20} {when:<12}")
+
+    def add_city(self):
+        """Interactive city addition"""
+        print("\n=== ADD NEW CITY ===")
+        city_name = input("City name: ").strip()
+        if not city_name:
+            print("City name required")
             return False
 
-        with self.db.get_connection() as conn:
-            try:
-                cursor = conn.execute(
-                    f"UPDATE zipcode_entries SET {field} = ? WHERE id = ?",
-                    (new_value, entry_id),
-                )
-                if cursor.rowcount == 0:
-                    print(f"No entry found with ID {entry_id}")
-                    return False
-                else:
-                    print(f"Updated entry {entry_id}: {field} = '{new_value}'")
-                    return True
-            except Exception as e:
-                print(f"Error updating entry: {e}")
-                return False
-
-    def update_meeting_entry(self, entry_id: int, field: str, new_value: str):
-        """Update a specific field in meetings table"""
-        valid_fields = [
-            "vendor",
-            "city_name",
-            "city_slug",
-            "meeting_date",
-            "meeting_name",
-            "packet_url",
-        ]
-
-        if field not in valid_fields:
-            print(f"Invalid field. Valid fields: {valid_fields}")
+        state = input("State (2-letter code): ").strip().upper()
+        if len(state) != 2:
+            print("State must be 2-letter code (e.g., CA)")
             return False
 
-        with self.db.get_connection() as conn:
-            try:
-                cursor = conn.execute(
-                    f"UPDATE meetings SET {field} = ? WHERE id = ?",
-                    (new_value, entry_id),
-                )
-                if cursor.rowcount == 0:
-                    print(f"No entry found with ID {entry_id}")
-                    return False
-                else:
-                    print(f"Updated entry {entry_id}: {field} = '{new_value}'")
-                    return True
-            except Exception as e:
-                print(f"Error updating entry: {e}")
-                return False
+        city_slug = input("City slug (vendor-specific): ").strip()
+        if not city_slug:
+            print("City slug required")
+            return False
 
-    def add_zipcode_entry(
-        self,
-        zipcode: str,
-        city_name: str,
-        city_slug: str,
-        state: str = "",
-        county: str = "",
-    ):
-        """Add a new zipcode entry"""
-        entry_data = {
-            "zipcode": zipcode,
-            "city": city_name,
-            "city_slug": city_slug,
-            "state": state,
-            "county": county,
-            "meetings": [],
-        }
+        vendor = input("Vendor (primegov/civicclerk/etc): ").strip()
+        county = input("County (optional): ").strip() or None
+
+        zipcodes_input = input("Zipcodes (comma-separated, optional): ").strip()
+        zipcodes = [z.strip() for z in zipcodes_input.split(",")] if zipcodes_input else []
 
         try:
-            entry_id = self.db.store_zipcode_entry(entry_data)
-            print(f"Added new zipcode entry with ID {entry_id}")
+            city_id = self.db.add_city(city_name, state, city_slug, vendor, county, zipcodes)
+            print(f"Added city '{city_name}, {state}' with ID {city_id}")
+            if zipcodes:
+                print(f"   Added {len(zipcodes)} zipcodes: {', '.join(zipcodes)}")
             return True
         except Exception as e:
-            print(f"Error adding entry: {e}")
+            print(f"Error adding city: {e}")
             return False
 
-    def delete_zipcode_entry(self, entry_id: int):
-        """Delete a zipcode entry"""
-        with self.db.get_connection() as conn:
-            try:
-                cursor = conn.execute(
-                    "DELETE FROM zipcode_entries WHERE id = ?", (entry_id,)
-                )
-                if cursor.rowcount == 0:
-                    print(f"No entry found with ID {entry_id}")
-                    return False
-                else:
-                    print(f"Deleted zipcode entry {entry_id}")
-                    return True
-            except Exception as e:
-                print(f"Error deleting entry: {e}")
-                return False
+    def add_zipcode_to_city(self):
+        """Add zipcode to existing city"""
+        print("\n=== ADD ZIPCODE TO CITY ===")
+        self.show_cities_table(20)
+        
+        city_id = input("Enter city ID: ").strip()
+        if not city_id.isdigit():
+            print("Invalid city ID")
+            return False
 
-    def delete_meeting_entry(self, entry_id: int):
-        """Delete a meeting entry"""
-        with self.db.get_connection() as conn:
-            try:
-                cursor = conn.execute("DELETE FROM meetings WHERE id = ?", (entry_id,))
-                if cursor.rowcount == 0:
-                    print(f"No entry found with ID {entry_id}")
-                    return False
-                else:
-                    print(f"Deleted meeting entry {entry_id}")
-                    return True
-            except Exception as e:
-                print(f"Error deleting entry: {e}")
-                return False
+        zipcode = input("Enter zipcode: ").strip()
+        if not zipcode.isdigit() or len(zipcode) != 5:
+            print("Invalid zipcode format")
+            return False
 
-    def search_entries(self, table: str, field: str, value: str):
-        """Search for entries in a table"""
-        if table == "zipcode":
-            valid_fields = ["zipcode", "city_name", "city_slug", "state", "county"]
-            table_name = "zipcode_entries"
-        elif table == "meetings":
-            valid_fields = ["vendor", "city_name", "city_slug", "meeting_name"]
-            table_name = "meetings"
-        else:
-            print("Invalid table. Use 'zipcode' or 'meetings'")
-            return
+        is_primary = input("Is this the primary zipcode? (y/N): ").strip().lower() == 'y'
 
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO zipcodes (zipcode, city_id, is_primary)
+                    VALUES (?, ?, ?)
+                """, (zipcode, int(city_id), is_primary))
+                conn.commit()
+                print(f"Added zipcode {zipcode} to city ID {city_id}")
+                return True
+        except Exception as e:
+            print(f"Error adding zipcode: {e}")
+            return False
+
+    def update_city(self):
+        """Update city information"""
+        print("\n=== UPDATE CITY ===")
+        self.show_cities_table(20)
+        
+        city_id = input("Enter city ID to update: ").strip()
+        if not city_id.isdigit():
+            print("Invalid city ID")
+            return False
+
+        field = input("Field to update (city_name/state/city_slug/vendor/status/county): ").strip()
+        valid_fields = ['city_name', 'state', 'city_slug', 'vendor', 'status', 'county']
+        
         if field not in valid_fields:
-            print(f"Invalid field for {table}. Valid fields: {valid_fields}")
+            print(f"Invalid field. Valid: {', '.join(valid_fields)}")
+            return False
+
+        new_value = input(f"New value for {field}: ").strip()
+
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(f"""
+                    UPDATE cities SET {field} = ?, updated_at = CURRENT_TIMESTAMP 
+                    WHERE id = ?
+                """, (new_value, int(city_id)))
+                
+                if cursor.rowcount == 0:
+                    print(f"No city found with ID {city_id}")
+                    return False
+                
+                conn.commit()
+                print(f"Updated city {city_id}: {field} = '{new_value}'")
+                return True
+        except Exception as e:
+            print(f"Error updating city: {e}")
+            return False
+
+    def delete_city(self):
+        """Delete city and all related data"""
+        print("\n=== DELETE CITY ===")
+        self.show_cities_table(20)
+        
+        city_id = input("Enter city ID to delete: ").strip()
+        if not city_id.isdigit():
+            print("Invalid city ID")
+            return False
+
+        # Show what will be deleted
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT city_name, state FROM cities WHERE id = ?", (int(city_id),))
+            city_row = cursor.fetchone()
+            if not city_row:
+                print(f"No city found with ID {city_id}")
+                return False
+
+            cursor.execute("SELECT COUNT(*) as count FROM zipcodes WHERE city_id = ?", (int(city_id),))
+            zipcode_count = cursor.fetchone()['count']
+            
+            cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE city_id = ?", (int(city_id),))
+            meeting_count = cursor.fetchone()['count']
+
+        print(f"\nWARNING: This will delete:")
+        print(f"   City: {city_row['city_name']}, {city_row['state']}")
+        print(f"   {zipcode_count} zipcodes")
+        print(f"   {meeting_count} meetings")
+
+        confirm = input("\nAre you sure? Type 'DELETE' to confirm: ").strip()
+        if confirm != "DELETE":
+            print("Cancelled")
+            return False
+
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                # Delete in order (foreign key constraints)
+                cursor.execute("DELETE FROM usage_metrics WHERE city_id = ?", (int(city_id),))
+                cursor.execute("DELETE FROM meetings WHERE city_id = ?", (int(city_id),))
+                cursor.execute("DELETE FROM zipcodes WHERE city_id = ?", (int(city_id),))
+                cursor.execute("DELETE FROM cities WHERE id = ?", (int(city_id),))
+                conn.commit()
+                print(f"Deleted city and all related data")
+                return True
+        except Exception as e:
+            print(f"Error deleting city: {e}")
+            return False
+
+    def search_database(self):
+        """Search across all tables"""
+        print("\n=== SEARCH DATABASE ===")
+        query = input("Search for: ").strip()
+        if not query:
+            print("Search query required")
             return
 
-        with self.db.get_connection() as conn:
-            cursor = conn.execute(
-                f"SELECT * FROM {table_name} WHERE {field} LIKE ? ORDER BY id",
-                (f"%{value}%",),
-            )
-            rows = cursor.fetchall()
+        print(f"\nSearching for '{query}'...")
 
-            if not rows:
-                print(f"No entries found in {table} where {field} contains '{value}'")
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Search cities
+            cursor.execute("""
+                SELECT 'CITY' as type, id, city_name || ', ' || state as name, city_slug, vendor
+                FROM cities 
+                WHERE city_name LIKE ? OR state LIKE ? OR city_slug LIKE ? OR vendor LIKE ?
+            """, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
+            
+            results = cursor.fetchall()
+            
+            # Search zipcodes
+            cursor.execute("""
+                SELECT 'ZIPCODE' as type, z.id, z.zipcode as name, 
+                       c.city_name || ', ' || c.state as city_slug, c.vendor
+                FROM zipcodes z
+                JOIN cities c ON z.city_id = c.id
+                WHERE z.zipcode LIKE ?
+            """, (f"%{query}%",))
+            
+            results.extend(cursor.fetchall())
+            
+            # Search meetings
+            cursor.execute("""
+                SELECT 'MEETING' as type, m.id, m.meeting_name as name,
+                       c.city_name || ', ' || c.state as city_slug, 
+                       m.meeting_date as vendor
+                FROM meetings m
+                JOIN cities c ON m.city_id = c.id
+                WHERE m.meeting_name LIKE ?
+            """, (f"%{query}%",))
+            
+            results.extend(cursor.fetchall())
+
+            if not results:
+                print("No results found")
                 return
 
-            print(f"\n=== SEARCH RESULTS: {table.upper()} ===")
-            for row in rows:
-                print(f"ID {row['id']}: {dict(row)}")
+            print(f"\nFound {len(results)} results:")
+            print(f"{'Type':<8} {'ID':<4} {'Name':<30} {'City/Info':<25} {'Extra':<15}")
+            print("-" * 85)
+            
+            for result in results:
+                print(f"{result['type']:<8} {result['id']:<4} {str(result['name'])[:29]:<30} "
+                     f"{str(result['city_slug'])[:24]:<25} {str(result['vendor'] or '')[:14]:<15}")
+
+    def show_statistics(self):
+        """Show database statistics"""
+        stats = self.db.get_cache_stats()
+        
+        print("\n=== DATABASE STATISTICS ===")
+        print(f"Cities:              {stats.get('cities_count', 0)}")
+        print(f"Total meetings:      {stats.get('meetings_count', 0)}")
+        print(f"Processed meetings:  {stats.get('processed_count', 0)}")
+        print(f"Recent activity:     {stats.get('recent_activity', 0)} (7 days)")
+        
+        # Additional stats
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT COUNT(*) as count FROM zipcodes")
+            zipcode_count = cursor.fetchone()['count']
+            
+            cursor.execute("SELECT COUNT(DISTINCT vendor) as count FROM cities WHERE vendor IS NOT NULL")
+            vendor_count = cursor.fetchone()['count']
+            
+            cursor.execute("SELECT vendor, COUNT(*) as count FROM cities WHERE vendor IS NOT NULL GROUP BY vendor ORDER BY count DESC")
+            vendor_breakdown = cursor.fetchall()
+            
+            cursor.execute("SELECT COUNT(*) as count FROM usage_metrics")
+            search_count = cursor.fetchone()['count']
+
+        print(f"Zipcodes:            {zipcode_count}")
+        print(f"Vendors:             {vendor_count}")
+        print(f"Total searches:      {search_count}")
+        
+        if vendor_breakdown:
+            print(f"\nVendor breakdown:")
+            for vendor in vendor_breakdown:
+                print(f"  {vendor['vendor']}: {vendor['count']} cities")
 
 
 def main():
@@ -235,100 +380,69 @@ def main():
 
     while True:
         print("\n" + "=" * 60)
-        print("ENGAGIC DATABASE VIEWER")
+        print("ENGAGIC DATABASE VIEWER v2.0")
         print("=" * 60)
-        print("1. View zipcode entries")
-        print("2. View meetings")
-        print("3. Update zipcode entry")
-        print("4. Update meeting entry")
-        print("5. Add zipcode entry")
-        print("6. Delete zipcode entry")
-        print("7. Delete meeting entry")
-        print("8. Search entries")
-        print("9. Exit")
+        print("View Data:")
+        print("  1. Cities")
+        print("  2. Zipcodes") 
+        print("  3. Meetings")
+        print("  4. Usage metrics")
+        print("  5. Statistics")
+        print("\nEdit Data:")
+        print("  6. Add city")
+        print("  7. Add zipcode to city")
+        print("  8. Update city")
+        print("  9. Delete city")
+        print("\nOther:")
+        print("  10. Search database")
+        print("  11. Exit")
 
-        choice = input("\nEnter choice (1-9): ").strip()
+        choice = input("\nChoice (1-11): ").strip()
 
         if choice == "1":
-            viewer.show_zipcode_table()
+            limit = input("How many cities? (default 50): ").strip()
+            limit = int(limit) if limit.isdigit() else 50
+            viewer.show_cities_table(limit)
 
         elif choice == "2":
-            limit = input("How many meetings to show? (default 20): ").strip()
+            limit = input("How many zipcodes? (default 50): ").strip()
+            limit = int(limit) if limit.isdigit() else 50
+            viewer.show_zipcodes_table(limit)
+
+        elif choice == "3":
+            limit = input("How many meetings? (default 20): ").strip()
             limit = int(limit) if limit.isdigit() else 20
             viewer.show_meetings_table(limit)
 
-        elif choice == "3":
-            viewer.show_zipcode_table()
-            entry_id = input("Enter zipcode entry ID to update: ").strip()
-            if not entry_id.isdigit():
-                print("Invalid ID")
-                continue
-            field = input(
-                "Enter field to update (zipcode/city_name/city_slug/vendor/state/county): "
-            ).strip()
-            new_value = input(f"Enter new value for {field}: ").strip()
-            viewer.update_zipcode_entry(int(entry_id), field, new_value)
-
         elif choice == "4":
-            viewer.show_meetings_table()
-            entry_id = input("Enter meeting entry ID to update: ").strip()
-            if not entry_id.isdigit():
-                print("Invalid ID")
-                continue
-            field = input(
-                "Enter field to update (vendor/city_name/city_slug/meeting_date/meeting_name/packet_url): "
-            ).strip()
-            new_value = input(f"Enter new value for {field}: ").strip()
-            viewer.update_meeting_entry(int(entry_id), field, new_value)
+            limit = input("How many metrics? (default 20): ").strip()
+            limit = int(limit) if limit.isdigit() else 20
+            viewer.show_usage_metrics(limit)
 
         elif choice == "5":
-            zipcode = input("Enter zipcode: ").strip()
-            city_name = input("Enter city name: ").strip()
-            city_slug = input("Enter city slug: ").strip()
-            state = input("Enter state (optional): ").strip()
-            county = input("Enter county (optional): ").strip()
-            viewer.add_zipcode_entry(zipcode, city_name, city_slug, state, county)
+            viewer.show_statistics()
 
         elif choice == "6":
-            viewer.show_zipcode_table()
-            entry_id = input("Enter zipcode entry ID to delete: ").strip()
-            if not entry_id.isdigit():
-                print("Invalid ID")
-                continue
-            confirm = (
-                input(f"Are you sure you want to delete entry {entry_id}? (y/N): ")
-                .strip()
-                .lower()
-            )
-            if confirm == "y":
-                viewer.delete_zipcode_entry(int(entry_id))
+            viewer.add_city()
 
         elif choice == "7":
-            viewer.show_meetings_table()
-            entry_id = input("Enter meeting entry ID to delete: ").strip()
-            if not entry_id.isdigit():
-                print("Invalid ID")
-                continue
-            confirm = (
-                input(f"Are you sure you want to delete entry {entry_id}? (y/N): ")
-                .strip()
-                .lower()
-            )
-            if confirm == "y":
-                viewer.delete_meeting_entry(int(entry_id))
+            viewer.add_zipcode_to_city()
 
         elif choice == "8":
-            table = input("Search in which table? (zipcode/meetings): ").strip().lower()
-            field = input("Search in which field? ").strip()
-            value = input("Search for what value? ").strip()
-            viewer.search_entries(table, field, value)
+            viewer.update_city()
 
         elif choice == "9":
+            viewer.delete_city()
+
+        elif choice == "10":
+            viewer.search_database()
+
+        elif choice == "11":
             print("Goodbye!")
             break
 
         else:
-            print("Invalid choice. Please enter 1-9.")
+            print("Invalid choice. Please enter 1-11.")
 
 
 if __name__ == "__main__":
