@@ -383,7 +383,7 @@ async def auto_create_city_from_zipcode(zipcode: str) -> Optional[Dict[str, Any]
             city_name=city_name,
             state=state,
             city_slug=city_slug,
-            vendor=None,  # No vendor yet - pending integration
+            vendor="",  # No vendor yet - pending integration
             county=county,
             zipcodes=[zipcode]
         )
