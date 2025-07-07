@@ -7,7 +7,7 @@ import re
 from random import uniform
 from urllib.parse import quote_plus
 
-#db = MeetingDatabase()
+db = MeetingDatabase()
 search_session = requests.Session()
 search_session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -37,11 +37,14 @@ with SearchEngine() as search:
         
         for city, state, pop in results:
             # Check if city already exists
+            existing = db.get_city_by_name(city, state)
+            if existing:
+                continue
+                
             for vendor in vendor_names:
-                time.sleep(uniform(.1, .3))
+                time.sleep(uniform(1, 3))
                 
                 query = quote_plus(f"{city},{state} {vendor}")
-                print(f"querying with {query}")
                 response = search_session.get(
                     f"https://www.google.com/search?q={query}",
                     timeout=10
@@ -51,16 +54,8 @@ with SearchEngine() as search:
                 # This regex looks for URLs containing the vendor name
                 pattern = rf'https?://([a-z0-9\-]+)\.{vendor}\.(com|gov|org|net)'
                 matches = re.findall(pattern, response.text, re.IGNORECASE)
-
-                city_lower = city.lower().replace(' ', '').replace('-', '')
-                if any(part in city_slug for part in [city_lower, city_lower[:4]]):
-                    print(f"for {city} we found {city_slug} and {vendor} using this url: {url}")
-                    # Add to DB
-                else:
-                    print(f"SKIPPING: {city} -> {city_slug} doesn't match!")
                 
                 if matches:
-
                     city_slug = matches[0][0]  # Get the first match
                     url = f"https://{city_slug}.{vendor}.{matches[0][1]}"
                     
