@@ -131,18 +131,19 @@ with SearchEngine() as search:
                             print(f"✅ FOUND: {city} → {city_slug} @ {vendor} ({url})")
                             found_count += 1
                             
-                            # Uncomment to actually add to database
-                            # from database import MeetingDatabase
-                            # db = MeetingDatabase()
-                            # try:
-                            #     db.add_city(
-                            #         city_name=city,
-                            #         state=state,
-                            #         city_slug=city_slug,
-                            #         vendor=vendor
-                            #     )
-                            # except Exception as e:
-                            #     print(f"❌ Error adding {city}: {e}")
+                            # Add to database
+                            from database import MeetingDatabase
+                            db = MeetingDatabase()
+                            try:
+                                db.add_city(
+                                    city_name=city,
+                                    state=state,
+                                    city_slug=city_slug,
+                                    vendor=vendor
+                                )
+                                print(f"✅ ADDED TO DB: {city}, {state} → {city_slug} @ {vendor}")
+                            except Exception as e:
+                                print(f"❌ Error adding {city}: {e}")
                             
                             break  # Found a vendor for this city, move to next city
                         else:
