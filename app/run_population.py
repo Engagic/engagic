@@ -1,5 +1,11 @@
 from sqlalchemy import func
 from uszipcode import SearchEngine, SimpleZipcode
+from database import MeetingDatabase
+import requests
+
+search_session = requests.Session()
+
+vendor_names = ["granicus", "primegov", "legistar", "civicclerk", "novusagenda", "civicplus", "municode"]
 
 with SearchEngine() as search:
     session = search.ses
@@ -16,4 +22,6 @@ with SearchEngine() as search:
         )
 
     for city, state, pop in results:
-        print(f"{city}, {state}: {pop}")
+        for vendor in vendor_names:
+            response = search_session.get(f"https://www.google.com/search?q={city},{state} {vendor}")
+            print(response.text)
