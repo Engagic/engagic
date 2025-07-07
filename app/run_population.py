@@ -1,16 +1,14 @@
 from sqlalchemy import func
 from uszipcode import SearchEngine, SimpleZipcode
-from database import MeetingDatabase
 import requests
 import time
 import re
 from random import uniform
 from urllib.parse import quote_plus
 
-db = MeetingDatabase()
 search_session = requests.Session()
 search_session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.5',
     'Accept-Encoding': 'gzip, deflate',
@@ -37,13 +35,8 @@ with SearchEngine() as search:
         
         for city, state, pop in results:
             # Check if city already exists
-            existing = db.get_city_by_name(city, state)
-            if existing:
-                continue
-                
             for vendor in vendor_names:
-                time.sleep(uniform(1, 3))
-                
+                time.sleep(uniform(2, 4))
                 query = quote_plus(f"{city},{state} {vendor}")
                 response = search_session.get(
                     f"https://www.google.com/search?q={query}",
