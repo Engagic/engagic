@@ -2,6 +2,7 @@ from sqlalchemy import func
 from uszipcode import SearchEngine, SimpleZipcode
 from playwright.sync_api import sync_playwright
 import time
+import json
 import re
 from random import uniform, choice
 from urllib.parse import quote_plus
@@ -10,6 +11,9 @@ from urllib.parse import quote_plus
 # playwright install chromium  # Run once to install browser
 
 vendor_names = ["granicus", "primegov", "legistar", "civicclerk", "novusagenda", "civicplus", "municode"]
+
+found_cities = []  # Track all discovered cities
+
 
 def get_random_viewport():
     """Random viewport sizes to look more human"""
@@ -21,6 +25,7 @@ def get_random_viewport():
         {'width': 1280, 'height': 720},
     ]
     return choice(viewports)
+
 
 def search_google_with_playwright(query):
     """Search Google using Playwright - undetectable AF"""
@@ -86,6 +91,76 @@ def search_google_with_playwright(query):
         finally:
             browser.close()
 
+
+def extract_city_and_url(html, vendor):
+    """Extract city slug and URL from various vendor patterns"""
+    
+    # Multiple patterns to catch different URL structures
+    patterns = [
+        # Standard: city_slug.vendor.com
+        (rf'https?://([a-z0-9\-]+)\.{vendor}\.(com|gov|org|net)', 'standard'),
+        # Vendor first with council: vendor.council.city_slug.gov
+        (rf'https?://{vendor}\.council\.([a-z0-9\-]+)\.(com|gov|org|net)', 'council'),
+        # Vendor first with any subdomain: vendor.subdomain.city_slug.gov
+        (rf'https?://{vendor}\.[a-z0-9\-]+\.([a-z0-9\-]+)\.(com|gov|org|net)', 'subdomain'),
+        # City first with vendor subdomain: city_slug.vendor.something.gov
+        (rf'https?://([a-z0-9\-]+)\.{vendor}\.[a-z0-9\-]+\.(com|gov|org|net)', 'city_first'),
+    ]
+    
+    for pattern, pattern_type in patterns:
+        matches = re.findall(pattern, html, re.IGNORECASE)
+        if matches:
+            if pattern_type == 'standard':
+                city_slug = matches[0][0]
+                domain = matches[0][1]
+                url = f"https://{city_slug}.{vendor}.{domain}"
+            elif pattern_type == 'council':
+                city_slug = matches[0][0]
+                domain = matches[0][1]
+                url = f"https://{vendor}.council.{city_slug}.{domain}"
+            elif pattern_type == 'subdomain':
+                city_slug = matches[0][1]
+                domain = matches[0][2]
+                # Try to find the actual URL in the HTML
+                url_pattern = rf'https?://{vendor}\.[a-z0-9\-]+\.{city_slug}\.{domain}'
+                url_match = re.search(url_pattern, html, re.IGNORECASE)
+                url = url_match.group(0) if url_match else f"https://{vendor}.{city_slug}.{domain}"
+            elif pattern_type == 'city_first':
+                city_slug = matches[0][0]
+                domain = matches[0][2]
+                url = f"https://{city_slug}.{vendor}.{domain}"
+            
+            return city_slug, url
+    
+    return None, None
+
+
+def validate_city_match(city, state, city_slug):
+    """Validate if the city_slug matches the city name"""
+    city_lower = city.lower().replace(' ', '').replace('-', '')
+    
+    # Special city mappings
+    special_cases = {
+        'newyork': ['nyc', 'newyorkc', 'newyorkcity'],
+        'losangeles': ['lacity', 'losangelesca', 'la-city'],
+        'sanfrancisco': ['sfgov', 'sf', 'sfo'],
+        'philadelphia': ['phila', 'philadelphiapa'],
+        'washingtondc': ['dc', 'dcgov', 'washdc'],
+        'washington': ['dc', 'dcgov', 'washdc'],
+        'saintlouis': ['stlouis', 'stl'],
+        'saintpaul': ['stpaul'],
+    }
+    
+    # Check if it's a special case
+    city_key = city_lower.replace(' ', '')
+    if city_key in special_cases:
+        if any(special in city_slug for special in special_cases[city_key]):
+            return True
+    
+    # Regular validation - check if city name or part of it is in the slug
+    return any(part in city_slug for part in [city_lower, city_lower[:4]])
+
+
 # Main script starts here
 print("🚀 STARTING CITY DISCOVERY WITH PLAYWRIGHT 🚀")
 
@@ -100,14 +175,20 @@ with SearchEngine() as search:
             )
             .group_by(SimpleZipcode.major_city, SimpleZipcode.state)
             .order_by(func.sum(SimpleZipcode.population).desc())
-            .limit(100)  # Start with 100 cities
+            .offset(100)
+            .limit(1000)  # Start with 100 cities
             .all()
         )
         
         found_count = 0
         
         for city, state, pop in results:
+            city_found = False
+            
             for vendor in vendor_names:
+                if city_found:
+                    break
+                    
                 # Random delay between searches
                 time.sleep(uniform(2, 5))
                 
@@ -117,35 +198,25 @@ with SearchEngine() as search:
                 try:
                     html = search_google_with_playwright(query)
                     
-                    # Look for URLs matching pattern: {city_slug}.{vendor}
-                    pattern = rf'https?://([a-z0-9\-]+)\.{vendor}\.(com|gov|org|net)'
-                    matches = re.findall(pattern, html, re.IGNORECASE)
+                    # Extract city slug and URL using multiple patterns
+                    city_slug, url = extract_city_and_url(html, vendor)
                     
-                    if matches:
-                        city_slug = matches[0][0]  # Get the first match
-                        url = f"https://{city_slug}.{vendor}.{matches[0][1]}"
-                        
+                    if city_slug and url:
                         # Validate the match
-                        city_lower = city.lower().replace(' ', '').replace('-', '')
-                        if any(part in city_slug for part in [city_lower, city_lower[:4]]):
-                            print(f"✅ FOUND: {city} → {city_slug} @ {vendor} ({url})")
+                        if validate_city_match(city, state, city_slug):
+                            found_cities.append({
+                                'city_name': city,
+                                'state': state,
+                                'city_slug': city_slug,
+                                'vendor': vendor,
+                                'url': url,
+                                'population': int(pop)
+                            })
                             found_count += 1
+                            city_found = True
                             
-                            # Add to database
-                            from database import MeetingDatabase
-                            db = MeetingDatabase()
-                            try:
-                                db.add_city(
-                                    city_name=city,
-                                    state=state,
-                                    city_slug=city_slug,
-                                    vendor=vendor
-                                )
-                                print(f"✅ ADDED TO DB: {city}, {state} → {city_slug} @ {vendor}")
-                            except Exception as e:
-                                print(f"❌ Error adding {city}: {e}")
-                            
-                            break  # Found a vendor for this city, move to next city
+                            print(f"✅ FOUND: {city}, {state} → {city_slug} @ {vendor} ({url})")
+                            break
                         else:
                             print(f"❌ SKIP: {city} → {city_slug} (doesn't match)")
                     
@@ -153,4 +224,19 @@ with SearchEngine() as search:
                     print(f"⚠️ Error searching {city}, {state} - {vendor}: {e}")
                     time.sleep(10)  # Extra delay on error
 
-print(f"\n🎉 DISCOVERY COMPLETE! Found {found_count} cities with vendors")
+print(f"\n🎉 Discovery complete! Found {found_count} cities with vendors")
+
+# Save results to JSON
+with open('discovered_cities.json', 'w') as f:
+    json.dump(found_cities, f, indent=2)
+print(f"💾 Saved {len(found_cities)} cities to discovered_cities.json")
+
+# Print summary
+print("\n📊 Summary by vendor:")
+vendor_counts = {}
+for city in found_cities:
+    vendor = city['vendor']
+    vendor_counts[vendor] = vendor_counts.get(vendor, 0) + 1
+
+for vendor, count in sorted(vendor_counts.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {vendor}: {count} cities")
