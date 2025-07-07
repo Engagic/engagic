@@ -26,7 +26,6 @@ def get_random_viewport():
     ]
     return choice(viewports)
 
-
 def search_google_with_playwright(query):
     """Search Google using Playwright - undetectable AF"""
     with sync_playwright() as p:
