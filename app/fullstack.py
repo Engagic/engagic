@@ -880,7 +880,7 @@ def main():
             logger.info(preview)
 
     except KeyboardInterrupt:
-        logger.error("\nOperation cancelled by user")
+        logger.warning("\nOperation cancelled by user")
         sys.exit(1)
     except Exception as e:
         logger.error(f"Error: {e}")
