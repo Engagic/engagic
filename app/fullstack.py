@@ -3,6 +3,7 @@ import tempfile
 import os
 import re
 import time
+import logging
 import pytesseract
 from pdf2image import convert_from_path
 from PyPDF2 import PdfReader
@@ -12,6 +13,7 @@ import sys
 from typing import List, Dict, Any
 from database import MeetingDatabase, get_city_info
 
+logger = logging.getLogger("engagic")
 
 class AgendaProcessor:
     def __init__(self, api_key=None, db_path="/root/engagic/app/meetings.db"):
