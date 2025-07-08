@@ -22,7 +22,7 @@ logger = logging.getLogger("engagic")
 class AgendaProcessor:
     def __init__(self, api_key=None, db_path="/root/engagic/app/meetings.db"):
         """Initialize processor with optional API key and database"""
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        self.api_key = api_key or os.getenv("LLM_API_KEY")
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable required")
 
