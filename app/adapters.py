@@ -1,3 +1,4 @@
+import re
 import requests
 import logging
 from urllib.parse import urlencode
@@ -97,3 +98,36 @@ class CivicClerkAdapter:
                 "start": mtg.get("startDateTime", ""),
                 "packet_url": self._packet_url(pkt),
             }
+
+#Tentative needs to be tested fucking old ass
+class LegistarAdapter:
+    def __init__(self, city_slug: str):
+        self.city_slug = city_slug
+        self.base = f"https://{city_slug}.legistar.com"
+        
+    def upcoming_packets(self):
+        # Get calendar HTML
+        resp = requests.get(f"{self.base}/Calendar.aspx")
+        
+        # Parse that ugly ass table
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        
+        # Find all meeting rows
+        for row in soup.find_all('tr', class_=['rgRow', 'rgAltRow']):
+            # Extract meeting ID and GUID from links
+            detail_link = row.find('a', href=re.compile(r'MeetingDetail\.aspx'))
+            if detail_link:
+                params = dict(re.findall(r'(\w+)=([^&]+)', detail_link['href']))
+                meeting_id = params.get('ID')
+                guid = params.get('GUID')
+                
+                # Check if agenda packet exists
+                packet_link = row.find('a', id=re.compile('hypAgendaPacket'))
+                if packet_link and 'Not available' not in packet_link.text:
+                    yield {
+                        'meeting_id': meeting_id,
+                        'title': row.find('a', id=re.compile('hypBody')).text,
+                        'start': row.find('td', class_='rgSorted').text,
+                        'packet_url': f"{self.base}/View.ashx?M=AP&ID={meeting_id}&GUID={guid}"
+                    }
