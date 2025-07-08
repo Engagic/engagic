@@ -166,18 +166,22 @@ class MeetingDatabase:
             return None
 
     def get_city_by_name(self, city_name: str, state: str) -> Optional[Dict[str, Any]]:
-        """Get city information by name and state"""
+        """Get city information by name and state (case-insensitive with space normalization)"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            # Normalize inputs: case-insensitive and handle spaces
+            city_normalized = city_name.strip().replace(' ', '').lower()
+            state_normalized = state.strip().upper()
+            
             cursor.execute("""
                 SELECT c.*, 
                        GROUP_CONCAT(z.zipcode) as zipcodes,
                        (SELECT z2.zipcode FROM zipcodes z2 WHERE z2.city_id = c.id AND z2.is_primary = 1) as primary_zipcode
                 FROM cities c
                 LEFT JOIN zipcodes z ON c.id = z.city_id
-                WHERE c.city_name = ? AND c.state = ?
+                WHERE LOWER(REPLACE(c.city_name, ' ', '')) = ? AND UPPER(c.state) = ?
                 GROUP BY c.id
-            """, (city_name, state))
+            """, (city_normalized, state_normalized))
             
             row = cursor.fetchone()
             if row:
