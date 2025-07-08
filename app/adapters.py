@@ -99,7 +99,7 @@ class CivicClerkAdapter:
                 "packet_url": self._packet_url(pkt),
             }
 
-#Tentative needs to be tested fucking old ass
+# TODO: Test
 class LegistarAdapter:
     def __init__(self, city_slug: str):
         self.city_slug = city_slug
