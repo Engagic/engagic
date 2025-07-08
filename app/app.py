@@ -76,6 +76,33 @@ db = MeetingDatabase()
 zipcode_search = SearchEngine()
 
 
+def normalize_city_name(city_name: str) -> str:
+    """Normalize city name for consistent formatting"""
+    city = city_name.strip()
+    
+    # Handle special cases where simple title() doesn't work well
+    special_cases = {
+        'lasvegas': 'Las Vegas',
+        'newyork': 'New York',
+        'losangeles': 'Los Angeles',
+        'sanfrancisco': 'San Francisco',
+        'sanjose': 'San Jose',
+        'sandiego': 'San Diego',
+        'santaana': 'Santa Ana',
+        'santabarbara': 'Santa Barbara',
+        'stlouis': 'St. Louis',
+        'stpaul': 'St. Paul',
+        'ftworth': 'Fort Worth',
+        'fortworth': 'Fort Worth',
+    }
+    
+    city_lower_nospace = city.lower().replace(' ', '').replace('.', '')
+    if city_lower_nospace in special_cases:
+        return special_cases[city_lower_nospace]
+    
+    # Default to title case
+    return city.title()
+
 def parse_city_state_input(input_str: str) -> tuple[str, str]:
     """Parse city, state from user input
 
@@ -84,6 +111,7 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
     - "Palo Alto, California"
     - "Boston Massachusetts"
     - "New York NY"
+    - "lasvegas nevada" (normalizes to "Las Vegas, NV")
 
     Returns: (city_name, state_abbreviation)
     """
@@ -152,10 +180,10 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
 
             # Check if it's already an abbreviation
             if len(state) == 2 and state.upper() in state_map.values():
-                return city, state.upper()
+                return normalize_city_name(city), state.upper()
             # Check if it's a full state name
             elif state_lower in state_map:
-                return city, state_map[state_lower]
+                return normalize_city_name(city), state_map[state_lower]
 
     # Try space-separated format: "City State" or "City Full State Name"
     words = input_str.split()
@@ -163,16 +191,16 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
         # Try last word as state abbreviation
         last_word = words[-1].lower()
         if len(last_word) == 2 and last_word.upper() in state_map.values():
-            city = " ".join(words[:-1])
-            return city, last_word.upper()
+            city = " ".join(words[:-1]).strip()
+            return normalize_city_name(city), last_word.upper()
 
         # Try last 1-2 words as full state name
         for num_state_words in [2, 1]:
             if len(words) > num_state_words:
                 potential_state = " ".join(words[-num_state_words:]).lower()
                 if potential_state in state_map:
-                    city = " ".join(words[:-num_state_words])
-                    return city, state_map[potential_state]
+                    city = " ".join(words[:-num_state_words]).strip()
+                    return normalize_city_name(city), state_map[potential_state]
 
     # No state found
     return input_str, None
