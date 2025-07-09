@@ -1,5 +1,13 @@
 const API_BASE = 'https://api.engagic.org';
 
+export interface CityOption {
+	city_name: string;
+	state: string;
+	city_slug: string;
+	vendor: string;
+	display_name: string;
+}
+
 export interface SearchResult {
 	success: boolean;
 	city_name?: string;
@@ -11,6 +19,8 @@ export interface SearchResult {
 	cached?: boolean;
 	query?: string;
 	type?: string;
+	ambiguous?: boolean;
+	city_options?: CityOption[];
 }
 
 export interface Meeting {

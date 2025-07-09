@@ -303,18 +303,13 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
 
 
 async def handle_city_search(city_input: str) -> Dict[str, Any]:
-    """Handle city name search with cache-first approach"""
+    """Handle city name search with cache-first approach and ambiguous city handling"""
     # Parse city, state
     city_name, state = parse_city_state_input(city_input)
     
     if not state:
-        return {
-            "success": False,
-            "message": "Please specify both city and state (e.g., 'Palo Alto, CA' or 'Boston Massachusetts')",
-            "query": city_input,
-            "type": "city_name",
-            "meetings": []
-        }
+        # No state provided - check for ambiguous cities
+        return await handle_ambiguous_city_search(city_name, city_input)
     
     # Check database first
     city_info = db.get_city_by_name(city_name, state)
@@ -362,6 +357,84 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         "query": city_input,
         "type": "city_name",
         "message": f"No meetings available yet for {city_name}, {state} - check back soon as we sync with the city website"
+    }
+
+
+async def handle_ambiguous_city_search(city_name: str, original_input: str) -> Dict[str, Any]:
+    """Handle city search when no state is provided - check for ambiguous matches"""
+    
+    # Look for all cities with this name
+    cities = db.get_cities_by_name_only(city_name)
+    
+    if not cities:
+        # No cities found - suggest including state
+        return {
+            "success": False,
+            "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') or try a different city.",
+            "query": original_input,
+            "type": "city_name",
+            "meetings": [],
+            "ambiguous": False
+        }
+    
+    if len(cities) == 1:
+        # Only one match - proceed with this city
+        city_info = cities[0]
+        
+        # Log search with city_id
+        db.log_search(original_input, "city_name", city_id=city_info['id'])
+        
+        # Get meetings for this city
+        meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+        
+        if meetings:
+            logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info['state']}")
+            return {
+                "success": True,
+                "city_name": city_info['city_name'],
+                "state": city_info['state'],
+                "city_slug": city_info['city_slug'],
+                "vendor": city_info['vendor'],
+                "meetings": meetings,
+                "cached": True,
+                "query": original_input,
+                "type": "city_name",
+                "ambiguous": False
+            }
+        else:
+            return {
+                "success": True,
+                "city_name": city_info['city_name'],
+                "state": city_info['state'],
+                "city_slug": city_info['city_slug'],
+                "vendor": city_info['vendor'],
+                "meetings": [],
+                "cached": False,
+                "query": original_input,
+                "type": "city_name",
+                "message": f"No meetings available yet for {city_info['city_name']}, {city_info['state']} - check back soon as we sync with the city website",
+                "ambiguous": False
+            }
+    
+    # Multiple matches - return ambiguous result
+    city_options = []
+    for city in cities:
+        city_options.append({
+            "city_name": city['city_name'],
+            "state": city['state'],
+            "city_slug": city['city_slug'],
+            "vendor": city['vendor'],
+            "display_name": f"{city['city_name']}, {city['state']}"
+        })
+    
+    return {
+        "success": False,
+        "message": f"Multiple cities named '{city_name}' found. Please specify which one:",
+        "query": original_input,
+        "type": "city_name",
+        "ambiguous": True,
+        "city_options": city_options,
+        "meetings": []
     }
 
 
