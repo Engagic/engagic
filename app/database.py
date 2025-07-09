@@ -484,6 +484,89 @@ class MeetingDatabase:
                 'total_meetings': total_with_urls
             }
 
+    def delete_city(self, city_slug: str) -> bool:
+        """Delete a city and all associated data (meetings, zipcodes, etc.)"""
+        logger.info(f"Deleting city: {city_slug}")
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get city_id first
+            cursor.execute("SELECT id FROM cities WHERE city_slug = ?", (city_slug,))
+            city_row = cursor.fetchone()
+            if not city_row:
+                logger.warning(f"City not found for deletion: {city_slug}")
+                return False
+            
+            city_id = city_row['id']
+            
+            # Delete in order due to foreign key constraints
+            cursor.execute("DELETE FROM meetings WHERE city_id = ?", (city_id,))
+            cursor.execute("DELETE FROM zipcodes WHERE city_id = ?", (city_id,))
+            cursor.execute("DELETE FROM usage_metrics WHERE city_id = ?", (city_id,))
+            cursor.execute("DELETE FROM cities WHERE id = ?", (city_id,))
+            
+            conn.commit()
+            logger.info(f"Successfully deleted city {city_slug} and all associated data")
+            return True
+
+    def delete_cached_summary(self, packet_url: str) -> bool:
+        """Delete a cached summary for a specific packet URL"""
+        logger.info(f"Deleting cached summary for: {packet_url}")
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Check if summary exists
+            cursor.execute("SELECT id FROM meetings WHERE packet_url = ?", (packet_url,))
+            if not cursor.fetchone():
+                logger.warning(f"No cached summary found for packet: {packet_url}")
+                return False
+            
+            # Delete the meeting record
+            cursor.execute("DELETE FROM meetings WHERE packet_url = ?", (packet_url,))
+            
+            # Also delete from processing_cache if it exists
+            cursor.execute("DELETE FROM processing_cache WHERE packet_url = ?", (packet_url,))
+            
+            conn.commit()
+            logger.info(f"Successfully deleted cached summary for: {packet_url}")
+            return True
+
+    def delete_cities_without_vendor(self) -> int:
+        """Delete all cities that don't have an associated vendor"""
+        logger.info("Deleting cities without vendor")
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get cities without vendor
+            cursor.execute("""
+                SELECT id, city_name, state, city_slug 
+                FROM cities 
+                WHERE vendor IS NULL OR vendor = ''
+            """)
+            cities_to_delete = cursor.fetchall()
+            
+            if not cities_to_delete:
+                logger.info("No cities without vendor found")
+                return 0
+            
+            deleted_count = 0
+            for city in cities_to_delete:
+                city_id = city['id']
+                city_slug = city['city_slug']
+                
+                # Delete associated data
+                cursor.execute("DELETE FROM meetings WHERE city_id = ?", (city_id,))
+                cursor.execute("DELETE FROM zipcodes WHERE city_id = ?", (city_id,))
+                cursor.execute("DELETE FROM usage_metrics WHERE city_id = ?", (city_id,))
+                cursor.execute("DELETE FROM cities WHERE id = ?", (city_id,))
+                
+                deleted_count += 1
+                logger.debug(f"Deleted city without vendor: {city_slug}")
+            
+            conn.commit()
+            logger.info(f"Successfully deleted {deleted_count} cities without vendor")
+            return deleted_count
+
 
 def get_city_info(city_slug: str) -> Dict[str, Any]:
     """Utility function to get city info by slug"""
