@@ -9,6 +9,7 @@ from adapters import PrimeGovAdapter, CivicClerkAdapter
 from fullstack import AgendaProcessor
 from database import MeetingDatabase
 from uszipcode import SearchEngine
+from background_processor import get_background_processor, start_background_processor
 
 # Configure structured logging
 logging.basicConfig(
@@ -74,6 +75,11 @@ except ValueError as e:
 
 db = MeetingDatabase()
 zipcode_search = SearchEngine()
+
+# Start background processor
+background_processor = get_background_processor()
+start_background_processor()
+logger.info("Background processor started")
 
 
 def normalize_city_name(city_name: str) -> str:
@@ -281,8 +287,19 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             "type": "zipcode"
         }
     
-    # Try to scrape fresh meetings
-    return await scrape_meetings_for_city(city_info)
+    # No cached meetings - background processor will handle this
+    return {
+        "success": True,
+        "city_name": city_info['city_name'],
+        "state": city_info['state'],
+        "city_slug": city_info['city_slug'],
+        "vendor": city_info['vendor'],
+        "meetings": [],
+        "cached": False,
+        "query": zipcode,
+        "type": "zipcode",
+        "message": f"No meetings available yet for {city_info['city_name']} - check back soon as we sync with the city website"
+    }
 
 
 async def handle_city_search(city_input: str) -> Dict[str, Any]:
@@ -333,96 +350,20 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
             "type": "city_name"
         }
     
-    # Try to scrape fresh meetings
-    return await scrape_meetings_for_city(city_info)
+    # No cached meetings - background processor will handle this
+    return {
+        "success": True,
+        "city_name": city_info['city_name'],
+        "state": city_info['state'],
+        "city_slug": city_info['city_slug'],
+        "vendor": city_info['vendor'],
+        "meetings": [],
+        "cached": False,
+        "query": city_input,
+        "type": "city_name",
+        "message": f"No meetings available yet for {city_name}, {state} - check back soon as we sync with the city website"
+    }
 
-
-async def scrape_meetings_for_city(city_info: Dict[str, Any]) -> Dict[str, Any]:
-    """Scrape meetings for a city using appropriate adapter"""
-    vendor = city_info.get('vendor')
-    city_slug = city_info['city_slug']
-    city_name = city_info['city_name']
-    
-    if not vendor:
-        return {
-            "success": True,
-            "city_name": city_name,
-            "state": city_info['state'],
-            "city_slug": city_slug,
-            "message": f"{city_name} has been registered and will be integrated soon",
-            "meetings": [],
-            "cached": False,
-            "status": "pending_integration"
-        }
-    
-    try:
-        scraped_meetings = []
-        
-        if vendor == "primegov":
-            logger.info(f"Scraping meetings for {city_name} using PrimeGov")
-            adapter = PrimeGovAdapter(city_slug)
-            for meeting in adapter.upcoming_packets():
-                # Store in database
-                db.store_meeting_data({
-                    "city_slug": city_slug,
-                    "meeting_name": meeting.get("title"),
-                    "packet_url": meeting.get("packet_url"),
-                    "meeting_date": meeting.get("start"),
-                    "meeting_id": meeting.get("meeting_id")
-                })
-                scraped_meetings.append(meeting)
-                
-        elif vendor == "civicclerk":
-            logger.info(f"Scraping meetings for {city_name} using CivicClerk")
-            adapter = CivicClerkAdapter(city_slug)
-            for meeting in adapter.upcoming_packets():
-                # Store in database
-                db.store_meeting_data({
-                    "city_slug": city_slug,
-                    "meeting_name": meeting.get("title"),
-                    "packet_url": meeting.get("packet_url"),
-                    "meeting_date": meeting.get("start"),
-                    "meeting_id": meeting.get("meeting_id")
-                })
-                scraped_meetings.append(meeting)
-        else:
-            return {
-                "success": True,
-                "city_name": city_name,
-                "state": city_info['state'],
-                "city_slug": city_slug,
-                "vendor": vendor,
-                "message": f"{city_name} integration is in progress - meetings will be available soon",
-                "meetings": [],
-                "cached": False,
-                "status": "vendor_not_implemented"
-            }
-        
-        logger.info(f"Successfully scraped {len(scraped_meetings)} meetings for {city_name}")
-        return {
-            "success": True,
-            "city_name": city_name,
-            "state": city_info['state'],
-            "city_slug": city_slug,
-            "vendor": vendor,
-            "meetings": scraped_meetings,
-            "cached": False,
-            "scraped_count": len(scraped_meetings)
-        }
-        
-    except Exception as scrape_error:
-        logger.error(f"Failed to scrape {city_name} with {vendor}: {scrape_error}")
-        return {
-            "success": True,
-            "city_name": city_name,
-            "state": city_info['state'],
-            "city_slug": city_slug,
-            "vendor": vendor,
-            "message": f"{city_name} integration is experiencing temporary issues but will be fixed soon",
-            "meetings": [],
-            "cached": False,
-            "status": "integration_error"
-        }
 
 
 async def auto_create_city_from_zipcode(zipcode: str) -> Optional[Dict[str, Any]]:
@@ -507,37 +448,32 @@ async def auto_create_city_from_city_name(city_name: str, state: str) -> Optiona
 
 @app.post("/api/process-agenda")
 async def process_agenda(request: ProcessRequest):
-    """Process an agenda with caching - returns cached or newly processed summary"""
-    if not processor:
-        raise HTTPException(
-            status_code=503,
-            detail="LLM processing not available - ANTHROPIC_API_KEY required",
-        )
-
+    """Get cached agenda summary - no longer processes on-demand"""
     try:
-        # Convert request to meeting data format
-        meeting_data = {
-            "packet_url": request.packet_url,
-            "city_slug": request.city_slug,
-            "meeting_name": request.meeting_name,
-            "meeting_date": request.meeting_date,
-            "meeting_id": request.meeting_id,
-        }
-
-        # Process with caching
-        result = processor.process_agenda_with_cache(meeting_data)
-
+        # Check for cached summary
+        cached_summary = db.get_cached_summary(request.packet_url)
+        
+        if cached_summary:
+            return {
+                "success": True,
+                "summary": cached_summary["processed_summary"],
+                "processing_time_seconds": cached_summary.get("processing_time_seconds", 0),
+                "cached": True,
+                "meeting_data": cached_summary,
+            }
+        
+        # No cached summary available
         return {
-            "success": True,
-            "summary": result["summary"],
-            "processing_time_seconds": result["processing_time"],
-            "cached": result["cached"],
-            "meeting_data": result["meeting_data"],
+            "success": False,
+            "message": "Summary not yet available - processing in background",
+            "cached": False,
+            "packet_url": request.packet_url,
+            "estimated_wait_minutes": 10  # Rough estimate
         }
 
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Error processing agenda: {str(e)}"
+            status_code=500, detail=f"Error retrieving agenda: {str(e)}"
         )
 
 
@@ -546,12 +482,22 @@ async def get_stats():
     """Get system statistics"""
     try:
         stats = db.get_cache_stats()
+        queue_stats = db.get_processing_queue_stats()
+        sync_status = background_processor.get_sync_status()
+        
         return {
             "status": "healthy",
             "cities": stats.get("cities_count", 0),
             "meetings": stats.get("meetings_count", 0),
             "processed": stats.get("processed_count", 0),
-            "recent_activity": stats.get("recent_activity", 0)
+            "recent_activity": stats.get("recent_activity", 0),
+            "background_processing": {
+                "is_running": sync_status.get("is_running", False),
+                "last_sync": sync_status.get("last_full_sync"),
+                "unprocessed_queue": queue_stats.get("unprocessed_count", 0),
+                "processing_success_rate": f"{queue_stats.get('success_rate', 0):.1f}%",
+                "recent_meetings": queue_stats.get("recent_count", 0)
+            }
         }
     except Exception as e:
         raise HTTPException(
@@ -586,17 +532,57 @@ async def health_check():
     try:
         # Test database connection
         stats = db.get_cache_stats()
+        sync_status = background_processor.get_sync_status()
 
         return {
             "status": "healthy",
             "database": "connected",
             "llm_processor": "available" if processor else "disabled",
+            "background_processor": "running" if sync_status.get("is_running") else "stopped",
             "cities": stats.get("cities_count", 0),
             "meetings": stats.get("meetings_count", 0)
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {"status": "unhealthy", "error": str(e)}
+
+
+@app.post("/api/admin/sync-city/{city_slug}")
+async def force_sync_city(city_slug: str):
+    """Force sync a specific city (admin endpoint)"""
+    try:
+        result = background_processor.force_sync_city(city_slug)
+        return {
+            "success": True,
+            "city_slug": city_slug,
+            "result": {
+                "status": result.status.value,
+                "meetings_found": result.meetings_found,
+                "meetings_processed": result.meetings_processed,
+                "duration_seconds": result.duration_seconds,
+                "error_message": result.error_message
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error syncing city: {str(e)}"
+        )
+
+
+@app.post("/api/admin/process-meeting")
+async def force_process_meeting(request: ProcessRequest):
+    """Force process a specific meeting (admin endpoint)"""
+    try:
+        success = background_processor.force_process_meeting(request.packet_url)
+        return {
+            "success": success,
+            "packet_url": request.packet_url,
+            "message": "Processing completed" if success else "Processing failed"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error processing meeting: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
