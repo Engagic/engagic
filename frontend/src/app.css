@@ -31,9 +31,12 @@ body {
 }
 
 .container {
-	max-width: 500px;
+	max-width: 700px;
 	width: 100%;
 	padding: 4rem 1rem;
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
 }
 
 .header {
@@ -67,14 +70,16 @@ body {
 
 .search-input {
 	width: 100%;
-	padding: 1.2rem;
-	font-size: 1rem;
+	padding: 1.4rem;
+	font-size: 1.1rem;
 	font-family: inherit;
 	border: 2px solid var(--civic-border);
 	border-radius: 12px;
 	background: var(--civic-white);
 	transition: all 0.3s ease;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+	resize: vertical;
+	min-height: 60px;
 }
 
 .search-input:focus {
@@ -296,9 +301,46 @@ body {
 	color: var(--civic-white);
 }
 
+.main-content {
+	flex: 1;
+}
+
+.footer {
+	margin-top: auto;
+	padding: 2rem 0;
+	border-top: 1px solid var(--civic-border);
+	text-align: center;
+	color: var(--civic-gray);
+}
+
+.github-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	color: var(--civic-gray);
+	text-decoration: none;
+	font-size: 0.9rem;
+	transition: color 0.2s ease;
+}
+
+.github-link:hover {
+	color: var(--civic-blue);
+}
+
+.github-icon {
+	width: 20px;
+	height: 20px;
+	fill: currentColor;
+}
+
 @media (max-width: 640px) {
 	.container {
 		padding: 1rem 0.5rem;
+	}
+	
+	.search-input {
+		padding: 1.2rem;
+		font-size: 1rem;
 	}
 	
 	.logo {

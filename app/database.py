@@ -98,6 +98,25 @@ class MeetingDatabase:
                 )
             """)
 
+            # City requests table - track user demand for missing cities
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS city_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    city_name TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    zipcode TEXT,
+                    search_query TEXT NOT NULL,
+                    search_type TEXT NOT NULL,
+                    user_ip TEXT,
+                    request_count INTEGER DEFAULT 1,
+                    first_requested TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_requested TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status TEXT DEFAULT 'requested',
+                    priority_score INTEGER DEFAULT 0,
+                    UNIQUE(city_name, state)
+                )
+            """)
+
             # Create indices for performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cities_slug ON cities(city_slug)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cities_name_state ON cities(city_name, state)")
@@ -110,6 +129,9 @@ class MeetingDatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_zipcode ON usage_metrics(zipcode)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_url ON processing_cache(packet_url)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_hash ON processing_cache(content_hash)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_city_requests_name_state ON city_requests(city_name, state)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_city_requests_count ON city_requests(request_count)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_city_requests_priority ON city_requests(priority_score)")
 
     @contextmanager
     def get_connection(self):
@@ -595,6 +617,98 @@ class MeetingDatabase:
             conn.commit()
             logger.info(f"Successfully deleted {deleted_count} cities without vendor")
             return deleted_count
+
+    def log_city_request(self, city_name: str, state: str, search_query: str, 
+                        search_type: str, zipcode: str = None, user_ip: str = None) -> int:
+        """Log a request for a missing city - track that demand!"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Normalize city and state
+            city_normalized = city_name.strip().title()
+            state_normalized = state.strip().upper()
+            
+            # Check if we already have this request
+            cursor.execute("""
+                SELECT id, request_count FROM city_requests 
+                WHERE city_name = ? AND state = ?
+            """, (city_normalized, state_normalized))
+            
+            existing = cursor.fetchone()
+            
+            if existing:
+                # Increment request count
+                new_count = existing['request_count'] + 1
+                cursor.execute("""
+                    UPDATE city_requests 
+                    SET request_count = ?, last_requested = CURRENT_TIMESTAMP,
+                        priority_score = ? * 10 + COALESCE(?, 0)
+                    WHERE id = ?
+                """, (new_count, new_count, zipcode and len(zipcode) or 0, existing['id']))
+                
+                logger.info(f"Updated city request: {city_normalized}, {state_normalized} (count: {new_count})")
+                return existing['id']
+            else:
+                # New request
+                priority_score = 10 + (len(zipcode) if zipcode else 0)
+                cursor.execute("""
+                    INSERT INTO city_requests 
+                    (city_name, state, zipcode, search_query, search_type, user_ip, priority_score)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (city_normalized, state_normalized, zipcode, search_query, search_type, user_ip, priority_score))
+                
+                request_id = cursor.lastrowid
+                conn.commit()
+                logger.info(f"New city request logged: {city_normalized}, {state_normalized} (ID: {request_id})")
+                return request_id
+
+    def get_top_city_requests(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get most requested cities for admin review"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT city_name, state, zipcode, request_count, priority_score,
+                       first_requested, last_requested, status
+                FROM city_requests 
+                ORDER BY priority_score DESC, request_count DESC, last_requested DESC
+                LIMIT ?
+            """, (limit,))
+            
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_city_request_stats(self) -> Dict[str, Any]:
+        """Get stats on city requests"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Total requests
+            cursor.execute("SELECT COUNT(*) as count FROM city_requests")
+            total_requests = cursor.fetchone()['count']
+            
+            # Total demand (sum of request counts)
+            cursor.execute("SELECT SUM(request_count) as total_demand FROM city_requests")
+            total_demand = cursor.fetchone()['total_demand'] or 0
+            
+            # Recent requests (last 7 days)
+            cursor.execute("SELECT COUNT(*) as count FROM city_requests WHERE last_requested > datetime('now', '-7 days')")
+            recent_requests = cursor.fetchone()['count']
+            
+            # Top states
+            cursor.execute("""
+                SELECT state, COUNT(*) as city_count, SUM(request_count) as total_requests
+                FROM city_requests 
+                GROUP BY state 
+                ORDER BY total_requests DESC 
+                LIMIT 5
+            """)
+            top_states = [dict(row) for row in cursor.fetchall()]
+            
+            return {
+                'total_unique_cities_requested': total_requests,
+                'total_demand': total_demand,
+                'recent_activity': recent_requests,
+                'top_states': top_states
+            }
 
 
 def get_city_info(city_slug: str) -> Dict[str, Any]:

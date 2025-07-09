@@ -32,10 +32,9 @@ export interface Meeting {
 	meeting_date?: string;
 }
 
-export interface ProcessResult {
+export interface CachedSummary {
 	success: boolean;
 	summary?: string;
-	processing_time_seconds?: number;
 	cached?: boolean;
 	meeting_data?: any;
 	error?: string;
@@ -57,7 +56,7 @@ export async function searchMeetings(query: string): Promise<SearchResult> {
 	return response.json();
 }
 
-export async function processAgenda(meeting: Meeting, citySlug: string): Promise<ProcessResult> {
+export async function getCachedSummary(meeting: Meeting, citySlug: string): Promise<CachedSummary> {
 	const response = await fetch(`${API_BASE}/api/process-agenda`, {
 		method: 'POST',
 		headers: {
@@ -73,7 +72,7 @@ export async function processAgenda(meeting: Meeting, citySlug: string): Promise
 	});
 
 	if (!response.ok) {
-		throw new Error(`Processing failed: ${response.status}`);
+		throw new Error(`Failed to get cached summary: ${response.status}`);
 	}
 
 	return response.json();
