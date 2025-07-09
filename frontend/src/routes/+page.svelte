@@ -1,12 +1,10 @@
 <script lang="ts">
-	import { searchMeetings, processAgenda, type SearchResult, type Meeting, type ProcessResult } from '$lib/api';
+	import { searchMeetings, type SearchResult, type CityOption } from '$lib/api';
+	import { generateCityUrl } from '$lib/utils';
 
 	let searchQuery = $state('');
 	let searchResults: SearchResult | null = $state(null);
-	let selectedMeeting: Meeting | null = $state(null);
-	let processingResult: ProcessResult | null = $state(null);
 	let loading = $state(false);
-	let processingMeeting = $state(false);
 	let error = $state('');
 
 	async function handleSearch() {
@@ -15,12 +13,16 @@
 		loading = true;
 		error = '';
 		searchResults = null;
-		selectedMeeting = null;
-		processingResult = null;
 
 		try {
 			const result = await searchMeetings(searchQuery.trim());
 			searchResults = result;
+			
+			// If successful and has city info, navigate to city page
+			if (result.success && result.city_name && result.state) {
+				const cityUrl = generateCityUrl(result.city_name, result.state);
+				window.location.href = `/${cityUrl}`;
+			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Search failed';
 		} finally {
@@ -28,26 +30,9 @@
 		}
 	}
 
-	async function handleMeetingClick(meeting: Meeting) {
-		if (!searchResults?.city_slug) return;
-
-		selectedMeeting = meeting;
-		processingMeeting = true;
-		processingResult = null;
-
-		try {
-			const result = await processAgenda(meeting, searchResults.city_slug);
-			processingResult = result;
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Processing failed';
-		} finally {
-			processingMeeting = false;
-		}
-	}
-
-	function handleBack() {
-		selectedMeeting = null;
-		processingResult = null;
+	async function handleCityOptionClick(cityOption: CityOption) {
+		const cityUrl = generateCityUrl(cityOption.city_name, cityOption.state);
+		window.location.href = `/${cityUrl}`;
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -92,55 +77,25 @@
 		</div>
 	{/if}
 
-	{#if selectedMeeting}
-		<div class="meeting-detail">
-			<button class="back-button" onclick={handleBack}>← Back to meetings</button>
-			<h3>{selectedMeeting.title || selectedMeeting.meeting_name}</h3>
-			<div class="meeting-date">
-				{selectedMeeting.start || selectedMeeting.meeting_date}
-			</div>
-			
-			{#if processingMeeting}
-				<div class="processing-status">Processing agenda packet...</div>
-			{/if}
-			
-			{#if processingResult}
-				<div class="meeting-summary">
-					{processingResult.summary}
-				</div>
-				<div class="processing-status">
-					{processingResult.cached ? 'Cached result' : `Processed in ${processingResult.processing_time_seconds}s`}
-				</div>
-			{/if}
-		</div>
-	{:else if searchResults}
+	{#if searchResults}
 		<div class="results-section">
-			{#if searchResults.success}
-				{#if searchResults.city_name}
-					<div class="city-info">
-						<div class="city-name">{searchResults.city_name}, {searchResults.state}</div>
-						{#if searchResults.cached}
-							<div class="processing-status">Cached results</div>
-						{/if}
+			{#if searchResults.ambiguous && searchResults.city_options}
+				<div class="ambiguous-cities">
+					<div class="ambiguous-message">
+						{searchResults.message}
 					</div>
-				{/if}
-
-				{#if searchResults.meetings && searchResults.meetings.length > 0}
-					<div class="meeting-list">
-						{#each searchResults.meetings as meeting}
-							<div class="meeting-card" onclick={() => handleMeetingClick(meeting)}>
-								<div class="meeting-title">{meeting.title || meeting.meeting_name}</div>
-								<div class="meeting-date">{meeting.start || meeting.meeting_date}</div>
-								<div class="meeting-status">Click to view agenda summary</div>
-							</div>
+					<div class="city-options">
+						{#each searchResults.city_options as cityOption}
+							<button 
+								class="city-option" 
+								onclick={() => handleCityOptionClick(cityOption)}
+							>
+								{cityOption.display_name}
+							</button>
 						{/each}
 					</div>
-				{:else}
-					<div class="no-meetings">
-						{searchResults.message || 'No meetings found'}
-					</div>
-				{/if}
-			{:else}
+				</div>
+			{:else if !searchResults.success}
 				<div class="error-message">
 					{searchResults.message || 'Search failed'}
 				</div>

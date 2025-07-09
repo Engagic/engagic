@@ -257,6 +257,45 @@ body {
 	margin-top: 0.5rem;
 }
 
+.ambiguous-cities {
+	text-align: center;
+	padding: 2rem;
+	background: var(--civic-white);
+	border-radius: 8px;
+	border: 1px solid var(--civic-border);
+}
+
+.ambiguous-message {
+	color: var(--civic-dark);
+	margin-bottom: 1.5rem;
+	font-size: 1.1rem;
+}
+
+.city-options {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	max-width: 300px;
+	margin: 0 auto;
+}
+
+.city-option {
+	padding: 0.75rem 1rem;
+	background: var(--civic-white);
+	border: 2px solid var(--civic-blue);
+	border-radius: 6px;
+	color: var(--civic-blue);
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 1rem;
+	transition: all 0.2s ease;
+}
+
+.city-option:hover {
+	background: var(--civic-blue);
+	color: var(--civic-white);
+}
+
 @media (max-width: 640px) {
 	.container {
 		padding: 1rem 0.5rem;

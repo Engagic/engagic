@@ -32,7 +32,7 @@ class MeetingDatabase:
                     status TEXT DEFAULT 'active',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(city_name, state, vendor)
+                    UNIQUE(city_name, state, city_slug)
                 )
             """)
 
@@ -181,6 +181,8 @@ class MeetingDatabase:
                 LEFT JOIN zipcodes z ON c.id = z.city_id
                 WHERE LOWER(REPLACE(c.city_name, ' ', '')) = ? AND UPPER(c.state) = ?
                 GROUP BY c.id
+                ORDER BY c.id
+                LIMIT 1
             """, (city_normalized, state_normalized))
             
             row = cursor.fetchone()
@@ -190,6 +192,33 @@ class MeetingDatabase:
                     result['zipcodes'] = result['zipcodes'].split(',')
                 return result
             return None
+    
+    def get_cities_by_name_only(self, city_name: str) -> List[Dict[str, Any]]:
+        """Get all cities matching a name (regardless of state) for ambiguous searches"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Normalize input: case-insensitive and handle spaces
+            city_normalized = city_name.strip().replace(' ', '').lower()
+            
+            cursor.execute("""
+                SELECT c.*, 
+                       GROUP_CONCAT(z.zipcode) as zipcodes,
+                       (SELECT z2.zipcode FROM zipcodes z2 WHERE z2.city_id = c.id AND z2.is_primary = 1) as primary_zipcode
+                FROM cities c
+                LEFT JOIN zipcodes z ON c.id = z.city_id
+                WHERE LOWER(REPLACE(c.city_name, ' ', '')) = ?
+                GROUP BY c.id
+                ORDER BY c.state, c.city_name
+            """, (city_normalized,))
+            
+            rows = cursor.fetchall()
+            results = []
+            for row in rows:
+                result = dict(row)
+                if result['zipcodes']:
+                    result['zipcodes'] = result['zipcodes'].split(',')
+                results.append(result)
+            return results
 
     def get_city_by_slug(self, city_slug: str) -> Optional[Dict[str, Any]]:
         """Get city information by slug"""

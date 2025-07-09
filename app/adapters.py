@@ -6,7 +6,6 @@ from datetime import datetime
 
 logger = logging.getLogger("engagic")
 
-
 class PrimeGovAdapter:
     def __init__(self, city_slug: str):
         if not city_slug:
@@ -51,7 +50,6 @@ class PrimeGovAdapter:
                 "packet_url": self._packet_url(pkt),
             }
 
-
 class CivicClerkAdapter:
     def __init__(self, city_slug: str):
         if not city_slug:
@@ -72,6 +70,53 @@ class CivicClerkAdapter:
                 "$orderby": "startDateTime asc, eventName asc",
             }
             response = requests.get(f"{self.base}/v1/Events", params=params)
+            response.raise_for_status()
+            data = response.json()
+            meetings = data.get("value", [])
+            logger.info(f"Retrieved {len(meetings)} meetings from CivicClerk for {self.slug}")
+        except Exception as e:
+            logger.error(f"Failed to fetch CivicClerk meetings for {self.slug}: {e}")
+            raise
+            
+        for mtg in meetings:
+            pkt = next(
+                (
+                    d
+                    for d in mtg.get("publishedFiles", [])
+                    if d.get("type") == "Agenda Packet"
+                ),
+                None,
+            )
+            if not pkt:
+                continue
+
+            yield {
+                "meeting_id": mtg["id"],
+                "title": mtg.get("eventName", ""),
+                "start": mtg.get("startDateTime", ""),
+                "packet_url": self._packet_url(pkt),
+            }
+
+class GranicusAdapter:
+    def __init__(self, city_slug: str):
+        if not city_slug:
+            raise ValueError("city_slug required, e.g. 'redwoodcity-ca'")
+        self.slug = city_slug
+        self.base = f"https://{self.slug}.granicus.com"
+        logger.info(f"Initialized Granicus adapter for {city_slug}")
+
+    def _packet_url(self, doc):
+        return f"https://{self.slug}.api.civicclerk.com/v1/Meetings/GetMeetingFileStream(fileId={doc['fileId']},plainText=false)"
+
+    def upcoming_packets(self):
+        try:
+            logger.debug(f"Fetching upcoming meetings from CivicClerk for {self.slug}")
+            current_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-3] + "Z"
+            params = {
+                "$filter": f"startDateTime gt {current_date}",
+                "$orderby": "startDateTime asc, eventName asc",
+            }
+            response = requests.get(f"{self.base}/ViewPublisher.php?view_id=2", params=params)
             response.raise_for_status()
             data = response.json()
             meetings = data.get("value", [])
