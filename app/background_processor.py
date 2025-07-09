@@ -9,9 +9,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 
-from database import MeetingDatabase
+from databases import DatabaseManager
 from fullstack import AgendaProcessor
 from adapters import PrimeGovAdapter, CivicClerkAdapter
+from config import config
 
 logger = logging.getLogger("engagic")
 
@@ -35,8 +36,13 @@ class SyncResult:
 
 
 class BackgroundProcessor:
-    def __init__(self, db_path: str = "/root/engagic/app/meetings.db"):
-        self.db = MeetingDatabase(db_path)
+    def __init__(self, locations_db_path: str = None, meetings_db_path: str = None, analytics_db_path: str = None):
+        # Use config paths if not provided
+        locations_path = locations_db_path or config.LOCATIONS_DB_PATH
+        meetings_path = meetings_db_path or config.MEETINGS_DB_PATH
+        analytics_path = analytics_db_path or config.ANALYTICS_DB_PATH
+        
+        self.db = DatabaseManager(locations_path, meetings_path, analytics_path)
         self.processor = None
         self.is_running = False
         self.sync_thread = None
@@ -45,7 +51,7 @@ class BackgroundProcessor:
         
         # Initialize LLM processor if available
         try:
-            self.processor = AgendaProcessor()
+            self.processor = AgendaProcessor(api_key=config.get_api_key(), db_path=meetings_path)
             logger.info("Background processor initialized with LLM capabilities")
         except ValueError:
             logger.warning("LLM processor not available - summaries will be skipped")
@@ -210,7 +216,7 @@ class BackgroundProcessor:
                         "meeting_id": meeting.get("meeting_id")
                     }
                     
-                    self.db.store_meeting_data(meeting_data, vendor)
+                    self.db.store_meeting_data(meeting_data)
                     
                     # Process summary immediately if LLM available and not already processed
                     if self.processor and meeting.get("packet_url"):
