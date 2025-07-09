@@ -5,11 +5,9 @@ from typing import Optional, List, Dict, Any
 import logging
 import time
 import uuid
-from adapters import PrimeGovAdapter, CivicClerkAdapter
 from fullstack import AgendaProcessor
 from database import MeetingDatabase
 from uszipcode import SearchEngine
-from background_processor import get_background_processor, start_background_processor
 
 # Configure structured logging
 logging.basicConfig(
@@ -75,12 +73,6 @@ except ValueError as e:
 
 db = MeetingDatabase()
 zipcode_search = SearchEngine()
-
-# Start background processor
-background_processor = get_background_processor()
-start_background_processor()
-logger.info("Background processor started")
-
 
 def normalize_city_name(city_name: str) -> str:
     """Normalize city name for consistent formatting"""
