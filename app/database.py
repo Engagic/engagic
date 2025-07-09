@@ -423,6 +423,67 @@ class MeetingDatabase:
                 results.append(result)
             return results
 
+    def get_unprocessed_meetings(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get meetings that don't have processed summaries yet"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT m.*, c.city_name, c.state, c.vendor, c.city_slug
+                FROM meetings m
+                JOIN cities c ON m.city_id = c.id
+                WHERE m.processed_summary IS NULL AND m.packet_url IS NOT NULL
+                ORDER BY m.meeting_date ASC, m.created_at ASC
+                LIMIT ?
+            """, (limit,))
+            
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Dict[str, Any]]:
+        """Get meeting by packet URL"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT m.*, c.city_name, c.state, c.vendor, c.city_slug
+                FROM meetings m
+                JOIN cities c ON m.city_id = c.id
+                WHERE m.packet_url = ?
+            """, (packet_url,))
+            
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+    def get_processing_queue_stats(self) -> Dict[str, Any]:
+        """Get statistics about processing queue"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Total unprocessed
+            cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE processed_summary IS NULL AND packet_url IS NOT NULL")
+            unprocessed_count = cursor.fetchone()['count']
+            
+            # Recently added (last 24 hours)
+            cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE created_at > datetime('now', '-1 day')")
+            recent_count = cursor.fetchone()['count']
+            
+            # Processing success rate (meetings with summaries vs without)
+            cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE processed_summary IS NOT NULL")
+            processed_count = cursor.fetchone()['count']
+            
+            cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE packet_url IS NOT NULL")
+            total_with_urls = cursor.fetchone()['count']
+            
+            success_rate = (processed_count / total_with_urls * 100) if total_with_urls > 0 else 0
+            
+            return {
+                'unprocessed_count': unprocessed_count,
+                'processed_count': processed_count,
+                'recent_count': recent_count,
+                'success_rate': success_rate,
+                'total_meetings': total_with_urls
+            }
+
     def delete_city(self, city_slug: str) -> bool:
         """Delete a city and all associated data (meetings, zipcodes, etc.)"""
         logger.info(f"Deleting city: {city_slug}")
