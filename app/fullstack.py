@@ -124,6 +124,14 @@ class AgendaProcessor:
         logger.info(f"Downloading and processing PDF from: {url}")
 
         with tempfile.TemporaryDirectory() as temp_dir:
+            # Force all temp files (requests, PIL, Tesseract, etc.) into our temp_dir
+            tempfile.tempdir = temp_dir
+            os.environ['TMPDIR'] = temp_dir
+            os.environ['TEMP'] = temp_dir
+            os.environ['TMP'] = temp_dir
+            
+            logger.debug(f"Redirecting all temp files into: {temp_dir}")
+            
             # Download PDF
             try:
                 response = requests.get(url, timeout=30)
