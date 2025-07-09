@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  engagic-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENGAGIC_HOST=0.0.0.0
+      - ENGAGIC_PORT=8000
+      - ENGAGIC_DEBUG=false
+      - ENGAGIC_LOG_LEVEL=INFO
+      - ENGAGIC_DB_PATH=/app/data/meetings.db
+      - ENGAGIC_LOG_PATH=/app/logs/engagic.log
+      - ENGAGIC_RATE_LIMIT_REQUESTS=30
+      - ENGAGIC_RATE_LIMIT_WINDOW=60
+      - ENGAGIC_MAX_QUERY_LENGTH=200
+      - ENGAGIC_BACKGROUND_PROCESSING=true
+      - ENGAGIC_SYNC_INTERVAL_HOURS=72
+      - ENGAGIC_PROCESSING_INTERVAL_HOURS=2
+      # Add your API key here or use a .env file
+      # - ANTHROPIC_API_KEY=your_key_here
+    env_file:
+      - .env  # Optional: load from .env file
+    volumes:
+      - ./data:/app/data  # Persist database
+      - ./logs:/app/logs  # Persist logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: Add a reverse proxy
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf
+  #   depends_on:
+  #     - engagic-api
+  #   restart: unless-stopped
+
+volumes:
+  data:
+  logs:

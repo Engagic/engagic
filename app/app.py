@@ -1,26 +1,57 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional, List, Dict, Any
 import logging
 import time
 import uuid
+import re
+from collections import defaultdict
+from datetime import datetime, timedelta
 from fullstack import AgendaProcessor
-from database import MeetingDatabase
+from databases import DatabaseManager
 from uszipcode import SearchEngine
+from config import config
 
 # Configure structured logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, config.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/root/engagic/app/engagic.log', mode='a')
+        logging.FileHandler(config.LOG_PATH, mode='a')
     ]
 )
 logger = logging.getLogger("engagic")
 
 app = FastAPI(title="engagic API", description="EGMI")
+
+# Rate limiting storage
+rate_limits = defaultdict(list)
+
+# Rate limiting middleware
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    client_ip = request.client.host if request.client else "unknown"
+    current_time = time.time()
+    
+    # Clean old entries
+    rate_limits[client_ip] = [
+        timestamp for timestamp in rate_limits[client_ip] 
+        if current_time - timestamp < config.RATE_LIMIT_WINDOW
+    ]
+    
+    # Check rate limit for API endpoints
+    if request.url.path.startswith("/api/"):
+        if len(rate_limits[client_ip]) >= config.RATE_LIMIT_REQUESTS:
+            logger.warning(f"Rate limit exceeded for {client_ip}")
+            raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
+        
+        # Add current request
+        rate_limits[client_ip].append(current_time)
+    
+    response = await call_next(request)
+    return response
 
 # Request/Response logging middleware
 @app.middleware("http")
@@ -47,17 +78,7 @@ async def log_requests(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://engagic.org",
-        "https://www.engagic.org",
-        "https://api.engagic.org",
-        "https://engagic.pages.dev",  # Cloudflare Pages preview domains
-        "http://localhost:3000",  # React/Next.js
-        "http://localhost:5173",  # Vite (SvelteKit)
-        "http://localhost:5000",  # Other common ports
-        "http://127.0.0.1:3000",
-        "https://165.232.158.241",
-    ],
+    allow_origins=config.ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -65,13 +86,18 @@ app.add_middleware(
 
 # Initialize global instances
 try:
-    processor = AgendaProcessor()
+    processor = AgendaProcessor(api_key=config.get_api_key(), db_path=config.MEETINGS_DB_PATH)
     logger.info("LLM processor initialized successfully")
 except ValueError as e:
-    logger.warning("ANTHROPIC_API_KEY not found - LLM processing will be disabled")
+    logger.warning("API key not found - LLM processing will be disabled")
     processor = None
 
-db = MeetingDatabase()
+# Initialize database manager with separate databases
+db = DatabaseManager(
+    locations_db_path=config.LOCATIONS_DB_PATH,
+    meetings_db_path=config.MEETINGS_DB_PATH,
+    analytics_db_path=config.ANALYTICS_DB_PATH
+)
 zipcode_search = SearchEngine()
 
 def normalize_city_name(city_name: str) -> str:
@@ -204,8 +230,33 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
     return input_str, None
 
 
+def sanitize_string(value: str) -> str:
+    """Sanitize string input to prevent injection attacks"""
+    if not value:
+        return ""
+    # Remove potentially dangerous characters
+    sanitized = re.sub(r'[<>"\';()&+]', '', value.strip())
+    return sanitized[:config.MAX_QUERY_LENGTH]
+
 class SearchRequest(BaseModel):
-    query: str  # zipcode or "city, state"
+    query: str
+    
+    @validator('query')
+    def validate_query(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Search query cannot be empty')
+        
+        sanitized = sanitize_string(v)
+        if len(sanitized) < 2:
+            raise ValueError('Search query too short')
+        if len(sanitized) > config.MAX_QUERY_LENGTH:
+            raise ValueError(f'Search query too long (max {config.MAX_QUERY_LENGTH} characters)')
+        
+        # Basic pattern validation
+        if not re.match(r'^[a-zA-Z0-9\s,.-]+$', sanitized):
+            raise ValueError('Search query contains invalid characters')
+        
+        return sanitized
 
 class ProcessRequest(BaseModel):
     packet_url: str
@@ -213,6 +264,37 @@ class ProcessRequest(BaseModel):
     meeting_name: Optional[str] = None
     meeting_date: Optional[str] = None
     meeting_id: Optional[str] = None
+    
+    @validator('packet_url')
+    def validate_packet_url(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Packet URL cannot be empty')
+        
+        # Basic URL validation
+        if not re.match(r'^https?://', v):
+            raise ValueError('Packet URL must be a valid HTTP/HTTPS URL')
+        
+        if len(v) > 2000:
+            raise ValueError('Packet URL too long')
+        
+        return v.strip()
+    
+    @validator('city_slug')
+    def validate_city_slug(cls, v):
+        if not v or not v.strip():
+            raise ValueError('City slug cannot be empty')
+        
+        # City slug should be alphanumeric
+        if not re.match(r'^[a-z0-9]+$', v.lower()):
+            raise ValueError('City slug contains invalid characters')
+        
+        return v.lower().strip()
+    
+    @validator('meeting_name', 'meeting_date', 'meeting_id', pre=True, always=True)
+    def validate_optional_strings(cls, v):
+        if v is None:
+            return None
+        return sanitize_string(str(v))
 
 
 @app.post("/api/search")
@@ -487,9 +569,13 @@ async def get_stats():
     try:
         stats = db.get_cache_stats()
         queue_stats = db.get_processing_queue_stats()
-        sync_status = background_processor.get_sync_status()
-        
         request_stats = db.get_city_request_stats()
+        
+        # Background processor info (separate service)
+        background_info = {
+            "status": "separate_service",
+            "note": "Background processing runs as separate daemon service"
+        }
         
         return {
             "status": "healthy",
@@ -499,11 +585,11 @@ async def get_stats():
             "recent_activity": stats.get("recent_activity", 0),
             "city_requests": request_stats,
             "background_processing": {
-                "is_running": sync_status.get("is_running", False),
-                "last_sync": sync_status.get("last_full_sync"),
+                "service_status": "separate_daemon",
                 "unprocessed_queue": queue_stats.get("unprocessed_count", 0),
                 "processing_success_rate": f"{queue_stats.get('success_rate', 0):.1f}%",
-                "recent_meetings": queue_stats.get("recent_count", 0)
+                "recent_meetings": queue_stats.get("recent_count", 0),
+                "note": "Check daemon status: systemctl status engagic-daemon"
             }
         }
     except Exception as e:
@@ -519,39 +605,163 @@ async def root():
         "service": "engagic API",
         "status": "running",
         "version": "2.0.0",
-        "description": "Simplified civic engagement API",
+        "description": "Civic engagement made simple - Search and access local government meetings",
+        "documentation": "https://github.com/Engagic/engagic#api-documentation",
         "endpoints": {
             "search": "POST /api/search - Search for meetings by zipcode or city name",
-            "process": "POST /api/process-agenda - Process meeting agenda with LLM",
-            "stats": "GET /api/stats - System statistics",
-            "health": "GET /api/health - Health check"
+            "process": "POST /api/process-agenda - Get cached meeting agenda summary",
+            "stats": "GET /api/stats - System statistics and metrics",
+            "health": "GET /api/health - Health check with detailed status",
+            "metrics": "GET /api/metrics - Detailed system metrics",
+            "admin": {
+                "city_requests": "GET /api/admin/city-requests - View requested cities",
+                "sync_city": "POST /api/admin/sync-city/{city_slug} - Force sync specific city",
+                "process_meeting": "POST /api/admin/process-meeting - Force process specific meeting"
+            }
         },
-        "usage": {
-            "search_zipcode": {"method": "POST", "url": "/api/search", "body": {"query": "94301"}},
-            "search_city": {"method": "POST", "url": "/api/search", "body": {"query": "Palo Alto, CA"}}
-        }
+        "usage_examples": {
+            "search_by_zipcode": {
+                "method": "POST",
+                "url": "/api/search",
+                "body": {"query": "94301"},
+                "description": "Search meetings by ZIP code"
+            },
+            "search_by_city": {
+                "method": "POST",
+                "url": "/api/search", 
+                "body": {"query": "Palo Alto, CA"},
+                "description": "Search meetings by city and state"
+            },
+            "search_ambiguous": {
+                "method": "POST",
+                "url": "/api/search",
+                "body": {"query": "Springfield"},
+                "description": "Search by city name only (may return multiple options)"
+            },
+            "get_summary": {
+                "method": "POST",
+                "url": "/api/process-agenda",
+                "body": {
+                    "packet_url": "https://example.com/agenda.pdf",
+                    "city_slug": "paloaltoca",
+                    "meeting_name": "City Council Meeting"
+                },
+                "description": "Get cached AI summary of meeting agenda"
+            }
+        },
+        "rate_limiting": f"{config.RATE_LIMIT_REQUESTS} requests per {config.RATE_LIMIT_WINDOW} seconds per IP",
+        "features": [
+            "ZIP code and city name search",
+            "AI-powered meeting summaries",
+            "Ambiguous city name handling", 
+            "Real-time meeting data caching",
+            "Multiple city system adapters",
+            "Background data processing",
+            "Comprehensive error handling",
+            "Request demand tracking"
+        ],
+        "data_sources": [
+            "PrimeGov (city council management)",
+            "CivicClerk (municipal systems)",
+            "Direct city websites"
+        ]
     }
 
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "2.0.0",
+        "checks": {}
+    }
+    
     try:
-        # Test database connection
+        # Database health check
+        db_health = db.get_system_health()
+        health_status["checks"]["databases"] = db_health
+        
+        if db_health["overall_status"] != "healthy":
+            health_status["status"] = "degraded"
+        
+        # Add basic stats
         stats = db.get_cache_stats()
-        sync_status = background_processor.get_sync_status()
-
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "llm_processor": "available" if processor else "disabled",
-            "background_processor": "running" if sync_status.get("is_running") else "stopped",
+        health_status["checks"]["data_summary"] = {
             "cities": stats.get("cities_count", 0),
-            "meetings": stats.get("meetings_count", 0)
+            "meetings": stats.get("meetings_count", 0),
+            "processed": stats.get("processed_count", 0)
         }
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return {"status": "unhealthy", "error": str(e)}
+        health_status["checks"]["databases"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_status["status"] = "degraded"
+    
+    # LLM processor check
+    health_status["checks"]["llm_processor"] = {
+        "status": "available" if processor else "disabled",
+        "has_api_key": bool(config.get_api_key())
+    }
+    
+    # Configuration check
+    health_status["checks"]["configuration"] = {
+        "status": "healthy",
+        "is_development": config.is_development(),
+        "rate_limiting": f"{config.RATE_LIMIT_REQUESTS} req/{config.RATE_LIMIT_WINDOW}s",
+        "background_processing": config.BACKGROUND_PROCESSING
+    }
+    
+    # Background processor check (separate service)
+    health_status["checks"]["background_processor"] = {
+        "status": "separate_service",
+        "note": "Background processing runs as independent daemon",
+        "check_command": "systemctl status engagic-daemon"
+    }
+    
+    # Set overall status based on critical services
+    if health_status["checks"]["databases"].get("overall_status") == "error":
+        health_status["status"] = "unhealthy"
+    
+    return health_status
+
+@app.get("/api/metrics")
+async def get_metrics():
+    """Basic metrics endpoint for monitoring"""
+    try:
+        stats = db.get_cache_stats()
+        queue_stats = db.get_processing_queue_stats()
+        request_stats = db.get_city_request_stats()
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "database": {
+                "cities_count": stats.get("cities_count", 0),
+                "meetings_count": stats.get("meetings_count", 0),
+                "processed_count": stats.get("processed_count", 0),
+                "recent_activity": stats.get("recent_activity", 0)
+            },
+            "processing": {
+                "unprocessed_queue": queue_stats.get("unprocessed_count", 0),
+                "success_rate": f"{queue_stats.get('success_rate', 0):.1f}%",
+                "recent_meetings": queue_stats.get("recent_count", 0)
+            },
+            "demand": {
+                "total_city_requests": request_stats.get("total_unique_cities_requested", 0),
+                "total_demand": request_stats.get("total_demand", 0),
+                "recent_requests": request_stats.get("recent_activity", 0)
+            },
+            "configuration": {
+                "rate_limit_window": config.RATE_LIMIT_WINDOW,
+                "rate_limit_requests": config.RATE_LIMIT_REQUESTS,
+                "background_processing": config.BACKGROUND_PROCESSING
+            }
+        }
+    except Exception as e:
+        logger.error(f"Metrics endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching metrics: {str(e)}")
 
 
 @app.get("/api/admin/city-requests")
@@ -572,44 +782,35 @@ async def get_city_requests():
 @app.post("/api/admin/sync-city/{city_slug}")
 async def force_sync_city(city_slug: str):
     """Force sync a specific city (admin endpoint)"""
-    try:
-        result = background_processor.force_sync_city(city_slug)
-        return {
-            "success": True,
-            "city_slug": city_slug,
-            "result": {
-                "status": result.status.value,
-                "meetings_found": result.meetings_found,
-                "meetings_processed": result.meetings_processed,
-                "duration_seconds": result.duration_seconds,
-                "error_message": result.error_message
-            }
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error syncing city: {str(e)}"
-        )
+    # This endpoint requires the background processor daemon to be running
+    # Admin should use the daemon directly: python daemon.py --sync-city SLUG
+    return {
+        "success": False,
+        "city_slug": city_slug,
+        "message": "Background processing runs as separate service. Use daemon directly:",
+        "command": f"python /root/engagic/app/daemon.py --sync-city {city_slug}",
+        "alternative": f"systemctl status engagic-daemon"
+    }
 
 
 @app.post("/api/admin/process-meeting")
 async def force_process_meeting(request: ProcessRequest):
     """Force process a specific meeting (admin endpoint)"""
-    try:
-        success = background_processor.force_process_meeting(request.packet_url)
-        return {
-            "success": success,
-            "packet_url": request.packet_url,
-            "message": "Processing completed" if success else "Processing failed"
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error processing meeting: {str(e)}"
-        )
+    # This endpoint requires the background processor daemon to be running
+    # Admin should use the daemon directly
+    return {
+        "success": False,
+        "packet_url": request.packet_url,
+        "message": "Background processing runs as separate service. Use daemon directly:",
+        "command": f"python /root/engagic/app/daemon.py --process-meeting {request.packet_url}",
+        "alternative": "systemctl status engagic-daemon"
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
 
     logger.info("Starting engagic API server...")
+    logger.info(f"Configuration: {config.summary()}")
     logger.info(f"LLM processor: {'enabled' if processor else 'disabled'}")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=config.API_HOST, port=config.API_PORT)
