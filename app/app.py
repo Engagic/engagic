@@ -248,19 +248,27 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
     # Update search log
     db.log_search(zipcode, "zipcode", zipcode=zipcode)
     
-    # Check database first
+    # Check database - CACHED ONLY
     city_info = db.get_city_by_zipcode(zipcode)
     if not city_info:
-        # Try to auto-create city from uszipcode data
-        city_info = await auto_create_city_from_zipcode(zipcode)
-        if not city_info:
-            return {
-                "success": False,
-                "message": "Thanks for asking! We don't have that zipcode yet, but we're working on adding more cities regularly. Try searching by city name instead.",
-                "query": zipcode,
-                "type": "zipcode",
-                "meetings": []
-            }
+        # Log the request for demand tracking
+        try:
+            # Try to get city info from zipcode for logging
+            result = zipcode_search.by_zipcode(zipcode)
+            if result and result.major_city:
+                city_name = result.major_city
+                state = result.state
+                db.log_city_request(city_name, state, zipcode, "zipcode", zipcode=zipcode)
+        except Exception as e:
+            logger.warning(f"Failed to log city request for zipcode {zipcode}: {e}")
+        
+        return {
+            "success": False,
+            "message": "We're not covering that area yet, but we're always expanding! Thanks for your interest - we'll prioritize cities with high demand.",
+            "query": zipcode,
+            "type": "zipcode",
+            "meetings": []
+        }
     
     # Get cached meetings
     meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
@@ -303,19 +311,22 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         # No state provided - check for ambiguous cities
         return await handle_ambiguous_city_search(city_name, city_input)
     
-    # Check database first
+    # Check database - CACHED ONLY
     city_info = db.get_city_by_name(city_name, state)
     if not city_info:
-        # Try to auto-create city from uszipcode data
-        city_info = await auto_create_city_from_city_name(city_name, state)
-        if not city_info:
-            return {
-                "success": False,
-                "message": f"Thanks for asking! We don't have {city_name}, {state} yet, but we're working on adding more cities regularly.",
-                "query": city_input,
-                "type": "city_name",
-                "meetings": []
-            }
+        # Log the request for demand tracking
+        try:
+            db.log_city_request(city_name, state, city_input, "city_name")
+        except Exception as e:
+            logger.warning(f"Failed to log city request for {city_name}, {state}: {e}")
+        
+        return {
+            "success": False,
+            "message": f"We're not covering {city_name}, {state} yet, but we're always expanding! Your interest has been noted - we prioritize cities with high demand.",
+            "query": city_input,
+            "type": "city_name",
+            "meetings": []
+        }
     
     # Log search with city_id
     db.log_search(city_input, "city_name", city_id=city_info['id'])
@@ -337,18 +348,18 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
             "type": "city_name"
         }
     
-    # No cached meetings - background processor will handle this
+    # No cached meetings - return empty
     return {
-        "success": True,
+        "success": False,
         "city_name": city_info['city_name'],
         "state": city_info['state'],
         "city_slug": city_info['city_slug'],
         "vendor": city_info['vendor'],
         "meetings": [],
-        "cached": False,
+        "cached": True,
         "query": city_input,
         "type": "city_name",
-        "message": f"No meetings available yet for {city_name}, {state} - check back soon as we sync with the city website"
+        "message": f"No meetings cached yet for {city_name}, {state}"
     }
 
 
@@ -359,10 +370,15 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
     cities = db.get_cities_by_name_only(city_name)
     
     if not cities:
-        # No cities found - suggest including state
+        # No cities found - log the request
+        try:
+            db.log_city_request(city_name, "UNKNOWN", original_input, "city_name_ambiguous")
+        except Exception as e:
+            logger.warning(f"Failed to log ambiguous city request for {city_name}: {e}")
+        
         return {
             "success": False,
-            "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') or try a different city.",
+            "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') - your interest has been noted!",
             "query": original_input,
             "type": "city_name",
             "meetings": [],
@@ -395,16 +411,16 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
             }
         else:
             return {
-                "success": True,
+                "success": False,
                 "city_name": city_info['city_name'],
                 "state": city_info['state'],
                 "city_slug": city_info['city_slug'],
                 "vendor": city_info['vendor'],
                 "meetings": [],
-                "cached": False,
+                "cached": True,
                 "query": original_input,
                 "type": "city_name",
-                "message": f"No meetings available yet for {city_info['city_name']}, {city_info['state']} - check back soon as we sync with the city website",
+                "message": f"No meetings cached yet for {city_info['city_name']}, {city_info['state']}",
                 "ambiguous": False
             }
     
@@ -431,84 +447,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
 
 
 
-async def auto_create_city_from_zipcode(zipcode: str) -> Optional[Dict[str, Any]]:
-    """Auto-create city entry from zipcode using uszipcode"""
-    try:
-        logger.info(f"Auto-creating city entry for zipcode {zipcode}")
-        
-        # Look up zipcode info
-        result = zipcode_search.by_zipcode(zipcode)
-        if not result or not result.major_city:
-            logger.warning(f"No city found for zipcode {zipcode}")
-            return None
-        
-        city_name = result.major_city
-        state = result.state
-        county = result.county
-        
-        # Create a basic city slug (we don't know the vendor yet)
-        city_slug = f"{city_name.lower().replace(' ', '').replace('.', '')}{state.lower()}"
-        
-        # Add city to database with no vendor (pending integration)
-        city_id = db.add_city(
-            city_name=city_name,
-            state=state,
-            city_slug=city_slug,
-            vendor="",  # No vendor yet - pending integration
-            county=county,
-            zipcodes=[zipcode]
-        )
-        
-        logger.info(f"Auto-created city: {city_name}, {state} (ID: {city_id})")
-        
-        # Return the created city info
-        return db.get_city_by_zipcode(zipcode)
-        
-    except Exception as e:
-        logger.error(f"Error auto-creating city from zipcode {zipcode}: {e}")
-        return None
-
-
-async def auto_create_city_from_city_name(city_name: str, state: str) -> Optional[Dict[str, Any]]:
-    """Auto-create city entry from city name using uszipcode"""
-    try:
-        logger.info(f"Auto-creating city entry for {city_name}, {state}")
-        
-        # Search for city in uszipcode
-        results = zipcode_search.by_city_and_state(city_name, state)
-        if not results:
-            logger.warning(f"No zipcode data found for {city_name}, {state}")
-            return None
-        
-        # Get primary zipcode and county from first result
-        primary_result = results[0]
-        primary_zipcode = primary_result.zipcode
-        county = primary_result.county
-        
-        # Collect all zipcodes for this city
-        zipcodes = [r.zipcode for r in results[:10]]  # Limit to first 10 zipcodes
-        
-        # Create city slug
-        city_slug = f"{city_name.lower().replace(' ', '').replace('.', '')}{state.lower()}"
-        
-        # Add city to database
-        city_id = db.add_city(
-            city_name=city_name,
-            state=state,
-            city_slug=city_slug,
-            vendor="",  # No vendor yet - pending integration
-            county=county,
-            zipcodes=zipcodes
-        )
-        
-        logger.info(f"Auto-created city: {city_name}, {state} with {len(zipcodes)} zipcodes (ID: {city_id})")
-        
-        # Return the created city info
-        return db.get_city_by_name(city_name, state)
-        
-    except Exception as e:
-        logger.error(f"Error auto-creating city from name {city_name}, {state}: {e}")
-        return None
+# Auto-creation functions removed - CACHED ONLY mode
 
 
 @app.post("/api/process-agenda")
@@ -550,12 +489,15 @@ async def get_stats():
         queue_stats = db.get_processing_queue_stats()
         sync_status = background_processor.get_sync_status()
         
+        request_stats = db.get_city_request_stats()
+        
         return {
             "status": "healthy",
             "cities": stats.get("cities_count", 0),
             "meetings": stats.get("meetings_count", 0),
             "processed": stats.get("processed_count", 0),
             "recent_activity": stats.get("recent_activity", 0),
+            "city_requests": request_stats,
             "background_processing": {
                 "is_running": sync_status.get("is_running", False),
                 "last_sync": sync_status.get("last_full_sync"),
@@ -610,6 +552,21 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {"status": "unhealthy", "error": str(e)}
+
+
+@app.get("/api/admin/city-requests")
+async def get_city_requests():
+    """Get top city requests for admin review"""
+    try:
+        top_requests = db.get_top_city_requests(50)
+        return {
+            "success": True,
+            "city_requests": top_requests,
+            "total_count": len(top_requests)
+        }
+    except Exception as e:
+        logger.error(f"Error getting city requests: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get city requests")
 
 
 @app.post("/api/admin/sync-city/{city_slug}")
