@@ -99,8 +99,9 @@ class DatabaseViewer:
                 meeting_date = row['meeting_date'][:10] if row['meeting_date'] else ""
                 has_summary = "YES" if row['has_summary'] else "NO"
                 created = row['created_at'][:10] if row['created_at'] else ""
+                packet_url = row["packet_url"] if row["packet_url"] else ""
                 print(f"{row['id']:<4} {row['city_name'][:19]:<20} {meeting_name:<25} "
-                     f"{meeting_date:<12} {has_summary:<8} {created:<12}")
+                     f"{meeting_date:<12} {has_summary:<8} {created:<12} {packet_url}")
 
     def show_usage_metrics(self, limit=20):
         """Display recent usage metrics"""
