@@ -525,8 +525,63 @@ class AgendaProcessor:
 
         return chunks
 
+    def _get_page_count(self, text: str) -> int:
+        """Count the number of pages in the text"""
+        page_markers = re.findall(r"--- PAGE \d+ ---", text)
+        return len(page_markers)
+
     def summarize(self, text: str, rate_limit_delay: int = 5) -> str:
-        """Summarize text with improved prompting"""
+        """Summarize text with improved prompting and short agenda handling"""
+        page_count = self._get_page_count(text)
+        logger.info(f"Document has {page_count} pages")
+
+        # Use different approach for short documents
+        if page_count <= 10:
+            return self._summarize_short_agenda(text, rate_limit_delay)
+        else:
+            return self._summarize_long_agenda(text, rate_limit_delay)
+
+    def _summarize_short_agenda(self, text: str, rate_limit_delay: int = 5) -> str:
+        """Summarize short agendas (<=10 pages) with simplified prompt"""
+        logger.info("Using short agenda summarization approach")
+        
+        try:
+            response = self.client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=3000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""This is a short city council meeting agenda. Provide a clear, concise summary that covers:
+
+                        **Key Agenda Items:**
+                        - List the main topics/issues being discussed
+                        - Include any public hearings or votes
+                        - Note any budget or financial items
+
+                        **Important Details:**
+                        - Specific addresses, dollar amounts, ordinance numbers
+                        - Deadlines or implementation dates
+                        - Public participation opportunities
+
+                        Keep it brief but informative. Focus on what citizens need to know.
+
+                        Agenda text:
+                        {text}""",
+                    }
+                ],
+            )
+
+            return response.content[0].text  # type: ignore
+
+        except Exception as e:
+            logger.error(f"Error processing short agenda: {e}")
+            return f"[ERROR: Could not process agenda - {str(e)}]"
+
+    def _summarize_long_agenda(self, text: str, rate_limit_delay: int = 5) -> str:
+        """Summarize long agendas (>10 pages) using chunking approach"""
+        logger.info("Using long agenda summarization approach")
+        
         chunks = self._chunk_by_agenda_items(text)
         logger.info(f"Split into {len(chunks)} chunks for processing")
 
