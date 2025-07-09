@@ -11,7 +11,8 @@ import anthropic
 import argparse
 import sys
 from typing import List, Dict, Any
-from database import MeetingDatabase, get_city_info
+from databases import DatabaseManager
+from config import config
 
 logger = logging.getLogger("engagic")
 
@@ -24,7 +25,11 @@ class AgendaProcessor:
 
         self.client = anthropic.Anthropic(api_key=self.api_key)
         self.english_words = self._load_english_words()
-        self.db = MeetingDatabase(db_path)
+        self.db = DatabaseManager(
+            locations_db_path=config.LOCATIONS_DB_PATH,
+            meetings_db_path=config.MEETINGS_DB_PATH,
+            analytics_db_path=config.ANALYTICS_DB_PATH
+        )
 
     def _load_english_words(self):
         """Load English word set with comprehensive fallback for civic terms"""
@@ -663,7 +668,7 @@ class AgendaProcessor:
         try:
             # Get city info
             city_slug = meeting_data.get("city_slug")
-            city_info = get_city_info(city_slug) if city_slug else {}
+            city_info = self.db.get_city_by_slug(city_slug) if city_slug else {}
 
             # Merge meeting data with city info
             full_meeting_data = {**meeting_data, **city_info}
@@ -677,7 +682,7 @@ class AgendaProcessor:
             # Store in database
             vendor = meeting_data.get("vendor")
             meeting_id = self.db.store_meeting_summary(
-                full_meeting_data, summary, processing_time, vendor
+                full_meeting_data, summary, processing_time
             )
 
             logger.info(
