@@ -315,7 +315,7 @@ body {
 
 .github-link {
 	display: inline-flex;
-	flex-direction: column-reverse;  /* text on top, icon underneath */
+	flex-direction: column-reverse; 
 	align-items: center;
 	gap: 0.25rem;
 	color: var(--civic-gray);
