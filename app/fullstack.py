@@ -22,6 +22,7 @@ logger = logging.getLogger("engagic")
 # Security constants
 MAX_PDF_SIZE = 200 * 1024 * 1024  # 200MB max PDF size
 MAX_PAGES = 1000  # Maximum pages to process
+MAX_OCR_PAGES = 200  # Maximum pages to OCR (OCR is slow and resource intensive)
 MAX_URL_LENGTH = 2000  # Maximum URL length
 ALLOWED_SCHEMES = ['http', 'https']
 BLOCKED_NETWORKS = [
@@ -517,12 +518,26 @@ class AgendaProcessor:
 
         for page_num in page_numbers:
             try:
+                # Check if PDF still exists
+                if not os.path.exists(pdf_path):
+                    logger.error(f"PDF file disappeared during processing: {pdf_path}")
+                    ocr_results[page_num] = f"[ERROR: PDF file no longer exists]"
+                    continue
+                    
                 pages = convert_from_path(
                     pdf_path, dpi=200, first_page=page_num, last_page=page_num,
                     output_folder=temp_dir
                 )
-                ocr_text = pytesseract.image_to_string(pages[0])
-                ocr_results[page_num] = ocr_text
+                if pages and len(pages) > 0:
+                    try:
+                        ocr_text = pytesseract.image_to_string(pages[0])
+                        ocr_results[page_num] = ocr_text
+                    except Exception as ocr_error:
+                        logger.warning(f"OCR failed for page {page_num}: {ocr_error}")
+                        ocr_results[page_num] = f"[OCR_FAILED: Page {page_num} - possibly PowerPoint or image]"
+                else:
+                    logger.warning(f"No image generated for page {page_num}")
+                    ocr_results[page_num] = f"[NO_IMAGE: Page {page_num}]"
             except Exception as e:
                 logger.error(f"OCR failed for page {page_num}: {e}")
                 ocr_results[page_num] = f"[OCR_ERROR: {str(e)}]"
@@ -540,20 +555,41 @@ class AgendaProcessor:
             # Check page count limit
             if total_pages > MAX_PAGES:
                 raise ValueError(f"PDF has {total_pages} pages, exceeds maximum of {MAX_PAGES} pages")
+            
+            # Warn if document is very large for OCR
+            if total_pages > MAX_OCR_PAGES:
+                logger.warning(f"PDF has {total_pages} pages, which exceeds OCR limit of {MAX_OCR_PAGES}. Only OCRing first {MAX_OCR_PAGES} pages.")
+                pages_to_ocr = MAX_OCR_PAGES
+            else:
+                pages_to_ocr = total_pages
 
         all_text = ""
         
         # Get the temp directory from the pdf_path's parent (which is our controlled temp_dir)
         temp_dir = os.path.dirname(pdf_path)
 
-        for page_num in range(1, total_pages + 1):
+        for page_num in range(1, pages_to_ocr + 1):
             try:
+                # Check if PDF still exists
+                if not os.path.exists(pdf_path):
+                    logger.error(f"PDF file disappeared during processing: {pdf_path}")
+                    all_text += f"\n--- PAGE {page_num} ---\n[ERROR: PDF file no longer exists]\n"
+                    continue
+                    
                 pages = convert_from_path(
                     pdf_path, dpi=200, first_page=page_num, last_page=page_num,
                     output_folder=temp_dir
                 )
-                ocr_text = pytesseract.image_to_string(pages[0])
-                all_text += f"\n--- PAGE {page_num} ---\n{ocr_text}\n"
+                if pages and len(pages) > 0:
+                    try:
+                        ocr_text = pytesseract.image_to_string(pages[0])
+                        all_text += f"\n--- PAGE {page_num} ---\n{ocr_text}\n"
+                    except Exception as ocr_error:
+                        logger.warning(f"OCR failed for page {page_num}: {ocr_error}")
+                        all_text += f"\n--- PAGE {page_num} ---\n[OCR_FAILED: possibly PowerPoint or image content]\n"
+                else:
+                    logger.warning(f"No image generated for page {page_num}")
+                    all_text += f"\n--- PAGE {page_num} ---\n[NO_IMAGE: conversion failed]\n"
 
                 if page_num % 10 == 0:
                     logger.info(f"OCR progress: {page_num}/{total_pages} pages...")
@@ -561,6 +597,10 @@ class AgendaProcessor:
             except Exception as e:
                 logger.warning(f"OCR error on page {page_num}: {e}")
                 all_text += f"\n--- PAGE {page_num} ---\n[OCR_ERROR: {str(e)}]\n"
+
+        # Add note if we truncated
+        if total_pages > MAX_OCR_PAGES:
+            all_text += f"\n\n[NOTE: Document has {total_pages} pages total. Only OCR'd first {MAX_OCR_PAGES} pages due to size limits.]\n"
 
         return all_text
 
