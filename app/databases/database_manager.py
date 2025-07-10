@@ -140,9 +140,19 @@ class DatabaseManager:
     
     # === Analytics Database Methods ===
     
-    def log_search(self, search_query: str, search_type: str, city_slug: str = None, 
+    def log_search(self, search_query: str, search_type: str, city_id: int = None, 
                   zipcode: str = None, topic_flags: List[str] = None):
         """Log search activity"""
+        # Convert city_id to city_slug for analytics
+        city_slug = None
+        if city_id:
+            with self.locations.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT city_slug FROM cities WHERE id = ?", (city_id,))
+                result = cursor.fetchone()
+                if result:
+                    city_slug = result['city_slug']
+        
         return self.analytics.log_search(search_query, search_type, city_slug, zipcode, topic_flags)
     
     def log_city_request(self, city_name: str, state: str, search_query: str, 
