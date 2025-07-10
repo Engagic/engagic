@@ -1,5 +1,7 @@
 import sqlite3
 import logging
+import hashlib
+import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from .base_db import BaseDatabase
@@ -20,6 +22,7 @@ class MeetingsDatabase(BaseDatabase):
             meeting_name TEXT,
             meeting_date DATETIME,
             packet_url TEXT NOT NULL,
+            meeting_hash TEXT,  -- Hash of meeting details for change detection
             raw_packet_size INTEGER,
             processed_summary TEXT,
             processing_time_seconds REAL,
@@ -62,21 +65,100 @@ class MeetingsDatabase(BaseDatabase):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
+            # Generate hash for change detection
+            meeting_hash = self._generate_meeting_hash(meeting_data)
+            
+            # Serialize packet_url if it's a list
+            packet_url = meeting_data.get('packet_url')
+            if isinstance(packet_url, list):
+                packet_url = json.dumps(packet_url)
+            
             # Insert meeting
             cursor.execute("""
                 INSERT OR REPLACE INTO meetings 
-                (city_slug, meeting_id, meeting_name, meeting_date, packet_url, last_accessed)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (city_slug, meeting_id, meeting_name, meeting_date, packet_url, meeting_hash, last_accessed)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 city_slug,
                 meeting_data.get('meeting_id'),
                 meeting_data.get('meeting_name'),
                 meeting_data.get('meeting_date'),
-                meeting_data.get('packet_url')
+                packet_url,
+                meeting_hash
             ))
             
             conn.commit()
             return cursor.lastrowid
+    
+    def _generate_meeting_hash(self, meeting_data: Dict[str, Any]) -> str:
+        """Generate hash of meeting data for change detection"""
+        # Use key meeting details for hash
+        hash_data = {
+            'meeting_id': meeting_data.get('meeting_id'),
+            'meeting_name': meeting_data.get('meeting_name'),
+            'meeting_date': meeting_data.get('meeting_date'),
+            'packet_url': meeting_data.get('packet_url')
+        }
+        
+        # Sort keys for consistent hashing
+        hash_string = json.dumps(hash_data, sort_keys=True)
+        return hashlib.md5(hash_string.encode()).hexdigest()
+    
+    def has_meeting_changed(self, meeting_data: Dict[str, Any]) -> bool:
+        """Check if meeting data has changed since last sync"""
+        packet_url = meeting_data.get('packet_url')
+        if not packet_url:
+            return True  # No URL means it's new
+        
+        new_hash = self._generate_meeting_hash(meeting_data)
+        
+        # Serialize packet_url if it's a list for DB lookup
+        lookup_url = packet_url
+        if isinstance(packet_url, list):
+            lookup_url = json.dumps(packet_url)
+        
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT meeting_hash FROM meetings WHERE packet_url = ?",
+                (lookup_url,)
+            )
+            
+            result = cursor.fetchone()
+            if not result:
+                return True  # New meeting
+            
+            existing_hash = result[0]
+            return existing_hash != new_hash  # Changed if hashes differ
+    
+    def get_city_meeting_frequency(self, city_slug: str, days: int = 30) -> int:
+        """Get meeting count for a city in the last N days"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT COUNT(*) FROM meetings 
+                   WHERE city_slug = ? 
+                   AND created_at >= datetime('now', '-{} days')""".format(days),
+                (city_slug,)
+            )
+            
+            result = cursor.fetchone()
+            return result[0] if result else 0
+    
+    def get_city_last_sync(self, city_slug: str) -> Optional[datetime]:
+        """Get the last sync time for a city"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT MAX(created_at) FROM meetings 
+                   WHERE city_slug = ?""",
+                (city_slug,)
+            )
+            
+            result = cursor.fetchone()
+            if result and result[0]:
+                return datetime.fromisoformat(result[0])
+            return None
     
     def store_meeting_summary(self, meeting_data: Dict[str, Any], summary: str, 
                             processing_time: float) -> int:
@@ -90,6 +172,11 @@ class MeetingsDatabase(BaseDatabase):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
+            # Serialize packet_url if it's a list
+            packet_url = meeting_data.get('packet_url')
+            if isinstance(packet_url, list):
+                packet_url = json.dumps(packet_url)
+            
             # Insert/update meeting with summary
             cursor.execute("""
                 INSERT OR REPLACE INTO meetings 
@@ -101,13 +188,22 @@ class MeetingsDatabase(BaseDatabase):
                 meeting_data.get('meeting_id'),
                 meeting_data.get('meeting_name'),
                 meeting_data.get('meeting_date'),
-                meeting_data.get('packet_url'),
+                packet_url,
                 summary,
                 processing_time
             ))
             
             conn.commit()
             return cursor.lastrowid
+    
+    def _deserialize_packet_url(self, packet_url: str):
+        """Deserialize packet_url if it's a JSON string"""
+        if packet_url and packet_url.startswith('['):
+            try:
+                return json.loads(packet_url)
+            except json.JSONDecodeError:
+                return packet_url
+        return packet_url
     
     def get_meetings_by_city(self, city_slug: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get meetings for a city by slug"""
@@ -121,18 +217,29 @@ class MeetingsDatabase(BaseDatabase):
                 LIMIT ?
             """, (city_slug, limit))
             
-            return [dict(row) for row in cursor.fetchall()]
+            meetings = []
+            for row in cursor.fetchall():
+                meeting = dict(row)
+                meeting['packet_url'] = self._deserialize_packet_url(meeting.get('packet_url'))
+                meetings.append(meeting)
+            return meetings
     
-    def get_cached_summary(self, packet_url: str) -> Optional[Dict[str, Any]]:
+    def get_cached_summary(self, packet_url) -> Optional[Dict[str, Any]]:
         """Get cached meeting summary by packet URL"""
         logger.debug(f"Checking cache for packet: {packet_url}")
+        
+        # Serialize packet_url if it's a list for DB lookup
+        lookup_url = packet_url
+        if isinstance(packet_url, list):
+            lookup_url = json.dumps(packet_url)
+        
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT *
                 FROM meetings
                 WHERE packet_url = ? AND processed_summary IS NOT NULL
-            """, (packet_url,))
+            """, (lookup_url,))
             
             row = cursor.fetchone()
             if row:
@@ -140,10 +247,12 @@ class MeetingsDatabase(BaseDatabase):
                 cursor.execute("""
                     UPDATE meetings SET last_accessed = CURRENT_TIMESTAMP 
                     WHERE packet_url = ?
-                """, (packet_url,))
+                """, (lookup_url,))
                 conn.commit()
                 logger.debug(f"Cache hit for packet: {packet_url}")
-                return dict(row)
+                meeting = dict(row)
+                meeting['packet_url'] = self._deserialize_packet_url(meeting.get('packet_url'))
+                return meeting
             logger.debug(f"Cache miss for packet: {packet_url}")
             return None
     
@@ -158,7 +267,12 @@ class MeetingsDatabase(BaseDatabase):
                 LIMIT ?
             """, (limit,))
             
-            return [dict(row) for row in cursor.fetchall()]
+            meetings = []
+            for row in cursor.fetchall():
+                meeting = dict(row)
+                meeting['packet_url'] = self._deserialize_packet_url(meeting.get('packet_url'))
+                meetings.append(meeting)
+            return meetings
     
     def get_unprocessed_meetings(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get meetings that don't have processed summaries yet"""
@@ -172,21 +286,33 @@ class MeetingsDatabase(BaseDatabase):
                 LIMIT ?
             """, (limit,))
             
-            return [dict(row) for row in cursor.fetchall()]
+            meetings = []
+            for row in cursor.fetchall():
+                meeting = dict(row)
+                meeting['packet_url'] = self._deserialize_packet_url(meeting.get('packet_url'))
+                meetings.append(meeting)
+            return meetings
     
-    def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Dict[str, Any]]:
+    def get_meeting_by_packet_url(self, packet_url) -> Optional[Dict[str, Any]]:
         """Get meeting by packet URL"""
+        # Serialize packet_url if it's a list for DB lookup
+        lookup_url = packet_url
+        if isinstance(packet_url, list):
+            lookup_url = json.dumps(packet_url)
+        
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT *
                 FROM meetings
                 WHERE packet_url = ?
-            """, (packet_url,))
+            """, (lookup_url,))
             
             row = cursor.fetchone()
             if row:
-                return dict(row)
+                meeting = dict(row)
+                meeting['packet_url'] = self._deserialize_packet_url(meeting.get('packet_url'))
+                return meeting
             return None
     
     def get_processing_queue_stats(self) -> Dict[str, Any]:

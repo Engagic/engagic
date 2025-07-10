@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 from .locations_db import LocationsDatabase
 from .meetings_db import MeetingsDatabase
@@ -100,6 +101,18 @@ class DatabaseManager:
     def get_cached_summary(self, packet_url: str) -> Optional[Dict[str, Any]]:
         """Get cached meeting summary by packet URL"""
         return self.meetings.get_cached_summary(packet_url)
+    
+    def has_meeting_changed(self, meeting_data: Dict[str, Any]) -> bool:
+        """Check if meeting data has changed since last sync"""
+        return self.meetings.has_meeting_changed(meeting_data)
+    
+    def get_city_meeting_frequency(self, city_slug: str, days: int = 30) -> int:
+        """Get meeting count for a city in the last N days"""
+        return self.meetings.get_city_meeting_frequency(city_slug, days)
+    
+    def get_city_last_sync(self, city_slug: str) -> Optional[datetime]:
+        """Get the last sync time for a city"""
+        return self.meetings.get_city_last_sync(city_slug)
     
     def get_recent_meetings(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Get most recently accessed meetings across all cities"""
