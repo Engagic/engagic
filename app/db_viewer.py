@@ -78,62 +78,95 @@ class DatabaseViewer:
 
     def show_meetings_table(self, limit=20):
         """Display meetings table with city information"""
+        # First get meetings
         with self.db.meetings.get_connection() as conn:
             cursor = conn.execute("""
-                SELECT m.id, m.meeting_name, m.meeting_date, m.packet_url,
-                       m.processed_summary IS NOT NULL as has_summary,
-                       m.created_at, m.last_accessed,
-                       c.city_name, c.state, c.vendor
-                FROM meetings m
-                JOIN cities c ON m.city_id = c.id
-                ORDER BY m.created_at DESC
+                SELECT id, meeting_name, meeting_date, packet_url, city_slug,
+                       processed_summary IS NOT NULL as has_summary,
+                       created_at, last_accessed
+                FROM meetings
+                ORDER BY created_at DESC
                 LIMIT ?
             """, (limit,))
-            rows = cursor.fetchall()
+            meetings = cursor.fetchall()
+        
+        # Then get city info for each meeting
+        rows = []
+        for meeting in meetings:
+            city_info = self.db.get_city_by_slug(meeting['city_slug'])
+            if city_info:
+                row = dict(meeting)
+                row['city_name'] = city_info['city_name']
+                row['state'] = city_info['state']
+                row['vendor'] = city_info.get('vendor', '')
+                rows.append(row)
+            else:
+                # Include meeting even if city not found
+                row = dict(meeting)
+                row['city_name'] = 'Unknown'
+                row['state'] = ''
+                row['vendor'] = ''
+                rows.append(row)
 
-            if not rows:
-                print("No meetings found.")
-                return
+        if not rows:
+            print("No meetings found.")
+            return
 
-            print(f"\n=== MEETINGS TABLE (last {len(rows)}) ===")
-            print(f"{'ID':<4} {'City':<20} {'Meeting':<25} {'Date':<12} {'Summary':<8} {'Created':<12}")
-            print("-" * 90)
+        print(f"\n=== MEETINGS TABLE (last {len(rows)}) ===")
+        print(f"{'ID':<4} {'City':<20} {'Meeting':<25} {'Date':<12} {'Summary':<8} {'Created':<12}")
+        print("-" * 90)
 
-            for row in rows:
-                meeting_name = row['meeting_name'][:24] if row['meeting_name'] else "Unknown"
-                meeting_date = row['meeting_date'][:10] if row['meeting_date'] else ""
-                has_summary = "YES" if row['has_summary'] else "NO"
-                created = row['created_at'][:10] if row['created_at'] else ""
-                packet_url = row["packet_url"] if row["packet_url"] else ""
-                print(f"{row['id']:<4} {row['city_name'][:19]:<20} {meeting_name:<25} "
-                     f"{meeting_date:<12} {has_summary:<8} {created:<12} {packet_url}")
+        for row in rows:
+            meeting_name = row['meeting_name'][:24] if row['meeting_name'] else "Unknown"
+            meeting_date = row['meeting_date'][:10] if row['meeting_date'] else ""
+            has_summary = "YES" if row['has_summary'] else "NO"
+            created = row['created_at'][:10] if row['created_at'] else ""
+            packet_url = row["packet_url"] if row["packet_url"] else ""
+            print(f"{row['id']:<4} {row['city_name'][:19]:<20} {meeting_name:<25} "
+                 f"{meeting_date:<12} {has_summary:<8} {created:<12} {packet_url}")
 
     def show_usage_metrics(self, limit=20):
         """Display recent usage metrics"""
+        # Get usage metrics first
         with self.db.analytics.get_connection() as conn:
             cursor = conn.execute("""
-                SELECT u.id, u.search_query, u.search_type, u.zipcode, u.created_at,
-                       c.city_name, c.state
-                FROM usage_metrics u
-                LEFT JOIN cities c ON u.city_id = c.id
-                ORDER BY u.created_at DESC
+                SELECT id, search_query, search_type, city_slug, zipcode, created_at
+                FROM usage_metrics
+                ORDER BY created_at DESC
                 LIMIT ?
             """, (limit,))
-            rows = cursor.fetchall()
+            metrics = cursor.fetchall()
+        
+        # Then get city info for each metric
+        rows = []
+        for metric in metrics:
+            row = dict(metric)
+            if metric['city_slug']:
+                city_info = self.db.get_city_by_slug(metric['city_slug'])
+                if city_info:
+                    row['city_name'] = city_info['city_name']
+                    row['state'] = city_info['state']
+                else:
+                    row['city_name'] = 'Unknown'
+                    row['state'] = ''
+            else:
+                row['city_name'] = None
+                row['state'] = None
+            rows.append(row)
 
-            if not rows:
-                print("No usage metrics found.")
-                return
+        if not rows:
+            print("No usage metrics found.")
+            return
 
-            print(f"\n=== USAGE METRICS (last {len(rows)}) ===")
-            print(f"{'ID':<4} {'Query':<20} {'Type':<12} {'City Found':<20} {'When':<12}")
-            print("-" * 75)
+        print(f"\n=== USAGE METRICS (last {len(rows)}) ===")
+        print(f"{'ID':<4} {'Query':<20} {'Type':<12} {'City Found':<20} {'When':<12}")
+        print("-" * 75)
 
-            for row in rows:
-                query = row['search_query'][:19] if row['search_query'] else ""
-                city_found = row['city_name'][:19] if row['city_name'] else "Not Found"
-                when = row['created_at'][:10] if row['created_at'] else ""
-                print(f"{row['id']:<4} {query:<20} {row['search_type']:<12} {city_found:<20} {when:<12}")
+        for row in rows:
+            query = row['search_query'][:19] if row['search_query'] else ""
+            city_found = row['city_name'][:19] if row['city_name'] else "Not Found"
+            when = row['created_at'][:10] if row['created_at'] else ""
+            print(f"{row['id']:<4} {query:<20} {row['search_type']:<12} {city_found:<20} {when:<12}")
 
     def add_city(self):
         """Interactive city addition"""
@@ -260,8 +293,17 @@ class DatabaseViewer:
             cursor.execute("SELECT COUNT(*) as count FROM zipcodes WHERE city_id = ?", (int(city_id),))
             zipcode_count = cursor.fetchone()['count']
             
-            cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE city_id = ?", (int(city_id),))
-            meeting_count = cursor.fetchone()['count']
+            # Get city_slug for cross-database operations
+            cursor.execute("SELECT city_slug FROM cities WHERE id = ?", (int(city_id),))
+            city_slug_row = cursor.fetchone()
+            city_slug = city_slug_row['city_slug'] if city_slug_row else None
+        
+        # Count meetings in meetings database
+        meeting_count = 0
+        if city_slug:
+            with self.db.meetings.get_connection() as conn:
+                cursor = conn.execute("SELECT COUNT(*) as count FROM meetings WHERE city_slug = ?", (city_slug,))
+                meeting_count = cursor.fetchone()['count']
 
         print(f"\nWARNING: This will delete:")
         print(f"   City: {city_row['city_name']}, {city_row['state']}")
@@ -274,16 +316,28 @@ class DatabaseViewer:
             return False
 
         try:
+            # Delete from analytics database
+            if city_slug:
+                with self.db.analytics.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM usage_metrics WHERE city_slug = ?", (city_slug,))
+                    conn.commit()
+                
+                # Delete from meetings database
+                with self.db.meetings.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM meetings WHERE city_slug = ?", (city_slug,))
+                    conn.commit()
+            
+            # Delete from locations database (zipcodes and city)
             with self.db.locations.get_connection() as conn:
                 cursor = conn.cursor()
-                # Delete in order (foreign key constraints)
-                cursor.execute("DELETE FROM usage_metrics WHERE city_id = ?", (int(city_id),))
-                cursor.execute("DELETE FROM meetings WHERE city_id = ?", (int(city_id),))
                 cursor.execute("DELETE FROM zipcodes WHERE city_id = ?", (int(city_id),))
                 cursor.execute("DELETE FROM cities WHERE id = ?", (int(city_id),))
                 conn.commit()
-                print(f"Deleted city and all related data")
-                return True
+            
+            print(f"Deleted city and all related data")
+            return True
         except Exception as e:
             print(f"Error deleting city: {e}")
             return False
@@ -298,40 +352,62 @@ class DatabaseViewer:
 
         print(f"\nSearching for '{query}'...")
 
-        with self.db.get_connection() as conn:
+        results = []
+        
+        # Search cities in locations database
+        with self.db.locations.get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Search cities
             cursor.execute("""
                 SELECT 'CITY' as type, id, city_name || ', ' || state as name, city_slug, vendor
                 FROM cities 
                 WHERE city_name LIKE ? OR state LIKE ? OR city_slug LIKE ? OR vendor LIKE ?
             """, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
-            
-            results = cursor.fetchall()
+            results.extend(cursor.fetchall())
             
             # Search zipcodes
             cursor.execute("""
                 SELECT 'ZIPCODE' as type, z.id, z.zipcode as name, 
-                       c.city_name || ', ' || c.state as city_slug, c.vendor
+                       c.city_name || ', ' || c.state as city_info, c.vendor
                 FROM zipcodes z
                 JOIN cities c ON z.city_id = c.id
                 WHERE z.zipcode LIKE ?
             """, (f"%{query}%",))
-            
-            results.extend(cursor.fetchall())
-            
-            # Search meetings
+            zipcode_results = cursor.fetchall()
+            # Convert to expected format
+            for row in zipcode_results:
+                results.append({
+                    'type': row['type'],
+                    'id': row['id'],
+                    'name': row['name'],
+                    'city_slug': row['city_info'],
+                    'vendor': row['vendor']
+                })
+        
+        # Search meetings in meetings database
+        with self.db.meetings.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("""
-                SELECT 'MEETING' as type, m.id, m.meeting_name as name,
-                       c.city_name || ', ' || c.state as city_slug, 
-                       m.meeting_date as vendor
-                FROM meetings m
-                JOIN cities c ON m.city_id = c.id
-                WHERE m.meeting_name LIKE ?
+                SELECT 'MEETING' as type, id, meeting_name as name,
+                       city_slug, meeting_date as vendor
+                FROM meetings
+                WHERE meeting_name LIKE ?
             """, (f"%{query}%",))
+            meeting_results = cursor.fetchall()
             
-            results.extend(cursor.fetchall())
+            # Get city info for each meeting
+            for row in meeting_results:
+                city_info = self.db.get_city_by_slug(row['city_slug'])
+                if city_info:
+                    city_display = f"{city_info['city_name']}, {city_info['state']}"
+                else:
+                    city_display = row['city_slug']
+                results.append({
+                    'type': row['type'],
+                    'id': row['id'],
+                    'name': row['name'],
+                    'city_slug': city_display,
+                    'vendor': row['vendor']
+                })
 
             if not results:
                 print("No results found")
@@ -355,8 +431,8 @@ class DatabaseViewer:
         print(f"Processed meetings:  {stats.get('processed_count', 0)}")
         print(f"Recent activity:     {stats.get('recent_activity', 0)} (7 days)")
         
-        # Additional stats
-        with self.db.get_connection() as conn:
+        # Additional stats from locations database
+        with self.db.locations.get_connection() as conn:
             cursor = conn.cursor()
             
             cursor.execute("SELECT COUNT(*) as count FROM zipcodes")
@@ -367,7 +443,10 @@ class DatabaseViewer:
             
             cursor.execute("SELECT vendor, COUNT(*) as count FROM cities WHERE vendor IS NOT NULL GROUP BY vendor ORDER BY count DESC")
             vendor_breakdown = cursor.fetchall()
-            
+        
+        # Stats from analytics database
+        with self.db.analytics.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) as count FROM usage_metrics")
             search_count = cursor.fetchone()['count']
 
