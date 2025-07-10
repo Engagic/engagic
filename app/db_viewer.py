@@ -6,16 +6,21 @@ Clean interface for managing cities, zipcodes, meetings, and analytics
 
 import json
 from datetime import datetime
-from database import MeetingDatabase
+from databases import DatabaseManager
+from config import config
 
 
 class DatabaseViewer:
     def __init__(self):
-        self.db = MeetingDatabase()
+        self.db = DatabaseManager(
+            locations_db_path=config.LOCATIONS_DB_PATH,
+            meetings_db_path=config.MEETINGS_DB_PATH,
+            analytics_db_path=config.ANALYTICS_DB_PATH
+        )
 
     def show_cities_table(self, limit=50):
         """Display cities table with zipcode counts"""
-        with self.db.get_connection() as conn:
+        with self.db.locations.get_connection() as conn:
             cursor = conn.execute("""
                 SELECT c.id, c.city_name, c.state, c.city_slug, c.vendor, c.status,
                        c.county, c.created_at,
@@ -45,7 +50,7 @@ class DatabaseViewer:
 
     def show_zipcodes_table(self, limit=50):
         """Display zipcodes table with city information"""
-        with self.db.get_connection() as conn:
+        with self.db.locations.get_connection() as conn:
             cursor = conn.execute("""
                 SELECT z.id, z.zipcode, z.is_primary, z.created_at,
                        c.city_name, c.state, c.city_slug
@@ -73,7 +78,7 @@ class DatabaseViewer:
 
     def show_meetings_table(self, limit=20):
         """Display meetings table with city information"""
-        with self.db.get_connection() as conn:
+        with self.db.meetings.get_connection() as conn:
             cursor = conn.execute("""
                 SELECT m.id, m.meeting_name, m.meeting_date, m.packet_url,
                        m.processed_summary IS NOT NULL as has_summary,
@@ -105,7 +110,7 @@ class DatabaseViewer:
 
     def show_usage_metrics(self, limit=20):
         """Display recent usage metrics"""
-        with self.db.get_connection() as conn:
+        with self.db.analytics.get_connection() as conn:
             cursor = conn.execute("""
                 SELECT u.id, u.search_query, u.search_type, u.zipcode, u.created_at,
                        c.city_name, c.state
@@ -182,7 +187,7 @@ class DatabaseViewer:
         is_primary = input("Is this the primary zipcode? (y/N): ").strip().lower() == 'y'
 
         try:
-            with self.db.get_connection() as conn:
+            with self.db.locations.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO zipcodes (zipcode, city_id, is_primary)
@@ -215,7 +220,7 @@ class DatabaseViewer:
         new_value = input(f"New value for {field}: ").strip()
 
         try:
-            with self.db.get_connection() as conn:
+            with self.db.locations.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(f"""
                     UPDATE cities SET {field} = ?, updated_at = CURRENT_TIMESTAMP 
@@ -244,7 +249,7 @@ class DatabaseViewer:
             return False
 
         # Show what will be deleted
-        with self.db.get_connection() as conn:
+        with self.db.locations.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT city_name, state FROM cities WHERE id = ?", (int(city_id),))
             city_row = cursor.fetchone()
@@ -269,7 +274,7 @@ class DatabaseViewer:
             return False
 
         try:
-            with self.db.get_connection() as conn:
+            with self.db.locations.get_connection() as conn:
                 cursor = conn.cursor()
                 # Delete in order (foreign key constraints)
                 cursor.execute("DELETE FROM usage_metrics WHERE city_id = ?", (int(city_id),))
