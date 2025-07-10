@@ -13,8 +13,81 @@ import sys
 from typing import List, Dict, Any
 from databases import DatabaseManager
 from config import config
+from urllib.parse import urlparse, quote
+import ipaddress
+import socket
 
 logger = logging.getLogger("engagic")
+
+# Security constants
+MAX_PDF_SIZE = 200 * 1024 * 1024  # 200MB max PDF size
+MAX_PAGES = 1000  # Maximum pages to process
+MAX_URL_LENGTH = 2000  # Maximum URL length
+ALLOWED_SCHEMES = ['http', 'https']
+BLOCKED_NETWORKS = [
+    ipaddress.ip_network('127.0.0.0/8'),  # Localhost
+    ipaddress.ip_network('10.0.0.0/8'),   # Private network
+    ipaddress.ip_network('172.16.0.0/12'), # Private network
+    ipaddress.ip_network('192.168.0.0/16'), # Private network
+    ipaddress.ip_network('169.254.0.0/16'), # Link-local
+    ipaddress.ip_network('::1/128'),        # IPv6 localhost
+    ipaddress.ip_network('fc00::/7'),       # IPv6 private
+    ipaddress.ip_network('fe80::/10'),      # IPv6 link-local
+]
+
+def validate_url(url: str) -> None:
+    """Validate URL for security issues including SSRF protection"""
+    # Check URL length
+    if len(url) > MAX_URL_LENGTH:
+        raise ValueError(f"URL exceeds maximum length of {MAX_URL_LENGTH} characters")
+    
+    # Parse and validate URL structure
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise ValueError("Invalid URL format")
+    
+    # Check scheme
+    if parsed.scheme not in ALLOWED_SCHEMES:
+        raise ValueError(f"URL scheme must be one of: {', '.join(ALLOWED_SCHEMES)}")
+    
+    # Check for empty hostname
+    if not parsed.hostname:
+        raise ValueError("URL must include a hostname")
+    
+    # Prevent file:// and other dangerous schemes
+    if parsed.scheme == 'file':
+        raise ValueError("File URLs are not allowed")
+    
+    # Resolve hostname to prevent DNS rebinding attacks
+    try:
+        # Get IP address
+        ip_str = socket.gethostbyname(parsed.hostname)
+        ip_addr = ipaddress.ip_address(ip_str)
+        
+        # Check against blocked networks (SSRF protection)
+        for network in BLOCKED_NETWORKS:
+            if ip_addr in network:
+                raise ValueError(f"URL points to blocked network: {network}")
+                
+    except socket.gaierror:
+        raise ValueError(f"Unable to resolve hostname: {parsed.hostname}")
+    except Exception as e:
+        raise ValueError(f"URL validation failed: {str(e)}")
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitize filename to prevent directory traversal"""
+    # Remove any path components
+    basename = os.path.basename(filename)
+    # Remove potentially dangerous characters
+    safe_name = re.sub(r'[^\w\s\-\.]', '', basename)
+    # Ensure it doesn't start with a dot (hidden file)
+    if safe_name.startswith('.'):
+        safe_name = safe_name[1:]
+    # Add timestamp to prevent collisions
+    timestamp = str(int(time.time()))
+    name, ext = os.path.splitext(safe_name)
+    return f"{name}_{timestamp}{ext}" if safe_name else f"file_{timestamp}.pdf"
 
 class AgendaProcessor:
     def __init__(self, api_key=None, db_path="/root/engagic/app/meetings.db"):
@@ -154,33 +227,79 @@ class AgendaProcessor:
     
     def _download_and_extract_single(self, url: str) -> str:
         """Download a single PDF and extract text"""
-        logger.info(f"Downloading and processing PDF from: {url}")
+        # Validate URL for security
+        validate_url(url)
+        
+        logger.info(f"Downloading and processing PDF from: {url[:80]}...")  # Log truncated URL
+
+        # Store original tempdir setting
+        original_tempdir = tempfile.tempdir
+        original_tmpdir = os.environ.get('TMPDIR')
+        original_temp = os.environ.get('TEMP')
+        original_tmp = os.environ.get('TMP')
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Force all temp files (requests, PIL, Tesseract, etc.) into our temp_dir
-            tempfile.tempdir = temp_dir
-            os.environ['TMPDIR'] = temp_dir
-            os.environ['TEMP'] = temp_dir
-            os.environ['TMP'] = temp_dir
-            
-            logger.debug(f"Redirecting all temp files into: {temp_dir}")
-            
-            # Download PDF
             try:
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-            except requests.RequestException as e:
-                raise Exception(f"Failed to download PDF: {e}")
+                # Force all temp files (requests, PIL, Tesseract, etc.) into our temp_dir
+                tempfile.tempdir = temp_dir
+                os.environ['TMPDIR'] = temp_dir
+                os.environ['TEMP'] = temp_dir
+                os.environ['TMP'] = temp_dir
+                
+                logger.debug(f"Redirecting all temp files into: {temp_dir}")
+                
+                # Download PDF with size limit via streaming
+                try:
+                    response = requests.get(url, timeout=30, stream=True, headers={
+                        'User-Agent': 'Engagic-Agenda-Processor/1.0'
+                    })
+                    response.raise_for_status()
+                    
+                    # Check content length if provided
+                    content_length = response.headers.get('content-length')
+                    if content_length and int(content_length) > MAX_PDF_SIZE:
+                        raise ValueError(f"PDF size {content_length} exceeds maximum allowed size of {MAX_PDF_SIZE} bytes")
+                    
+                    # Download with size checking
+                    pdf_content = b''
+                    downloaded = 0
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            downloaded += len(chunk)
+                            if downloaded > MAX_PDF_SIZE:
+                                raise ValueError(f"PDF size exceeds maximum allowed size of {MAX_PDF_SIZE} bytes")
+                            pdf_content += chunk
+                            
+                except requests.RequestException as e:
+                    raise Exception(f"Failed to download PDF: {e}")
 
-            pdf_path = os.path.join(temp_dir, "agenda.pdf")
-            with open(pdf_path, "wb") as f:
-                f.write(response.content)
+                pdf_path = os.path.join(temp_dir, sanitize_filename("agenda.pdf"))
+                with open(pdf_path, "wb") as f:
+                    f.write(pdf_content)
 
-            # Smart text extraction
-            raw_text = self._extract_text_smart(pdf_path)
+                # Smart text extraction
+                raw_text = self._extract_text_smart(pdf_path)
 
-            # Normalize the formatting
-            return self._normalize_text_formatting(raw_text)
+                # Normalize the formatting
+                return self._normalize_text_formatting(raw_text)
+                
+            finally:
+                # Always restore original tempdir settings
+                tempfile.tempdir = original_tempdir
+                if original_tmpdir:
+                    os.environ['TMPDIR'] = original_tmpdir
+                elif 'TMPDIR' in os.environ:
+                    del os.environ['TMPDIR']
+                    
+                if original_temp:
+                    os.environ['TEMP'] = original_temp
+                elif 'TEMP' in os.environ:
+                    del os.environ['TEMP']
+                    
+                if original_tmp:
+                    os.environ['TMP'] = original_tmp
+                elif 'TMP' in os.environ:
+                    del os.environ['TMP']
 
     def _extract_text_smart(self, pdf_path: str) -> str:
         """Try PDFReader first, fall back to OCR for problematic pages"""
@@ -190,6 +309,11 @@ class AgendaProcessor:
             with open(pdf_path, "rb") as f:
                 reader = PdfReader(f)
                 total_pages = len(reader.pages)
+                
+                # Check page count limit
+                if total_pages > MAX_PAGES:
+                    raise ValueError(f"PDF has {total_pages} pages, exceeds maximum of {MAX_PAGES} pages")
+                
                 logger.info(f"Processing {total_pages} pages...")
 
                 all_text = ""
@@ -248,13 +372,18 @@ class AgendaProcessor:
             if i == 0 and not page.strip():
                 continue
 
-            # Extract page number and content
-            page_match = re.match(r"\s*(\d+)\s*---\s*\n(.*)", page, re.DOTALL)
-            if not page_match:
+            # Extract page number and content - limit search to prevent ReDoS
+            # Split on first newline to avoid DOTALL on entire content
+            lines = page.split('\n', 1)
+            if not lines:
                 continue
-
-            page_num = page_match.group(1)
-            page_content = page_match.group(2)
+            
+            header_match = re.match(r"\s*(\d+)\s*---\s*", lines[0])
+            if not header_match:
+                continue
+                
+            page_num = header_match.group(1)
+            page_content = lines[1] if len(lines) > 1 else ""
 
             # Normalize this page
             normalized_content = self._normalize_page_content(page_content)
@@ -382,11 +511,15 @@ class AgendaProcessor:
     def _ocr_specific_pages(self, pdf_path: str, page_numbers: List[int]) -> dict:
         """OCR only specific pages"""
         ocr_results = {}
+        
+        # Get the temp directory from the pdf_path's parent (which is our controlled temp_dir)
+        temp_dir = os.path.dirname(pdf_path)
 
         for page_num in page_numbers:
             try:
                 pages = convert_from_path(
-                    pdf_path, dpi=200, first_page=page_num, last_page=page_num
+                    pdf_path, dpi=200, first_page=page_num, last_page=page_num,
+                    output_folder=temp_dir
                 )
                 ocr_text = pytesseract.image_to_string(pages[0])
                 ocr_results[page_num] = ocr_text
@@ -403,13 +536,21 @@ class AgendaProcessor:
         with open(pdf_path, "rb") as f:
             reader = PdfReader(f)
             total_pages = len(reader.pages)
+            
+            # Check page count limit
+            if total_pages > MAX_PAGES:
+                raise ValueError(f"PDF has {total_pages} pages, exceeds maximum of {MAX_PAGES} pages")
 
         all_text = ""
+        
+        # Get the temp directory from the pdf_path's parent (which is our controlled temp_dir)
+        temp_dir = os.path.dirname(pdf_path)
 
         for page_num in range(1, total_pages + 1):
             try:
                 pages = convert_from_path(
-                    pdf_path, dpi=200, first_page=page_num, last_page=page_num
+                    pdf_path, dpi=200, first_page=page_num, last_page=page_num,
+                    output_folder=temp_dir
                 )
                 ocr_text = pytesseract.image_to_string(pages[0])
                 all_text += f"\n--- PAGE {page_num} ---\n{ocr_text}\n"
@@ -440,13 +581,18 @@ class AgendaProcessor:
             if i == 0 and not page.strip():
                 continue
 
-            # Extract page number and content
-            page_match = re.match(r"\s*(\d+)\s*---\s*\n(.*)", page, re.DOTALL)
-            if not page_match:
+            # Extract page number and content - limit search to prevent ReDoS
+            # Split on first newline to avoid DOTALL on entire content
+            lines = page.split('\n', 1)
+            if not lines:
                 continue
-
-            page_num = page_match.group(1)
-            page_content = page_match.group(2)
+            
+            header_match = re.match(r"\s*(\d+)\s*---\s*", lines[0])
+            if not header_match:
+                continue
+                
+            page_num = header_match.group(1)
+            page_content = lines[1] if len(lines) > 1 else ""
 
             # Process lines
             lines = page_content.split("\n")
@@ -577,7 +723,7 @@ class AgendaProcessor:
         logger.info(f"Document has {page_count} pages")
 
         # Use different approach for short documents
-        if page_count <= 10:
+        if page_count <= 30:
             return self._summarize_short_agenda(text, rate_limit_delay)
         else:
             return self._summarize_long_agenda(text, rate_limit_delay)
@@ -766,31 +912,55 @@ class AgendaProcessor:
 
     def _save_text(self, text: str, filename: str) -> None:
         """Save text to file with UTF-8 encoding"""
-        with open(filename, "w", encoding="utf-8") as f:
+        # Sanitize filename to prevent directory traversal
+        safe_filename = sanitize_filename(filename)
+        with open(safe_filename, "w", encoding="utf-8") as f:
             f.write(text)
-        logger.info(f"Saved to {filename} ({len(text)} characters)")
+        logger.info(f"Saved to {safe_filename} ({len(text)} characters)")
 
     def download_packet(self, url: str, output_path: str = None) -> str:
         """Download PDF packet and save to file"""
-        if not url.startswith(("http://", "https://")):
-            raise ValueError("URL must start with http:// or https://")
+        # Validate URL for security
+        validate_url(url)
 
         if not output_path:
             output_path = "downloaded_packet.pdf"
+        
+        # Sanitize output path
+        safe_output_path = sanitize_filename(output_path)
 
-        logger.info(f"Downloading packet from: {url}")
+        logger.info(f"Downloading packet from: {url[:80]}...")
 
         try:
-            response = requests.get(url, timeout=30)
+            # Download with streaming and size limit
+            response = requests.get(url, timeout=30, stream=True, headers={
+                'User-Agent': 'Engagic-Agenda-Processor/1.0'
+            })
             response.raise_for_status()
+            
+            # Check content length
+            content_length = response.headers.get('content-length')
+            if content_length and int(content_length) > MAX_PDF_SIZE:
+                raise ValueError(f"PDF size {content_length} exceeds maximum allowed size of {MAX_PDF_SIZE} bytes")
+            
+            # Download with size checking
+            pdf_content = b''
+            downloaded = 0
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    downloaded += len(chunk)
+                    if downloaded > MAX_PDF_SIZE:
+                        raise ValueError(f"PDF size exceeds maximum allowed size of {MAX_PDF_SIZE} bytes")
+                    pdf_content += chunk
+                    
         except requests.RequestException as e:
             raise Exception(f"Failed to download PDF: {e}")
 
-        with open(output_path, "wb") as f:
-            f.write(response.content)
+        with open(safe_output_path, "wb") as f:
+            f.write(pdf_content)
 
-        logger.info(f"Packet saved to {output_path} ({len(response.content)} bytes)")
-        return output_path
+        logger.info(f"Packet saved to {safe_output_path} ({len(pdf_content)} bytes)")
+        return safe_output_path
     
 
     def download_and_process(
