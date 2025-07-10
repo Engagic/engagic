@@ -124,8 +124,36 @@ class AgendaProcessor:
                 ]
             )
 
-    def download_and_extract_text(self, url: str) -> str:
-        """Download PDF and extract text using smart extraction strategy"""
+    def download_and_extract_text(self, url) -> str:
+        """Download PDF(s) and extract text using smart extraction strategy
+        
+        Args:
+            url: Either a string URL or a list of URLs
+        """
+        # Handle list of URLs
+        if isinstance(url, list):
+            logger.info(f"Processing {len(url)} PDFs")
+            all_texts = []
+            for i, pdf_url in enumerate(url, 1):
+                try:
+                    logger.info(f"Processing PDF {i}/{len(url)}: {pdf_url[:80]}...")
+                    text = self._download_and_extract_single(pdf_url)
+                    all_texts.append(f"--- DOCUMENT {i} ---\n{text}")
+                except Exception as e:
+                    logger.error(f"Failed to process PDF {i}: {e}")
+                    continue
+            
+            if not all_texts:
+                raise Exception("No documents could be processed")
+            
+            # Combine all texts with clear separators
+            return "\n\n".join(all_texts)
+        else:
+            # Single URL
+            return self._download_and_extract_single(url)
+    
+    def _download_and_extract_single(self, url: str) -> str:
+        """Download a single PDF and extract text"""
         logger.info(f"Downloading and processing PDF from: {url}")
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -673,7 +701,7 @@ class AgendaProcessor:
             # Merge meeting data with city info
             full_meeting_data = {**meeting_data, **city_info}
 
-            # Process the agenda
+            # Process the agenda - download_and_extract_text now handles both single URLs and lists
             summary = self.process_agenda(
                 packet_url, save_raw=False, save_cleaned=False
             )
@@ -703,14 +731,14 @@ class AgendaProcessor:
 
     def process_agenda(
         self,
-        url: str,
+        url,  # Can be string or list
         english_threshold: float = 0.7,
         save_raw: bool = True,
         save_cleaned: bool = True,
     ) -> str:
         """Complete pipeline: download → clean → summarize"""
         try:
-            # Extract text
+            # Extract text (handles both single URLs and lists)
             raw_text = self.download_and_extract_text(url)
 
             if save_raw:
@@ -763,6 +791,7 @@ class AgendaProcessor:
 
         logger.info(f"Packet saved to {output_path} ({len(response.content)} bytes)")
         return output_path
+    
 
     def download_and_process(
         self, url: str, english_threshold: float = 0.7, save_files: bool = True
