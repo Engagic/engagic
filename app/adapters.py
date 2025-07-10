@@ -5,7 +5,8 @@ import json
 import os
 from urllib.parse import urlencode, urljoin, urlparse, parse_qs
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
+from pdf_scraper_utils import deep_scrape_pdfs
 
 logger = logging.getLogger("engagic")
 
@@ -688,3 +689,438 @@ class NovusAgendaAdapter():
         except Exception as e:
             logger.error(f"Failed to fetch NovusAgenda meetings for {self.slug}: {e}")
             raise
+
+class CivicPlusAdapter:
+    def __init__(self, city_slug: str):
+        if not city_slug:
+            raise ValueError("city_slug required")
+        self.city_slug = city_slug
+        self.base_url = f"https://{city_slug}.civicplus.com"
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Engagic/1.0 (Civic Engagement Bot)'
+        })
+        logger.info(f"Initialized CivicPlus adapter for {city_slug}")
+    
+    def _find_agenda_url(self):
+        """Find the agenda page URL - first check homepage for external redirects"""
+        logger.info(f"Finding agenda URL for {self.city_slug}")
+        
+        # FIRST: Check homepage for external agenda links (like MunicodeMetings)
+        logger.info(f"Checking homepage for external agenda system links")
+        try:
+            resp = self.session.get(self.base_url, timeout=10)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                
+                # Look for links with "agenda" in text that go to external systems
+                agenda_links = []
+                for link in soup.find_all('a', href=True):
+                    link_text = link.get_text().strip().lower()
+                    href = link['href']
+                    
+                    # Check if link text contains agenda-related keywords
+                    if any(word in link_text for word in ['agenda', 'meeting', 'minutes']):
+                        # Check if it's an external link (not CivicPlus)
+                        if href.startswith('http') and 'civicplus.com' not in href:
+                            agenda_links.append({
+                                'text': link.get_text().strip(),
+                                'url': href,
+                                'domain': urlparse(href).netloc
+                            })
+                
+                if agenda_links:
+                    logger.info(f"Found {len(agenda_links)} external agenda links on homepage:")
+                    for link_info in agenda_links:
+                        logger.info(f"  - '{link_info['text']}' -> {link_info['domain']}")
+                    
+                    # Check for known meeting systems
+                    known_systems = {
+                        'municodemeetings.com': 'municode',
+                        'granicus.com': 'granicus',
+                        'legistar.com': 'legistar',
+                        'primegov.com': 'primegov',
+                        'civicclerk.com': 'civicclerk',
+                        'novusagenda.com': 'novusagenda',
+                        'iqm2.com': 'granicus',
+                        'destinyhosted.com': 'destiny'
+                    }
+                    
+                    for link_info in agenda_links:
+                        for domain_pattern, vendor in known_systems.items():
+                            if domain_pattern in link_info['domain']:
+                                logger.warning(f"⚠️  This city uses {vendor} ({link_info['domain']}), not CivicPlus!")
+                                logger.warning(f"    Update discovered_cities.json: {self.city_slug} -> vendor: '{vendor}'")
+                                # Still try to process with CivicPlus adapter as fallback
+                                break
+                
+        except Exception as e:
+            logger.debug(f"Failed to check homepage: {e}")
+        
+        # THEN: Try standard CivicPlus agenda URLs
+        logger.info(f"Trying standard CivicPlus agenda URLs")
+        agenda_urls = [
+            f"{self.base_url}/agendacenter",
+            f"{self.base_url}/AgendaCenter",
+            f"{self.base_url}/Government/Agendas",
+            f"{self.base_url}/Agendas",
+            f"{self.base_url}/Meetings"
+        ]
+        
+        for url in agenda_urls:
+            try:
+                logger.debug(f"Trying agenda URL: {url}")
+                resp = self.session.get(url, timeout=10)
+                logger.debug(f"Response status: {resp.status_code}")
+                
+                if resp.status_code == 200:
+                    # Check if it's actually an agenda page
+                    text_lower = resp.text.lower()
+                    keywords_found = [kw for kw in ['agenda', 'meeting', 'council'] if kw in text_lower]
+                    
+                    if keywords_found:
+                        logger.info(f"✓ Found agenda page at {url} (keywords: {keywords_found})")
+                        return url
+                    else:
+                        logger.debug(f"Page exists but no agenda keywords found at {url}")
+                else:
+                    logger.debug(f"Non-200 response ({resp.status_code}) for {url}")
+            except Exception as e:
+                logger.debug(f"Failed to fetch {url}: {type(e).__name__}: {str(e)[:100]}")
+                continue
+        
+        # If no standard URL works, search homepage for agenda links
+        logger.info(f"Standard URLs failed, searching homepage for CivicPlus agenda links")
+        try:
+            resp = self.session.get(self.base_url, timeout=10)
+            logger.debug(f"Homepage status: {resp.status_code}")
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            
+            agenda_links_found = []
+            for link in soup.find_all('a', href=True):
+                href = link['href']
+                text = link.get_text().strip().lower()
+                
+                if any(word in text for word in ['agenda', 'meeting', 'council']):
+                    if href.startswith('http'):
+                        url = href
+                    else:
+                        url = urljoin(self.base_url, href)
+                    
+                    agenda_links_found.append((text[:50], url))
+                    
+                    # Make sure it's still on CivicPlus
+                    if 'civicplus.com' in url:
+                        logger.info(f"✓ Found agenda link on homepage: '{text[:50]}' -> {url}")
+                        return url
+            
+            if agenda_links_found:
+                logger.debug(f"Found {len(agenda_links_found)} agenda-related links but none on CivicPlus")
+                for text, url in agenda_links_found[:3]:
+                    logger.debug(f"  - '{text}' -> {url}")
+        except Exception as e:
+            logger.warning(f"Failed to search homepage: {type(e).__name__}: {str(e)[:100]}")
+        
+        # Default to agendacenter
+        default_url = f"{self.base_url}/agendacenter"
+        logger.warning(f"No agenda URL found, defaulting to {default_url}")
+        return default_url
+    
+    def _parse_agenda_item(self, item):
+        """Parse a single agenda item from CivicPlus"""
+        try:
+            # CivicPlus usually has structure like:
+            # <div class="agenda-item">
+            #   <h3>Meeting Name</h3>
+            #   <div class="date">Date</div>
+            #   <a href="/DocumentCenter/View/123/Agenda-PDF">Agenda</a>
+            # </div>
+            
+            meeting_info = {}
+            item_text = item.get_text().strip()
+            logger.debug(f"Parsing agenda item: {item_text[:100]}...")
+            
+            # Try to find meeting name
+            title_elem = item.find(['h3', 'h4', 'h5', 'strong', 'b'])
+            if title_elem:
+                meeting_info['meeting_name'] = title_elem.get_text().strip()
+                logger.debug(f"  Found title: {meeting_info['meeting_name']}")
+            else:
+                # Fallback - use first text
+                meeting_info['meeting_name'] = item_text[:100]
+                logger.debug(f"  No title element, using text: {meeting_info['meeting_name']}")
+            
+            # Skip generic UI elements
+            generic_names = ['tools', 'search', 'filter', 'sort', 'view', 'options', 'settings', 
+                           'agenda center', 'document center', 'home', 'back', 'next', 'previous']
+            if meeting_info['meeting_name'].lower().strip() in generic_names:
+                logger.debug(f"  Skipping generic UI element: {meeting_info['meeting_name']}")
+                return None
+            
+            # Try to find date
+            date_text = None
+            date_elem = item.find(class_=re.compile(r'date|time|when'))
+            if date_elem:
+                date_text = date_elem.get_text().strip()
+                logger.debug(f"  Found date element: {date_text}")
+            else:
+                # Search for date pattern
+                date_match = re.search(r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4}\b', 
+                                     item.get_text(), re.IGNORECASE)
+                if date_match:
+                    date_text = date_match.group()
+                    logger.debug(f"  Found date pattern: {date_text}")
+            
+            if date_text:
+                # Try parsing common date formats
+                for fmt in ['%B %d, %Y', '%b %d, %Y', '%m/%d/%Y', '%Y-%m-%d']:
+                    try:
+                        meeting_info['meeting_date'] = datetime.strptime(date_text, fmt)
+                        logger.debug(f"  Parsed date: {meeting_info['meeting_date']}")
+                        break
+                    except:
+                        continue
+                
+                if 'meeting_date' not in meeting_info:
+                    logger.debug(f"  Could not parse date: {date_text}")
+                    meeting_info['meeting_date'] = None
+            else:
+                logger.debug(f"  No date found in item")
+            
+            # Find PDF link
+            pdf_link = None
+            all_links = item.find_all('a', href=True)
+            logger.debug(f"  Found {len(all_links)} links in item")
+            
+            for link in all_links:
+                href = link['href']
+                link_text = link.get_text().lower()
+                
+                # Skip generic DocumentCenter links
+                if '/documentcenter' in href.lower() and '/view/' not in href.lower():
+                    continue
+                
+                # Look for agenda/packet links
+                if any(word in link_text for word in ['agenda', 'packet', 'pdf', 'download']):
+                    if href.startswith('http'):
+                        pdf_link = href
+                    else:
+                        pdf_link = urljoin(self.base_url, href)
+                    logger.debug(f"  Found agenda link by text '{link_text[:30]}': {pdf_link}")
+                    break
+                
+                # Also check href for PDF or specific document view
+                if '.pdf' in href.lower() or '/documentcenter/view/' in href.lower():
+                    if href.startswith('http'):
+                        pdf_link = href
+                    else:
+                        pdf_link = urljoin(self.base_url, href)
+                    logger.debug(f"  Found PDF link by URL pattern: {pdf_link}")
+                    break
+            
+            if pdf_link:
+                # Check if this is a direct PDF or needs deep scraping
+                # CivicPlus ViewFile URLs are direct PDFs even without .pdf extension
+                if '.pdf' in pdf_link.lower() or '/ViewFile/' in pdf_link:
+                    meeting_info['packet_url'] = pdf_link
+                    logger.info(f"  ✓ Direct PDF: {pdf_link}")
+                else:
+                    # This might be a detail page with nested PDFs
+                    logger.info(f"  Deep scraping {pdf_link} for nested PDFs")
+                    nested_pdfs = deep_scrape_pdfs(pdf_link, self.base_url, max_depth=2)
+                    if nested_pdfs:
+                        logger.info(f"  ✓ Found {len(nested_pdfs)} nested PDFs")
+                        for i, pdf in enumerate(nested_pdfs[:3]):
+                            logger.debug(f"    PDF {i+1}: {pdf}")
+                        if len(nested_pdfs) > 3:
+                            logger.debug(f"    ... and {len(nested_pdfs) - 3} more")
+                        meeting_info['packet_url'] = nested_pdfs  # List of PDFs like Legistar
+                    else:
+                        logger.warning(f"  No nested PDFs found, using original link: {pdf_link}")
+                        meeting_info['packet_url'] = pdf_link  # Fallback to original link
+                
+                meeting_info['meeting_id'] = self._extract_meeting_id(pdf_link)
+                return meeting_info
+            else:
+                logger.debug(f"  No PDF link found in item")
+            
+        except Exception as e:
+            logger.error(f"Error parsing agenda item: {e}")
+        
+        return None
+    
+    def _extract_meeting_id(self, url):
+        """Extract a meeting ID from URL"""
+        # Try to find numeric ID in URL
+        match = re.search(r'/(\d{3,})', url)
+        if match:
+            return match.group(1)
+        
+        # Fallback to URL hash
+        return str(hash(url))[-8:]
+    
+    def all_meetings(self):
+        """Fetch all available meetings from CivicPlus"""
+        meetings = []
+        
+        try:
+            # Find the agenda page
+            agenda_url = self._find_agenda_url()
+            
+            # Add date range parameters (today to 2 weeks from now)
+            today = datetime.now()
+            two_weeks = today + timedelta(days=14)
+            
+            # Format dates as MM/DD/YYYY for CivicPlus
+            start_date = today.strftime('%m/%d/%Y')
+            end_date = two_weeks.strftime('%m/%d/%Y')
+            
+            # Build search URL with date parameters
+            search_params = f"/Search/?term=&CIDs=all&startDate={start_date}&endDate={end_date}&dateRange=&dateSelector="
+            
+            # If agenda_url ends with /agendacenter, append search params
+            if agenda_url.lower().endswith('/agendacenter'):
+                agenda_url_with_dates = agenda_url.rstrip('/') + search_params
+            else:
+                # For other URLs, try to use the base URL + agendacenter + search
+                agenda_url_with_dates = f"{self.base_url}/agendacenter{search_params}"
+            
+            logger.info(f"Fetching meetings from {start_date} to {end_date}")
+            logger.info(f"URL: {agenda_url_with_dates}")
+            
+            resp = self.session.get(agenda_url_with_dates, timeout=30)
+            resp.raise_for_status()
+            logger.info(f"Successfully loaded agenda page, status: {resp.status_code}")
+            
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            
+            # CivicPlus has various structures, try multiple selectors
+            selectors = [
+                'div.agendaItem',
+                'div.agenda-item',
+                'div.meeting-item',
+                'div.MeetingItem',
+                'tr.agendaRow',
+                'div.widgetRow',
+                'article.meeting',
+                'li.meeting-list-item',
+                # Search results specific selectors
+                'div.searchResult',
+                'div.result-item',
+                'table.agendaTable tr'
+            ]
+            
+            items = []
+            for selector in selectors:
+                items = soup.select(selector)
+                if items:
+                    logger.info(f"✓ Found {len(items)} items with selector: '{selector}'")
+                    break
+                else:
+                    logger.debug(f"No items found with selector: '{selector}'")
+            
+            if not items:
+                logger.info("No items found with standard selectors, trying fallback search")
+                # Fallback: look for any div/tr containing both a date and "agenda"
+                all_divs = soup.find_all(['div', 'tr', 'li', 'article'])
+                logger.debug(f"Scanning {len(all_divs)} elements for agenda items")
+                
+                for div in all_divs:
+                    text = div.get_text().lower()
+                    if 'agenda' in text and any(month in text for month in 
+                        ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']):
+                        items.append(div)
+                
+                if items:
+                    logger.info(f"✓ Found {len(items)} items using fallback search")
+                else:
+                    logger.warning(f"No agenda items found on page {agenda_url}")
+            
+            # If we're on a search results page, also look for direct ViewFile links
+            if '/Search/' in agenda_url_with_dates:
+                logger.info("Detected search results page, looking for direct ViewFile links")
+                viewfile_links = soup.find_all('a', href=re.compile(r'/ViewFile/Agenda/'))
+                
+                if viewfile_links:
+                    logger.info(f"Found {len(viewfile_links)} direct ViewFile agenda links")
+                    valid_viewfiles = 0
+                    
+                    for link in viewfile_links:
+                        href = link['href']
+                        text = link.get_text().strip()
+                        
+                        # Skip minutes and generic text
+                        if 'minutes' in text.lower():
+                            continue
+                        
+                        # Skip generic link text
+                        generic_texts = ['pdf', 'view', 'download', 'agenda', 'html', 'packet']
+                        if text.lower() in generic_texts:
+                            # Try to find better text from parent element
+                            parent = link.find_parent(['tr', 'div', 'li', 'td'])
+                            if parent:
+                                parent_text = parent.get_text().strip()
+                                # Look for meeting name pattern
+                                lines = parent_text.split('\n')
+                                for line in lines:
+                                    line = line.strip()
+                                    if line and line.lower() not in generic_texts and len(line) > 10:
+                                        text = line
+                                        break
+                        
+                        # Skip if still generic
+                        if text.lower() in generic_texts or len(text) < 5:
+                            logger.debug(f"Skipping generic ViewFile link: {text}")
+                            continue
+                            
+                        # Create meeting info from direct link
+                        meeting_info = {
+                            'meeting_name': text[:100],
+                            'packet_url': urljoin(self.base_url, href),
+                            'meeting_id': self._extract_meeting_id(href)
+                        }
+                        
+                        # Try to extract date from link
+                        date_match = re.search(r'_(\d{8})-', href)
+                        if date_match:
+                            date_str = date_match.group(1)
+                            try:
+                                meeting_info['meeting_date'] = datetime.strptime(date_str, '%m%d%Y')
+                            except:
+                                pass
+                        
+                        meetings.append(meeting_info)
+                        valid_viewfiles += 1
+                        logger.debug(f"Added direct ViewFile: {meeting_info['meeting_name']}")
+                    
+                    if valid_viewfiles > 0:
+                        logger.info(f"Added {valid_viewfiles} valid meetings from direct ViewFile links")
+                        return meetings  # Return early if we found direct links
+            
+            # Parse each item
+            logger.info(f"Parsing {len(items)} potential meeting items")
+            valid_meetings = 0
+            
+            for i, item in enumerate(items):
+                logger.debug(f"\n--- Processing item {i+1}/{len(items)} ---")
+                meeting = self._parse_agenda_item(item)
+                if meeting and 'packet_url' in meeting:
+                    meetings.append(meeting)
+                    valid_meetings += 1
+                    logger.info(f"✓ Valid meeting: {meeting.get('meeting_name', 'Unknown')[:50]}")
+                else:
+                    logger.debug(f"✗ Invalid/incomplete meeting item")
+            
+            logger.info(f"\nSummary: Found {valid_meetings} valid meetings with packets out of {len(items)} items for {self.city_slug}")
+            
+        except Exception as e:
+            logger.error(f"Error fetching CivicPlus meetings for {self.city_slug}: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.debug(traceback.format_exc())
+        
+        return meetings
+    
+    def upcoming_packets(self):
+        """Alias for all_meetings for compatibility"""
+        return self.all_meetings()
+
