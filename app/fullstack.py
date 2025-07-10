@@ -891,6 +891,7 @@ class AgendaProcessor:
                 self._save_text(raw_text, "raw_agenda.txt")
 
             # Clean text with configurable threshold
+            logger.info(f"Cleaning text for url: {url}")
             cleaned_text = self.clean_text(raw_text, english_threshold)
 
             if save_cleaned:
