@@ -1,6 +1,8 @@
 import re
 import requests
+import tempfile
 import logging
+import fitz
 import json
 import os
 from urllib.parse import urlencode, urljoin, urlparse, parse_qs
@@ -199,13 +201,7 @@ class GranicusAdapter:
 
         # Only process agenda links within the upcoming events table
         for a in upcoming_table.select("a"):
-            if a.string and "Agenda" in a.string:  # human-visible "Agenda"
-                href = a.get("href", "")
-                if not href:
-                    continue
-
-                agenda_url = self._absolute(href)
-
+            if a.string:
                 row = a.find_parent("tr")
                 if not row:
                     continue
@@ -214,44 +210,67 @@ class GranicusAdapter:
                     continue
                 title = cells[0].get_text(" ", strip=True)
                 start = cells[1].get_text(" ", strip=True)
+                date = self._normalize_date(start)
 
-                # Check if this is a direct PDF link
-                if ".pdf" in agenda_url.lower() or "GeneratedAgenda.ashx" in agenda_url:
-                    # Direct PDF link
-                    logger.debug(f"Found direct PDF link for {title}: {agenda_url}")
-                    yield {
-                        "meeting_id": self._clip_or_event_id(agenda_url),
-                        "title": title,
-                        "start": self._normalize_date(start),
-                        "packet_url": agenda_url,  # Single PDF
-                    }
-                elif "AgendaViewer.php" in agenda_url:
-                    # AgendaViewer page - need to extract PDFs
-                    try:
-                        pdf_urls = self._extract_pdfs_from_agenda(agenda_url)
-                        if pdf_urls:
-                            logger.info(
-                                f"Found {len(pdf_urls)} PDFs for meeting: {title}"
-                            )
-                            yield {
-                                "meeting_id": self._clip_or_event_id(agenda_url),
-                                "title": title,
-                                "start": self._normalize_date(start),
-                                "packet_url": pdf_urls,  # List of PDFs
-                            }
-                        else:
-                            logger.debug(
-                                f"No PDFs found for meeting: {title}, skipping"
-                            )
-                    except Exception as e:
-                        logger.debug(
-                            f"Could not extract PDFs for {title}, moving on: {e}"
-                        )
+                if "Agenda" in a.string:  # human-visible "Agenda"
+                    href = a.get("href", "")
+                    if not href:
                         continue
-                else:
-                    logger.debug(
-                        f"Skipping non-PDF/non-AgendaViewer link: {agenda_url}"
-                    )
+
+                    agenda_url = self._absolute(href)
+
+                    row = a.find_parent("tr")
+                    if not row:
+                        continue
+                    cells = row.find_all("td")
+                    if len(cells) < 2:
+                        continue
+                    title = cells[0].get_text(" ", strip=True)
+                    start = cells[1].get_text(" ", strip=True)
+
+                    # Check if this is a direct PDF link
+                    if ".pdf" in agenda_url.lower() or "GeneratedAgenda.ashx" in agenda_url:
+                        # Direct PDF link
+                        logger.debug(f"Found direct PDF link for {title}: {agenda_url}")
+                        yield {
+                            "meeting_id": self._clip_or_event_id(agenda_url),
+                            "title": title,
+                            "start": date,
+                            "packet_url": agenda_url,  # Single PDF
+                        }
+                    elif "AgendaViewer.php" in agenda_url:
+                        # AgendaViewer page - need to extract PDFs
+                        try:
+                            pdf_urls = self._extract_pdfs_from_agenda(agenda_url)
+                            if pdf_urls:
+                                logger.info(
+                                    f"Found {len(pdf_urls)} PDFs for meeting: {title}"
+                                )
+                                yield {
+                                    "meeting_id": self._clip_or_event_id(agenda_url),
+                                    "title": title,
+                                    "start": date,
+                                    "packet_url": pdf_urls,  # List of PDFs
+                                }
+                    else:
+                        logger.debug(
+                            f"Skipping non-PDF/non-AgendaViewer link: {agenda_url}"
+                        )
+            if not meeting_id:
+                # Use a hash of title + date as fallback ID
+                import hashlib
+
+                id_string = f"{title}_{date or 'no_date'}"
+                meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
+
+            return {
+                "meeting_id": meeting_id,
+                "title": title,
+                "start": date,
+                "packet_url": packet_url,  # Will be None, string URL, or list of URLs
+                "meeting_detail_url": meeting_detail_url,  # For debugging
+                "has_packet": packet_url is not None,
+            }
 
     def _discover_view_id(self, url):
         """Brute force discover the view_id by testing a range of IDs"""
@@ -451,8 +470,6 @@ class GranicusAdapter:
     def _extract_embedded_pdfs(self, pdf_url):
         """Download PDF and extract embedded PDF links from it"""
         try:
-            import tempfile
-            import fitz  # PyMuPDF
 
             logger.info(f"Downloading PDF to extract embedded links: {pdf_url}")
 
@@ -554,13 +571,6 @@ class LegistarAdapter:
                 yield meeting_data
 
         logger.info(f"Found {len(meetings_found)} total meetings")
-
-    def upcoming_packets(self):
-        """Get only meetings with packets (for backward compatibility)"""
-        # Get all meetings and filter for ones with packets
-        for meeting in self.all_meetings():
-            if meeting.get("packet_url"):
-                yield meeting
 
     def _extract_meeting_from_row(self, row):
         """Extract meeting data from a table row, return None if not a meeting row"""
@@ -1391,7 +1401,3 @@ class CivicPlusAdapter:
             logger.debug(traceback.format_exc())
 
         return meetings
-
-    def upcoming_packets(self):
-        """Alias for all_meetings for compatibility"""
-        return self.all_meetings()
