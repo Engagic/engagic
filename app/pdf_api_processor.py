@@ -869,12 +869,69 @@ If there are supporting documents or attachments mentioned, note what additional
             logger.error(f"Failed to cancel batch: {e}")
             return False
 
+    def process_single_pdf_chunked(self, pdf_url: str) -> str:
+        """Process large PDF by chunking it into smaller pieces"""
+        from pdf_chunker import PDFChunker
+        
+        logger.info(f"Processing large PDF via chunking: {pdf_url[:80]}...")
+        
+        chunker = PDFChunker()
+        try:
+            # Download the PDF
+            pdf_content = chunker.download_pdf(pdf_url)
+            
+            # Split into chunks
+            chunks = chunker.split_pdf_by_size(pdf_content)
+            logger.info(f"Split PDF into {len(chunks)} chunks")
+            
+            # Process each chunk
+            chunk_summaries = []
+            for chunk in chunks:
+                logger.info(f"Processing chunk {chunk.chunk_number + 1}/{chunk.total_chunks} "
+                          f"(pages {chunk.start_page + 1}-{chunk.end_page + 1}, {chunk.size_bytes:,} bytes)")
+                
+                # Create document block for chunk
+                document_block = self._create_document_block_base64(chunk.content)
+                
+                # Add chunk context to prompt if multiple chunks
+                prompt_blocks = [document_block]
+                
+                if chunk.total_chunks > 1:
+                    chunk_prompt = chunker.create_chunk_summary_prompt(chunk)
+                    prompt_blocks.append({"type": "text", "text": chunk_prompt})
+                
+                prompt_blocks.append(self._get_agenda_analysis_prompt(use_caching=True))
+                
+                # Process chunk
+                response = self.client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt_blocks}],
+                )
+                
+                chunk_summaries.append(response.content[0].text)
+                
+                # Track usage
+                if hasattr(response, "usage") and response.usage:
+                    self.cost_tracker.add_usage(response.usage.model_dump(), "claude-3-5-sonnet-20241022")
+            
+            # Combine summaries
+            final_summary = chunker.combine_chunk_summaries(chunk_summaries, chunks)
+            logger.info(f"Successfully processed PDF via chunking ({len(chunks)} chunks)")
+            return final_summary
+            
+        except Exception as e:
+            logger.error(f"Failed to process PDF via chunking: {e}")
+            raise
+
     def process(self, url: Union[str, List[str]], method: str = "url") -> str:
         """Main entry point - process single or multiple PDFs with specified method"""
         if isinstance(url, list):
             return self.process_multiple_pdfs(url, method)
         else:
-            if method == "base64":
+            if method == "chunked":
+                return self.process_single_pdf_chunked(url)
+            elif method == "base64":
                 return self.process_single_pdf_base64(url)
             elif method == "files" or self.use_files_api:
                 return self.process_single_pdf_files_api(url)
