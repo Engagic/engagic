@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
 from typing import Optional, List, Dict, Any
@@ -776,8 +776,30 @@ async def get_metrics():
         raise HTTPException(status_code=500, detail=f"Error fetching metrics: {str(e)}")
 
 
+async def verify_admin_token(authorization: str = Header(None)):
+    """Verify admin bearer token"""
+    if not config.ADMIN_TOKEN:
+        raise HTTPException(status_code=500, detail="Admin authentication not configured")
+    
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    
+    try:
+        scheme, token = authorization.split(" ")
+        if scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="Invalid authentication scheme")
+        
+        if token != config.ADMIN_TOKEN:
+            raise HTTPException(status_code=403, detail="Invalid admin token")
+            
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+    
+    return True
+
+
 @app.get("/api/admin/city-requests")
-async def get_city_requests():
+async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
     """Get top city requests for admin review"""
     try:
         top_requests = db.get_top_city_requests(50)
@@ -792,7 +814,7 @@ async def get_city_requests():
 
 
 @app.post("/api/admin/sync-city/{city_slug}")
-async def force_sync_city(city_slug: str):
+async def force_sync_city(city_slug: str, is_admin: bool = Depends(verify_admin_token)):
     """Force sync a specific city (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
     # Admin should use the daemon directly: python daemon.py --sync-city SLUG
@@ -806,7 +828,7 @@ async def force_sync_city(city_slug: str):
 
 
 @app.post("/api/admin/process-meeting")
-async def force_process_meeting(request: ProcessRequest):
+async def force_process_meeting(request: ProcessRequest, is_admin: bool = Depends(verify_admin_token)):
     """Force process a specific meeting (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
     # Admin should use the daemon directly
@@ -821,8 +843,38 @@ async def force_process_meeting(request: ProcessRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    import sys
+    import os
 
+    # Validate critical environment variables on startup
+    if not config.get_api_key():
+        logger.warning("WARNING: No LLM API key configured. AI features will be disabled.")
+        logger.warning("Set ANTHROPIC_API_KEY or LLM_API_KEY to enable AI summaries.")
+    
+    if not config.ADMIN_TOKEN:
+        logger.warning("WARNING: No admin token configured. Admin endpoints will not work.")
+        logger.warning("Set ENGAGIC_ADMIN_TOKEN to enable admin functionality.")
+    
     logger.info("Starting engagic API server...")
     logger.info(f"Configuration: {config.summary()}")
     logger.info(f"LLM processor: {'enabled' if processor else 'disabled'}")
+    
+    # Check if databases exist
+    for db_name, db_path in [
+        ("locations", config.LOCATIONS_DB_PATH),
+        ("meetings", config.MEETINGS_DB_PATH),
+        ("analytics", config.ANALYTICS_DB_PATH)
+    ]:
+        if not os.path.exists(db_path):
+            logger.warning(f"{db_name} database not found at {db_path}")
+            logger.info("Databases will be created automatically on first use")
+    
+    # Handle command line arguments
+    if len(sys.argv) > 1 and sys.argv[1] == "--init-db":
+        logger.info("Initializing databases...")
+        # Access the database manager to trigger creation
+        _ = db.get_cache_stats()
+        logger.info("Databases initialized successfully")
+        sys.exit(0)
+    
     uvicorn.run(app, host=config.API_HOST, port=config.API_PORT)
