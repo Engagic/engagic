@@ -1,19 +1,3 @@
-"""Engagic Agenda Processor - Process city council meeting packets using Claude's PDF API
-
-This module provides comprehensive PDF processing capabilities with multiple methods:
-1. URL-based processing (fastest, no download required)
-2. Base64 processing with caching (download once, cache for reuse)
-3. Files API processing (upload once, reference multiple times)
-4. OCR fallback for problematic PDFs
-
-Key Features:
-- Automatic method selection with fallback chain
-- Token usage estimation
-- Batch processing for high-volume workflows
-- Database caching of processed summaries
-- Support for multi-document agendas
-"""
-
 import os
 import time
 import logging
@@ -23,7 +7,7 @@ import sys
 from typing import List, Dict, Any
 from databases import DatabaseManager
 from config import config
-from pdf_api_processor import PDFAPIProcessor, MAX_PDF_API_PAGES
+from pdf_api_processor import PDFAPIProcessor
 from pdf_ocr_extractor import PDFOCRExtractor, validate_url, sanitize_filename
 import requests
 
@@ -49,30 +33,18 @@ class AgendaProcessor:
         )
         
         # Initialize both PDF processors
-        # Can configure to use Files API by default with use_files_api=True
-        self.pdf_api_processor = PDFAPIProcessor(self.api_key, use_files_api=False)
+        self.pdf_api_processor = PDFAPIProcessor(self.api_key)
         self.pdf_ocr_extractor = PDFOCRExtractor()
 
-    def _process_with_pdf_api(self, url, method="url"):
-        """Try to process PDF using the new PDF API with multiple methods"""
+    def _process_with_pdf_api(self, url):
+        """Try to process PDF using the new PDF API"""
         try:
-            logger.info(f"Attempting to process with PDF API using {method} method...")
-            
-            # Log token estimation if single URL
-            if isinstance(url, str):
-                # Try to get page count from PDF metadata (simplified estimation)
-                valid, _, size = self.pdf_api_processor.validate_pdf_for_api(url)
-                if size:
-                    # Rough estimate: 3KB per page
-                    estimated_pages = min(size // 3000, MAX_PDF_API_PAGES)
-                    token_estimate = self.pdf_api_processor.estimate_tokens(estimated_pages)
-                    logger.info(f"Estimated token usage: {token_estimate['total_tokens']:,} tokens for ~{estimated_pages} pages")
-            
-            summary = self.pdf_api_processor.process(url, method=method)
-            logger.info(f"Successfully processed with PDF API ({method} method)")
-            return summary, f"pdf_api_{method}"
+            logger.info("Attempting to process with PDF API...")
+            summary = self.pdf_api_processor.process(url)
+            logger.info("Successfully processed with PDF API")
+            return summary, "pdf_api"
         except Exception as e:
-            logger.warning(f"PDF API processing failed with {method} method: {e}")
+            logger.warning(f"PDF API processing failed: {e}")
             raise
     
     def _process_with_ocr(self, url, english_threshold=0.7):
@@ -807,13 +779,8 @@ class AgendaProcessor:
 
         return "\n".join(summaries)
 
-    def process_agenda_with_cache(self, meeting_data: Dict[str, Any], pdf_method: str = "auto") -> Dict[str, Any]:
-        """Process agenda with database caching - main entry point for cached processing
-        
-        Args:
-            meeting_data: Meeting information including packet_url
-            pdf_method: PDF processing method (auto, url, base64, files, ocr)
-        """
+    def process_agenda_with_cache(self, meeting_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process agenda with database caching - main entry point for cached processing"""
         packet_url = meeting_data["packet_url"]
 
         # Check cache first
@@ -825,7 +792,6 @@ class AgendaProcessor:
                 "processing_time": cached_meeting["processing_time_seconds"],
                 "cached": True,
                 "meeting_data": cached_meeting,
-                "processing_method": cached_meeting.get("processing_method", "unknown"),
             }
 
         # Cache miss - process the agenda
@@ -840,31 +806,20 @@ class AgendaProcessor:
             # Merge meeting data with city info
             full_meeting_data = {**meeting_data, **city_info}
 
-            # Process the agenda with specified method
+            # Process the agenda - download_and_extract_text now handles both single URLs and lists
             summary = self.process_agenda(
-                packet_url, 
-                save_raw=False, 
-                save_cleaned=False,
-                pdf_method=pdf_method
+                packet_url, save_raw=False, save_cleaned=False
             )
             processing_time = time.time() - start_time
-            
-            # Track which method succeeded
-            processing_method = pdf_method
-            if pdf_method == "auto":
-                # Try to determine which method actually worked based on logs
-                # This is simplified - in production you'd track this properly
-                processing_method = "pdf_api"  # Default assumption
 
-            # Store in database with processing method
-            full_meeting_data["processing_method"] = processing_method
+            # Store in database
             vendor = meeting_data.get("vendor")
             meeting_id = self.db.store_meeting_summary(
                 full_meeting_data, summary, processing_time
             )
 
             logger.info(
-                f"Processed and cached agenda {packet_url} in {processing_time:.1f}s using {processing_method} (ID: {meeting_id})"
+                f"Processed and cached agenda {packet_url} in {processing_time:.1f}s (ID: {meeting_id})"
             )
 
             return {
@@ -873,7 +828,6 @@ class AgendaProcessor:
                 "cached": False,
                 "meeting_data": full_meeting_data,
                 "meeting_id": meeting_id,
-                "processing_method": processing_method,
             }
 
         except Exception as e:
@@ -886,69 +840,24 @@ class AgendaProcessor:
         english_threshold: float = 0.7,
         save_raw: bool = True,
         save_cleaned: bool = True,
-        pdf_method: str = "auto",  # auto, url, base64, files, ocr
     ) -> str:
-        """Complete pipeline with multiple PDF processing approaches
+        """Complete pipeline with dual approach: PDF API first, then OCR fallback"""
         
-        Args:
-            url: PDF URL or list of URLs
-            english_threshold: For OCR fallback
-            save_raw: Save raw text output
-            save_cleaned: Save cleaned text output
-            pdf_method: Processing method - auto (tries url->base64->ocr), url, base64, files, or ocr
-        """
-        
-        if pdf_method == "auto":
-            # Try URL method first (fastest, no download)
-            try:
-                summary, method = self._process_with_pdf_api(url, "url")
-                logger.info(f"Successfully processed using {method}")
-                
-                if save_raw or save_cleaned:
-                    self._save_text(summary, "agenda_summary.txt")
-                    logger.info("Complete! Summary saved to agenda_summary.txt")
-                
-                return summary
-                
-            except Exception as url_error:
-                logger.warning(f"URL method failed: {url_error}")
-                
-                # Try base64 with caching (download once, cache for reuse)
-                try:
-                    summary, method = self._process_with_pdf_api(url, "base64")
-                    logger.info(f"Successfully processed using {method}")
-                    
-                    if save_raw or save_cleaned:
-                        self._save_text(summary, "agenda_summary.txt")
-                        logger.info("Complete! Summary saved to agenda_summary.txt")
-                    
-                    return summary
-                    
-                except Exception as base64_error:
-                    logger.warning(f"Base64 method failed: {base64_error}")
-                    
-                    # Final fallback to OCR
-                    try:
-                        summary, method = self._process_with_ocr(url, english_threshold)
-                        logger.info(f"Successfully processed using {method}")
-                        
-                        if save_raw or save_cleaned:
-                            self._save_text(summary, "agenda_summary.txt")
-                            logger.info("Complete! Summary saved to agenda_summary.txt")
-                        
-                        return summary
-                        
-                    except Exception as ocr_error:
-                        logger.error(f"All processing methods failed")
-                        logger.error(f"URL error: {url_error}")
-                        logger.error(f"Base64 error: {base64_error}")
-                        logger.error(f"OCR error: {ocr_error}")
-                        
-                        # Return a user-friendly error message
-                        return "Unable to process this PDF document. The file may be corrupted, password-protected, or in an unsupported format."
-        
-        elif pdf_method == "ocr":
-            # Direct OCR processing
+        # First, try the PDF API approach
+        try:
+            summary, method = self._process_with_pdf_api(url)
+            logger.info(f"Successfully processed using {method}")
+            
+            if save_raw or save_cleaned:
+                self._save_text(summary, "agenda_summary.txt")
+                logger.info("Complete! Summary saved to agenda_summary.txt")
+            
+            return summary
+            
+        except Exception as pdf_api_error:
+            logger.warning(f"PDF API failed: {pdf_api_error}")
+            
+            # Fallback to OCR approach
             try:
                 summary, method = self._process_with_ocr(url, english_threshold)
                 logger.info(f"Successfully processed using {method}")
@@ -959,41 +868,13 @@ class AgendaProcessor:
                 
                 return summary
                 
-            except Exception as e:
-                logger.error(f"OCR processing failed: {e}")
-                return "Unable to process this PDF document using OCR."
-        
-        else:
-            # Use specified PDF API method
-            try:
-                summary, method = self._process_with_pdf_api(url, pdf_method)
-                logger.info(f"Successfully processed using {method}")
+            except Exception as ocr_error:
+                logger.error(f"Both processing methods failed")
+                logger.error(f"PDF API error: {pdf_api_error}")
+                logger.error(f"OCR error: {ocr_error}")
                 
-                if save_raw or save_cleaned:
-                    self._save_text(summary, "agenda_summary.txt")
-                    logger.info("Complete! Summary saved to agenda_summary.txt")
-                
-                return summary
-                
-            except Exception as e:
-                logger.error(f"{pdf_method} method failed: {e}")
-                
-                # Try OCR as fallback unless explicitly disabled
-                if pdf_method != "ocr":
-                    try:
-                        logger.info("Falling back to OCR...")
-                        summary, method = self._process_with_ocr(url, english_threshold)
-                        logger.info(f"Successfully processed using {method}")
-                        
-                        if save_raw or save_cleaned:
-                            self._save_text(summary, "agenda_summary.txt")
-                            logger.info("Complete! Summary saved to agenda_summary.txt")
-                        
-                        return summary
-                    except Exception as ocr_error:
-                        logger.error(f"OCR fallback also failed: {ocr_error}")
-                
-                return f"Unable to process PDF using {pdf_method} method."
+                # Return a user-friendly error message
+                return "Unable to process this PDF document. The file may be corrupted, password-protected, or in an unsupported format."
 
     def _save_text(self, text: str, filename: str) -> None:
         """Save text to file with UTF-8 encoding"""
@@ -1113,38 +994,6 @@ class AgendaProcessor:
             logger.info("Full pipeline complete - all files saved")
 
         return result
-    
-    def process_batch_agendas(self, pdf_requests: List[Dict[str, Any]]) -> str:
-        """Process multiple agendas using batch API for efficiency
-        
-        Args:
-            pdf_requests: List of dicts with 'url' and optional 'prompt' keys
-            
-        Returns:
-            Batch job ID for tracking
-        """
-        logger.info(f"Processing batch of {len(pdf_requests)} agendas")
-        
-        try:
-            # Validate all URLs first
-            for i, req in enumerate(pdf_requests):
-                url = req.get("url")
-                if not url:
-                    raise ValueError(f"Request {i} missing 'url' field")
-                
-                valid, error_msg, _ = self.pdf_api_processor.validate_pdf_for_api(url)
-                if not valid:
-                    logger.warning(f"PDF {i} validation failed: {error_msg}")
-            
-            # Submit batch job
-            batch_id = self.pdf_api_processor.process_batch(pdf_requests)
-            logger.info(f"Batch processing initiated: {batch_id}")
-            
-            return batch_id
-            
-        except Exception as e:
-            logger.error(f"Batch processing failed: {e}")
-            raise
 
 
 def create_cli_parser():
@@ -1204,17 +1053,6 @@ Examples:
     parser.add_argument(
         "--api-key", help="Anthropic API key (or set ANTHROPIC_API_KEY env var)"
     )
-    parser.add_argument(
-        "--pdf-method",
-        choices=["auto", "url", "base64", "files", "ocr"],
-        default="auto",
-        help="PDF processing method (default: auto - tries url->base64->ocr)",
-    )
-    parser.add_argument(
-        "--use-files-api",
-        action="store_true",
-        help="Use Files API for PDF processing (uploads PDFs for reuse)",
-    )
 
     return parser
 
@@ -1259,30 +1097,18 @@ def main():
 
         elif args.full_pipeline:
             logger.info("=== FULL PIPELINE ===")
-            
-            # Configure processor with Files API if requested
-            if args.use_files_api:
-                processor.pdf_api_processor.use_files_api = True
-                logger.info("Using Files API for PDF processing")
-            
-            # Use new process_agenda method instead of full_pipeline
-            summary = processor.process_agenda(
-                args.full_pipeline, 
-                english_threshold=args.threshold,
-                save_raw=save_files,
-                save_cleaned=save_files,
-                pdf_method=args.pdf_method
+            result = processor.full_pipeline(
+                args.full_pipeline, args.threshold, save_files
             )
-            
             logger.info(
-                f"Success! Generated summary with {len(summary)} characters"
+                f"Success! Generated summary with {len(result['summary'])} characters"
             )
             logger.info("=" * 50)
             logger.info("SUMMARY PREVIEW:")
             logger.info("=" * 50)
             # Show first 500 characters of summary
-            preview = summary[:500]
-            if len(summary) > 500:
+            preview = result["summary"][:500]
+            if len(result["summary"]) > 500:
                 preview += "...\n[truncated - see full summary in saved file]"
             logger.info(preview)
 

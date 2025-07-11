@@ -78,11 +78,12 @@ class DatabaseViewer:
 
     def show_meetings_table(self, limit=20):
         """Display meetings table with city information"""
-        # First get meetings
+        # First get meetings with summaries
         with self.db.meetings.get_connection() as conn:
             cursor = conn.execute("""
                 SELECT id, meeting_name, meeting_date, packet_url, city_slug,
                        processed_summary IS NOT NULL as has_summary,
+                       processed_summary,
                        created_at, last_accessed
                 FROM meetings
                 ORDER BY created_at DESC
@@ -124,6 +125,16 @@ class DatabaseViewer:
             packet_url = row["packet_url"] if row["packet_url"] else ""
             print(f"{row['id']:<4} {row['city_name'][:19]:<20} {meeting_name:<25} "
                  f"{meeting_date:<12} {has_summary:<8} {created:<12} {packet_url}")
+            
+            # Display full summary if available
+            if row['processed_summary']:
+                print("\n    Summary:")
+                print("    " + "-" * 80)
+                # Split summary into lines and indent
+                summary_lines = row['processed_summary'].split('\n')
+                for line in summary_lines:
+                    print(f"    {line}")
+                print("    " + "-" * 80 + "\n")
 
     def show_usage_metrics(self, limit=20):
         """Display recent usage metrics"""
