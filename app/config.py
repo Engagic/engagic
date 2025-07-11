@@ -50,6 +50,9 @@ class Config:
         # Logging
         self.LOG_LEVEL = os.getenv("ENGAGIC_LOG_LEVEL", "INFO").upper()
         
+        # Admin authentication
+        self.ADMIN_TOKEN = os.getenv("ENGAGIC_ADMIN_TOKEN", "")
+        
         # Validate configuration
         self._validate()
     

@@ -50,7 +50,14 @@ export async function searchMeetings(query: string): Promise<SearchResult> {
 	});
 
 	if (!response.ok) {
-		throw new Error(`Search failed: ${response.status}`);
+		if (response.status === 429) {
+			throw new Error('Too many requests. Please wait a moment and try again.');
+		} else if (response.status === 500) {
+			throw new Error('Server error. Please try again later.');
+		} else if (response.status === 404) {
+			throw new Error('Not found. Please check your search and try again.');
+		}
+		throw new Error(`Something went wrong. Please try again.`);
 	}
 
 	return response.json();
@@ -72,7 +79,12 @@ export async function getCachedSummary(meeting: Meeting, citySlug: string): Prom
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to get cached summary: ${response.status}`);
+		if (response.status === 429) {
+			throw new Error('Too many requests. Please wait a moment and try again.');
+		} else if (response.status === 500) {
+			throw new Error('Server error. Please try again later.');
+		}
+		throw new Error('Failed to load meeting summary. Please try again.');
 	}
 
 	return response.json();
