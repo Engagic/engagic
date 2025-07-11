@@ -12,6 +12,7 @@ from fullstack import AgendaProcessor
 from databases import DatabaseManager
 from uszipcode import SearchEngine
 from config import config
+from utils import generate_city_banana
 
 # Configure structured logging
 logging.basicConfig(
@@ -234,6 +235,14 @@ def sanitize_string(value: str) -> str:
     """Sanitize string input to prevent injection attacks"""
     if not value:
         return ""
+    
+    # Basic SQL injection prevention - reject obvious patterns
+    sql_patterns = [r"';\s*DROP", r"';\s*DELETE", r"';\s*UPDATE", r"';\s*INSERT", 
+                    r"--", r"/\*.*\*/", r"UNION\s+SELECT", r"OR\s+1\s*=\s*1"]
+    for pattern in sql_patterns:
+        if re.search(pattern, value, re.IGNORECASE):
+            raise ValueError("Invalid characters in input")
+    
     # Remove potentially dangerous characters
     sanitized = re.sub(r'[<>"\';()&+]', '', value.strip())
     return sanitized[:config.MAX_QUERY_LENGTH]
@@ -352,8 +361,9 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             "meetings": []
         }
     
-    # Get cached meetings
-    meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+    # Get cached meetings using city_banana
+    city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+    meetings = db.get_meetings_by_city(city_banana, 50)
     
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info.get('state', 'Unknown')}")
@@ -413,8 +423,9 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
     # Log search with city_id
     db.log_search(city_input, "city_name", city_id=city_info['id'])
     
-    # Get cached meetings
-    meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+    # Get cached meetings using city_banana
+    city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+    meetings = db.get_meetings_by_city(city_banana, 50)
     
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
@@ -474,8 +485,9 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
         # Log search with city_id
         db.log_search(original_input, "city_name", city_id=city_info['id'])
         
-        # Get meetings for this city
-        meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+        # Get meetings for this city using city_banana
+        city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+        meetings = db.get_meetings_by_city(city_banana, 50)
         
         if meetings:
             logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info['state']}")

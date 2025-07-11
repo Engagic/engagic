@@ -231,6 +231,20 @@ class GranicusAdapter:
             except Exception as e:
                 logger.debug(f"Error testing view_id {i} for {url}: {e}")
                 continue
+                
+        # If we couldn't find one with current year, try again without year check
+        logger.warning(f"No view_id found with {current_year} data, trying without year filter...")
+        for i in range(1, 101):
+            try:
+                response = requests.get(f"{tentative}{i}", headers=DEFAULT_HEADERS, timeout=30)
+                if response.status_code == 200:
+                    if "ViewPublisher" in response.text and ("Meeting" in response.text or "Agenda" in response.text):
+                        logger.warning(f"Found view_id {i} for {url} (but no {current_year} data - might be stale)")
+                        return i
+            except Exception as e:
+                logger.debug(f"Error testing view_id {i} for {url}: {e}")
+                continue
+        
         # If we get here, no valid view_id was found
         raise ValueError(f"Could not discover view_id for {url} in range 1-100")
 
@@ -1123,4 +1137,3 @@ class CivicPlusAdapter:
     def upcoming_packets(self):
         """Alias for all_meetings for compatibility"""
         return self.all_meetings()
-

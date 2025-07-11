@@ -16,7 +16,7 @@ class AnalyticsDatabase(BaseDatabase):
         -- Usage metrics table - track user behavior (minimal, privacy-focused)
         CREATE TABLE IF NOT EXISTS usage_metrics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city_slug TEXT,  -- Reference to city (no FK since it's in different DB)
+            city_banana TEXT,  -- Reference to city (no FK since it's in different DB)
             zipcode TEXT,
             search_query TEXT,
             search_type TEXT,
@@ -57,7 +57,7 @@ class AnalyticsDatabase(BaseDatabase):
         );
 
         -- Create indices for performance
-        CREATE INDEX IF NOT EXISTS idx_usage_city_slug ON usage_metrics(city_slug);
+        CREATE INDEX IF NOT EXISTS idx_usage_city_banana ON usage_metrics(city_banana);
         CREATE INDEX IF NOT EXISTS idx_usage_zipcode ON usage_metrics(zipcode);
         CREATE INDEX IF NOT EXISTS idx_usage_created_at ON usage_metrics(created_at);
         CREATE INDEX IF NOT EXISTS idx_city_requests_name_state ON city_requests(city_name, state);
@@ -67,17 +67,17 @@ class AnalyticsDatabase(BaseDatabase):
         """
         self.execute_script(schema)
     
-    def log_search(self, search_query: str, search_type: str, city_slug: str = None, 
+    def log_search(self, search_query: str, search_type: str, city_banana: str = None, 
                   zipcode: str = None, topic_flags: List[str] = None):
         """Log search activity (minimal data collection)"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO usage_metrics 
-                (city_slug, zipcode, search_query, search_type, topic_flags)
+                (city_banana, zipcode, search_query, search_type, topic_flags)
                 VALUES (?, ?, ?, ?, ?)
             """, (
-                city_slug,
+                city_banana,
                 zipcode,
                 search_query,
                 search_type,
@@ -201,14 +201,14 @@ class AnalyticsDatabase(BaseDatabase):
             
             # Get top cities and zipcodes
             cursor.execute("""
-                SELECT city_slug, COUNT(*) as count
+                SELECT city_banana, COUNT(*) as count
                 FROM usage_metrics 
-                WHERE DATE(created_at) = ? AND city_slug IS NOT NULL
-                GROUP BY city_slug 
+                WHERE DATE(created_at) = ? AND city_banana IS NOT NULL
+                GROUP BY city_banana 
                 ORDER BY count DESC 
                 LIMIT 10
             """, (date,))
-            top_cities = [{"city_slug": row[0], "count": row[1]} for row in cursor.fetchall()]
+            top_cities = [{"city_banana": row[0], "count": row[1]} for row in cursor.fetchall()]
             
             cursor.execute("""
                 SELECT zipcode, COUNT(*) as count
