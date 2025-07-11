@@ -17,7 +17,7 @@ class MeetingsDatabase(BaseDatabase):
         -- Meetings table - meeting data cache
         CREATE TABLE IF NOT EXISTS meetings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city_slug TEXT NOT NULL,  -- Reference to city (no FK since it's in different DB)
+            city_banana TEXT NOT NULL,  -- Reference to city (no FK since it's in different DB)
             meeting_id TEXT,
             meeting_name TEXT,
             meeting_date DATETIME,
@@ -46,7 +46,7 @@ class MeetingsDatabase(BaseDatabase):
         );
 
         -- Create indices for performance
-        CREATE INDEX IF NOT EXISTS idx_meetings_city_slug ON meetings(city_slug);
+        CREATE INDEX IF NOT EXISTS idx_meetings_city_banana ON meetings(city_banana);
         CREATE INDEX IF NOT EXISTS idx_meetings_packet_url ON meetings(packet_url);
         CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(meeting_date);
         CREATE INDEX IF NOT EXISTS idx_cache_url ON processing_cache(packet_url);
@@ -56,11 +56,11 @@ class MeetingsDatabase(BaseDatabase):
     
     def store_meeting_data(self, meeting_data: Dict[str, Any]) -> int:
         """Store meeting data"""
-        city_slug = meeting_data.get('city_slug')
-        logger.debug(f"Storing meeting data for {city_slug}: {meeting_data.get('meeting_name', 'Unknown')}")
+        city_banana = meeting_data.get('city_banana')
+        logger.debug(f"Storing meeting data for {city_banana}: {meeting_data.get('meeting_name', 'Unknown')}")
         
-        if not city_slug:
-            raise ValueError("city_slug required in meeting_data")
+        if not city_banana:
+            raise ValueError("city_banana required in meeting_data")
         
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -76,10 +76,10 @@ class MeetingsDatabase(BaseDatabase):
             # Insert meeting
             cursor.execute("""
                 INSERT OR REPLACE INTO meetings 
-                (city_slug, meeting_id, meeting_name, meeting_date, packet_url, meeting_hash, last_accessed)
+                (city_banana, meeting_id, meeting_name, meeting_date, packet_url, meeting_hash, last_accessed)
                 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
-                city_slug,
+                city_banana,
                 meeting_data.get('meeting_id'),
                 meeting_data.get('meeting_name'),
                 meeting_data.get('meeting_date'),
@@ -131,28 +131,28 @@ class MeetingsDatabase(BaseDatabase):
             existing_hash = result[0]
             return existing_hash != new_hash  # Changed if hashes differ
     
-    def get_city_meeting_frequency(self, city_slug: str, days: int = 30) -> int:
+    def get_city_meeting_frequency(self, city_banana: str, days: int = 30) -> int:
         """Get meeting count for a city in the last N days"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """SELECT COUNT(*) FROM meetings 
-                   WHERE city_slug = ? 
+                   WHERE city_banana = ? 
                    AND created_at >= datetime('now', '-{} days')""".format(days),
-                (city_slug,)
+                (city_banana,)
             )
             
             result = cursor.fetchone()
             return result[0] if result else 0
     
-    def get_city_last_sync(self, city_slug: str) -> Optional[datetime]:
+    def get_city_last_sync(self, city_banana: str) -> Optional[datetime]:
         """Get the last sync time for a city"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """SELECT MAX(created_at) FROM meetings 
-                   WHERE city_slug = ?""",
-                (city_slug,)
+                   WHERE city_banana = ?""",
+                (city_banana,)
             )
             
             result = cursor.fetchone()
@@ -163,11 +163,11 @@ class MeetingsDatabase(BaseDatabase):
     def store_meeting_summary(self, meeting_data: Dict[str, Any], summary: str, 
                             processing_time: float) -> int:
         """Store processed meeting summary"""
-        city_slug = meeting_data.get('city_slug')
-        logger.info(f"Storing meeting summary for {city_slug}: {len(summary)} chars, {processing_time:.2f}s")
+        city_banana = meeting_data.get('city_banana')
+        logger.info(f"Storing meeting summary for {city_banana}: {len(summary)} chars, {processing_time:.2f}s")
         
-        if not city_slug:
-            raise ValueError("city_slug required in meeting_data")
+        if not city_banana:
+            raise ValueError("city_banana required in meeting_data")
         
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -180,11 +180,11 @@ class MeetingsDatabase(BaseDatabase):
             # Insert/update meeting with summary
             cursor.execute("""
                 INSERT OR REPLACE INTO meetings 
-                (city_slug, meeting_id, meeting_name, meeting_date, packet_url, 
+                (city_banana, meeting_id, meeting_name, meeting_date, packet_url, 
                  processed_summary, processing_time_seconds, last_accessed)
                 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
-                city_slug,
+                city_banana,
                 meeting_data.get('meeting_id'),
                 meeting_data.get('meeting_name'),
                 meeting_data.get('meeting_date'),
@@ -205,17 +205,17 @@ class MeetingsDatabase(BaseDatabase):
                 return packet_url
         return packet_url
     
-    def get_meetings_by_city(self, city_slug: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_meetings_by_city(self, city_banana: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get meetings for a city by slug"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT *
                 FROM meetings
-                WHERE city_slug = ?
+                WHERE city_banana = ?
                 ORDER BY meeting_date DESC, last_accessed DESC
                 LIMIT ?
-            """, (city_slug, limit))
+            """, (city_banana, limit))
             
             meetings = []
             for row in cursor.fetchall():
@@ -285,6 +285,92 @@ class MeetingsDatabase(BaseDatabase):
                 ORDER BY meeting_date ASC, created_at ASC
                 LIMIT ?
             """, (limit,))
+            
+            meetings = []
+            for row in cursor.fetchall():
+                meeting = dict(row)
+                meeting['packet_url'] = self._deserialize_packet_url(meeting.get('packet_url'))
+                meetings.append(meeting)
+            return meetings
+    
+    def clear_meeting_summaries(self, city_banana: str = None, meeting_ids: List[str] = None, 
+                               all_meetings: bool = False) -> int:
+        """Clear meeting summaries to force re-processing
+        
+        Args:
+            city_banana: Clear all summaries for a specific city
+            meeting_ids: Clear summaries for specific meeting IDs
+            all_meetings: Clear ALL summaries (use with caution)
+            
+        Returns:
+            Number of summaries cleared
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if all_meetings:
+                logger.warning("Clearing ALL meeting summaries for re-processing")
+                cursor.execute("""
+                    UPDATE meetings 
+                    SET processed_summary = NULL, processing_time_seconds = NULL
+                    WHERE processed_summary IS NOT NULL
+                """)
+                
+            elif city_banana:
+                logger.info(f"Clearing all summaries for city: {city_banana}")
+                cursor.execute("""
+                    UPDATE meetings 
+                    SET processed_summary = NULL, processing_time_seconds = NULL
+                    WHERE city_banana = ? AND processed_summary IS NOT NULL
+                """, (city_banana,))
+                
+            elif meeting_ids:
+                logger.info(f"Clearing summaries for {len(meeting_ids)} specific meetings")
+                placeholders = ','.join('?' * len(meeting_ids))
+                cursor.execute(f"""
+                    UPDATE meetings 
+                    SET processed_summary = NULL, processing_time_seconds = NULL
+                    WHERE meeting_id IN ({placeholders}) AND processed_summary IS NOT NULL
+                """, meeting_ids)
+                
+            else:
+                raise ValueError("Must specify city_banana, meeting_ids, or all_meetings=True")
+            
+            cleared_count = cursor.rowcount
+            conn.commit()
+            
+            logger.info(f"Cleared {cleared_count} meeting summaries for re-processing")
+            return cleared_count
+    
+    def get_processed_meetings(self, city_banana: str = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get meetings that have processed summaries
+        
+        Args:
+            city_banana: Filter by city (optional)
+            limit: Maximum number of results
+            
+        Returns:
+            List of processed meetings
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if city_banana:
+                cursor.execute("""
+                    SELECT *
+                    FROM meetings
+                    WHERE city_banana = ? AND processed_summary IS NOT NULL
+                    ORDER BY meeting_date DESC
+                    LIMIT ?
+                """, (city_banana, limit))
+            else:
+                cursor.execute("""
+                    SELECT *
+                    FROM meetings
+                    WHERE processed_summary IS NOT NULL
+                    ORDER BY meeting_date DESC
+                    LIMIT ?
+                """, (limit,))
             
             meetings = []
             for row in cursor.fetchall():

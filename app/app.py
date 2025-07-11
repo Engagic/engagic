@@ -12,6 +12,7 @@ from fullstack import AgendaProcessor
 from databases import DatabaseManager
 from uszipcode import SearchEngine
 from config import config
+from utils import generate_city_banana
 
 # Configure structured logging
 logging.basicConfig(
@@ -352,8 +353,9 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             "meetings": []
         }
     
-    # Get cached meetings
-    meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+    # Get cached meetings using city_banana
+    city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+    meetings = db.get_meetings_by_city(city_banana, 50)
     
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info.get('state', 'Unknown')}")
@@ -413,8 +415,9 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
     # Log search with city_id
     db.log_search(city_input, "city_name", city_id=city_info['id'])
     
-    # Get cached meetings
-    meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+    # Get cached meetings using city_banana
+    city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+    meetings = db.get_meetings_by_city(city_banana, 50)
     
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
@@ -474,8 +477,9 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
         # Log search with city_id
         db.log_search(original_input, "city_name", city_id=city_info['id'])
         
-        # Get meetings for this city
-        meetings = db.get_meetings_by_city(city_info['city_slug'], 50)
+        # Get meetings for this city using city_banana
+        city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+        meetings = db.get_meetings_by_city(city_banana, 50)
         
         if meetings:
             logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info['state']}")
