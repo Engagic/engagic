@@ -13,3 +13,4 @@ sqlalchemy<2.0
 playwright
 bs4
 lxml
+PyMuPDF
