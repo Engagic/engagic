@@ -72,7 +72,7 @@ body {
 	width: 100%;
 	padding: 1.4rem;
 	font-size: 1.1rem;
-	font-family: inherit;
+	font-family: 'IBM Plex Mono', monospace;
 	border: 2px solid var(--civic-border);
 	border-radius: 12px;
 	background: var(--civic-white);
@@ -252,8 +252,13 @@ body {
 }
 
 .meeting-summary {
-	line-height: 1.8;
+	font-family: Georgia, 'Times New Roman', Times, serif;
+	line-height: 1.75;
 	white-space: pre-wrap;
+	font-size: 1.1rem;
+	color: #374151;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 .back-button {

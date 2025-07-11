@@ -27,10 +27,67 @@
 			// Search by city name and state
 			const searchQuery = `${parsed.cityName}, ${parsed.state}`;
 			const result = await searchMeetings(searchQuery);
+			
+			// Sort meetings by date (soonest first)
+			if (result.success && result.meetings) {
+				result.meetings.sort((a, b) => {
+					// Get full date strings (including time if present)
+					const dateStringA = a.start || a.meeting_date;
+					const dateStringB = b.start || b.meeting_date;
+					
+					// Parse the date strings for format: "MMM DD, YYYY - HH:MM AM/PM"
+					const parseDateTime = (dateStr: string) => {
+						// Remove the dash and trim
+						const cleanedStr = dateStr.replace(' - ', ' ').trim();
+						
+						// Parse using Date constructor which handles "MMM DD, YYYY HH:MM AM/PM"
+						const date = new Date(cleanedStr);
+						
+						// If that didn't work, try manual parsing
+						if (isNaN(date.getTime())) {
+							// Split by spaces
+							const parts = cleanedStr.split(' ');
+							if (parts.length >= 5) {
+								// Format: "MMM DD, YYYY HH:MM AM/PM"
+								const monthStr = parts[0];
+								const day = parseInt(parts[1].replace(',', ''), 10);
+								const year = parseInt(parts[2], 10);
+								const time = parts[3];
+								const ampm = parts[4];
+								
+								// Convert month name to number
+								const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+								const month = months.indexOf(monthStr);
+								
+								// Parse time
+								let [hours, minutes] = time.split(':').map(n => parseInt(n, 10));
+								
+								// Convert to 24-hour format
+								if (ampm.toUpperCase() === 'PM' && hours !== 12) {
+									hours += 12;
+								} else if (ampm.toUpperCase() === 'AM' && hours === 12) {
+									hours = 0;
+								}
+								
+								return new Date(year, month, day, hours, minutes);
+							}
+						}
+						
+						return date;
+					};
+					
+					const dateA = parseDateTime(dateStringA);
+					const dateB = parseDateTime(dateStringB);
+					
+					// Return comparison (ascending order - soonest first)
+					return dateA.getTime() - dateB.getTime();
+				});
+			}
+			
 			searchResults = result;
 		} catch (err) {
 			console.error('Failed to load meetings:', err);
-			error = err instanceof Error ? err.message : 'We humbly thank you for your patience';
+			error = err instanceof Error ? err.message : 'No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting\'s scheduled time';
 		} finally {
 			loading = false;
 		}
@@ -39,6 +96,33 @@
 	function handleMeetingClick(meeting: Meeting) {
 		const meetingSlug = generateMeetingSlug(meeting);
 		window.location.href = `/${city_url}/${meetingSlug}`;
+	}
+
+	function formatMeetingDate(dateString: string): string {
+		// Handle date strings with time like "2025-09-09 9:30 AM"
+		// Extract just the date part
+		const datePart = dateString.split(' ')[0];
+		
+		// Parse the date components manually to avoid timezone issues
+		const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
+		
+		if (isNaN(year) || isNaN(month) || isNaN(day)) {
+			// Fallback for unparseable dates
+			return dateString;
+		}
+		
+		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const monthName = months[month - 1]; // month is 1-based in the date string
+		const suffix = day === 1 || day === 21 || day === 31 ? 'st' : 
+					  day === 2 || day === 22 ? 'nd' : 
+					  day === 3 || day === 23 ? 'rd' : 'th';
+		return `${monthName} ${day}, ${year}`;
+	}
+
+	function extractTime(dateString: string): string {
+		// Extract just the time portion like "09:30 AM"
+		const timeMatch = dateString.match(/(\d{1,2}:\d{2}\s*[AP]M)/i);
+		return timeMatch ? timeMatch[1] : '';
 	}
 </script>
 
@@ -82,8 +166,8 @@
 				<div class="meeting-list">
 					{#each searchResults.meetings as meeting}
 						<div class="meeting-card" onclick={() => handleMeetingClick(meeting)}>
-							<div class="meeting-title">{meeting.title || meeting.meeting_name}</div>
-							<div class="meeting-date">{meeting.start || meeting.meeting_date}</div>
+							<div class="meeting-title">{(meeting.title || meeting.meeting_name).replace(/ on \d{4}-\d{2}-\d{2}.*$/, '')} on {formatMeetingDate(meeting.start || meeting.meeting_date).replace(/ - \d{1,2}:\d{2}\s*[AP]M$/i, '')}</div>
+							<div class="meeting-date">{extractTime(meeting.start || meeting.meeting_date)}</div>
 							<div class="meeting-status">Click to view agenda</div>
 						</div>
 					{/each}
