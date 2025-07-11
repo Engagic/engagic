@@ -47,7 +47,7 @@
 			}
 		} catch (err) {
 			console.error('Failed to load meeting:', err);
-			error = 'We humbly thank you for your patience';
+			error = 'No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting\'s scheduled';
 		} finally {
 			loading = false;
 		}
@@ -87,6 +87,29 @@
 			return slugParts.some(part => title.includes(part) || dateStr.includes(part));
 		}) || meetings[0] || null; // Fallback to first meeting
 	}
+
+	function formatMeetingDate(dateString: string): string {
+		// Handle date strings with time like "2025-09-09 9:30 AM"
+		// Extract just the date part
+		const datePart = dateString.split(' ')[0];
+		
+		// Parse the date components manually to avoid timezone issues
+		const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
+		
+		if (isNaN(year) || isNaN(month) || isNaN(day)) {
+			// Fallback for unparseable dates
+			return dateString;
+		}
+		
+		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const monthName = months[month - 1]; // month is 1-based in the date string
+		const suffix = day === 1 || day === 21 || day === 31 ? 'st' : 
+					  day === 2 || day === 22 ? 'nd' : 
+					  day === 3 || day === 23 ? 'rd' : 'th';
+		return `${monthName} ${day}${suffix}, ${year}`;
+	}
+	
+	
 </script>
 
 <svelte:head>
@@ -124,7 +147,7 @@
 			<div class="meeting-header">
 				<h1 class="meeting-title">{selectedMeeting.title || selectedMeeting.meeting_name}</h1>
 				<div class="meeting-date">
-					{selectedMeeting.start || selectedMeeting.meeting_date}
+					{formatMeetingDate(selectedMeeting.start || selectedMeeting.meeting_date)}
 				</div>
 			</div>
 			
@@ -202,9 +225,79 @@
 	}
 
 	.meeting-summary {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.8;
-		white-space: pre-wrap;
-		font-size: 1rem;
+		font-size: 1.05rem;
+		color: #374151;
+	}
+	
+	/* Markdown element styles */
+	.meeting-summary :global(h1),
+	.meeting-summary :global(h2),
+	.meeting-summary :global(h3),
+	.meeting-summary :global(h4) {
+		font-family: 'IBM Plex Mono', monospace;
+		color: var(--civic-dark);
+		margin-top: 1.5rem;
+		margin-bottom: 0.75rem;
+		font-weight: 600;
+	}
+	
+	.meeting-summary :global(h1) { font-size: 1.5rem; }
+	.meeting-summary :global(h2) { font-size: 1.3rem; }
+	.meeting-summary :global(h3) { font-size: 1.15rem; }
+	.meeting-summary :global(h4) { font-size: 1.05rem; }
+	
+	.meeting-summary :global(h1:first-child),
+	.meeting-summary :global(h2:first-child),
+	.meeting-summary :global(h3:first-child),
+	.meeting-summary :global(h4:first-child) {
+		margin-top: 0;
+	}
+	
+	.meeting-summary :global(p) {
+		margin-bottom: 1rem;
+	}
+	
+	.meeting-summary :global(ul),
+	.meeting-summary :global(ol) {
+		margin: 1rem 0;
+		padding-left: 2rem;
+	}
+	
+	.meeting-summary :global(li) {
+		margin-bottom: 0.5rem;
+	}
+	
+	.meeting-summary :global(li > ul),
+	.meeting-summary :global(li > ol) {
+		margin-top: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+	
+	.meeting-summary :global(strong) {
+		font-weight: 600;
+		color: var(--civic-dark);
+	}
+	
+	.meeting-summary :global(em) {
+		font-style: italic;
+	}
+	
+	.meeting-summary :global(code) {
+		font-family: 'IBM Plex Mono', monospace;
+		background: #f3f4f6;
+		padding: 0.1rem 0.3rem;
+		border-radius: 3px;
+		font-size: 0.95em;
+	}
+	
+	.meeting-summary :global(blockquote) {
+		border-left: 3px solid var(--civic-blue);
+		padding-left: 1rem;
+		margin: 1rem 0;
+		color: #6b7280;
+		font-style: italic;
 	}
 
 	.no-summary {
