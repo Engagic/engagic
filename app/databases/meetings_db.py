@@ -21,14 +21,14 @@ class MeetingsDatabase(BaseDatabase):
             meeting_id TEXT,
             meeting_name TEXT,
             meeting_date DATETIME,
-            packet_url TEXT NOT NULL,
+            packet_url TEXT,  -- Can be NULL for meetings without packets
             meeting_hash TEXT,  -- Hash of meeting details for change detection
             raw_packet_size INTEGER,
             processed_summary TEXT,
             processing_time_seconds REAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(packet_url)
+            UNIQUE(city_banana, meeting_id)  -- Composite key instead of packet_url
         );
 
         -- Processing cache table - LLM processing cache
