@@ -325,6 +325,8 @@ class GranicusAdapter:
                         'granicus_production_attachments.s3.amazonaws.com',
                         's3.amazonaws.com/granicus_production_attachments'
                     )
+                else:
+                    logger.warning(f"Unknown redirect from Granicus for {url} towards {redirect_url}")
                 r = requests.get(redirect_url, headers=DEFAULT_HEADERS, timeout=30)
             else:
                 # For non-S3 redirects, follow normally
