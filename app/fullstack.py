@@ -23,7 +23,7 @@ import sys
 from typing import List, Dict, Any
 from databases import DatabaseManager
 from config import config
-from pdf_api_processor import PDFAPIProcessor, MAX_PDF_API_PAGES
+from pdf_api_processor import PDFAPIProcessor, MAX_PDF_API_PAGES, BatchAccumulator, BatchResult, ResultType
 from pdf_ocr_extractor import PDFOCRExtractor, validate_url, sanitize_filename
 import requests
 
@@ -52,6 +52,14 @@ class AgendaProcessor:
         # Can configure to use Files API by default with use_files_api=True
         self.pdf_api_processor = PDFAPIProcessor(self.api_key, use_files_api=False)
         self.pdf_ocr_extractor = PDFOCRExtractor()
+        
+        # Initialize batch accumulator for efficient processing
+        self.batch_accumulator = BatchAccumulator(
+            self.pdf_api_processor,
+            batch_size=50,  # Submit when 50 PDFs accumulated
+            wait_time=300,  # Or after 5 minutes
+            auto_submit=True
+        )
 
     def _process_with_pdf_api(self, url, method="url"):
         """Try to process PDF using the new PDF API with multiple methods"""
@@ -530,6 +538,7 @@ class AgendaProcessor:
             f"Cleaning text with {english_threshold * 100}% English word threshold..."
         )
 
+
         pages = raw_text.split("--- PAGE")
         cleaned_pages = []
         total_lines_kept = 0
@@ -833,9 +842,9 @@ class AgendaProcessor:
         start_time = time.time()
 
         try:
-            # Get city info
-            city_slug = meeting_data.get("city_slug")
-            city_info = self.db.get_city_by_slug(city_slug) if city_slug else {}
+            # Get city info using city_banana
+            city_banana = meeting_data.get("city_banana")
+            city_info = self.db.get_city_by_banana(city_banana) if city_banana else {}
 
             # Merge meeting data with city info
             full_meeting_data = {**meeting_data, **city_info}
@@ -1114,37 +1123,111 @@ class AgendaProcessor:
 
         return result
     
-    def process_batch_agendas(self, pdf_requests: List[Dict[str, Any]]) -> str:
-        """Process multiple agendas using batch API for efficiency
+    def process_batch_agendas(self, pdf_requests: List[Dict[str, Any]], 
+                            wait_for_results: bool = True,
+                            return_raw: bool = False) -> Union[str, List[Dict[str, Any]], List[BatchResult]]:
+        """Process multiple agendas using batch API with full support
         
         Args:
-            pdf_requests: List of dicts with 'url' and optional 'prompt' keys
+            pdf_requests: List of dicts with 'url' and optional 'prompt', 'custom_id', 'model' keys
+            wait_for_results: If True, wait for completion and return results
+            return_raw: If True, return raw BatchResult objects; otherwise return summaries
             
         Returns:
-            Batch job ID for tracking
+            If wait_for_results=False: Batch job ID for tracking
+            If wait_for_results=True and return_raw=True: List of BatchResult objects
+            If wait_for_results=True and return_raw=False: List of processed summaries
         """
         logger.info(f"Processing batch of {len(pdf_requests)} agendas")
         
         try:
-            # Validate all URLs first
+            # Enhanced validation with model selection
+            valid_requests = []
             for i, req in enumerate(pdf_requests):
                 url = req.get("url")
                 if not url:
-                    raise ValueError(f"Request {i} missing 'url' field")
+                    logger.warning(f"Request {i} missing 'url' field, skipping")
+                    continue
                 
-                valid, error_msg, _ = self.pdf_api_processor.validate_pdf_for_api(url)
+                valid, error_msg, size = self.pdf_api_processor.validate_pdf_for_api(url)
                 if not valid:
                     logger.warning(f"PDF {i} validation failed: {error_msg}")
+                    continue
+                
+                # Add size info for model selection
+                req["_size"] = size
+                valid_requests.append(req)
             
-            # Submit batch job
-            batch_id = self.pdf_api_processor.process_batch(pdf_requests)
-            logger.info(f"Batch processing initiated: {batch_id}")
+            if not valid_requests:
+                raise ValueError("No valid PDFs to process")
             
-            return batch_id
+            logger.info(f"Processing {len(valid_requests)} valid PDFs out of {len(pdf_requests)} total")
+            
+            # Submit batch job with enhanced options
+            result = self.pdf_api_processor.process_batch(
+                valid_requests,
+                wait_for_completion=wait_for_results,
+                use_prompt_caching=True
+            )
+            
+            if not wait_for_results:
+                # Return batch ID for async tracking
+                return result
+            
+            # Process results
+            if return_raw:
+                return result  # List[BatchResult]
+            
+            # Extract summaries and handle errors
+            processed_results = []
+            for batch_result in result:
+                if batch_result.result_type == ResultType.SUCCEEDED:
+                    summary = batch_result.message.get("content", [{}])[0].get("text", "")
+                    processed_results.append({
+                        "custom_id": batch_result.custom_id,
+                        "status": "success",
+                        "summary": summary,
+                        "usage": batch_result.usage
+                    })
+                else:
+                    processed_results.append({
+                        "custom_id": batch_result.custom_id,
+                        "status": "error",
+                        "error": batch_result.error or f"Request {batch_result.result_type.value}"
+                    })
+            
+            # Log cost summary
+            cost_summary = self.pdf_api_processor.cost_tracker.get_summary()
+            logger.info(f"Batch processing complete. Cost summary: {cost_summary}")
+            
+            return processed_results
             
         except Exception as e:
             logger.error(f"Batch processing failed: {e}")
             raise
+    
+    def add_to_batch_queue(self, pdf_url: str, custom_id: str = None) -> str:
+        """Add a PDF to the batch accumulator for efficient processing"""
+        return self.batch_accumulator.add_request(pdf_url, custom_id)
+    
+    def get_batch_queue_status(self) -> Dict[str, Any]:
+        """Get current status of the batch accumulator"""
+        return self.batch_accumulator.get_status()
+    
+    def force_batch_submission(self):
+        """Force submission of accumulated batch requests"""
+        self.batch_accumulator.force_submit()
+    
+    def get_cost_summary(self) -> Dict[str, Any]:
+        """Get comprehensive cost tracking summary"""
+        return self.pdf_api_processor.cost_tracker.get_summary()
+    
+    def shutdown(self):
+        """Cleanup resources"""
+        logger.info("Shutting down AgendaProcessor...")
+        if hasattr(self, 'batch_accumulator'):
+            self.batch_accumulator.shutdown()
+        logger.info("Shutdown complete")
 
 
 def create_cli_parser():
@@ -1295,4 +1378,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # Ensure cleanup on interrupt
+        logger.info("\nShutting down...")
+        sys.exit(0)

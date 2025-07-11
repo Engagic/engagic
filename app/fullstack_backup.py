@@ -1,22 +1,94 @@
+import requests
+import tempfile
 import os
+import re
 import time
 import logging
+import pytesseract
+from pdf2image import convert_from_path
+from PyPDF2 import PdfReader
 import anthropic
 import argparse
 import sys
 from typing import List, Dict, Any
 from databases import DatabaseManager
 from config import config
-from pdf_api_processor import PDFAPIProcessor
-from pdf_ocr_extractor import PDFOCRExtractor, validate_url, sanitize_filename
-import requests
+from urllib.parse import urlparse, quote
+import ipaddress
+import socket
 
 logger = logging.getLogger("engagic")
 
-# PDF download size limit (for download_packet method)
+# Security constants
 MAX_PDF_SIZE = 200 * 1024 * 1024  # 200MB max PDF size
+MAX_PAGES = 1000  # Maximum pages to process
+MAX_OCR_PAGES = 200  # Maximum pages to OCR (OCR is slow and resource intensive)
+MAX_URL_LENGTH = 2000  # Maximum URL length
+ALLOWED_SCHEMES = ['http', 'https']
+BLOCKED_NETWORKS = [
+    ipaddress.ip_network('127.0.0.0/8'),  # Localhost
+    ipaddress.ip_network('10.0.0.0/8'),   # Private network
+    ipaddress.ip_network('172.16.0.0/12'), # Private network
+    ipaddress.ip_network('192.168.0.0/16'), # Private network
+    ipaddress.ip_network('169.254.0.0/16'), # Link-local
+    ipaddress.ip_network('::1/128'),        # IPv6 localhost
+    ipaddress.ip_network('fc00::/7'),       # IPv6 private
+    ipaddress.ip_network('fe80::/10'),      # IPv6 link-local
+]
 
-# validate_url and sanitize_filename are now imported from pdf_ocr_extractor
+def validate_url(url: str) -> None:
+    """Validate URL for security issues including SSRF protection"""
+    # Check URL length
+    if len(url) > MAX_URL_LENGTH:
+        raise ValueError(f"URL exceeds maximum length of {MAX_URL_LENGTH} characters")
+    
+    # Parse and validate URL structure
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise ValueError("Invalid URL format")
+    
+    # Check scheme
+    if parsed.scheme not in ALLOWED_SCHEMES:
+        raise ValueError(f"URL scheme must be one of: {', '.join(ALLOWED_SCHEMES)}")
+    
+    # Check for empty hostname
+    if not parsed.hostname:
+        raise ValueError("URL must include a hostname")
+    
+    # Prevent file:// and other dangerous schemes
+    if parsed.scheme == 'file':
+        raise ValueError("File URLs are not allowed")
+    
+    # Resolve hostname to prevent DNS rebinding attacks
+    try:
+        # Get IP address
+        ip_str = socket.gethostbyname(parsed.hostname)
+        ip_addr = ipaddress.ip_address(ip_str)
+        
+        # Check against blocked networks (SSRF protection)
+        for network in BLOCKED_NETWORKS:
+            if ip_addr in network:
+                raise ValueError(f"URL points to blocked network: {network}")
+                
+    except socket.gaierror:
+        raise ValueError(f"Unable to resolve hostname: {parsed.hostname}")
+    except Exception as e:
+        raise ValueError(f"URL validation failed: {str(e)}")
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitize filename to prevent directory traversal"""
+    # Remove any path components
+    basename = os.path.basename(filename)
+    # Remove potentially dangerous characters
+    safe_name = re.sub(r'[^\w\s\-\.]', '', basename)
+    # Ensure it doesn't start with a dot (hidden file)
+    if safe_name.startswith('.'):
+        safe_name = safe_name[1:]
+    # Add timestamp to prevent collisions
+    timestamp = str(int(time.time()))
+    name, ext = os.path.splitext(safe_name)
+    return f"{name}_{timestamp}{ext}" if safe_name else f"file_{timestamp}.pdf"
 
 class AgendaProcessor:
     def __init__(self, api_key=None, db_path="/root/engagic/app/meetings.db"):
@@ -26,58 +98,114 @@ class AgendaProcessor:
             raise ValueError("LLM_API_KEY environment variable required")
 
         self.client = anthropic.Anthropic(api_key=self.api_key)
+        self.english_words = self._load_english_words()
         self.db = DatabaseManager(
             locations_db_path=config.LOCATIONS_DB_PATH,
             meetings_db_path=config.MEETINGS_DB_PATH,
             analytics_db_path=config.ANALYTICS_DB_PATH
         )
+
+    def _load_english_words(self):
+        """Load English word set with comprehensive fallback for civic terms"""
+        try:
+            from nltk.corpus import words
+
+            return set(word.lower() for word in words.words())
+        except:
+            # Comprehensive civic/municipal terms
+            return set(
+                [
+                    "the",
+                    "and",
+                    "or",
+                    "but",
+                    "in",
+                    "on",
+                    "at",
+                    "to",
+                    "for",
+                    "of",
+                    "with",
+                    "by",
+                    "council",
+                    "city",
+                    "meeting",
+                    "agenda",
+                    "item",
+                    "public",
+                    "comment",
+                    "session",
+                    "board",
+                    "commission",
+                    "appointment",
+                    "ordinance",
+                    "resolution",
+                    "budget",
+                    "planning",
+                    "zoning",
+                    "development",
+                    "traffic",
+                    "safety",
+                    "park",
+                    "library",
+                    "police",
+                    "fire",
+                    "emergency",
+                    "infrastructure",
+                    "project",
+                    "contract",
+                    "approval",
+                    "review",
+                    "hearing",
+                    "closed",
+                    "property",
+                    "agreement",
+                    "staff",
+                    "street",
+                    "avenue",
+                    "boulevard",
+                    "road",
+                    "drive",
+                    "lane",
+                    "court",
+                    "place",
+                    "north",
+                    "south",
+                    "east",
+                    "west",
+                    "permit",
+                    "variance",
+                    "conditional",
+                    "use",
+                    "environmental",
+                    "impact",
+                    "report",
+                    "ceqa",
+                    "downtown",
+                    "residential",
+                    "commercial",
+                    "industrial",
+                    "mixed",
+                    "density",
+                    "housing",
+                    "affordable",
+                    "transportation",
+                    "transit",
+                    "parking",
+                    "bicycle",
+                    "pedestrian",
+                    "crosswalk",
+                ]
+            )
+
+    def download_and_extract_text(self, url) -> str:
+        """Download PDF(s) and extract text using smart extraction strategy
         
-        # Initialize both PDF processors
-        self.pdf_api_processor = PDFAPIProcessor(self.api_key)
-        self.pdf_ocr_extractor = PDFOCRExtractor()
-
-    def _process_with_pdf_api(self, url):
-        """Try to process PDF using the new PDF API"""
-        try:
-            logger.info("Attempting to process with PDF API...")
-            summary = self.pdf_api_processor.process(url)
-            logger.info("Successfully processed with PDF API")
-            return summary, "pdf_api"
-        except Exception as e:
-            logger.warning(f"PDF API processing failed: {e}")
-            raise
-    
-    def _process_with_ocr(self, url, english_threshold=0.7):
-        """Fallback to OCR-based processing"""
-        try:
-            logger.info("Falling back to OCR-based processing...")
-            
-            # Extract and clean text
-            cleaned_text = self.pdf_ocr_extractor.process(url, english_threshold)
-            
-            # Summarize
-            logger.info("Starting OCR text summarization...")
-            summary = self.summarize(cleaned_text)
-            
-            logger.info("Successfully processed with OCR")
-            return summary, "ocr"
-        except Exception as e:
-            logger.error(f"OCR processing also failed: {e}")
-            raise
-
-    # OCR methods removed - now using pdf_ocr_extractor module
-    # The following methods have been moved to pdf_ocr_extractor.py:
-    # - download_and_extract_text
-    # - _download_and_extract_single  
-    # - _extract_text_smart
-    # - _normalize_text_formatting
-    # - _normalize_page_content
-    # - _should_start_new_block
-    # - _is_good_digital_extraction
-    # - _ocr_specific_pages
-    # - _full_ocr
-    # - clean_text
-    # - _meets_english_threshold
+        Args:
+            url: Either a string URL or a list of URLs
+        """
+        # Handle list of URLs
+        if isinstance(url, list):
             logger.info(f"Processing {len(url)} PDFs")
             all_texts = []
             for i, pdf_url in enumerate(url, 1):
@@ -360,16 +488,6 @@ class AgendaProcessor:
 
         if not valid_lines:
             return False
-            
-        # Check if text is mostly numbers (page numbers, etc)
-        all_text = " ".join(valid_lines)
-        words = all_text.split()
-        if words:
-            # Count how many "words" are just numbers
-            number_words = sum(1 for word in words if word.isdigit())
-            if len(words) > 5 and (number_words / len(words)) > 0.5:
-                logger.info(f"Digital extraction is mostly numbers: {number_words}/{len(words)} numeric tokens")
-                return False
 
         # Check for excessive single-word lines (sign of fragmented extraction)
         single_word_lines = sum(1 for line in valid_lines if len(line.split()) == 1)
@@ -380,24 +498,14 @@ class AgendaProcessor:
             return False
 
         # Check for reasonable sentence structure in first few lines
-        sample_text = " ".join(valid_lines[:10])  # Check more lines
+        sample_text = " ".join(valid_lines[:5])
         words = sample_text.split()
         if len(words) > 10:
             # Should have some longer words and reasonable punctuation
-            long_words = sum(1 for word in words if len(word) > 3 and not word.isdigit())
+            long_words = sum(1 for word in words if len(word) > 3)
             if (long_words / len(words)) < 0.3:
                 logger.info("Digital extraction lacks proper word structure")
                 return False
-                
-        # Check for common agenda/meeting words to ensure we have real content
-        common_words = ['meeting', 'agenda', 'council', 'item', 'public', 'board', 
-                       'city', 'approval', 'discussion', 'report', 'minutes', 'call',
-                       'the', 'and', 'to', 'of', 'for', 'in', 'on', 'at']
-        text_lower = all_text.lower()
-        found_common_words = sum(1 for word in common_words if word in text_lower)
-        if found_common_words < 3:
-            logger.info(f"Digital extraction lacks common meeting words (found only {found_common_words})")
-            return False
 
         return True
 
@@ -664,14 +772,6 @@ class AgendaProcessor:
         """Summarize short agendas (<=10 pages) with simplified prompt"""
         logger.info("Using short agenda summarization approach")
         
-        # Check if we have meaningful content to summarize
-        cleaned_lines = [line.strip() for line in text.split('\n') if line.strip()]
-        content_lines = [line for line in cleaned_lines if not line.startswith('[') and not line.startswith('---')]
-        
-        if len(content_lines) < 10:
-            logger.warning("Insufficient content extracted from PDF")
-            return "Unable to extract meaningful content from this PDF. The document may be a scanned image without searchable text, or it may use a format that prevents text extraction."
-        
         try:
             response = self.client.messages.create(
                 model="claude-3-5-sonnet-20241022",
@@ -703,36 +803,19 @@ class AgendaProcessor:
 
         except Exception as e:
             logger.error(f"Error processing short agenda: {e}")
-            return f"Unable to process this agenda due to a technical error. Please try again later."
+            return f"[ERROR: Could not process agenda - {str(e)}]"
 
     def _summarize_long_agenda(self, text: str, rate_limit_delay: int = 5) -> str:
         """Summarize long agendas (>10 pages) using chunking approach"""
         logger.info("Using long agenda summarization approach")
         
-        # Check if we have meaningful content to summarize
-        cleaned_lines = [line.strip() for line in text.split('\n') if line.strip()]
-        content_lines = [line for line in cleaned_lines if not line.startswith('[') and not line.startswith('---')]
-        
-        if len(content_lines) < 20:
-            logger.warning("Insufficient content extracted from PDF")
-            return "Unable to extract meaningful content from this PDF. The document may be a scanned image without searchable text, or it may use a format that prevents text extraction."
-        
         chunks = self._chunk_by_agenda_items(text)
         logger.info(f"Split into {len(chunks)} chunks for processing")
 
         summaries = []
-        valid_summaries = 0
 
         for i, chunk in enumerate(chunks):
             logger.info(f"Processing chunk {i + 1}/{len(chunks)}...")
-            
-            # Skip chunks that are mostly error messages
-            chunk_lines = [line.strip() for line in chunk.split('\n') if line.strip()]
-            chunk_content = [line for line in chunk_lines if not line.startswith('[') and not line.startswith('---')]
-            
-            if len(chunk_content) < 5:
-                logger.info(f"Skipping chunk {i + 1} - insufficient content")
-                continue
 
             try:
                 response = self.client.messages.create(
@@ -763,7 +846,6 @@ class AgendaProcessor:
                 summaries.append(
                     f"--- SECTION {i + 1} SUMMARY ---\n{response.content[0].text}\n"  # type: ignore
                 )
-                valid_summaries += 1
 
                 # Rate limiting
                 if i < len(chunks) - 1:
@@ -772,10 +854,9 @@ class AgendaProcessor:
 
             except Exception as e:
                 logger.error(f"Error processing chunk {i + 1}: {e}")
-                continue
-
-        if valid_summaries == 0:
-            return "Unable to extract meaningful content from this PDF. The document may be a scanned image without searchable text, or it may use a format that prevents text extraction."
+                summaries.append(
+                    f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Could not process this section - {str(e)}]\n"
+                )
 
         return "\n".join(summaries)
 
@@ -841,40 +922,34 @@ class AgendaProcessor:
         save_raw: bool = True,
         save_cleaned: bool = True,
     ) -> str:
-        """Complete pipeline with dual approach: PDF API first, then OCR fallback"""
-        
-        # First, try the PDF API approach
+        """Complete pipeline: download → clean → summarize"""
         try:
-            summary, method = self._process_with_pdf_api(url)
-            logger.info(f"Successfully processed using {method}")
-            
-            if save_raw or save_cleaned:
+            # Extract text (handles both single URLs and lists)
+            raw_text = self.download_and_extract_text(url)
+
+            if save_raw:
+                self._save_text(raw_text, "raw_agenda.txt")
+
+            # Clean text with configurable threshold
+            logger.info(f"Cleaning text for url: {url}")
+            cleaned_text = self.clean_text(raw_text, english_threshold)
+
+            if save_cleaned:
+                self._save_text(cleaned_text, "cleaned_agenda.txt")
+
+            # Summarize
+            logger.info("Starting summarization...")
+            summary = self.summarize(cleaned_text)
+
+            if save_raw or save_cleaned:  # Only save if we're saving other files
                 self._save_text(summary, "agenda_summary.txt")
                 logger.info("Complete! Summary saved to agenda_summary.txt")
-            
+
             return summary
-            
-        except Exception as pdf_api_error:
-            logger.warning(f"PDF API failed: {pdf_api_error}")
-            
-            # Fallback to OCR approach
-            try:
-                summary, method = self._process_with_ocr(url, english_threshold)
-                logger.info(f"Successfully processed using {method}")
-                
-                if save_raw or save_cleaned:
-                    self._save_text(summary, "agenda_summary.txt")
-                    logger.info("Complete! Summary saved to agenda_summary.txt")
-                
-                return summary
-                
-            except Exception as ocr_error:
-                logger.error(f"Both processing methods failed")
-                logger.error(f"PDF API error: {pdf_api_error}")
-                logger.error(f"OCR error: {ocr_error}")
-                
-                # Return a user-friendly error message
-                return "Unable to process this PDF document. The file may be corrupted, password-protected, or in an unsupported format."
+
+        except Exception as e:
+            logger.error(f"Error processing agenda: {e}")
+            raise
 
     def _save_text(self, text: str, filename: str) -> None:
         """Save text to file with UTF-8 encoding"""
