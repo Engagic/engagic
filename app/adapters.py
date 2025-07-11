@@ -7,6 +7,8 @@ from urllib.parse import urlencode, urljoin, urlparse, parse_qs
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from pdf_scraper_utils import deep_scrape_pdfs
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger("engagic")
 
@@ -130,6 +132,22 @@ class GranicusAdapter:
         self.slug = city_slug
         self.base = f"https://{self.slug}.granicus.com"
         self.view_ids_file = "granicus_view_ids.json"
+        
+        # Create a robust HTTP session with proper timeouts
+        self.session = requests.Session()
+        self.session.headers.update(DEFAULT_HEADERS)
+        
+        # Set aggressive connection and read timeouts
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=2,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
         # Load existing view_id mappings
         view_id_mappings = self._load_view_id_mappings()
@@ -245,8 +263,8 @@ class GranicusAdapter:
         # Test an expanded range up to 100!
         for i in range(1, 101):
             try:
-                response = requests.get(
-                    f"{tentative}{i}", headers=DEFAULT_HEADERS, timeout=30
+                response = self.session.get(
+                    f"{tentative}{i}", timeout=(5, 10)
                 )
                 if response.status_code == 200:
                     # Check if the response contains actual meeting data AND current year
@@ -269,8 +287,8 @@ class GranicusAdapter:
         )
         for i in range(1, 101):
             try:
-                response = requests.get(
-                    f"{tentative}{i}", headers=DEFAULT_HEADERS, timeout=30
+                response = self.session.get(
+                    f"{tentative}{i}", timeout=(5, 10)
                 )
                 if response.status_code == 200:
                     if "ViewPublisher" in response.text and (
@@ -314,7 +332,8 @@ class GranicusAdapter:
         logger.debug(f"GET {url}")
         # Handle S3 redirects with SSL issues
         try:
-            r = requests.get(url, headers=DEFAULT_HEADERS, timeout=30, allow_redirects=False)
+            # Use session with strict timeouts: 10s connect, 20s read
+            r = self.session.get(url, timeout=(10, 20), allow_redirects=False)
             
             # If it's a redirect to S3, rewrite the URL to use path-style
             if r.status_code in [301, 302] and 's3.amazonaws.com' in r.headers.get('Location', ''):
@@ -327,10 +346,10 @@ class GranicusAdapter:
                     )
                 else:
                     logger.warning(f"Unknown redirect from Granicus for {url} towards {redirect_url}")
-                r = requests.get(redirect_url, headers=DEFAULT_HEADERS, timeout=30)
+                r = self.session.get(redirect_url, timeout=(10, 20))
             else:
                 # For non-S3 redirects, follow normally
-                r = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
+                r = self.session.get(url, timeout=(10, 20))
                 
             r.raise_for_status()
             return BeautifulSoup(r.text, "lxml")

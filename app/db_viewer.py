@@ -93,9 +93,8 @@ class DatabaseViewer:
         with self.db.meetings.get_connection() as conn:
             cursor = conn.execute(
                 """
-                SELECT id, meeting_name, meeting_date, packet_url, city_slug,
+                SELECT id, meeting_name, meeting_date, packet_url, city_banana,
                        processed_summary IS NOT NULL as has_summary,
-                       processed_summary,
                        created_at, last_accessed
                 FROM meetings
                 ORDER BY created_at DESC
@@ -108,7 +107,7 @@ class DatabaseViewer:
         # Then get city info for each meeting
         rows = []
         for meeting in meetings:
-            city_info = self.db.get_city_by_slug(meeting["city_slug"])
+            city_info = self.db.get_city_by_banana(meeting["city_banana"])
             if city_info:
                 row = dict(meeting)
                 row["city_name"] = city_info["city_name"]
@@ -142,26 +141,16 @@ class DatabaseViewer:
             created = row["created_at"][:10] if row["created_at"] else ""
             packet_url = row["packet_url"] if row["packet_url"] else ""
             print(
-                f"{row['id']:<4} {row['city_name'][:19]:<20} {meeting_name:<25} "
+                f"{row['id']:<4} {row['city_name'][:19]:<20} {row['city_banana'][:19]:<20} {meeting_name:<25} "
                 f"{meeting_date:<12} {has_summary:<8} {created:<12} {packet_url}"
             )
-
-            # Display full summary if available
-            if row["processed_summary"]:
-                print("\n    Summary:")
-                print("    " + "-" * 80)
-                # Split summary into lines and indent
-                summary_lines = row["processed_summary"].split("\n")
-                for line in summary_lines:
-                    print(f"    {line}")
-                print("    " + "-" * 80 + "\n")
 
     def show_usage_metrics(self, limit=20):
         """Display recent usage metrics"""
         with self.db.analytics.get_connection() as conn:
             cursor = conn.execute(
                 """
-                SELECT id, search_query, search_type, city_slug, zipcode, created_at
+                SELECT id, search_query, search_type, city_banana, zipcode, created_at
                 FROM usage_metrics
                 ORDER BY created_at DESC
                 LIMIT ?
@@ -174,8 +163,8 @@ class DatabaseViewer:
         rows = []
         for metric in metrics:
             row = dict(metric)
-            if metric["city_slug"]:
-                city_info = self.db.get_city_by_slug(metric["city_slug"])
+            if metric["city_banana"]:
+                city_info = self.db.get_city_by_banana(metric["city_banana"])
                 if city_info:
                     row["city_name"] = city_info["city_name"]
                     row["state"] = city_info["state"]
@@ -347,18 +336,18 @@ class DatabaseViewer:
             )
             zipcode_count = cursor.fetchone()["count"]
 
-            # Get city_slug for cross-database operations
-            cursor.execute("SELECT city_slug FROM cities WHERE id = ?", (int(city_id),))
-            city_slug_row = cursor.fetchone()
-            city_slug = city_slug_row["city_slug"] if city_slug_row else None
+            # Get city_banana for cross-database operations
+            cursor.execute("SELECT city_banana FROM cities WHERE id = ?", (int(city_id),))
+            city_banana_row = cursor.fetchone()
+            city_banana = city_banana_row["city_banana"] if city_banana_row else None
 
         # Count meetings in meetings database
         meeting_count = 0
-        if city_slug:
+        if city_banana:
             with self.db.meetings.get_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT COUNT(*) as count FROM meetings WHERE city_slug = ?",
-                    (city_slug,),
+                    "SELECT COUNT(*) as count FROM meetings WHERE city_banana = ?",
+                    (city_banana,),
                 )
                 meeting_count = cursor.fetchone()["count"]
 
@@ -442,7 +431,7 @@ class DatabaseViewer:
             cursor.execute(
                 """
                 SELECT 'MEETING' as type, id, meeting_name as name,
-                       city_slug, meeting_date as vendor
+                       city_banana, meeting_date as vendor
                 FROM meetings
                 WHERE meeting_name LIKE ?
             """,
@@ -452,11 +441,11 @@ class DatabaseViewer:
 
             # Get city info for each meeting
             for row in meeting_results:
-                city_info = self.db.get_city_by_slug(row["city_slug"])
+                city_info = self.db.get_city_by_banana(row["city_banana"])
                 if city_info:
                     city_display = f"{city_info['city_name']}, {city_info['state']}"
                 else:
-                    city_display = row["city_slug"]
+                    city_display = row["city_banana"]
                 results.append(
                     {
                         "type": row["type"],
