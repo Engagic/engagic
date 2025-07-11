@@ -93,16 +93,16 @@ export async function getCachedSummary(meeting: Meeting, cityBanana: string): Pr
 			} else if (response.status === 500) {
 				throw new Error('We humbly thank you for your patience');
 			} else if (response.status === 404) {
-				throw new Error('Packets not posted yet, please check back later');
+				throw new Error('No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting date');
 			}
-			throw new Error('Packets not posted yet, please check back later');
+			throw new Error('No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting date');
 		}
 
 		const result = await response.json();
 		
 		// Check if the response indicates no summary is available yet
 		if (!result.success && result.message && result.message.includes('not yet available')) {
-			throw new Error('Packets not posted yet, please check back later');
+			throw new Error('No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting date');
 		}
 		
 		return result;
