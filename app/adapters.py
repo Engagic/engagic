@@ -154,10 +154,13 @@ class GranicusAdapter:
     def upcoming_packets(self):
         soup = self._fetch_dom(self.list_url)
 
-        # Find the "Upcoming Events" section
+        # Find the "Upcoming Events" or "Upcoming Meetings" section
         upcoming_header = soup.find("h2", string="Upcoming Events")
         if not upcoming_header:
-            logger.warning(f"No 'Upcoming Events' section found for {self.slug}")
+            upcoming_header = soup.find("h2", string="Upcoming Meetings")
+        
+        if not upcoming_header:
+            logger.warning(f"No 'Upcoming Events' or 'Upcoming Meetings' section found for {self.slug}")
             return
 
         # Find the table that follows the "Upcoming Events" header
@@ -309,9 +312,31 @@ class GranicusAdapter:
 
     def _fetch_dom(self, url: str) -> BeautifulSoup:
         logger.debug(f"GET {url}")
-        r = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
-        r.raise_for_status()
-        return BeautifulSoup(r.text, "lxml")
+        # Handle S3 redirects with SSL issues
+        try:
+            r = requests.get(url, headers=DEFAULT_HEADERS, timeout=30, allow_redirects=False)
+            
+            # If it's a redirect to S3, rewrite the URL to use path-style
+            if r.status_code in [301, 302] and 's3.amazonaws.com' in r.headers.get('Location', ''):
+                redirect_url = r.headers['Location']
+                # Convert virtual-hosted-style to path-style S3 URL
+                if 'granicus_production_attachments.s3.amazonaws.com' in redirect_url:
+                    redirect_url = redirect_url.replace(
+                        'granicus_production_attachments.s3.amazonaws.com',
+                        's3.amazonaws.com/granicus_production_attachments'
+                    )
+                else:
+                    logger.warning(f"Unknown redirect from Granicus for {url} towards {redirect_url}")
+                r = requests.get(redirect_url, headers=DEFAULT_HEADERS, timeout=30)
+            else:
+                # For non-S3 redirects, follow normally
+                r = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
+                
+            r.raise_for_status()
+            return BeautifulSoup(r.text, "lxml")
+        except Exception as e:
+            logger.debug(f"Error fetching {url}: {e}")
+            raise
 
     def _absolute(self, href: str) -> str:
         if href.startswith("//"):
@@ -331,8 +356,27 @@ class GranicusAdapter:
         """Extract PDF URLs from the AgendaViewer page AND parse embedded PDFs"""
         pdf_urls = []
 
+        # Check if the URL redirects directly to a PDF
         try:
-            # First, get the AgendaViewer page
+            r = requests.get(agenda_viewer_url, headers=DEFAULT_HEADERS, timeout=30, allow_redirects=False)
+            
+            # If it redirects to a PDF, just return that PDF URL
+            if r.status_code in [301, 302]:
+                redirect_url = r.headers.get('Location', '')
+                if redirect_url and ('.pdf' in redirect_url.lower() or 's3.amazonaws.com' in redirect_url):
+                    # Handle S3 URL conversion if needed
+                    if 'granicus_production_attachments.s3.amazonaws.com' in redirect_url:
+                        redirect_url = redirect_url.replace(
+                            'granicus_production_attachments.s3.amazonaws.com',
+                            's3.amazonaws.com/granicus_production_attachments'
+                        )
+                    logger.debug(f"AgendaViewer redirects directly to PDF: {redirect_url}")
+                    return [redirect_url]
+        except Exception as e:
+            logger.debug(f"Error checking for PDF redirect: {e}")
+
+        try:
+            # If no direct PDF redirect, parse as HTML page
             soup = self._fetch_dom(agenda_viewer_url)
         except Exception as e:
             logger.debug(f"Could not fetch agenda viewer page {agenda_viewer_url}: {e}")
