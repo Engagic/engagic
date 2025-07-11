@@ -40,20 +40,24 @@ class DatabaseManager:
         """Get city information by slug"""
         return self.locations.get_city_by_slug(city_slug)
     
+    def get_city_by_banana(self, city_banana: str) -> Optional[Dict[str, Any]]:
+        """Get city information by city_banana identifier"""
+        return self.locations.get_city_by_banana(city_banana)
+    
     def get_all_cities(self) -> List[Dict[str, Any]]:
         """Get all cities with their zipcode information"""
         return self.locations.get_all_cities()
     
-    def delete_city(self, city_slug: str) -> bool:
+    def delete_city(self, city_banana: str) -> bool:
         """Delete a city and all associated data from both locations and meetings"""
         # Delete from locations database
-        locations_success = self.locations.delete_city(city_slug)
+        locations_success = self.locations.delete_city(city_banana)
         
         # Delete meetings for this city
-        meetings_deleted = self._delete_meetings_by_city_slug(city_slug)
+        meetings_deleted = self._delete_meetings_by_city_banana(city_banana)
         
         if locations_success:
-            logger.info(f"Deleted city {city_slug} and {meetings_deleted} associated meetings")
+            logger.info(f"Deleted city {city_banana} and {meetings_deleted} associated meetings")
         
         return locations_success
     
@@ -63,22 +67,26 @@ class DatabaseManager:
         cities_to_delete = []
         for city in self.locations.get_all_cities():
             if not city.get('vendor'):
-                cities_to_delete.append(city['city_slug'])
+                cities_to_delete.append(city['city_banana'])
         
         # Delete from locations
         count = self.locations.delete_cities_without_vendor()
         
         # Delete associated meetings
-        for city_slug in cities_to_delete:
-            self._delete_meetings_by_city_slug(city_slug)
+        for city_banana in cities_to_delete:
+            self._delete_meetings_by_city_banana(city_banana)
         
         return count
     
-    def _delete_meetings_by_city_slug(self, city_slug: str) -> int:
-        """Helper to delete all meetings for a city slug"""
+    def update_city(self, city_id: int, vendor: str = None, city_slug: str = None, city_banana: str = None) -> bool:
+        """Update city vendor and/or city_slug information"""
+        return self.locations.update_city(city_id, vendor, city_slug, city_banana)
+    
+    def _delete_meetings_by_city_banana(self, city_banana: str) -> int:
+        """Helper to delete all meetings for a city banana"""
         with self.meetings.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM meetings WHERE city_slug = ?", (city_slug,))
+            cursor.execute("DELETE FROM meetings WHERE city_banana = ?", (city_banana,))
             deleted_count = cursor.rowcount
             conn.commit()
             return deleted_count
@@ -94,9 +102,9 @@ class DatabaseManager:
         """Store processed meeting summary"""
         return self.meetings.store_meeting_summary(meeting_data, summary, processing_time)
     
-    def get_meetings_by_city(self, city_slug: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get meetings for a city by slug"""
-        return self.meetings.get_meetings_by_city(city_slug, limit)
+    def get_meetings_by_city(self, city_banana: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get meetings for a city by city_banana"""
+        return self.meetings.get_meetings_by_city(city_banana, limit)
     
     def get_cached_summary(self, packet_url: str) -> Optional[Dict[str, Any]]:
         """Get cached meeting summary by packet URL"""
@@ -106,13 +114,14 @@ class DatabaseManager:
         """Check if meeting data has changed since last sync"""
         return self.meetings.has_meeting_changed(meeting_data)
     
-    def get_city_meeting_frequency(self, city_slug: str, days: int = 30) -> int:
+
+    def get_city_meeting_frequency(self, city_banana: str, days: int = 30) -> int:
         """Get meeting count for a city in the last N days"""
-        return self.meetings.get_city_meeting_frequency(city_slug, days)
+        return self.meetings.get_city_meeting_frequency(city_banana, days)
     
-    def get_city_last_sync(self, city_slug: str) -> Optional[datetime]:
+    def get_city_last_sync(self, city_banana: str) -> Optional[datetime]:
         """Get the last sync time for a city"""
-        return self.meetings.get_city_last_sync(city_slug)
+        return self.meetings.get_city_last_sync(city_banana)
     
     def get_recent_meetings(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Get most recently accessed meetings across all cities"""
@@ -121,6 +130,15 @@ class DatabaseManager:
     def get_unprocessed_meetings(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get meetings that don't have processed summaries yet"""
         return self.meetings.get_unprocessed_meetings(limit)
+    
+    def clear_meeting_summaries(self, city_banana: str = None, meeting_ids: List[str] = None, 
+                               all_meetings: bool = False) -> int:
+        """Clear meeting summaries to force re-processing"""
+        return self.meetings.clear_meeting_summaries(city_banana, meeting_ids, all_meetings)
+    
+    def get_processed_meetings(self, city_banana: str = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get meetings that have processed summaries"""
+        return self.meetings.get_processed_meetings(city_banana, limit)
     
     def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Dict[str, Any]]:
         """Get meeting by packet URL"""
@@ -143,17 +161,17 @@ class DatabaseManager:
     def log_search(self, search_query: str, search_type: str, city_id: int = None, 
                   zipcode: str = None, topic_flags: List[str] = None):
         """Log search activity"""
-        # Convert city_id to city_slug for analytics
-        city_slug = None
+        # Convert city_id to city_banana for analytics
+        city_banana = None
         if city_id:
             with self.locations.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT city_slug FROM cities WHERE id = ?", (city_id,))
+                cursor.execute("SELECT city_banana FROM cities WHERE id = ?", (city_id,))
                 result = cursor.fetchone()
                 if result:
-                    city_slug = result['city_slug']
+                    city_banana = result['city_banana']
         
-        return self.analytics.log_search(search_query, search_type, city_slug, zipcode, topic_flags)
+        return self.analytics.log_search(search_query, search_type, city_banana, zipcode, topic_flags)
     
     def log_city_request(self, city_name: str, state: str, search_query: str, 
                         search_type: str, zipcode: str = None, user_ip: str = None) -> int:
