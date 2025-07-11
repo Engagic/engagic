@@ -37,6 +37,28 @@ import requests
 
 logger = logging.getLogger("engagic")
 
+
+# Custom exceptions for cleaner error handling
+class ProcessingError(Exception):
+    """Base exception for PDF processing errors"""
+    pass
+
+
+class RateLimitError(ProcessingError):
+    """Raised when API rate limits are hit"""
+    pass
+
+
+class CreditsExhaustedError(ProcessingError):
+    """Raised when API credits are exhausted"""
+    pass
+
+
+class PDFSizeError(ProcessingError):
+    """Raised when PDF exceeds size/page limits"""
+    pass
+
+
 # PDF download size limit (for download_packet method)
 MAX_PDF_SIZE = 200 * 1024 * 1024  # 200MB max PDF size
 
@@ -423,9 +445,10 @@ class AgendaProcessor:
             except Exception as url_error:
                 logger.warning(f"URL method failed: {url_error}")
                 
-                # For large PDFs, go straight to chunking
-                if "exceeds API limit" in str(url_error) or "size exceeds" in str(url_error).lower():
-                    logger.info("PDF size issue detected, using chunking method")
+                # Check for ANY size/page limit errors
+                error_str = str(url_error).lower()
+                if any(x in error_str for x in ["exceeds api limit", "size exceeds", "100 pdf pages", "page limit", "maximum of 100"]):
+                    logger.info("PDF size/page limit issue detected, using chunking method")
                     try:
                         summary, method = self._process_with_pdf_api(url, "chunked")
                         logger.info(f"Successfully processed using {method}")
@@ -438,7 +461,7 @@ class AgendaProcessor:
 
                     except Exception as chunk_error:
                         logger.error(f"Chunking failed: {chunk_error}")
-                        return f"Unable to process large PDF: {chunk_error}"
+                        raise PDFSizeError(f"Unable to process large PDF: {str(chunk_error)}") from chunk_error
                 
                 # For other failures, try base64
                 try:
@@ -454,9 +477,10 @@ class AgendaProcessor:
                 except Exception as base64_error:
                     logger.warning(f"Base64 method failed: {base64_error}")
                     
-                    # If base64 also fails due to size, try chunking
-                    if "exceeds API limit" in str(base64_error) or "size exceeds" in str(base64_error).lower():
-                        logger.info("Base64 failed due to size, trying chunking")
+                    # Check for ANY size/page limit errors (including 400 errors about page limits)
+                    error_str = str(base64_error).lower()
+                    if any(x in error_str for x in ["exceeds api limit", "size exceeds", "100 pdf pages", "page limit", "maximum of 100"]):
+                        logger.info("Base64 failed due to size/page limits, trying chunking")
                         try:
                             summary, method = self._process_with_pdf_api(url, "chunked")
                             logger.info(f"Successfully processed using {method}")
@@ -469,20 +493,27 @@ class AgendaProcessor:
 
                         except Exception as chunk_error:
                             logger.error(f"Chunking failed: {chunk_error}")
-                            return f"Unable to process large PDF: {chunk_error}"
+                            # Don't fall back to OCR if chunking fails
+                            raise PDFSizeError(f"Unable to process large PDF: {str(chunk_error)}") from chunk_error
                     
                     # Check if failure was due to rate limits
-                    if any(x in str(base64_error).lower() for x in ["529", "overloaded", "rate limit", "429"]):
+                    error_str = str(base64_error).lower()
+                    if any(x in error_str for x in ["529", "overloaded", "rate limit", "429"]):
                         logger.warning("API is rate limited/overloaded")
                         
                         # Check if we've hit too many rate limits
                         if self.rate_limit_handler.consecutive_rate_limits > 5:
                             # Consider using batch API instead
                             logger.warning("Too many rate limits, consider using batch API")
-                            return "Unable to process PDF due to rate limits. Consider batching multiple requests."
+                            raise RateLimitError("Unable to process PDF due to rate limits. Consider batching multiple requests.")
                         
                         # Wait and retry with exponential backoff is handled by decorator
-                        return "Unable to process PDF: API is currently overloaded. Please try again later."
+                        raise RateLimitError("API is currently overloaded. Please try again later.")
+                    
+                    # Check for credit exhaustion
+                    if "credit balance is too low" in error_str:
+                        logger.error("API credits exhausted")
+                        raise CreditsExhaustedError("Insufficient API credits to process PDF")
                     
                     # Only use OCR as absolute last resort and log a warning
                     logger.warning("WARNING: Falling back to OCR - this is slow and resource-intensive!")
@@ -504,8 +535,8 @@ class AgendaProcessor:
                         logger.error(f"Base64 error: {base64_error}")
                         logger.error(f"OCR error: {ocr_error}")
 
-                        # Return a user-friendly error message
-                        return "Unable to process this PDF document. The file may be corrupted, password-protected, or in an unsupported format."
+                        # Raise an exception instead of returning error string
+                        raise ProcessingError("Unable to process this PDF document. The file may be corrupted, password-protected, or in an unsupported format.")
 
         elif pdf_method == "ocr":
             # Direct OCR processing

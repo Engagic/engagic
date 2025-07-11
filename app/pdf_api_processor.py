@@ -13,6 +13,7 @@ import threading
 from collections import defaultdict
 import json
 from pathlib import Path
+from anthropic_rate_limiter import AnthropicRateLimiter
 
 logger = logging.getLogger("engagic")
 
@@ -185,6 +186,7 @@ class PDFAPIProcessor:
         self._batch_cache = {}  # Cache for batch job tracking
         self.cost_tracker = CostTracker()
         self._prompt_cache = {}  # Cache for prompts to maximize cache hits
+        self.rate_limiter = AnthropicRateLimiter()  # Add intelligent rate limiting
 
     def estimate_tokens(self, page_count: int) -> Dict[str, int]:
         """Estimate token usage for a PDF"""
@@ -441,7 +443,9 @@ If there are supporting documents or attachments mentioned, note what additional
             model = self.select_optimal_model(pdf_metadata)
             logger.info(f"Selected model {model} for PDF processing")
 
-            response = self.client.messages.create(
+            # Make API call with rate limiting
+            response = self.rate_limiter.wrap_request(
+                self.client.messages.create,
                 model=model,
                 max_tokens=4000,
                 messages=[{"role": "user", "content": content_blocks}],
@@ -497,7 +501,9 @@ If there are supporting documents or attachments mentioned, note what additional
                 self._get_agenda_analysis_prompt(use_caching=use_cache),
             ]
 
-            response = self.client.messages.create(
+            # Make API call with rate limiting
+            response = self.rate_limiter.wrap_request(
+                self.client.messages.create,
                 model=model,
                 max_tokens=4000,
                 messages=[{"role": "user", "content": content_blocks}],
@@ -543,7 +549,9 @@ If there are supporting documents or attachments mentioned, note what additional
                 self._get_agenda_analysis_prompt(use_caching=True),
             ]
 
-            response = self.client.beta.messages.create(
+            # Make API call with rate limiting
+            response = self.rate_limiter.wrap_request(
+                self.client.beta.messages.create,
                 model=model,
                 max_tokens=4000,
                 messages=[{"role": "user", "content": content_blocks}],
@@ -626,8 +634,11 @@ If there are supporting documents or attachments mentioned, note what additional
             batch_requests.append(batch_request)
         
         try:
-            # Submit batch
-            batch = self.client.messages.batches.create(requests=batch_requests)
+            # Submit batch with rate limiting
+            batch = self.rate_limiter.wrap_request(
+                self.client.messages.batches.create,
+                requests=batch_requests
+            )
             logger.info(f"Batch submitted with ID: {batch.id}")
             
             # Cache batch info
@@ -744,8 +755,11 @@ If there are supporting documents or attachments mentioned, note what additional
         logger.info(f"Model distribution for batch: {dict(model_distribution)}")
 
         try:
-            # Create batch job
-            batch = self.client.beta.messages.batches.create(requests=batch_requests)
+            # Create batch job with rate limiting
+            batch = self.rate_limiter.wrap_request(
+                self.client.beta.messages.batches.create,
+                requests=batch_requests
+            )
             logger.info(
                 f"Created batch job: {batch.id} with {len(batch_requests)} requests"
             )
@@ -1051,8 +1065,9 @@ If there are supporting documents or attachments mentioned, note what additional
                 
                 prompt_blocks.append(self._get_agenda_analysis_prompt(use_caching=True))
                 
-                # Process chunk
-                response = self.client.messages.create(
+                # Process chunk with rate limiting
+                response = self.rate_limiter.wrap_request(
+                    self.client.messages.create,
                     model="claude-3-5-sonnet-20241022",
                     max_tokens=4000,
                     messages=[{"role": "user", "content": prompt_blocks}],
