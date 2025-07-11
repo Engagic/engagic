@@ -24,7 +24,7 @@
 				window.location.href = `/${cityUrl}`;
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Search failed';
+			error = err instanceof Error ? err.message : 'log_search';
 		} finally {
 			loading = false;
 		}
@@ -60,7 +60,7 @@
 			class="search-input"
 			bind:value={searchQuery}
 			onkeydown={handleKeydown}
-			placeholder="Enter zipcode or city, state (e.g. 94301 or Palo Alto, CA)"
+			placeholder="Enter zipcode or city"
 			disabled={loading}
 		/>
 		<button 
