@@ -24,6 +24,15 @@ logger = logging.getLogger("engagic")
 
 app = FastAPI(title="engagic API", description="EGMI")
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://engagic.org", "http://localhost:5173", "http://localhost:4173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Rate limiting storage
 rate_limits = defaultdict(list)
 
