@@ -24,7 +24,8 @@
 				window.location.href = `/${cityUrl}`;
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'log_search';
+			console.error('Search error:', err);
+			error = err instanceof Error ? err.message : 'We humbly thank you for your patience';
 		} finally {
 			loading = false;
 		}

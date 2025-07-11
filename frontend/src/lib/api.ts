@@ -41,51 +41,76 @@ export interface CachedSummary {
 }
 
 export async function searchMeetings(query: string): Promise<SearchResult> {
-	const response = await fetch(`${API_BASE}/api/search`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-		},
-		body: JSON.stringify({ query }),
-	});
+	try {
+		const response = await fetch(`${API_BASE}/api/search`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ query }),
+		});
 
-	if (!response.ok) {
-		if (response.status === 429) {
-			throw new Error('Too many requests. Please wait a moment and try again.');
-		} else if (response.status === 500) {
-			throw new Error('Server error. Please try again later.');
-		} else if (response.status === 404) {
-			throw new Error('Not found. Please check your search and try again.');
+		if (!response.ok) {
+			if (response.status === 429) {
+				throw new Error('Too many requests. Please wait a moment and try again.');
+			} else if (response.status === 500) {
+				throw new Error('We humbly thank you for your patience');
+			} else if (response.status === 404) {
+				throw new Error('No meetings found for this location');
+			}
+			throw new Error('We humbly thank you for your patience');
 		}
-		throw new Error(`Something went wrong. Please try again.`);
-	}
 
-	return response.json();
+		return response.json();
+	} catch (error) {
+		// Network errors (fetch failures)
+		if (error instanceof TypeError && error.message.includes('fetch')) {
+			throw new Error('We humbly thank you for your patience');
+		}
+		throw error;
+	}
 }
 
 export async function getCachedSummary(meeting: Meeting, cityBanana: string): Promise<CachedSummary> {
-	const response = await fetch(`${API_BASE}/api/process-agenda`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-		},
-		body: JSON.stringify({
-			packet_url: meeting.packet_url,
-			city_banana: cityBanana,
-			meeting_name: meeting.title || meeting.meeting_name,
-			meeting_date: meeting.start || meeting.meeting_date,
-			meeting_id: meeting.meeting_id,
-		}),
-	});
+	try {
+		const response = await fetch(`${API_BASE}/api/process-agenda`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				packet_url: meeting.packet_url,
+				city_banana: cityBanana,
+				meeting_name: meeting.title || meeting.meeting_name,
+				meeting_date: meeting.start || meeting.meeting_date,
+				meeting_id: meeting.meeting_id,
+			}),
+		});
 
-	if (!response.ok) {
-		if (response.status === 429) {
-			throw new Error('Too many requests. Please wait a moment and try again.');
-		} else if (response.status === 500) {
-			throw new Error('Server error. Please try again later.');
+		if (!response.ok) {
+			if (response.status === 429) {
+				throw new Error('Too many requests. Please wait a moment and try again.');
+			} else if (response.status === 500) {
+				throw new Error('We humbly thank you for your patience');
+			} else if (response.status === 404) {
+				throw new Error('Packets not posted yet, please check back later');
+			}
+			throw new Error('Packets not posted yet, please check back later');
 		}
-		throw new Error('Failed to load meeting summary. Please try again.');
-	}
 
-	return response.json();
+		const result = await response.json();
+		
+		// Check if the response indicates no summary is available yet
+		if (!result.success && result.message && result.message.includes('not yet available')) {
+			throw new Error('Packets not posted yet, please check back later');
+		}
+		
+		return result;
+	} catch (error) {
+		// Network errors (fetch failures)
+		if (error instanceof TypeError && error.message.includes('fetch')) {
+			throw new Error('We humbly thank you for your patience');
+		}
+		throw error;
+	}
 }
