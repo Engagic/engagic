@@ -3,7 +3,7 @@ const API_BASE = 'https://api.engagic.org';
 export interface CityOption {
 	city_name: string;
 	state: string;
-	city_slug: string;
+	city_banana: string;
 	vendor: string;
 	display_name: string;
 }
@@ -12,7 +12,7 @@ export interface SearchResult {
 	success: boolean;
 	city_name?: string;
 	state?: string;
-	city_slug?: string;
+	city_banana?: string;
 	vendor?: string;
 	meetings?: Meeting[];
 	message?: string;
@@ -63,7 +63,7 @@ export async function searchMeetings(query: string): Promise<SearchResult> {
 	return response.json();
 }
 
-export async function getCachedSummary(meeting: Meeting, citySlug: string): Promise<CachedSummary> {
+export async function getCachedSummary(meeting: Meeting, cityBanana: string): Promise<CachedSummary> {
 	const response = await fetch(`${API_BASE}/api/process-agenda`, {
 		method: 'POST',
 		headers: {
@@ -71,7 +71,7 @@ export async function getCachedSummary(meeting: Meeting, citySlug: string): Prom
 		},
 		body: JSON.stringify({
 			packet_url: meeting.packet_url,
-			city_slug: citySlug,
+			city_banana: cityBanana,
 			meeting_name: meeting.title || meeting.meeting_name,
 			meeting_date: meeting.start || meeting.meeting_date,
 			meeting_id: meeting.meeting_id,
