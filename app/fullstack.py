@@ -339,8 +339,25 @@ class AgendaProcessor:
 
             except Exception as url_error:
                 logger.warning(f"URL method failed: {url_error}")
+                
+                # For large PDFs, go straight to chunking
+                if "exceeds API limit" in str(url_error) or "size exceeds" in str(url_error).lower():
+                    logger.info("PDF size issue detected, using chunking method")
+                    try:
+                        summary, method = self._process_with_pdf_api(url, "chunked")
+                        logger.info(f"Successfully processed using {method}")
 
-                # Try base64 with caching (download once, cache for reuse)
+                        if save_raw or save_cleaned:
+                            self._save_text(summary, "agenda_summary.txt")
+                            logger.info("Complete! Summary saved to agenda_summary.txt")
+
+                        return summary
+
+                    except Exception as chunk_error:
+                        logger.error(f"Chunking failed: {chunk_error}")
+                        return f"Unable to process large PDF: {chunk_error}"
+                
+                # For other failures, try base64
                 try:
                     summary, method = self._process_with_pdf_api(url, "base64")
                     logger.info(f"Successfully processed using {method}")
@@ -354,21 +371,27 @@ class AgendaProcessor:
                 except Exception as base64_error:
                     logger.warning(f"Base64 method failed: {base64_error}")
                     
-                    # Try chunking method for large PDFs
-                    try:
-                        summary, method = self._process_with_pdf_api(url, "chunked")
-                        logger.info(f"Successfully processed using {method}")
+                    # If base64 also fails due to size, try chunking
+                    if "exceeds API limit" in str(base64_error) or "size exceeds" in str(base64_error).lower():
+                        logger.info("Base64 failed due to size, trying chunking")
+                        try:
+                            summary, method = self._process_with_pdf_api(url, "chunked")
+                            logger.info(f"Successfully processed using {method}")
 
-                        if save_raw or save_cleaned:
-                            self._save_text(summary, "agenda_summary.txt")
-                            logger.info("Complete! Summary saved to agenda_summary.txt")
+                            if save_raw or save_cleaned:
+                                self._save_text(summary, "agenda_summary.txt")
+                                logger.info("Complete! Summary saved to agenda_summary.txt")
 
-                        return summary
+                            return summary
 
-                    except Exception as chunk_error:
-                        logger.warning(f"Chunking method failed: {chunk_error}")
-
-                    # Final fallback to OCR
+                        except Exception as chunk_error:
+                            logger.error(f"Chunking failed: {chunk_error}")
+                            return f"Unable to process large PDF: {chunk_error}"
+                    
+                    # Only use OCR as absolute last resort and log a warning
+                    logger.warning("WARNING: Falling back to OCR - this is slow and resource-intensive!")
+                    logger.warning("Consider implementing better PDF handling to avoid OCR")
+                    
                     try:
                         summary, method = self._process_with_ocr(url, english_threshold)
                         logger.info(f"Successfully processed using {method}")
@@ -383,7 +406,6 @@ class AgendaProcessor:
                         logger.error("All processing methods failed")
                         logger.error(f"URL error: {url_error}")
                         logger.error(f"Base64 error: {base64_error}")
-                        logger.error(f"Chunking error: {chunk_error}")
                         logger.error(f"OCR error: {ocr_error}")
 
                         # Return a user-friendly error message
@@ -420,10 +442,26 @@ class AgendaProcessor:
             except Exception as e:
                 logger.error(f"{pdf_method} method failed: {e}")
 
-                # Try OCR as fallback unless explicitly disabled
-                if pdf_method != "ocr":
+                # If the error is due to size, try chunking
+                if "exceeds API limit" in str(e) or "size exceeds" in str(e).lower():
+                    logger.info(f"{pdf_method} failed due to size, trying chunking")
                     try:
-                        logger.info("Falling back to OCR...")
+                        summary, method = self._process_with_pdf_api(url, "chunked")
+                        logger.info(f"Successfully processed using {method}")
+
+                        if save_raw or save_cleaned:
+                            self._save_text(summary, "agenda_summary.txt")
+                            logger.info("Complete! Summary saved to agenda_summary.txt")
+
+                        return summary
+                    except Exception as chunk_error:
+                        logger.error(f"Chunking also failed: {chunk_error}")
+                        return f"Unable to process large PDF: {chunk_error}"
+                
+                # Try OCR as absolute last resort (not for chunked method)
+                if pdf_method not in ["ocr", "chunked"]:
+                    logger.warning("WARNING: Falling back to OCR as last resort - this is slow!")
+                    try:
                         summary, method = self._process_with_ocr(url, english_threshold)
                         logger.info(f"Successfully processed using {method}")
 
@@ -435,7 +473,7 @@ class AgendaProcessor:
                     except Exception as ocr_error:
                         logger.error(f"OCR fallback also failed: {ocr_error}")
 
-                return f"Unable to process PDF using {pdf_method} method."
+                return f"Unable to process PDF using {pdf_method} method: {str(e)}"
 
     def _save_text(self, text: str, filename: str) -> None:
         """Save text to file with UTF-8 encoding"""
