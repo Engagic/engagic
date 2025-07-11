@@ -171,7 +171,50 @@ class GranicusAdapter:
             f"{self.slug}: using view_id={self.view_id}  list_url={self.list_url}"
         )
 
-    def upcoming_packets(self):
+    class GranicusAdapter:
+    def __init__(self, city_slug: str):
+        self.slug = city_slug
+        self.base = f"https://{self.slug}.granicus.com"
+        self.view_ids_file = "granicus_view_ids.json"
+        
+        # Create a robust HTTP session with proper timeouts
+        self.session = requests.Session()
+        self.session.headers.update(DEFAULT_HEADERS)
+        
+        # Set aggressive connection and read timeouts
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=2,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+
+        # Load existing view_id mappings
+        view_id_mappings = self._load_view_id_mappings()
+
+        # Check if we already have a view_id for this base URL
+        if self.base in view_id_mappings:
+            self.view_id = view_id_mappings[self.base]
+            logger.info(f"Found cached view_id {self.view_id} for {self.base}")
+        else:
+            # Discover and cache the view_id
+            self.view_id = self._discover_view_id(self.base)
+            view_id_mappings[self.base] = self.view_id
+            self._save_view_id_mappings(view_id_mappings)
+            logger.info(f"Discovered and cached view_id {self.view_id} for {self.base}")
+
+        # Build the list URL
+        self.list_url = f"{self.base}/ViewPublisher.php?view_id={self.view_id}"
+        logger.info(
+            f"{self.slug}: using view_id={self.view_id}  list_url={self.list_url}"
+        )
+
+    def all_meetings(self):
+        """Get ALL meetings (with and without packets) for display to users"""
         soup = self._fetch_dom(self.list_url)
 
         # Find the "Upcoming Events" or "Upcoming Meetings" section
@@ -199,45 +242,40 @@ class GranicusAdapter:
 
         logger.info(f"Processing upcoming events table for {self.slug}")
 
-        # Only process agenda links within the upcoming events table
-        for a in upcoming_table.select("a"):
-            if a.string:
-                row = a.find_parent("tr")
-                if not row:
-                    continue
-                cells = row.find_all("td")
-                if len(cells) < 2:
-                    continue
-                title = cells[0].get_text(" ", strip=True)
-                start = cells[1].get_text(" ", strip=True)
-                date = self._normalize_date(start)
+        meetings_found = []
 
-                if "Agenda" in a.string:  # human-visible "Agenda"
-                    href = a.get("href", "")
-                    if not href:
-                        continue
-
+        # Process ALL meeting rows, not just ones with agenda links
+        for row in upcoming_table.find_all("tr"):
+            # Skip empty or header rows
+            cells = row.find_all("td")
+            if len(cells) < 2:
+                continue
+            
+            # Extract meeting info from cells
+            title = cells[0].get_text(" ", strip=True)
+            start = cells[1].get_text(" ", strip=True)
+            
+            # Skip if no meaningful title
+            if not title or title in ["Meeting", "Event"]:
+                continue
+            
+            # Look for agenda link in this row
+            agenda_link = row.find("a", string=lambda s: s and "Agenda" in s)
+            
+            packet_url = None
+            meeting_id = None
+            
+            if agenda_link:
+                href = agenda_link.get("href", "")
+                if href:
                     agenda_url = self._absolute(href)
-
-                    row = a.find_parent("tr")
-                    if not row:
-                        continue
-                    cells = row.find_all("td")
-                    if len(cells) < 2:
-                        continue
-                    title = cells[0].get_text(" ", strip=True)
-                    start = cells[1].get_text(" ", strip=True)
-
+                    meeting_id = self._clip_or_event_id(agenda_url)
+                    
                     # Check if this is a direct PDF link
                     if ".pdf" in agenda_url.lower() or "GeneratedAgenda.ashx" in agenda_url:
                         # Direct PDF link
                         logger.debug(f"Found direct PDF link for {title}: {agenda_url}")
-                        yield {
-                            "meeting_id": self._clip_or_event_id(agenda_url),
-                            "title": title,
-                            "start": date,
-                            "packet_url": agenda_url,  # Single PDF
-                        }
+                        packet_url = agenda_url
                     elif "AgendaViewer.php" in agenda_url:
                         # AgendaViewer page - need to extract PDFs
                         try:
@@ -246,31 +284,35 @@ class GranicusAdapter:
                                 logger.info(
                                     f"Found {len(pdf_urls)} PDFs for meeting: {title}"
                                 )
-                                yield {
-                                    "meeting_id": self._clip_or_event_id(agenda_url),
-                                    "title": title,
-                                    "start": date,
-                                    "packet_url": pdf_urls,  # List of PDFs
-                                }
-                    else:
-                        logger.debug(
-                            f"Skipping non-PDF/non-AgendaViewer link: {agenda_url}"
-                        )
+                                packet_url = pdf_urls  # List of PDFs
+                            else:
+                                logger.debug(
+                                    f"No PDFs found for meeting: {title}"
+                                )
+                        except Exception as e:
+                            logger.debug(
+                                f"Could not extract PDFs for {title}: {e}"
+                            )
+            
+            # Generate a meeting_id if we don't have one
             if not meeting_id:
                 # Use a hash of title + date as fallback ID
                 import hashlib
-
-                id_string = f"{title}_{date or 'no_date'}"
+                id_string = f"{title}_{start}"
                 meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
-
-            return {
+            
+            # Yield the meeting regardless of packet availability
+            meeting_data = {
                 "meeting_id": meeting_id,
                 "title": title,
-                "start": date,
+                "start": self._normalize_date(start),
                 "packet_url": packet_url,  # Will be None, string URL, or list of URLs
-                "meeting_detail_url": meeting_detail_url,  # For debugging
                 "has_packet": packet_url is not None,
             }
+            meetings_found.append(meeting_data)
+            yield meeting_data
+        
+        logger.info(f"Found {len(meetings_found)} total meetings")
 
     def _discover_view_id(self, url):
         """Brute force discover the view_id by testing a range of IDs"""
