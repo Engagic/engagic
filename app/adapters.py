@@ -215,7 +215,7 @@ class GranicusAdapter:
             
             # Skip if no meaningful title
             if not title or title in ["Meeting", "Event"]:
-                continue
+                logger.info(f"No Title found for {self.base}{row}")
             
             # Look for agenda link in this row
             agenda_link = row.find("a", string=lambda s: s and "Agenda" in s)
