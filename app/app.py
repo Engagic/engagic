@@ -269,7 +269,7 @@ class SearchRequest(BaseModel):
 
 class ProcessRequest(BaseModel):
     packet_url: str
-    city_slug: str
+    city_slug: str  # Kept for frontend backward compatibility only
     meeting_name: Optional[str] = None
     meeting_date: Optional[str] = None
     meeting_id: Optional[str] = None
@@ -371,7 +371,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             "success": True,
             "city_name": city_info['city_name'],
             "state": city_info['state'],
-            "city_slug": city_info['city_slug'],
+            "city_slug": city_info['city_slug'],  # Kept for frontend/vendor compatibility
             "vendor": city_info['vendor'],
             "meetings": meetings,
             "cached": True,
@@ -384,7 +384,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
         "success": True,
         "city_name": city_info['city_name'],
         "state": city_info['state'],
-        "city_slug": city_info['city_slug'],
+        "city_slug": city_info['city_slug'],  # Kept for frontend/vendor compatibility
         "vendor": city_info['vendor'],
         "meetings": [],
         "cached": False,
@@ -433,7 +433,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
             "success": True,
             "city_name": city_info['city_name'],
             "state": city_info['state'],
-            "city_slug": city_info['city_slug'],
+            "city_slug": city_info['city_slug'],  # Kept for frontend/vendor compatibility
             "vendor": city_info['vendor'],
             "meetings": meetings,
             "cached": True,
@@ -446,7 +446,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         "success": False,
         "city_name": city_info['city_name'],
         "state": city_info['state'],
-        "city_slug": city_info['city_slug'],
+        "city_slug": city_info['city_slug'],  # Kept for frontend/vendor compatibility
         "vendor": city_info['vendor'],
         "meetings": [],
         "cached": True,
@@ -495,7 +495,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
                 "success": True,
                 "city_name": city_info['city_name'],
                 "state": city_info['state'],
-                "city_slug": city_info['city_slug'],
+                "city_slug": city_info['city_slug'],  # Kept for frontend/vendor compatibility
                 "vendor": city_info['vendor'],
                 "meetings": meetings,
                 "cached": True,
@@ -508,7 +508,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
                 "success": False,
                 "city_name": city_info['city_name'],
                 "state": city_info['state'],
-                "city_slug": city_info['city_slug'],
+                "city_slug": city_info['city_slug'],  # Kept for frontend/vendor compatibility
                 "vendor": city_info['vendor'],
                 "meetings": [],
                 "cached": True,
@@ -524,7 +524,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
         city_options.append({
             "city_name": city['city_name'],
             "state": city['state'],
-            "city_slug": city['city_slug'],
+            "city_slug": city['city_slug'],  # Kept for frontend/vendor compatibility
             "vendor": city['vendor'],
             "display_name": f"{city['city_name']}, {city['state']}"
         })
