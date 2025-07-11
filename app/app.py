@@ -269,7 +269,7 @@ class SearchRequest(BaseModel):
 
 class ProcessRequest(BaseModel):
     packet_url: str
-    city_slug: str
+    city_banana: str
     meeting_name: Optional[str] = None
     meeting_date: Optional[str] = None
     meeting_id: Optional[str] = None
@@ -288,16 +288,16 @@ class ProcessRequest(BaseModel):
         
         return v.strip()
     
-    @validator('city_slug')
-    def validate_city_slug(cls, v):
+    @validator('city_banana')
+    def validate_city_banana(cls, v):
         if not v or not v.strip():
-            raise ValueError('City slug cannot be empty')
+            raise ValueError('City banana cannot be empty')
         
-        # City slug should be alphanumeric
-        if not re.match(r'^[a-z0-9]+$', v.lower()):
-            raise ValueError('City slug contains invalid characters')
+        # City banana should be alphanumeric with state code
+        if not re.match(r'^[a-z0-9]+[A-Z]{2}$', v):
+            raise ValueError('City banana must be lowercase city name + uppercase state code')
         
-        return v.lower().strip()
+        return v.strip()
     
     @validator('meeting_name', 'meeting_date', 'meeting_id', pre=True, always=True)
     def validate_optional_strings(cls, v):
@@ -371,7 +371,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             "success": True,
             "city_name": city_info['city_name'],
             "state": city_info['state'],
-            "city_slug": city_info['city_slug'],
+            "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
             "vendor": city_info['vendor'],
             "meetings": meetings,
             "cached": True,
@@ -384,7 +384,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
         "success": True,
         "city_name": city_info['city_name'],
         "state": city_info['state'],
-        "city_slug": city_info['city_slug'],
+        "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
         "vendor": city_info['vendor'],
         "meetings": [],
         "cached": False,
@@ -433,7 +433,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
             "success": True,
             "city_name": city_info['city_name'],
             "state": city_info['state'],
-            "city_slug": city_info['city_slug'],
+            "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
             "vendor": city_info['vendor'],
             "meetings": meetings,
             "cached": True,
@@ -446,7 +446,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         "success": False,
         "city_name": city_info['city_name'],
         "state": city_info['state'],
-        "city_slug": city_info['city_slug'],
+        "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
         "vendor": city_info['vendor'],
         "meetings": [],
         "cached": True,
@@ -495,7 +495,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
                 "success": True,
                 "city_name": city_info['city_name'],
                 "state": city_info['state'],
-                "city_slug": city_info['city_slug'],
+                "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
                 "vendor": city_info['vendor'],
                 "meetings": meetings,
                 "cached": True,
@@ -508,7 +508,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
                 "success": False,
                 "city_name": city_info['city_name'],
                 "state": city_info['state'],
-                "city_slug": city_info['city_slug'],
+                "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
                 "vendor": city_info['vendor'],
                 "meetings": [],
                 "cached": True,
@@ -524,7 +524,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
         city_options.append({
             "city_name": city['city_name'],
             "state": city['state'],
-            "city_slug": city['city_slug'],
+            "city_banana": city.get('city_banana') or generate_city_banana(city['city_name'], city['state']),
             "vendor": city['vendor'],
             "display_name": f"{city['city_name']}, {city['state']}"
         })
@@ -655,7 +655,7 @@ async def root():
                 "url": "/api/process-agenda",
                 "body": {
                     "packet_url": "https://example.com/agenda.pdf",
-                    "city_slug": "paloaltoca",
+                    "city_banana": "paloaltoCA",
                     "meeting_name": "City Council Meeting"
                 },
                 "description": "Get cached AI summary of meeting agenda"
@@ -813,16 +813,16 @@ async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
         raise HTTPException(status_code=500, detail="Failed to get city requests")
 
 
-@app.post("/api/admin/sync-city/{city_slug}")
-async def force_sync_city(city_slug: str, is_admin: bool = Depends(verify_admin_token)):
+@app.post("/api/admin/sync-city/{city_banana}")
+async def force_sync_city(city_banana: str, is_admin: bool = Depends(verify_admin_token)):
     """Force sync a specific city (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
-    # Admin should use the daemon directly: python daemon.py --sync-city SLUG
+    # Admin should use the daemon directly: python daemon.py --sync-city CITY_BANANA
     return {
         "success": False,
-        "city_slug": city_slug,
+        "city_banana": city_banana,
         "message": "Background processing runs as separate service. Use daemon directly:",
-        "command": f"python /root/engagic/app/daemon.py --sync-city {city_slug}",
+        "command": f"python /root/engagic/app/daemon.py --sync-city {city_banana}",
         "alternative": f"systemctl status engagic-daemon"
     }
 
