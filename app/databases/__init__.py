@@ -14,9 +14,9 @@ from .analytics_db import AnalyticsDatabase
 from .database_manager import DatabaseManager
 
 __all__ = [
-    'BaseDatabase',
-    'LocationsDatabase', 
-    'MeetingsDatabase',
-    'AnalyticsDatabase',
-    'DatabaseManager'
+    "BaseDatabase",
+    "LocationsDatabase",
+    "MeetingsDatabase",
+    "AnalyticsDatabase",
+    "DatabaseManager",
 ]
