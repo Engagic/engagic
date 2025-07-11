@@ -21,14 +21,14 @@ class MeetingsDatabase(BaseDatabase):
             meeting_id TEXT,
             meeting_name TEXT,
             meeting_date DATETIME,
-            packet_url TEXT NOT NULL,
+            packet_url TEXT,  -- Can be NULL for meetings without packets
             meeting_hash TEXT,  -- Hash of meeting details for change detection
             raw_packet_size INTEGER,
             processed_summary TEXT,
             processing_time_seconds REAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(packet_url)
+            UNIQUE(city_banana, meeting_id)  -- Composite key instead of packet_url
         );
 
         -- Processing cache table - LLM processing cache
@@ -112,21 +112,19 @@ class MeetingsDatabase(BaseDatabase):
 
     def has_meeting_changed(self, meeting_data: Dict[str, Any]) -> bool:
         """Check if meeting data has changed since last sync"""
-        packet_url = meeting_data.get("packet_url")
-        if not packet_url:
-            return True  # No URL means it's new
-
+        city_banana = meeting_data.get("city_banana")
+        meeting_id = meeting_data.get("meeting_id")
+        
+        if not city_banana or not meeting_id:
+            return True  # Missing required fields means it's new
+        
         new_hash = self._generate_meeting_hash(meeting_data)
-
-        # Serialize packet_url if it's a list for DB lookup
-        lookup_url = packet_url
-        if isinstance(packet_url, list):
-            lookup_url = json.dumps(packet_url)
 
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT meeting_hash FROM meetings WHERE packet_url = ?", (lookup_url,)
+                "SELECT meeting_hash FROM meetings WHERE city_banana = ? AND meeting_id = ?", 
+                (city_banana, meeting_id)
             )
 
             result = cursor.fetchone()
