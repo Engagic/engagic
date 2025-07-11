@@ -171,48 +171,6 @@ class GranicusAdapter:
             f"{self.slug}: using view_id={self.view_id}  list_url={self.list_url}"
         )
 
-    class GranicusAdapter:
-    def __init__(self, city_slug: str):
-        self.slug = city_slug
-        self.base = f"https://{self.slug}.granicus.com"
-        self.view_ids_file = "granicus_view_ids.json"
-        
-        # Create a robust HTTP session with proper timeouts
-        self.session = requests.Session()
-        self.session.headers.update(DEFAULT_HEADERS)
-        
-        # Set aggressive connection and read timeouts
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=2,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-        )
-        
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-
-        # Load existing view_id mappings
-        view_id_mappings = self._load_view_id_mappings()
-
-        # Check if we already have a view_id for this base URL
-        if self.base in view_id_mappings:
-            self.view_id = view_id_mappings[self.base]
-            logger.info(f"Found cached view_id {self.view_id} for {self.base}")
-        else:
-            # Discover and cache the view_id
-            self.view_id = self._discover_view_id(self.base)
-            view_id_mappings[self.base] = self.view_id
-            self._save_view_id_mappings(view_id_mappings)
-            logger.info(f"Discovered and cached view_id {self.view_id} for {self.base}")
-
-        # Build the list URL
-        self.list_url = f"{self.base}/ViewPublisher.php?view_id={self.view_id}"
-        logger.info(
-            f"{self.slug}: using view_id={self.view_id}  list_url={self.list_url}"
-        )
-
     def all_meetings(self):
         """Get ALL meetings (with and without packets) for display to users"""
         soup = self._fetch_dom(self.list_url)
