@@ -32,6 +32,7 @@ from pdf_api_processor import (
     ResultType,
 )
 from pdf_ocr_extractor import PDFOCRExtractor, validate_url, sanitize_filename
+from rate_limit_handler import RateLimitHandler, with_rate_limit_retry, APIRateLimitManager
 import requests
 
 logger = logging.getLogger("engagic")
@@ -58,6 +59,14 @@ class AgendaProcessor:
         # Can configure to use Files API by default with use_files_api=True
         self.pdf_api_processor = PDFAPIProcessor(self.api_key, use_files_api=False)
         self.pdf_ocr_extractor = PDFOCRExtractor()
+        
+        # Initialize rate limit handling
+        self.rate_limit_manager = APIRateLimitManager()
+        self.rate_limit_handler = RateLimitHandler(
+            initial_delay=2.0,
+            max_delay=120.0,
+            max_retries=5
+        )
 
         # Initialize batch accumulator for efficient processing
         self.batch_accumulator = BatchAccumulator(
@@ -67,8 +76,12 @@ class AgendaProcessor:
             auto_submit=True,
         )
 
+    @with_rate_limit_retry()
     def _process_with_pdf_api(self, url, method="url"):
-        """Try to process PDF using the new PDF API with multiple methods"""
+        """Try to process PDF using the new PDF API with multiple methods and rate limit handling"""
+        # Check if we should wait due to rate limits
+        self.rate_limit_manager.wait_if_needed()
+        
         try:
             # Check if PDF needs chunking (only for single URLs)
             if isinstance(url, str) and method in ["url", "base64"]:
@@ -237,6 +250,76 @@ class AgendaProcessor:
             logger.error(f"Error processing long agenda: {e}")
             return "Unable to process this large agenda document. The file may be too complex or contain formatting that prevents proper analysis."
 
+    def process_multiple_agendas_batch(self, meeting_data_list: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """Process multiple agendas using batch API for efficiency"""
+        results = {}
+        
+        # Separate into those needing processing
+        to_process = []
+        
+        for meeting_data in meeting_data_list:
+            packet_url = meeting_data.get("packet_url")
+            if not packet_url:
+                continue
+                
+            # Check cache first
+            cached = self.db.get_cached_summary(packet_url)
+            if cached:
+                results[packet_url] = {
+                    "summary": cached["processed_summary"],
+                    "cached": True,
+                    "meeting_data": cached
+                }
+            else:
+                to_process.append(meeting_data)
+        
+        # Process uncached items in batch
+        if to_process:
+            logger.info(f"Processing {len(to_process)} agendas via batch API")
+            
+            # Prepare batch requests
+            batch_requests = []
+            url_to_meeting = {}
+            
+            for meeting_data in to_process:
+                packet_url = meeting_data["packet_url"]
+                url_to_meeting[packet_url] = meeting_data
+                batch_requests.append({
+                    "url": packet_url,
+                    "custom_id": packet_url[:100]  # Use truncated URL as ID
+                })
+            
+            # Process batch
+            batch_results = self.pdf_api_processor.smart_batch_pdfs(
+                [r["url"] for r in batch_requests],
+                max_wait_time=1800  # 30 minutes max
+            )
+            
+            # Store results
+            for packet_url, summary in batch_results.items():
+                if packet_url in url_to_meeting:
+                    meeting_data = url_to_meeting[packet_url]
+                    
+                    # Store in database
+                    city_banana = meeting_data.get("city_banana")
+                    city_info = self.db.get_city_by_banana(city_banana) if city_banana else {}
+                    full_meeting_data = {**meeting_data, **city_info}
+                    
+                    processing_time = 0  # Batch processing time not tracked per item
+                    meeting_id = self.db.store_meeting_summary(
+                        full_meeting_data, summary, processing_time
+                    )
+                    
+                    results[packet_url] = {
+                        "summary": summary,
+                        "cached": False,
+                        "meeting_data": full_meeting_data,
+                        "meeting_id": meeting_id,
+                        "processing_method": "batch"
+                    }
+        
+        return results
+    
     def process_agenda_with_cache(
         self, meeting_data: Dict[str, Any], pdf_method: str = "auto"
     ) -> Dict[str, Any]:
@@ -388,9 +471,22 @@ class AgendaProcessor:
                             logger.error(f"Chunking failed: {chunk_error}")
                             return f"Unable to process large PDF: {chunk_error}"
                     
+                    # Check if failure was due to rate limits
+                    if any(x in str(base64_error).lower() for x in ["529", "overloaded", "rate limit", "429"]):
+                        logger.warning("API is rate limited/overloaded")
+                        
+                        # Check if we've hit too many rate limits
+                        if self.rate_limit_handler.consecutive_rate_limits > 5:
+                            # Consider using batch API instead
+                            logger.warning("Too many rate limits, consider using batch API")
+                            return "Unable to process PDF due to rate limits. Consider batching multiple requests."
+                        
+                        # Wait and retry with exponential backoff is handled by decorator
+                        return "Unable to process PDF: API is currently overloaded. Please try again later."
+                    
                     # Only use OCR as absolute last resort and log a warning
                     logger.warning("WARNING: Falling back to OCR - this is slow and resource-intensive!")
-                    logger.warning("Consider implementing better PDF handling to avoid OCR")
+                    logger.warning("Consider using batch API for multiple PDFs to avoid rate limits")
                     
                     try:
                         summary, method = self._process_with_ocr(url, english_threshold)
@@ -457,6 +553,16 @@ class AgendaProcessor:
                     except Exception as chunk_error:
                         logger.error(f"Chunking also failed: {chunk_error}")
                         return f"Unable to process large PDF: {chunk_error}"
+                
+                # Check if failure was due to rate limits
+                if any(x in str(e).lower() for x in ["529", "overloaded", "rate limit", "429"]):
+                    logger.warning("API is rate limited/overloaded")
+                    
+                    # Track rate limits
+                    self.rate_limit_handler.handle_rate_limit()
+                    
+                    # Suggest batch processing
+                    return f"Unable to process PDF: API rate limit hit. Consider using batch processing for multiple PDFs."
                 
                 # Try OCR as absolute last resort (not for chunked method)
                 if pdf_method not in ["ocr", "chunked"]:
