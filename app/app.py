@@ -341,9 +341,6 @@ async def search_meetings(request: SearchRequest):
 
         logger.info(f"Search request: '{query}'")
 
-        # Log the search
-        db.log_search(query, "unknown")  # We'll determine type below
-
         # Determine if input is zipcode or city name
         is_zipcode = query.isdigit() and len(query) == 5
 
