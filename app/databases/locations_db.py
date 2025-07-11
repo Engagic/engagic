@@ -3,6 +3,10 @@ import logging
 from typing import Optional, List, Dict, Any
 from .base_db import BaseDatabase
 from uszipcode import SearchEngine
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import generate_city_banana
 
 logger = logging.getLogger("engagic")
 
@@ -21,13 +25,14 @@ class LocationsDatabase(BaseDatabase):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             city_name TEXT NOT NULL,
             state TEXT NOT NULL,
-            city_slug TEXT NOT NULL UNIQUE,
+            city_banana TEXT NOT NULL UNIQUE,
+            city_slug TEXT,
             vendor TEXT,
             county TEXT,
             status TEXT DEFAULT 'active',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(city_name, state, city_slug)
+            UNIQUE(city_name, state)
         );
 
         -- Zipcodes table - zipcode to city mapping
@@ -42,6 +47,7 @@ class LocationsDatabase(BaseDatabase):
         );
 
         -- Create indices for performance
+        CREATE INDEX IF NOT EXISTS idx_cities_banana ON cities(city_banana);
         CREATE INDEX IF NOT EXISTS idx_cities_slug ON cities(city_slug);
         CREATE INDEX IF NOT EXISTS idx_cities_name_state ON cities(city_name, state);
         CREATE INDEX IF NOT EXISTS idx_zipcodes_zipcode ON zipcodes(zipcode);
@@ -53,14 +59,16 @@ class LocationsDatabase(BaseDatabase):
                  county: str = None, zipcodes: List[str] = None) -> int:
         """Add a new city with optional zipcodes"""
         logger.info(f"Adding city: {city_name}, {state} with vendor {vendor}")
+        city_banana = generate_city_banana(city_name, state)
+        
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
             # Insert city
             cursor.execute("""
-                INSERT INTO cities (city_name, state, city_slug, vendor, county)
-                VALUES (?, ?, ?, ?, ?)
-            """, (city_name, state, city_slug, vendor, county))
+                INSERT INTO cities (city_name, state, city_banana, city_slug, vendor, county)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (city_name, state, city_banana, city_slug, vendor, county))
             
             city_id = cursor.lastrowid
             
@@ -170,6 +178,28 @@ class LocationsDatabase(BaseDatabase):
                 return result
             return None
     
+    def get_city_by_banana(self, city_banana: str) -> Optional[Dict[str, Any]]:
+        """Get city information by city_banana identifier"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT c.*, 
+                       GROUP_CONCAT(z.zipcode) as zipcodes,
+                       (SELECT z2.zipcode FROM zipcodes z2 WHERE z2.city_id = c.id AND z2.is_primary = 1) as primary_zipcode
+                FROM cities c
+                LEFT JOIN zipcodes z ON c.id = z.city_id
+                WHERE c.city_banana = ?
+                GROUP BY c.id
+            """, (city_banana,))
+            
+            row = cursor.fetchone()
+            if row:
+                result = dict(row)
+                if result['zipcodes']:
+                    result['zipcodes'] = result['zipcodes'].split(',')
+                return result
+            return None
+    
     def get_all_cities(self) -> List[Dict[str, Any]]:
         """Get all cities with their zipcode information"""
         with self.get_connection() as conn:
@@ -192,17 +222,17 @@ class LocationsDatabase(BaseDatabase):
                 results.append(result)
             return results
     
-    def delete_city(self, city_slug: str) -> bool:
+    def delete_city(self, city_banana: str) -> bool:
         """Delete a city and all associated data"""
-        logger.info(f"Deleting city: {city_slug}")
+        logger.info(f"Deleting city: {city_banana}")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
             # Get city_id first
-            cursor.execute("SELECT id FROM cities WHERE city_slug = ?", (city_slug,))
+            cursor.execute("SELECT id FROM cities WHERE city_banana = ?", (city_banana,))
             city_row = cursor.fetchone()
             if not city_row:
-                logger.warning(f"City not found for deletion: {city_slug}")
+                logger.warning(f"City not found for deletion: {city_banana}")
                 return False
             
             city_id = city_row['id']
@@ -211,7 +241,7 @@ class LocationsDatabase(BaseDatabase):
             cursor.execute("DELETE FROM cities WHERE id = ?", (city_id,))
             
             conn.commit()
-            logger.info(f"Successfully deleted city {city_slug}")
+            logger.info(f"Successfully deleted city {city_banana}")
             return True
     
     def delete_cities_without_vendor(self) -> int:
@@ -240,3 +270,53 @@ class LocationsDatabase(BaseDatabase):
             conn.commit()
             logger.info(f"Successfully deleted {count} cities without vendor")
             return count
+    
+    def update_city(self, city_id: int, vendor: str = None, city_slug: str = None, city_banana: str = None) -> bool:
+        """Update city vendor and/or city_slug information"""
+        logger.info(f"Updating city ID {city_id}: vendor={vendor}, city_slug={city_slug}, city_banana={city_banana}")
+        
+        if vendor is None and city_slug is None and city_banana is None:
+            logger.warning("No fields to update")
+            return False
+        
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Build update query dynamically
+            update_parts = []
+            params = []
+            
+            if vendor is not None:
+                update_parts.append("vendor = ?")
+                params.append(vendor)
+            
+            if city_slug is not None:
+                update_parts.append("city_slug = ?")
+                params.append(city_slug)
+            
+            if city_banana is not None:
+                update_parts.append("city_banana = ?")
+                params.append(city_banana)
+            
+            # Always update the updated_at timestamp
+            update_parts.append("updated_at = CURRENT_TIMESTAMP")
+            
+            # Add city_id to params
+            params.append(city_id)
+            
+            query = f"""
+                UPDATE cities 
+                SET {', '.join(update_parts)}
+                WHERE id = ?
+            """
+            
+            cursor.execute(query, params)
+            
+            if cursor.rowcount == 0:
+                logger.warning(f"No city found with ID {city_id}")
+                conn.commit()
+                return False
+            
+            conn.commit()
+            logger.info(f"Successfully updated city ID {city_id}")
+            return True

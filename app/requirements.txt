@@ -11,4 +11,5 @@ uszipcode
 sqlalchemy-mate<2.0
 sqlalchemy<2.0
 playwright
+bs4
 lxml
