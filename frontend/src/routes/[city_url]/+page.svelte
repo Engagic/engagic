@@ -29,7 +29,8 @@
 			const result = await searchMeetings(searchQuery);
 			searchResults = result;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load meetings';
+			console.error('Failed to load meetings:', err);
+			error = err instanceof Error ? err.message : 'We humbly thank you for your patience';
 		} finally {
 			loading = false;
 		}

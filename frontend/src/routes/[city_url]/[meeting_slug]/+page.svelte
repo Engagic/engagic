@@ -46,7 +46,8 @@
 				error = result.message || 'Failed to load city meetings';
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load meeting';
+			console.error('Failed to load meeting:', err);
+			error = 'We humbly thank you for your patience';
 		} finally {
 			loading = false;
 		}
@@ -67,7 +68,8 @@
 				cachedSummary = null;
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load summary';
+			console.error('Failed to load summary:', err);
+			error = err instanceof Error ? err.message : 'We humbly thank you for your patience';
 		} finally {
 			loadingSummary = false;
 		}
@@ -114,7 +116,7 @@
 			Loading meeting...
 		</div>
 	{:else if error}
-		<div class="error-message">
+		<div class="{error.includes('Packets not posted yet') ? 'info-message' : 'error-message'}">
 			{error}
 		</div>
 	{:else if selectedMeeting}

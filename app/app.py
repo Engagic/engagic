@@ -356,7 +356,7 @@ async def search_meetings(request: SearchRequest):
         raise
     except Exception as e:
         logger.error(f"Unexpected search error for '{query}': {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
 
 
 async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
@@ -621,8 +621,9 @@ async def process_agenda(request: ProcessRequest):
         }
 
     except Exception as e:
+        logger.error(f"Error retrieving agenda for {packet_url}: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Error retrieving agenda: {str(e)}"
+            status_code=500, detail="We humbly thank you for your patience"
         )
 
 
@@ -656,7 +657,8 @@ async def get_stats():
             },
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching stats: {str(e)}")
+        logger.error(f"Error fetching stats: {str(e)}")
+        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
 
 
 @app.get("/")
@@ -822,7 +824,7 @@ async def get_metrics():
         }
     except Exception as e:
         logger.error(f"Metrics endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
 
 
 async def verify_admin_token(authorization: str = Header(None)):
