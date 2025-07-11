@@ -26,6 +26,7 @@ from config import config
 from pdf_api_processor import (
     PDFAPIProcessor,
     MAX_PDF_API_PAGES,
+    MAX_PDF_API_SIZE,
     BatchAccumulator,
     BatchResult,
     ResultType,
@@ -69,10 +70,13 @@ class AgendaProcessor:
     def _process_with_pdf_api(self, url, method="url"):
         """Try to process PDF using the new PDF API with multiple methods"""
         try:
-            # Log token estimation if single URL
-            if isinstance(url, str):
-                # Try to get page count from PDF metadata (simplified estimation)
-                valid, _, size = self.pdf_api_processor.validate_pdf_for_api(url)
+            # Check if PDF needs chunking (only for single URLs)
+            if isinstance(url, str) and method in ["url", "base64"]:
+                valid, error_msg, size = self.pdf_api_processor.validate_pdf_for_api(url)
+                if not valid and size and size > MAX_PDF_API_SIZE:
+                    logger.info(f"PDF too large ({size:,} bytes), switching to chunked processing")
+                    return self._process_with_pdf_api(url, method="chunked")
+                
                 if size:
                     # Rough estimate: 3KB per page
                     estimated_pages = min(size // 3000, MAX_PDF_API_PAGES)
@@ -349,6 +353,20 @@ class AgendaProcessor:
 
                 except Exception as base64_error:
                     logger.warning(f"Base64 method failed: {base64_error}")
+                    
+                    # Try chunking method for large PDFs
+                    try:
+                        summary, method = self._process_with_pdf_api(url, "chunked")
+                        logger.info(f"Successfully processed using {method}")
+
+                        if save_raw or save_cleaned:
+                            self._save_text(summary, "agenda_summary.txt")
+                            logger.info("Complete! Summary saved to agenda_summary.txt")
+
+                        return summary
+
+                    except Exception as chunk_error:
+                        logger.warning(f"Chunking method failed: {chunk_error}")
 
                     # Final fallback to OCR
                     try:
@@ -365,6 +383,7 @@ class AgendaProcessor:
                         logger.error("All processing methods failed")
                         logger.error(f"URL error: {url_error}")
                         logger.error(f"Base64 error: {base64_error}")
+                        logger.error(f"Chunking error: {chunk_error}")
                         logger.error(f"OCR error: {ocr_error}")
 
                         # Return a user-friendly error message
@@ -641,9 +660,9 @@ Examples:
     )
     parser.add_argument(
         "--pdf-method",
-        choices=["auto", "url", "base64", "files", "ocr"],
+        choices=["auto", "url", "base64", "files", "ocr", "chunked"],
         default="auto",
-        help="PDF processing method (default: auto - tries url->base64->ocr)",
+        help="PDF processing method (default: auto - tries url->base64->chunked->ocr)",
     )
     parser.add_argument(
         "--use-files-api",
