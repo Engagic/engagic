@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 import logging
 import time
 import uuid
 import re
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from fullstack import AgendaProcessor
 from databases import DatabaseManager
 from uszipcode import SearchEngine
@@ -17,11 +17,8 @@ from utils import generate_city_banana
 # Configure structured logging
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(config.LOG_PATH, mode='a')
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler(config.LOG_PATH, mode="a")],
 )
 logger = logging.getLogger("engagic")
 
@@ -30,52 +27,62 @@ app = FastAPI(title="engagic API", description="EGMI")
 # Rate limiting storage
 rate_limits = defaultdict(list)
 
+
 # Rate limiting middleware
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     client_ip = request.client.host if request.client else "unknown"
     current_time = time.time()
-    
+
     # Clean old entries
     rate_limits[client_ip] = [
-        timestamp for timestamp in rate_limits[client_ip] 
+        timestamp
+        for timestamp in rate_limits[client_ip]
         if current_time - timestamp < config.RATE_LIMIT_WINDOW
     ]
-    
+
     # Check rate limit for API endpoints
     if request.url.path.startswith("/api/"):
         if len(rate_limits[client_ip]) >= config.RATE_LIMIT_REQUESTS:
             logger.warning(f"Rate limit exceeded for {client_ip}")
-            raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
-        
+            raise HTTPException(
+                status_code=429, detail="Rate limit exceeded. Please try again later."
+            )
+
         # Add current request
         rate_limits[client_ip].append(current_time)
-    
+
     response = await call_next(request)
     return response
+
 
 # Request/Response logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     request_id = str(uuid.uuid4())[:8]
     start_time = time.time()
-    
+
     # Log incoming request
-    logger.info(f"[{request_id}] {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}")
-    
+    logger.info(
+        f"[{request_id}] {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}"
+    )
+
     # Process request
     try:
         response = await call_next(request)
         duration = time.time() - start_time
-        
+
         # Log response
-        logger.info(f"[{request_id}] Response: {response.status_code} - Duration: {duration:.3f}s")
+        logger.info(
+            f"[{request_id}] Response: {response.status_code} - Duration: {duration:.3f}s"
+        )
         return response
-        
+
     except Exception as e:
         duration = time.time() - start_time
         logger.error(f"[{request_id}] Error: {str(e)} - Duration: {duration:.3f}s")
         raise
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -87,9 +94,11 @@ app.add_middleware(
 
 # Initialize global instances
 try:
-    processor = AgendaProcessor(api_key=config.get_api_key(), db_path=config.MEETINGS_DB_PATH)
+    processor = AgendaProcessor(
+        api_key=config.get_api_key(), db_path=config.MEETINGS_DB_PATH
+    )
     logger.info("LLM processor initialized successfully")
-except ValueError as e:
+except ValueError:
     logger.warning("API key not found - LLM processing will be disabled")
     processor = None
 
@@ -97,36 +106,38 @@ except ValueError as e:
 db = DatabaseManager(
     locations_db_path=config.LOCATIONS_DB_PATH,
     meetings_db_path=config.MEETINGS_DB_PATH,
-    analytics_db_path=config.ANALYTICS_DB_PATH
+    analytics_db_path=config.ANALYTICS_DB_PATH,
 )
 zipcode_search = SearchEngine()
+
 
 def normalize_city_name(city_name: str) -> str:
     """Normalize city name for consistent formatting"""
     city = city_name.strip()
-    
+
     # Handle special cases where simple title() doesn't work well
     special_cases = {
-        'lasvegas': 'Las Vegas',
-        'newyork': 'New York',
-        'losangeles': 'Los Angeles',
-        'sanfrancisco': 'San Francisco',
-        'sanjose': 'San Jose',
-        'sandiego': 'San Diego',
-        'santaana': 'Santa Ana',
-        'santabarbara': 'Santa Barbara',
-        'stlouis': 'St. Louis',
-        'stpaul': 'St. Paul',
-        'ftworth': 'Fort Worth',
-        'fortworth': 'Fort Worth',
+        "lasvegas": "Las Vegas",
+        "newyork": "New York",
+        "losangeles": "Los Angeles",
+        "sanfrancisco": "San Francisco",
+        "sanjose": "San Jose",
+        "sandiego": "San Diego",
+        "santaana": "Santa Ana",
+        "santabarbara": "Santa Barbara",
+        "stlouis": "St. Louis",
+        "stpaul": "St. Paul",
+        "ftworth": "Fort Worth",
+        "fortworth": "Fort Worth",
     }
-    
-    city_lower_nospace = city.lower().replace(' ', '').replace('.', '')
+
+    city_lower_nospace = city.lower().replace(" ", "").replace(".", "")
     if city_lower_nospace in special_cases:
         return special_cases[city_lower_nospace]
-    
+
     # Default to title case
     return city.title()
+
 
 def parse_city_state_input(input_str: str) -> tuple[str, str]:
     """Parse city, state from user input
@@ -235,37 +246,49 @@ def sanitize_string(value: str) -> str:
     """Sanitize string input to prevent injection attacks"""
     if not value:
         return ""
-    
+
     # Basic SQL injection prevention - reject obvious patterns
-    sql_patterns = [r"';\s*DROP", r"';\s*DELETE", r"';\s*UPDATE", r"';\s*INSERT", 
-                    r"--", r"/\*.*\*/", r"UNION\s+SELECT", r"OR\s+1\s*=\s*1"]
+    sql_patterns = [
+        r"';\s*DROP",
+        r"';\s*DELETE",
+        r"';\s*UPDATE",
+        r"';\s*INSERT",
+        r"--",
+        r"/\*.*\*/",
+        r"UNION\s+SELECT",
+        r"OR\s+1\s*=\s*1",
+    ]
     for pattern in sql_patterns:
         if re.search(pattern, value, re.IGNORECASE):
             raise ValueError("Invalid characters in input")
-    
+
     # Remove potentially dangerous characters
-    sanitized = re.sub(r'[<>"\';()&+]', '', value.strip())
-    return sanitized[:config.MAX_QUERY_LENGTH]
+    sanitized = re.sub(r'[<>"\';()&+]', "", value.strip())
+    return sanitized[: config.MAX_QUERY_LENGTH]
+
 
 class SearchRequest(BaseModel):
     query: str
-    
-    @validator('query')
+
+    @validator("query")
     def validate_query(cls, v):
         if not v or not v.strip():
-            raise ValueError('Search query cannot be empty')
-        
+            raise ValueError("Search query cannot be empty")
+
         sanitized = sanitize_string(v)
         if len(sanitized) < 2:
-            raise ValueError('Search query too short')
+            raise ValueError("Search query too short")
         if len(sanitized) > config.MAX_QUERY_LENGTH:
-            raise ValueError(f'Search query too long (max {config.MAX_QUERY_LENGTH} characters)')
-        
+            raise ValueError(
+                f"Search query too long (max {config.MAX_QUERY_LENGTH} characters)"
+            )
+
         # Basic pattern validation
-        if not re.match(r'^[a-zA-Z0-9\s,.-]+$', sanitized):
-            raise ValueError('Search query contains invalid characters')
-        
+        if not re.match(r"^[a-zA-Z0-9\s,.-]+$", sanitized):
+            raise ValueError("Search query contains invalid characters")
+
         return sanitized
+
 
 class ProcessRequest(BaseModel):
     packet_url: str
@@ -273,33 +296,35 @@ class ProcessRequest(BaseModel):
     meeting_name: Optional[str] = None
     meeting_date: Optional[str] = None
     meeting_id: Optional[str] = None
-    
-    @validator('packet_url')
+
+    @validator("packet_url")
     def validate_packet_url(cls, v):
         if not v or not v.strip():
-            raise ValueError('Packet URL cannot be empty')
-        
+            raise ValueError("Packet URL cannot be empty")
+
         # Basic URL validation
-        if not re.match(r'^https?://', v):
-            raise ValueError('Packet URL must be a valid HTTP/HTTPS URL')
-        
+        if not re.match(r"^https?://", v):
+            raise ValueError("Packet URL must be a valid HTTP/HTTPS URL")
+
         if len(v) > 2000:
-            raise ValueError('Packet URL too long')
-        
+            raise ValueError("Packet URL too long")
+
         return v.strip()
-    
-    @validator('city_banana')
+
+    @validator("city_banana")
     def validate_city_banana(cls, v):
         if not v or not v.strip():
-            raise ValueError('City banana cannot be empty')
-        
+            raise ValueError("City banana cannot be empty")
+
         # City banana should be alphanumeric with state code
-        if not re.match(r'^[a-z0-9]+[A-Z]{2}$', v):
-            raise ValueError('City banana must be lowercase city name + uppercase state code')
-        
+        if not re.match(r"^[a-z0-9]+[A-Z]{2}$", v):
+            raise ValueError(
+                "City banana must be lowercase city name + uppercase state code"
+            )
+
         return v.strip()
-    
-    @validator('meeting_name', 'meeting_date', 'meeting_id', pre=True, always=True)
+
+    @validator("meeting_name", "meeting_date", "meeting_id", pre=True, always=True)
     def validate_optional_strings(cls, v):
         if v is None:
             return None
@@ -313,20 +338,20 @@ async def search_meetings(request: SearchRequest):
         query = request.query.strip()
         if not query:
             raise HTTPException(status_code=400, detail="Search query cannot be empty")
-        
+
         logger.info(f"Search request: '{query}'")
-        
+
         # Log the search
         db.log_search(query, "unknown")  # We'll determine type below
-        
+
         # Determine if input is zipcode or city name
         is_zipcode = query.isdigit() and len(query) == 5
-        
+
         if is_zipcode:
             return await handle_zipcode_search(query)
         else:
             return await handle_city_search(query)
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -338,7 +363,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
     """Handle zipcode search with cache-first approach"""
     # Update search log
     db.log_search(zipcode, "zipcode", zipcode=zipcode)
-    
+
     # Check database - CACHED ONLY
     city_info = db.get_city_by_zipcode(zipcode)
     if not city_info:
@@ -349,48 +374,56 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             if result and result.major_city:
                 city_name = result.major_city
                 state = result.state
-                db.log_city_request(city_name, state, zipcode, "zipcode", zipcode=zipcode)
+                db.log_city_request(
+                    city_name, state, zipcode, "zipcode", zipcode=zipcode
+                )
         except Exception as e:
             logger.warning(f"Failed to log city request for zipcode {zipcode}: {e}")
-        
+
         return {
             "success": False,
             "message": "We're not covering that area yet, but we're always expanding! Thanks for your interest - we'll prioritize cities with high demand.",
             "query": zipcode,
             "type": "zipcode",
-            "meetings": []
+            "meetings": [],
         }
-    
+
     # Get cached meetings using city_banana
-    city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+    city_banana = city_info.get("city_banana") or generate_city_banana(
+        city_info["city_name"], city_info["state"]
+    )
     meetings = db.get_meetings_by_city(city_banana, 50)
-    
+
     if meetings:
-        logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info.get('state', 'Unknown')}")
+        logger.info(
+            f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info.get('state', 'Unknown')}"
+        )
         return {
             "success": True,
-            "city_name": city_info['city_name'],
-            "state": city_info['state'],
-            "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
-            "vendor": city_info['vendor'],
+            "city_name": city_info["city_name"],
+            "state": city_info["state"],
+            "city_banana": city_info.get("city_banana")
+            or generate_city_banana(city_info["city_name"], city_info["state"]),
+            "vendor": city_info["vendor"],
             "meetings": meetings,
             "cached": True,
             "query": zipcode,
-            "type": "zipcode"
+            "type": "zipcode",
         }
-    
+
     # No cached meetings - background processor will handle this
     return {
         "success": True,
-        "city_name": city_info['city_name'],
-        "state": city_info['state'],
-        "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
-        "vendor": city_info['vendor'],
+        "city_name": city_info["city_name"],
+        "state": city_info["state"],
+        "city_banana": city_info.get("city_banana")
+        or generate_city_banana(city_info["city_name"], city_info["state"]),
+        "vendor": city_info["vendor"],
         "meetings": [],
         "cached": False,
         "query": zipcode,
         "type": "zipcode",
-        "message": f"No meetings available yet for {city_info['city_name']} - check back soon as we sync with the city website"
+        "message": f"No meetings available yet for {city_info['city_name']} - check back soon as we sync with the city website",
     }
 
 
@@ -398,11 +431,11 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
     """Handle city name search with cache-first approach and ambiguous city handling"""
     # Parse city, state
     city_name, state = parse_city_state_input(city_input)
-    
+
     if not state:
         # No state provided - check for ambiguous cities
         return await handle_ambiguous_city_search(city_name, city_input)
-    
+
     # Check database - CACHED ONLY
     city_info = db.get_city_by_name(city_name, state)
     if not city_info:
@@ -411,124 +444,141 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
             db.log_city_request(city_name, state, city_input, "city_name")
         except Exception as e:
             logger.warning(f"Failed to log city request for {city_name}, {state}: {e}")
-        
+
         return {
             "success": False,
             "message": f"We're not covering {city_name}, {state} yet, but we're always expanding! Your interest has been noted - we prioritize cities with high demand.",
             "query": city_input,
             "type": "city_name",
-            "meetings": []
+            "meetings": [],
         }
-    
+
     # Log search with city_id
-    db.log_search(city_input, "city_name", city_id=city_info['id'])
-    
+    db.log_search(city_input, "city_name", city_id=city_info["id"])
+
     # Get cached meetings using city_banana
-    city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+    city_banana = city_info.get("city_banana") or generate_city_banana(
+        city_info["city_name"], city_info["state"]
+    )
     meetings = db.get_meetings_by_city(city_banana, 50)
-    
+
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
         return {
             "success": True,
-            "city_name": city_info['city_name'],
-            "state": city_info['state'],
-            "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
-            "vendor": city_info['vendor'],
+            "city_name": city_info["city_name"],
+            "state": city_info["state"],
+            "city_banana": city_info.get("city_banana")
+            or generate_city_banana(city_info["city_name"], city_info["state"]),
+            "vendor": city_info["vendor"],
             "meetings": meetings,
             "cached": True,
             "query": city_input,
-            "type": "city_name"
+            "type": "city_name",
         }
-    
+
     # No cached meetings - return empty
     return {
         "success": False,
-        "city_name": city_info['city_name'],
-        "state": city_info['state'],
-        "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
-        "vendor": city_info['vendor'],
+        "city_name": city_info["city_name"],
+        "state": city_info["state"],
+        "city_banana": city_info.get("city_banana")
+        or generate_city_banana(city_info["city_name"], city_info["state"]),
+        "vendor": city_info["vendor"],
         "meetings": [],
         "cached": True,
         "query": city_input,
         "type": "city_name",
-        "message": f"No meetings cached yet for {city_name}, {state}"
+        "message": f"No meetings cached yet for {city_name}, {state}",
     }
 
 
-async def handle_ambiguous_city_search(city_name: str, original_input: str) -> Dict[str, Any]:
+async def handle_ambiguous_city_search(
+    city_name: str, original_input: str
+) -> Dict[str, Any]:
     """Handle city search when no state is provided - check for ambiguous matches"""
-    
+
     # Look for all cities with this name
     cities = db.get_cities_by_name_only(city_name)
-    
+
     if not cities:
         # No cities found - log the request
         try:
-            db.log_city_request(city_name, "UNKNOWN", original_input, "city_name_ambiguous")
+            db.log_city_request(
+                city_name, "UNKNOWN", original_input, "city_name_ambiguous"
+            )
         except Exception as e:
             logger.warning(f"Failed to log ambiguous city request for {city_name}: {e}")
-        
+
         return {
             "success": False,
             "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') - your interest has been noted!",
             "query": original_input,
             "type": "city_name",
             "meetings": [],
-            "ambiguous": False
+            "ambiguous": False,
         }
-    
+
     if len(cities) == 1:
         # Only one match - proceed with this city
         city_info = cities[0]
-        
+
         # Log search with city_id
-        db.log_search(original_input, "city_name", city_id=city_info['id'])
-        
+        db.log_search(original_input, "city_name", city_id=city_info["id"])
+
         # Get meetings for this city using city_banana
-        city_banana = city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state'])
+        city_banana = city_info.get("city_banana") or generate_city_banana(
+            city_info["city_name"], city_info["state"]
+        )
         meetings = db.get_meetings_by_city(city_banana, 50)
-        
+
         if meetings:
-            logger.info(f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info['state']}")
+            logger.info(
+                f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info['state']}"
+            )
             return {
                 "success": True,
-                "city_name": city_info['city_name'],
-                "state": city_info['state'],
-                "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
-                "vendor": city_info['vendor'],
+                "city_name": city_info["city_name"],
+                "state": city_info["state"],
+                "city_banana": city_info.get("city_banana")
+                or generate_city_banana(city_info["city_name"], city_info["state"]),
+                "vendor": city_info["vendor"],
                 "meetings": meetings,
                 "cached": True,
                 "query": original_input,
                 "type": "city_name",
-                "ambiguous": False
+                "ambiguous": False,
             }
         else:
             return {
                 "success": False,
-                "city_name": city_info['city_name'],
-                "state": city_info['state'],
-                "city_banana": city_info.get('city_banana') or generate_city_banana(city_info['city_name'], city_info['state']),
-                "vendor": city_info['vendor'],
+                "city_name": city_info["city_name"],
+                "state": city_info["state"],
+                "city_banana": city_info.get("city_banana")
+                or generate_city_banana(city_info["city_name"], city_info["state"]),
+                "vendor": city_info["vendor"],
                 "meetings": [],
                 "cached": True,
                 "query": original_input,
                 "type": "city_name",
                 "message": f"No meetings cached yet for {city_info['city_name']}, {city_info['state']}",
-                "ambiguous": False
+                "ambiguous": False,
             }
-    
+
     # Multiple matches - return ambiguous result
     city_options = []
     for city in cities:
-        city_options.append({
-            "city_name": city['city_name'],
-            "state": city['state'],
-            "city_banana": city.get('city_banana') or generate_city_banana(city['city_name'], city['state']),
-            "vendor": city['vendor'],
-            "display_name": f"{city['city_name']}, {city['state']}"
-        })
-    
+        city_options.append(
+            {
+                "city_name": city["city_name"],
+                "state": city["state"],
+                "city_banana": city.get("city_banana")
+                or generate_city_banana(city["city_name"], city["state"]),
+                "vendor": city["vendor"],
+                "display_name": f"{city['city_name']}, {city['state']}",
+            }
+        )
+
     return {
         "success": False,
         "message": f"Multiple cities named '{city_name}' found. Please specify which one:",
@@ -536,9 +586,8 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str) -> D
         "type": "city_name",
         "ambiguous": True,
         "city_options": city_options,
-        "meetings": []
+        "meetings": [],
     }
-
 
 
 # Auto-creation functions removed - CACHED ONLY mode
@@ -550,23 +599,25 @@ async def process_agenda(request: ProcessRequest):
     try:
         # Check for cached summary
         cached_summary = db.get_cached_summary(request.packet_url)
-        
+
         if cached_summary:
             return {
                 "success": True,
                 "summary": cached_summary["processed_summary"],
-                "processing_time_seconds": cached_summary.get("processing_time_seconds", 0),
+                "processing_time_seconds": cached_summary.get(
+                    "processing_time_seconds", 0
+                ),
                 "cached": True,
                 "meeting_data": cached_summary,
             }
-        
+
         # No cached summary available
         return {
             "success": False,
             "message": "Summary not yet available - processing in background",
             "cached": False,
             "packet_url": request.packet_url,
-            "estimated_wait_minutes": 10  # Rough estimate
+            "estimated_wait_minutes": 10,  # Rough estimate
         }
 
     except Exception as e:
@@ -582,13 +633,13 @@ async def get_stats():
         stats = db.get_cache_stats()
         queue_stats = db.get_processing_queue_stats()
         request_stats = db.get_city_request_stats()
-        
+
         # Background processor info (separate service)
         background_info = {
             "status": "separate_service",
-            "note": "Background processing runs as separate daemon service"
+            "note": "Background processing runs as separate daemon service",
         }
-        
+
         return {
             "status": "healthy",
             "cities": stats.get("cities_count", 0),
@@ -601,13 +652,11 @@ async def get_stats():
                 "unprocessed_queue": queue_stats.get("unprocessed_count", 0),
                 "processing_success_rate": f"{queue_stats.get('success_rate', 0):.1f}%",
                 "recent_meetings": queue_stats.get("recent_count", 0),
-                "note": "Check daemon status: systemctl status engagic-daemon"
-            }
+                "note": "Check daemon status: systemctl status engagic-daemon",
+            },
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching stats: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error fetching stats: {str(e)}")
 
 
 @app.get("/")
@@ -628,27 +677,27 @@ async def root():
             "admin": {
                 "city_requests": "GET /api/admin/city-requests - View requested cities",
                 "sync_city": "POST /api/admin/sync-city/{city_slug} - Force sync specific city",
-                "process_meeting": "POST /api/admin/process-meeting - Force process specific meeting"
-            }
+                "process_meeting": "POST /api/admin/process-meeting - Force process specific meeting",
+            },
         },
         "usage_examples": {
             "search_by_zipcode": {
                 "method": "POST",
                 "url": "/api/search",
                 "body": {"query": "94301"},
-                "description": "Search meetings by ZIP code"
+                "description": "Search meetings by ZIP code",
             },
             "search_by_city": {
                 "method": "POST",
-                "url": "/api/search", 
+                "url": "/api/search",
                 "body": {"query": "Palo Alto, CA"},
-                "description": "Search meetings by city and state"
+                "description": "Search meetings by city and state",
             },
             "search_ambiguous": {
                 "method": "POST",
                 "url": "/api/search",
                 "body": {"query": "Springfield"},
-                "description": "Search by city name only (may return multiple options)"
+                "description": "Search by city name only (may return multiple options)",
             },
             "get_summary": {
                 "method": "POST",
@@ -656,27 +705,27 @@ async def root():
                 "body": {
                     "packet_url": "https://example.com/agenda.pdf",
                     "city_banana": "paloaltoCA",
-                    "meeting_name": "City Council Meeting"
+                    "meeting_name": "City Council Meeting",
                 },
-                "description": "Get cached AI summary of meeting agenda"
-            }
+                "description": "Get cached AI summary of meeting agenda",
+            },
         },
         "rate_limiting": f"{config.RATE_LIMIT_REQUESTS} requests per {config.RATE_LIMIT_WINDOW} seconds per IP",
         "features": [
             "ZIP code and city name search",
             "AI-powered meeting summaries",
-            "Ambiguous city name handling", 
+            "Ambiguous city name handling",
             "Real-time meeting data caching",
             "Multiple city system adapters",
             "Background data processing",
             "Comprehensive error handling",
-            "Request demand tracking"
+            "Request demand tracking",
         ],
         "data_sources": [
             "PrimeGov (city council management)",
             "CivicClerk (municipal systems)",
-            "Direct city websites"
-        ]
+            "Direct city websites",
+        ],
     }
 
 
@@ -687,57 +736,55 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": "2.0.0",
-        "checks": {}
+        "checks": {},
     }
-    
+
     try:
         # Database health check
         db_health = db.get_system_health()
         health_status["checks"]["databases"] = db_health
-        
+
         if db_health["overall_status"] != "healthy":
             health_status["status"] = "degraded"
-        
+
         # Add basic stats
         stats = db.get_cache_stats()
         health_status["checks"]["data_summary"] = {
             "cities": stats.get("cities_count", 0),
             "meetings": stats.get("meetings_count", 0),
-            "processed": stats.get("processed_count", 0)
+            "processed": stats.get("processed_count", 0),
         }
     except Exception as e:
-        health_status["checks"]["databases"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_status["checks"]["databases"] = {"status": "unhealthy", "error": str(e)}
         health_status["status"] = "degraded"
-    
+
     # LLM processor check
     health_status["checks"]["llm_processor"] = {
         "status": "available" if processor else "disabled",
-        "has_api_key": bool(config.get_api_key())
+        "has_api_key": bool(config.get_api_key()),
     }
-    
+
     # Configuration check
     health_status["checks"]["configuration"] = {
         "status": "healthy",
         "is_development": config.is_development(),
         "rate_limiting": f"{config.RATE_LIMIT_REQUESTS} req/{config.RATE_LIMIT_WINDOW}s",
-        "background_processing": config.BACKGROUND_PROCESSING
+        "background_processing": config.BACKGROUND_PROCESSING,
     }
-    
+
     # Background processor check (separate service)
     health_status["checks"]["background_processor"] = {
         "status": "separate_service",
         "note": "Background processing runs as independent daemon",
-        "check_command": "systemctl status engagic-daemon"
+        "check_command": "systemctl status engagic-daemon",
     }
-    
+
     # Set overall status based on critical services
     if health_status["checks"]["databases"].get("overall_status") == "error":
         health_status["status"] = "unhealthy"
-    
+
     return health_status
+
 
 @app.get("/api/metrics")
 async def get_metrics():
@@ -746,30 +793,32 @@ async def get_metrics():
         stats = db.get_cache_stats()
         queue_stats = db.get_processing_queue_stats()
         request_stats = db.get_city_request_stats()
-        
+
         return {
             "timestamp": datetime.now().isoformat(),
             "database": {
                 "cities_count": stats.get("cities_count", 0),
                 "meetings_count": stats.get("meetings_count", 0),
                 "processed_count": stats.get("processed_count", 0),
-                "recent_activity": stats.get("recent_activity", 0)
+                "recent_activity": stats.get("recent_activity", 0),
             },
             "processing": {
                 "unprocessed_queue": queue_stats.get("unprocessed_count", 0),
                 "success_rate": f"{queue_stats.get('success_rate', 0):.1f}%",
-                "recent_meetings": queue_stats.get("recent_count", 0)
+                "recent_meetings": queue_stats.get("recent_count", 0),
             },
             "demand": {
-                "total_city_requests": request_stats.get("total_unique_cities_requested", 0),
+                "total_city_requests": request_stats.get(
+                    "total_unique_cities_requested", 0
+                ),
                 "total_demand": request_stats.get("total_demand", 0),
-                "recent_requests": request_stats.get("recent_activity", 0)
+                "recent_requests": request_stats.get("recent_activity", 0),
             },
             "configuration": {
                 "rate_limit_window": config.RATE_LIMIT_WINDOW,
                 "rate_limit_requests": config.RATE_LIMIT_REQUESTS,
-                "background_processing": config.BACKGROUND_PROCESSING
-            }
+                "background_processing": config.BACKGROUND_PROCESSING,
+            },
         }
     except Exception as e:
         logger.error(f"Metrics endpoint failed: {e}")
@@ -779,22 +828,26 @@ async def get_metrics():
 async def verify_admin_token(authorization: str = Header(None)):
     """Verify admin bearer token"""
     if not config.ADMIN_TOKEN:
-        raise HTTPException(status_code=500, detail="Admin authentication not configured")
-    
+        raise HTTPException(
+            status_code=500, detail="Admin authentication not configured"
+        )
+
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
-    
+
     try:
         scheme, token = authorization.split(" ")
         if scheme.lower() != "bearer":
             raise HTTPException(status_code=401, detail="Invalid authentication scheme")
-        
+
         if token != config.ADMIN_TOKEN:
             raise HTTPException(status_code=403, detail="Invalid admin token")
-            
+
     except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid authorization header format")
-    
+        raise HTTPException(
+            status_code=401, detail="Invalid authorization header format"
+        )
+
     return True
 
 
@@ -806,7 +859,7 @@ async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
         return {
             "success": True,
             "city_requests": top_requests,
-            "total_count": len(top_requests)
+            "total_count": len(top_requests),
         }
     except Exception as e:
         logger.error(f"Error getting city requests: {e}")
@@ -814,7 +867,9 @@ async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
 
 
 @app.post("/api/admin/sync-city/{city_banana}")
-async def force_sync_city(city_banana: str, is_admin: bool = Depends(verify_admin_token)):
+async def force_sync_city(
+    city_banana: str, is_admin: bool = Depends(verify_admin_token)
+):
     """Force sync a specific city (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
     # Admin should use the daemon directly: python daemon.py --sync-city CITY_BANANA
@@ -823,12 +878,14 @@ async def force_sync_city(city_banana: str, is_admin: bool = Depends(verify_admi
         "city_banana": city_banana,
         "message": "Background processing runs as separate service. Use daemon directly:",
         "command": f"python /root/engagic/app/daemon.py --sync-city {city_banana}",
-        "alternative": f"systemctl status engagic-daemon"
+        "alternative": "systemctl status engagic-daemon",
     }
 
 
 @app.post("/api/admin/process-meeting")
-async def force_process_meeting(request: ProcessRequest, is_admin: bool = Depends(verify_admin_token)):
+async def force_process_meeting(
+    request: ProcessRequest, is_admin: bool = Depends(verify_admin_token)
+):
     """Force process a specific meeting (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
     # Admin should use the daemon directly
@@ -837,7 +894,7 @@ async def force_process_meeting(request: ProcessRequest, is_admin: bool = Depend
         "packet_url": request.packet_url,
         "message": "Background processing runs as separate service. Use daemon directly:",
         "command": f"python /root/engagic/app/daemon.py --process-meeting {request.packet_url}",
-        "alternative": "systemctl status engagic-daemon"
+        "alternative": "systemctl status engagic-daemon",
     }
 
 
@@ -848,27 +905,31 @@ if __name__ == "__main__":
 
     # Validate critical environment variables on startup
     if not config.get_api_key():
-        logger.warning("WARNING: No LLM API key configured. AI features will be disabled.")
+        logger.warning(
+            "WARNING: No LLM API key configured. AI features will be disabled."
+        )
         logger.warning("Set ANTHROPIC_API_KEY or LLM_API_KEY to enable AI summaries.")
-    
+
     if not config.ADMIN_TOKEN:
-        logger.warning("WARNING: No admin token configured. Admin endpoints will not work.")
+        logger.warning(
+            "WARNING: No admin token configured. Admin endpoints will not work."
+        )
         logger.warning("Set ENGAGIC_ADMIN_TOKEN to enable admin functionality.")
-    
+
     logger.info("Starting engagic API server...")
     logger.info(f"Configuration: {config.summary()}")
     logger.info(f"LLM processor: {'enabled' if processor else 'disabled'}")
-    
+
     # Check if databases exist
     for db_name, db_path in [
         ("locations", config.LOCATIONS_DB_PATH),
         ("meetings", config.MEETINGS_DB_PATH),
-        ("analytics", config.ANALYTICS_DB_PATH)
+        ("analytics", config.ANALYTICS_DB_PATH),
     ]:
         if not os.path.exists(db_path):
             logger.warning(f"{db_name} database not found at {db_path}")
             logger.info("Databases will be created automatically on first use")
-    
+
     # Handle command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "--init-db":
         logger.info("Initializing databases...")
@@ -876,5 +937,5 @@ if __name__ == "__main__":
         _ = db.get_cache_stats()
         logger.info("Databases initialized successfully")
         sys.exit(0)
-    
+
     uvicorn.run(app, host=config.API_HOST, port=config.API_PORT)
