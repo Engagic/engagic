@@ -47,7 +47,7 @@
 			}
 		} catch (err) {
 			console.error('Failed to load meeting:', err);
-			error = 'No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting\'s scheduled';
+			error = 'No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting date';
 		} finally {
 			loading = false;
 		}
