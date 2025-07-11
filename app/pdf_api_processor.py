@@ -11,6 +11,8 @@ from datetime import datetime
 from enum import Enum
 import threading
 from collections import defaultdict
+import json
+from pathlib import Path
 
 logger = logging.getLogger("engagic")
 
@@ -595,6 +597,86 @@ If there are supporting documents or attachments mentioned, note what additional
 
         return "\n".join(summaries)
 
+    def submit_batch(self, pdf_requests: List[Dict[str, Any]]) -> str:
+        """Submit a batch without waiting for results"""
+        logger.info(f"Submitting batch with {len(pdf_requests)} PDFs")
+        
+        # Build batch requests
+        batch_requests = []
+        for req in pdf_requests:
+            pdf_url = req.get("url")
+            custom_id = req.get("custom_id", f"pdf_{int(time.time() * 1000)}")
+            prompt = req.get("prompt") or self._get_agenda_analysis_prompt(use_caching=True)
+            model = req.get("model", "claude-3-5-sonnet-20241022")
+            
+            # Create document block
+            content = [
+                self._create_document_block_url(pdf_url),
+                prompt
+            ]
+            
+            batch_request = {
+                "custom_id": custom_id,
+                "params": {
+                    "model": model,
+                    "max_tokens": 4000,
+                    "messages": [{"role": "user", "content": content}]
+                }
+            }
+            batch_requests.append(batch_request)
+        
+        try:
+            # Submit batch
+            batch = self.client.messages.batches.create(requests=batch_requests)
+            logger.info(f"Batch submitted with ID: {batch.id}")
+            
+            # Cache batch info
+            self._batch_cache[batch.id] = {
+                "id": batch.id,
+                "status": batch.processing_status,
+                "created_at": datetime.now(),
+                "request_count": len(batch_requests),
+                "custom_ids": [r["custom_id"] for r in batch_requests]
+            }
+            
+            return batch.id
+            
+        except Exception as e:
+            logger.error(f"Failed to submit batch: {e}")
+            raise
+    
+    def get_batch_results(self, batch_id: str) -> List[Dict[str, Any]]:
+        """Get results from a completed batch"""
+        try:
+            results = []
+            
+            # Stream results efficiently
+            for result in self.client.messages.batches.results(batch_id):
+                result_dict = {
+                    "custom_id": result.custom_id,
+                    "status": result.result.type
+                }
+                
+                if result.result.type == "succeeded":
+                    # Extract message content
+                    message = result.result.message
+                    content = message.content[0].text if message.content else ""
+                    result_dict["summary"] = content
+                    result_dict["usage"] = {
+                        "input_tokens": message.usage.input_tokens,
+                        "output_tokens": message.usage.output_tokens
+                    }
+                elif result.result.type == "errored":
+                    result_dict["error"] = result.result.error
+                
+                results.append(result_dict)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to get batch results: {e}")
+            raise
+    
     def process_batch(
         self,
         pdf_requests: List[Dict[str, Any]],
@@ -868,13 +950,137 @@ If there are supporting documents or attachments mentioned, note what additional
         except Exception as e:
             logger.error(f"Failed to cancel batch: {e}")
             return False
+    
+    def smart_batch_pdfs(self, pdf_urls: List[str], max_wait_time: int = 3600) -> Dict[str, str]:
+        """Process PDFs using batching with smart fallback for urgent needs"""
+        results = {}
+        
+        # Check if we should use batching
+        use_batch = len(pdf_urls) > 3  # Batch if more than 3 PDFs
+        
+        if use_batch:
+            logger.info(f"Using batch processing for {len(pdf_urls)} PDFs")
+            
+            # Prepare batch requests
+            batch_requests = [
+                {"url": url, "custom_id": f"pdf_{i}"} 
+                for i, url in enumerate(pdf_urls)
+            ]
+            
+            try:
+                # Submit batch
+                batch_id = self.submit_batch(batch_requests)
+                
+                # Wait for batch with timeout
+                start_time = time.time()
+                while time.time() - start_time < max_wait_time:
+                    status = self.get_batch_status(batch_id)
+                    
+                    if status["processing_status"] == "ended":
+                        # Get results
+                        batch_results = self.get_batch_results(batch_id)
+                        
+                        # Map results back to URLs
+                        for i, url in enumerate(pdf_urls):
+                            custom_id = f"pdf_{i}"
+                            result = next((r for r in batch_results if r["custom_id"] == custom_id), None)
+                            
+                            if result and result["status"] == "succeeded":
+                                results[url] = result["summary"]
+                            else:
+                                # Fallback to direct processing for failed items
+                                logger.warning(f"Batch processing failed for {url}, using direct API")
+                                try:
+                                    results[url] = self.process_single_pdf_url(url)
+                                except:
+                                    results[url] = "Failed to process PDF"
+                        
+                        return results
+                    
+                    # Check periodically
+                    time.sleep(30)
+                
+                # Timeout - cancel batch and fallback
+                logger.warning(f"Batch {batch_id} timed out after {max_wait_time}s")
+                self.cancel_batch(batch_id)
+                
+            except Exception as e:
+                logger.error(f"Batch processing failed: {e}")
+        
+        # Fallback to direct processing
+        logger.info("Using direct API processing")
+        for url in pdf_urls:
+            try:
+                results[url] = self.process_single_pdf_url(url)
+            except Exception as e:
+                logger.error(f"Failed to process {url}: {e}")
+                results[url] = f"Error: {str(e)}"
+        
+        return results
+
+    def process_single_pdf_chunked(self, pdf_url: str) -> str:
+        """Process large PDF by chunking it into smaller pieces"""
+        from pdf_chunker import PDFChunker
+        
+        logger.info(f"Processing large PDF via chunking: {pdf_url[:80]}...")
+        
+        chunker = PDFChunker()
+        try:
+            # Download the PDF
+            pdf_content = chunker.download_pdf(pdf_url)
+            
+            # Split into chunks
+            chunks = chunker.split_pdf_by_size(pdf_content)
+            logger.info(f"Split PDF into {len(chunks)} chunks")
+            
+            # Process each chunk
+            chunk_summaries = []
+            for chunk in chunks:
+                logger.info(f"Processing chunk {chunk.chunk_number + 1}/{chunk.total_chunks} "
+                          f"(pages {chunk.start_page + 1}-{chunk.end_page + 1}, {chunk.size_bytes:,} bytes)")
+                
+                # Create document block for chunk
+                document_block = self._create_document_block_base64(chunk.content)
+                
+                # Add chunk context to prompt if multiple chunks
+                prompt_blocks = [document_block]
+                
+                if chunk.total_chunks > 1:
+                    chunk_prompt = chunker.create_chunk_summary_prompt(chunk)
+                    prompt_blocks.append({"type": "text", "text": chunk_prompt})
+                
+                prompt_blocks.append(self._get_agenda_analysis_prompt(use_caching=True))
+                
+                # Process chunk
+                response = self.client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt_blocks}],
+                )
+                
+                chunk_summaries.append(response.content[0].text)
+                
+                # Track usage
+                if hasattr(response, "usage") and response.usage:
+                    self.cost_tracker.add_usage(response.usage.model_dump(), "claude-3-5-sonnet-20241022")
+            
+            # Combine summaries
+            final_summary = chunker.combine_chunk_summaries(chunk_summaries, chunks)
+            logger.info(f"Successfully processed PDF via chunking ({len(chunks)} chunks)")
+            return final_summary
+            
+        except Exception as e:
+            logger.error(f"Failed to process PDF via chunking: {e}")
+            raise
 
     def process(self, url: Union[str, List[str]], method: str = "url") -> str:
         """Main entry point - process single or multiple PDFs with specified method"""
         if isinstance(url, list):
             return self.process_multiple_pdfs(url, method)
         else:
-            if method == "base64":
+            if method == "chunked":
+                return self.process_single_pdf_chunked(url)
+            elif method == "base64":
                 return self.process_single_pdf_base64(url)
             elif method == "files" or self.use_files_api:
                 return self.process_single_pdf_files_api(url)
