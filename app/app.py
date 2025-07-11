@@ -489,7 +489,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         "cached": True,
         "query": city_input,
         "type": "city_name",
-        "message": f"No meetings cached yet for {city_name}, {state}",
+        "message": f"No meetings cached yet for {city_name}, {state}, please check back soon!",
     }
 
 
@@ -561,7 +561,7 @@ async def handle_ambiguous_city_search(
                 "cached": True,
                 "query": original_input,
                 "type": "city_name",
-                "message": f"No meetings cached yet for {city_info['city_name']}, {city_info['state']}",
+                "message": f"No meetings cached yet for {city_info['city_name']}, {city_info['state']}, please check back soon!",
                 "ambiguous": False,
             }
 
