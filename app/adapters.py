@@ -176,9 +176,13 @@ class GranicusAdapter:
         soup = self._fetch_dom(self.list_url)
 
         # Find the "Upcoming Events" or "Upcoming Meetings" section
-        upcoming_header = soup.find("h2", string="Upcoming Events")
-        if not upcoming_header:
-            upcoming_header = soup.find("h2", string="Upcoming Meetings")
+        header_options = ["h2", "h3"]
+        for header in header_options:
+            upcoming_header = soup.find(header, string="Upcoming Events")
+            if not upcoming_header:
+                upcoming_header = soup.find(header, string="Upcoming Meetings")
+            else:
+                break
         
         if not upcoming_header:
             logger.warning(f"No 'Upcoming Events' or 'Upcoming Meetings' section found for {self.slug}")
