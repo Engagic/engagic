@@ -53,13 +53,13 @@
 	}
 
 	async function loadCachedSummary(meeting: Meeting) {
-		if (!searchResults?.city_slug) return;
+		if (!searchResults?.city_banana) return;
 		
 		loadingSummary = true;
 		cachedSummary = null;
 
 		try {
-			const result = await getCachedSummary(meeting, searchResults.city_slug);
+			const result = await getCachedSummary(meeting, searchResults.city_banana);
 			if (result.success && result.cached && result.summary) {
 				cachedSummary = result;
 			} else {
