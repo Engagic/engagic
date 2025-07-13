@@ -36,7 +36,10 @@ export interface CachedSummary {
 	success: boolean;
 	summary?: string;
 	cached?: boolean;
-	meeting_data?: any;
+	meeting_data?: {
+		packet_url?: string | string[];
+		[key: string]: any;
+	};
 	error?: string;
 }
 

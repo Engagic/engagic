@@ -157,6 +157,17 @@
 				<div class="meeting-summary">
 					{cachedSummary.summary}
 				</div>
+				{#if cachedSummary.meeting_data?.packet_url}
+					{@const packetUrl = Array.isArray(cachedSummary.meeting_data.packet_url) 
+						? cachedSummary.meeting_data.packet_url[0] 
+						: cachedSummary.meeting_data.packet_url}
+					<div class="summary-source">
+						<p>
+							Summarized through the Anthropic API from this meeting URL: 
+							<a href={packetUrl} target="_blank" rel="noopener noreferrer">{packetUrl}</a>
+						</p>
+					</div>
+				{/if}
 			{:else}
 				<div class="no-summary">
 					<p>Working on it, please wait!</p>
@@ -319,6 +330,28 @@
 	.no-summary p:last-child {
 		font-size: 0.95rem;
 		margin: 0;
+	}
+
+	.summary-source {
+		margin-top: 2rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid var(--civic-border);
+		font-size: 0.9rem;
+		color: var(--civic-gray);
+	}
+
+	.summary-source p {
+		margin: 0;
+	}
+
+	.summary-source a {
+		color: var(--civic-blue);
+		text-decoration: none;
+		word-break: break-word;
+	}
+
+	.summary-source a:hover {
+		text-decoration: underline;
 	}
 
 	@media (max-width: 640px) {
