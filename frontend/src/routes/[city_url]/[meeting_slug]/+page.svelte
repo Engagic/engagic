@@ -134,6 +134,20 @@
 		<span class="nav-current">Meeting</span>
 	</div>
 
+	{#if cachedSummary?.meeting_data?.packet_url}
+		{@const packetUrl = Array.isArray(cachedSummary.meeting_data.packet_url) 
+			? cachedSummary.meeting_data.packet_url[0] 
+			: cachedSummary.meeting_data.packet_url}
+		<div class="packet-url-box">
+			<div class="packet-url-content">
+				<span class="packet-url-label">Meeting packet:</span>
+				<a href={packetUrl} target="_blank" rel="noopener noreferrer" class="packet-url-link">
+					{packetUrl}
+				</a>
+			</div>
+		</div>
+	{/if}
+
 	{#if loading}
 		<div class="loading">
 			Loading meeting...
@@ -157,17 +171,6 @@
 				<div class="meeting-summary">
 					{cachedSummary.summary}
 				</div>
-				{#if cachedSummary.meeting_data?.packet_url}
-					{@const packetUrl = Array.isArray(cachedSummary.meeting_data.packet_url) 
-						? cachedSummary.meeting_data.packet_url[0] 
-						: cachedSummary.meeting_data.packet_url}
-					<div class="summary-source">
-						<p>
-							Summarized through the Anthropic API from this meeting URL: 
-							<a href={packetUrl} target="_blank" rel="noopener noreferrer">{packetUrl}</a>
-						</p>
-					</div>
-				{/if}
 			{:else}
 				<div class="no-summary">
 					<p>Working on it, please wait!</p>
@@ -210,6 +213,38 @@
 
 	.nav-current {
 		font-weight: 500;
+	}
+
+	.packet-url-box {
+		margin: 1.5rem 0;
+		padding: 1rem;
+		background: #f0f9ff;
+		border: 1px solid #bae6fd;
+		border-radius: 8px;
+	}
+
+	.packet-url-content {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.packet-url-label {
+		font-weight: 500;
+		color: var(--civic-dark);
+		white-space: nowrap;
+	}
+
+	.packet-url-link {
+		color: var(--civic-blue);
+		text-decoration: none;
+		word-break: break-all;
+		font-size: 0.9rem;
+	}
+
+	.packet-url-link:hover {
+		text-decoration: underline;
 	}
 
 	.meeting-detail {
@@ -330,28 +365,6 @@
 	.no-summary p:last-child {
 		font-size: 0.95rem;
 		margin: 0;
-	}
-
-	.summary-source {
-		margin-top: 2rem;
-		padding-top: 1.5rem;
-		border-top: 1px solid var(--civic-border);
-		font-size: 0.9rem;
-		color: var(--civic-gray);
-	}
-
-	.summary-source p {
-		margin: 0;
-	}
-
-	.summary-source a {
-		color: var(--civic-blue);
-		text-decoration: none;
-		word-break: break-word;
-	}
-
-	.summary-source a:hover {
-		text-decoration: underline;
 	}
 
 	@media (max-width: 640px) {
