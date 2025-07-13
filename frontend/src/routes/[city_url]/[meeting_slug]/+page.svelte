@@ -116,7 +116,7 @@
 			: selectedMeeting.packet_url}
 		<div class="packet-url-box">
 			<div class="packet-url-content">
-				<span class="packet-url-label">Meeting packet:</span>
+				<span class="packet-url-label">Summarized through the Anthropic API from this meeting-packet URL:</span>
 				<a href={packetUrl} target="_blank" rel="noopener noreferrer" class="packet-url-link">
 					{packetUrl}
 				</a>
