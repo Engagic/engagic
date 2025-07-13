@@ -214,6 +214,12 @@ class GranicusAdapter:
                 continue
             
             # Extract meeting info from cells
+            # Remove hidden spans (containing timestamps) before extracting text
+            for span in cells[0].find_all('span', style=lambda x: x and 'display:none' in x):
+                span.decompose()
+            for span in cells[1].find_all('span', style=lambda x: x and 'display:none' in x):
+                span.decompose()
+            
             title = cells[0].get_text(" ", strip=True)
             start = cells[1].get_text(" ", strip=True)
             
