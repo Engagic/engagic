@@ -64,6 +64,20 @@ class MeetingsDatabase(BaseDatabase):
         if not city_banana:
             raise ValueError("city_banana required in meeting_data")
 
+        # Ensure meeting_id is always present
+        meeting_id = meeting_data.get("meeting_id")
+        if not meeting_id:
+            # Generate a fallback meeting_id from meeting details
+            id_components = [
+                city_banana,
+                meeting_data.get("meeting_name", ""),
+                meeting_data.get("meeting_date", ""),
+                meeting_data.get("packet_url", "")
+            ]
+            id_string = "|".join(str(c) for c in id_components)
+            meeting_id = "auto_" + hashlib.md5(id_string.encode()).hexdigest()[:12]
+            logger.warning(f"Generated fallback meeting_id for {city_banana}: {meeting_id}")
+
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
@@ -85,7 +99,7 @@ class MeetingsDatabase(BaseDatabase):
             """,
                 (
                     city_banana,
-                    meeting_data.get("meeting_id"),
+                    meeting_id,
                     meeting_data.get("meeting_name"),
                     meeting_data.get("meeting_date"),
                     packet_url,

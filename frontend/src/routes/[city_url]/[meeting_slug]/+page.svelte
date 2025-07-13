@@ -1,16 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { searchMeetings, getCachedSummary, type SearchResult, type Meeting, type CachedSummary } from '$lib/api';
+	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api';
 	import { parseCityUrl } from '$lib/utils';
 
 	let city_url = $page.params.city_url;
 	let meeting_slug = $page.params.meeting_slug;
 	let searchResults: SearchResult | null = $state(null);
 	let selectedMeeting: Meeting | null = $state(null);
-	let cachedSummary: CachedSummary | null = $state(null);
 	let loading = $state(true);
-	let loadingSummary = $state(false);
 	let error = $state('');
 
 	onMount(async () => {
@@ -38,7 +36,6 @@
 				const meeting = findMeetingBySlug(result.meetings, meeting_slug);
 				if (meeting) {
 					selectedMeeting = meeting;
-					await loadCachedSummary(meeting);
 				} else {
 					error = 'Meeting not found';
 				}
@@ -53,27 +50,6 @@
 		}
 	}
 
-	async function loadCachedSummary(meeting: Meeting) {
-		if (!searchResults?.city_banana) return;
-		
-		loadingSummary = true;
-		cachedSummary = null;
-
-		try {
-			const result = await getCachedSummary(meeting, searchResults.city_banana);
-			if (result.success && result.cached && result.summary) {
-				cachedSummary = result;
-			} else {
-				// No cached summary available
-				cachedSummary = null;
-			}
-		} catch (err) {
-			console.error('Failed to load summary:', err);
-			error = err instanceof Error ? err.message : 'We humbly thank you for your patience';
-		} finally {
-			loadingSummary = false;
-		}
-	}
 
 	function findMeetingBySlug(meetings: Meeting[], slug: string): Meeting | null {
 		// Basic slug matching - in a real app you'd want more sophisticated matching
@@ -134,10 +110,10 @@
 		<span class="nav-current">Meeting</span>
 	</div>
 
-	{#if cachedSummary?.meeting_data?.packet_url}
-		{@const packetUrl = Array.isArray(cachedSummary.meeting_data.packet_url) 
-			? cachedSummary.meeting_data.packet_url[0] 
-			: cachedSummary.meeting_data.packet_url}
+	{#if selectedMeeting?.packet_url}
+		{@const packetUrl = Array.isArray(selectedMeeting.packet_url) 
+			? selectedMeeting.packet_url[0] 
+			: selectedMeeting.packet_url}
 		<div class="packet-url-box">
 			<div class="packet-url-content">
 				<span class="packet-url-label">Meeting packet:</span>
@@ -165,11 +141,9 @@
 				</div>
 			</div>
 			
-			{#if loadingSummary}
-				<div class="processing-status">Checking for summary...</div>
-			{:else if cachedSummary}
+			{#if selectedMeeting.processed_summary}
 				<div class="meeting-summary">
-					{cachedSummary.summary}
+					{selectedMeeting.processed_summary}
 				</div>
 			{:else}
 				<div class="no-summary">

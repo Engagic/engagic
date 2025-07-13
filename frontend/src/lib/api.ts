@@ -27,9 +27,10 @@ export interface Meeting {
 	meeting_id?: string;
 	title?: string;
 	start?: string;
-	packet_url?: string;
+	packet_url?: string | string[];
 	meeting_name?: string;
 	meeting_date?: string;
+	processed_summary?: string;
 }
 
 export interface CachedSummary {
