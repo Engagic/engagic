@@ -546,6 +546,8 @@ class GranicusAdapter:
 class LegistarAdapter:
     def __init__(self, city_slug: str):
         self.city_slug = city_slug
+        if self.city_slug =="nyc" and os.getenv("NYC_API_KEY"):
+            self.base = f"https://webapi.legistar.com/v1/{self.city_slug}/matters?token="
         self.base = f"https://{city_slug}.legistar.com"
 
     def all_meetings(self):
