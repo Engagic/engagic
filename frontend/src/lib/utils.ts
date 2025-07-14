@@ -22,9 +22,19 @@ export function generateMeetingSlug(meeting: Meeting): string {
 	let dateSlug = '';
 	
 	if (dateStr) {
-		// Handle format like "Jul 24, 2025 - 6:30 PM"
-		// Extract just the date part before the time
-		const datePart = dateStr.split(' - ')[0].trim();
+		// Handle various date formats
+		let datePart = dateStr;
+		
+		// If date contains time separator, extract just the date part
+		if (dateStr.includes(' - ')) {
+			datePart = dateStr.split(' - ')[0].trim();
+		}
+		
+		// Also handle "on YYYY-MM-DD" format from title
+		const titleDateMatch = title.match(/on (\d{4}-\d{2}-\d{2})/);
+		if (titleDateMatch) {
+			datePart = titleDateMatch[1];
+		}
 		
 		// Try to parse date and format as YYYY_MM_DD
 		const date = new Date(datePart);
@@ -36,15 +46,23 @@ export function generateMeetingSlug(meeting: Meeting): string {
 		}
 	}
 	
-	// Clean title: lowercase, remove special chars, replace spaces with underscores
-	const cleanTitle = title
+	// Clean title: remove date suffix if present, lowercase, remove special chars
+	let cleanTitle = title
+		.replace(/ on \d{4}-\d{2}-\d{2}.*$/, '') // Remove "on YYYY-MM-DD" suffix
 		.toLowerCase()
 		.replace(/[^a-z0-9\s]/g, '')
 		.replace(/\s+/g, '_')
 		.substring(0, 50); // Limit length
 	
+	// Always include date in slug to avoid ambiguity
+	if (!dateSlug) {
+		// If we couldn't parse a date, use a fallback
+		console.warn('Could not parse date for meeting:', meeting);
+		dateSlug = 'undated';
+	}
+	
 	// Combine title and date
-	return dateSlug ? `${cleanTitle}_${dateSlug}` : cleanTitle;
+	return `${cleanTitle}_${dateSlug}`;
 }
 
 export function parseCityUrl(cityUrl: string): { cityName: string; state: string } | null {
