@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api';
-	import { parseCityUrl } from '$lib/utils';
+	import { parseCityUrl, generateMeetingSlug } from '$lib/utils';
 
 	let city_url = $page.params.city_url;
 	let meeting_slug = $page.params.meeting_slug;
@@ -52,16 +52,11 @@
 
 
 	function findMeetingBySlug(meetings: Meeting[], slug: string): Meeting | null {
-		// Basic slug matching - in a real app you'd want more sophisticated matching
-		// For now, just find the first meeting that could plausibly match the slug
+		// Find meeting where generated slug matches the URL slug
 		return meetings.find(meeting => {
-			const title = (meeting.title || meeting.meeting_name || '').toLowerCase();
-			const dateStr = meeting.meeting_date || meeting.start || '';
-			
-			// Check if slug contains parts of the title or date
-			const slugParts = slug.split('_');
-			return slugParts.some(part => title.includes(part) || dateStr.includes(part));
-		}) || meetings[0] || null; // Fallback to first meeting
+			const generatedSlug = generateMeetingSlug(meeting);
+			return generatedSlug === slug;
+		}) || null;
 	}
 
 	function formatMeetingDate(dateString: string): string {
