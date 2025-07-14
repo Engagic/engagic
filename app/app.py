@@ -589,7 +589,7 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
         }
     
     # Log the state search
-    db.log_search(state_input, "state", state=state_abbr)
+    db.log_search(state_input, "state")
     
     # Convert cities to the format expected by frontend
     city_options = []
