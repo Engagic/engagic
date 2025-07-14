@@ -956,35 +956,45 @@ async def get_city_coverage():
         # Calculate total population if we have zipcode data
         total_population = 0
         cities_with_coords = []
+        all_zipcodes = set()
         
         # Initialize zipcode search engine
         search = SearchEngine()
         
         for city in coverage_data:
-            # Get primary zipcode for the city
-            zipcode = city.get("primary_zipcode")
-            if zipcode:
-                # Look up zipcode data for coordinates and population
-                zip_data = search.by_zipcode(zipcode)
-                if zip_data and zip_data.lat and zip_data.lng:
-                    cities_with_coords.append({
-                        "name": city["city_name"],
-                        "state": city["state"],
-                        "zipcode": zipcode,
-                        "lat": zip_data.lat,
-                        "lng": zip_data.lng,
-                        "population": zip_data.population or 0,
-                        "meetingCount": city["meeting_count"],
-                        "vendor": city.get("vendor", "unknown"),
-                        "city_banana": city["city_banana"]
-                    })
-                    total_population += zip_data.population or 0
+            # Get all zipcodes for the city
+            zipcodes = city.get("zipcodes", [])
+            if not zipcodes and city.get("primary_zipcode"):
+                zipcodes = [city.get("primary_zipcode")]
+            
+            # Process each zipcode
+            for zipcode in zipcodes:
+                if zipcode:
+                    all_zipcodes.add(zipcode)
+                    # Look up zipcode data for coordinates and population
+                    zip_data = search.by_zipcode(zipcode)
+                    if zip_data and zip_data.lat and zip_data.lng:
+                        cities_with_coords.append({
+                            "name": city["city_name"],
+                            "state": city["state"],
+                            "zipcode": zipcode,
+                            "lat": zip_data.lat,
+                            "lng": zip_data.lng,
+                            "population": zip_data.population or 0,
+                            "meetingCount": city["meeting_count"],
+                            "vendor": city.get("vendor", "unknown"),
+                            "city_banana": city["city_banana"],
+                            "bounds": [zip_data.bounds_west, zip_data.bounds_south, 
+                                     zip_data.bounds_east, zip_data.bounds_north] if zip_data.bounds_west else None
+                        })
+                        total_population += zip_data.population or 0
         
         return {
             "success": True,
             "data": {
                 "cities": cities_with_coords,
-                "totalCities": len(cities_with_coords),
+                "totalCities": len(set(c["city_banana"] for c in cities_with_coords)),
+                "totalZipcodes": len(all_zipcodes),
                 "totalMeetings": sum(c["meetingCount"] for c in cities_with_coords),
                 "populationCovered": total_population
             }

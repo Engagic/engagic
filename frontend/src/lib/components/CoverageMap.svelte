@@ -54,33 +54,34 @@
       style: {
         version: 8,
         sources: {
-          'osm-tiles': {
+          'carto-dark': {
             type: 'raster',
             tiles: [
-              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+              'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+              'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
             ],
             tileSize: 256,
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© CARTO'
           }
         },
         layers: [
           {
-            id: 'osm-tiles',
+            id: 'base-tiles',
             type: 'raster',
-            source: 'osm-tiles',
+            source: 'carto-dark',
             minzoom: 0,
             maxzoom: 19,
             paint: {
-              'raster-opacity': 0.8,
-              'raster-contrast': 0,
-              'raster-brightness-min': 0
+              'raster-opacity': 1,
+              'raster-contrast': 0.2,
+              'raster-brightness-min': 0,
+              'raster-hue-rotate': 180,
+              'raster-saturation': -1
             }
           }
         ],
-        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-        sprite: 'https://openmaptiles.org/styles/osm-bright/sprite'
+        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf'
       },
       ...INITIAL_VIEW,
       maxZoom: 12,
@@ -133,9 +134,9 @@
             'interpolate',
             ['linear'],
             ['get', 'point_count'],
-            10, '#51bbd6',
-            100, '#f1f075',
-            500, '#f28cb1'
+            10, '#00ff41',
+            100, '#00ffff',
+            500, '#ff00ff'
           ],
           'circle-radius': [
             'interpolate',
@@ -145,8 +146,11 @@
             100, 30,
             500, 40
           ],
-          'circle-blur': 0.5,
-          'circle-opacity': 0.8
+          'circle-blur': 1,
+          'circle-opacity': 0.9,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#00ff41',
+          'circle-stroke-opacity': 0.8
         }
       });
       
@@ -162,7 +166,9 @@
           'text-size': 14
         },
         paint: {
-          'text-color': '#ffffff'
+          'text-color': '#00ff41',
+          'text-halo-color': '#000000',
+          'text-halo-width': 2
         }
       });
       
@@ -175,11 +181,11 @@
         paint: {
           'circle-color': [
             'case',
-            ['>', ['get', 'meetingCount'], 20], '#ff4444',
-            ['>', ['get', 'meetingCount'], 10], '#ff8844',
-            ['>', ['get', 'meetingCount'], 5], '#ffaa44',
-            ['>', ['get', 'meetingCount'], 0], '#44ff44',
-            '#888888'
+            ['>', ['get', 'meetingCount'], 20], '#ff0080',
+            ['>', ['get', 'meetingCount'], 10], '#ff00ff',
+            ['>', ['get', 'meetingCount'], 5], '#00ffff',
+            ['>', ['get', 'meetingCount'], 0], '#00ff41',
+            '#404040'
           ],
           'circle-radius': [
             'interpolate',
@@ -189,8 +195,16 @@
             8, 8,
             12, 12
           ],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1,
+          'circle-stroke-color': [
+            'case',
+            ['>', ['get', 'meetingCount'], 20], '#ff0080',
+            ['>', ['get', 'meetingCount'], 10], '#ff00ff',
+            ['>', ['get', 'meetingCount'], 5], '#00ffff',
+            ['>', ['get', 'meetingCount'], 0], '#00ff41',
+            '#404040'
+          ],
+          'circle-stroke-opacity': 0.8,
           'circle-opacity': [
             'case',
             ['boolean', ['feature-state', 'hover'], false],
@@ -220,9 +234,10 @@
           'text-anchor': 'top'
         },
         paint: {
-          'text-color': '#000000',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 2
+          'text-color': '#00ff41',
+          'text-halo-color': '#000000',
+          'text-halo-width': 1,
+          'text-halo-blur': 1
         }
       });
       
@@ -257,12 +272,12 @@
               'interpolate',
               ['linear'],
               ['heatmap-density'],
-              0, 'rgba(33,102,172,0)',
-              0.2, 'rgb(103,169,207)',
-              0.4, 'rgb(209,229,240)',
-              0.6, 'rgb(253,219,199)',
-              0.8, 'rgb(239,138,98)',
-              1, 'rgb(178,24,43)'
+              0, 'rgba(0,0,0,0)',
+              0.2, 'rgba(0,255,65,0.1)',
+              0.4, 'rgba(0,255,255,0.2)',
+              0.6, 'rgba(255,0,255,0.3)',
+              0.8, 'rgba(255,0,128,0.4)',
+              1, 'rgba(255,0,128,0.6)'
             ],
             'heatmap-radius': [
               'interpolate',
@@ -405,9 +420,13 @@
     width: 100%;
     height: 600px;
     position: relative;
-    border-radius: 12px;
+    border-radius: 0;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    background: #000;
+    border: 2px solid #00ff41;
+    box-shadow: 
+      0 0 20px rgba(0, 255, 65, 0.5),
+      inset 0 0 20px rgba(0, 255, 65, 0.1);
   }
   
   .loading-overlay {
@@ -440,13 +459,16 @@
     position: absolute;
     top: 20px;
     left: 20px;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(0, 0, 0, 0.9);
     padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border: 1px solid #00ff41;
+    box-shadow: 
+      0 0 10px rgba(0, 255, 65, 0.5),
+      inset 0 0 10px rgba(0, 255, 65, 0.1);
     display: flex;
     gap: 30px;
     backdrop-filter: blur(10px);
+    font-family: monospace;
   }
   
   :global(.stat-item) {
@@ -456,47 +478,63 @@
   }
   
   :global(.stat-number) {
-    font-size: 28px;
-    font-weight: bold;
-    color: #2c3e50;
+    font-size: 32px;
+    font-weight: normal;
+    color: #00ff41;
+    text-shadow: 0 0 10px rgba(0, 255, 65, 0.8);
+    font-family: monospace;
+    letter-spacing: 2px;
   }
   
   :global(.stat-label) {
-    font-size: 12px;
-    color: #7f8c8d;
+    font-size: 10px;
+    color: #00ff41;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    font-family: monospace;
   }
   
   :global(.maplibregl-popup-content) {
     padding: 0;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid #00ff41;
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
   }
   
   :global(.popup-content) {
     padding: 15px;
     min-width: 200px;
+    font-family: monospace;
+    background: #000;
   }
   
   :global(.popup-content h3) {
     margin: 0 0 10px 0;
-    font-size: 16px;
-    font-weight: bold;
-    color: #2c3e50;
+    font-size: 14px;
+    font-weight: normal;
+    color: #00ff41;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 0 0 5px rgba(0, 255, 65, 0.8);
   }
   
   :global(.popup-content p) {
     margin: 5px 0;
-    font-size: 14px;
-    color: #5a6c7d;
+    font-size: 12px;
+    color: #00ffff;
+    opacity: 0.9;
   }
   
   :global(.click-hint) {
-    font-size: 12px;
-    color: #3498db;
+    font-size: 11px;
+    color: #ff00ff;
     margin-top: 10px;
-    font-style: italic;
+    font-style: normal;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    animation: pulse 2s infinite;
   }
   
   @keyframes fadeOut {
@@ -508,6 +546,29 @@
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+  }
+  
+  :global(.maplibregl-ctrl-group) {
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid #00ff41;
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+  }
+  
+  :global(.maplibregl-ctrl-group button) {
+    background: #000;
+    color: #00ff41;
+    border-color: #00ff41;
+  }
+  
+  :global(.maplibregl-ctrl-group button:hover) {
+    background: #00ff41;
+    color: #000;
   }
   
   @media (max-width: 768px) {

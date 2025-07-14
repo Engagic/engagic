@@ -1,5 +1,5 @@
 <script>
-  import CoverageMap from '$lib/components/CoverageMap.svelte';
+  import ZipcodeCoverageMap from '$lib/components/ZipcodeCoverageMap.svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   
@@ -9,7 +9,8 @@
   let stats = {
     totalCities: 0,
     totalMeetings: 0,
-    populationCovered: 0
+    populationCovered: 0,
+    totalZipcodes: 0
   };
   
   onMount(async () => {
@@ -22,7 +23,8 @@
         stats = {
           totalCities: result.data.totalCities,
           totalMeetings: result.data.totalMeetings,
-          populationCovered: result.data.populationCovered
+          populationCovered: result.data.populationCovered,
+          totalZipcodes: result.data.totalZipcodes || 0
         };
       } else {
         error = result.error || 'Failed to load coverage data';
@@ -56,28 +58,32 @@
 </script>
 
 <svelte:head>
-  <title>Coverage Map - Engagic</title>
-  <meta name="description" content="Explore Engagic's coverage across {stats.totalCities} US cities. Find local government meetings in your area." />
+  <title>Geographic Coverage - Engagic</title>
+  <meta name="description" content="Explore Engagic's coverage across {stats.totalZipcodes} zipcodes in {stats.totalCities} US cities. Find local government meetings in your area." />
 </svelte:head>
 
 <main>
   <div class="hero">
-    <h1>Civic Transparency Across America</h1>
-    <p class="subtitle">Click any city to explore local government meetings</p>
+    <h1>Geographic Coverage Map</h1>
+    <p class="subtitle">Shaded areas represent zipcode boundaries with active municipal data</p>
     
     {#if !loading}
       <div class="coverage-stats">
         <div class="stat">
+          <span class="stat-value">{stats.totalZipcodes.toLocaleString()}</span>
+          <span class="stat-label">Zipcodes Covered</span>
+        </div>
+        <div class="stat">
           <span class="stat-value">{stats.totalCities.toLocaleString()}</span>
-          <span class="stat-label">Cities Covered</span>
+          <span class="stat-label">Cities</span>
         </div>
         <div class="stat">
           <span class="stat-value">{formatPopulation(stats.populationCovered)}</span>
-          <span class="stat-label">Population Reached</span>
+          <span class="stat-label">Population</span>
         </div>
         <div class="stat">
           <span class="stat-value">{stats.totalMeetings.toLocaleString()}</span>
-          <span class="stat-label">Active Meetings</span>
+          <span class="stat-label">Meetings</span>
         </div>
       </div>
     {/if}
@@ -95,7 +101,7 @@
         <button on:click={() => location.reload()}>Retry</button>
       </div>
     {:else}
-      <CoverageMap {cities} onCityClick={handleCityClick} />
+      <ZipcodeCoverageMap {cities} onCityClick={handleCityClick} />
     {/if}
   </div>
   
@@ -126,27 +132,31 @@
 <style>
   main {
     min-height: 100vh;
-    background: #f8f9fa;
+    background: #ffffff;
+    color: #000000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   
   .hero {
     text-align: center;
     padding: 3rem 2rem 2rem;
-    background: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    background: #ffffff;
+    border-bottom: 2px solid #000000;
   }
   
   h1 {
-    font-size: 2.5rem;
+    font-size: 3rem;
     margin-bottom: 0.5rem;
-    color: #2c3e50;
-    font-weight: 700;
+    color: #000000;
+    font-weight: 900;
+    letter-spacing: -2px;
   }
   
   .subtitle {
     font-size: 1.125rem;
-    color: #5a6c7d;
+    color: #666666;
     margin-bottom: 2rem;
+    font-weight: 400;
   }
   
   .coverage-stats {
@@ -163,23 +173,25 @@
   }
   
   .stat-value {
-    font-size: 2rem;
-    font-weight: bold;
-    color: #3498db;
+    font-size: 3rem;
+    font-weight: 900;
+    color: #000000;
+    letter-spacing: -1px;
   }
   
   .stat-label {
     font-size: 0.875rem;
-    color: #7f8c8d;
+    color: #666666;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 1px;
     margin-top: 0.25rem;
+    font-weight: 500;
   }
   
   .map-section {
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
+    padding: 0;
+    max-width: 100%;
+    margin: 0;
   }
   
   .loading-state, .error-state {

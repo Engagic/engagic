@@ -300,6 +300,7 @@ class DatabaseManager:
                     "city_banana": city["city_banana"],
                     "vendor": city.get("vendor"),
                     "primary_zipcode": primary_zipcode,
+                    "zipcodes": city.get("zipcodes", []),
                     "meeting_count": meeting_count
                 })
         
