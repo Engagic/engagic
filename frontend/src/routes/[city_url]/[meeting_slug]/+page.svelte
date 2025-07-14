@@ -95,6 +95,10 @@
 			<p class="tagline">civic engagement made simple</p>
 		</header>
 
+	<div class="city-header">
+		<a href="/{city_url}" class="back-link">← Back to {searchResults?.city_name || 'city'} meetings</a>
+	</div>
+
 	<div class="navigation">
 		<a href="/" class="nav-link">← Home</a>
 		<span class="nav-separator">•</span>
@@ -213,6 +217,23 @@
 	}
 
 	.packet-url-link:hover {
+		text-decoration: underline;
+	}
+
+	.city-header {
+		margin-bottom: 1rem;
+	}
+
+	.back-link {
+		display: inline-block;
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 500;
+		font-size: 1.1rem;
+		padding: 0.5rem 0;
+	}
+
+	.back-link:hover {
 		text-decoration: underline;
 	}
 
