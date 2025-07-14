@@ -48,6 +48,10 @@ class DatabaseManager:
         """Get all cities matching a name (regardless of state)"""
         return self.locations.get_cities_by_name_only(city_name)
 
+    def get_cities_by_state(self, state: str) -> List[Dict[str, Any]]:
+        """Get all cities in a given state"""
+        return self.locations.get_cities_by_state(state)
+
     def get_city_by_slug(self, city_slug: str) -> Optional[Dict[str, Any]]:
         """Get city information by slug"""
         return self.locations.get_city_by_slug(city_slug)

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api';
 	import { generateMeetingSlug, parseCityUrl } from '$lib/utils';
@@ -95,7 +96,7 @@
 
 	function handleMeetingClick(meeting: Meeting) {
 		const meetingSlug = generateMeetingSlug(meeting);
-		window.location.href = `/${city_url}/${meetingSlug}`;
+		goto(`/${city_url}/${meetingSlug}`);
 	}
 
 	function formatMeetingDate(dateString: string): string {
