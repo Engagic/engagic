@@ -143,7 +143,13 @@
         }
       });
       
-      // Hover effects
+      // Hover effects with popup
+      let popup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 15
+      });
+      
       map.on('mouseenter', 'coverage-fill', (e) => {
         map.getCanvas().style.cursor = 'pointer';
         
@@ -159,6 +165,19 @@
             { source: 'zipcode-coverage', id: hoveredZipId },
             { hover: true }
           );
+          
+          // Show popup with city info and meeting count
+          const coordinates = e.features[0].geometry.coordinates.slice();
+          const properties = e.features[0].properties;
+          
+          popup.setLngLat(coordinates)
+            .setHTML(`
+              <div style="font-family: -apple-system, sans-serif; padding: 8px;">
+                <strong>${properties.city}, ${properties.state}</strong><br>
+                <span style="color: #666; font-size: 14px;">${properties.meetingCount} meetings available</span>
+              </div>
+            `)
+            .addTo(map);
         }
       });
       
@@ -171,6 +190,7 @@
           );
         }
         hoveredZipId = null;
+        popup.remove();
       });
       
       // Click handler

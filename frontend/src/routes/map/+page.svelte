@@ -38,13 +38,11 @@
   });
   
   function handleCityClick(city) {
-    // Navigate to city-specific URL using city_banana
-    if (city.city_banana) {
-      goto(`/${city.city_banana}`);
-    } else {
-      const searchQuery = `${city.name}, ${city.state}`;
-      goto(`/?q=${encodeURIComponent(searchQuery)}`);
-    }
+    // Generate city_banana format: cityname + STATE (no spaces, lowercase city, uppercase state)
+    const cityName = city.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const state = city.state.toUpperCase();
+    const cityBanana = `${cityName}${state}`;
+    goto(`/${cityBanana}`);
   }
   
   function formatPopulation(num) {
