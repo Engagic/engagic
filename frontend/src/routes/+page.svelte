@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { searchMeetings, type SearchResult, type CityOption } from '$lib/api';
 	import { generateCityUrl } from '$lib/utils';
 
@@ -21,7 +22,7 @@
 			// If successful and has city info, navigate to city page
 			if (result.success && result.city_name && result.state) {
 				const cityUrl = generateCityUrl(result.city_name, result.state);
-				window.location.href = `/${cityUrl}`;
+				goto(`/${cityUrl}`);
 			}
 		} catch (err) {
 			console.error('Search error:', err);
@@ -33,7 +34,7 @@
 
 	async function handleCityOptionClick(cityOption: CityOption) {
 		const cityUrl = generateCityUrl(cityOption.city_name, cityOption.state);
-		window.location.href = `/${cityUrl}`;
+		goto(`/${cityUrl}`);
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -61,7 +62,7 @@
 			class="search-input"
 			bind:value={searchQuery}
 			onkeydown={handleKeydown}
-			placeholder="Enter zipcode or city"
+			placeholder="Enter zipcode, city, or state"
 			disabled={loading}
 		/>
 		<button 

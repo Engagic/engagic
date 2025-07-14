@@ -99,16 +99,6 @@
 		<a href="/{city_url}" class="back-link">← Back to {searchResults?.city_name || 'city'} meetings</a>
 	</div>
 
-	<div class="navigation">
-		<a href="/" class="nav-link">← Home</a>
-		<span class="nav-separator">•</span>
-		<a href="/{city_url}" class="nav-link">
-			{searchResults?.city_name ? `${searchResults.city_name}, ${searchResults.state}` : 'City'}
-		</a>
-		<span class="nav-separator">•</span>
-		<span class="nav-current">Meeting</span>
-	</div>
-
 	{#if selectedMeeting?.packet_url}
 		{@const packetUrl = Array.isArray(selectedMeeting.packet_url) 
 			? selectedMeeting.packet_url[0] 
@@ -165,28 +155,6 @@
 </div>
 
 <style>
-	.navigation {
-		margin-bottom: 2rem;
-		color: var(--civic-gray);
-	}
-
-	.nav-link {
-		color: var(--civic-blue);
-		text-decoration: none;
-		font-weight: 500;
-	}
-
-	.nav-link:hover {
-		text-decoration: underline;
-	}
-
-	.nav-separator {
-		margin: 0 0.5rem;
-	}
-
-	.nav-current {
-		font-weight: 500;
-	}
 
 	.packet-url-box {
 		margin: 1.5rem 0;
