@@ -284,16 +284,12 @@ class DatabaseManager:
         for city in cities:
             if city.get("status") == "active":
                 # Get primary zipcode for the city
-                primary_zipcode = None
-                zipcodes = city.get("zipcodes", [])
-                if zipcodes:
-                    # Find primary zipcode or use first one
-                    for z in zipcodes:
-                        if z.get("is_primary"):
-                            primary_zipcode = z["zipcode"]
-                            break
-                    if not primary_zipcode and zipcodes:
-                        primary_zipcode = zipcodes[0]["zipcode"]
+                primary_zipcode = city.get("primary_zipcode")
+                if not primary_zipcode:
+                    # Fall back to first zipcode if no primary
+                    zipcodes = city.get("zipcodes", [])
+                    if zipcodes and len(zipcodes) > 0:
+                        primary_zipcode = zipcodes[0]
                 
                 # Get meeting count for this city
                 meeting_count = self.meetings.get_meeting_count_by_city(city["city_banana"])
