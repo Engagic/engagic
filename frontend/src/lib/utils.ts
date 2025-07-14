@@ -22,8 +22,12 @@ export function generateMeetingSlug(meeting: Meeting): string {
 	let dateSlug = '';
 	
 	if (dateStr) {
+		// Handle format like "Jul 24, 2025 - 6:30 PM"
+		// Extract just the date part before the time
+		const datePart = dateStr.split(' - ')[0].trim();
+		
 		// Try to parse date and format as YYYY_MM_DD
-		const date = new Date(dateStr);
+		const date = new Date(datePart);
 		if (!isNaN(date.getTime())) {
 			const year = date.getFullYear();
 			const month = String(date.getMonth() + 1).padStart(2, '0');
