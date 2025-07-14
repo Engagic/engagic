@@ -274,6 +274,41 @@ class DatabaseManager:
             },
         }
 
+    def get_city_coverage_data(self) -> List[Dict[str, Any]]:
+        """Get city coverage data for map visualization"""
+        # Get all active cities
+        cities = self.locations.get_all_cities()
+        
+        # Get meeting counts for each city
+        coverage_data = []
+        for city in cities:
+            if city.get("status") == "active":
+                # Get primary zipcode for the city
+                primary_zipcode = None
+                zipcodes = city.get("zipcodes", [])
+                if zipcodes:
+                    # Find primary zipcode or use first one
+                    for z in zipcodes:
+                        if z.get("is_primary"):
+                            primary_zipcode = z["zipcode"]
+                            break
+                    if not primary_zipcode and zipcodes:
+                        primary_zipcode = zipcodes[0]["zipcode"]
+                
+                # Get meeting count for this city
+                meeting_count = self.meetings.get_meeting_count_by_city(city["city_banana"])
+                
+                coverage_data.append({
+                    "city_name": city["city_name"],
+                    "state": city["state"],
+                    "city_banana": city["city_banana"],
+                    "vendor": city.get("vendor"),
+                    "primary_zipcode": primary_zipcode,
+                    "meeting_count": meeting_count
+                })
+        
+        return coverage_data
+
     def get_system_health(self) -> Dict[str, Any]:
         """Get overall system health from all databases"""
         try:

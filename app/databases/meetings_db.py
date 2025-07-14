@@ -228,6 +228,21 @@ class MeetingsDatabase(BaseDatabase):
                 return packet_url
         return packet_url
 
+    def get_meeting_count_by_city(self, city_banana: str) -> int:
+        """Get count of meetings for a specific city"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count
+                FROM meetings
+                WHERE city_banana = ?
+            """,
+                (city_banana,),
+            )
+            result = cursor.fetchone()
+            return result[0] if result else 0
+
     def get_meetings_by_city(
         self, city_banana: str, limit: int = 50
     ) -> List[Dict[str, Any]]:
