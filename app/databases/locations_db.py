@@ -179,6 +179,36 @@ class LocationsDatabase(BaseDatabase):
                 results.append(result)
             return results
 
+    def get_cities_by_state(self, state: str) -> List[Dict[str, Any]]:
+        """Get all cities in a given state"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Normalize state to uppercase
+            state_normalized = state.strip().upper()
+            
+            cursor.execute(
+                """
+                SELECT c.*, 
+                       GROUP_CONCAT(z.zipcode) as zipcodes,
+                       (SELECT z2.zipcode FROM zipcodes z2 WHERE z2.city_id = c.id AND z2.is_primary = 1) as primary_zipcode
+                FROM cities c
+                LEFT JOIN zipcodes z ON c.id = z.city_id
+                WHERE UPPER(c.state) = ? AND c.status = 'active'
+                GROUP BY c.id
+                ORDER BY c.city_name
+            """,
+                (state_normalized,),
+            )
+            
+            rows = cursor.fetchall()
+            results = []
+            for row in rows:
+                result = dict(row)
+                if result["zipcodes"]:
+                    result["zipcodes"] = result["zipcodes"].split(",")
+                results.append(result)
+            return results
+
     def get_city_by_slug(self, city_slug: str) -> Optional[Dict[str, Any]]:
         """Get city information by slug"""
         with self.get_connection() as conn:

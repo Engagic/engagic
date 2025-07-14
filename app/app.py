@@ -251,6 +251,38 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
     return input_str, None
 
 
+def is_state_query(query: str) -> bool:
+    """Check if the query is just a state name or abbreviation"""
+    query_lower = query.strip().lower()
+    
+    # State abbreviation map
+    state_map = {
+        "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+        "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+        "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+        "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+        "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+        "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+        "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+        "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+        "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+        "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+        "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+        "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+        "wisconsin": "WI", "wyoming": "WY"
+    }
+    
+    # Check if it's a full state name
+    if query_lower in state_map:
+        return True
+    
+    # Check if it's a state abbreviation
+    if len(query) == 2 and query.upper() in state_map.values():
+        return True
+    
+    return False
+
+
 def sanitize_string(value: str) -> str:
     """Sanitize string input to prevent injection attacks"""
     if not value:
@@ -350,11 +382,16 @@ async def search_meetings(request: SearchRequest):
 
         logger.info(f"Search request: '{query}'")
 
-        # Determine if input is zipcode or city name
+        # Determine if input is zipcode, state, or city name
         is_zipcode = query.isdigit() and len(query) == 5
+        is_state = is_state_query(query)
+        
+        logger.info(f"Query analysis - is_zipcode: {is_zipcode}, is_state: {is_state}")
 
         if is_zipcode:
             return await handle_zipcode_search(query)
+        elif is_state:
+            return await handle_state_search(query)
         else:
             return await handle_city_search(query)
 
@@ -496,6 +533,82 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         "query": city_input,
         "type": "city_name",
         "message": f"No meetings cached yet for {city_name}, {state}, please check back soon!",
+    }
+
+
+async def handle_state_search(state_input: str) -> Dict[str, Any]:
+    """Handle state search - return list of cities in that state"""
+    # Normalize state input
+    state_input_lower = state_input.strip().lower()
+    
+    # State abbreviation map
+    state_map = {
+        "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+        "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+        "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+        "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+        "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+        "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+        "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+        "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+        "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+        "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+        "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+        "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+        "wisconsin": "WI", "wyoming": "WY"
+    }
+    
+    # Determine state abbreviation
+    if state_input_lower in state_map:
+        state_abbr = state_map[state_input_lower]
+        # Proper title case for multi-word states
+        state_full = " ".join(word.capitalize() for word in state_input_lower.split())
+    elif len(state_input) == 2 and state_input.upper() in state_map.values():
+        state_abbr = state_input.upper()
+        # Find full name from abbreviation
+        state_full = next((k.title() for k, v in state_map.items() if v == state_abbr), state_abbr)
+    else:
+        return {
+            "success": False,
+            "message": f"'{state_input}' is not a recognized state.",
+            "query": state_input,
+            "type": "state",
+            "meetings": [],
+        }
+    
+    # Get all cities in this state
+    cities = db.get_cities_by_state(state_abbr)
+    
+    if not cities:
+        return {
+            "success": False,
+            "message": f"We don't have any cities in {state_full} yet, but we're always expanding!",
+            "query": state_input,
+            "type": "state",
+            "meetings": [],
+        }
+    
+    # Log the state search
+    db.log_search(state_input, "state", state=state_abbr)
+    
+    # Convert cities to the format expected by frontend
+    city_options = []
+    for city in cities:
+        city_options.append({
+            "city_name": city["city_name"],
+            "state": city["state"],
+            "city_banana": city.get("city_banana") or generate_city_banana(city["city_name"], city["state"]),
+            "vendor": city.get("vendor", "unknown"),
+            "display_name": f"{city['city_name']}, {city['state']}"
+        })
+    
+    return {
+        "success": False,  # False because we're not returning meetings directly
+        "message": f"Found {len(city_options)} cities in {state_full}. Select a city to view meetings:",
+        "query": state_input,
+        "type": "state",
+        "ambiguous": True,  # Reuse ambiguous city UI pattern
+        "city_options": city_options,
     }
 
 
