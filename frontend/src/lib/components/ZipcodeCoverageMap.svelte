@@ -52,74 +52,87 @@
         }
       });
       
-      // Create zipcode coverage layer
-      // For demo purposes, we'll create circles around zipcodes
-      // In production, you'd load actual zipcode boundary polygons
-      const zipcodeFeatures = cities.map(city => ({
+      // Create city boundary polygons from bounds
+      const cityFeatures = cities.map((city, idx) => ({
         type: 'Feature',
+        id: idx,
         properties: {
-          zipcode: city.zipcode,
           city: city.name,
           state: city.state,
           meetingCount: city.meetingCount,
-          population: city.population
+          population: city.population,
+          zipcodeCount: city.zipcodeCount,
+          city_banana: city.city_banana
         },
-        geometry: {
+        geometry: city.bounds ? {
+          type: 'Polygon',
+          coordinates: [[
+            [city.bounds[0], city.bounds[1]], // SW
+            [city.bounds[2], city.bounds[1]], // SE
+            [city.bounds[2], city.bounds[3]], // NE
+            [city.bounds[0], city.bounds[3]], // NW
+            [city.bounds[0], city.bounds[1]]  // Close polygon
+          ]]
+        } : {
           type: 'Point',
           coordinates: [city.lng, city.lat]
         }
       }));
       
-      map.addSource('zipcode-coverage', {
+      map.addSource('city-coverage', {
         type: 'geojson',
         data: {
           type: 'FeatureCollection',
-          features: zipcodeFeatures
+          features: cityFeatures
         }
       });
       
-      // Add coverage areas (circles for now, would be actual zipcode polygons)
+      // Add city boundary fill
       map.addLayer({
         id: 'coverage-fill',
-        type: 'circle',
-        source: 'zipcode-coverage',
+        type: 'fill',
+        source: 'city-coverage',
+        filter: ['==', ['geometry-type'], 'Polygon'],
         paint: {
-          'circle-radius': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            3, 20,
-            7, 40,
-            10, 80
-          ],
-          'circle-color': 'rgba(0, 0, 0, 0.7)',
-          'circle-opacity': [
+          'fill-color': 'rgba(0, 0, 0, 0.7)',
+          'fill-opacity': [
             'case',
             ['boolean', ['feature-state', 'hover'], false],
-            0.9,
-            0.7
-          ],
-          'circle-blur': 0.8
+            0.8,
+            0.6
+          ]
         }
       });
       
-      // Add city points on top
+      // Add city boundary outlines
+      map.addLayer({
+        id: 'coverage-outline',
+        type: 'line',
+        source: 'city-coverage',
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: {
+          'line-color': '#000000',
+          'line-width': 1,
+          'line-opacity': 0.8
+        }
+      });
+      
+      // Add city center points
       map.addLayer({
         id: 'city-points',
         type: 'circle',
-        source: 'zipcode-coverage',
+        source: 'city-coverage',
         paint: {
-          'circle-radius': [
-            'interpolate',
-            ['linear'],
-            ['get', 'meetingCount'],
-            0, 3,
-            10, 5,
-            50, 8
-          ],
+          'circle-radius': 4,
           'circle-color': '#ffffff',
           'circle-stroke-color': '#000000',
-          'circle-stroke-width': 1
+          'circle-stroke-width': 2,
+          'circle-opacity': [
+            'case',
+            ['==', ['geometry-type'], 'Point'],
+            1,
+            0
+          ]
         }
       });
       
@@ -127,7 +140,7 @@
       map.addLayer({
         id: 'city-labels',
         type: 'symbol',
-        source: 'zipcode-coverage',
+        source: 'city-coverage',
         minzoom: 6,
         layout: {
           'text-field': ['get', 'city'],
@@ -156,25 +169,35 @@
         if (e.features.length > 0) {
           if (hoveredZipId !== null) {
             map.setFeatureState(
-              { source: 'zipcode-coverage', id: hoveredZipId },
+              { source: 'city-coverage', id: hoveredZipId },
               { hover: false }
             );
           }
           hoveredZipId = e.features[0].id;
           map.setFeatureState(
-            { source: 'zipcode-coverage', id: hoveredZipId },
+            { source: 'city-coverage', id: hoveredZipId },
             { hover: true }
           );
           
           // Show popup with city info and meeting count
-          const coordinates = e.features[0].geometry.coordinates.slice();
+          let coordinates = e.features[0].geometry.coordinates.slice();
           const properties = e.features[0].properties;
+          
+          // For polygons, use the center of the bounds
+          if (e.features[0].geometry.type === 'Polygon') {
+            const bounds = new maplibregl.LngLatBounds();
+            e.features[0].geometry.coordinates[0].forEach(coord => {
+              bounds.extend(coord);
+            });
+            coordinates = bounds.getCenter();
+          }
           
           popup.setLngLat(coordinates)
             .setHTML(`
               <div style="font-family: -apple-system, sans-serif; padding: 8px;">
                 <strong>${properties.city}, ${properties.state}</strong><br>
-                <span style="color: #666; font-size: 14px;">${properties.meetingCount} meetings available</span>
+                <span style="color: #666; font-size: 14px;">${properties.meetingCount} meetings available</span><br>
+                <span style="color: #999; font-size: 12px;">${properties.zipcodeCount || 1} zipcodes covered</span>
               </div>
             `)
             .addTo(map);
@@ -185,7 +208,7 @@
         map.getCanvas().style.cursor = '';
         if (hoveredZipId !== null) {
           map.setFeatureState(
-            { source: 'zipcode-coverage', id: hoveredZipId },
+            { source: 'city-coverage', id: hoveredZipId },
             { hover: false }
           );
         }

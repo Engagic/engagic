@@ -955,7 +955,7 @@ async def get_city_coverage():
         
         # Calculate total population if we have zipcode data
         total_population = 0
-        cities_with_coords = []
+        city_boundaries = []
         all_zipcodes = set()
         
         # Initialize zipcode search engine
@@ -967,35 +967,61 @@ async def get_city_coverage():
             if not zipcodes and city.get("primary_zipcode"):
                 zipcodes = [city.get("primary_zipcode")]
             
-            # Process each zipcode
+            # Collect all bounds for this city's zipcodes
+            city_pop = 0
+            min_lat, max_lat = 90, -90
+            min_lng, max_lng = 180, -180
+            valid_zips = 0
+            center_lat = 0
+            center_lng = 0
+            
             for zipcode in zipcodes:
                 if zipcode:
                     all_zipcodes.add(zipcode)
-                    # Look up zipcode data for coordinates and population
+                    # Look up zipcode data
                     zip_data = search.by_zipcode(zipcode)
                     if zip_data and zip_data.lat and zip_data.lng:
-                        cities_with_coords.append({
-                            "name": city["city_name"],
-                            "state": city["state"],
-                            "zipcode": zipcode,
-                            "lat": zip_data.lat,
-                            "lng": zip_data.lng,
-                            "population": zip_data.population or 0,
-                            "meetingCount": city["meeting_count"],
-                            "vendor": city.get("vendor", "unknown"),
-                            "city_banana": city["city_banana"],
-                            "bounds": [zip_data.bounds_west, zip_data.bounds_south, 
-                                     zip_data.bounds_east, zip_data.bounds_north] if zip_data.bounds_west else None
-                        })
-                        total_population += zip_data.population or 0
+                        # Update city bounds
+                        if zip_data.bounds_south and zip_data.bounds_north:
+                            min_lat = min(min_lat, zip_data.bounds_south)
+                            max_lat = max(max_lat, zip_data.bounds_north)
+                            min_lng = min(min_lng, zip_data.bounds_west)
+                            max_lng = max(max_lng, zip_data.bounds_east)
+                        else:
+                            # Fallback to point with small buffer
+                            min_lat = min(min_lat, zip_data.lat - 0.05)
+                            max_lat = max(max_lat, zip_data.lat + 0.05)
+                            min_lng = min(min_lng, zip_data.lng - 0.05)
+                            max_lng = max(max_lng, zip_data.lng + 0.05)
+                        
+                        center_lat += zip_data.lat
+                        center_lng += zip_data.lng
+                        valid_zips += 1
+                        city_pop += zip_data.population or 0
+            
+            if valid_zips > 0:
+                # Create city boundary from merged zipcode bounds
+                city_boundaries.append({
+                    "name": city["city_name"],
+                    "state": city["state"],
+                    "city_banana": city["city_banana"],
+                    "lat": center_lat / valid_zips,
+                    "lng": center_lng / valid_zips,
+                    "bounds": [min_lng, min_lat, max_lng, max_lat],
+                    "population": city_pop,
+                    "meetingCount": city["meeting_count"],
+                    "vendor": city.get("vendor", "unknown"),
+                    "zipcodeCount": len(zipcodes)
+                })
+                total_population += city_pop
         
         return {
             "success": True,
             "data": {
-                "cities": cities_with_coords,
-                "totalCities": len(set(c["city_banana"] for c in cities_with_coords)),
+                "cities": city_boundaries,
+                "totalCities": len(city_boundaries),
                 "totalZipcodes": len(all_zipcodes),
-                "totalMeetings": sum(c["meetingCount"] for c in cities_with_coords),
+                "totalMeetings": sum(c["meetingCount"] for c in city_boundaries),
                 "populationCovered": total_population
             }
         }
