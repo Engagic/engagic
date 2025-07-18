@@ -162,26 +162,34 @@
 		background: #f0f9ff;
 		border: 1px solid #bae6fd;
 		border-radius: 8px;
+		overflow: hidden;
+		word-wrap: break-word;
+		overflow-wrap: break-word;
 	}
 
 	.packet-url-content {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: 0.75rem;
-		flex-wrap: wrap;
+		flex-direction: column;
 	}
 
 	.packet-url-label {
 		font-weight: 500;
 		color: var(--civic-dark);
-		white-space: nowrap;
+		font-size: 0.85rem;
+		line-height: 1.4;
 	}
 
 	.packet-url-link {
 		color: var(--civic-blue);
 		text-decoration: none;
-		word-break: break-all;
-		font-size: 0.9rem;
+		word-break: break-word;
+		overflow-wrap: break-word;
+		font-size: 0.85rem;
+		width: 100%;
+		display: block;
+		line-height: 1.4;
 	}
 
 	.packet-url-link:hover {
@@ -328,10 +336,39 @@
 	@media (max-width: 640px) {
 		.meeting-title {
 			font-size: 1.4rem;
+			word-wrap: break-word;
+			overflow-wrap: break-word;
 		}
 		
 		.meeting-detail {
 			padding: 1rem;
+		}
+
+		.packet-url-box {
+			padding: 0.75rem;
+			margin: 1rem 0;
+		}
+
+		.packet-url-label {
+			font-size: 0.8rem;
+		}
+
+		.packet-url-link {
+			font-size: 0.75rem;
+		}
+
+		.back-link {
+			font-size: 1rem;
+		}
+
+		.meeting-summary {
+			font-size: 1rem;
+			overflow-wrap: break-word;
+			word-wrap: break-word;
+		}
+
+		.meeting-header {
+			margin-bottom: 1.5rem;
 		}
 	}
 </style>
