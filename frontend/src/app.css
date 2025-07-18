@@ -357,6 +357,13 @@ body {
 @media (max-width: 640px) {
 	.container {
 		padding: 1rem 0.5rem;
+		max-width: 100%;
+		overflow-x: hidden;
+	}
+	
+	.main-content {
+		overflow-x: hidden;
+		width: 100%;
 	}
 	
 	.search-input {
@@ -374,5 +381,11 @@ body {
 	
 	.meeting-card {
 		padding: 1rem;
+	}
+	
+	.meeting-detail {
+		overflow-x: hidden;
+		word-wrap: break-word;
+		overflow-wrap: break-word;
 	}
 }
