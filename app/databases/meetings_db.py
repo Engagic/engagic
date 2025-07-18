@@ -45,12 +45,31 @@ class MeetingsDatabase(BaseDatabase):
             last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- Processing queue table - decoupled PDF processing queue
+        CREATE TABLE IF NOT EXISTS processing_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            packet_url TEXT NOT NULL UNIQUE,
+            meeting_id TEXT,
+            city_banana TEXT,
+            status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+            priority INTEGER DEFAULT 0,
+            retry_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            error_message TEXT,
+            processing_metadata TEXT  -- JSON field for flexible metadata
+        );
+
         -- Create indices for performance
         CREATE INDEX IF NOT EXISTS idx_meetings_city_banana ON meetings(city_banana);
         CREATE INDEX IF NOT EXISTS idx_meetings_packet_url ON meetings(packet_url);
         CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(meeting_date);
         CREATE INDEX IF NOT EXISTS idx_cache_url ON processing_cache(packet_url);
         CREATE INDEX IF NOT EXISTS idx_cache_hash ON processing_cache(content_hash);
+        CREATE INDEX IF NOT EXISTS idx_queue_status ON processing_queue(status);
+        CREATE INDEX IF NOT EXISTS idx_queue_priority ON processing_queue(priority DESC);
+        CREATE INDEX IF NOT EXISTS idx_queue_city ON processing_queue(city_banana);
         """
         self.execute_script(schema)
 
@@ -586,3 +605,225 @@ class MeetingsDatabase(BaseDatabase):
                 "processed_count": processed_count,
                 "recent_activity": recent_activity,
             }
+
+    # Processing Queue Methods
+    
+    def enqueue_for_processing(self, packet_url: str, meeting_id: str, city_banana: str, priority: int = 0, metadata: Dict[str, Any] = None) -> int:
+        """Add a packet URL to the processing queue"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Serialize metadata if provided
+            metadata_json = json.dumps(metadata) if metadata else None
+            
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO processing_queue 
+                    (packet_url, meeting_id, city_banana, priority, processing_metadata)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (packet_url, meeting_id, city_banana, priority, metadata_json)
+                )
+                conn.commit()
+                logger.info(f"Enqueued {packet_url} for processing with priority {priority}")
+                return cursor.lastrowid
+            except Exception as e:
+                if "UNIQUE constraint failed" in str(e):
+                    logger.debug(f"Packet {packet_url} already in queue")
+                else:
+                    logger.error(f"Error enqueuing packet: {e}")
+                return -1
+    
+    def get_next_for_processing(self, city_banana: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get next item from processing queue based on priority and status"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if city_banana:
+                cursor.execute(
+                    """
+                    SELECT * FROM processing_queue
+                    WHERE status = 'pending' AND city_banana = ?
+                    ORDER BY priority DESC, created_at ASC
+                    LIMIT 1
+                    """,
+                    (city_banana,)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM processing_queue
+                    WHERE status = 'pending'
+                    ORDER BY priority DESC, created_at ASC
+                    LIMIT 1
+                    """
+                )
+            
+            row = cursor.fetchone()
+            if row:
+                # Mark as processing
+                cursor.execute(
+                    """
+                    UPDATE processing_queue
+                    SET status = 'processing', started_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (row['id'],)
+                )
+                conn.commit()
+                
+                result = dict(row)
+                if result.get('processing_metadata'):
+                    result['processing_metadata'] = json.loads(result['processing_metadata'])
+                return result
+            return None
+    
+    def mark_processing_complete(self, queue_id: int) -> None:
+        """Mark a queue item as completed"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE processing_queue
+                SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (queue_id,)
+            )
+            conn.commit()
+            logger.info(f"Marked queue item {queue_id} as completed")
+    
+    def mark_processing_failed(self, queue_id: int, error_message: str, increment_retry: bool = True) -> None:
+        """Mark a queue item as failed with error message"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if increment_retry:
+                cursor.execute(
+                    """
+                    UPDATE processing_queue
+                    SET status = 'failed', 
+                        error_message = ?,
+                        retry_count = retry_count + 1,
+                        completed_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (error_message, queue_id)
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE processing_queue
+                    SET status = 'failed', 
+                        error_message = ?,
+                        completed_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (error_message, queue_id)
+                )
+            conn.commit()
+            logger.warning(f"Marked queue item {queue_id} as failed: {error_message}")
+    
+    def reset_failed_items(self, max_retries: int = 3) -> int:
+        """Reset failed items back to pending if under retry limit"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE processing_queue
+                SET status = 'pending', error_message = NULL
+                WHERE status = 'failed' AND retry_count < ?
+                """,
+                (max_retries,)
+            )
+            reset_count = cursor.rowcount
+            conn.commit()
+            logger.info(f"Reset {reset_count} failed items back to pending")
+            return reset_count
+    
+    def get_queue_stats(self) -> Dict[str, Any]:
+        """Get processing queue statistics"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats = {}
+            
+            # Count by status
+            cursor.execute(
+                """
+                SELECT status, COUNT(*) as count
+                FROM processing_queue
+                GROUP BY status
+                """
+            )
+            for row in cursor.fetchall():
+                stats[f"{row['status']}_count"] = row['count']
+            
+            # Failed with high retry count
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count
+                FROM processing_queue
+                WHERE status = 'failed' AND retry_count >= 3
+                """
+            )
+            stats['permanently_failed'] = cursor.fetchone()['count']
+            
+            # Average processing time
+            cursor.execute(
+                """
+                SELECT AVG(julianday(completed_at) - julianday(started_at)) * 86400 as avg_seconds
+                FROM processing_queue
+                WHERE status = 'completed' AND completed_at IS NOT NULL AND started_at IS NOT NULL
+                """
+            )
+            avg_time = cursor.fetchone()['avg_seconds']
+            stats['avg_processing_seconds'] = avg_time if avg_time else 0
+            
+            return stats
+    
+    def bulk_enqueue_unprocessed_meetings(self, limit: Optional[int] = None) -> int:
+        """Bulk enqueue all unprocessed meetings with packet URLs"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Find all meetings with packet URLs but no summaries
+            query = """
+                SELECT m.packet_url, m.meeting_id, m.city_banana, m.meeting_date
+                FROM meetings m
+                LEFT JOIN processing_queue pq ON m.packet_url = pq.packet_url
+                WHERE m.packet_url IS NOT NULL 
+                AND m.processed_summary IS NULL
+                AND pq.id IS NULL
+                ORDER BY m.meeting_date DESC
+            """
+            
+            if limit:
+                query += f" LIMIT {limit}"
+            
+            cursor.execute(query)
+            meetings = cursor.fetchall()
+            
+            enqueued = 0
+            for meeting in meetings:
+                # Calculate priority based on meeting date recency
+                days_old = (datetime.now() - datetime.fromisoformat(meeting['meeting_date'])).days if meeting['meeting_date'] else 999
+                priority = max(0, 100 - days_old)  # Recent meetings get higher priority
+                
+                try:
+                    cursor.execute(
+                        """
+                        INSERT INTO processing_queue 
+                        (packet_url, meeting_id, city_banana, priority)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (meeting['packet_url'], meeting['meeting_id'], meeting['city_banana'], priority)
+                    )
+                    enqueued += 1
+                except Exception as e:
+                    logger.debug(f"Skipping already queued packet: {meeting['packet_url']}")
+            
+            conn.commit()
+            logger.info(f"Bulk enqueued {enqueued} meetings for processing")
+            return enqueued

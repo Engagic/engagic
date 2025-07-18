@@ -192,6 +192,36 @@ class DatabaseManager:
         """Clean up old cache entries"""
         return self.meetings.cleanup_old_entries(days_old)
 
+    # === Processing Queue Methods ===
+    
+    def enqueue_for_processing(self, packet_url: str, meeting_id: str, city_banana: str, priority: int = 0, metadata: Dict[str, Any] = None) -> int:
+        """Add a packet URL to the processing queue"""
+        return self.meetings.enqueue_for_processing(packet_url, meeting_id, city_banana, priority, metadata)
+    
+    def get_next_for_processing(self, city_banana: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get next item from processing queue based on priority and status"""
+        return self.meetings.get_next_for_processing(city_banana)
+    
+    def mark_processing_complete(self, queue_id: int) -> None:
+        """Mark a queue item as completed"""
+        return self.meetings.mark_processing_complete(queue_id)
+    
+    def mark_processing_failed(self, queue_id: int, error_message: str, increment_retry: bool = True) -> None:
+        """Mark a queue item as failed with error message"""
+        return self.meetings.mark_processing_failed(queue_id, error_message, increment_retry)
+    
+    def reset_failed_items(self, max_retries: int = 3) -> int:
+        """Reset failed items back to pending if under retry limit"""
+        return self.meetings.reset_failed_items(max_retries)
+    
+    def get_queue_stats(self) -> Dict[str, Any]:
+        """Get processing queue statistics"""
+        return self.meetings.get_queue_stats()
+    
+    def bulk_enqueue_unprocessed_meetings(self, limit: Optional[int] = None) -> int:
+        """Bulk enqueue all unprocessed meetings with packet URLs"""
+        return self.meetings.bulk_enqueue_unprocessed_meetings(limit)
+
     # === Analytics Database Methods ===
 
     def log_search(
