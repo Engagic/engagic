@@ -11,8 +11,6 @@ from datetime import datetime
 from enum import Enum
 import threading
 from collections import defaultdict
-import json
-from pathlib import Path
 from anthropic_rate_limiter import AnthropicRateLimiter
 
 logger = logging.getLogger("engagic")

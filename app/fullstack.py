@@ -22,7 +22,6 @@ import requests
 import anthropic
 from typing import List, Dict, Any, Optional, Union
 from urllib.parse import urlparse
-from pathlib import Path
 
 # PDF processing
 from PyPDF2 import PdfReader
@@ -50,7 +49,7 @@ def validate_url(url: str) -> None:
         raise ValueError(f"Invalid URL length: {len(url) if url else 0}")
     
     parsed = urlparse(url)
-    if not parsed.scheme in ['http', 'https']:
+    if parsed.scheme not in ['http', 'https']:
         raise ValueError("URL must use HTTP or HTTPS")
     
     if not parsed.netloc:
@@ -627,10 +626,10 @@ if __name__ == "__main__":
     
     print("=== SUMMARY ===")
     print(summary)
-    print(f"\n=== PROCESSING INFO ===")
+    print("\n=== PROCESSING INFO ===")
     print(f"Method: {method}")
     print(f"Cost: ${cost:.3f}")
-    print(f"\n=== STATS ===")
+    print("\n=== STATS ===")
     stats = processor.get_processing_stats()
     for key, value in stats.items():
         print(f"{key}: {value}")

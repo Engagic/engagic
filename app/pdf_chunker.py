@@ -6,8 +6,7 @@ It splits large PDFs into smaller chunks that can be processed separately.
 
 import logging
 import io
-import base64
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Optional
 import PyPDF2
 import requests
 from dataclasses import dataclass
@@ -175,7 +174,7 @@ Focus on extracting all specific information, as the chunks will be combined lat
             return summaries[0]
         
         combined = []
-        combined.append(f"**Document Overview:**")
+        combined.append("**Document Overview:**")
         combined.append(f"This document was processed in {len(summaries)} chunks due to its size.")
         combined.append("")
         
