@@ -2,8 +2,8 @@
 
 import time
 import logging
-from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from typing import Optional, Dict
+from datetime import datetime
 import anthropic
 
 logger = logging.getLogger("engagic")
