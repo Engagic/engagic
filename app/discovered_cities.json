@@ -1,0 +1,6618 @@
+[
+  {
+    "city_name": "Houston",
+    "state": "TX",
+    "city_slug": "houston",
+    "vendor": "novusagenda",
+    "url": "https://houston.novusagenda.com",
+    "population": 2906334
+  },
+  {
+    "city_name": "Los Angeles",
+    "state": "CA",
+    "city_slug": "lacity",
+    "vendor": "primegov",
+    "url": "https://lacity.primegov.com",
+    "population": 2374674
+  },
+  {
+    "city_name": "Miami",
+    "state": "FL",
+    "city_slug": "miamifl",
+    "vendor": "granicus",
+    "url": "https://miamifl.granicus.com",
+    "population": 1723765
+  },
+  {
+    "city_name": "San Antonio",
+    "state": "TX",
+    "city_slug": "sanantonio",
+    "vendor": "primegov",
+    "url": "https://sanantonio.primegov.com",
+    "population": 1577687
+  },
+  {
+    "city_name": "New York",
+    "state": "NY",
+    "city_slug": "nyc",
+    "vendor": "legistar",
+    "url": "https://nyc.legistar.com",
+    "population": 1575590
+  },
+  {
+    "city_name": "Philadelphia",
+    "state": "PA",
+    "city_slug": "phila",
+    "vendor": "legistar",
+    "url": "https://phila.legistar.com",
+    "population": 1526193
+  },
+  {
+    "city_name": "Las Vegas",
+    "state": "NV",
+    "city_slug": "lasvegas",
+    "vendor": "primegov",
+    "url": "https://lasvegas.primegov.com",
+    "population": 1417609
+  },
+  {
+    "city_name": "Phoenix",
+    "state": "AZ",
+    "city_slug": "phoenix",
+    "vendor": "legistar",
+    "url": "https://phoenix.legistar.com",
+    "population": 1312922
+  },
+  {
+    "city_name": "Dallas",
+    "state": "TX",
+    "city_slug": "cityofdallas",
+    "vendor": "legistar",
+    "url": "https://cityofdallas.legistar.com",
+    "population": 1250874
+  },
+  {
+    "city_name": "San Diego",
+    "state": "CA",
+    "city_slug": "sandiego",
+    "vendor": "granicus",
+    "url": "https://sandiego.granicus.com",
+    "population": 1236051
+  },
+  {
+    "city_name": "San Jose",
+    "state": "CA",
+    "city_slug": "sanjose",
+    "vendor": "granicus",
+    "url": "https://sanjose.granicus.com",
+    "population": 973849
+  },
+  {
+    "city_name": "Denver",
+    "state": "CO",
+    "city_slug": "denver",
+    "vendor": "granicus",
+    "url": "https://denver.granicus.com",
+    "population": 958706
+  },
+  {
+    "city_name": "Austin",
+    "state": "TX",
+    "city_slug": "austintexas",
+    "vendor": "granicus",
+    "url": "https://austintexas.granicus.com",
+    "population": 939499
+  },
+  {
+    "city_name": "Indianapolis",
+    "state": "IN",
+    "city_slug": "indianapolis",
+    "vendor": "granicus",
+    "url": "https://indianapolis.granicus.com",
+    "population": 910148
+  },
+  {
+    "city_name": "Atlanta",
+    "state": "GA",
+    "city_slug": "atlantaga",
+    "vendor": "legistar",
+    "url": "https://atlantaga.legistar.com",
+    "population": 894308
+  },
+  {
+    "city_name": "Orlando",
+    "state": "FL",
+    "city_slug": "cityoforlando",
+    "vendor": "granicus",
+    "url": "https://cityoforlando.granicus.com",
+    "population": 878217
+  },
+  {
+    "city_name": "Seattle",
+    "state": "WA",
+    "city_slug": "seattle",
+    "vendor": "granicus",
+    "url": "https://seattle.granicus.com",
+    "population": 837651
+  },
+  {
+    "city_name": "Fort Worth",
+    "state": "TX",
+    "city_slug": "fortworthgov",
+    "vendor": "granicus",
+    "url": "https://fortworthgov.granicus.com",
+    "population": 808032
+  },
+  {
+    "city_name": "Milwaukee",
+    "state": "WI",
+    "city_slug": "milwaukee",
+    "vendor": "granicus",
+    "url": "https://milwaukee.granicus.com",
+    "population": 807683
+  },
+  {
+    "city_name": "San Francisco",
+    "state": "CA",
+    "city_slug": "sanfrancisco",
+    "vendor": "granicus",
+    "url": "https://sanfrancisco.granicus.com",
+    "population": 799169
+  },
+  {
+    "city_name": "Cincinnati",
+    "state": "OH",
+    "city_slug": "cincinnatioh",
+    "vendor": "legistar",
+    "url": "https://cincinnatioh.legistar.com",
+    "population": 795220
+  },
+  {
+    "city_name": "Charlotte",
+    "state": "NC",
+    "city_slug": "charlottenc",
+    "vendor": "granicus",
+    "url": "https://charlottenc.granicus.com",
+    "population": 790679
+  },
+  {
+    "city_name": "Columbus",
+    "state": "OH",
+    "city_slug": "columbus",
+    "vendor": "legistar",
+    "url": "https://columbus.legistar.com",
+    "population": 773853
+  },
+  {
+    "city_name": "Cleveland",
+    "state": "OH",
+    "city_slug": "cityofcleveland",
+    "vendor": "legistar",
+    "url": "https://cityofcleveland.legistar.com",
+    "population": 768776
+  },
+  {
+    "city_name": "Fort Lauderdale",
+    "state": "FL",
+    "city_slug": "fortlauderdale",
+    "vendor": "granicus",
+    "url": "https://fortlauderdale.granicus.com",
+    "population": 765608
+  },
+  {
+    "city_name": "Sacramento",
+    "state": "CA",
+    "city_slug": "sacramento",
+    "vendor": "granicus",
+    "url": "https://sacramento.granicus.com",
+    "population": 757530
+  },
+  {
+    "city_name": "Saint Paul",
+    "state": "MN",
+    "city_slug": "stpaul",
+    "vendor": "granicus",
+    "url": "https://stpaul.granicus.com",
+    "population": 753116
+  },
+  {
+    "city_name": "El Paso",
+    "state": "TX",
+    "city_slug": "elpasotexas",
+    "vendor": "granicus",
+    "url": "https://elpasotexas.granicus.com",
+    "population": 738438
+  },
+  {
+    "city_name": "Louisville",
+    "state": "KY",
+    "city_slug": "louisville",
+    "vendor": "granicus",
+    "url": "https://louisville.granicus.com",
+    "population": 735981
+  },
+  {
+    "city_name": "Tampa",
+    "state": "FL",
+    "city_slug": "tampabaywater",
+    "vendor": "granicus",
+    "url": "https://tampabaywater.granicus.com",
+    "population": 710454
+  },
+  {
+    "city_name": "Memphis",
+    "state": "TN",
+    "city_slug": "memphis",
+    "vendor": "granicus",
+    "url": "https://memphis.granicus.com",
+    "population": 696544
+  },
+  {
+    "city_name": "Pittsburgh",
+    "state": "PA",
+    "city_slug": "pittsburgh",
+    "vendor": "granicus",
+    "url": "https://pittsburgh.granicus.com",
+    "population": 687276
+  },
+  {
+    "city_name": "Detroit",
+    "state": "MI",
+    "city_slug": "detroit",
+    "vendor": "legistar",
+    "url": "https://detroit.legistar.com",
+    "population": 673342
+  },
+  {
+    "city_name": "Oklahoma City",
+    "state": "OK",
+    "city_slug": "oklahomacounty",
+    "vendor": "legistar",
+    "url": "https://oklahomacounty.legistar.com",
+    "population": 637611
+  },
+  {
+    "city_name": "Baltimore",
+    "state": "MD",
+    "city_slug": "baltimorecountymd",
+    "vendor": "granicus",
+    "url": "https://baltimorecountymd.granicus.com",
+    "population": 628484
+  },
+  {
+    "city_name": "Washington",
+    "state": "DC",
+    "city_slug": "dc",
+    "vendor": "granicus",
+    "url": "https://dc.granicus.com",
+    "population": 593412
+  },
+  {
+    "city_name": "Fresno",
+    "state": "CA",
+    "city_slug": "fresno",
+    "vendor": "granicus",
+    "url": "https://fresno.granicus.com",
+    "population": 570271
+  },
+  {
+    "city_name": "Buffalo",
+    "state": "NY",
+    "city_slug": "buffalony",
+    "vendor": "iqm2",
+    "url": "https://buffalony.iqm2.com",
+    "population": 557493
+  },
+  {
+    "city_name": "Kansas City",
+    "state": "MO",
+    "city_slug": "kansascity",
+    "vendor": "granicus",
+    "url": "https://kansascity.granicus.com",
+    "population": 543912
+  },
+  {
+    "city_name": "Bakersfield",
+    "state": "CA",
+    "city_slug": "bakersfield",
+    "vendor": "novusagenda",
+    "url": "https://bakersfield.novusagenda.com",
+    "population": 520197
+  },
+  {
+    "city_name": "Colorado Springs",
+    "state": "CO",
+    "city_slug": "coloradosprings",
+    "vendor": "granicus",
+    "url": "https://coloradosprings.granicus.com",
+    "population": 510033
+  },
+  {
+    "city_name": "Raleigh",
+    "state": "NC",
+    "city_slug": "raleigh",
+    "vendor": "granicus",
+    "url": "https://raleigh.granicus.com",
+    "population": 489514
+  },
+  {
+    "city_name": "Mesa",
+    "state": "AZ",
+    "city_slug": "mesa",
+    "vendor": "legistar",
+    "url": "https://mesa.legistar.com",
+    "population": 478404
+  },
+  {
+    "city_name": "Dayton",
+    "state": "OH",
+    "city_slug": "oh-dayton",
+    "vendor": "civicplus",
+    "url": "https://oh-dayton.civicplus.com",
+    "population": 477743
+  },
+  {
+    "city_name": "Long Beach",
+    "state": "CA",
+    "city_slug": "longbeach",
+    "vendor": "granicus",
+    "url": "https://longbeach.granicus.com",
+    "population": 471835
+  },
+  {
+    "city_name": "Staten Island",
+    "state": "NY",
+    "city_slug": "nystateassembly",
+    "vendor": "granicus",
+    "url": "https://nystateassembly.granicus.com",
+    "population": 468730
+  },
+  {
+    "city_name": "Nashville",
+    "state": "TN",
+    "city_slug": "nashville",
+    "vendor": "granicus",
+    "url": "https://nashville.granicus.com",
+    "population": 429204
+  },
+  {
+    "city_name": "Hollywood",
+    "state": "FL",
+    "city_slug": "hollywoodfl",
+    "vendor": "granicus",
+    "url": "https://hollywoodfl.granicus.com",
+    "population": 420284
+  },
+  {
+    "city_name": "Tulsa",
+    "state": "OK",
+    "city_slug": "tulsa-ok",
+    "vendor": "granicus",
+    "url": "https://tulsa-ok.granicus.com",
+    "population": 410882
+  },
+  {
+    "city_name": "Wichita",
+    "state": "KS",
+    "city_slug": "wichitaks",
+    "vendor": "granicus",
+    "url": "https://wichitaks.granicus.com",
+    "population": 409656
+  },
+  {
+    "city_name": "Aurora",
+    "state": "CO",
+    "city_slug": "aurora-il",
+    "vendor": "legistar",
+    "url": "https://aurora-il.legistar.com",
+    "population": 388969
+  },
+  {
+    "city_name": "Oakland",
+    "state": "CA",
+    "city_slug": "oakland",
+    "vendor": "granicus",
+    "url": "https://oakland.granicus.com",
+    "population": 380744
+  },
+  {
+    "city_name": "Baton Rouge",
+    "state": "LA",
+    "city_slug": "la-batonrouge",
+    "vendor": "civicplus",
+    "url": "https://la-batonrouge.civicplus.com",
+    "population": 377561
+  },
+  {
+    "city_name": "Arlington",
+    "state": "TX",
+    "city_slug": "arlingtontx",
+    "vendor": "granicus",
+    "url": "https://arlingtontx.granicus.com",
+    "population": 370281
+  },
+  {
+    "city_name": "Knoxville",
+    "state": "TN",
+    "city_slug": "knoxvilletn",
+    "vendor": "primegov",
+    "url": "https://knoxvilletn.primegov.com",
+    "population": 367282
+  },
+  {
+    "city_name": "Richmond",
+    "state": "VA",
+    "city_slug": "richmondva",
+    "vendor": "granicus",
+    "url": "https://richmondva.granicus.com",
+    "population": 364141
+  },
+  {
+    "city_name": "Stockton",
+    "state": "CA",
+    "city_slug": "stockton",
+    "vendor": "granicus",
+    "url": "https://stockton.granicus.com",
+    "population": 355885
+  },
+  {
+    "city_name": "Anaheim",
+    "state": "CA",
+    "city_slug": "anaheim",
+    "vendor": "granicus",
+    "url": "https://anaheim.granicus.com",
+    "population": 354475
+  },
+  {
+    "city_name": "Grand Rapids",
+    "state": "MI",
+    "city_slug": "grandrapidsmi",
+    "vendor": "granicus",
+    "url": "https://grandrapidsmi.granicus.com",
+    "population": 348860
+  },
+  {
+    "city_name": "Santa Ana",
+    "state": "CA",
+    "city_slug": "santaana",
+    "vendor": "granicus",
+    "url": "https://santaana.granicus.com",
+    "population": 348131
+  },
+  {
+    "city_name": "Riverside",
+    "state": "CA",
+    "city_slug": "riversideca",
+    "vendor": "granicus",
+    "url": "https://riversideca.granicus.com",
+    "population": 343942
+  },
+  {
+    "city_name": "Spokane",
+    "state": "WA",
+    "city_slug": "spokanevalley",
+    "vendor": "granicus",
+    "url": "https://spokanevalley.granicus.com",
+    "population": 342856
+  },
+  {
+    "city_name": "Pompano Beach",
+    "state": "FL",
+    "city_slug": "pompano",
+    "vendor": "legistar",
+    "url": "https://pompano.legistar.com",
+    "population": 336751
+  },
+  {
+    "city_name": "Alexandria",
+    "state": "VA",
+    "city_slug": "alexandria",
+    "vendor": "granicus",
+    "url": "https://alexandria.granicus.com",
+    "population": 321490
+  },
+  {
+    "city_name": "Toledo",
+    "state": "OH",
+    "city_slug": "toledo",
+    "vendor": "granicus",
+    "url": "https://toledo.granicus.com",
+    "population": 316948
+  },
+  {
+    "city_name": "Corpus Christi",
+    "state": "TX",
+    "city_slug": "corpuschristi",
+    "vendor": "granicus",
+    "url": "https://corpuschristi.granicus.com",
+    "population": 305739
+  },
+  {
+    "city_name": "Greensboro",
+    "state": "NC",
+    "city_slug": "greensboro",
+    "vendor": "legistar",
+    "url": "https://greensboro.legistar.com",
+    "population": 305168
+  },
+  {
+    "city_name": "Littleton",
+    "state": "CO",
+    "city_slug": "littletongov",
+    "vendor": "granicus",
+    "url": "https://littletongov.granicus.com",
+    "population": 302400
+  },
+  {
+    "city_name": "Marietta",
+    "state": "GA",
+    "city_slug": "marietta",
+    "vendor": "granicus",
+    "url": "https://marietta.granicus.com",
+    "population": 302309
+  },
+  {
+    "city_name": "Vancouver",
+    "state": "WA",
+    "city_slug": "vancouver",
+    "vendor": "primegov",
+    "url": "https://vancouver.primegov.com",
+    "population": 299480
+  },
+  {
+    "city_name": "Tacoma",
+    "state": "WA",
+    "city_slug": "cityoftacoma",
+    "vendor": "granicus",
+    "url": "https://cityoftacoma.granicus.com",
+    "population": 294985
+  },
+  {
+    "city_name": "Lexington",
+    "state": "KY",
+    "city_slug": "lexington",
+    "vendor": "legistar",
+    "url": "https://lexington.legistar.com",
+    "population": 294163
+  },
+  {
+    "city_name": "Glendale",
+    "state": "AZ",
+    "city_slug": "glendale-az",
+    "vendor": "granicus",
+    "url": "https://glendale-az.granicus.com",
+    "population": 280389
+  },
+  {
+    "city_name": "Plano",
+    "state": "TX",
+    "city_slug": "plano",
+    "vendor": "novusagenda",
+    "url": "https://plano.novusagenda.com",
+    "population": 278067
+  },
+  {
+    "city_name": "Newark",
+    "state": "NJ",
+    "city_slug": "newark",
+    "vendor": "granicus",
+    "url": "https://newark.granicus.com",
+    "population": 277237
+  },
+  {
+    "city_name": "Reno",
+    "state": "NV",
+    "city_slug": "reno",
+    "vendor": "granicus",
+    "url": "https://reno.granicus.com",
+    "population": 276896
+  },
+  {
+    "city_name": "Naples",
+    "state": "FL",
+    "city_slug": "naples",
+    "vendor": "granicus",
+    "url": "https://naples.granicus.com",
+    "population": 275992
+  },
+  {
+    "city_name": "Tallahassee",
+    "state": "FL",
+    "city_slug": "tallahassee",
+    "vendor": "granicus",
+    "url": "https://tallahassee.granicus.com",
+    "population": 275474
+  },
+  {
+    "city_name": "Mobile",
+    "state": "AL",
+    "city_slug": "cityofmobile",
+    "vendor": "novusagenda",
+    "url": "https://cityofmobile.novusagenda.com",
+    "population": 269635
+  },
+  {
+    "city_name": "Scottsdale",
+    "state": "AZ",
+    "city_slug": "scottsdale",
+    "vendor": "granicus",
+    "url": "https://scottsdale.granicus.com",
+    "population": 268597
+  },
+  {
+    "city_name": "Madison",
+    "state": "WI",
+    "city_slug": "madison",
+    "vendor": "legistar",
+    "url": "https://madison.legistar.com",
+    "population": 267757
+  },
+  {
+    "city_name": "Durham",
+    "state": "NC",
+    "city_slug": "durham",
+    "vendor": "granicus",
+    "url": "https://durham.granicus.com",
+    "population": 256789
+  },
+  {
+    "city_name": "Salem",
+    "state": "OR",
+    "city_slug": "salem",
+    "vendor": "granicus",
+    "url": "https://salem.granicus.com",
+    "population": 249657
+  },
+  {
+    "city_name": "Laredo",
+    "state": "TX",
+    "city_slug": "cityoflaredo",
+    "vendor": "granicus",
+    "url": "https://cityoflaredo.granicus.com",
+    "population": 248858
+  },
+  {
+    "city_name": "Lubbock",
+    "state": "TX",
+    "city_slug": "lubbocktx",
+    "vendor": "granicus",
+    "url": "https://lubbocktx.granicus.com",
+    "population": 248257
+  },
+  {
+    "city_name": "Pensacola",
+    "state": "FL",
+    "city_slug": "pensacola",
+    "vendor": "granicus",
+    "url": "https://pensacola.granicus.com",
+    "population": 247260
+  },
+  {
+    "city_name": "Winston Salem",
+    "state": "NC",
+    "city_slug": "winston-salem",
+    "vendor": "granicus",
+    "url": "https://winston-salem.granicus.com",
+    "population": 246278
+  },
+  {
+    "city_name": "Chula Vista",
+    "state": "CA",
+    "city_slug": "chulavista",
+    "vendor": "legistar",
+    "url": "https://chulavista.legistar.com",
+    "population": 239879
+  },
+  {
+    "city_name": "Norfolk",
+    "state": "VA",
+    "city_slug": "norfolkva",
+    "vendor": "granicus",
+    "url": "https://norfolkva.granicus.com",
+    "population": 239416
+  },
+  {
+    "city_name": "Fayetteville",
+    "state": "NC",
+    "city_slug": "cityoffayetteville",
+    "vendor": "granicus",
+    "url": "https://cityoffayetteville.granicus.com",
+    "population": 238602
+  },
+  {
+    "city_name": "Lakeland",
+    "state": "FL",
+    "city_slug": "lakeforest",
+    "vendor": "primegov",
+    "url": "https://lakeforest.primegov.com",
+    "population": 237282
+  },
+  {
+    "city_name": "San Bernardino",
+    "state": "CA",
+    "city_slug": "sanbernardino",
+    "vendor": "granicus",
+    "url": "https://sanbernardino.granicus.com",
+    "population": 236660
+  },
+  {
+    "city_name": "Corona",
+    "state": "CA",
+    "city_slug": "corona",
+    "vendor": "granicus",
+    "url": "https://corona.granicus.com",
+    "population": 233717
+  },
+  {
+    "city_name": "Sarasota",
+    "state": "FL",
+    "city_slug": "sarasotacounty",
+    "vendor": "granicus",
+    "url": "https://sarasotacounty.granicus.com",
+    "population": 232625
+  },
+  {
+    "city_name": "Savannah",
+    "state": "GA",
+    "city_slug": "savannahga",
+    "vendor": "granicus",
+    "url": "https://savannahga.granicus.com",
+    "population": 228927
+  },
+  {
+    "city_name": "Lawrenceville",
+    "state": "GA",
+    "city_slug": "lawrenceville-ga",
+    "vendor": "municode",
+    "url": "https://lawrenceville-ga.municodemeetings.com",
+    "population": 228867
+  },
+  {
+    "city_name": "Shreveport",
+    "state": "LA",
+    "city_slug": "shreveportla",
+    "vendor": "primegov",
+    "url": "https://shreveportla.primegov.com",
+    "population": 228095
+  },
+  {
+    "city_name": "Fort Myers",
+    "state": "FL",
+    "city_slug": "fortmyers",
+    "vendor": "novusagenda",
+    "url": "https://fortmyers.novusagenda.com",
+    "population": 222608
+  },
+  {
+    "city_name": "Chesapeake",
+    "state": "VA",
+    "city_slug": "chesapeake",
+    "vendor": "granicus",
+    "url": "https://chesapeake.granicus.com",
+    "population": 222272
+  },
+  {
+    "city_name": "Fontana",
+    "state": "CA",
+    "city_slug": "fontana",
+    "vendor": "granicus",
+    "url": "https://fontana.granicus.com",
+    "population": 221665
+  },
+  {
+    "city_name": "Springfield",
+    "state": "MO",
+    "city_slug": "springfieldohio",
+    "vendor": "primegov",
+    "url": "https://springfieldohio.primegov.com",
+    "population": 219752
+  },
+  {
+    "city_name": "Amarillo",
+    "state": "TX",
+    "city_slug": "amarillo",
+    "vendor": "granicus",
+    "url": "https://amarillo.granicus.com",
+    "population": 218766
+  },
+  {
+    "city_name": "Bradenton",
+    "state": "FL",
+    "city_slug": "cityofbradenton",
+    "vendor": "granicus",
+    "url": "https://cityofbradenton.granicus.com",
+    "population": 216518
+  },
+  {
+    "city_name": "Wilmington",
+    "state": "DE",
+    "city_slug": "wilmington",
+    "vendor": "legistar",
+    "url": "https://wilmington.legistar.com",
+    "population": 215619
+  },
+  {
+    "city_name": "North Las Vegas",
+    "state": "NV",
+    "city_slug": "cityofnorthlasvegas",
+    "vendor": "primegov",
+    "url": "https://cityofnorthlasvegas.primegov.com",
+    "population": 214518
+  },
+  {
+    "city_name": "Little Rock",
+    "state": "AR",
+    "city_slug": "littlerock",
+    "vendor": "novusagenda",
+    "url": "https://littlerock.novusagenda.com",
+    "population": 214454
+  },
+  {
+    "city_name": "Irvine",
+    "state": "CA",
+    "city_slug": "irvine",
+    "vendor": "granicus",
+    "url": "https://irvine.granicus.com",
+    "population": 212569
+  },
+  {
+    "city_name": "Montgomery",
+    "state": "AL",
+    "city_slug": "montgomerycountymd",
+    "vendor": "granicus",
+    "url": "https://montgomerycountymd.granicus.com",
+    "population": 211625
+  },
+  {
+    "city_name": "Oxnard",
+    "state": "CA",
+    "city_slug": "oxnard",
+    "vendor": "granicus",
+    "url": "https://oxnard.granicus.com",
+    "population": 211523
+  },
+  {
+    "city_name": "Gilbert",
+    "state": "AZ",
+    "city_slug": "gilbert",
+    "vendor": "granicus",
+    "url": "https://gilbert.granicus.com",
+    "population": 211167
+  },
+  {
+    "city_name": "Trenton",
+    "state": "NJ",
+    "city_slug": "nj-trenton",
+    "vendor": "civicplus",
+    "url": "https://nj-trenton.civicplus.com",
+    "population": 210481
+  },
+  {
+    "city_name": "Boca Raton",
+    "state": "FL",
+    "city_slug": "bocaraton",
+    "vendor": "granicus",
+    "url": "https://bocaraton.granicus.com",
+    "population": 210202
+  },
+  {
+    "city_name": "Santa Rosa",
+    "state": "CA",
+    "city_slug": "santa-rosa",
+    "vendor": "granicus",
+    "url": "https://santa-rosa.granicus.com",
+    "population": 209844
+  },
+  {
+    "city_name": "Arlington",
+    "state": "VA",
+    "city_slug": "arlington",
+    "vendor": "granicus",
+    "url": "https://arlington.granicus.com",
+    "population": 207410
+  },
+  {
+    "city_name": "Ocala",
+    "state": "FL",
+    "city_slug": "ocala",
+    "vendor": "granicus",
+    "url": "https://ocala.granicus.com",
+    "population": 207224
+  },
+  {
+    "city_name": "Aurora",
+    "state": "IL",
+    "city_slug": "aurora-il",
+    "vendor": "granicus",
+    "url": "https://aurora-il.granicus.com",
+    "population": 206095
+  },
+  {
+    "city_name": "Chattanooga",
+    "state": "TN",
+    "city_slug": "chattanooga",
+    "vendor": "granicus",
+    "url": "https://chattanooga.granicus.com",
+    "population": 198659
+  },
+  {
+    "city_name": "Greenville",
+    "state": "SC",
+    "city_slug": "greenville",
+    "vendor": "granicus",
+    "url": "https://greenville.granicus.com",
+    "population": 196808
+  },
+  {
+    "city_name": "Gainesville",
+    "state": "FL",
+    "city_slug": "gainesville",
+    "vendor": "granicus",
+    "url": "https://gainesville.granicus.com",
+    "population": 191567
+  },
+  {
+    "city_name": "Huntington Beach",
+    "state": "CA",
+    "city_slug": "huntingtonbeach",
+    "vendor": "granicus",
+    "url": "https://huntingtonbeach.granicus.com",
+    "population": 190249
+  },
+  {
+    "city_name": "Rockford",
+    "state": "IL",
+    "city_slug": "il-rockford",
+    "vendor": "iqm2",
+    "url": "https://il-rockford.iqm2.com",
+    "population": 189076
+  },
+  {
+    "city_name": "Oceanside",
+    "state": "CA",
+    "city_slug": "oceanside",
+    "vendor": "legistar",
+    "url": "https://oceanside.legistar.com",
+    "population": 188742
+  },
+  {
+    "city_name": "Huntsville",
+    "state": "AL",
+    "city_slug": "huntsvilleal",
+    "vendor": "granicus",
+    "url": "https://huntsvilleal.granicus.com",
+    "population": 187596
+  },
+  {
+    "city_name": "Ogden",
+    "state": "UT",
+    "city_slug": "ut-ogden",
+    "vendor": "civicplus",
+    "url": "https://ut-ogden.civicplus.com",
+    "population": 186422
+  },
+  {
+    "city_name": "Wilmington",
+    "state": "NC",
+    "city_slug": "wilmington",
+    "vendor": "granicus",
+    "url": "https://wilmington.granicus.com",
+    "population": 186140
+  },
+  {
+    "city_name": "Beaverton",
+    "state": "OR",
+    "city_slug": "beaverton",
+    "vendor": "granicus",
+    "url": "https://beaverton.granicus.com",
+    "population": 183865
+  },
+  {
+    "city_name": "Evansville",
+    "state": "IN",
+    "city_slug": "evansville",
+    "vendor": "granicus",
+    "url": "https://evansville.granicus.com",
+    "population": 182901
+  },
+  {
+    "city_name": "Erie",
+    "state": "PA",
+    "city_slug": "erie",
+    "vendor": "granicus",
+    "url": "https://erie.granicus.com",
+    "population": 182679
+  },
+  {
+    "city_name": "Lancaster",
+    "state": "CA",
+    "city_slug": "lancaster",
+    "vendor": "granicus",
+    "url": "https://lancaster.granicus.com",
+    "population": 182305
+  },
+  {
+    "city_name": "Salinas",
+    "state": "CA",
+    "city_slug": "salinas",
+    "vendor": "legistar",
+    "url": "https://salinas.legistar.com",
+    "population": 182180
+  },
+  {
+    "city_name": "Worcester",
+    "state": "MA",
+    "city_slug": "worcesterma",
+    "vendor": "primegov",
+    "url": "https://worcesterma.primegov.com",
+    "population": 181315
+  },
+  {
+    "city_name": "Newport News",
+    "state": "VA",
+    "city_slug": "newportrichey",
+    "vendor": "novusagenda",
+    "url": "https://newportrichey.novusagenda.com",
+    "population": 179275
+  },
+  {
+    "city_name": "Yonkers",
+    "state": "NY",
+    "city_slug": "yonkersny",
+    "vendor": "legistar",
+    "url": "https://yonkersny.legistar.com",
+    "population": 177756
+  },
+  {
+    "city_name": "Hayward",
+    "state": "CA",
+    "city_slug": "hayward",
+    "vendor": "granicus",
+    "url": "https://hayward.granicus.com",
+    "population": 177085
+  },
+  {
+    "city_name": "York",
+    "state": "PA",
+    "city_slug": "pa-yorkcounty",
+    "vendor": "civicplus",
+    "url": "https://pa-yorkcounty.civicplus.com",
+    "population": 175624
+  },
+  {
+    "city_name": "Grand Prairie",
+    "state": "TX",
+    "city_slug": "grandprairie",
+    "vendor": "legistar",
+    "url": "https://grandprairie.legistar.com",
+    "population": 174375
+  },
+  {
+    "city_name": "Torrance",
+    "state": "CA",
+    "city_slug": "torrance",
+    "vendor": "granicus",
+    "url": "https://torrance.granicus.com",
+    "population": 174353
+  },
+  {
+    "city_name": "Columbus",
+    "state": "GA",
+    "city_slug": "columbus",
+    "vendor": "legistar",
+    "url": "https://columbus.legistar.com",
+    "population": 173903
+  },
+  {
+    "city_name": "Charleston",
+    "state": "SC",
+    "city_slug": "charlestonsc",
+    "vendor": "granicus",
+    "url": "https://charlestonsc.granicus.com",
+    "population": 173849
+  },
+  {
+    "city_name": "Jackson",
+    "state": "MS",
+    "city_slug": "jacksonms",
+    "vendor": "granicus",
+    "url": "https://jacksonms.granicus.com",
+    "population": 173488
+  },
+  {
+    "city_name": "Garden Grove",
+    "state": "CA",
+    "city_slug": "gardengrove",
+    "vendor": "novusagenda",
+    "url": "https://gardengrove.novusagenda.com",
+    "population": 172782
+  },
+  {
+    "city_name": "Glendale",
+    "state": "CA",
+    "city_slug": "glendale",
+    "vendor": "granicus",
+    "url": "https://glendale.granicus.com",
+    "population": 172489
+  },
+  {
+    "city_name": "Clearwater",
+    "state": "FL",
+    "city_slug": "clearwater",
+    "vendor": "granicus",
+    "url": "https://clearwater.granicus.com",
+    "population": 172247
+  },
+  {
+    "city_name": "Palmdale",
+    "state": "CA",
+    "city_slug": "palmdale",
+    "vendor": "granicus",
+    "url": "https://palmdale.granicus.com",
+    "population": 171170
+  },
+  {
+    "city_name": "Decatur",
+    "state": "GA",
+    "city_slug": "decatur",
+    "vendor": "novusagenda",
+    "url": "https://decatur.novusagenda.com",
+    "population": 167967
+  },
+  {
+    "city_name": "Everett",
+    "state": "WA",
+    "city_slug": "everett",
+    "vendor": "granicus",
+    "url": "https://everett.granicus.com",
+    "population": 167401
+  },
+  {
+    "city_name": "Tempe",
+    "state": "AZ",
+    "city_slug": "tempe",
+    "vendor": "granicus",
+    "url": "https://tempe.granicus.com",
+    "population": 167311
+  },
+  {
+    "city_name": "Olympia",
+    "state": "WA",
+    "city_slug": "olympia",
+    "vendor": "granicus",
+    "url": "https://olympia.granicus.com",
+    "population": 167094
+  },
+  {
+    "city_name": "Ontario",
+    "state": "CA",
+    "city_slug": "ontarioca",
+    "vendor": "granicus",
+    "url": "https://ontarioca.granicus.com",
+    "population": 166856
+  },
+  {
+    "city_name": "Allentown",
+    "state": "PA",
+    "city_slug": "allentownpa",
+    "vendor": "granicus",
+    "url": "https://allentownpa.granicus.com",
+    "population": 166069
+  },
+  {
+    "city_name": "Rancho Cucamonga",
+    "state": "CA",
+    "city_slug": "ranchocucamonga",
+    "vendor": "granicus",
+    "url": "https://ranchocucamonga.granicus.com",
+    "population": 165435
+  },
+  {
+    "city_name": "Roanoke",
+    "state": "VA",
+    "city_slug": "va-roanokecounty",
+    "vendor": "civicplus",
+    "url": "https://va-roanokecounty.civicplus.com",
+    "population": 165116
+  },
+  {
+    "city_name": "Lancaster",
+    "state": "PA",
+    "city_slug": "lancaster",
+    "vendor": "granicus",
+    "url": "https://lancaster.granicus.com",
+    "population": 164596
+  },
+  {
+    "city_name": "Topeka",
+    "state": "KS",
+    "city_slug": "topeka",
+    "vendor": "novusagenda",
+    "url": "https://topeka.novusagenda.com",
+    "population": 162696
+  },
+  {
+    "city_name": "Elk Grove",
+    "state": "CA",
+    "city_slug": "elkgrove",
+    "vendor": "granicus",
+    "url": "https://elkgrove.granicus.com",
+    "population": 162646
+  },
+  {
+    "city_name": "Schenectady",
+    "state": "NY",
+    "city_slug": "ny-schenectady",
+    "vendor": "civicplus",
+    "url": "https://ny-schenectady.civicplus.com",
+    "population": 162643
+  },
+  {
+    "city_name": "Lansing",
+    "state": "MI",
+    "city_slug": "eastlansing",
+    "vendor": "granicus",
+    "url": "https://eastlansing.granicus.com",
+    "population": 162150
+  },
+  {
+    "city_name": "Naperville",
+    "state": "IL",
+    "city_slug": "naperville",
+    "vendor": "granicus",
+    "url": "https://naperville.granicus.com",
+    "population": 160668
+  },
+  {
+    "city_name": "Sioux Falls",
+    "state": "SD",
+    "city_slug": "siouxcityschools",
+    "vendor": "novusagenda",
+    "url": "https://siouxcityschools.novusagenda.com",
+    "population": 160121
+  },
+  {
+    "city_name": "Kalamazoo",
+    "state": "MI",
+    "city_slug": "kalamazoocomi",
+    "vendor": "civicclerk",
+    "url": "https://kalamazoocomi.civicclerk.com",
+    "population": 158937
+  },
+  {
+    "city_name": "Peoria",
+    "state": "AZ",
+    "city_slug": "peoriaaz",
+    "vendor": "granicus",
+    "url": "https://peoriaaz.granicus.com",
+    "population": 158093
+  },
+  {
+    "city_name": "Cape Coral",
+    "state": "FL",
+    "city_slug": "capecoral",
+    "vendor": "novusagenda",
+    "url": "https://capecoral.novusagenda.com",
+    "population": 156391
+  },
+  {
+    "city_name": "Fredericksburg",
+    "state": "VA",
+    "city_slug": "va-fredericksburg",
+    "vendor": "civicplus",
+    "url": "https://va-fredericksburg.civicplus.com",
+    "population": 156008
+  },
+  {
+    "city_name": "Boynton Beach",
+    "state": "FL",
+    "city_slug": "boynton-beach",
+    "vendor": "granicus",
+    "url": "https://boynton-beach.granicus.com",
+    "population": 155385
+  },
+  {
+    "city_name": "Homestead",
+    "state": "FL",
+    "city_slug": "fl-homestead",
+    "vendor": "civicplus",
+    "url": "https://fl-homestead.civicplus.com",
+    "population": 155195
+  },
+  {
+    "city_name": "Pomona",
+    "state": "CA",
+    "city_slug": "pomona",
+    "vendor": "legistar",
+    "url": "https://pomona.legistar.com",
+    "population": 154204
+  },
+  {
+    "city_name": "Pasadena",
+    "state": "CA",
+    "city_slug": "pasadena",
+    "vendor": "granicus",
+    "url": "https://pasadena.granicus.com",
+    "population": 153114
+  },
+  {
+    "city_name": "Fairfax",
+    "state": "VA",
+    "city_slug": "fairfax",
+    "vendor": "granicus",
+    "url": "https://fairfax.granicus.com",
+    "population": 151929
+  },
+  {
+    "city_name": "Pueblo",
+    "state": "CO",
+    "city_slug": "puebloco",
+    "vendor": "civicclerk",
+    "url": "https://puebloco.civicclerk.com",
+    "population": 151815
+  },
+  {
+    "city_name": "Lafayette",
+    "state": "LA",
+    "city_slug": "lafayette",
+    "vendor": "granicus",
+    "url": "https://lafayette.granicus.com",
+    "population": 151705
+  },
+  {
+    "city_name": "Hyattsville",
+    "state": "MD",
+    "city_slug": "hyattsville-md",
+    "vendor": "granicus",
+    "url": "https://hyattsville-md.granicus.com",
+    "population": 150988
+  },
+  {
+    "city_name": "Kansas City",
+    "state": "KS",
+    "city_slug": "kansascity",
+    "vendor": "granicus",
+    "url": "https://kansascity.granicus.com",
+    "population": 150221
+  },
+  {
+    "city_name": "Sugar Land",
+    "state": "TX",
+    "city_slug": "sugarlandtx",
+    "vendor": "granicus",
+    "url": "https://sugarlandtx.granicus.com",
+    "population": 149159
+  },
+  {
+    "city_name": "Astoria",
+    "state": "NY",
+    "city_slug": "astoria",
+    "vendor": "granicus",
+    "url": "https://astoria.granicus.com",
+    "population": 148476
+  },
+  {
+    "city_name": "Kent",
+    "state": "WA",
+    "city_slug": "kentwa",
+    "vendor": "granicus",
+    "url": "https://kentwa.granicus.com",
+    "population": 147876
+  },
+  {
+    "city_name": "Waco",
+    "state": "TX",
+    "city_slug": "waco-texas",
+    "vendor": "granicus",
+    "url": "https://waco-texas.granicus.com",
+    "population": 146904
+  },
+  {
+    "city_name": "South Bend",
+    "state": "IN",
+    "city_slug": "southbendin",
+    "vendor": "granicus",
+    "url": "https://southbendin.granicus.com",
+    "population": 145459
+  },
+  {
+    "city_name": "Mckinney",
+    "state": "TX",
+    "city_slug": "mckinney",
+    "vendor": "granicus",
+    "url": "https://mckinney.granicus.com",
+    "population": 144932
+  },
+  {
+    "city_name": "Albany",
+    "state": "NY",
+    "city_slug": "albanyca",
+    "vendor": "primegov",
+    "url": "https://albanyca.primegov.com",
+    "population": 144533
+  },
+  {
+    "city_name": "Tyler",
+    "state": "TX",
+    "city_slug": "tyler",
+    "vendor": "granicus",
+    "url": "https://tyler.granicus.com",
+    "population": 144160
+  },
+  {
+    "city_name": "Springfield",
+    "state": "MA",
+    "city_slug": "westspringfieldma",
+    "vendor": "granicus",
+    "url": "https://westspringfieldma.granicus.com",
+    "population": 144116
+  },
+  {
+    "city_name": "Beaumont",
+    "state": "TX",
+    "city_slug": "beaumonttexas",
+    "vendor": "primegov",
+    "url": "https://beaumonttexas.primegov.com",
+    "population": 142692
+  },
+  {
+    "city_name": "Visalia",
+    "state": "CA",
+    "city_slug": "visalia",
+    "vendor": "granicus",
+    "url": "https://visalia.granicus.com",
+    "population": 142488
+  },
+  {
+    "city_name": "Yuma",
+    "state": "AZ",
+    "city_slug": "yuma-az",
+    "vendor": "legistar",
+    "url": "https://yuma-az.legistar.com",
+    "population": 141891
+  },
+  {
+    "city_name": "Orange",
+    "state": "CA",
+    "city_slug": "cityoforange",
+    "vendor": "granicus",
+    "url": "https://cityoforange.granicus.com",
+    "population": 141692
+  },
+  {
+    "city_name": "Springfield",
+    "state": "IL",
+    "city_slug": "springfieldohio",
+    "vendor": "primegov",
+    "url": "https://springfieldohio.primegov.com",
+    "population": 140742
+  },
+  {
+    "city_name": "Mesquite",
+    "state": "TX",
+    "city_slug": "mesquite",
+    "vendor": "legistar",
+    "url": "https://mesquite.legistar.com",
+    "population": 140703
+  },
+  {
+    "city_name": "Boston",
+    "state": "MA",
+    "city_slug": "boston",
+    "vendor": "granicus",
+    "url": "https://boston.granicus.com",
+    "population": 140554
+  },
+  {
+    "city_name": "Sunnyvale",
+    "state": "CA",
+    "city_slug": "sunnyvaleca",
+    "vendor": "granicus",
+    "url": "https://sunnyvaleca.granicus.com",
+    "population": 140482
+  },
+  {
+    "city_name": "Denton",
+    "state": "TX",
+    "city_slug": "denton-tx",
+    "vendor": "granicus",
+    "url": "https://denton-tx.granicus.com",
+    "population": 139552
+  },
+  {
+    "city_name": "Round Rock",
+    "state": "TX",
+    "city_slug": "roundrock",
+    "vendor": "granicus",
+    "url": "https://roundrock.granicus.com",
+    "population": 139523
+  },
+  {
+    "city_name": "Columbia",
+    "state": "MO",
+    "city_slug": "gocolumbiamo",
+    "vendor": "granicus",
+    "url": "https://gocolumbiamo.granicus.com",
+    "population": 139271
+  },
+  {
+    "city_name": "Manassas",
+    "state": "VA",
+    "city_slug": "manassascity",
+    "vendor": "granicus",
+    "url": "https://manassascity.granicus.com",
+    "population": 137564
+  },
+  {
+    "city_name": "Odessa",
+    "state": "TX",
+    "city_slug": "odessatx",
+    "vendor": "civicclerk",
+    "url": "https://odessatx.civicclerk.com",
+    "population": 137390
+  },
+  {
+    "city_name": "Edinburg",
+    "state": "TX",
+    "city_slug": "edinburg",
+    "vendor": "granicus",
+    "url": "https://edinburg.granicus.com",
+    "population": 136507
+  },
+  {
+    "city_name": "Saginaw",
+    "state": "MI",
+    "city_slug": "saginaw",
+    "vendor": "granicus",
+    "url": "https://saginaw.granicus.com",
+    "population": 135669
+  },
+  {
+    "city_name": "Peoria",
+    "state": "IL",
+    "city_slug": "peoriail",
+    "vendor": "granicus",
+    "url": "https://peoriail.granicus.com",
+    "population": 135657
+  },
+  {
+    "city_name": "Compton",
+    "state": "CA",
+    "city_slug": "comptoncity",
+    "vendor": "granicus",
+    "url": "https://comptoncity.granicus.com",
+    "population": 134901
+  },
+  {
+    "city_name": "Fullerton",
+    "state": "CA",
+    "city_slug": "fullerton",
+    "vendor": "granicus",
+    "url": "https://fullerton.granicus.com",
+    "population": 134733
+  },
+  {
+    "city_name": "Midland",
+    "state": "TX",
+    "city_slug": "midland",
+    "vendor": "primegov",
+    "url": "https://midland.primegov.com",
+    "population": 134281
+  },
+  {
+    "city_name": "Killeen",
+    "state": "TX",
+    "city_slug": "killeen",
+    "vendor": "granicus",
+    "url": "https://killeen.granicus.com",
+    "population": 134151
+  },
+  {
+    "city_name": "Newark",
+    "state": "DE",
+    "city_slug": "newark",
+    "vendor": "legistar",
+    "url": "https://newark.legistar.com",
+    "population": 133629
+  },
+  {
+    "city_name": "Santa Maria",
+    "state": "CA",
+    "city_slug": "santa-ana",
+    "vendor": "primegov",
+    "url": "https://santa-ana.primegov.com",
+    "population": 133563
+  },
+  {
+    "city_name": "Santa Barbara",
+    "state": "CA",
+    "city_slug": "santabarbara",
+    "vendor": "legistar",
+    "url": "https://santabarbara.legistar.com",
+    "population": 132916
+  },
+  {
+    "city_name": "San Mateo",
+    "state": "CA",
+    "city_slug": "sanmateocounty",
+    "vendor": "granicus",
+    "url": "https://sanmateocounty.granicus.com",
+    "population": 131801
+  },
+  {
+    "city_name": "Hampton",
+    "state": "VA",
+    "city_slug": "hampton",
+    "vendor": "granicus",
+    "url": "https://hampton.granicus.com",
+    "population": 131775
+  },
+  {
+    "city_name": "Mcallen",
+    "state": "TX",
+    "city_slug": "mcallentx",
+    "vendor": "civicclerk",
+    "url": "https://mcallentx.civicclerk.com",
+    "population": 131628
+  },
+  {
+    "city_name": "Cary",
+    "state": "NC",
+    "city_slug": "townofcary",
+    "vendor": "granicus",
+    "url": "https://townofcary.granicus.com",
+    "population": 131592
+  },
+  {
+    "city_name": "Bellevue",
+    "state": "WA",
+    "city_slug": "bellevue",
+    "vendor": "granicus",
+    "url": "https://bellevue.granicus.com",
+    "population": 131324
+  },
+  {
+    "city_name": "Rockville",
+    "state": "MD",
+    "city_slug": "rockvillemd",
+    "vendor": "granicus",
+    "url": "https://rockvillemd.granicus.com",
+    "population": 130569
+  },
+  {
+    "city_name": "Victorville",
+    "state": "CA",
+    "city_slug": "victorville",
+    "vendor": "granicus",
+    "url": "https://victorville.granicus.com",
+    "population": 130495
+  },
+  {
+    "city_name": "Olathe",
+    "state": "KS",
+    "city_slug": "olatheks",
+    "vendor": "legistar",
+    "url": "https://olatheks.legistar.com",
+    "population": 130216
+  },
+  {
+    "city_name": "Sterling Heights",
+    "state": "MI",
+    "city_slug": "mi-sterlingheights",
+    "vendor": "civicplus",
+    "url": "https://mi-sterlingheights.civicplus.com",
+    "population": 129683
+  },
+  {
+    "city_name": "Puyallup",
+    "state": "WA",
+    "city_slug": "cityofpuyallup",
+    "vendor": "granicus",
+    "url": "https://cityofpuyallup.granicus.com",
+    "population": 129412
+  },
+  {
+    "city_name": "New Haven",
+    "state": "CT",
+    "city_slug": "newhaven-ct",
+    "vendor": "granicus",
+    "url": "https://newhaven-ct.granicus.com",
+    "population": 128884
+  },
+  {
+    "city_name": "Muskegon",
+    "state": "MI",
+    "city_slug": "mi-muskegoncountyintranet",
+    "vendor": "civicplus",
+    "url": "https://mi-muskegoncountyintranet.civicplus.com",
+    "population": 128715
+  },
+  {
+    "city_name": "Joliet",
+    "state": "IL",
+    "city_slug": "joliet",
+    "vendor": "granicus",
+    "url": "https://joliet.granicus.com",
+    "population": 128354
+  },
+  {
+    "city_name": "Racine",
+    "state": "WI",
+    "city_slug": "cityofracine",
+    "vendor": "granicus",
+    "url": "https://cityofracine.granicus.com",
+    "population": 127302
+  },
+  {
+    "city_name": "Simi Valley",
+    "state": "CA",
+    "city_slug": "simivalley",
+    "vendor": "granicus",
+    "url": "https://simivalley.granicus.com",
+    "population": 126874
+  },
+  {
+    "city_name": "Yakima",
+    "state": "WA",
+    "city_slug": "yakimawa",
+    "vendor": "granicus",
+    "url": "https://yakimawa.granicus.com",
+    "population": 126248
+  },
+  {
+    "city_name": "Lake Charles",
+    "state": "LA",
+    "city_slug": "countyoflake",
+    "vendor": "legistar",
+    "url": "https://countyoflake.legistar.com",
+    "population": 124276
+  },
+  {
+    "city_name": "Concord",
+    "state": "CA",
+    "city_slug": "cityofconcord",
+    "vendor": "granicus",
+    "url": "https://cityofconcord.granicus.com",
+    "population": 123688
+  },
+  {
+    "city_name": "Independence",
+    "state": "MO",
+    "city_slug": "independence",
+    "vendor": "novusagenda",
+    "url": "https://independence.novusagenda.com",
+    "population": 123373
+  },
+  {
+    "city_name": "Roseville",
+    "state": "CA",
+    "city_slug": "roseville",
+    "vendor": "novusagenda",
+    "url": "https://roseville.novusagenda.com",
+    "population": 122853
+  },
+  {
+    "city_name": "Santa Fe",
+    "state": "NM",
+    "city_slug": "santafe",
+    "vendor": "primegov",
+    "url": "https://santafe.primegov.com",
+    "population": 122813
+  },
+  {
+    "city_name": "Stamford",
+    "state": "CT",
+    "city_slug": "cityofstamford",
+    "vendor": "granicus",
+    "url": "https://cityofstamford.granicus.com",
+    "population": 122486
+  },
+  {
+    "city_name": "Gainesville",
+    "state": "GA",
+    "city_slug": "gainesville",
+    "vendor": "legistar",
+    "url": "https://gainesville.legistar.com",
+    "population": 120577
+  },
+  {
+    "city_name": "Frederick",
+    "state": "MD",
+    "city_slug": "cityoffrederick",
+    "vendor": "granicus",
+    "url": "https://cityoffrederick.granicus.com",
+    "population": 120315
+  },
+  {
+    "city_name": "Frisco",
+    "state": "TX",
+    "city_slug": "friscotexas",
+    "vendor": "granicus",
+    "url": "https://friscotexas.granicus.com",
+    "population": 120276
+  },
+  {
+    "city_name": "Carrollton",
+    "state": "TX",
+    "city_slug": "carrolltontx",
+    "vendor": "granicus",
+    "url": "https://carrolltontx.granicus.com",
+    "population": 119595
+  },
+  {
+    "city_name": "Rochester",
+    "state": "MN",
+    "city_slug": "rochestermn",
+    "vendor": "granicus",
+    "url": "https://rochestermn.granicus.com",
+    "population": 117815
+  },
+  {
+    "city_name": "Hemet",
+    "state": "CA",
+    "city_slug": "ca-hemet",
+    "vendor": "civicplus",
+    "url": "https://ca-hemet.civicplus.com",
+    "population": 117746
+  },
+  {
+    "city_name": "Broken Arrow",
+    "state": "OK",
+    "city_slug": "brokenarrow",
+    "vendor": "granicus",
+    "url": "https://brokenarrow.granicus.com",
+    "population": 117553
+  },
+  {
+    "city_name": "Longmont",
+    "state": "CO",
+    "city_slug": "longmont",
+    "vendor": "primegov",
+    "url": "https://longmont.primegov.com",
+    "population": 117461
+  },
+  {
+    "city_name": "Elgin",
+    "state": "IL",
+    "city_slug": "cityofelgin",
+    "vendor": "granicus",
+    "url": "https://cityofelgin.granicus.com",
+    "population": 117295
+  },
+  {
+    "city_name": "Appleton",
+    "state": "WI",
+    "city_slug": "cityofappleton",
+    "vendor": "granicus",
+    "url": "https://cityofappleton.granicus.com",
+    "population": 116633
+  },
+  {
+    "city_name": "Falls Church",
+    "state": "VA",
+    "city_slug": "fallschurch-va",
+    "vendor": "granicus",
+    "url": "https://fallschurch-va.granicus.com",
+    "population": 116155
+  },
+  {
+    "city_name": "High Point",
+    "state": "NC",
+    "city_slug": "highpoint",
+    "vendor": "granicus",
+    "url": "https://highpoint.granicus.com",
+    "population": 116061
+  },
+  {
+    "city_name": "Murrieta",
+    "state": "CA",
+    "city_slug": "murrieta",
+    "vendor": "granicus",
+    "url": "https://murrieta.granicus.com",
+    "population": 115971
+  },
+  {
+    "city_name": "Duluth",
+    "state": "MN",
+    "city_slug": "duluth-mn",
+    "vendor": "granicus",
+    "url": "https://duluth-mn.granicus.com",
+    "population": 115916
+  },
+  {
+    "city_name": "Santa Clara",
+    "state": "CA",
+    "city_slug": "santaclaracounty",
+    "vendor": "primegov",
+    "url": "https://santaclaracounty.primegov.com",
+    "population": 115820
+  },
+  {
+    "city_name": "Berkeley",
+    "state": "CA",
+    "city_slug": "berkeley",
+    "vendor": "granicus",
+    "url": "https://berkeley.granicus.com",
+    "population": 115628
+  },
+  {
+    "city_name": "La Puente",
+    "state": "CA",
+    "city_slug": "lapuente",
+    "vendor": "granicus",
+    "url": "https://lapuente.granicus.com",
+    "population": 115525
+  },
+  {
+    "city_name": "New Port Richey",
+    "state": "FL",
+    "city_slug": "cityofnewportrichey",
+    "vendor": "granicus",
+    "url": "https://cityofnewportrichey.granicus.com",
+    "population": 115083
+  },
+  {
+    "city_name": "Temecula",
+    "state": "CA",
+    "city_slug": "temeculaca",
+    "vendor": "legistar",
+    "url": "https://temeculaca.legistar.com",
+    "population": 114424
+  },
+  {
+    "city_name": "Boulder",
+    "state": "CO",
+    "city_slug": "boulder",
+    "vendor": "novusagenda",
+    "url": "https://boulder.novusagenda.com",
+    "population": 114354
+  },
+  {
+    "city_name": "Norman",
+    "state": "OK",
+    "city_slug": "norman",
+    "vendor": "legistar",
+    "url": "https://norman.legistar.com",
+    "population": 113857
+  },
+  {
+    "city_name": "West Jordan",
+    "state": "UT",
+    "city_slug": "westjordan",
+    "vendor": "primegov",
+    "url": "https://westjordan.primegov.com",
+    "population": 113582
+  },
+  {
+    "city_name": "Provo",
+    "state": "UT",
+    "city_slug": "ut-provo",
+    "vendor": "civicplus",
+    "url": "https://ut-provo.civicplus.com",
+    "population": 112922
+  },
+  {
+    "city_name": "Kenosha",
+    "state": "WI",
+    "city_slug": "kenosha",
+    "vendor": "granicus",
+    "url": "https://kenosha.granicus.com",
+    "population": 112912
+  },
+  {
+    "city_name": "Ventura",
+    "state": "CA",
+    "city_slug": "cityofventura",
+    "vendor": "granicus",
+    "url": "https://cityofventura.granicus.com",
+    "population": 112613
+  },
+  {
+    "city_name": "Vista",
+    "state": "CA",
+    "city_slug": "riovista-ca",
+    "vendor": "granicus",
+    "url": "https://riovista-ca.granicus.com",
+    "population": 112033
+  },
+  {
+    "city_name": "Redding",
+    "state": "CA",
+    "city_slug": "reddingca",
+    "vendor": "granicus",
+    "url": "https://reddingca.granicus.com",
+    "population": 111624
+  },
+  {
+    "city_name": "Costa Mesa",
+    "state": "CA",
+    "city_slug": "costamesa",
+    "vendor": "granicus",
+    "url": "https://costamesa.granicus.com",
+    "population": 110851
+  },
+  {
+    "city_name": "Sparks",
+    "state": "NV",
+    "city_slug": "sparks",
+    "vendor": "granicus",
+    "url": "https://sparks.granicus.com",
+    "population": 110014
+  },
+  {
+    "city_name": "Clovis",
+    "state": "CA",
+    "city_slug": "cityofclovis",
+    "vendor": "granicus",
+    "url": "https://cityofclovis.granicus.com",
+    "population": 109930
+  },
+  {
+    "city_name": "Miami Beach",
+    "state": "FL",
+    "city_slug": "miamifl",
+    "vendor": "granicus",
+    "url": "https://miamifl.granicus.com",
+    "population": 109637
+  },
+  {
+    "city_name": "Lewisville",
+    "state": "TX",
+    "city_slug": "cityoflewisville",
+    "vendor": "granicus",
+    "url": "https://cityoflewisville.granicus.com",
+    "population": 109212
+  },
+  {
+    "city_name": "Greenville",
+    "state": "NC",
+    "city_slug": "greenville",
+    "vendor": "granicus",
+    "url": "https://greenville.granicus.com",
+    "population": 108695
+  },
+  {
+    "city_name": "Delray Beach",
+    "state": "FL",
+    "city_slug": "delraybeach",
+    "vendor": "granicus",
+    "url": "https://delraybeach.granicus.com",
+    "population": 107599
+  },
+  {
+    "city_name": "Burbank",
+    "state": "CA",
+    "city_slug": "burbank",
+    "vendor": "granicus",
+    "url": "https://burbank.granicus.com",
+    "population": 106841
+  },
+  {
+    "city_name": "Tracy",
+    "state": "CA",
+    "city_slug": "tracy-ca",
+    "vendor": "granicus",
+    "url": "https://tracy-ca.granicus.com",
+    "population": 106426
+  },
+  {
+    "city_name": "Perris",
+    "state": "CA",
+    "city_slug": "perris",
+    "vendor": "granicus",
+    "url": "https://perris.granicus.com",
+    "population": 106213
+  },
+  {
+    "city_name": "Chico",
+    "state": "CA",
+    "city_slug": "chico-ca",
+    "vendor": "granicus",
+    "url": "https://chico-ca.granicus.com",
+    "population": 106193
+  },
+  {
+    "city_name": "Rock Hill",
+    "state": "SC",
+    "city_slug": "rockhill",
+    "vendor": "legistar",
+    "url": "https://rockhill.legistar.com",
+    "population": 106146
+  },
+  {
+    "city_name": "Fairfield",
+    "state": "CA",
+    "city_slug": "fairfield",
+    "vendor": "novusagenda",
+    "url": "https://fairfield.novusagenda.com",
+    "population": 105693
+  },
+  {
+    "city_name": "Sandy",
+    "state": "UT",
+    "city_slug": "sandyutah",
+    "vendor": "granicus",
+    "url": "https://sandyutah.granicus.com",
+    "population": 105585
+  },
+  {
+    "city_name": "Norwalk",
+    "state": "CA",
+    "city_slug": "norwalk",
+    "vendor": "granicus",
+    "url": "https://norwalk.granicus.com",
+    "population": 105549
+  },
+  {
+    "city_name": "Bend",
+    "state": "OR",
+    "city_slug": "bend",
+    "vendor": "granicus",
+    "url": "https://bend.granicus.com",
+    "population": 105390
+  },
+  {
+    "city_name": "Cambridge",
+    "state": "MA",
+    "city_slug": "cambridgema",
+    "vendor": "granicus",
+    "url": "https://cambridgema.granicus.com",
+    "population": 105321
+  },
+  {
+    "city_name": "Douglasville",
+    "state": "GA",
+    "city_slug": "douglasville",
+    "vendor": "legistar",
+    "url": "https://douglasville.legistar.com",
+    "population": 105268
+  },
+  {
+    "city_name": "Palm Bay",
+    "state": "FL",
+    "city_slug": "palmbayflorida",
+    "vendor": "primegov",
+    "url": "https://palmbayflorida.primegov.com",
+    "population": 104966
+  },
+  {
+    "city_name": "San Leandro",
+    "state": "CA",
+    "city_slug": "sanleandro",
+    "vendor": "granicus",
+    "url": "https://sanleandro.granicus.com",
+    "population": 104689
+  },
+  {
+    "city_name": "Concord",
+    "state": "NC",
+    "city_slug": "concordnh",
+    "vendor": "legistar",
+    "url": "https://concordnh.legistar.com",
+    "population": 104595
+  },
+  {
+    "city_name": "Nampa",
+    "state": "ID",
+    "city_slug": "nampa",
+    "vendor": "primegov",
+    "url": "https://nampa.primegov.com",
+    "population": 104532
+  },
+  {
+    "city_name": "Redwood City",
+    "state": "CA",
+    "city_slug": "redwoodcity-ca",
+    "vendor": "granicus",
+    "url": "https://redwoodcity-ca.granicus.com",
+    "population": 104429
+  },
+  {
+    "city_name": "Springfield",
+    "state": "VA",
+    "city_slug": "springfieldohio",
+    "vendor": "primegov",
+    "url": "https://springfieldohio.primegov.com",
+    "population": 104396
+  },
+  {
+    "city_name": "Jackson",
+    "state": "MI",
+    "city_slug": "jacksonco",
+    "vendor": "legistar",
+    "url": "https://jacksonco.legistar.com",
+    "population": 104131
+  },
+  {
+    "city_name": "Duluth",
+    "state": "GA",
+    "city_slug": "duluthga",
+    "vendor": "granicus",
+    "url": "https://duluthga.granicus.com",
+    "population": 103980
+  },
+  {
+    "city_name": "San Angelo",
+    "state": "TX",
+    "city_slug": "sanantonio",
+    "vendor": "primegov",
+    "url": "https://sanantonio.primegov.com",
+    "population": 103927
+  },
+  {
+    "city_name": "Auburn",
+    "state": "WA",
+    "city_slug": "auburnwa",
+    "vendor": "granicus",
+    "url": "https://auburnwa.granicus.com",
+    "population": 103374
+  },
+  {
+    "city_name": "Grand Junction",
+    "state": "CO",
+    "city_slug": "grandjunctionco",
+    "vendor": "civicclerk",
+    "url": "https://grandjunctionco.civicclerk.com",
+    "population": 103017
+  },
+  {
+    "city_name": "Gastonia",
+    "state": "NC",
+    "city_slug": "gaston",
+    "vendor": "granicus",
+    "url": "https://gaston.granicus.com",
+    "population": 102620
+  },
+  {
+    "city_name": "Longview",
+    "state": "TX",
+    "city_slug": "longbeach",
+    "vendor": "primegov",
+    "url": "https://longbeach.primegov.com",
+    "population": 102348
+  },
+  {
+    "city_name": "Wichita Falls",
+    "state": "TX",
+    "city_slug": "tx-wichitafalls",
+    "vendor": "civicplus",
+    "url": "https://tx-wichitafalls.civicplus.com",
+    "population": 102011
+  },
+  {
+    "city_name": "West Chester",
+    "state": "PA",
+    "city_slug": "westchestercountyny",
+    "vendor": "legistar",
+    "url": "https://westchestercountyny.legistar.com",
+    "population": 101922
+  },
+  {
+    "city_name": "Springfield",
+    "state": "OH",
+    "city_slug": "springfieldohio",
+    "vendor": "primegov",
+    "url": "https://springfieldohio.primegov.com",
+    "population": 101826
+  },
+  {
+    "city_name": "Idaho Falls",
+    "state": "ID",
+    "city_slug": "idahofalls",
+    "vendor": "legistar",
+    "url": "https://idahofalls.legistar.com",
+    "population": 101543
+  },
+  {
+    "city_name": "Albany",
+    "state": "GA",
+    "city_slug": "albanyca",
+    "vendor": "primegov",
+    "url": "https://albanyca.primegov.com",
+    "population": 101511
+  },
+  {
+    "city_name": "Rialto",
+    "state": "CA",
+    "city_slug": "rialto",
+    "vendor": "granicus",
+    "url": "https://rialto.granicus.com",
+    "population": 101505
+  },
+  {
+    "city_name": "Greeley",
+    "state": "CO",
+    "city_slug": "greeley",
+    "vendor": "granicus",
+    "url": "https://greeley.granicus.com",
+    "population": 101464
+  },
+  {
+    "city_name": "Davenport",
+    "state": "IA",
+    "city_slug": "davenport",
+    "vendor": "granicus",
+    "url": "https://davenport.granicus.com",
+    "population": 101394
+  },
+  {
+    "city_name": "Scranton",
+    "state": "PA",
+    "city_slug": "scrantonpa",
+    "vendor": "granicus",
+    "url": "https://scrantonpa.granicus.com",
+    "population": 100355
+  },
+  {
+    "city_name": "Englewood",
+    "state": "CO",
+    "city_slug": "englewoodgov",
+    "vendor": "granicus",
+    "url": "https://englewoodgov.granicus.com",
+    "population": 99594
+  },
+  {
+    "city_name": "Hesperia",
+    "state": "CA",
+    "city_slug": "hesperia",
+    "vendor": "granicus",
+    "url": "https://hesperia.granicus.com",
+    "population": 99484
+  },
+  {
+    "city_name": "Vacaville",
+    "state": "CA",
+    "city_slug": "vacaville",
+    "vendor": "granicus",
+    "url": "https://vacaville.granicus.com",
+    "population": 99475
+  },
+  {
+    "city_name": "Daytona Beach",
+    "state": "FL",
+    "city_slug": "daytonabeach",
+    "vendor": "novusagenda",
+    "url": "https://daytonabeach.novusagenda.com",
+    "population": 99390
+  },
+  {
+    "city_name": "Lynchburg",
+    "state": "VA",
+    "city_slug": "lynchburg",
+    "vendor": "granicus",
+    "url": "https://lynchburg.granicus.com",
+    "population": 99291
+  },
+  {
+    "city_name": "Madera",
+    "state": "CA",
+    "city_slug": "maderacounty",
+    "vendor": "primegov",
+    "url": "https://maderacounty.primegov.com",
+    "population": 98719
+  },
+  {
+    "city_name": "Waukegan",
+    "state": "IL",
+    "city_slug": "il-waukegan",
+    "vendor": "civicplus",
+    "url": "https://il-waukegan.civicplus.com",
+    "population": 98692
+  },
+  {
+    "city_name": "Dearborn",
+    "state": "MI",
+    "city_slug": "mi-dearbornheights",
+    "vendor": "civicplus",
+    "url": "https://mi-dearbornheights.civicplus.com",
+    "population": 98153
+  },
+  {
+    "city_name": "Lafayette",
+    "state": "IN",
+    "city_slug": "lafayette",
+    "vendor": "granicus",
+    "url": "https://lafayette.granicus.com",
+    "population": 98078
+  },
+  {
+    "city_name": "Santa Cruz",
+    "state": "CA",
+    "city_slug": "santacruzcountyca",
+    "vendor": "primegov",
+    "url": "https://santacruzcountyca.primegov.com",
+    "population": 97900
+  },
+  {
+    "city_name": "Merced",
+    "state": "CA",
+    "city_slug": "cityofmerced",
+    "vendor": "granicus",
+    "url": "https://cityofmerced.granicus.com",
+    "population": 97703
+  },
+  {
+    "city_name": "Menifee",
+    "state": "CA",
+    "city_slug": "cityofmenifee",
+    "vendor": "granicus",
+    "url": "https://cityofmenifee.granicus.com",
+    "population": 97687
+  },
+  {
+    "city_name": "Richmond",
+    "state": "TX",
+    "city_slug": "richmondva",
+    "vendor": "legistar",
+    "url": "https://richmondva.legistar.com",
+    "population": 97598
+  },
+  {
+    "city_name": "Rochester",
+    "state": "MI",
+    "city_slug": "roch",
+    "vendor": "legistar",
+    "url": "https://roch.legistar.com",
+    "population": 97195
+  },
+  {
+    "city_name": "Clinton Township",
+    "state": "MI",
+    "city_slug": "clintontwpmi",
+    "vendor": "civicclerk",
+    "url": "https://clintontwpmi.api.civicclerk.com",
+    "population": 96825
+  },
+  {
+    "city_name": "Charleston",
+    "state": "WV",
+    "city_slug": "charlestownwv",
+    "vendor": "granicus",
+    "url": "https://charlestownwv.granicus.com",
+    "population": 96057
+  },
+  {
+    "city_name": "Winter Haven",
+    "state": "FL",
+    "city_slug": "winterhaven-fl",
+    "vendor": "granicus",
+    "url": "https://winterhaven-fl.granicus.com",
+    "population": 95906
+  },
+  {
+    "city_name": "Roswell",
+    "state": "GA",
+    "city_slug": "roswell",
+    "vendor": "legistar",
+    "url": "https://roswell.legistar.com",
+    "population": 95251
+  },
+  {
+    "city_name": "Bowie",
+    "state": "MD",
+    "city_slug": "cityofbowie",
+    "vendor": "granicus",
+    "url": "https://cityofbowie.granicus.com",
+    "population": 95216
+  },
+  {
+    "city_name": "Keller",
+    "state": "TX",
+    "city_slug": "cityofkeller",
+    "vendor": "granicus",
+    "url": "https://cityofkeller.granicus.com",
+    "population": 95035
+  },
+  {
+    "city_name": "Waukesha",
+    "state": "WI",
+    "city_slug": "waukesha",
+    "vendor": "granicus",
+    "url": "https://waukesha.granicus.com",
+    "population": 95015
+  },
+  {
+    "city_name": "New Bedford",
+    "state": "MA",
+    "city_slug": "newbedford-ma",
+    "vendor": "granicus",
+    "url": "https://newbedford-ma.granicus.com",
+    "population": 94905
+  },
+  {
+    "city_name": "Mission Viejo",
+    "state": "CA",
+    "city_slug": "missionviejo",
+    "vendor": "granicus",
+    "url": "https://missionviejo.granicus.com",
+    "population": 94804
+  },
+  {
+    "city_name": "Plainfield",
+    "state": "IL",
+    "city_slug": "plainfieldil",
+    "vendor": "granicus",
+    "url": "https://plainfieldil.granicus.com",
+    "population": 94521
+  },
+  {
+    "city_name": "South Gate",
+    "state": "CA",
+    "city_slug": "cityofsouthgate",
+    "vendor": "granicus",
+    "url": "https://cityofsouthgate.granicus.com",
+    "population": 94396
+  },
+  {
+    "city_name": "Napa",
+    "state": "CA",
+    "city_slug": "napa",
+    "vendor": "granicus",
+    "url": "https://napa.granicus.com",
+    "population": 94014
+  },
+  {
+    "city_name": "Lawton",
+    "state": "OK",
+    "city_slug": "cityoflawton",
+    "vendor": "granicus",
+    "url": "https://cityoflawton.granicus.com",
+    "population": 93591
+  },
+  {
+    "city_name": "Allen",
+    "state": "TX",
+    "city_slug": "cityofallen",
+    "vendor": "granicus",
+    "url": "https://cityofallen.granicus.com",
+    "population": 93487
+  },
+  {
+    "city_name": "Hagerstown",
+    "state": "MD",
+    "city_slug": "hagerstown",
+    "vendor": "novusagenda",
+    "url": "https://hagerstown.novusagenda.com",
+    "population": 93303
+  },
+  {
+    "city_name": "Hawthorne",
+    "state": "CA",
+    "city_slug": "hawthorne-ca",
+    "vendor": "granicus",
+    "url": "https://hawthorne-ca.granicus.com",
+    "population": 93193
+  },
+  {
+    "city_name": "Lynnwood",
+    "state": "WA",
+    "city_slug": "lynnwoodwa",
+    "vendor": "granicus",
+    "url": "https://lynnwoodwa.granicus.com",
+    "population": 92865
+  },
+  {
+    "city_name": "Lakewood",
+    "state": "NJ",
+    "city_slug": "onelakewood",
+    "vendor": "granicus",
+    "url": "https://onelakewood.granicus.com",
+    "population": 92843
+  },
+  {
+    "city_name": "Kennesaw",
+    "state": "GA",
+    "city_slug": "kennesaw",
+    "vendor": "novusagenda",
+    "url": "https://kennesaw.novusagenda.com",
+    "population": 92645
+  },
+  {
+    "city_name": "Palo Alto",
+    "state": "CA",
+    "city_slug": "cityofpaloalto",
+    "vendor": "primegov",
+    "url": "https://cityofpaloalto.primegov.com",
+    "population": 92558
+  },
+  {
+    "city_name": "Terre Haute",
+    "state": "IN",
+    "city_slug": "terrebonneparish",
+    "vendor": "novusagenda",
+    "url": "https://terrebonneparish.novusagenda.com",
+    "population": 92551
+  },
+  {
+    "city_name": "Broomfield",
+    "state": "CO",
+    "city_slug": "broomfield",
+    "vendor": "granicus",
+    "url": "https://broomfield.granicus.com",
+    "population": 92337
+  },
+  {
+    "city_name": "Battle Creek",
+    "state": "MI",
+    "city_slug": "battlecreek",
+    "vendor": "novusagenda",
+    "url": "https://battlecreek.novusagenda.com",
+    "population": 92270
+  },
+  {
+    "city_name": "Santa Monica",
+    "state": "CA",
+    "city_slug": "santamonica",
+    "vendor": "granicus",
+    "url": "https://santamonica.granicus.com",
+    "population": 92043
+  },
+  {
+    "city_name": "Jacksonville",
+    "state": "NC",
+    "city_slug": "jacksonvillenc",
+    "vendor": "granicus",
+    "url": "https://jacksonvillenc.granicus.com",
+    "population": 91948
+  },
+  {
+    "city_name": "Acworth",
+    "state": "GA",
+    "city_slug": "acworth-ga",
+    "vendor": "granicus",
+    "url": "https://acworth-ga.granicus.com",
+    "population": 91843
+  },
+  {
+    "city_name": "Missouri City",
+    "state": "TX",
+    "city_slug": "tx-missouricity",
+    "vendor": "civicweb",
+    "url": "https://missouricitytx.civicweb.net",
+    "population": 91828
+  },
+  {
+    "city_name": "Chapel Hill",
+    "state": "NC",
+    "city_slug": "chapelhill",
+    "vendor": "granicus",
+    "url": "https://chapelhill.granicus.com",
+    "population": 91595
+  },
+  {
+    "city_name": "Missoula",
+    "state": "MT",
+    "city_slug": "mt-missoula3",
+    "vendor": "civicplus",
+    "url": "https://mt-missoula3.civicplus.com",
+    "population": 90987
+  },
+  {
+    "city_name": "El Monte",
+    "state": "CA",
+    "city_slug": "elmonte",
+    "vendor": "granicus",
+    "url": "https://elmonte.granicus.com",
+    "population": 90977
+  },
+  {
+    "city_name": "Mcdonough",
+    "state": "GA",
+    "city_slug": "mcdonough",
+    "vendor": "granicus",
+    "url": "https://mcdonough.granicus.com",
+    "population": 90808
+  },
+  {
+    "city_name": "Franklin",
+    "state": "TN",
+    "city_slug": "franklintn",
+    "vendor": "legistar",
+    "url": "https://franklintn.legistar.com",
+    "population": 90669
+  },
+  {
+    "city_name": "Rapid City",
+    "state": "SD",
+    "city_slug": "cityofdellrapids",
+    "vendor": "granicus",
+    "url": "https://cityofdellrapids.granicus.com",
+    "population": 90647
+  },
+  {
+    "city_name": "Mansfield",
+    "state": "OH",
+    "city_slug": "mansfield",
+    "vendor": "legistar",
+    "url": "https://mansfield.legistar.com",
+    "population": 90484
+  },
+  {
+    "city_name": "Lexington",
+    "state": "SC",
+    "city_slug": "lexington",
+    "vendor": "legistar",
+    "url": "https://lexington.legistar.com",
+    "population": 90341
+  },
+  {
+    "city_name": "Canton",
+    "state": "MI",
+    "city_slug": "canton",
+    "vendor": "legistar",
+    "url": "https://canton.legistar.com",
+    "population": 90173
+  },
+  {
+    "city_name": "Fort Smith",
+    "state": "AR",
+    "city_slug": "fortsmithar",
+    "vendor": "granicus",
+    "url": "https://fortsmithar.granicus.com",
+    "population": 90141
+  },
+  {
+    "city_name": "Westminster",
+    "state": "CA",
+    "city_slug": "westminsterca",
+    "vendor": "granicus",
+    "url": "https://westminsterca.granicus.com",
+    "population": 89747
+  },
+  {
+    "city_name": "Fayetteville",
+    "state": "AR",
+    "city_slug": "accessfayetteville",
+    "vendor": "granicus",
+    "url": "https://accessfayetteville.granicus.com",
+    "population": 89379
+  },
+  {
+    "city_name": "Bryan",
+    "state": "TX",
+    "city_slug": "cityofbryantx",
+    "vendor": "granicus",
+    "url": "https://cityofbryantx.granicus.com",
+    "population": 89322
+  },
+  {
+    "city_name": "San Marcos",
+    "state": "CA",
+    "city_slug": "sanmarcos",
+    "vendor": "legistar",
+    "url": "https://sanmarcos.legistar.com",
+    "population": 89275
+  },
+  {
+    "city_name": "Woodstock",
+    "state": "GA",
+    "city_slug": "woodstockga",
+    "vendor": "granicus",
+    "url": "https://woodstockga.granicus.com",
+    "population": 89239
+  },
+  {
+    "city_name": "Fort Pierce",
+    "state": "FL",
+    "city_slug": "fl-fortpierce",
+    "vendor": "civicplus",
+    "url": "https://fl-fortpierce.civicplus.com",
+    "population": 89162
+  },
+  {
+    "city_name": "Rio Rancho",
+    "state": "NM",
+    "city_slug": "riorancho",
+    "vendor": "granicus",
+    "url": "https://riorancho.granicus.com",
+    "population": 89123
+  },
+  {
+    "city_name": "Coral Springs",
+    "state": "FL",
+    "city_slug": "coralsprings",
+    "vendor": "granicus",
+    "url": "https://coralsprings.granicus.com",
+    "population": 88885
+  },
+  {
+    "city_name": "Cleveland",
+    "state": "TN",
+    "city_slug": "cityofcleveland",
+    "vendor": "legistar",
+    "url": "https://cityofcleveland.legistar.com",
+    "population": 88774
+  },
+  {
+    "city_name": "Deltona",
+    "state": "FL",
+    "city_slug": "deltona",
+    "vendor": "granicus",
+    "url": "https://deltona.granicus.com",
+    "population": 88735
+  },
+  {
+    "city_name": "Orem",
+    "state": "UT",
+    "city_slug": "orem",
+    "vendor": "granicus",
+    "url": "https://orem.granicus.com",
+    "population": 88528
+  },
+  {
+    "city_name": "Farmington",
+    "state": "MI",
+    "city_slug": "farmington",
+    "vendor": "granicus",
+    "url": "https://farmington.granicus.com",
+    "population": 87927
+  },
+  {
+    "city_name": "Morgantown",
+    "state": "WV",
+    "city_slug": "morgantown",
+    "vendor": "granicus",
+    "url": "https://morgantown.granicus.com",
+    "population": 87558
+  },
+  {
+    "city_name": "Herndon",
+    "state": "VA",
+    "city_slug": "herndon",
+    "vendor": "granicus",
+    "url": "https://herndon.granicus.com",
+    "population": 87123
+  },
+  {
+    "city_name": "Lima",
+    "state": "OH",
+    "city_slug": "limaoh",
+    "vendor": "primegov",
+    "url": "https://limaoh.primegov.com",
+    "population": 86954
+  },
+  {
+    "city_name": "Annapolis",
+    "state": "MD",
+    "city_slug": "annapolismd",
+    "vendor": "granicus",
+    "url": "https://annapolismd.granicus.com",
+    "population": 86889
+  },
+  {
+    "city_name": "Decatur",
+    "state": "IL",
+    "city_slug": "decaturalabamausa",
+    "vendor": "granicus",
+    "url": "https://decaturalabamausa.granicus.com",
+    "population": 86556
+  },
+  {
+    "city_name": "Monroe",
+    "state": "LA",
+    "city_slug": "cityofmonroe",
+    "vendor": "granicus",
+    "url": "https://cityofmonroe.granicus.com",
+    "population": 86468
+  },
+  {
+    "city_name": "Cheyenne",
+    "state": "WY",
+    "city_slug": "cheyenne",
+    "vendor": "granicus",
+    "url": "https://cheyenne.granicus.com",
+    "population": 86283
+  },
+  {
+    "city_name": "Canton",
+    "state": "GA",
+    "city_slug": "canton",
+    "vendor": "legistar",
+    "url": "https://canton.legistar.com",
+    "population": 85446
+  },
+  {
+    "city_name": "Norwalk",
+    "state": "CT",
+    "city_slug": "norwalk",
+    "vendor": "granicus",
+    "url": "https://norwalk.granicus.com",
+    "population": 85419
+  },
+  {
+    "city_name": "Sioux City",
+    "state": "IA",
+    "city_slug": "siouxschools",
+    "vendor": "granicus",
+    "url": "https://siouxschools.granicus.com",
+    "population": 84981
+  },
+  {
+    "city_name": "Parker",
+    "state": "CO",
+    "city_slug": "parker",
+    "vendor": "granicus",
+    "url": "https://parker.granicus.com",
+    "population": 84861
+  },
+  {
+    "city_name": "Newnan",
+    "state": "GA",
+    "city_slug": "ga-newnan",
+    "vendor": "civicplus",
+    "url": "https://ga-newnan.civicplus.com",
+    "population": 84721
+  },
+  {
+    "city_name": "Pittsburg",
+    "state": "CA",
+    "city_slug": "pittsburg",
+    "vendor": "granicus",
+    "url": "https://pittsburg.granicus.com",
+    "population": 84641
+  },
+  {
+    "city_name": "Suffolk",
+    "state": "VA",
+    "city_slug": "suffolkva",
+    "vendor": "granicus",
+    "url": "https://suffolkva.granicus.com",
+    "population": 84522
+  },
+  {
+    "city_name": "Westland",
+    "state": "MI",
+    "city_slug": "mi-westland",
+    "vendor": "civicplus",
+    "url": "https://mi-westland.civicplus.com",
+    "population": 84124
+  },
+  {
+    "city_name": "Gardena",
+    "state": "CA",
+    "city_slug": "cityofgardena",
+    "vendor": "granicus",
+    "url": "https://cityofgardena.granicus.com",
+    "population": 84103
+  },
+  {
+    "city_name": "Citrus Heights",
+    "state": "CA",
+    "city_slug": "ca-citrusheights",
+    "vendor": "civicplus",
+    "url": "https://ca-citrusheights.civicplus.com",
+    "population": 83966
+  },
+  {
+    "city_name": "Sumter",
+    "state": "SC",
+    "city_slug": "sumterclerk",
+    "vendor": "granicus",
+    "url": "https://sumterclerk.granicus.com",
+    "population": 83799
+  },
+  {
+    "city_name": "Livermore",
+    "state": "CA",
+    "city_slug": "livermore",
+    "vendor": "granicus",
+    "url": "https://livermore.granicus.com",
+    "population": 83763
+  },
+  {
+    "city_name": "Chino",
+    "state": "CA",
+    "city_slug": "chino",
+    "vendor": "legistar",
+    "url": "https://chino.legistar.com",
+    "population": 83727
+  },
+  {
+    "city_name": "Gulfport",
+    "state": "MS",
+    "city_slug": "gulfport",
+    "vendor": "granicus",
+    "url": "https://gulfport.granicus.com",
+    "population": 83530
+  },
+  {
+    "city_name": "Carson",
+    "state": "CA",
+    "city_slug": "carson",
+    "vendor": "granicus",
+    "url": "https://carson.granicus.com",
+    "population": 83241
+  },
+  {
+    "city_name": "Walnut Creek",
+    "state": "CA",
+    "city_slug": "walnutcreek",
+    "vendor": "granicus",
+    "url": "https://walnutcreek.granicus.com",
+    "population": 82557
+  },
+  {
+    "city_name": "Clermont",
+    "state": "FL",
+    "city_slug": "sumterclerk",
+    "vendor": "granicus",
+    "url": "https://sumterclerk.granicus.com",
+    "population": 81987
+  },
+  {
+    "city_name": "Richmond",
+    "state": "CA",
+    "city_slug": "richmond",
+    "vendor": "granicus",
+    "url": "https://richmond.granicus.com",
+    "population": 81602
+  },
+  {
+    "city_name": "Jonesboro",
+    "state": "GA",
+    "city_slug": "jonesboro",
+    "vendor": "legistar",
+    "url": "https://jonesboro.legistar.com",
+    "population": 81147
+  },
+  {
+    "city_name": "Eau Claire",
+    "state": "WI",
+    "city_slug": "eauclairecountywi",
+    "vendor": "granicus",
+    "url": "https://eauclairecountywi.granicus.com",
+    "population": 81075
+  },
+  {
+    "city_name": "Danbury",
+    "state": "CT",
+    "city_slug": "danbury",
+    "vendor": "granicus",
+    "url": "https://danbury.granicus.com",
+    "population": 80882
+  },
+  {
+    "city_name": "Hattiesburg",
+    "state": "MS",
+    "city_slug": "hattiesburgms",
+    "vendor": "legistar",
+    "url": "https://hattiesburgms.legistar.com",
+    "population": 80858
+  },
+  {
+    "city_name": "Tustin",
+    "state": "CA",
+    "city_slug": "tustin",
+    "vendor": "granicus",
+    "url": "https://tustin.granicus.com",
+    "population": 80773
+  },
+  {
+    "city_name": "Dothan",
+    "state": "AL",
+    "city_slug": "al-dothan",
+    "vendor": "civicplus",
+    "url": "https://al-dothan.civicplus.com",
+    "population": 80446
+  },
+  {
+    "city_name": "Arlington Heights",
+    "state": "IL",
+    "city_slug": "arlingtonheights",
+    "vendor": "novusagenda",
+    "url": "https://arlingtonheights.novusagenda.com",
+    "population": 79890
+  },
+  {
+    "city_name": "Lakewood",
+    "state": "CA",
+    "city_slug": "lakewood",
+    "vendor": "novusagenda",
+    "url": "https://lakewood.novusagenda.com",
+    "population": 79812
+  },
+  {
+    "city_name": "Dallas",
+    "state": "GA",
+    "city_slug": "cityofdallas",
+    "vendor": "legistar",
+    "url": "https://cityofdallas.legistar.com",
+    "population": 79338
+  },
+  {
+    "city_name": "Middletown",
+    "state": "OH",
+    "city_slug": "middletown",
+    "vendor": "granicus",
+    "url": "https://middletown.granicus.com",
+    "population": 79273
+  },
+  {
+    "city_name": "New Braunfels",
+    "state": "TX",
+    "city_slug": "newbraunfels",
+    "vendor": "granicus",
+    "url": "https://newbraunfels.granicus.com",
+    "population": 78685
+  },
+  {
+    "city_name": "Valparaiso",
+    "state": "IN",
+    "city_slug": "in-valparaisoutilities",
+    "vendor": "civicplus",
+    "url": "https://in-valparaisoutilities.civicplus.com",
+    "population": 78553
+  },
+  {
+    "city_name": "Gresham",
+    "state": "OR",
+    "city_slug": "gresham",
+    "vendor": "granicus",
+    "url": "https://gresham.granicus.com",
+    "population": 77581
+  },
+  {
+    "city_name": "Camarillo",
+    "state": "CA",
+    "city_slug": "camarillo",
+    "vendor": "primegov",
+    "url": "https://camarillo.primegov.com",
+    "population": 77518
+  },
+  {
+    "city_name": "Apple Valley",
+    "state": "CA",
+    "city_slug": "applevalley",
+    "vendor": "novusagenda",
+    "url": "https://applevalley.novusagenda.com",
+    "population": 77467
+  },
+  {
+    "city_name": "Jonesboro",
+    "state": "AR",
+    "city_slug": "jonesboro",
+    "vendor": "granicus",
+    "url": "https://jonesboro.granicus.com",
+    "population": 77249
+  },
+  {
+    "city_name": "Redmond",
+    "state": "WA",
+    "city_slug": "redmond",
+    "vendor": "granicus",
+    "url": "https://redmond.granicus.com",
+    "population": 77226
+  },
+  {
+    "city_name": "Carmel",
+    "state": "IN",
+    "city_slug": "carmel",
+    "vendor": "novusagenda",
+    "url": "https://carmel.novusagenda.com",
+    "population": 77123
+  },
+  {
+    "city_name": "Lexington",
+    "state": "NC",
+    "city_slug": "lexington",
+    "vendor": "legistar",
+    "url": "https://lexington.legistar.com",
+    "population": 76998
+  },
+  {
+    "city_name": "Monroe",
+    "state": "NC",
+    "city_slug": "monroecity",
+    "vendor": "novusagenda",
+    "url": "https://monroecity.novusagenda.com",
+    "population": 76676
+  },
+  {
+    "city_name": "Baldwin Park",
+    "state": "CA",
+    "city_slug": "baldwinpark",
+    "vendor": "granicus",
+    "url": "https://baldwinpark.granicus.com",
+    "population": 76571
+  },
+  {
+    "city_name": "Lawrence",
+    "state": "MA",
+    "city_slug": "ma-lawrence",
+    "vendor": "civicplus",
+    "url": "https://ma-lawrence.civicplus.com",
+    "population": 76383
+  },
+  {
+    "city_name": "Schaumburg",
+    "state": "IL",
+    "city_slug": "schaumburg",
+    "vendor": "novusagenda",
+    "url": "https://schaumburg.novusagenda.com",
+    "population": 75951
+  },
+  {
+    "city_name": "Iowa City",
+    "state": "IA",
+    "city_slug": "iowacity",
+    "vendor": "novusagenda",
+    "url": "https://iowacity.novusagenda.com",
+    "population": 75917
+  },
+  {
+    "city_name": "Southfield",
+    "state": "MI",
+    "city_slug": "southfield-mi",
+    "vendor": "granicus",
+    "url": "https://southfield-mi.granicus.com",
+    "population": 75830
+  },
+  {
+    "city_name": "Smyrna",
+    "state": "GA",
+    "city_slug": "smyrnacity",
+    "vendor": "granicus",
+    "url": "https://smyrnacity.granicus.com",
+    "population": 75810
+  },
+  {
+    "city_name": "Greer",
+    "state": "SC",
+    "city_slug": "greer",
+    "vendor": "novusagenda",
+    "url": "https://greer.novusagenda.com",
+    "population": 75476
+  },
+  {
+    "city_name": "Redondo Beach",
+    "state": "CA",
+    "city_slug": "redondo",
+    "vendor": "granicus",
+    "url": "https://redondo.granicus.com",
+    "population": 75364
+  },
+  {
+    "city_name": "Huntington Park",
+    "state": "CA",
+    "city_slug": "huntingtonpark",
+    "vendor": "granicus",
+    "url": "https://huntingtonpark.granicus.com",
+    "population": 75066
+  },
+  {
+    "city_name": "Chino Hills",
+    "state": "CA",
+    "city_slug": "chinohills",
+    "vendor": "granicus",
+    "url": "https://chinohills.granicus.com",
+    "population": 74796
+  },
+  {
+    "city_name": "Kirkland",
+    "state": "WA",
+    "city_slug": "kirkland",
+    "vendor": "granicus",
+    "url": "https://kirkland.granicus.com",
+    "population": 74745
+  },
+  {
+    "city_name": "Mountain View",
+    "state": "CA",
+    "city_slug": "mountainview",
+    "vendor": "granicus",
+    "url": "https://mountainview.granicus.com",
+    "population": 74646
+  },
+  {
+    "city_name": "Palm Harbor",
+    "state": "FL",
+    "city_slug": "palmbayflorida",
+    "vendor": "primegov",
+    "url": "https://palmbayflorida.primegov.com",
+    "population": 74401
+  },
+  {
+    "city_name": "Davis",
+    "state": "CA",
+    "city_slug": "davis",
+    "vendor": "granicus",
+    "url": "https://davis.granicus.com",
+    "population": 74313
+  },
+  {
+    "city_name": "Manteca",
+    "state": "CA",
+    "city_slug": "manteca-ca",
+    "vendor": "granicus",
+    "url": "https://manteca-ca.granicus.com",
+    "population": 74232
+  },
+  {
+    "city_name": "Springfield",
+    "state": "OR",
+    "city_slug": "springfieldohio",
+    "vendor": "primegov",
+    "url": "https://springfieldohio.primegov.com",
+    "population": 73885
+  },
+  {
+    "city_name": "Somerville",
+    "state": "MA",
+    "city_slug": "somervillema",
+    "vendor": "granicus",
+    "url": "https://somervillema.granicus.com",
+    "population": 73844
+  },
+  {
+    "city_name": "Alameda",
+    "state": "CA",
+    "city_slug": "alamedacounty",
+    "vendor": "granicus",
+    "url": "https://alamedacounty.granicus.com",
+    "population": 73812
+  },
+  {
+    "city_name": "Redlands",
+    "state": "CA",
+    "city_slug": "redlandsusd",
+    "vendor": "primegov",
+    "url": "https://redlandsusd.primegov.com",
+    "population": 73690
+  },
+  {
+    "city_name": "Leesburg",
+    "state": "VA",
+    "city_slug": "leesburgva",
+    "vendor": "granicus",
+    "url": "https://leesburgva.granicus.com",
+    "population": 73675
+  },
+  {
+    "city_name": "Brighton",
+    "state": "CO",
+    "city_slug": "brightonco",
+    "vendor": "granicus",
+    "url": "https://brightonco.granicus.com",
+    "population": 73471
+  },
+  {
+    "city_name": "New Rochelle",
+    "state": "NY",
+    "city_slug": "newrochelle",
+    "vendor": "granicus",
+    "url": "https://newrochelle.granicus.com",
+    "population": 73387
+  },
+  {
+    "city_name": "New Britain",
+    "state": "CT",
+    "city_slug": "newbritain",
+    "vendor": "granicus",
+    "url": "https://newbritain.granicus.com",
+    "population": 73240
+  },
+  {
+    "city_name": "Marysville",
+    "state": "WA",
+    "city_slug": "marysville",
+    "vendor": "granicus",
+    "url": "https://marysville.granicus.com",
+    "population": 73083
+  },
+  {
+    "city_name": "Temple",
+    "state": "TX",
+    "city_slug": "cityoftemple",
+    "vendor": "primegov",
+    "url": "https://cityoftemple.primegov.com",
+    "population": 72710
+  },
+  {
+    "city_name": "Lodi",
+    "state": "CA",
+    "city_slug": "lodica",
+    "vendor": "granicus",
+    "url": "https://lodica.granicus.com",
+    "population": 72565
+  },
+  {
+    "city_name": "Janesville",
+    "state": "WI",
+    "city_slug": "janesville",
+    "vendor": "granicus",
+    "url": "https://janesville.granicus.com",
+    "population": 72323
+  },
+  {
+    "city_name": "Joplin",
+    "state": "MO",
+    "city_slug": "joplinmo",
+    "vendor": "granicus",
+    "url": "https://joplinmo.granicus.com",
+    "population": 72274
+  },
+  {
+    "city_name": "Opa Locka",
+    "state": "FL",
+    "city_slug": "fl-opalocka",
+    "vendor": "civicplus",
+    "url": "https://fl-opalocka.civicplus.com",
+    "population": 72255
+  },
+  {
+    "city_name": "Folsom",
+    "state": "CA",
+    "city_slug": "folsom",
+    "vendor": "granicus",
+    "url": "https://folsom.granicus.com",
+    "population": 72180
+  },
+  {
+    "city_name": "Oviedo",
+    "state": "FL",
+    "city_slug": "cityofoviedo",
+    "vendor": "primegov",
+    "url": "https://cityofoviedo.primegov.com",
+    "population": 72047
+  },
+  {
+    "city_name": "Rogers",
+    "state": "AR",
+    "city_slug": "rogerscity",
+    "vendor": "novusagenda",
+    "url": "https://rogerscity.novusagenda.com",
+    "population": 71942
+  },
+  {
+    "city_name": "Council Bluffs",
+    "state": "IA",
+    "city_slug": "councilbluffs-ia",
+    "vendor": "granicus",
+    "url": "https://councilbluffs-ia.granicus.com",
+    "population": 71782
+  },
+  {
+    "city_name": "Orange Park",
+    "state": "FL",
+    "city_slug": "cityoforange",
+    "vendor": "granicus",
+    "url": "https://cityoforange.granicus.com",
+    "population": 71690
+  },
+  {
+    "city_name": "League City",
+    "state": "TX",
+    "city_slug": "leaguecitytx",
+    "vendor": "granicus",
+    "url": "https://leaguecitytx.granicus.com",
+    "population": 71580
+  },
+  {
+    "city_name": "Plainfield",
+    "state": "NJ",
+    "city_slug": "plainfieldil",
+    "vendor": "granicus",
+    "url": "https://plainfieldil.granicus.com",
+    "population": 71485
+  },
+  {
+    "city_name": "Winter Park",
+    "state": "FL",
+    "city_slug": "winterpark",
+    "vendor": "granicus",
+    "url": "https://winterpark.granicus.com",
+    "population": 71471
+  },
+  {
+    "city_name": "Dubuque",
+    "state": "IA",
+    "city_slug": "cityofdubuque",
+    "vendor": "granicus",
+    "url": "https://cityofdubuque.granicus.com",
+    "population": 71168
+  },
+  {
+    "city_name": "Cherry Hill",
+    "state": "NJ",
+    "city_slug": "nj-cherryhill2",
+    "vendor": "civicplus",
+    "url": "https://nj-cherryhill2.civicplus.com",
+    "population": 71054
+  },
+  {
+    "city_name": "Petaluma",
+    "state": "CA",
+    "city_slug": "petaluma",
+    "vendor": "granicus",
+    "url": "https://petaluma.granicus.com",
+    "population": 70223
+  },
+  {
+    "city_name": "Waterloo",
+    "state": "IA",
+    "city_slug": "waterloo",
+    "vendor": "novusagenda",
+    "url": "https://waterloo.novusagenda.com",
+    "population": 70157
+  },
+  {
+    "city_name": "White Plains",
+    "state": "NY",
+    "city_slug": "ny-whiteplains",
+    "vendor": "civicplus",
+    "url": "https://ny-whiteplains.civicplus.com",
+    "population": 69870
+  },
+  {
+    "city_name": "Passaic",
+    "state": "NJ",
+    "city_slug": "passaiccountynj",
+    "vendor": "legistar",
+    "url": "https://passaiccountynj.legistar.com",
+    "population": 69816
+  },
+  {
+    "city_name": "Mooresville",
+    "state": "NC",
+    "city_slug": "mooresvillenc",
+    "vendor": "granicus",
+    "url": "https://mooresvillenc.granicus.com",
+    "population": 69793
+  },
+  {
+    "city_name": "Lynwood",
+    "state": "CA",
+    "city_slug": "lynwood",
+    "vendor": "granicus",
+    "url": "https://lynwood.granicus.com",
+    "population": 69745
+  },
+  {
+    "city_name": "Tulare",
+    "state": "CA",
+    "city_slug": "tulare",
+    "vendor": "granicus",
+    "url": "https://tulare.granicus.com",
+    "population": 69721
+  },
+  {
+    "city_name": "Union City",
+    "state": "CA",
+    "city_slug": "unioncity",
+    "vendor": "novusagenda",
+    "url": "https://unioncity.novusagenda.com",
+    "population": 69516
+  },
+  {
+    "city_name": "Dover",
+    "state": "DE",
+    "city_slug": "doverny",
+    "vendor": "novusagenda",
+    "url": "https://doverny.novusagenda.com",
+    "population": 69187
+  },
+  {
+    "city_name": "Georgetown",
+    "state": "TX",
+    "city_slug": "georgetown",
+    "vendor": "granicus",
+    "url": "https://georgetown.granicus.com",
+    "population": 69072
+  },
+  {
+    "city_name": "Dublin",
+    "state": "OH",
+    "city_slug": "dublinoh",
+    "vendor": "granicus",
+    "url": "https://dublinoh.granicus.com",
+    "population": 68932
+  },
+  {
+    "city_name": "Lake Elsinore",
+    "state": "CA",
+    "city_slug": "lakeelsinore",
+    "vendor": "primegov",
+    "url": "https://lakeelsinore.primegov.com",
+    "population": 68860
+  },
+  {
+    "city_name": "Pflugerville",
+    "state": "TX",
+    "city_slug": "pflugerville",
+    "vendor": "granicus",
+    "url": "https://pflugerville.granicus.com",
+    "population": 68789
+  },
+  {
+    "city_name": "Centreville",
+    "state": "VA",
+    "city_slug": "centerville",
+    "vendor": "novusagenda",
+    "url": "https://centerville.novusagenda.com",
+    "population": 68683
+  },
+  {
+    "city_name": "Palm Beach Gardens",
+    "state": "FL",
+    "city_slug": "palmbayflorida",
+    "vendor": "primegov",
+    "url": "https://palmbayflorida.primegov.com",
+    "population": 68587
+  },
+  {
+    "city_name": "Salisbury",
+    "state": "MD",
+    "city_slug": "salisburymd",
+    "vendor": "granicus",
+    "url": "https://salisburymd.granicus.com",
+    "population": 68452
+  },
+  {
+    "city_name": "Framingham",
+    "state": "MA",
+    "city_slug": "framinghamma",
+    "vendor": "granicus",
+    "url": "https://framinghamma.granicus.com",
+    "population": 68423
+  },
+  {
+    "city_name": "Pasco",
+    "state": "WA",
+    "city_slug": "pasco",
+    "vendor": "civicweb",
+    "url": "https://missouricitytx.civicweb.net",
+    "population": 68191
+  },
+  {
+    "city_name": "Tomball",
+    "state": "TX",
+    "city_slug": "tomball-tx",
+    "vendor": "municode",
+    "url": "https://tomball-tx.municodemeetings.com",
+    "population": 68059
+  },
+  {
+    "city_name": "Layton",
+    "state": "UT",
+    "city_slug": "laytonut",
+    "vendor": "civicclerk",
+    "url": "https://laytonut.civicclerk.com",
+    "population": 67651
+  },
+  {
+    "city_name": "Matthews",
+    "state": "NC",
+    "city_slug": "matthewsnc",
+    "vendor": "granicus",
+    "url": "https://matthewsnc.granicus.com",
+    "population": 67626
+  },
+  {
+    "city_name": "La Habra",
+    "state": "CA",
+    "city_slug": "ca-lahabra",
+    "vendor": "civicplus",
+    "url": "https://ca-lahabra.civicplus.com",
+    "population": 67619
+  },
+  {
+    "city_name": "Columbus",
+    "state": "IN",
+    "city_slug": "columbusin",
+    "vendor": "granicus",
+    "url": "https://columbusin.granicus.com",
+    "population": 67468
+  },
+  {
+    "city_name": "Castle Rock",
+    "state": "CO",
+    "city_slug": "castlerock-co",
+    "vendor": "granicus",
+    "url": "https://castlerock-co.granicus.com",
+    "population": 67419
+  },
+  {
+    "city_name": "Mount Vernon",
+    "state": "NY",
+    "city_slug": "mountvernonny",
+    "vendor": "legistar",
+    "url": "https://mountvernonny.legistar.com",
+    "population": 67100
+  },
+  {
+    "city_name": "Huntington Station",
+    "state": "NY",
+    "city_slug": "huntingtonny",
+    "vendor": "granicus",
+    "url": "https://huntingtonny.granicus.com",
+    "population": 67094
+  },
+  {
+    "city_name": "Goodyear",
+    "state": "AZ",
+    "city_slug": "goodyear",
+    "vendor": "granicus",
+    "url": "https://goodyear.granicus.com",
+    "population": 67037
+  },
+  {
+    "city_name": "Stuart",
+    "state": "FL",
+    "city_slug": "stuart",
+    "vendor": "novusagenda",
+    "url": "https://stuart.novusagenda.com",
+    "population": 67021
+  },
+  {
+    "city_name": "West Lafayette",
+    "state": "IN",
+    "city_slug": "westlafayette",
+    "vendor": "granicus",
+    "url": "https://westlafayette.granicus.com",
+    "population": 66972
+  },
+  {
+    "city_name": "Milpitas",
+    "state": "CA",
+    "city_slug": "ca-milpitas",
+    "vendor": "civicplus",
+    "url": "https://ca-milpitas.civicplus.com",
+    "population": 66943
+  },
+  {
+    "city_name": "Lebanon",
+    "state": "PA",
+    "city_slug": "mtlebanon",
+    "vendor": "granicus",
+    "url": "https://mtlebanon.granicus.com",
+    "population": 66923
+  },
+  {
+    "city_name": "Yorba Linda",
+    "state": "CA",
+    "city_slug": "yorbalinda",
+    "vendor": "granicus",
+    "url": "https://yorbalinda.granicus.com",
+    "population": 66570
+  },
+  {
+    "city_name": "Union City",
+    "state": "NJ",
+    "city_slug": "unioncity",
+    "vendor": "novusagenda",
+    "url": "https://unioncity.novusagenda.com",
+    "population": 66515
+  },
+  {
+    "city_name": "Cocoa",
+    "state": "FL",
+    "city_slug": "cocoa",
+    "vendor": "granicus",
+    "url": "https://cocoa.granicus.com",
+    "population": 65760
+  },
+  {
+    "city_name": "Glen Allen",
+    "state": "VA",
+    "city_slug": "glendaleca",
+    "vendor": "primegov",
+    "url": "https://glendaleca.primegov.com",
+    "population": 65336
+  },
+  {
+    "city_name": "Portland",
+    "state": "ME",
+    "city_slug": "support",
+    "vendor": "granicus",
+    "url": "https://support.granicus.com",
+    "population": 65261
+  },
+  {
+    "city_name": "Weatherford",
+    "state": "TX",
+    "city_slug": "weatherford",
+    "vendor": "granicus",
+    "url": "https://weatherford.granicus.com",
+    "population": 65228
+  },
+  {
+    "city_name": "Decatur",
+    "state": "AL",
+    "city_slug": "decaturalabamausa",
+    "vendor": "granicus",
+    "url": "https://decaturalabamausa.granicus.com",
+    "population": 64979
+  },
+  {
+    "city_name": "Midland",
+    "state": "MI",
+    "city_slug": "midland",
+    "vendor": "granicus",
+    "url": "https://midland.granicus.com",
+    "population": 64967
+  },
+  {
+    "city_name": "Orland Park",
+    "state": "IL",
+    "city_slug": "orlandpark",
+    "vendor": "legistar",
+    "url": "https://orlandpark.legistar.com",
+    "population": 64769
+  },
+  {
+    "city_name": "Harrisonburg",
+    "state": "VA",
+    "city_slug": "harrisonburg-va",
+    "vendor": "granicus",
+    "url": "https://harrisonburg-va.granicus.com",
+    "population": 64282
+  },
+  {
+    "city_name": "East Orange",
+    "state": "NJ",
+    "city_slug": "eastgreenwichri",
+    "vendor": "novusagenda",
+    "url": "https://eastgreenwichri.novusagenda.com",
+    "population": 64267
+  },
+  {
+    "city_name": "Punta Gorda",
+    "state": "FL",
+    "city_slug": "puntagorda",
+    "vendor": "granicus",
+    "url": "https://puntagorda.granicus.com",
+    "population": 64211
+  },
+  {
+    "city_name": "Venice",
+    "state": "FL",
+    "city_slug": "venice",
+    "vendor": "granicus",
+    "url": "https://venice.granicus.com",
+    "population": 64116
+  },
+  {
+    "city_name": "Buckeye",
+    "state": "AZ",
+    "city_slug": "buckeyeaz",
+    "vendor": "granicus",
+    "url": "https://buckeyeaz.granicus.com",
+    "population": 63868
+  },
+  {
+    "city_name": "San Marcos",
+    "state": "TX",
+    "city_slug": "tx-sanmarcoscity",
+    "vendor": "civicplus",
+    "url": "https://tx-sanmarcoscity.civicplus.com",
+    "population": 63836
+  },
+  {
+    "city_name": "Brunswick",
+    "state": "GA",
+    "city_slug": "brunswick",
+    "vendor": "novusagenda",
+    "url": "https://brunswick.novusagenda.com",
+    "population": 63812
+  },
+  {
+    "city_name": "Madison",
+    "state": "AL",
+    "city_slug": "madisonal",
+    "vendor": "granicus",
+    "url": "https://madisonal.granicus.com",
+    "population": 63731
+  },
+  {
+    "city_name": "La Crosse",
+    "state": "WI",
+    "city_slug": "cityoflacrosse",
+    "vendor": "granicus",
+    "url": "https://cityoflacrosse.granicus.com",
+    "population": 63587
+  },
+  {
+    "city_name": "Altoona",
+    "state": "PA",
+    "city_slug": "altoona",
+    "vendor": "granicus",
+    "url": "https://altoona.granicus.com",
+    "population": 63424
+  },
+  {
+    "city_name": "Laguna Niguel",
+    "state": "CA",
+    "city_slug": "lagunabeachcity",
+    "vendor": "granicus",
+    "url": "https://lagunabeachcity.granicus.com",
+    "population": 63297
+  },
+  {
+    "city_name": "Vienna",
+    "state": "VA",
+    "city_slug": "vienna-va",
+    "vendor": "granicus",
+    "url": "https://vienna-va.granicus.com",
+    "population": 63233
+  },
+  {
+    "city_name": "Florence",
+    "state": "AL",
+    "city_slug": "florenceal",
+    "vendor": "granicus",
+    "url": "https://florenceal.granicus.com",
+    "population": 63217
+  },
+  {
+    "city_name": "Taylor",
+    "state": "MI",
+    "city_slug": "taylor",
+    "vendor": "granicus",
+    "url": "https://taylor.granicus.com",
+    "population": 63131
+  },
+  {
+    "city_name": "Newport Beach",
+    "state": "CA",
+    "city_slug": "newportbeach",
+    "vendor": "granicus",
+    "url": "https://newportbeach.granicus.com",
+    "population": 62946
+  },
+  {
+    "city_name": "Fairbanks",
+    "state": "AK",
+    "city_slug": "fairbanksalaska",
+    "vendor": "granicus",
+    "url": "https://fairbanksalaska.granicus.com",
+    "population": 62735
+  },
+  {
+    "city_name": "Fayetteville",
+    "state": "GA",
+    "city_slug": "cityoffayetteville",
+    "vendor": "legistar",
+    "url": "https://cityoffayetteville.legistar.com",
+    "population": 62578
+  },
+  {
+    "city_name": "Clearfield",
+    "state": "UT",
+    "city_slug": "clearfieldcity",
+    "vendor": "primegov",
+    "url": "https://clearfieldcity.primegov.com",
+    "population": 62494
+  },
+  {
+    "city_name": "Middletown",
+    "state": "NY",
+    "city_slug": "middletown",
+    "vendor": "granicus",
+    "url": "https://middletown.granicus.com",
+    "population": 62197
+  },
+  {
+    "city_name": "Lakewood",
+    "state": "WA",
+    "city_slug": "onelakewood",
+    "vendor": "granicus",
+    "url": "https://onelakewood.granicus.com",
+    "population": 62135
+  },
+  {
+    "city_name": "Rosemead",
+    "state": "CA",
+    "city_slug": "cityofrosemead",
+    "vendor": "granicus",
+    "url": "https://cityofrosemead.granicus.com",
+    "population": 62097
+  },
+  {
+    "city_name": "North Port",
+    "state": "FL",
+    "city_slug": "cityofnorthport",
+    "vendor": "granicus",
+    "url": "https://cityofnorthport.granicus.com",
+    "population": 62009
+  },
+  {
+    "city_name": "Griffin",
+    "state": "GA",
+    "city_slug": "cityofgriffin",
+    "vendor": "granicus",
+    "url": "https://cityofgriffin.granicus.com",
+    "population": 61966
+  },
+  {
+    "city_name": "Port Orchard",
+    "state": "WA",
+    "city_slug": "portorchard",
+    "vendor": "granicus",
+    "url": "https://portorchard.granicus.com",
+    "population": 61951
+  },
+  {
+    "city_name": "Ormond Beach",
+    "state": "FL",
+    "city_slug": "fl-ormondbeach",
+    "vendor": "civicplus",
+    "url": "https://fl-ormondbeach.civicplus.com",
+    "population": 61891
+  },
+  {
+    "city_name": "Carson City",
+    "state": "NV",
+    "city_slug": "carsoncity",
+    "vendor": "granicus",
+    "url": "https://carsoncity.granicus.com",
+    "population": 61818
+  },
+  {
+    "city_name": "North Richland Hills",
+    "state": "TX",
+    "city_slug": "tx-northrichlandhillsed",
+    "vendor": "civicplus",
+    "url": "https://tx-northrichlandhillsed.civicplus.com",
+    "population": 61653
+  },
+  {
+    "city_name": "Deland",
+    "state": "FL",
+    "city_slug": "delandfl",
+    "vendor": "granicus",
+    "url": "https://delandfl.granicus.com",
+    "population": 61526
+  },
+  {
+    "city_name": "Mansfield",
+    "state": "TX",
+    "city_slug": "mansfieldtx",
+    "vendor": "granicus",
+    "url": "https://mansfieldtx.granicus.com",
+    "population": 61361
+  },
+  {
+    "city_name": "Eden Prairie",
+    "state": "MN",
+    "city_slug": "eden-prairie",
+    "vendor": "granicus",
+    "url": "https://eden-prairie.granicus.com",
+    "population": 60797
+  },
+  {
+    "city_name": "Fond Du Lac",
+    "state": "WI",
+    "city_slug": "fonddulac",
+    "vendor": "granicus",
+    "url": "https://fonddulac.granicus.com",
+    "population": 60763
+  },
+  {
+    "city_name": "Rancho Cordova",
+    "state": "CA",
+    "city_slug": "ranchocordovaca",
+    "vendor": "civicclerk",
+    "url": "https://ranchocordovaca.civicclerk.com",
+    "population": 60722
+  },
+  {
+    "city_name": "Cupertino",
+    "state": "CA",
+    "city_slug": "cupertino",
+    "vendor": "granicus",
+    "url": "https://cupertino.granicus.com",
+    "population": 60717
+  },
+  {
+    "city_name": "Texarkana",
+    "state": "TX",
+    "city_slug": "tx-texarkana",
+    "vendor": "civicplus",
+    "url": "https://tx-texarkana.civicplus.com",
+    "population": 60677
+  },
+  {
+    "city_name": "Snohomish",
+    "state": "WA",
+    "city_slug": "snohomish",
+    "vendor": "granicus",
+    "url": "https://snohomish.granicus.com",
+    "population": 60670
+  },
+  {
+    "city_name": "Pasadena",
+    "state": "MD",
+    "city_slug": "pasadena",
+    "vendor": "granicus",
+    "url": "https://pasadena.granicus.com",
+    "population": 60576
+  },
+  {
+    "city_name": "Bristol",
+    "state": "CT",
+    "city_slug": "bristolct",
+    "vendor": "civicclerk",
+    "url": "https://bristolct.civicclerk.com",
+    "population": 60448
+  },
+  {
+    "city_name": "Bellevue",
+    "state": "NE",
+    "city_slug": "bellevue",
+    "vendor": "granicus",
+    "url": "https://bellevue.granicus.com",
+    "population": 60409
+  },
+  {
+    "city_name": "Danville",
+    "state": "VA",
+    "city_slug": "va-danvilleparks",
+    "vendor": "civicplus",
+    "url": "https://va-danvilleparks.civicplus.com",
+    "population": 60391
+  },
+  {
+    "city_name": "Powder Springs",
+    "state": "GA",
+    "city_slug": "powd",
+    "vendor": "legistar",
+    "url": "https://powd.legistar.com",
+    "population": 60347
+  },
+  {
+    "city_name": "Burnsville",
+    "state": "MN",
+    "city_slug": "burnsville",
+    "vendor": "civicweb",
+    "url": "https://burnsville.civicweb.net",
+    "population": 60291
+  },
+  {
+    "city_name": "Monterey Park",
+    "state": "CA",
+    "city_slug": "monterey-park",
+    "vendor": "granicus",
+    "url": "https://monterey-park.granicus.com",
+    "population": 60238
+  },
+  {
+    "city_name": "Petersburg",
+    "state": "VA",
+    "city_slug": "petersburg",
+    "vendor": "legistar",
+    "url": "https://petersburg.legistar.com",
+    "population": 60032
+  },
+  {
+    "city_name": "San Pablo",
+    "state": "CA",
+    "city_slug": "sanpablo",
+    "vendor": "granicus",
+    "url": "https://sanpablo.granicus.com",
+    "population": 59861
+  },
+  {
+    "city_name": "Wilson",
+    "state": "NC",
+    "city_slug": "wilson",
+    "vendor": "granicus",
+    "url": "https://wilson.granicus.com",
+    "population": 59853
+  },
+  {
+    "city_name": "Burleson",
+    "state": "TX",
+    "city_slug": "burlesontx",
+    "vendor": "granicus",
+    "url": "https://burlesontx.granicus.com",
+    "population": 59744
+  },
+  {
+    "city_name": "Azusa",
+    "state": "CA",
+    "city_slug": "azusa",
+    "vendor": "granicus",
+    "url": "https://azusa.granicus.com",
+    "population": 59705
+  },
+  {
+    "city_name": "Lilburn",
+    "state": "GA",
+    "city_slug": "ga-lilburn",
+    "vendor": "civicplus",
+    "url": "https://ga-lilburn.civicplus.com",
+    "population": 59660
+  },
+  {
+    "city_name": "Newark",
+    "state": "OH",
+    "city_slug": "newark",
+    "vendor": "granicus",
+    "url": "https://newark.granicus.com",
+    "population": 59605
+  },
+  {
+    "city_name": "Lancaster",
+    "state": "OH",
+    "city_slug": "cityoflancasterca",
+    "vendor": "primegov",
+    "url": "https://cityoflancasterca.primegov.com",
+    "population": 59570
+  },
+  {
+    "city_name": "Malden",
+    "state": "MA",
+    "city_slug": "cityofmalden",
+    "vendor": "legistar",
+    "url": "https://cityofmalden.legistar.com",
+    "population": 59503
+  },
+  {
+    "city_name": "Carmichael",
+    "state": "CA",
+    "city_slug": "carmel",
+    "vendor": "novusagenda",
+    "url": "https://carmel.novusagenda.com",
+    "population": 59418
+  },
+  {
+    "city_name": "Lake Forest",
+    "state": "CA",
+    "city_slug": "lakeforest",
+    "vendor": "primegov",
+    "url": "https://lakeforest.primegov.com",
+    "population": 59182
+  },
+  {
+    "city_name": "Albany",
+    "state": "OR",
+    "city_slug": "albanyca",
+    "vendor": "granicus",
+    "url": "https://albanyca.granicus.com",
+    "population": 58967
+  },
+  {
+    "city_name": "Bozeman",
+    "state": "MT",
+    "city_slug": "bozeman",
+    "vendor": "granicus",
+    "url": "https://bozeman.granicus.com",
+    "population": 58934
+  },
+  {
+    "city_name": "Alexandria",
+    "state": "LA",
+    "city_slug": "alexandria",
+    "vendor": "granicus",
+    "url": "https://alexandria.granicus.com",
+    "population": 58923
+  },
+  {
+    "city_name": "Martinsburg",
+    "state": "WV",
+    "city_slug": "martinsburgwv",
+    "vendor": "granicus",
+    "url": "https://martinsburgwv.granicus.com",
+    "population": 58793
+  },
+  {
+    "city_name": "Novato",
+    "state": "CA",
+    "city_slug": "novato",
+    "vendor": "granicus",
+    "url": "https://novato.granicus.com",
+    "population": 58652
+  },
+  {
+    "city_name": "Grove City",
+    "state": "OH",
+    "city_slug": "groveport",
+    "vendor": "legistar",
+    "url": "https://groveport.legistar.com",
+    "population": 58424
+  },
+  {
+    "city_name": "Farmington",
+    "state": "NM",
+    "city_slug": "farmington",
+    "vendor": "granicus",
+    "url": "https://farmington.granicus.com",
+    "population": 57780
+  },
+  {
+    "city_name": "Riverdale",
+    "state": "GA",
+    "city_slug": "ga-riverdalearts",
+    "vendor": "civicplus",
+    "url": "https://ga-riverdalearts.civicplus.com",
+    "population": 57733
+  },
+  {
+    "city_name": "Lake City",
+    "state": "FL",
+    "city_slug": "lake-citymn",
+    "vendor": "granicus",
+    "url": "https://lake-citymn.granicus.com",
+    "population": 57683
+  },
+  {
+    "city_name": "Golden",
+    "state": "CO",
+    "city_slug": "goldenco",
+    "vendor": "granicus",
+    "url": "https://goldenco.granicus.com",
+    "population": 57589
+  },
+  {
+    "city_name": "Ames",
+    "state": "IA",
+    "city_slug": "ames",
+    "vendor": "granicus",
+    "url": "https://ames.granicus.com",
+    "population": 57453
+  },
+  {
+    "city_name": "Gilroy",
+    "state": "CA",
+    "city_slug": "gilroy",
+    "vendor": "primegov",
+    "url": "https://gilroy.primegov.com",
+    "population": 57349
+  },
+  {
+    "city_name": "Rocklin",
+    "state": "CA",
+    "city_slug": "rocklin-ca",
+    "vendor": "granicus",
+    "url": "https://rocklin-ca.granicus.com",
+    "population": 57307
+  },
+  {
+    "city_name": "Westminster",
+    "state": "MD",
+    "city_slug": "cityofwestminster",
+    "vendor": "primegov",
+    "url": "https://cityofwestminster.primegov.com",
+    "population": 57154
+  },
+  {
+    "city_name": "Colton",
+    "state": "CA",
+    "city_slug": "ca-colton",
+    "vendor": "civicplus",
+    "url": "https://ca-colton.civicplus.com",
+    "population": 56505
+  },
+  {
+    "city_name": "Altamonte Springs",
+    "state": "FL",
+    "city_slug": "fl-altamontesprings",
+    "vendor": "civicplus",
+    "url": "https://fl-altamontesprings.civicplus.com",
+    "population": 56439
+  },
+  {
+    "city_name": "Plymouth",
+    "state": "MA",
+    "city_slug": "plymouthtown",
+    "vendor": "novusagenda",
+    "url": "https://plymouthtown.novusagenda.com",
+    "population": 56271
+  },
+  {
+    "city_name": "Rockwall",
+    "state": "TX",
+    "city_slug": "rockwall-tx",
+    "vendor": "granicus",
+    "url": "https://rockwall-tx.granicus.com",
+    "population": 56131
+  },
+  {
+    "city_name": "Palm Desert",
+    "state": "CA",
+    "city_slug": "cityofpalmdesert",
+    "vendor": "granicus",
+    "url": "https://cityofpalmdesert.granicus.com",
+    "population": 56047
+  },
+  {
+    "city_name": "Blue Springs",
+    "state": "MO",
+    "city_slug": "bluespringsgov",
+    "vendor": "granicus",
+    "url": "https://bluespringsgov.granicus.com",
+    "population": 56014
+  },
+  {
+    "city_name": "Fountain Valley",
+    "state": "CA",
+    "city_slug": "fountainvalley",
+    "vendor": "granicus",
+    "url": "https://fountainvalley.granicus.com",
+    "population": 56004
+  },
+  {
+    "city_name": "San Benito",
+    "state": "TX",
+    "city_slug": "tx-sanbenito",
+    "vendor": "civicplus",
+    "url": "https://tx-sanbenito.civicplus.com",
+    "population": 55878
+  },
+  {
+    "city_name": "Monroe",
+    "state": "MI",
+    "city_slug": "cityofmonroe",
+    "vendor": "granicus",
+    "url": "https://cityofmonroe.granicus.com",
+    "population": 55814
+  },
+  {
+    "city_name": "Lake Havasu City",
+    "state": "AZ",
+    "city_slug": "lakehavasucity",
+    "vendor": "granicus",
+    "url": "https://lakehavasucity.granicus.com",
+    "population": 55808
+  },
+  {
+    "city_name": "Richmond",
+    "state": "KY",
+    "city_slug": "richmond",
+    "vendor": "granicus",
+    "url": "https://richmond.granicus.com",
+    "population": 55803
+  },
+  {
+    "city_name": "Zanesville",
+    "state": "OH",
+    "city_slug": "oh-zanesville",
+    "vendor": "civicplus",
+    "url": "https://oh-zanesville.civicplus.com",
+    "population": 55643
+  },
+  {
+    "city_name": "Gretna",
+    "state": "LA",
+    "city_slug": "gretnala",
+    "vendor": "granicus",
+    "url": "https://gretnala.granicus.com",
+    "population": 55581
+  },
+  {
+    "city_name": "West Haven",
+    "state": "CT",
+    "city_slug": "westhaven",
+    "vendor": "primegov",
+    "url": "https://westhaven.primegov.com",
+    "population": 55564
+  },
+  {
+    "city_name": "Chicopee",
+    "state": "MA",
+    "city_slug": "chico-ca",
+    "vendor": "granicus",
+    "url": "https://chico-ca.granicus.com",
+    "population": 55307
+  },
+  {
+    "city_name": "Auburn",
+    "state": "AL",
+    "city_slug": "auburnwa",
+    "vendor": "novusagenda",
+    "url": "https://auburnwa.novusagenda.com",
+    "population": 55272
+  },
+  {
+    "city_name": "Lansdale",
+    "state": "PA",
+    "city_slug": "pa-lansdaleborough",
+    "vendor": "civicplus",
+    "url": "https://pa-lansdaleborough.civicplus.com",
+    "population": 55138
+  },
+  {
+    "city_name": "Prescott",
+    "state": "AZ",
+    "city_slug": "prescottvalley",
+    "vendor": "primegov",
+    "url": "https://prescottvalley.primegov.com",
+    "population": 55064
+  },
+  {
+    "city_name": "Fairfield",
+    "state": "CT",
+    "city_slug": "fairfield",
+    "vendor": "novusagenda",
+    "url": "https://fairfield.novusagenda.com",
+    "population": 55023
+  },
+  {
+    "city_name": "Rowlett",
+    "state": "TX",
+    "city_slug": "tx-rowlett",
+    "vendor": "civicplus",
+    "url": "https://tx-rowlett.civicplus.com",
+    "population": 54963
+  },
+  {
+    "city_name": "Marion",
+    "state": "OH",
+    "city_slug": "marionfl",
+    "vendor": "legistar",
+    "url": "https://marionfl.legistar.com",
+    "population": 54790
+  },
+  {
+    "city_name": "Titusville",
+    "state": "FL",
+    "city_slug": "fl-titusville",
+    "vendor": "civicplus",
+    "url": "https://fl-titusville.civicplus.com",
+    "population": 54767
+  },
+  {
+    "city_name": "Clayton",
+    "state": "NC",
+    "city_slug": "claycounty",
+    "vendor": "novusagenda",
+    "url": "https://claycounty.novusagenda.com",
+    "population": 54573
+  },
+  {
+    "city_name": "Greenwood",
+    "state": "SC",
+    "city_slug": "eastgreenwichri",
+    "vendor": "novusagenda",
+    "url": "https://eastgreenwichri.novusagenda.com",
+    "population": 54394
+  },
+  {
+    "city_name": "Jackson",
+    "state": "NJ",
+    "city_slug": "jacksonco",
+    "vendor": "legistar",
+    "url": "https://jacksonco.legistar.com",
+    "population": 54392
+  },
+  {
+    "city_name": "Paramount",
+    "state": "CA",
+    "city_slug": "paramountcity",
+    "vendor": "primegov",
+    "url": "https://paramountcity.primegov.com",
+    "population": 54099
+  },
+  {
+    "city_name": "Wilmington",
+    "state": "CA",
+    "city_slug": "wilmington",
+    "vendor": "granicus",
+    "url": "https://wilmington.granicus.com",
+    "population": 53815
+  },
+  {
+    "city_name": "Wellington",
+    "state": "FL",
+    "city_slug": "wellington",
+    "vendor": "granicus",
+    "url": "https://wellington.granicus.com",
+    "population": 53718
+  },
+  {
+    "city_name": "Goose Creek",
+    "state": "SC",
+    "city_slug": "cityofgoosecreek",
+    "vendor": "granicus",
+    "url": "https://cityofgoosecreek.granicus.com",
+    "population": 53588
+  },
+  {
+    "city_name": "Helena",
+    "state": "MT",
+    "city_slug": "helena",
+    "vendor": "novusagenda",
+    "url": "https://helena.novusagenda.com",
+    "population": 53568
+  },
+  {
+    "city_name": "Danville",
+    "state": "CA",
+    "city_slug": "danville-ca",
+    "vendor": "granicus",
+    "url": "https://danville-ca.granicus.com",
+    "population": 53554
+  },
+  {
+    "city_name": "Blacksburg",
+    "state": "VA",
+    "city_slug": "blacksburg",
+    "vendor": "granicus",
+    "url": "https://blacksburg.granicus.com",
+    "population": 53311
+  },
+  {
+    "city_name": "Loveland",
+    "state": "OH",
+    "city_slug": "oh-loveland",
+    "vendor": "civicplus",
+    "url": "https://oh-loveland.civicplus.com",
+    "population": 53267
+  },
+  {
+    "city_name": "Goleta",
+    "state": "CA",
+    "city_slug": "goleta",
+    "vendor": "granicus",
+    "url": "https://goleta.granicus.com",
+    "population": 53217
+  },
+  {
+    "city_name": "Santa Clarita",
+    "state": "CA",
+    "city_slug": "santaclaracounty",
+    "vendor": "primegov",
+    "url": "https://santaclaracounty.primegov.com",
+    "population": 53134
+  },
+  {
+    "city_name": "Wake Forest",
+    "state": "NC",
+    "city_slug": "wake-forest",
+    "vendor": "granicus",
+    "url": "https://wake-forest.granicus.com",
+    "population": 53078
+  },
+  {
+    "city_name": "Union",
+    "state": "NJ",
+    "city_slug": "unioncity",
+    "vendor": "novusagenda",
+    "url": "https://unioncity.novusagenda.com",
+    "population": 53053
+  },
+  {
+    "city_name": "Stillwater",
+    "state": "OK",
+    "city_slug": "cityofstillwater",
+    "vendor": "granicus",
+    "url": "https://cityofstillwater.granicus.com",
+    "population": 53050
+  },
+  {
+    "city_name": "Shelby",
+    "state": "NC",
+    "city_slug": "shelby",
+    "vendor": "granicus",
+    "url": "https://shelby.granicus.com",
+    "population": 52833
+  },
+  {
+    "city_name": "Nacogdoches",
+    "state": "TX",
+    "city_slug": "nacogdochestx",
+    "vendor": "civicclerk",
+    "url": "https://nacogdochestx.civicclerk.com",
+    "population": 52598
+  },
+  {
+    "city_name": "Grand Island",
+    "state": "NE",
+    "city_slug": "grand-island",
+    "vendor": "granicus",
+    "url": "https://grand-island.granicus.com",
+    "population": 52565
+  },
+  {
+    "city_name": "Seminole",
+    "state": "FL",
+    "city_slug": "seminolecountyfl",
+    "vendor": "granicus",
+    "url": "https://seminolecountyfl.granicus.com",
+    "population": 52523
+  },
+  {
+    "city_name": "Glenview",
+    "state": "IL",
+    "city_slug": "glenview",
+    "vendor": "granicus",
+    "url": "https://glenview.granicus.com",
+    "population": 52440
+  },
+  {
+    "city_name": "Princeton",
+    "state": "NJ",
+    "city_slug": "princetonnj",
+    "vendor": "legistar",
+    "url": "https://princetonnj.legistar.com",
+    "population": 52304
+  },
+  {
+    "city_name": "Lakewood",
+    "state": "OH",
+    "city_slug": "onelakewood",
+    "vendor": "granicus",
+    "url": "https://onelakewood.granicus.com",
+    "population": 52244
+  },
+  {
+    "city_name": "Huntersville",
+    "state": "NC",
+    "city_slug": "huntersville",
+    "vendor": "civicclerk",
+    "url": "https://huntersvillenc.civicclerk.com",
+    "population": 52133
+  },
+  {
+    "city_name": "Placentia",
+    "state": "CA",
+    "city_slug": "placentia",
+    "vendor": "granicus",
+    "url": "https://placentia.granicus.com",
+    "population": 52033
+  },
+  {
+    "city_name": "Twin Falls",
+    "state": "ID",
+    "city_slug": "twinfalls",
+    "vendor": "granicus",
+    "url": "https://twinfalls.granicus.com",
+    "population": 52010
+  },
+  {
+    "city_name": "Fort Walton Beach",
+    "state": "FL",
+    "city_slug": "fortwaltonbeachcityfl",
+    "vendor": "iqm2",
+    "url": "https://fortwaltonbeachcityfl.iqm2.com",
+    "population": 51828
+  },
+  {
+    "city_name": "Quincy",
+    "state": "IL",
+    "city_slug": "quincyil",
+    "vendor": "granicus",
+    "url": "https://quincyil.granicus.com",
+    "population": 51810
+  },
+  {
+    "city_name": "Revere",
+    "state": "MA",
+    "city_slug": "revere",
+    "vendor": "granicus",
+    "url": "https://revere.granicus.com",
+    "population": 51808
+  },
+  {
+    "city_name": "Maricopa",
+    "state": "AZ",
+    "city_slug": "maricopa",
+    "vendor": "legistar",
+    "url": "https://maricopa.legistar.com",
+    "population": 51612
+  },
+  {
+    "city_name": "Salina",
+    "state": "KS",
+    "city_slug": "salina-ks",
+    "vendor": "granicus",
+    "url": "https://salina-ks.granicus.com",
+    "population": 51499
+  },
+  {
+    "city_name": "Lombard",
+    "state": "IL",
+    "city_slug": "villageoflombard",
+    "vendor": "granicus",
+    "url": "https://villageoflombard.granicus.com",
+    "population": 51468
+  },
+  {
+    "city_name": "Oregon City",
+    "state": "OR",
+    "city_slug": "oregon-city",
+    "vendor": "granicus",
+    "url": "https://oregon-city.granicus.com",
+    "population": 51359
+  },
+  {
+    "city_name": "Morrisville",
+    "state": "PA",
+    "city_slug": "morrisville",
+    "vendor": "granicus",
+    "url": "https://morrisville.granicus.com",
+    "population": 51334
+  },
+  {
+    "city_name": "East Lansing",
+    "state": "MI",
+    "city_slug": "eastlansing",
+    "vendor": "granicus",
+    "url": "https://eastlansing.granicus.com",
+    "population": 51302
+  },
+  {
+    "city_name": "Glendora",
+    "state": "CA",
+    "city_slug": "glendaleca",
+    "vendor": "primegov",
+    "url": "https://glendaleca.primegov.com",
+    "population": 51180
+  },
+  {
+    "city_name": "Cathedral City",
+    "state": "CA",
+    "city_slug": "cathedralcity",
+    "vendor": "primegov",
+    "url": "https://cathedralcity.primegov.com",
+    "population": 51151
+  },
+  {
+    "city_name": "Kingman",
+    "state": "AZ",
+    "city_slug": "kingman",
+    "vendor": "novusagenda",
+    "url": "https://kingman.novusagenda.com",
+    "population": 50760
+  },
+  {
+    "city_name": "South Jordan",
+    "state": "UT",
+    "city_slug": "ut-southjordan",
+    "vendor": "civicplus",
+    "url": "https://ut-southjordan.civicplus.com",
+    "population": 50566
+  },
+  {
+    "city_name": "Columbus",
+    "state": "MS",
+    "city_slug": "columbus",
+    "vendor": "legistar",
+    "url": "https://columbus.legistar.com",
+    "population": 50547
+  },
+  {
+    "city_name": "Hanover",
+    "state": "PA",
+    "city_slug": "pa-westhanovertownship",
+    "vendor": "civicplus",
+    "url": "https://pa-westhanovertownship.civicplus.com",
+    "population": 50292
+  },
+  {
+    "city_name": "Crossville",
+    "state": "TN",
+    "city_slug": "crossvilletn",
+    "vendor": "legistar",
+    "url": "https://crossvilletn.legistar.com",
+    "population": 50276
+  },
+  {
+    "city_name": "Brookline",
+    "state": "MA",
+    "city_slug": "brooklinema",
+    "vendor": "granicus",
+    "url": "https://brooklinema.granicus.com",
+    "population": 49990
+  },
+  {
+    "city_name": "Kalispell",
+    "state": "MT",
+    "city_slug": "kalispell",
+    "vendor": "granicus",
+    "url": "https://kalispell.granicus.com",
+    "population": 49693
+  },
+  {
+    "city_name": "Galveston",
+    "state": "TX",
+    "city_slug": "galvestoncountytx",
+    "vendor": "legistar",
+    "url": "https://galvestoncountytx.legistar.com",
+    "population": 49659
+  },
+  {
+    "city_name": "Elmira",
+    "state": "NY",
+    "city_slug": "cityofelmira",
+    "vendor": "granicus",
+    "url": "https://cityofelmira.granicus.com",
+    "population": 49642
+  },
+  {
+    "city_name": "Ankeny",
+    "state": "IA",
+    "city_slug": "ankenyiowa",
+    "vendor": "novusagenda",
+    "url": "https://ankenyiowa.novusagenda.com",
+    "population": 49581
+  },
+  {
+    "city_name": "Orange",
+    "state": "TX",
+    "city_slug": "cityoforange",
+    "vendor": "granicus",
+    "url": "https://cityoforange.granicus.com",
+    "population": 49572
+  },
+  {
+    "city_name": "North Fort Myers",
+    "state": "FL",
+    "city_slug": "cityofnorthport",
+    "vendor": "legistar",
+    "url": "https://cityofnorthport.legistar.com",
+    "population": 49442
+  },
+  {
+    "city_name": "Cerritos",
+    "state": "CA",
+    "city_slug": "cerritos",
+    "vendor": "granicus",
+    "url": "https://cerritos.granicus.com",
+    "population": 49399
+  },
+  {
+    "city_name": "Apache Junction",
+    "state": "AZ",
+    "city_slug": "apachejunction",
+    "vendor": "granicus",
+    "url": "https://apachejunction.granicus.com",
+    "population": 49387
+  },
+  {
+    "city_name": "Washington",
+    "state": "PA",
+    "city_slug": "washco",
+    "vendor": "granicus",
+    "url": "https://washco.granicus.com",
+    "population": 49331
+  },
+  {
+    "city_name": "Smyrna",
+    "state": "TN",
+    "city_slug": "smyrna",
+    "vendor": "granicus",
+    "url": "https://smyrna.granicus.com",
+    "population": 49322
+  },
+  {
+    "city_name": "Westminster",
+    "state": "CO",
+    "city_slug": "westminsterco",
+    "vendor": "granicus",
+    "url": "https://westminsterco.granicus.com",
+    "population": 49261
+  },
+  {
+    "city_name": "Longview",
+    "state": "WA",
+    "city_slug": "longview-wa",
+    "vendor": "granicus",
+    "url": "https://longview-wa.granicus.com",
+    "population": 49205
+  },
+  {
+    "city_name": "Encinitas",
+    "state": "CA",
+    "city_slug": "encinitas",
+    "vendor": "granicus",
+    "url": "https://encinitas.granicus.com",
+    "population": 49121
+  },
+  {
+    "city_name": "Beaufort",
+    "state": "SC",
+    "city_slug": "beaufort",
+    "vendor": "novusagenda",
+    "url": "https://beaufort.novusagenda.com",
+    "population": 49114
+  },
+  {
+    "city_name": "Chesterfield",
+    "state": "VA",
+    "city_slug": "chesterfieldva",
+    "vendor": "granicus",
+    "url": "https://chesterfieldva.granicus.com",
+    "population": 49080
+  },
+  {
+    "city_name": "Aliso Viejo",
+    "state": "CA",
+    "city_slug": "alisoviejoca",
+    "vendor": "granicus",
+    "url": "https://alisoviejoca.granicus.com",
+    "population": 49046
+  },
+  {
+    "city_name": "Lehi",
+    "state": "UT",
+    "city_slug": "lehi",
+    "vendor": "granicus",
+    "url": "https://lehi.granicus.com",
+    "population": 49030
+  },
+  {
+    "city_name": "La Mirada",
+    "state": "CA",
+    "city_slug": "cityoflamirada",
+    "vendor": "granicus",
+    "url": "https://cityoflamirada.granicus.com",
+    "population": 49012
+  },
+  {
+    "city_name": "West Bend",
+    "state": "WI",
+    "city_slug": "westalliswi",
+    "vendor": "legistar",
+    "url": "https://westalliswi.legistar.com",
+    "population": 49012
+  },
+  {
+    "city_name": "Kannapolis",
+    "state": "NC",
+    "city_slug": "kannapolis",
+    "vendor": "novusagenda",
+    "url": "https://kannapolis.novusagenda.com",
+    "population": 49010
+  },
+  {
+    "city_name": "Beloit",
+    "state": "WI",
+    "city_slug": "beloit",
+    "vendor": "granicus",
+    "url": "https://beloit.granicus.com",
+    "population": 48929
+  },
+  {
+    "city_name": "Desoto",
+    "state": "TX",
+    "city_slug": "desotobocc",
+    "vendor": "legistar",
+    "url": "https://desotobocc.legistar.com",
+    "population": 48877
+  },
+  {
+    "city_name": "Queen Creek",
+    "state": "AZ",
+    "city_slug": "queencreekaz",
+    "vendor": "granicus",
+    "url": "https://queencreekaz.granicus.com",
+    "population": 48870
+  },
+  {
+    "city_name": "Collierville",
+    "state": "TN",
+    "city_slug": "collierville",
+    "vendor": "granicus",
+    "url": "https://collierville.granicus.com",
+    "population": 48642
+  },
+  {
+    "city_name": "Concord",
+    "state": "NH",
+    "city_slug": "cityofconcord",
+    "vendor": "granicus",
+    "url": "https://cityofconcord.granicus.com",
+    "population": 48532
+  },
+  {
+    "city_name": "Vicksburg",
+    "state": "MS",
+    "city_slug": "vicksburg-ms",
+    "vendor": "granicus",
+    "url": "https://vicksburg-ms.granicus.com",
+    "population": 48264
+  },
+  {
+    "city_name": "Eureka",
+    "state": "CA",
+    "city_slug": "eureka",
+    "vendor": "granicus",
+    "url": "https://eureka.granicus.com",
+    "population": 48128
+  },
+  {
+    "city_name": "Delaware",
+    "state": "OH",
+    "city_slug": "delawareohio",
+    "vendor": "granicus",
+    "url": "https://delawareohio.granicus.com",
+    "population": 48107
+  },
+  {
+    "city_name": "Poway",
+    "state": "CA",
+    "city_slug": "ca-poway",
+    "vendor": "civicplus",
+    "url": "https://ca-poway.civicplus.com",
+    "population": 47904
+  },
+  {
+    "city_name": "The Colony",
+    "state": "TX",
+    "city_slug": "thecolony",
+    "vendor": "granicus",
+    "url": "https://thecolony.granicus.com",
+    "population": 47852
+  },
+  {
+    "city_name": "Covington",
+    "state": "LA",
+    "city_slug": "covingtonwa",
+    "vendor": "primegov",
+    "url": "https://covingtonwa.primegov.com",
+    "population": 47736
+  },
+  {
+    "city_name": "Middletown",
+    "state": "CT",
+    "city_slug": "middletown",
+    "vendor": "granicus",
+    "url": "https://middletown.granicus.com",
+    "population": 47648
+  },
+  {
+    "city_name": "New Albany",
+    "state": "IN",
+    "city_slug": "cityofnewalbany",
+    "vendor": "granicus",
+    "url": "https://cityofnewalbany.granicus.com",
+    "population": 47472
+  },
+  {
+    "city_name": "Roseville",
+    "state": "MI",
+    "city_slug": "roseville",
+    "vendor": "novusagenda",
+    "url": "https://roseville.novusagenda.com",
+    "population": 47388
+  },
+  {
+    "city_name": "Lincoln",
+    "state": "CA",
+    "city_slug": "lincoln",
+    "vendor": "granicus",
+    "url": "https://lincoln.granicus.com",
+    "population": 47354
+  },
+  {
+    "city_name": "Bloomfield",
+    "state": "NJ",
+    "city_slug": "bloomfieldhills",
+    "vendor": "novusagenda",
+    "url": "https://bloomfieldhills.novusagenda.com",
+    "population": 47312
+  },
+  {
+    "city_name": "Monroe",
+    "state": "NY",
+    "city_slug": "monroecounty",
+    "vendor": "novusagenda",
+    "url": "https://monroecounty.novusagenda.com",
+    "population": 47226
+  },
+  {
+    "city_name": "Granbury",
+    "state": "TX",
+    "city_slug": "granbury",
+    "vendor": "granicus",
+    "url": "https://granbury.granicus.com",
+    "population": 47119
+  },
+  {
+    "city_name": "Martinez",
+    "state": "CA",
+    "city_slug": "martinez",
+    "vendor": "granicus",
+    "url": "https://martinez.granicus.com",
+    "population": 47065
+  },
+  {
+    "city_name": "Lenexa",
+    "state": "KS",
+    "city_slug": "lenexaks",
+    "vendor": "civicclerk",
+    "url": "https://lenexaks.civicclerk.com",
+    "population": 46932
+  },
+  {
+    "city_name": "Culver City",
+    "state": "CA",
+    "city_slug": "culver-city",
+    "vendor": "granicus",
+    "url": "https://culver-city.granicus.com",
+    "population": 46915
+  },
+  {
+    "city_name": "Bedford",
+    "state": "TX",
+    "city_slug": "bedfordcounty",
+    "vendor": "primegov",
+    "url": "https://bedfordcounty.primegov.com",
+    "population": 46885
+  },
+  {
+    "city_name": "Richmond",
+    "state": "IN",
+    "city_slug": "richmond",
+    "vendor": "granicus",
+    "url": "https://richmond.granicus.com",
+    "population": 46875
+  },
+  {
+    "city_name": "Pinellas Park",
+    "state": "FL",
+    "city_slug": "pinellas",
+    "vendor": "granicus",
+    "url": "https://pinellas.granicus.com",
+    "population": 46772
+  },
+  {
+    "city_name": "Anoka",
+    "state": "MN",
+    "city_slug": "anoka-k12",
+    "vendor": "granicus",
+    "url": "https://anoka-k12.granicus.com",
+    "population": 46352
+  },
+  {
+    "city_name": "Grapevine",
+    "state": "TX",
+    "city_slug": "tx-grapevinepd",
+    "vendor": "civicplus",
+    "url": "https://tx-grapevinepd.civicplus.com",
+    "population": 46320
+  },
+  {
+    "city_name": "Dekalb",
+    "state": "IL",
+    "city_slug": "dekalbcountyga",
+    "vendor": "granicus",
+    "url": "https://dekalbcountyga.granicus.com",
+    "population": 46272
+  },
+  {
+    "city_name": "West Orange",
+    "state": "NJ",
+    "city_slug": "nj-westorange",
+    "vendor": "civicplus",
+    "url": "https://nj-westorange.civicplus.com",
+    "population": 46182
+  },
+  {
+    "city_name": "Winter Garden",
+    "state": "FL",
+    "city_slug": "winterhaven-fl",
+    "vendor": "granicus",
+    "url": "https://winterhaven-fl.granicus.com",
+    "population": 46083
+  },
+  {
+    "city_name": "Lancaster",
+    "state": "SC",
+    "city_slug": "cityoflancasterca",
+    "vendor": "primegov",
+    "url": "https://cityoflancasterca.primegov.com",
+    "population": 46041
+  },
+  {
+    "city_name": "Dublin",
+    "state": "CA",
+    "city_slug": "dublin",
+    "vendor": "granicus",
+    "url": "https://dublin.granicus.com",
+    "population": 46016
+  },
+  {
+    "city_name": "East Stroudsburg",
+    "state": "PA",
+    "city_slug": "eastgreenwichri",
+    "vendor": "novusagenda",
+    "url": "https://eastgreenwichri.novusagenda.com",
+    "population": 45923
+  },
+  {
+    "city_name": "Westbury",
+    "state": "NY",
+    "city_slug": "cityofwestminster",
+    "vendor": "primegov",
+    "url": "https://cityofwestminster.primegov.com",
+    "population": 45768
+  },
+  {
+    "city_name": "Danville",
+    "state": "IL",
+    "city_slug": "danville-ca",
+    "vendor": "granicus",
+    "url": "https://danville-ca.granicus.com",
+    "population": 45744
+  },
+  {
+    "city_name": "Monroe Township",
+    "state": "NJ",
+    "city_slug": "monroecity",
+    "vendor": "novusagenda",
+    "url": "https://monroecity.novusagenda.com",
+    "population": 45620
+  },
+  {
+    "city_name": "Morgan Hill",
+    "state": "CA",
+    "city_slug": "morgan-hill",
+    "vendor": "legistar",
+    "url": "https://morgan-hill.legistar.com",
+    "population": 45579
+  },
+  {
+    "city_name": "Palm Springs",
+    "state": "CA",
+    "city_slug": "palmsprings",
+    "vendor": "granicus",
+    "url": "https://palmsprings.granicus.com",
+    "population": 45562
+  },
+  {
+    "city_name": "Bloomfield Hills",
+    "state": "MI",
+    "city_slug": "bloomfieldhills",
+    "vendor": "novusagenda",
+    "url": "https://bloomfieldhills.novusagenda.com",
+    "population": 45496
+  },
+  {
+    "city_name": "Cedar Hill",
+    "state": "TX",
+    "city_slug": "tx-cedarhill3",
+    "vendor": "civicplus",
+    "url": "https://tx-cedarhill3.civicplus.com",
+    "population": 45373
+  },
+  {
+    "city_name": "Auburn",
+    "state": "CA",
+    "city_slug": "auburn",
+    "vendor": "granicus",
+    "url": "https://auburn.granicus.com",
+    "population": 45353
+  },
+  {
+    "city_name": "Seguin",
+    "state": "TX",
+    "city_slug": "cityofseguintx",
+    "vendor": "granicus",
+    "url": "https://cityofseguintx.granicus.com",
+    "population": 45341
+  },
+  {
+    "city_name": "Mount Vernon",
+    "state": "WA",
+    "city_slug": "wa-mountvernon",
+    "vendor": "civicplus",
+    "url": "https://wa-mountvernon.civicplus.com",
+    "population": 45330
+  },
+  {
+    "city_name": "Campbell",
+    "state": "CA",
+    "city_slug": "cityofcampbell",
+    "vendor": "granicus",
+    "url": "https://cityofcampbell.granicus.com",
+    "population": 45260
+  },
+  {
+    "city_name": "Moline",
+    "state": "IL",
+    "city_slug": "molineil",
+    "vendor": "granicus",
+    "url": "https://molineil.granicus.com",
+    "population": 45099
+  },
+  {
+    "city_name": "Clovis",
+    "state": "NM",
+    "city_slug": "cityofclovis",
+    "vendor": "granicus",
+    "url": "https://cityofclovis.granicus.com",
+    "population": 45006
+  },
+  {
+    "city_name": "Cape Girardeau",
+    "state": "MO",
+    "city_slug": "cityofcapegirardeau",
+    "vendor": "granicus",
+    "url": "https://cityofcapegirardeau.granicus.com",
+    "population": 44994
+  },
+  {
+    "city_name": "Patchogue",
+    "state": "NY",
+    "city_slug": "ny-patchogue",
+    "vendor": "civicplus",
+    "url": "https://ny-patchogue.civicplus.com",
+    "population": 44837
+  },
+  {
+    "city_name": "Hudson",
+    "state": "FL",
+    "city_slug": "hudson",
+    "vendor": "granicus",
+    "url": "https://hudson.granicus.com",
+    "population": 44792
+  },
+  {
+    "city_name": "Jeffersonville",
+    "state": "IN",
+    "city_slug": "pa-jeffersonvillegolfcourse",
+    "vendor": "civicplus",
+    "url": "https://pa-jeffersonvillegolfcourse.civicplus.com",
+    "population": 44722
+  },
+  {
+    "city_name": "Enfield",
+    "state": "CT",
+    "city_slug": "enfieldct",
+    "vendor": "civicclerk",
+    "url": "https://enfieldct.civicclerk.com",
+    "population": 44654
+  },
+  {
+    "city_name": "Chester",
+    "state": "VA",
+    "city_slug": "chesterfieldva",
+    "vendor": "granicus",
+    "url": "https://chesterfieldva.granicus.com",
+    "population": 44523
+  },
+  {
+    "city_name": "Marion",
+    "state": "IN",
+    "city_slug": "marionfl",
+    "vendor": "legistar",
+    "url": "https://marionfl.legistar.com",
+    "population": 44485
+  },
+  {
+    "city_name": "Fairfield",
+    "state": "OH",
+    "city_slug": "fairborn",
+    "vendor": "granicus",
+    "url": "https://fairborn.granicus.com",
+    "population": 43917
+  },
+  {
+    "city_name": "South El Monte",
+    "state": "CA",
+    "city_slug": "ca-southelmonte",
+    "vendor": "civicplus",
+    "url": "https://ca-southelmonte.civicplus.com",
+    "population": 43896
+  },
+  {
+    "city_name": "Okeechobee",
+    "state": "FL",
+    "city_slug": "okeechobee",
+    "vendor": "granicus",
+    "url": "https://okeechobee.granicus.com",
+    "population": 43841
+  },
+  {
+    "city_name": "Morristown",
+    "state": "NJ",
+    "city_slug": "nj-morristownship",
+    "vendor": "civicplus",
+    "url": "https://nj-morristownship.civicplus.com",
+    "population": 43747
+  },
+  {
+    "city_name": "Beaumont",
+    "state": "CA",
+    "city_slug": "ca-beaumont2",
+    "vendor": "civicplus",
+    "url": "https://ca-beaumont2.civicplus.com",
+    "population": 43605
+  },
+  {
+    "city_name": "Brunswick",
+    "state": "OH",
+    "city_slug": "brunswick-md",
+    "vendor": "granicus",
+    "url": "https://brunswick-md.granicus.com",
+    "population": 43548
+  },
+  {
+    "city_name": "Desert Hot Springs",
+    "state": "CA",
+    "city_slug": "cityofpalmdesert",
+    "vendor": "granicus",
+    "url": "https://cityofpalmdesert.granicus.com",
+    "population": 43525
+  },
+  {
+    "city_name": "Freeport",
+    "state": "NY",
+    "city_slug": "ny-freeport3",
+    "vendor": "civicplus",
+    "url": "https://ny-freeport3.civicplus.com",
+    "population": 43341
+  },
+  {
+    "city_name": "Hopkins",
+    "state": "MN",
+    "city_slug": "hopkinsmn",
+    "vendor": "granicus",
+    "url": "https://hopkinsmn.granicus.com",
+    "population": 43301
+  },
+  {
+    "city_name": "Laurel",
+    "state": "MS",
+    "city_slug": "laurelms",
+    "vendor": "legistar",
+    "url": "https://laurelms.legistar.com",
+    "population": 43244
+  },
+  {
+    "city_name": "Walnut",
+    "state": "CA",
+    "city_slug": "walnutcreek",
+    "vendor": "granicus",
+    "url": "https://walnutcreek.granicus.com",
+    "population": 43079
+  },
+  {
+    "city_name": "Rome",
+    "state": "NY",
+    "city_slug": "romenewyork",
+    "vendor": "novusagenda",
+    "url": "https://romenewyork.novusagenda.com",
+    "population": 42986
+  },
+  {
+    "city_name": "Kyle",
+    "state": "TX",
+    "city_slug": "cityofkyletx",
+    "vendor": "granicus",
+    "url": "https://cityofkyletx.granicus.com",
+    "population": 42954
+  },
+  {
+    "city_name": "Elmwood Park",
+    "state": "IL",
+    "city_slug": "elmwoodpark",
+    "vendor": "granicus",
+    "url": "https://elmwoodpark.granicus.com",
+    "population": 42920
+  },
+  {
+    "city_name": "Arlington",
+    "state": "MA",
+    "city_slug": "arlington",
+    "vendor": "novusagenda",
+    "url": "https://arlington.novusagenda.com",
+    "population": 42844
+  },
+  {
+    "city_name": "Commerce City",
+    "state": "CO",
+    "city_slug": "commerce",
+    "vendor": "granicus",
+    "url": "https://commerce.granicus.com",
+    "population": 42699
+  },
+  {
+    "city_name": "Port Richey",
+    "state": "FL",
+    "city_slug": "cityofnewportrichey",
+    "vendor": "granicus",
+    "url": "https://cityofnewportrichey.granicus.com",
+    "population": 42619
+  },
+  {
+    "city_name": "Newark",
+    "state": "CA",
+    "city_slug": "newark",
+    "vendor": "granicus",
+    "url": "https://newark.granicus.com",
+    "population": 42573
+  },
+  {
+    "city_name": "Egg Harbor Township",
+    "state": "NJ",
+    "city_slug": "villageofeggharbor",
+    "vendor": "granicus",
+    "url": "https://villageofeggharbor.granicus.com",
+    "population": 42532
+  },
+  {
+    "city_name": "Huntington",
+    "state": "NY",
+    "city_slug": "huntingtonny",
+    "vendor": "granicus",
+    "url": "https://huntingtonny.granicus.com",
+    "population": 42230
+  },
+  {
+    "city_name": "Starkville",
+    "state": "MS",
+    "city_slug": "ms-starkville",
+    "vendor": "civicplus",
+    "url": "https://ms-starkville.civicplus.com",
+    "population": 42108
+  },
+  {
+    "city_name": "Winter Springs",
+    "state": "FL",
+    "city_slug": "winterspringsfl",
+    "vendor": "granicus",
+    "url": "https://winterspringsfl.granicus.com",
+    "population": 42012
+  },
+  {
+    "city_name": "Rancho Palos Verdes",
+    "state": "CA",
+    "city_slug": "torranceca",
+    "vendor": "primegov",
+    "url": "https://torranceca.primegov.com",
+    "population": 41804
+  },
+  {
+    "city_name": "Gillette",
+    "state": "WY",
+    "city_slug": "gillettewy",
+    "vendor": "novusagenda",
+    "url": "https://gillettewy.novusagenda.com",
+    "population": 41750
+  },
+  {
+    "city_name": "Urbandale",
+    "state": "IA",
+    "city_slug": "ia-urbandale",
+    "vendor": "civicplus",
+    "url": "https://ia-urbandale.civicplus.com",
+    "population": 41731
+  },
+  {
+    "city_name": "Beverly Hills",
+    "state": "CA",
+    "city_slug": "beverlyhills",
+    "vendor": "granicus",
+    "url": "https://beverlyhills.granicus.com",
+    "population": 41730
+  },
+  {
+    "city_name": "Lake Zurich",
+    "state": "IL",
+    "city_slug": "lakeforest",
+    "vendor": "primegov",
+    "url": "https://lakeforest.primegov.com",
+    "population": 41669
+  },
+  {
+    "city_name": "Prescott Valley",
+    "state": "AZ",
+    "city_slug": "prescottvalley",
+    "vendor": "primegov",
+    "url": "https://prescottvalley.primegov.com",
+    "population": 41635
+  },
+  {
+    "city_name": "Fairmont",
+    "state": "WV",
+    "city_slug": "wv-fairmont",
+    "vendor": "civicplus",
+    "url": "https://wv-fairmont.civicplus.com",
+    "population": 41369
+  },
+  {
+    "city_name": "Georgetown",
+    "state": "KY",
+    "city_slug": "georgetown",
+    "vendor": "novusagenda",
+    "url": "https://georgetown.novusagenda.com",
+    "population": 41342
+  },
+  {
+    "city_name": "Adrian",
+    "state": "MI",
+    "city_slug": "mi-adrianlibrary",
+    "vendor": "civicplus",
+    "url": "https://mi-adrianlibrary.civicplus.com",
+    "population": 41310
+  },
+  {
+    "city_name": "Lakeside",
+    "state": "CA",
+    "city_slug": "lakesidefire",
+    "vendor": "granicus",
+    "url": "https://lakesidefire.granicus.com",
+    "population": 41281
+  },
+  {
+    "city_name": "San Bruno",
+    "state": "CA",
+    "city_slug": "sanbruno",
+    "vendor": "primegov",
+    "url": "https://sanbruno.primegov.com",
+    "population": 41130
+  },
+  {
+    "city_name": "Westfield",
+    "state": "MA",
+    "city_slug": "ma-westfield",
+    "vendor": "civicplus",
+    "url": "https://ma-westfield.civicplus.com",
+    "population": 41117
+  },
+  {
+    "city_name": "Salem",
+    "state": "MA",
+    "city_slug": "winston-salem",
+    "vendor": "granicus",
+    "url": "https://winston-salem.granicus.com",
+    "population": 41109
+  },
+  {
+    "city_name": "Ringgold",
+    "state": "GA",
+    "city_slug": "cityofringgoldga",
+    "vendor": "granicus",
+    "url": "https://cityofringgoldga.granicus.com",
+    "population": 41029
+  },
+  {
+    "city_name": "Davenport",
+    "state": "FL",
+    "city_slug": "davenport",
+    "vendor": "novusagenda",
+    "url": "https://davenport.novusagenda.com",
+    "population": 40984
+  },
+  {
+    "city_name": "Los Altos",
+    "state": "CA",
+    "city_slug": "losaltoshills",
+    "vendor": "granicus",
+    "url": "https://losaltoshills.granicus.com",
+    "population": 40885
+  },
+  {
+    "city_name": "Arlington",
+    "state": "WA",
+    "city_slug": "arlington",
+    "vendor": "novusagenda",
+    "url": "https://arlington.novusagenda.com",
+    "population": 40815
+  },
+  {
+    "city_name": "Moorhead",
+    "state": "MN",
+    "city_slug": "moorheadmn",
+    "vendor": "primegov",
+    "url": "https://moorheadmn.primegov.com",
+    "population": 40766
+  },
+  {
+    "city_name": "Burlingame",
+    "state": "CA",
+    "city_slug": "burlingameca",
+    "vendor": "granicus",
+    "url": "https://burlingameca.granicus.com",
+    "population": 40737
+  },
+  {
+    "city_name": "Casselberry",
+    "state": "FL",
+    "city_slug": "fl-casselberry",
+    "vendor": "civicplus",
+    "url": "https://fl-casselberry.civicplus.com",
+    "population": 40689
+  },
+  {
+    "city_name": "Kearny",
+    "state": "NJ",
+    "city_slug": "kearney",
+    "vendor": "granicus",
+    "url": "https://kearney.granicus.com",
+    "population": 40684
+  },
+  {
+    "city_name": "Bullhead City",
+    "state": "AZ",
+    "city_slug": "bullheadcity",
+    "vendor": "granicus",
+    "url": "https://bullheadcity.granicus.com",
+    "population": 40544
+  },
+  {
+    "city_name": "Fairborn",
+    "state": "OH",
+    "city_slug": "fairborn",
+    "vendor": "granicus",
+    "url": "https://fairborn.granicus.com",
+    "population": 40529
+  },
+  {
+    "city_name": "Menlo Park",
+    "state": "CA",
+    "city_slug": "menlopark",
+    "vendor": "granicus",
+    "url": "https://menlopark.granicus.com",
+    "population": 40526
+  },
+  {
+    "city_name": "Shakopee",
+    "state": "MN",
+    "city_slug": "shakopeemn",
+    "vendor": "granicus",
+    "url": "https://shakopeemn.granicus.com",
+    "population": 40416
+  },
+  {
+    "city_name": "Hinesville",
+    "state": "GA",
+    "city_slug": "ga-hinesville",
+    "vendor": "civicplus",
+    "url": "https://ga-hinesville.civicplus.com",
+    "population": 40302
+  },
+  {
+    "city_name": "Manitowoc",
+    "state": "WI",
+    "city_slug": "manitowoc",
+    "vendor": "granicus",
+    "url": "https://manitowoc.granicus.com",
+    "population": 40220
+  },
+  {
+    "city_name": "Germantown",
+    "state": "TN",
+    "city_slug": "germantown-tn",
+    "vendor": "granicus",
+    "url": "https://germantown-tn.granicus.com",
+    "population": 40131
+  },
+  {
+    "city_name": "North Miami Beach",
+    "state": "FL",
+    "city_slug": "cityofnorthport",
+    "vendor": "legistar",
+    "url": "https://cityofnorthport.legistar.com",
+    "population": 40053
+  },
+  {
+    "city_name": "Daphne",
+    "state": "AL",
+    "city_slug": "al-daphne",
+    "vendor": "civicplus",
+    "url": "https://al-daphne.civicplus.com",
+    "population": 39999
+  },
+  {
+    "city_name": "Plymouth",
+    "state": "MI",
+    "city_slug": "nwsccc-plymouth",
+    "vendor": "granicus",
+    "url": "https://nwsccc-plymouth.granicus.com",
+    "population": 39963
+  },
+  {
+    "city_name": "Northbrook",
+    "state": "IL",
+    "city_slug": "northbrook-il",
+    "vendor": "granicus",
+    "url": "https://northbrook-il.granicus.com",
+    "population": 39936
+  },
+  {
+    "city_name": "Old Bridge",
+    "state": "NJ",
+    "city_slug": "oldbridge",
+    "vendor": "novusagenda",
+    "url": "https://oldbridge.novusagenda.com",
+    "population": 39898
+  },
+  {
+    "city_name": "Romeoville",
+    "state": "IL",
+    "city_slug": "romeoville",
+    "vendor": "legistar",
+    "url": "https://romeoville.legistar.com",
+    "population": 39807
+  },
+  {
+    "city_name": "Draper",
+    "state": "UT",
+    "city_slug": "draper",
+    "vendor": "granicus",
+    "url": "https://draper.granicus.com",
+    "population": 39765
+  },
+  {
+    "city_name": "Moses Lake",
+    "state": "WA",
+    "city_slug": "wa-moseslake",
+    "vendor": "civicplus",
+    "url": "https://wa-moseslake.civicplus.com",
+    "population": 39722
+  },
+  {
+    "city_name": "Russellville",
+    "state": "AR",
+    "city_slug": "ar-russellvillepolice",
+    "vendor": "civicplus",
+    "url": "https://ar-russellvillepolice.civicplus.com",
+    "population": 39658
+  },
+  {
+    "city_name": "Taylors",
+    "state": "SC",
+    "city_slug": "taylor",
+    "vendor": "granicus",
+    "url": "https://taylor.granicus.com",
+    "population": 39561
+  },
+  {
+    "city_name": "Auburn",
+    "state": "NY",
+    "city_slug": "auburnny",
+    "vendor": "granicus",
+    "url": "https://auburnny.granicus.com",
+    "population": 39506
+  },
+  {
+    "city_name": "Beverly",
+    "state": "MA",
+    "city_slug": "ma-beverly",
+    "vendor": "civicplus",
+    "url": "https://ma-beverly.civicplus.com",
+    "population": 39502
+  },
+  {
+    "city_name": "Palmetto",
+    "state": "FL",
+    "city_slug": "palmettobay",
+    "vendor": "granicus",
+    "url": "https://palmettobay.granicus.com",
+    "population": 39457
+  },
+  {
+    "city_name": "New Berlin",
+    "state": "WI",
+    "city_slug": "newberlinwi",
+    "vendor": "civicclerk",
+    "url": "https://newberlinwi.civicclerk.com",
+    "population": 39445
+  },
+  {
+    "city_name": "Hallandale",
+    "state": "FL",
+    "city_slug": "hallandalebeach",
+    "vendor": "legistar",
+    "url": "https://hallandalebeach.legistar.com",
+    "population": 39341
+  },
+  {
+    "city_name": "Monroe",
+    "state": "GA",
+    "city_slug": "monroecity",
+    "vendor": "novusagenda",
+    "url": "https://monroecity.novusagenda.com",
+    "population": 39269
+  },
+  {
+    "city_name": "Brea",
+    "state": "CA",
+    "city_slug": "ca-brea",
+    "vendor": "civicplus",
+    "url": "https://ca-brea.civicplus.com",
+    "population": 39146
+  },
+  {
+    "city_name": "Addison",
+    "state": "IL",
+    "city_slug": "addison",
+    "vendor": "granicus",
+    "url": "https://addison.granicus.com",
+    "population": 39119
+  },
+  {
+    "city_name": "Scarsdale",
+    "state": "NY",
+    "city_slug": "ny-scarsdale",
+    "vendor": "civicplus",
+    "url": "https://ny-scarsdale.civicplus.com",
+    "population": 38982
+  },
+  {
+    "city_name": "Arlington",
+    "state": "TN",
+    "city_slug": "arlington",
+    "vendor": "novusagenda",
+    "url": "https://arlington.novusagenda.com",
+    "population": 38927
+  },
+  {
+    "city_name": "Powell",
+    "state": "OH",
+    "city_slug": "cityofpowell",
+    "vendor": "granicus",
+    "url": "https://cityofpowell.granicus.com",
+    "population": 38821
+  },
+  {
+    "city_name": "Greenwich",
+    "state": "CT",
+    "city_slug": "eastgreenwichri",
+    "vendor": "novusagenda",
+    "url": "https://eastgreenwichri.novusagenda.com",
+    "population": 38819
+  },
+  {
+    "city_name": "Dickinson",
+    "state": "TX",
+    "city_slug": "dickinsontx",
+    "vendor": "granicus",
+    "url": "https://dickinsontx.granicus.com",
+    "population": 38806
+  },
+  {
+    "city_name": "El Dorado Hills",
+    "state": "CA",
+    "city_slug": "eldorado",
+    "vendor": "granicus",
+    "url": "https://eldorado.granicus.com",
+    "population": 38797
+  },
+  {
+    "city_name": "Temple Hills",
+    "state": "MD",
+    "city_slug": "cityoftemple",
+    "vendor": "primegov",
+    "url": "https://cityoftemple.primegov.com",
+    "population": 38792
+  },
+  {
+    "city_name": "Greenville",
+    "state": "MS",
+    "city_slug": "greenville",
+    "vendor": "granicus",
+    "url": "https://greenville.granicus.com",
+    "population": 38755
+  },
+  {
+    "city_name": "Stow",
+    "state": "OH",
+    "city_slug": "stowohio",
+    "vendor": "granicus",
+    "url": "https://stowohio.granicus.com",
+    "population": 38742
+  },
+  {
+    "city_name": "Coppell",
+    "state": "TX",
+    "city_slug": "coppelltx",
+    "vendor": "granicus",
+    "url": "https://coppelltx.granicus.com",
+    "population": 38666
+  },
+  {
+    "city_name": "Lincolnton",
+    "state": "NC",
+    "city_slug": "nc-lincolncounty",
+    "vendor": "civicplus",
+    "url": "https://nc-lincolncounty.civicplus.com",
+    "population": 38570
+  },
+  {
+    "city_name": "Hampton",
+    "state": "GA",
+    "city_slug": "hampton",
+    "vendor": "legistar",
+    "url": "https://hampton.legistar.com",
+    "population": 38569
+  },
+  {
+    "city_name": "Marlborough",
+    "state": "MA",
+    "city_slug": "ma-marlborough",
+    "vendor": "civicplus",
+    "url": "https://ma-marlborough.civicplus.com",
+    "population": 38499
+  },
+  {
+    "city_name": "Mount Airy",
+    "state": "NC",
+    "city_slug": "nc-mountairy",
+    "vendor": "civicplus",
+    "url": "https://nc-mountairy.civicplus.com",
+    "population": 38374
+  },
+  {
+    "city_name": "Howell",
+    "state": "NJ",
+    "city_slug": "nj-howelltownship",
+    "vendor": "civicplus",
+    "url": "https://nj-howelltownship.civicplus.com",
+    "population": 38304
+  },
+  {
+    "city_name": "Stevens Point",
+    "state": "WI",
+    "city_slug": "stevenspoint",
+    "vendor": "granicus",
+    "url": "https://stevenspoint.granicus.com",
+    "population": 38295
+  },
+  {
+    "city_name": "Lancaster",
+    "state": "TX",
+    "city_slug": "lancastersc",
+    "vendor": "novusagenda",
+    "url": "https://lancastersc.novusagenda.com",
+    "population": 38269
+  },
+  {
+    "city_name": "Evans",
+    "state": "GA",
+    "city_slug": "evanscolorado",
+    "vendor": "primegov",
+    "url": "https://evanscolorado.primegov.com",
+    "population": 38168
+  },
+  {
+    "city_name": "Riverton",
+    "state": "UT",
+    "city_slug": "rivertoncity",
+    "vendor": "granicus",
+    "url": "https://rivertoncity.granicus.com",
+    "population": 38168
+  },
+  {
+    "city_name": "Jacksonville",
+    "state": "AR",
+    "city_slug": "ar-jacksonville",
+    "vendor": "civicplus",
+    "url": "https://ar-jacksonville.civicplus.com",
+    "population": 37979
+  },
+  {
+    "city_name": "Kent",
+    "state": "OH",
+    "city_slug": "newkent",
+    "vendor": "novusagenda",
+    "url": "https://newkent.novusagenda.com",
+    "population": 37927
+  },
+  {
+    "city_name": "Winder",
+    "state": "GA",
+    "city_slug": "cityofwinder",
+    "vendor": "granicus",
+    "url": "https://cityofwinder.granicus.com",
+    "population": 37837
+  },
+  {
+    "city_name": "Oak Harbor",
+    "state": "WA",
+    "city_slug": "wa-oakharbor",
+    "vendor": "civicplus",
+    "url": "https://wa-oakharbor.civicplus.com",
+    "population": 37823
+  },
+  {
+    "city_name": "Glen Ellyn",
+    "state": "IL",
+    "city_slug": "glenview",
+    "vendor": "granicus",
+    "url": "https://glenview.granicus.com",
+    "population": 37805
+  },
+  {
+    "city_name": "Salem",
+    "state": "VA",
+    "city_slug": "salem",
+    "vendor": "legistar",
+    "url": "https://salem.legistar.com",
+    "population": 37761
+  },
+  {
+    "city_name": "Kerrville",
+    "state": "TX",
+    "city_slug": "kerrvilletx",
+    "vendor": "granicus",
+    "url": "https://kerrvilletx.granicus.com",
+    "population": 37620
+  },
+  {
+    "city_name": "Norwich",
+    "state": "CT",
+    "city_slug": "ct-norwich",
+    "vendor": "civicplus",
+    "url": "https://ct-norwich.civicplus.com",
+    "population": 37541
+  },
+  {
+    "city_name": "Ocoee",
+    "state": "FL",
+    "city_slug": "fl-ocoee",
+    "vendor": "civicplus",
+    "url": "https://fl-ocoee.civicplus.com",
+    "population": 37500
+  },
+  {
+    "city_name": "Park Ridge",
+    "state": "IL",
+    "city_slug": "parkridge",
+    "vendor": "granicus",
+    "url": "https://parkridge.granicus.com",
+    "population": 37475
+  },
+  {
+    "city_name": "Newport",
+    "state": "KY",
+    "city_slug": "cityofnewport",
+    "vendor": "granicus",
+    "url": "https://cityofnewport.granicus.com",
+    "population": 37337
+  },
+  {
+    "city_name": "Madison",
+    "state": "TN",
+    "city_slug": "tn-madisoncounty",
+    "vendor": "civicplus",
+    "url": "https://tn-madisoncounty.civicplus.com",
+    "population": 37316
+  },
+  {
+    "city_name": "Long Beach",
+    "state": "NY",
+    "city_slug": "longbeach",
+    "vendor": "granicus",
+    "url": "https://longbeach.granicus.com",
+    "population": 37280
+  },
+  {
+    "city_name": "Dunedin",
+    "state": "FL",
+    "city_slug": "dunedin",
+    "vendor": "granicus",
+    "url": "https://dunedin.granicus.com",
+    "population": 37240
+  },
+  {
+    "city_name": "Boerne",
+    "state": "TX",
+    "city_slug": "boerne",
+    "vendor": "granicus",
+    "url": "https://boerne.granicus.com",
+    "population": 37160
+  },
+  {
+    "city_name": "Kankakee",
+    "state": "IL",
+    "city_slug": "il-kankakeecounty",
+    "vendor": "civicplus",
+    "url": "https://il-kankakeecounty.civicplus.com",
+    "population": 37157
+  },
+  {
+    "city_name": "Lake Wales",
+    "state": "FL",
+    "city_slug": "lakewales",
+    "vendor": "granicus",
+    "url": "https://lakewales.granicus.com",
+    "population": 37098
+  },
+  {
+    "city_name": "Marion",
+    "state": "IA",
+    "city_slug": "marionfl",
+    "vendor": "legistar",
+    "url": "https://marionfl.legistar.com",
+    "population": 36980
+  },
+  {
+    "city_name": "Saratoga Springs",
+    "state": "NY",
+    "city_slug": "saratoga-springs",
+    "vendor": "granicus",
+    "url": "https://saratoga-springs.granicus.com",
+    "population": 36915
+  },
+  {
+    "city_name": "Lockport",
+    "state": "IL",
+    "city_slug": "lockport",
+    "vendor": "granicus",
+    "url": "https://lockport.granicus.com",
+    "population": 36869
+  },
+  {
+    "city_name": "Miamisburg",
+    "state": "OH",
+    "city_slug": "oh-miamitownship",
+    "vendor": "civicplus",
+    "url": "https://oh-miamitownship.civicplus.com",
+    "population": 36784
+  },
+  {
+    "city_name": "Millville",
+    "state": "NJ",
+    "city_slug": "nj-millville",
+    "vendor": "civicplus",
+    "url": "https://nj-millville.civicplus.com",
+    "population": 36768
+  },
+  {
+    "city_name": "Oxford",
+    "state": "MS",
+    "city_slug": "cityofoxford",
+    "vendor": "granicus",
+    "url": "https://cityofoxford.granicus.com",
+    "population": 36699
+  },
+  {
+    "city_name": "Alamogordo",
+    "state": "NM",
+    "city_slug": "losalamos",
+    "vendor": "granicus",
+    "url": "https://losalamos.granicus.com",
+    "population": 36630
+  },
+  {
+    "city_name": "Lewiston",
+    "state": "ME",
+    "city_slug": "me-lewiston",
+    "vendor": "civicplus",
+    "url": "https://me-lewiston.civicplus.com",
+    "population": 36592
+  },
+  {
+    "city_name": "Oakley",
+    "state": "CA",
+    "city_slug": "oakley",
+    "vendor": "granicus",
+    "url": "https://oakley.granicus.com",
+    "population": 36515
+  },
+  {
+    "city_name": "Elk River",
+    "state": "MN",
+    "city_slug": "mn-elkriver",
+    "vendor": "civicplus",
+    "url": "https://mn-elkriver.civicplus.com",
+    "population": 36440
+  },
+  {
+    "city_name": "Texarkana",
+    "state": "AR",
+    "city_slug": "cityoftexarkanaar",
+    "vendor": "municode",
+    "url": "https://cityoftexarkanaar.municode.com",
+    "population": 36438
+  },
+  {
+    "city_name": "Moorpark",
+    "state": "CA",
+    "city_slug": "moorpark",
+    "vendor": "granicus",
+    "url": "https://moorpark.granicus.com",
+    "population": 36422
+  },
+  {
+    "city_name": "Rockledge",
+    "state": "FL",
+    "city_slug": "fl-rockledge",
+    "vendor": "civicplus",
+    "url": "https://fl-rockledge.civicplus.com",
+    "population": 36374
+  },
+  {
+    "city_name": "Sun Prairie",
+    "state": "WI",
+    "city_slug": "cityofsunprairie",
+    "vendor": "primegov",
+    "url": "https://cityofsunprairie.primegov.com",
+    "population": 36294
+  },
+  {
+    "city_name": "Oswego",
+    "state": "IL",
+    "city_slug": "oswego",
+    "vendor": "granicus",
+    "url": "https://oswego.granicus.com",
+    "population": 36156
+  },
+  {
+    "city_name": "Madison",
+    "state": "MS",
+    "city_slug": "madison",
+    "vendor": "legistar",
+    "url": "https://madison.legistar.com",
+    "population": 36143
+  },
+  {
+    "city_name": "Durango",
+    "state": "CO",
+    "city_slug": "durangogov",
+    "vendor": "granicus",
+    "url": "https://durangogov.granicus.com",
+    "population": 36051
+  },
+  {
+    "city_name": "Kearney",
+    "state": "NE",
+    "city_slug": "kearney",
+    "vendor": "granicus",
+    "url": "https://kearney.granicus.com",
+    "population": 36027
+  },
+  {
+    "city_name": "Woodinville",
+    "state": "WA",
+    "city_slug": "woodinville",
+    "vendor": "granicus",
+    "url": "https://woodinville.granicus.com",
+    "population": 35897
+  },
+  {
+    "city_name": "Smithtown",
+    "state": "NY",
+    "city_slug": "smithtownny",
+    "vendor": "civicclerk",
+    "url": "https://smithtownny.civicclerk.com",
+    "population": 35772
+  },
+  {
+    "city_name": "Claremont",
+    "state": "CA",
+    "city_slug": "claremontca",
+    "vendor": "granicus",
+    "url": "https://claremontca.granicus.com",
+    "population": 35705
+  },
+  {
+    "city_name": "Menomonee Falls",
+    "state": "WI",
+    "city_slug": "wi-menomoneefalls2",
+    "vendor": "civicplus",
+    "url": "https://wi-menomoneefalls2.civicplus.com",
+    "population": 35651
+  },
+  {
+    "city_name": "Port Angeles",
+    "state": "WA",
+    "city_slug": "wa-portangeles",
+    "vendor": "civicplus",
+    "url": "https://wa-portangeles.civicplus.com",
+    "population": 35573
+  },
+  {
+    "city_name": "Sonoma",
+    "state": "CA",
+    "city_slug": "sonoma-county",
+    "vendor": "granicus",
+    "url": "https://sonoma-county.granicus.com",
+    "population": 35394
+  },
+  {
+    "city_name": "Laramie",
+    "state": "WY",
+    "city_slug": "laramiecounty",
+    "vendor": "legistar",
+    "url": "https://laramiecounty.legistar.com",
+    "population": 35299
+  },
+  {
+    "city_name": "Winchester",
+    "state": "KY",
+    "city_slug": "ky-winchester2",
+    "vendor": "civicplus",
+    "url": "https://ky-winchester2.civicplus.com",
+    "population": 35262
+  },
+  {
+    "city_name": "Rosenberg",
+    "state": "TX",
+    "city_slug": "tx-rosenberg",
+    "vendor": "civicplus",
+    "url": "https://tx-rosenberg.civicplus.com",
+    "population": 35241
+  },
+  {
+    "city_name": "Manhattan Beach",
+    "state": "CA",
+    "city_slug": "manhattanbeach",
+    "vendor": "granicus",
+    "url": "https://manhattanbeach.granicus.com",
+    "population": 35135
+  },
+  {
+    "city_name": "Chester",
+    "state": "PA",
+    "city_slug": "pa-chestercountyswa",
+    "vendor": "civicplus",
+    "url": "https://pa-chestercountyswa.civicplus.com",
+    "population": 35130
+  },
+  {
+    "city_name": "Lake Villa",
+    "state": "IL",
+    "city_slug": "lakeforest",
+    "vendor": "primegov",
+    "url": "https://lakeforest.primegov.com",
+    "population": 35111
+  },
+  {
+    "city_name": "Middletown",
+    "state": "DE",
+    "city_slug": "middletown",
+    "vendor": "granicus",
+    "url": "https://middletown.granicus.com",
+    "population": 35107
+  },
+  {
+    "city_name": "Peachtree City",
+    "state": "GA",
+    "city_slug": "ga-peachtreecity2",
+    "vendor": "civicplus",
+    "url": "https://ga-peachtreecity2.civicplus.com",
+    "population": 35069
+  },
+  {
+    "city_name": "Miami Gardens",
+    "state": "FL",
+    "city_slug": "miamidade",
+    "vendor": "granicus",
+    "url": "https://miamidade.granicus.com",
+    "population": 35059
+  },
+  {
+    "city_name": "Kingston",
+    "state": "NY",
+    "city_slug": "kingstonny",
+    "vendor": "granicus",
+    "url": "https://kingstonny.granicus.com",
+    "population": 35040
+  },
+  {
+    "city_name": "Stillwater",
+    "state": "MN",
+    "city_slug": "cityofstillwater",
+    "vendor": "granicus",
+    "url": "https://cityofstillwater.granicus.com",
+    "population": 35024
+  },
+  {
+    "city_name": "Paris",
+    "state": "TX",
+    "city_slug": "terrebonneparish",
+    "vendor": "novusagenda",
+    "url": "https://terrebonneparish.novusagenda.com",
+    "population": 34942
+  },
+  {
+    "city_name": "Ardmore",
+    "state": "OK",
+    "city_slug": "ok-ardmore",
+    "vendor": "civicplus",
+    "url": "https://ok-ardmore.civicplus.com",
+    "population": 34927
+  },
+  {
+    "city_name": "Dunnellon",
+    "state": "FL",
+    "city_slug": "dunnellon",
+    "vendor": "granicus",
+    "url": "https://dunnellon.granicus.com",
+    "population": 34926
+  },
+  {
+    "city_name": "Galesburg",
+    "state": "IL",
+    "city_slug": "galesburg",
+    "vendor": "granicus",
+    "url": "https://galesburg.granicus.com",
+    "population": 34788
+  }
+]
