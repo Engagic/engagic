@@ -95,10 +95,7 @@ class BackgroundProcessor:
 
         # Initialize LLM processor if available
         try:
-            self.processor = AgendaProcessor(
-                api_key=config.get_api_key(), 
-                db_path=meetings_path
-            )
+            self.processor = AgendaProcessor(api_key=config.get_api_key())
             logger.info("Background processor initialized with LLM capabilities")
         except ValueError:
             logger.warning("LLM processor not available - summaries will be skipped")
