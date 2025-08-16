@@ -1,655 +1,508 @@
-"""Engagic Agenda Processor - Process city council meeting packets using Claude's PDF API
+"""
+Engagic Optimal PDF Processing Stack
 
-This module provides comprehensive PDF processing capabilities with multiple methods:
-1. URL-based processing (fastest, no download required)
-2. Base64 processing with caching (download once, cache for reuse)
-3. Files API processing (upload once, reference multiple times)
-4. OCR fallback for problematic PDFs
+Three-tier approach for maximum quality and cost efficiency:
+Tier 1: PyPDF2 text extraction + regular text API (free extraction, lowest cost)
+Tier 2: Mistral OCR API + regular text API ($1/1000 pages)
+Tier 3: Claude PDF API (most expensive, last resort)
 
-Key Features:
-- Automatic method selection with fallback chain
-- Token usage estimation
-- Batch processing for high-volume workflows
-- Database caching of processed summaries
-- Support for multi-document agendas
+Key features:
+- Smart text quality validation to avoid wasting money
+- Proper API usage (text extraction uses text API, not PDF API)
+- Cost tracking and processing statistics
+- Robust error handling and fallback logic
 """
 
 import os
+import re
 import time
 import logging
+import tempfile
+import requests
 import anthropic
-import argparse
-import sys
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Optional, Union
+from urllib.parse import urlparse
+from pathlib import Path
+
+# PDF processing
+from PyPDF2 import PdfReader
+
+# Our modules
 from databases import DatabaseManager
 from config import config
-from pdf_api_processor import (
-    PDFAPIProcessor,
-    MAX_PDF_API_PAGES,
-    MAX_PDF_API_SIZE,
-    BatchAccumulator,
-    BatchResult,
-    ResultType,
-)
-from pdf_ocr_extractor import PDFOCRExtractor, validate_url, sanitize_filename
-from rate_limit_handler import RateLimitHandler, with_rate_limit_retry, APIRateLimitManager
-import requests
 
 logger = logging.getLogger("engagic")
 
+# Security and processing limits
+MAX_PDF_SIZE = 200 * 1024 * 1024  # 200MB max
+MAX_PAGES = 1000  # Maximum pages to process
+MAX_URL_LENGTH = 2000
 
-# Custom exceptions for cleaner error handling
+
 class ProcessingError(Exception):
     """Base exception for PDF processing errors"""
     pass
 
 
-class RateLimitError(ProcessingError):
-    """Raised when API rate limits are hit"""
-    pass
+def validate_url(url: str) -> None:
+    """Validate URL for security"""
+    if not url or len(url) > MAX_URL_LENGTH:
+        raise ValueError(f"Invalid URL length: {len(url) if url else 0}")
+    
+    parsed = urlparse(url)
+    if not parsed.scheme in ['http', 'https']:
+        raise ValueError("URL must use HTTP or HTTPS")
+    
+    if not parsed.netloc:
+        raise ValueError("URL must have a valid domain")
 
 
-class CreditsExhaustedError(ProcessingError):
-    """Raised when API credits are exhausted"""
-    pass
+def sanitize_filename(filename: str) -> str:
+    """Sanitize filename for safe file operations"""
+    # Remove directory traversal attempts
+    filename = os.path.basename(filename)
+    # Remove/replace unsafe characters
+    filename = re.sub(r'[^\w\-_\.]', '_', filename)
+    return filename[:255]  # Limit length
 
 
-class PDFSizeError(ProcessingError):
-    """Raised when PDF exceeds size/page limits"""
-    pass
-
-
-# PDF download size limit (for download_packet method)
-MAX_PDF_SIZE = 200 * 1024 * 1024  # 200MB max PDF size
-
-
-class AgendaProcessor:
-    def __init__(self, api_key=None, db_path="/root/engagic/app/meetings.db"):
-        """Initialize processor with optional API key and database"""
-        self.api_key = api_key or os.getenv("LLM_API_KEY")
+class OptimalAgendaProcessor:
+    """Optimal three-tier PDF processor for cost-effective, high-quality results"""
+    
+    def __init__(self, api_key: Optional[str] = None, mistral_api_key: Optional[str] = None):
+        """Initialize the processor
+        
+        Args:
+            api_key: Anthropic API key (or uses environment variables)
+            mistral_api_key: Mistral API key for Tier 2 (optional)
+        """
+        # Initialize Anthropic client
+        self.api_key = api_key or os.getenv("LLM_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or config.get_api_key()
         if not self.api_key:
-            raise ValueError("LLM_API_KEY environment variable required")
-
+            raise ValueError("API key required - set LLM_API_KEY or ANTHROPIC_API_KEY environment variable")
+        
         self.client = anthropic.Anthropic(api_key=self.api_key)
+        
+        # Initialize database
         self.db = DatabaseManager(
             locations_db_path=config.LOCATIONS_DB_PATH,
             meetings_db_path=config.MEETINGS_DB_PATH,
             analytics_db_path=config.ANALYTICS_DB_PATH,
         )
-
-        # Initialize both PDF processors
-        # Can configure to use Files API by default with use_files_api=True
-        self.pdf_api_processor = PDFAPIProcessor(self.api_key, use_files_api=False)
-        self.pdf_ocr_extractor = PDFOCRExtractor()
         
-        # Initialize rate limit handling
-        self.rate_limit_manager = APIRateLimitManager()
-        self.rate_limit_handler = RateLimitHandler(
-            initial_delay=2.0,
-            max_delay=120.0,
-            max_retries=5
-        )
-
-        # Initialize batch accumulator for efficient processing
-        self.batch_accumulator = BatchAccumulator(
-            self.pdf_api_processor,
-            batch_size=50,  # Submit when 50 PDFs accumulated
-            wait_time=300,  # Or after 5 minutes
-            auto_submit=True,
-        )
-
-    @with_rate_limit_retry()
-    def _process_with_pdf_api(self, url, method="url"):
-        """Try to process PDF using the new PDF API with multiple methods and rate limit handling"""
-        # Check if we should wait due to rate limits
-        self.rate_limit_manager.wait_if_needed()
+        # Initialize Mistral OCR if available
+        self.mistral_api_key = mistral_api_key or os.getenv("MISTRAL_API_KEY")
+        self.mistral_client = None
+        if self.mistral_api_key:
+            try:
+                from mistralai import Mistral
+                self.mistral_client = Mistral(api_key=self.mistral_api_key)
+                logger.info("Mistral OCR client initialized")
+            except ImportError:
+                logger.warning("Mistral SDK not available - Tier 2 disabled")
         
+        # Initialize Claude PDF API processor for Tier 3
         try:
-            # Check if PDF needs chunking (only for single URLs)
-            if isinstance(url, str) and method in ["url", "base64"]:
-                valid, error_msg, size = self.pdf_api_processor.validate_pdf_for_api(url)
-                if not valid and size and size > MAX_PDF_API_SIZE:
-                    logger.info(f"PDF too large ({size:,} bytes), switching to chunked processing")
-                    return self._process_with_pdf_api(url, method="chunked")
-                
-                if size:
-                    # Rough estimate: 3KB per page
-                    estimated_pages = min(size // 3000, MAX_PDF_API_PAGES)
-                    token_estimate = self.pdf_api_processor.estimate_tokens(
-                        estimated_pages
-                    )
-                    logger.info(
-                        f"Estimated token usage: {token_estimate['total_tokens']:,} tokens for ~{estimated_pages} pages"
-                    )
-
-            summary = self.pdf_api_processor.process(url, method=method)
-            logger.info(f"Successfully processed with PDF API ({method} method)")
-            return summary, f"pdf_api_{method}"
-        except Exception as e:
-            logger.warning(f"PDF API processing failed with {method} method: {e}")
-            raise
-
-    def _process_with_ocr(self, url, english_threshold=0.7):
-        """Fallback to OCR-based processing"""
-        try:
-            logger.info("Falling back to OCR-based processing...")
-
-            # Extract and clean text
-            cleaned_text = self.pdf_ocr_extractor.process(url, english_threshold)
-
-            # Summarize
-            logger.info("Starting OCR text summarization...")
-            summary = self.summarize(cleaned_text)
-
-            logger.info("Successfully processed with OCR")
-            return summary, "ocr"
-        except Exception as e:
-            logger.error(f"OCR processing also failed: {e}")
-            raise
-
-    # OCR methods removed - now using pdf_ocr_extractor module
-    # All OCR functionality has been moved to pdf_ocr_extractor.py
-
-    def summarize(self, text: str, rate_limit_delay: int = 5) -> str:
-        """Summarize text with improved prompting"""
-        # Estimate document size based on text length
-        text_length = len(text)
-        estimated_pages = text_length // 3000  # Rough estimate
-        logger.info(
-            f"Document has approximately {estimated_pages} pages ({text_length} characters)"
-        )
-
-        # Use different approach for short documents
-        if text_length < 90000:  # Roughly 30 pages
-            return self._summarize_short_agenda(text, rate_limit_delay)
-        else:
-            return self._summarize_long_agenda(text, rate_limit_delay)
-
-    def _summarize_short_agenda(self, text: str, rate_limit_delay: int = 5) -> str:
-        """Summarize short agendas (<=10 pages) with simplified prompt"""
-        logger.info("Using short agenda summarization approach")
-
-        # Check if we have meaningful content to summarize
-        cleaned_lines = [line.strip() for line in text.split("\n") if line.strip()]
-        content_lines = [
-            line
-            for line in cleaned_lines
-            if not line.startswith("[") and not line.startswith("---")
-        ]
-
-        if len(content_lines) < 10:
-            logger.warning("Insufficient content extracted from PDF")
-            return "Unable to extract meaningful content from this PDF. The document may be a scanned image without searchable text, or it may use a format that prevents text extraction."
-
-        try:
-            response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=3000,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"""This is a short city council meeting agenda. Provide a clear, concise summary that covers:
-
-                        **Key Agenda Items:**
-                        - List the main topics/issues being discussed
-                        - Include any public hearings or votes
-                        - Note any budget or financial items
-
-                        **Important Details:**
-                        - Specific addresses, dollar amounts, ordinance numbers
-                        - Deadlines or implementation dates
-                        - Public participation opportunities
-
-                        Keep it brief but informative. Focus on what citizens need to know.
-
-                        Agenda text:
-                        {text}""",
-                    }
-                ],
-            )
-
-            return response.content[0].text  # type: ignore
-
-        except Exception as e:
-            logger.error(f"Error processing short agenda: {e}")
-            return "Unable to process this agenda due to a technical error. Please try again later."
-
-    def _summarize_long_agenda(self, text: str, rate_limit_delay: int = 5) -> str:
-        """Summarize long agendas (>30 pages) using direct approach"""
-        logger.info("Using long agenda summarization approach")
-
-        # Check if we have meaningful content to summarize
-        cleaned_lines = [line.strip() for line in text.split("\n") if line.strip()]
-        content_lines = [
-            line
-            for line in cleaned_lines
-            if not line.startswith("[") and not line.startswith("---")
-        ]
-
-        if len(content_lines) < 20:
-            logger.warning("Insufficient content extracted from PDF")
-            return "Unable to extract meaningful content from this PDF. The document may be a scanned image without searchable text, or it may use a format that prevents text extraction."
-
-        # For long documents, we'll summarize directly without chunking
-        # The new PDF API can handle large documents better
-        logger.info("Processing long document with comprehensive summary approach")
-
-        try:
-            response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=4000,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"""This is a long city council meeting agenda packet. Please provide a comprehensive summary that covers:
-
-                        **Major Agenda Items:**
-                        - List all significant topics/issues being discussed with key details
-                        - Include any public hearings, votes, or major decisions
-                        - Note budget items, financial impacts, and dollar amounts
-
-                        **Public Impact:**
-                        - How these items affect residents' daily lives
-                        - Specific addresses, developments, or areas affected
-                        - Timing, deadlines, or implementation dates
-
-                        **Public Participation:**
-                        - Opportunities for public comment or hearings
-                        - How residents can get involved
-
-                        Format as organized sections with bullet points. Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
-                        Focus on items that matter to citizens while skipping pure administrative matters.
-
-                        Agenda text:
-                        {text[:75000]}""",  # Limit to reasonable size for API
-                    }
-                ],
-            )
-
-            return response.content[0].text  # type: ignore
-
-        except Exception as e:
-            logger.error(f"Error processing long agenda: {e}")
-            return "Unable to process this large agenda document. The file may be too complex or contain formatting that prevents proper analysis."
-
-    def process_multiple_agendas_batch(self, meeting_data_list: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-        """Process multiple agendas using batch API for efficiency"""
-        results = {}
+            from pdf_api_processor import PDFAPIProcessor
+            self.pdf_processor = PDFAPIProcessor(self.api_key)
+            logger.info("Claude PDF API processor initialized")
+        except ImportError:
+            logger.warning("PDF API processor not available - Tier 3 disabled")
+            self.pdf_processor = None
         
-        # Separate into those needing processing
-        to_process = []
+        # Load basic English words for validation
+        self.english_words = self._load_basic_english_words()
         
-        for meeting_data in meeting_data_list:
-            packet_url = meeting_data.get("packet_url")
-            if not packet_url:
-                continue
-                
-            # Check cache first
-            cached = self.db.get_cached_summary(packet_url)
-            if cached:
-                results[packet_url] = {
-                    "summary": cached["processed_summary"],
-                    "cached": True,
-                    "meeting_data": cached
-                }
-            else:
-                to_process.append(meeting_data)
-        
-        # Process uncached items in batch
-        if to_process:
-            logger.info(f"Processing {len(to_process)} agendas via batch API")
-            
-            # Prepare batch requests
-            batch_requests = []
-            url_to_meeting = {}
-            
-            for meeting_data in to_process:
-                packet_url = meeting_data["packet_url"]
-                url_to_meeting[packet_url] = meeting_data
-                batch_requests.append({
-                    "url": packet_url,
-                    "custom_id": packet_url[:100]  # Use truncated URL as ID
-                })
-            
-            # Process batch
-            batch_results = self.pdf_api_processor.smart_batch_pdfs(
-                [r["url"] for r in batch_requests],
-                max_wait_time=1800  # 30 minutes max
-            )
-            
-            # Store results
-            for packet_url, summary in batch_results.items():
-                if packet_url in url_to_meeting:
-                    meeting_data = url_to_meeting[packet_url]
-                    
-                    # Store in database
-                    city_banana = meeting_data.get("city_banana")
-                    city_info = self.db.get_city_by_banana(city_banana) if city_banana else {}
-                    full_meeting_data = {**meeting_data, **city_info}
-                    
-                    processing_time = 0  # Batch processing time not tracked per item
-                    meeting_id = self.db.store_meeting_summary(
-                        full_meeting_data, summary, processing_time
-                    )
-                    
-                    results[packet_url] = {
-                        "summary": summary,
-                        "cached": False,
-                        "meeting_data": full_meeting_data,
-                        "meeting_id": meeting_id,
-                        "processing_method": "batch"
-                    }
-        
-        return results
+        # Processing statistics
+        self.stats = {
+            "tier1_success": 0,
+            "tier2_success": 0, 
+            "tier3_success": 0,
+            "total_processed": 0,
+            "total_cost": 0.0,
+            "tier1_cost": 0.0,  # Text API cost for PyPDF2
+            "tier2_cost": 0.0,  # Mistral OCR + text API cost
+            "tier3_cost": 0.0   # PDF API cost
+        }
     
-    def process_agenda_with_cache(
-        self, meeting_data: Dict[str, Any], pdf_method: str = "auto"
-    ) -> Dict[str, Any]:
-        """Process agenda with database caching - main entry point for cached processing
-
+    def _load_basic_english_words(self) -> set:
+        """Load basic English words for text quality validation"""
+        # Essential civic and government terms
+        civic_words = {
+            "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+            "council", "city", "meeting", "agenda", "item", "public", "comment", "session",
+            "board", "commission", "appointment", "ordinance", "resolution", "budget",
+            "planning", "zoning", "development", "traffic", "safety", "park", "library",
+            "police", "fire", "emergency", "infrastructure", "project", "contract",
+            "approval", "review", "hearing", "vote", "motion", "approve", "deny",
+            "discussion", "report", "presentation", "staff", "department", "mayor",
+            "member", "chair", "chairman", "chairwoman", "minutes", "action", "adopt"
+        }
+        
+        # Try to load NLTK words if available
+        try:
+            from nltk.corpus import words
+            return civic_words.union(set(word.lower() for word in words.words()[:5000]))
+        except:
+            return civic_words
+    
+    def process_agenda_with_cache(self, meeting_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Main entry point - process agenda with caching
+        
         Args:
-            meeting_data: Meeting information including packet_url
-            pdf_method: PDF processing method (auto, url, base64, files, ocr)
+            meeting_data: Dictionary with packet_url, city_banana, etc.
+            
+        Returns:
+            Dictionary with summary, processing_time, cached flag, etc.
         """
-        packet_url = meeting_data["packet_url"]
-
+        packet_url = meeting_data.get("packet_url")
+        if not packet_url:
+            return {"success": False, "error": "No packet_url provided"}
+        
         # Check cache first
         cached_meeting = self.db.get_cached_summary(packet_url)
         if cached_meeting:
             logger.info(f"Cache hit for {packet_url}")
             return {
+                "success": True,
                 "summary": cached_meeting["processed_summary"],
-                "processing_time": cached_meeting["processing_time_seconds"],
+                "processing_time": cached_meeting.get("processing_time_seconds", 0),
                 "cached": True,
                 "meeting_data": cached_meeting,
-                "processing_method": cached_meeting.get("processing_method", "unknown"),
+                "processing_method": cached_meeting.get("processing_method", "cached")
             }
-
-        # Cache miss - process the agenda
-        logger.info(f"Cache miss for {packet_url} - processing...")
+        
+        # Process with optimal tiered approach
+        logger.info(f"Cache miss for {packet_url} - processing with optimal tiered approach...")
         start_time = time.time()
-
+        
         try:
-            # Get city info using city_banana
-            city_banana = meeting_data.get("city_banana")
-            city_info = self.db.get_city_by_banana(city_banana) if city_banana else {}
-
-            # Merge meeting data with city info
-            full_meeting_data = {**meeting_data, **city_info}
-            summary = self.process_agenda(
-                packet_url, save_raw=False, save_cleaned=False, pdf_method=pdf_method
-            )
+            # Process the agenda
+            summary, method, cost = self.process_agenda_optimal(packet_url)
+            
+            # Store in database
             processing_time = time.time() - start_time
-
-            # Track which method succeeded
-            processing_method = pdf_method
-            if pdf_method == "auto":
-                # Try to determine which method actually worked based on logs
-                # This is simplified - in production you'd track this properly
-                processing_method = "pdf_api"  # Default assumption
-
-            # Store in database with processing method
-            full_meeting_data["processing_method"] = processing_method
-            vendor = meeting_data.get("vendor")
-            meeting_id = self.db.store_meeting_summary(
-                full_meeting_data, summary, processing_time
-            )
-
-            logger.info(
-                f"Processed and cached agenda {packet_url} in {processing_time:.1f}s using {processing_method} (ID: {meeting_id})"
-            )
-
+            meeting_data["processed_summary"] = summary
+            meeting_data["processing_time_seconds"] = processing_time
+            meeting_data["processing_method"] = method
+            meeting_data["processing_cost"] = cost
+            
+            meeting_id = self.db.store_meeting_summary(meeting_data, summary, processing_time)
+            
+            logger.info(f"Processed agenda {packet_url} in {processing_time:.1f}s using {method} (cost: ${cost:.3f})")
+            
             return {
+                "success": True,
                 "summary": summary,
                 "processing_time": processing_time,
                 "cached": False,
-                "meeting_data": full_meeting_data,
+                "meeting_data": meeting_data,
                 "meeting_id": meeting_id,
-                "processing_method": processing_method,
+                "processing_method": method,
+                "processing_cost": cost,
+                "stats": self.stats
             }
-
+            
         except Exception as e:
-            logger.error(f"Error processing agenda {packet_url}: {e}")
-            raise
-
-    def process_agenda(
-        self,
-        url,  # Can be string or list
-        english_threshold: float = 0.7,
-        save_raw: bool = True,
-        save_cleaned: bool = True,
-        pdf_method: str = "auto",  # auto, url, base64, files, ocr
-    ) -> str:
-        """Complete pipeline with multiple PDF processing approaches
-
+            logger.error(f"Failed to process agenda: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "processing_time": time.time() - start_time,
+                "cached": False
+            }
+    
+    def process_agenda_optimal(self, url: Union[str, List[str]]) -> tuple[str, str, float]:
+        """Process agenda using optimal three-tier approach
+        
         Args:
-            url: PDF URL or list of URLs
-            english_threshold: For OCR fallback
-            save_raw: Save raw text output
-            save_cleaned: Save cleaned text output
-            pdf_method: Processing method - auto (tries url->base64->ocr), url, base64, files, or ocr
+            url: Single URL string or list of URLs
+            
+        Returns:
+            Tuple of (summary, method_used, cost)
         """
-
-        if pdf_method == "auto":
-            # Try URL method first (fastest, no download)
-            try:
-                summary, method = self._process_with_pdf_api(url, "url")
-                logger.info(f"Successfully processed using {method}")
-
-                if save_raw or save_cleaned:
-                    self._save_text(summary, "agenda_summary.txt")
-                    logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                return summary
-
-            except Exception as url_error:
-                logger.warning(f"URL method failed: {url_error}")
-                
-                # Check for ANY size/page limit errors
-                error_str = str(url_error).lower()
-                if any(x in error_str for x in ["exceeds api limit", "size exceeds", "100 pdf pages", "page limit", "maximum of 100"]):
-                    logger.info("PDF size/page limit issue detected, using chunking method")
-                    try:
-                        summary, method = self._process_with_pdf_api(url, "chunked")
-                        logger.info(f"Successfully processed using {method}")
-
-                        if save_raw or save_cleaned:
-                            self._save_text(summary, "agenda_summary.txt")
-                            logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                        return summary
-
-                    except Exception as chunk_error:
-                        logger.error(f"Chunking failed: {chunk_error}")
-                        raise PDFSizeError(f"Unable to process large PDF: {str(chunk_error)}") from chunk_error
-                
-                # For other failures, try base64
-                try:
-                    summary, method = self._process_with_pdf_api(url, "base64")
-                    logger.info(f"Successfully processed using {method}")
-
-                    if save_raw or save_cleaned:
-                        self._save_text(summary, "agenda_summary.txt")
-                        logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                    return summary
-
-                except Exception as base64_error:
-                    logger.warning(f"Base64 method failed: {base64_error}")
-                    
-                    # Check for ANY size/page limit errors (including 400 errors about page limits)
-                    error_str = str(base64_error).lower()
-                    if any(x in error_str for x in ["exceeds api limit", "size exceeds", "100 pdf pages", "page limit", "maximum of 100"]):
-                        logger.info("Base64 failed due to size/page limits, trying chunking")
-                        try:
-                            summary, method = self._process_with_pdf_api(url, "chunked")
-                            logger.info(f"Successfully processed using {method}")
-
-                            if save_raw or save_cleaned:
-                                self._save_text(summary, "agenda_summary.txt")
-                                logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                            return summary
-
-                        except Exception as chunk_error:
-                            logger.error(f"Chunking failed: {chunk_error}")
-                            # Don't fall back to OCR if chunking fails
-                            raise PDFSizeError(f"Unable to process large PDF: {str(chunk_error)}") from chunk_error
-                    
-                    # Check if failure was due to rate limits
-                    error_str = str(base64_error).lower()
-                    if any(x in error_str for x in ["529", "overloaded", "rate limit", "429"]):
-                        logger.warning("API is rate limited/overloaded")
-                        
-                        # Check if we've hit too many rate limits
-                        if self.rate_limit_handler.consecutive_rate_limits > 5:
-                            # Consider using batch API instead
-                            logger.warning("Too many rate limits, consider using batch API")
-                            raise RateLimitError("Unable to process PDF due to rate limits. Consider batching multiple requests.")
-                        
-                        # Wait and retry with exponential backoff is handled by decorator
-                        raise RateLimitError("API is currently overloaded. Please try again later.")
-                    
-                    # Check for credit exhaustion
-                    if "credit balance is too low" in error_str:
-                        logger.error("API credits exhausted")
-                        raise CreditsExhaustedError("Insufficient API credits to process PDF")
-                    
-                    # Only use OCR as absolute last resort and log a warning
-                    logger.warning("WARNING: Falling back to OCR - this is slow and resource-intensive!")
-                    logger.warning("Consider using batch API for multiple PDFs to avoid rate limits")
-                    
-                    try:
-                        summary, method = self._process_with_ocr(url, english_threshold)
-                        logger.info(f"Successfully processed using {method}")
-
-                        if save_raw or save_cleaned:
-                            self._save_text(summary, "agenda_summary.txt")
-                            logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                        return summary
-
-                    except Exception as ocr_error:
-                        logger.error("All processing methods failed")
-                        logger.error(f"URL error: {url_error}")
-                        logger.error(f"Base64 error: {base64_error}")
-                        logger.error(f"OCR error: {ocr_error}")
-
-                        # Raise an exception instead of returning error string
-                        raise ProcessingError("Unable to process this PDF document. The file may be corrupted, password-protected, or in an unsupported format.")
-
-        elif pdf_method == "ocr":
-            # Direct OCR processing
-            try:
-                summary, method = self._process_with_ocr(url, english_threshold)
-                logger.info(f"Successfully processed using {method}")
-
-                if save_raw or save_cleaned:
-                    self._save_text(summary, "agenda_summary.txt")
-                    logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                return summary
-
-            except Exception as e:
-                logger.error(f"OCR processing failed: {e}")
-                return "Unable to process this PDF document using OCR."
-
-        else:
-            # Use specified PDF API method
-            try:
-                summary, method = self._process_with_pdf_api(url, pdf_method)
-                logger.info(f"Successfully processed using {method}")
-
-                if save_raw or save_cleaned:
-                    self._save_text(summary, "agenda_summary.txt")
-                    logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                return summary
-
-            except Exception as e:
-                logger.error(f"{pdf_method} method failed: {e}")
-
-                # If the error is due to size, try chunking
-                if "exceeds API limit" in str(e) or "size exceeds" in str(e).lower():
-                    logger.info(f"{pdf_method} failed due to size, trying chunking")
-                    try:
-                        summary, method = self._process_with_pdf_api(url, "chunked")
-                        logger.info(f"Successfully processed using {method}")
-
-                        if save_raw or save_cleaned:
-                            self._save_text(summary, "agenda_summary.txt")
-                            logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                        return summary
-                    except Exception as chunk_error:
-                        logger.error(f"Chunking also failed: {chunk_error}")
-                        return f"Unable to process large PDF: {chunk_error}"
-                
-                # Check if failure was due to rate limits
-                if any(x in str(e).lower() for x in ["529", "overloaded", "rate limit", "429"]):
-                    logger.warning("API is rate limited/overloaded")
-                    
-                    # Track rate limits
-                    self.rate_limit_handler.handle_rate_limit()
-                    
-                    # Suggest batch processing
-                    return f"Unable to process PDF: API rate limit hit. Consider using batch processing for multiple PDFs."
-                
-                # Try OCR as absolute last resort (not for chunked method)
-                if pdf_method not in ["ocr", "chunked"]:
-                    logger.warning("WARNING: Falling back to OCR as last resort - this is slow!")
-                    try:
-                        summary, method = self._process_with_ocr(url, english_threshold)
-                        logger.info(f"Successfully processed using {method}")
-
-                        if save_raw or save_cleaned:
-                            self._save_text(summary, "agenda_summary.txt")
-                            logger.info("Complete! Summary saved to agenda_summary.txt")
-
-                        return summary
-                    except Exception as ocr_error:
-                        logger.error(f"OCR fallback also failed: {ocr_error}")
-
-                return f"Unable to process PDF using {pdf_method} method: {str(e)}"
-
-    def _save_text(self, text: str, filename: str) -> None:
-        """Save text to file with UTF-8 encoding"""
-        # Sanitize filename to prevent directory traversal
-        safe_filename = sanitize_filename(filename)
-        with open(safe_filename, "w", encoding="utf-8") as f:
-            f.write(text)
-        logger.info(f"Saved to {safe_filename} ({len(text)} characters)")
-
-    def download_packet(self, url: str, output_path: str = None) -> str:
-        """Download PDF packet and save to file"""
-        # Validate URL for security
-        validate_url(url)
-
-        if not output_path:
-            output_path = "downloaded_packet.pdf"
-
-        # Sanitize output path
-        safe_output_path = sanitize_filename(output_path)
-
-        logger.info(f"Downloading packet from: {url[:80]}...")
-
+        self.stats["total_processed"] += 1
+        
+        # Handle multiple URLs
+        if isinstance(url, list):
+            return self._process_multiple_pdfs(url)
+        
+        # Tier 1: PyPDF2 text extraction + regular text API (cheapest)
+        logger.info("Attempting Tier 1: PyPDF2 text extraction + text API...")
         try:
-            # Download with streaming and size limit
+            text = self._tier1_extract_text(url)
+            if text and self._is_good_text_quality(text):
+                summary = self._summarize_with_text_api(text, "comprehensive")
+                cost = self._estimate_text_api_cost(text)
+                self.stats["tier1_success"] += 1
+                self.stats["tier1_cost"] += cost
+                self.stats["total_cost"] += cost
+                logger.info(f"Tier 1 successful - PyPDF2 + text API (cost: ${cost:.3f})")
+                return summary, "tier1_pypdf2_text_api", cost
+        except Exception as e:
+            logger.debug(f"Tier 1 failed: {e}")
+        
+        # Tier 2: Mistral OCR + regular text API (moderate cost)
+        if self.mistral_client:
+            logger.info("Attempting Tier 2: Mistral OCR + text API...")
+            try:
+                text, ocr_cost = self._tier2_mistral_ocr(url)
+                if text and self._is_good_text_quality(text):
+                    summary = self._summarize_with_text_api(text, "comprehensive")
+                    text_cost = self._estimate_text_api_cost(text)
+                    total_cost = ocr_cost + text_cost
+                    self.stats["tier2_success"] += 1
+                    self.stats["tier2_cost"] += total_cost
+                    self.stats["total_cost"] += total_cost
+                    logger.info(f"Tier 2 successful - Mistral OCR + text API (cost: ${total_cost:.3f})")
+                    return summary, "tier2_mistral_text_api", total_cost
+            except Exception as e:
+                logger.debug(f"Tier 2 failed: {e}")
+        
+        # Tier 3: Claude PDF API (most expensive, last resort)
+        if self.pdf_processor:
+            logger.info("Attempting Tier 3: Claude PDF API...")
+            try:
+                summary = self._tier3_claude_pdf_api(url)
+                if summary:
+                    cost = 15.0  # Rough estimate for PDF API
+                    self.stats["tier3_success"] += 1
+                    self.stats["tier3_cost"] += cost
+                    self.stats["total_cost"] += cost
+                    logger.info(f"Tier 3 successful - Claude PDF API (cost: ${cost:.3f})")
+                    return summary, "tier3_claude_pdf_api", cost
+            except Exception as e:
+                logger.error(f"Tier 3 failed: {e}")
+        
+        # All tiers failed
+        raise ProcessingError("All processing tiers failed - unable to process PDF")
+    
+    def _tier1_extract_text(self, url: str) -> Optional[str]:
+        """Tier 1: Extract text using PyPDF2
+        
+        Args:
+            url: PDF URL to process
+            
+        Returns:
+            Extracted text if successful, None otherwise
+        """
+        validate_url(url)
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Download PDF
+            pdf_content = self._download_pdf(url)
+            if not pdf_content:
+                return None
+            
+            pdf_path = os.path.join(temp_dir, "agenda.pdf")
+            with open(pdf_path, "wb") as f:
+                f.write(pdf_content)
+            
+            # Extract text with PyPDF2
+            try:
+                reader = PdfReader(pdf_path)
+                if len(reader.pages) > MAX_PAGES:
+                    logger.warning(f"PDF has {len(reader.pages)} pages, truncating to {MAX_PAGES}")
+                
+                all_text = []
+                for i, page in enumerate(reader.pages[:MAX_PAGES]):
+                    try:
+                        text = page.extract_text()
+                        if text.strip():
+                            all_text.append(f"--- PAGE {i+1} ---\n{text}")
+                    except Exception as e:
+                        logger.debug(f"Failed to extract page {i+1}: {e}")
+                        continue
+                
+                combined_text = "\n".join(all_text)
+                return self._normalize_text(combined_text) if combined_text.strip() else None
+                
+            except Exception as e:
+                logger.debug(f"PyPDF2 extraction failed: {e}")
+                return None
+    
+    def _tier2_mistral_ocr(self, url: str) -> tuple[Optional[str], float]:
+        """Tier 2: Use Mistral OCR API
+        
+        Args:
+            url: PDF URL to process
+            
+        Returns:
+            Tuple of (extracted_text, ocr_cost)
+        """
+        if not self.mistral_client:
+            return None, 0.0
+        
+        try:
+            # Download PDF first
+            pdf_content = self._download_pdf(url)
+            if not pdf_content:
+                return None, 0.0
+            
+            # Convert to base64 for Mistral API
+            import base64
+            pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+            
+            # Call Mistral OCR API
+            response = self.mistral_client.chat.complete(
+                model="mistral-ocr-latest",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extract all text from this PDF document. Preserve the structure and formatting."},
+                        {"type": "pdf", "pdf": pdf_base64}
+                    ]
+                }]
+            )
+            
+            text = response.choices[0].message.content
+            
+            # Estimate cost (roughly $1 per 1000 pages, estimate pages from PDF size)
+            estimated_pages = max(1, len(pdf_content) // 50000)  # Rough estimate
+            cost = estimated_pages * 0.001  # $1 per 1000 pages
+            
+            logger.info(f"Mistral OCR processed ~{estimated_pages} pages, cost: ${cost:.3f}")
+            
+            return self._normalize_text(text) if text else None, cost
+            
+        except Exception as e:
+            logger.error(f"Mistral OCR failed: {e}")
+            return None, 0.0
+    
+    def _tier3_claude_pdf_api(self, url: str) -> Optional[str]:
+        """Tier 3: Use Claude PDF API with optimized prompt
+        
+        Args:
+            url: PDF URL to process
+            
+        Returns:
+            Summary from PDF API
+        """
+        if not self.pdf_processor:
+            return None
+        
+        try:
+            # Use the PDF API processor with a comprehensive prompt
+            summary = self.pdf_processor.process(url, method="url")
+            return summary
+        except Exception as e:
+            logger.error(f"Claude PDF API failed: {e}")
+            return None
+    
+    def _summarize_with_text_api(self, text: str, style: str = "comprehensive") -> str:
+        """Summarize extracted text using regular text API (not PDF API)
+        
+        Args:
+            text: Extracted text to summarize
+            style: Summary style (comprehensive, brief)
+            
+        Returns:
+            Summary text
+        """
+        page_count = self._estimate_page_count(text)
+        logger.info(f"Summarizing {page_count} pages of text using text API")
+        
+        if style == "comprehensive":
+            prompt = """Analyze this city council meeting agenda and provide a comprehensive summary for residents.
+
+**Complete Agenda Items** (list every single one):
+- Item number and full title
+- Complete description of what's being proposed
+- Department or presenter
+- Action required (vote, discussion, information only)
+
+**Financial Details** (every dollar amount):
+- Budget items with exact amounts
+- Contract values and vendors
+- Grant amounts and sources
+- Fee changes or rate adjustments
+
+**Property and Development** (all locations):
+- Complete addresses for any property discussed
+- Zoning changes with current and proposed zoning
+- Development project names and descriptions
+- Square footage, units, or measurements
+
+**Public Participation**:
+- Public hearing items with times
+- Comment period details
+- How to participate (in person, online, written)
+- Deadlines for input
+
+**Key Details to Preserve**:
+- Exact dollar amounts (not "several million" but "$3,456,789")
+- Complete addresses (not "downtown" but "123 Main Street")
+- Full names and titles
+- Precise dates and times
+- Ordinance and resolution numbers
+
+Format as organized sections with bullet points. Be thorough and detailed.
+
+Agenda text:
+{text}"""
+        else:
+            prompt = """Provide a brief summary of this city council meeting agenda, focusing on the most important items that affect residents:
+
+{text}"""
+        
+        try:
+            response = self.client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt.format(text=text)}]
+            )
+            return response.content[0].text
+        except Exception as e:
+            logger.error(f"Text API summarization failed: {e}")
+            raise
+    
+    def _process_multiple_pdfs(self, urls: List[str]) -> tuple[str, str, float]:
+        """Process multiple PDFs and combine summaries
+        
+        Args:
+            urls: List of PDF URLs
+            
+        Returns:
+            Tuple of (combined_summary, method_used, total_cost)
+        """
+        logger.info(f"Processing {len(urls)} PDFs")
+        summaries = []
+        total_cost = 0.0
+        methods_used = []
+        
+        for i, url in enumerate(urls, 1):
+            logger.info(f"Processing PDF {i}/{len(urls)}: {url[:80]}...")
+            try:
+                summary, method, cost = self.process_agenda_optimal(url)
+                summaries.append(f"=== DOCUMENT {i} ===\n{summary}")
+                total_cost += cost
+                methods_used.append(method)
+            except Exception as e:
+                logger.error(f"Failed to process PDF {i}: {e}")
+                summaries.append(f"=== DOCUMENT {i} ===\n[Error: Could not process]")
+        
+        combined_summary = "\n\n".join(summaries)
+        combined_method = f"multiple_pdfs_{len(urls)}_docs"
+        
+        return combined_summary, combined_method, total_cost
+    
+    def _download_pdf(self, url: str) -> Optional[bytes]:
+        """Download PDF with validation and size limits"""
+        try:
             response = requests.get(
                 url,
                 timeout=30,
                 stream=True,
-                headers={"User-Agent": "Engagic-Agenda-Processor/1.0"},
+                headers={"User-Agent": "Engagic-Agenda-Processor/3.0"}
             )
             response.raise_for_status()
-
+            
             # Check content length
             content_length = response.headers.get("content-length")
             if content_length and int(content_length) > MAX_PDF_SIZE:
-                raise ValueError(
-                    f"PDF size {content_length} exceeds maximum allowed size of {MAX_PDF_SIZE} bytes"
-                )
-
+                logger.error(f"PDF too large: {content_length} bytes")
+                return None
+            
             # Download with size checking
             pdf_content = b""
             downloaded = 0
@@ -657,292 +510,134 @@ class AgendaProcessor:
                 if chunk:
                     downloaded += len(chunk)
                     if downloaded > MAX_PDF_SIZE:
-                        raise ValueError(
-                            f"PDF size exceeds maximum allowed size of {MAX_PDF_SIZE} bytes"
-                        )
+                        logger.error("PDF exceeds maximum size")
+                        return None
                     pdf_content += chunk
-
-        except requests.RequestException as e:
-            raise Exception(f"Failed to download PDF: {e}")
-
-        with open(safe_output_path, "wb") as f:
-            f.write(pdf_content)
-
-        logger.info(f"Packet saved to {safe_output_path} ({len(pdf_content)} bytes)")
-        return safe_output_path
-
-    def process_batch_agendas(
-        self,
-        pdf_requests: List[Dict[str, Any]],
-        wait_for_results: bool = True,
-        return_raw: bool = False,
-    ) -> Union[str, List[Dict[str, Any]], List[BatchResult]]:
-        """Process multiple agendas using batch API with full support
-
-        Args:
-            pdf_requests: List of dicts with 'url' and optional 'prompt', 'custom_id', 'model' keys
-            wait_for_results: If True, wait for completion and return results
-            return_raw: If True, return raw BatchResult objects; otherwise return summaries
-
-        Returns:
-            If wait_for_results=False: Batch job ID for tracking
-            If wait_for_results=True and return_raw=True: List of BatchResult objects
-            If wait_for_results=True and return_raw=False: List of processed summaries
-        """
-        logger.info(f"Processing batch of {len(pdf_requests)} agendas")
-
-        try:
-            # Enhanced validation with model selection
-            valid_requests = []
-            for i, req in enumerate(pdf_requests):
-                url = req.get("url")
-                if not url:
-                    logger.warning(f"Request {i} missing 'url' field, skipping")
-                    continue
-
-                valid, error_msg, size = self.pdf_api_processor.validate_pdf_for_api(
-                    url
-                )
-                if not valid:
-                    logger.warning(f"PDF {i} validation failed: {error_msg}")
-                    continue
-
-                # Add size info for model selection
-                req["_size"] = size
-                valid_requests.append(req)
-
-            if not valid_requests:
-                raise ValueError("No valid PDFs to process")
-
-            logger.info(
-                f"Processing {len(valid_requests)} valid PDFs out of {len(pdf_requests)} total"
-            )
-
-            # Submit batch job with enhanced options
-            result = self.pdf_api_processor.process_batch(
-                valid_requests,
-                wait_for_completion=wait_for_results,
-                use_prompt_caching=True,
-            )
-
-            if not wait_for_results:
-                # Return batch ID for async tracking
-                return result
-
-            # Process results
-            if return_raw:
-                return result  # List[BatchResult]
-
-            # Extract summaries and handle errors
-            processed_results = []
-            for batch_result in result:
-                if batch_result.result_type == ResultType.SUCCEEDED:
-                    summary = batch_result.message.get("content", [{}])[0].get(
-                        "text", ""
-                    )
-                    processed_results.append(
-                        {
-                            "custom_id": batch_result.custom_id,
-                            "status": "success",
-                            "summary": summary,
-                            "usage": batch_result.usage,
-                        }
-                    )
-                else:
-                    processed_results.append(
-                        {
-                            "custom_id": batch_result.custom_id,
-                            "status": "error",
-                            "error": batch_result.error
-                            or f"Request {batch_result.result_type.value}",
-                        }
-                    )
-
-            # Log cost summary
-            cost_summary = self.pdf_api_processor.cost_tracker.get_summary()
-            logger.info(f"Batch processing complete. Cost summary: {cost_summary}")
-
-            return processed_results
-
+            
+            return pdf_content
+            
         except Exception as e:
-            logger.error(f"Batch processing failed: {e}")
-            raise
+            logger.error(f"Failed to download PDF: {e}")
+            return None
+    
+    def _is_good_text_quality(self, text: str) -> bool:
+        """Validate if extracted text is good quality"""
+        if not text or len(text) < 100:
+            return False
+        
+        # Check character distribution
+        letters = sum(1 for c in text if c.isalpha())
+        total_chars = len(text)
+        
+        if total_chars == 0:
+            return False
+        
+        letter_ratio = letters / total_chars
+        if letter_ratio < 0.3:  # Too few letters indicates poor extraction
+            return False
+        
+        # Check for actual words
+        words = text.split()
+        if len(words) < 20:
+            return False
+        
+        # Check for recognizable English words
+        sample_words = words[:100]
+        recognizable = sum(1 for word in sample_words if word.lower().strip('.,!?();:') in self.english_words)
+        
+        if len(sample_words) >= 50 and recognizable < 5:
+            return False
+        
+        # Check for excessive single-character "words" (sign of bad extraction)
+        single_chars = sum(1 for word in sample_words if len(word) == 1)
+        if len(sample_words) >= 50 and single_chars > 20:
+            return False
+        
+        return True
+    
+    def _normalize_text(self, text: str) -> str:
+        """Clean up and normalize extracted text"""
+        # Remove excessive whitespace
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r' {2,}', ' ', text)
+        
+        # Fix common extraction issues
+        text = text.replace('|', 'I')  # Common OCR mistake
+        text = text.replace('‚', ',')  # Unicode comma issue
+        
+        return text.strip()
+    
+    def _estimate_page_count(self, text: str) -> int:
+        """Estimate page count from text"""
+        # Look for page markers first
+        page_markers = re.findall(r'--- PAGE (\d+) ---', text)
+        if page_markers:
+            return len(page_markers)
+        
+        # Estimate based on character count
+        chars_per_page = 3000
+        return max(1, len(text) // chars_per_page)
+    
+    def _estimate_text_api_cost(self, text: str) -> float:
+        """Estimate cost for text API usage"""
+        # Rough estimate: ~750 characters per token, ~$0.003 per 1K tokens for Claude
+        tokens = len(text) // 750
+        return (tokens / 1000) * 0.003
+    
+    def get_processing_stats(self) -> Dict[str, Any]:
+        """Get comprehensive processing statistics"""
+        total = self.stats["total_processed"]
+        if total == 0:
+            return self.stats
+        
+        return {
+            **self.stats,
+            "tier1_percentage": (self.stats["tier1_success"] / total) * 100,
+            "tier2_percentage": (self.stats["tier2_success"] / total) * 100,
+            "tier3_percentage": (self.stats["tier3_success"] / total) * 100,
+            "average_cost": self.stats["total_cost"] / total if total > 0 else 0,
+            "cost_breakdown": {
+                "tier1_cost": self.stats["tier1_cost"],
+                "tier2_cost": self.stats["tier2_cost"], 
+                "tier3_cost": self.stats["tier3_cost"]
+            }
+        }
+    
+    def process_agenda(self, url: str, **kwargs) -> str:
+        """Legacy compatibility method - use process_agenda_optimal instead"""
+        summary, method, cost = self.process_agenda_optimal(url)
+        return summary
 
-    def add_to_batch_queue(self, pdf_url: str, custom_id: str = None) -> str:
-        """Add a PDF to the batch accumulator for efficient processing"""
-        return self.batch_accumulator.add_request(pdf_url, custom_id)
 
-    def get_batch_queue_status(self) -> Dict[str, Any]:
-        """Get current status of the batch accumulator"""
-        return self.batch_accumulator.get_status()
-
-    def force_batch_submission(self):
-        """Force submission of accumulated batch requests"""
-        self.batch_accumulator.force_submit()
-
-    def get_cost_summary(self) -> Dict[str, Any]:
-        """Get comprehensive cost tracking summary"""
-        return self.pdf_api_processor.cost_tracker.get_summary()
-
-    def shutdown(self):
-        """Cleanup resources"""
-        logger.info("Shutting down AgendaProcessor...")
-        if hasattr(self, "batch_accumulator"):
-            self.batch_accumulator.shutdown()
-        logger.info("Shutdown complete")
+# Backwards compatibility
+class AgendaProcessor(OptimalAgendaProcessor):
+    """Backwards compatibility class"""
+    pass
 
 
-def create_cli_parser():
-    """Create CLI argument parser"""
-    parser = argparse.ArgumentParser(
-        description="Engagic Agenda Processor - Process city council meeting packets using AI",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python fullstack.py --process https://example.com/packet.pdf
-  python fullstack.py --process https://example.com/packet.pdf --pdf-method ocr
-  python fullstack.py --download https://example.com/packet.pdf -o agenda.pdf
-  python fullstack.py --batch meetings.json --wait
-        """,
-    )
-
-    # Action flags (mutually exclusive)
-    action_group = parser.add_mutually_exclusive_group(required=True)
-    action_group.add_argument(
-        "--process",
-        metavar="URL",
-        help="Process PDF from URL and generate AI summary",
-    )
-    action_group.add_argument(
-        "--download",
-        metavar="URL",
-        help="Download PDF packet from URL and save to file",
-    )
-    action_group.add_argument(
-        "--batch",
-        metavar="FILE",
-        help="Process multiple PDFs from JSON file using batch API",
-    )
-
-    # Optional parameters
-    parser.add_argument(
-        "--output",
-        "-o",
-        help="Output filename for downloaded packet (only with --download)",
-    )
-    parser.add_argument(
-        "--api-key", help="Anthropic API key (or set LLM_API_KEY env var)"
-    )
-    parser.add_argument(
-        "--pdf-method",
-        choices=["auto", "url", "base64", "files", "ocr", "chunked"],
-        default="auto",
-        help="PDF processing method (default: auto - tries url->base64->chunked->ocr)",
-    )
-    parser.add_argument(
-        "--use-files-api",
-        action="store_true",
-        help="Use Files API for PDF processing (uploads PDFs for reuse)",
-    )
-    parser.add_argument(
-        "--wait",
-        action="store_true",
-        help="Wait for batch processing to complete (only with --batch)",
-    )
-    parser.add_argument(
-        "--save-summary",
-        action="store_true",
-        help="Save summary to file after processing",
-    )
-
-    return parser
-
-
-def main():
-    """CLI main function"""
-    parser = create_cli_parser()
-    args = parser.parse_args()
-
-    try:
-        # Initialize processor
-        processor = AgendaProcessor(api_key=args.api_key)
-
-        if args.download:
-            logger.info("=== DOWNLOADING PDF ===")
-            output_path = processor.download_packet(args.download, args.output)
-            logger.info(f"Success! Packet saved to: {output_path}")
-
-        elif args.process:
-            logger.info("=== PROCESSING AGENDA ===")
-
-            # Configure processor with Files API if requested
-            if args.use_files_api:
-                processor.pdf_api_processor.use_files_api = True
-                logger.info("Using Files API for PDF processing")
-
-            # Process the agenda
-            summary = processor.process_agenda(
-                args.process,
-                pdf_method=args.pdf_method,
-                save_raw=args.save_summary,
-                save_cleaned=args.save_summary,
-            )
-
-            if args.save_summary:
-                processor._save_text(summary, "agenda_summary.txt")
-                logger.info("Summary saved to agenda_summary.txt")
-
-            logger.info(f"Success! Generated summary with {len(summary)} characters")
-            logger.info("=" * 50)
-            logger.info("SUMMARY:")
-            logger.info("=" * 50)
-            logger.info(summary)
-
-        elif args.batch:
-            logger.info("=== BATCH PROCESSING ===")
-
-            # Load batch requests from JSON file
-            import json
-
-            with open(args.batch, "r") as f:
-                pdf_requests = json.load(f)
-
-            logger.info(f"Processing {len(pdf_requests)} PDFs in batch mode")
-
-            # Process batch
-            results = processor.process_batch_agendas(
-                pdf_requests, wait_for_results=args.wait, return_raw=False
-            )
-
-            if args.wait:
-                # Show results
-                success_count = sum(1 for r in results if r.get("status") == "success")
-                logger.info(f"Batch complete: {success_count}/{len(results)} succeeded")
-
-                if args.save_summary:
-                    # Save all summaries
-                    for i, result in enumerate(results):
-                        if result.get("status") == "success":
-                            filename = f"batch_summary_{result.get('custom_id', i)}.txt"
-                            processor._save_text(result["summary"], filename)
-                            logger.info(f"Saved summary to {filename}")
-            else:
-                # Just show batch ID
-                logger.info(f"Batch submitted with ID: {results}")
-                logger.info("Use batch status API to check progress")
-
-    except KeyboardInterrupt:
-        logger.warning("\nOperation cancelled by user")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        sys.exit(1)
+def create_processor(**kwargs) -> OptimalAgendaProcessor:
+    """Create an optimal processor instance"""
+    return OptimalAgendaProcessor(**kwargs)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        # Ensure cleanup on interrupt
-        logger.info("\nShutting down...")
-        sys.exit(0)
+    import sys
+    
+    if len(sys.argv) < 2:
+        print("Usage: python fullstack.py <pdf_url>")
+        sys.exit(1)
+    
+    processor = create_processor()
+    
+    test_url = sys.argv[1]
+    summary, method, cost = processor.process_agenda_optimal(test_url)
+    
+    print("=== SUMMARY ===")
+    print(summary)
+    print(f"\n=== PROCESSING INFO ===")
+    print(f"Method: {method}")
+    print(f"Cost: ${cost:.3f}")
+    print(f"\n=== STATS ===")
+    stats = processor.get_processing_stats()
+    for key, value in stats.items():
+        print(f"{key}: {value}")
