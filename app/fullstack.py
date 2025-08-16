@@ -66,7 +66,7 @@ def sanitize_filename(filename: str) -> str:
     return filename[:255]  # Limit length
 
 
-class OptimalAgendaProcessor:
+class AgendaProcessor:
     """Optimal three-tier PDF processor for cost-effective, high-quality results"""
     
     def __init__(self, api_key: Optional[str] = None, mistral_api_key: Optional[str] = None):
@@ -608,16 +608,9 @@ Agenda text:
         summary, method, cost = self.process_agenda_optimal(url)
         return summary
 
-
-# Backwards compatibility
-class AgendaProcessor(OptimalAgendaProcessor):
-    """Backwards compatibility class"""
-    pass
-
-
-def create_processor(**kwargs) -> OptimalAgendaProcessor:
+def create_processor(**kwargs) -> AgendaProcessor:
     """Create an optimal processor instance"""
-    return OptimalAgendaProcessor(**kwargs)
+    return AgendaProcessor(**kwargs)
 
 
 if __name__ == "__main__":
