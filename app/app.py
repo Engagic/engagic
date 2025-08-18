@@ -104,7 +104,7 @@ app.add_middleware(
 # Initialize global instances
 try:
     processor = AgendaProcessor(
-        api_key=config.get_api_key(), db_path=config.MEETINGS_DB_PATH
+        api_key=config.get_api_key()
     )
     logger.info("LLM processor initialized successfully")
 except ValueError:

@@ -22,6 +22,7 @@ import requests
 import anthropic
 from typing import List, Dict, Any, Optional, Union
 from urllib.parse import urlparse
+from pathlib import Path
 
 # PDF processing
 from PyPDF2 import PdfReader
@@ -49,7 +50,7 @@ def validate_url(url: str) -> None:
         raise ValueError(f"Invalid URL length: {len(url) if url else 0}")
     
     parsed = urlparse(url)
-    if parsed.scheme not in ['http', 'https']:
+    if not parsed.scheme in ['http', 'https']:
         raise ValueError("URL must use HTTP or HTTPS")
     
     if not parsed.netloc:
@@ -403,47 +404,44 @@ class AgendaProcessor:
         
         if style == "comprehensive":
             prompt = """Analyze this city council meeting agenda and provide a comprehensive summary for residents.
+            **Complete Agenda Items** (list every single one):
+            - Item number and full title
+            - Complete description of what's being proposed
+            - Department or presenter
+            - Action required (vote, discussion, information only)
 
-**Complete Agenda Items** (list every single one):
-- Item number and full title
-- Complete description of what's being proposed
-- Department or presenter
-- Action required (vote, discussion, information only)
+            **Financial Details** (every dollar amount):
+            - Budget items with exact amounts
+            - Contract values and vendors
+            - Grant amounts and sources
+            - Fee changes or rate adjustments
 
-**Financial Details** (every dollar amount):
-- Budget items with exact amounts
-- Contract values and vendors
-- Grant amounts and sources
-- Fee changes or rate adjustments
+            **Property and Development** (all locations):
+            - Complete addresses for any property discussed
+            - Zoning changes with current and proposed zoning
+            - Development project names and descriptions
+            - Square footage, units, or measurements
 
-**Property and Development** (all locations):
-- Complete addresses for any property discussed
-- Zoning changes with current and proposed zoning
-- Development project names and descriptions
-- Square footage, units, or measurements
+            **Public Participation**:
+            - Public hearing items with times
+            - Comment period details
+            - How to participate (in person, online, written)
+            - Deadlines for input
 
-**Public Participation**:
-- Public hearing items with times
-- Comment period details
-- How to participate (in person, online, written)
-- Deadlines for input
+            **Key Details to Preserve**:
+            - Exact dollar amounts (not "several million" but "$3,456,789")
+            - Complete addresses (not "downtown" but "123 Main Street")
+            - Full names and titles
+            - Precise dates and times
+            - Ordinance and resolution numbers
 
-**Key Details to Preserve**:
-- Exact dollar amounts (not "several million" but "$3,456,789")
-- Complete addresses (not "downtown" but "123 Main Street")
-- Full names and titles
-- Precise dates and times
-- Ordinance and resolution numbers
+            Format as organized sections with bullet points. Be thorough and detailed.
 
-Format as organized sections with bullet points. Be thorough and detailed.
-
-Agenda text:
-{text}"""
+            Agenda text:
+            {text}"""
         else:
             prompt = """Provide a brief summary of this city council meeting agenda, focusing on the most important items that affect residents:
-
-{text}"""
-        
+                {text}"""
         try:
             response = self.client.messages.create(
                 model="claude-3-5-sonnet-20241022",
@@ -626,10 +624,10 @@ if __name__ == "__main__":
     
     print("=== SUMMARY ===")
     print(summary)
-    print("\n=== PROCESSING INFO ===")
+    print(f"\n=== PROCESSING INFO ===")
     print(f"Method: {method}")
     print(f"Cost: ${cost:.3f}")
-    print("\n=== STATS ===")
+    print(f"\n=== STATS ===")
     stats = processor.get_processing_stats()
     for key, value in stats.items():
         print(f"{key}: {value}")
