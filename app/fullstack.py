@@ -390,7 +390,7 @@ class AgendaProcessor:
             return None
     
     def _summarize_with_text_api(self, text: str, style: str = "comprehensive") -> str:
-        """Summarize extracted text using regular text API (not PDF API)
+        """Summarize extracted text using optimal approach based on document size
         
         Args:
             text: Extracted text to summarize
@@ -400,58 +400,216 @@ class AgendaProcessor:
             Summary text
         """
         page_count = self._estimate_page_count(text)
-        logger.info(f"Summarizing {page_count} pages of text using text API")
+        text_size = len(text)
+        max_size = 75000  # Conservative limit for text API
         
-        if style == "comprehensive":
-            prompt = """Analyze this city council meeting agenda and provide a comprehensive summary for residents.
-            **Complete Agenda Items** (list every single one):
-            - Item number and full title
-            - Complete description of what's being proposed
-            - Department or presenter
-            - Action required (vote, discussion, information only)
-
-            **Financial Details** (every dollar amount):
-            - Budget items with exact amounts
-            - Contract values and vendors
-            - Grant amounts and sources
-            - Fee changes or rate adjustments
-
-            **Property and Development** (all locations):
-            - Complete addresses for any property discussed
-            - Zoning changes with current and proposed zoning
-            - Development project names and descriptions
-            - Square footage, units, or measurements
-
-            **Public Participation**:
-            - Public hearing items with times
-            - Comment period details
-            - How to participate (in person, online, written)
-            - Deadlines for input
-
-            **Key Details to Preserve**:
-            - Exact dollar amounts (not "several million" but "$3,456,789")
-            - Complete addresses (not "downtown" but "123 Main Street")
-            - Full names and titles
-            - Precise dates and times
-            - Ordinance and resolution numbers
-
-            Format as organized sections with bullet points. Be thorough and detailed.
-
-            Agenda text:
-            {text}"""
+        logger.info(f"Summarizing {page_count} pages ({text_size} chars) using text API")
+        
+        # Use different approaches based on document complexity
+        if page_count <= 30 and text_size <= max_size:
+            # Short documents: use simple, focused approach
+            logger.info("Using short agenda summarization approach")
+            return self._summarize_short_agenda(text)
+        elif text_size > max_size:
+            # Large documents: use chunking approach
+            logger.info(f"Text too large ({text_size} chars), using chunking approach")
+            return self._summarize_with_chunking(text, style)
         else:
-            prompt = """Provide a brief summary of this city council meeting agenda, focusing on the most important items that affect residents:
-                {text}"""
+            # Medium documents: use comprehensive single-pass approach
+            logger.info("Using comprehensive single-pass summarization")
+            return self._summarize_comprehensive_single(text)
+    
+    def _summarize_short_agenda(self, text: str) -> str:
+        """Summarize short agendas with simple, focused approach"""
+        try:
+            response = self.client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=3000,
+                messages=[{
+                    "role": "user",
+                    "content": f"""This is a city council meeting agenda. Provide a clear, concise summary that covers:
+
+                    **Key Agenda Items:**
+                    - List the main topics/issues being discussed
+                    - Include any public hearings or votes
+                    - Note any budget or financial items
+
+                    **Important Details:**
+                    - Specific addresses, dollar amounts, ordinance numbers
+                    - Deadlines or implementation dates
+                    - Public participation opportunities
+
+                    Keep it brief but informative. Focus on what citizens need to know.
+
+                    Agenda text:
+                    {text}"""
+                }]
+            )
+            return response.content[0].text
+        except Exception as e:
+            logger.error(f"Short agenda summarization failed: {e}")
+            raise
+    
+    def _summarize_comprehensive_single(self, text: str) -> str:
+        """Comprehensive single-pass summarization for medium-sized documents"""
         try:
             response = self.client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=4000,
-                messages=[{"role": "user", "content": prompt.format(text=text)}]
+                messages=[{
+                    "role": "user", 
+                    "content": f"""Analyze this city council meeting agenda and provide a comprehensive summary for residents.
+                    **Complete Agenda Items** (list every single one):
+                    - Item number and full title
+                    - Complete description of what's being proposed
+                    - Department or presenter
+                    - Action required (vote, discussion, information only)
+
+                    **Financial Details** (every dollar amount):
+                    - Budget items with exact amounts
+                    - Contract values and vendors
+                    - Grant amounts and sources
+                    - Fee changes or rate adjustments
+
+                    **Property and Development** (all locations):
+                    - Complete addresses for any property discussed
+                    - Zoning changes with current and proposed zoning
+                    - Development project names and descriptions
+                    - Square footage, units, or measurements
+
+                    **Public Participation**:
+                    - Public hearing items with times
+                    - Comment period details
+                    - How to participate (in person, online, written)
+                    - Deadlines for input
+
+                    **Key Details to Preserve**:
+                    - Exact dollar amounts (not "several million" but "$3,456,789")
+                    - Complete addresses (not "downtown" but "123 Main Street")
+                    - Full names and titles
+                    - Precise dates and times
+                    - Ordinance and resolution numbers
+
+                    Format as organized sections with bullet points. Be thorough and detailed.
+                    Skip pure administrative items unless they have significant public impact.
+
+                    Agenda text:
+                    {text}"""
+                }]
             )
             return response.content[0].text
         except Exception as e:
-            logger.error(f"Text API summarization failed: {e}")
+            logger.error(f"Comprehensive summarization failed: {e}")
             raise
+    
+    def _summarize_with_chunking(self, text: str, style: str = "comprehensive") -> str:
+        """Summarize large text using smart chunking approach"""
+        chunks = self._chunk_by_agenda_items(text)
+        logger.info(f"Split into {len(chunks)} chunks for processing")
+        
+        summaries = []
+        rate_limit_delay = 2  # Conservative delay between API calls
+        
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Processing chunk {i + 1}/{len(chunks)}...")
+            
+            try:
+                chunk_prompt = f"""Analyze this portion of a city council meeting agenda packet and extract the key information 
+                that residents should know about. Focus on:
+
+                1. **Agenda Items**: What specific issues/proposals are being discussed?
+                2. **Public Impact**: How might these affect residents' daily lives?
+                3. **Financial Details**: Any budget items, costs, or financial impacts
+                4. **Location/Property Details**: Specific addresses, developments, or geographic areas affected
+                5. **Timing**: When things will happen, deadlines, or implementation dates
+                6. **Public Participation**: Opportunities for public comment or hearings
+
+                Format as clear bullet points. Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
+                Skip pure administrative items unless they have significant public impact.
+
+                Text to analyze:
+                {chunk}"""
+                
+                response = self.client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=4000,
+                    messages=[{"role": "user", "content": chunk_prompt}]
+                )
+                
+                summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n{response.content[0].text}\n")
+                
+                # Rate limiting between chunks
+                if i < len(chunks) - 1:
+                    logger.debug(f"Waiting {rate_limit_delay} seconds...")
+                    time.sleep(rate_limit_delay)
+                    
+            except Exception as e:
+                logger.error(f"Error processing chunk {i + 1}: {e}")
+                summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Could not process this section - {str(e)}]\n")
+        
+        return "\n".join(summaries)
+    
+    def _chunk_by_agenda_items(self, text: str, max_chunk_size: int = 75000) -> List[str]:
+        """Smart chunking that respects agenda item boundaries"""
+        # Look for agenda item patterns
+        agenda_patterns = [
+            r"\n\s*\d+\.\s+[A-Z]",  # "1. ITEM NAME"
+            r"\n\s*[A-Z]\.\s+[A-Z]",  # "A. ITEM NAME"
+            r"\n\s*Item\s+\d+",  # "Item 1"
+            r"\n\s*AGENDA\s+ITEM",  # "AGENDA ITEM"
+        ]
+
+        # Find all potential split points
+        split_points = [0]
+        for pattern in agenda_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                split_points.append(match.start())
+
+        split_points = sorted(set(split_points))
+        split_points.append(len(text))
+
+        # Group split points into appropriately sized chunks
+        chunks = []
+        current_chunk_start = 0
+
+        for i in range(1, len(split_points)):
+            chunk_end = split_points[i]
+            chunk_size = chunk_end - current_chunk_start
+
+            if chunk_size > max_chunk_size and chunks:
+                # Start new chunk
+                chunk_text = text[current_chunk_start : split_points[i - 1]]
+                chunks.append(chunk_text)
+                current_chunk_start = split_points[i - 1]
+            elif i == len(split_points) - 1:
+                # Last chunk
+                chunk_text = text[current_chunk_start:chunk_end]
+                chunks.append(chunk_text)
+
+        # Fallback to simple chunking if no agenda patterns found
+        if len(chunks) <= 1:
+            return self._simple_chunk(text, max_chunk_size)
+
+        return chunks
+
+    def _simple_chunk(self, text: str, chunk_size: int) -> List[str]:
+        """Fallback chunking by character count with page boundaries"""
+        chunks = []
+        start = 0
+
+        while start < len(text):
+            end = start + chunk_size
+
+            # Try to break on page boundary
+            if end < len(text):
+                page_break = text.rfind("--- PAGE", start, end)
+                if page_break > start + chunk_size // 2:
+                    end = page_break
+
+            chunks.append(text[start:end])
+            start = end
+
+        return chunks
     
     def _process_multiple_pdfs(self, urls: List[str]) -> tuple[str, str, float]:
         """Process multiple PDFs and combine summaries
