@@ -102,12 +102,16 @@ class AgendaProcessor:
                 logger.warning("Mistral SDK not available - Tier 2 disabled")
         
         # Initialize Claude PDF API processor for Tier 3
-        try:
-            from pdf_api_processor import PDFAPIProcessor
-            self.pdf_processor = PDFAPIProcessor(self.api_key)
-            logger.info("Claude PDF API processor initialized")
-        except ImportError:
-            logger.warning("PDF API processor not available - Tier 3 disabled")
+        if self.api_key:
+            try:
+                from pdf_api_processor import PDFAPIProcessor
+                self.pdf_processor = PDFAPIProcessor(self.api_key)
+                logger.info("Claude PDF API processor initialized")
+            except ImportError:
+                logger.warning("PDF API processor not available - Tier 3 disabled")
+                self.pdf_processor = None
+        else:
+            logger.info("No API key available - PDF API processor disabled")
             self.pdf_processor = None
         
         # Load basic English words for validation
@@ -382,9 +386,14 @@ class AgendaProcessor:
             return None
         
         try:
-            # Use the PDF API processor with a comprehensive prompt
-            summary = self.pdf_processor.process(url, method="url")
-            return summary
+            # Try URL method first, then fallback to base64
+            try:
+                summary = self.pdf_processor.process(url, method="url")
+                return summary
+            except Exception as url_error:
+                logger.warning(f"PDF API URL method failed: {url_error}, trying base64...")
+                summary = self.pdf_processor.process(url, method="base64")
+                return summary
         except Exception as e:
             logger.error(f"Claude PDF API failed: {e}")
             return None
