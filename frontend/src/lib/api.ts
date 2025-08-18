@@ -44,6 +44,52 @@ export interface CachedSummary {
 	error?: string;
 }
 
+export interface AnalyticsData {
+	success: boolean;
+	timestamp: string;
+	headline_metrics: {
+		cities_covered: number;
+		meetings_tracked: number;
+		agendas_summarized: number;
+		states_covered: number;
+		zipcodes_served: number;
+	};
+	impact_metrics: {
+		estimated_pages_processed: number;
+		citizen_hours_saved: number;
+		ai_efficiency_ratio: number;
+		average_summary_time: number;
+		recent_activity_30d: number;
+	};
+	quality_metrics: {
+		processing_success_rate: number;
+		high_quality_summaries: number;
+		recent_summaries_30d: number;
+		active_cities: number;
+	};
+	growth_metrics: {
+		daily_searches: number;
+		successful_searches: number;
+		city_requests: number;
+		search_success_rate: number;
+	};
+	fun_facts: string[];
+}
+
+export async function getAnalytics(): Promise<AnalyticsData> {
+	try {
+		const response = await fetch(`${API_BASE}/api/analytics`);
+		
+		if (!response.ok) {
+			throw new Error('Failed to fetch analytics');
+		}
+		
+		return response.json();
+	} catch (error) {
+		throw new Error('Failed to load analytics data');
+	}
+}
+
 export async function searchMeetings(query: string): Promise<SearchResult> {
 	try {
 		const response = await fetch(`${API_BASE}/api/search`, {

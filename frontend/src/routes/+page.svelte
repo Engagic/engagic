@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { searchMeetings, type SearchResult, type CityOption } from '$lib/api';
+	import { searchMeetings, getAnalytics, type SearchResult, type CityOption, type AnalyticsData } from '$lib/api';
 	import { generateCityUrl } from '$lib/utils';
+	import { onMount } from 'svelte';
 
 	let searchQuery = $state('');
 	let searchResults: SearchResult | null = $state(null);
 	let loading = $state(false);
 	let error = $state('');
+	let analytics: AnalyticsData | null = $state(null);
+	let analyticsLoading = $state(true);
 
 	async function handleSearch() {
 		if (!searchQuery.trim()) return;
@@ -41,6 +44,25 @@
 		if (event.key === 'Enter') {
 			handleSearch();
 		}
+	}
+
+	onMount(async () => {
+		try {
+			analytics = await getAnalytics();
+		} catch (err) {
+			console.error('Failed to load analytics:', err);
+		} finally {
+			analyticsLoading = false;
+		}
+	});
+
+	function formatNumber(num: number): string {
+		if (num >= 1000000) {
+			return (num / 1000000).toFixed(1) + 'M';
+		} else if (num >= 1000) {
+			return (num / 1000).toFixed(1) + 'K';
+		}
+		return num.toLocaleString();
 	}
 </script>
 
@@ -107,6 +129,53 @@
 	{:else if loading}
 		<div class="loading">
 			Searching for meetings...
+		</div>
+	{/if}
+
+	<!-- Analytics Dashboard -->
+	{#if !analyticsLoading && analytics}
+		<div class="analytics-dashboard">
+			<h2 class="dashboard-title">Making Democracy Accessible</h2>
+			
+			<div class="metrics-grid">
+				<div class="metric-card highlight">
+					<div class="metric-number">{formatNumber(analytics.headline_metrics.cities_covered)}</div>
+					<div class="metric-label">Cities Covered</div>
+				</div>
+				
+				<div class="metric-card highlight">
+					<div class="metric-number">{formatNumber(analytics.headline_metrics.agendas_summarized)}</div>
+					<div class="metric-label">Agendas Summarized</div>
+				</div>
+				
+				<div class="metric-card highlight">
+					<div class="metric-number">{formatNumber(analytics.impact_metrics.citizen_hours_saved)}</div>
+					<div class="metric-label">Hours Saved</div>
+				</div>
+				
+				<div class="metric-card highlight">
+					<div class="metric-number">{analytics.headline_metrics.states_covered}</div>
+					<div class="metric-label">States</div>
+				</div>
+			</div>
+
+			<div class="secondary-metrics">
+				<div class="metric-row">
+					<span class="metric-stat">{formatNumber(analytics.impact_metrics.estimated_pages_processed)} pages processed</span>
+					<span class="metric-stat">{analytics.quality_metrics.processing_success_rate}% success rate</span>
+					<span class="metric-stat">{formatNumber(analytics.headline_metrics.zipcodes_served)} zip codes served</span>
+				</div>
+			</div>
+
+			<div class="fun-facts">
+				<div class="fun-fact">
+					{analytics.fun_facts[0]}
+				</div>
+			</div>
+		</div>
+	{:else if analyticsLoading}
+		<div class="analytics-loading">
+			<div class="loading-shimmer"></div>
 		</div>
 	{/if}
 	</div>
