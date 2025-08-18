@@ -213,6 +213,10 @@ class GranicusAdapter:
             if len(cells) < 2:
                 continue
             
+            # Skip header rows (those with listHeader class)
+            if any(cell.get("class") == ["listHeader"] for cell in cells):
+                continue
+            
             # Extract meeting info from cells
             # Remove hidden spans (containing timestamps) before extracting text
             for span in cells[0].find_all('span', style=lambda x: x and 'display:none' in x):
@@ -225,7 +229,7 @@ class GranicusAdapter:
             
             # Skip if no meaningful title
             if not title or title in ["Meeting", "Event"]:
-                logger.info(f"No Title found for {self.base}{row}")
+                logger.debug(f"No meaningful title found in row from {self.list_url}")
             
             # Look for agenda link in this row
             agenda_link = row.find("a", string=lambda s: s and "Agenda" in s)
@@ -525,7 +529,9 @@ class GranicusAdapter:
                                 logger.debug(
                                     f"Found embedded PDF on page {page_num + 1}: {uri}"
                                 )
-                                embedded_urls.append(uri)
+                                # Convert relative URLs to absolute URLs
+                                absolute_uri = self._absolute(uri)
+                                embedded_urls.append(absolute_uri)
 
                 doc.close()
 
