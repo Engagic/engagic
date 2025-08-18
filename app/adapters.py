@@ -525,7 +525,9 @@ class GranicusAdapter:
                                 logger.debug(
                                     f"Found embedded PDF on page {page_num + 1}: {uri}"
                                 )
-                                embedded_urls.append(uri)
+                                # Convert relative URLs to absolute URLs
+                                absolute_uri = self._absolute(uri)
+                                embedded_urls.append(absolute_uri)
 
                 doc.close()
 
