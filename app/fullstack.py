@@ -739,6 +739,231 @@ class AgendaProcessor:
         tokens = len(text) // 750
         return (tokens / 1000) * 0.003
     
+    def process_batch_agendas(
+        self, 
+        batch_requests: List[Dict[str, str]], 
+        wait_for_results: bool = True,
+        return_raw: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Process multiple agendas using Anthropic's Batch API for 50% cost savings
+        
+        Args:
+            batch_requests: List of {"url": packet_url, "custom_id": custom_id}
+            wait_for_results: Whether to wait for batch completion (default True)
+            return_raw: Whether to return raw batch results (default False)
+            
+        Returns:
+            List of processing results matching the input custom_ids
+        """
+        if not batch_requests:
+            return []
+            
+        logger.info(f"Processing {len(batch_requests)} agendas using Batch API (50% cost savings)")
+        
+        try:
+            # Prepare batch API requests
+            api_requests = []
+            for req in batch_requests:
+                # Extract text first using tier 1 approach
+                try:
+                    text = self._tier1_extract_text(req["url"])
+                    if not text or not self._is_good_text_quality(text):
+                        # Skip this request if text extraction fails
+                        logger.warning(f"Skipping {req['custom_id']} - failed text extraction")
+                        continue
+                        
+                    # Determine processing approach based on text size
+                    text_size = len(text)
+                    page_count = self._estimate_page_count(text)
+                    
+                    if page_count <= 30 and text_size <= 75000:
+                        # Short agenda approach
+                        prompt = f"""This is a city council meeting agenda. Provide a clear, concise summary that covers:
+
+                        **Key Agenda Items:**
+                        - List the main topics/issues being discussed
+                        - Include any public hearings or votes
+                        - Note any budget or financial items
+
+                        **Important Details:**
+                        - Specific addresses, dollar amounts, ordinance numbers
+                        - Deadlines or implementation dates
+                        - Public participation opportunities
+
+                        Keep it brief but informative. Focus on what citizens need to know.
+
+                        Agenda text:
+                        {text}"""
+                    elif text_size <= 75000:
+                        # Comprehensive single-pass approach
+                        prompt = f"""Analyze this city council meeting agenda and provide a comprehensive summary for residents.
+                        **Complete Agenda Items** (list every single one):
+                        - Item number and full title
+                        - Complete description of what's being proposed
+                        - Department or presenter
+                        - Action required (vote, discussion, information only)
+
+                        **Financial Details** (every dollar amount):
+                        - Budget items with exact amounts
+                        - Contract values and vendors
+                        - Grant amounts and sources
+                        - Fee changes or rate adjustments
+
+                        **Property and Development** (all locations):
+                        - Complete addresses for any property discussed
+                        - Zoning changes with current and proposed zoning
+                        - Development project names and descriptions
+                        - Square footage, units, or measurements
+
+                        **Public Participation**:
+                        - Public hearing items with times
+                        - Comment period details
+                        - How to participate (in person, online, written)
+                        - Deadlines for input
+
+                        **Key Details to Preserve**:
+                        - Exact dollar amounts (not "several million" but "$3,456,789")
+                        - Complete addresses (not "downtown" but "123 Main Street")
+                        - Full names and titles
+                        - Precise dates and times
+                        - Ordinance and resolution numbers
+
+                        Format as organized sections with bullet points. Be thorough and detailed.
+                        Skip pure administrative items unless they have significant public impact.
+
+                        Agenda text:
+                        {text}"""
+                    else:
+                        # For very large texts, we'll need chunking - use first chunk for batch
+                        chunks = self._chunk_by_agenda_items(text, max_chunk_size=75000)
+                        first_chunk = chunks[0] if chunks else text[:75000]
+                        prompt = f"""Analyze this portion of a city council meeting agenda packet and extract the key information 
+                        that residents should know about. Focus on:
+
+                        1. **Agenda Items**: What specific issues/proposals are being discussed?
+                        2. **Public Impact**: How might these affect residents' daily lives?
+                        3. **Financial Details**: Any budget items, costs, or financial impacts
+                        4. **Location/Property Details**: Specific addresses, developments, or geographic areas affected
+                        5. **Timing**: When things will happen, deadlines, or implementation dates
+                        6. **Public Participation**: Opportunities for public comment or hearings
+
+                        Format as clear bullet points. Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
+                        Skip pure administrative items unless they have significant public impact.
+
+                        Text to analyze:
+                        {first_chunk}"""
+                    
+                    # Create batch API request
+                    api_requests.append({
+                        "custom_id": req["custom_id"],
+                        "params": {
+                            "model": "claude-3-5-sonnet-20241022",
+                            "max_tokens": 4000,
+                            "messages": [{"role": "user", "content": prompt}]
+                        }
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error preparing batch request for {req['custom_id']}: {e}")
+                    continue
+            
+            if not api_requests:
+                logger.warning("No valid batch requests to process")
+                return []
+            
+            # Submit to Anthropic Batch API
+            batch_response = self.client.messages.batches.create(requests=api_requests)
+            batch_id = batch_response.id
+            
+            logger.info(f"Submitted batch {batch_id} with {len(api_requests)} requests")
+            
+            if not wait_for_results:
+                return [{"batch_id": batch_id, "status": "submitted"}]
+            
+            # Poll for completion
+            max_wait_time = 3600  # 1 hour max wait
+            poll_interval = 30    # Check every 30 seconds
+            waited_time = 0
+            
+            while waited_time < max_wait_time:
+                batch_status = self.client.messages.batches.retrieve(batch_id)
+                
+                if batch_status.processing_status == "ended":
+                    logger.info(f"Batch {batch_id} completed successfully")
+                    break
+                elif batch_status.processing_status in ["canceled", "failed"]:
+                    logger.error(f"Batch {batch_id} failed with status: {batch_status.processing_status}")
+                    return []
+                
+                logger.info(f"Batch {batch_id} still processing... ({waited_time}s waited)")
+                time.sleep(poll_interval)
+                waited_time += poll_interval
+            
+            if waited_time >= max_wait_time:
+                logger.error(f"Batch {batch_id} timed out after {max_wait_time}s")
+                return []
+            
+            # Retrieve and process results
+            results = []
+            for result in self.client.messages.batches.results(batch_id):
+                if result.result.type == "succeeded":
+                    summary = result.result.message.content[0].text
+                    cost = self._estimate_batch_cost(result.result.message.usage)
+                    
+                    results.append({
+                        "custom_id": result.custom_id,
+                        "summary": summary,
+                        "processing_time": 0,  # Batch processing time not tracked per item
+                        "processing_method": "batch_api_tier1",
+                        "processing_cost": cost,
+                        "success": True
+                    })
+                elif result.result.type == "errored":
+                    logger.error(f"Batch item {result.custom_id} failed: {result.result.error}")
+                    results.append({
+                        "custom_id": result.custom_id,
+                        "error": str(result.result.error),
+                        "success": False
+                    })
+                else:
+                    logger.warning(f"Batch item {result.custom_id} status: {result.result.type}")
+                    results.append({
+                        "custom_id": result.custom_id,
+                        "error": f"Batch processing {result.result.type}",
+                        "success": False
+                    })
+            
+            # Update stats
+            successful_count = sum(1 for r in results if r.get("success"))
+            total_cost = sum(r.get("processing_cost", 0) for r in results if r.get("success"))
+            
+            self.stats["tier1_success"] += successful_count
+            self.stats["total_processed"] += len(results)
+            self.stats["tier1_cost"] += total_cost
+            self.stats["total_cost"] += total_cost
+            
+            logger.info(f"Batch processing complete: {successful_count}/{len(results)} successful, ${total_cost:.3f} total cost")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Batch processing failed: {e}")
+            return []
+    
+    def _estimate_batch_cost(self, usage) -> float:
+        """Estimate cost for batch API usage (50% of regular pricing)"""
+        if not usage:
+            return 0.0
+        
+        input_tokens = getattr(usage, 'input_tokens', 0)
+        output_tokens = getattr(usage, 'output_tokens', 0)
+        
+        # Batch pricing is 50% of regular pricing for Claude 3.5 Sonnet
+        input_cost = (input_tokens / 1000) * 1.50  # $1.50 per 1K tokens (batch rate)
+        output_cost = (output_tokens / 1000) * 7.50  # $7.50 per 1K tokens (batch rate)
+        
+        return input_cost + output_cost
+    
     def get_processing_stats(self) -> Dict[str, Any]:
         """Get comprehensive processing statistics"""
         total = self.stats["total_processed"]
