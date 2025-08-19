@@ -1,6 +1,10 @@
-from adapters import CivicClerkAdapter
+from backend.adapters.all_adapters import CivicClerkAdapter
 import requests
 from datetime import datetime
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 burlintest = CivicClerkAdapter("montpeliervt")
 current_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-3] + "Z"
