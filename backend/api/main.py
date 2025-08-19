@@ -740,7 +740,7 @@ async def process_agenda(request: ProcessRequest):
         }
 
     except Exception as e:
-        logger.error(f"Error retrieving agenda for {packet_url}: {str(e)}")
+        logger.error(f"Error retrieving agenda for {request.packet_url}: {str(e)}")
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
@@ -753,12 +753,6 @@ async def get_stats():
         stats = db.get_cache_stats()
         queue_stats = db.get_processing_queue_stats()
         request_stats = db.get_city_request_stats()
-
-        # Background processor info (separate service)
-        background_info = {
-            "status": "separate_service",
-            "note": "Background processing runs as separate daemon service",
-        }
 
         return {
             "status": "healthy",

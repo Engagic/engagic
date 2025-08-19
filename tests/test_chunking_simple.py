@@ -1,11 +1,11 @@
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 #!/usr/bin/env python3
 """Simple test for PDF chunking"""
 
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ['LLM_API_KEY'] = os.environ.get('LLM_API_KEY', '')
 
 from backend.core.processor import AgendaProcessor

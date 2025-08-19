@@ -98,7 +98,7 @@ class MeetingsDatabase(BaseDatabase):
                 dt_str = clean_str.rstrip('Z').split('.')[0]  # Remove microseconds and Z
                 dt = datetime.fromisoformat(dt_str.replace('T', ' '))
                 return dt.strftime('%Y-%m-%d %H:%M:%S')
-            except:
+            except Exception:
                 pass
 
         # Try each format pattern
@@ -114,7 +114,7 @@ class MeetingsDatabase(BaseDatabase):
             from dateutil import parser
             dt = parser.parse(clean_str, fuzzy=True)
             return dt.strftime('%Y-%m-%d %H:%M:%S')
-        except:
+        except Exception:
             pass
         
         logger.warning(f"Could not parse date string: '{date_str}'")

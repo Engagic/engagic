@@ -1118,7 +1118,7 @@ class CivicPlusAdapter:
                         meeting_info["meeting_date"] = datetime.strptime(date_text, fmt)
                         logger.debug(f"  Parsed date: {meeting_info['meeting_date']}")
                         break
-                    except:
+                    except Exception:
                         continue
 
                 if "meeting_date" not in meeting_info:
@@ -1375,7 +1375,7 @@ class CivicPlusAdapter:
                                 meeting_info["meeting_date"] = datetime.strptime(
                                     date_str, "%m%d%Y"
                                 )
-                            except:
+                            except Exception:
                                 pass
 
                         meetings.append(meeting_info)
