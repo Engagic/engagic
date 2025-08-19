@@ -19,6 +19,14 @@
 		error = '';
 		
 		try {
+			// Check if this is a static route that should not be handled as a city
+			const staticRoutes = ['about', 'api', 'admin'];
+			if (staticRoutes.includes(city_url)) {
+				// Redirect to 404 or handle appropriately
+				goto('/');
+				return;
+			}
+			
 			// Parse the city URL to get city name and state
 			const parsed = parseCityUrl(city_url);
 			if (!parsed) {
