@@ -79,6 +79,64 @@
 					  day === 3 || day === 23 ? 'rd' : 'th';
 		return `${monthName} ${day}${suffix}, ${year}`;
 	}
+
+	function processSummary(rawSummary: string): Array<{type: 'header' | 'text', content: string}> {
+		if (!rawSummary) return [];
+		
+		// Remove ugly document headers
+		let cleaned = rawSummary
+			.replace(/=== DOCUMENT \d+ ===/g, '')
+			.replace(/--- SECTION \d+ SUMMARY ---/g, '')
+			.replace(/Here's a concise summary of the[^:]*:/gi, '')
+			.replace(/Here's a summary of the[^:]*:/gi, '')
+			.replace(/Here's the key points[^:]*:/gi, '')
+			.replace(/Here's a structured analysis[^:]*:/gi, '')
+			.replace(/Summary of the[^:]*:/gi, '')
+			.trim();
+		
+		// Clean up extra whitespace
+		cleaned = cleaned
+			.replace(/\n{3,}/g, '\n\n')
+			.replace(/^\s*\n+/, '')
+			.trim();
+		
+		// Process into structured content
+		const lines = cleaned.split('\n');
+		const processed = [];
+		let currentText = '';
+		
+		for (const line of lines) {
+			// Check if this line has bold markdown header
+			const headerMatch = line.match(/^\*\*([^*]+):\*\*$/);
+			if (headerMatch) {
+				// Save any accumulated text first
+				if (currentText.trim()) {
+					processed.push({ type: 'text', content: currentText.trim() });
+					currentText = '';
+				}
+				// Add the header
+				processed.push({ type: 'header', content: headerMatch[1] });
+			} else {
+				// Accumulate regular text (with light markdown cleanup)
+				let cleanedLine = line
+					// Remove remaining bold/italic that isn't a header
+					.replace(/\*\*([^*]+)\*\*/g, '$1')
+					.replace(/\*([^*]+)\*/g, '$1')
+					.replace(/_([^_]+)_/g, '$1')
+					// Clean bullet points
+					.replace(/^\s*[\*\+]\s+/g, '- ');
+				
+				currentText += (currentText ? '\n' : '') + cleanedLine;
+			}
+		}
+		
+		// Add any remaining text
+		if (currentText.trim()) {
+			processed.push({ type: 'text', content: currentText.trim() });
+		}
+		
+		return processed;
+	}
 	
 	
 </script>
@@ -131,8 +189,25 @@
 			</div>
 			
 			{#if selectedMeeting.processed_summary}
+				{@const processedContent = processSummary(selectedMeeting.processed_summary)}
 				<div class="meeting-summary">
-					{selectedMeeting.processed_summary}
+					{#if processedContent.length === 1 && processedContent[0].type === 'text'}
+						<!-- Plain text summary without headers -->
+						<div class="summary-content">
+							{processedContent[0].content}
+						</div>
+					{:else}
+						<!-- Structured summary with headers -->
+						{#each processedContent as block}
+							{#if block.type === 'header'}
+								<h3 class="summary-header">{block.content}</h3>
+							{:else}
+								<div class="summary-text">
+									{block.content}
+								</div>
+							{/if}
+						{/each}
+					{/if}
 				</div>
 			{:else}
 				<div class="no-summary">

@@ -1,6 +1,7 @@
 import logging
 import hashlib
 import json
+import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from .base_db import BaseDatabase
@@ -20,7 +21,7 @@ class MeetingsDatabase(BaseDatabase):
             city_banana TEXT NOT NULL,  -- Reference to city (no FK since it's in different DB)
             meeting_id TEXT,
             meeting_name TEXT,
-            meeting_date DATETIME,
+            meeting_date DATETIME,  -- Standardized ISO datetime (YYYY-MM-DD HH:MM:SS)
             packet_url TEXT,  -- Can be NULL for meetings without packets
             meeting_hash TEXT,  -- Hash of meeting details for change detection
             raw_packet_size INTEGER,
@@ -53,6 +54,71 @@ class MeetingsDatabase(BaseDatabase):
         CREATE INDEX IF NOT EXISTS idx_cache_hash ON processing_cache(content_hash);
         """
         self.execute_script(schema)
+
+    def _normalize_meeting_datetime(self, date_str: str) -> Optional[str]:
+        """Parse various date formats and return ISO datetime string
+        
+        Args:
+            date_str: Raw date string from various sources
+            
+        Returns:
+            ISO datetime string (YYYY-MM-DD HH:MM:SS) or None if parsing fails
+        """
+        if not date_str or not date_str.strip():
+            return None
+            
+        # Clean up the date string
+        clean_str = re.sub(r'\s+', ' ', date_str.strip())
+        
+        # Try different common date formats in order
+        format_attempts = [
+            # Month name formats (most common in the problem data)
+            '%b %d, %Y %I:%M %p',  # Jul 22, 2025 6:30 PM
+            '%B %d, %Y %I:%M %p',  # July 22, 2025 6:30 PM
+            '%b %d %Y %I:%M %p',   # Jul 22 2025 6:30 PM
+            '%B %d %Y %I:%M %p',   # July 22 2025 6:30 PM
+            '%b %d, %Y',           # Jul 22, 2025
+            '%B %d, %Y',           # July 22, 2025
+            
+            # ISO formats
+            '%Y-%m-%d %H:%M:%S',   # 2025-07-22 18:30:00
+            '%Y-%m-%d %I:%M %p',   # 2025-07-22 6:30 PM
+            '%Y-%m-%d',            # 2025-07-22
+            '%Y-%m-%dT%H:%M:%S',   # 2025-07-22T18:30:00
+            
+            # Numeric formats
+            '%m/%d/%Y %I:%M %p',   # 07/22/2025 6:30 PM
+            '%m/%d/%Y',            # 07/22/2025
+        ]
+        
+        # First handle special ISO with timezone format
+        if 'T' in clean_str and 'Z' in clean_str:
+            try:
+                # ISO with timezone
+                dt_str = clean_str.rstrip('Z').split('.')[0]  # Remove microseconds and Z
+                dt = datetime.fromisoformat(dt_str.replace('T', ' '))
+                return dt.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                pass
+
+        # Try each format pattern
+        for format_str in format_attempts:
+            try:
+                dt = datetime.strptime(clean_str, format_str)
+                return dt.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                continue
+        
+        # Fallback: try Python's dateutil parser if available
+        try:
+            from dateutil import parser
+            dt = parser.parse(clean_str, fuzzy=True)
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass
+        
+        logger.warning(f"Could not parse date string: '{date_str}'")
+        return None
 
     def store_meeting_data(self, meeting_data: Dict[str, Any]) -> int:
         """Store meeting data"""
@@ -89,11 +155,16 @@ class MeetingsDatabase(BaseDatabase):
             if isinstance(packet_url, list):
                 packet_url = json.dumps(packet_url)
 
+            # Normalize meeting date for reliable parsing
+            meeting_date_raw = meeting_data.get("meeting_date") or meeting_data.get("start")
+            meeting_date_normalized = self._normalize_meeting_datetime(meeting_date_raw)
+            
+            logger.debug(f"Date normalization: '{meeting_date_raw}' -> '{meeting_date_normalized}'")
+
             # Insert meeting
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO meetings 
-
                 (city_banana, meeting_id, meeting_name, meeting_date, packet_url, meeting_hash, last_accessed)
                 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """,
@@ -101,7 +172,7 @@ class MeetingsDatabase(BaseDatabase):
                     city_banana,
                     meeting_id,
                     meeting_data.get("meeting_name"),
-                    meeting_data.get("meeting_date"),
+                    meeting_date_normalized,  # Store the normalized date
                     packet_url,
                     meeting_hash,
                 ),
@@ -197,6 +268,10 @@ class MeetingsDatabase(BaseDatabase):
             if isinstance(packet_url, list):
                 packet_url = json.dumps(packet_url)
 
+            # Normalize meeting date for reliable parsing
+            meeting_date_raw = meeting_data.get("meeting_date") or meeting_data.get("start")
+            meeting_date_normalized = self._normalize_meeting_datetime(meeting_date_raw)
+
             # Insert/update meeting with summary
             cursor.execute(
                 """
@@ -209,7 +284,7 @@ class MeetingsDatabase(BaseDatabase):
                     city_banana,
                     meeting_data.get("meeting_id"),
                     meeting_data.get("meeting_name"),
-                    meeting_data.get("meeting_date"),
+                    meeting_date_normalized,  # Store the normalized date
                     packet_url,
                     summary,
                     processing_time,

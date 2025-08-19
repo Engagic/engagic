@@ -543,7 +543,7 @@ class AgendaProcessor:
         logger.info(f"Split into {len(chunks)} chunks for processing")
         
         summaries = []
-        rate_limit_delay = 2  # Conservative delay between API calls
+        rate_limit_delay = 5  # Conservative delay between API calls to avoid rate limits
         
         for i, chunk in enumerate(chunks):
             logger.info(f"Processing chunk {i + 1}/{len(chunks)}...")
@@ -559,7 +559,8 @@ class AgendaProcessor:
                 5. **Timing**: When things will happen, deadlines, or implementation dates
                 6. **Public Participation**: Opportunities for public comment or hearings
 
-                Format as clear bullet points. Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
+                Format with clear headers using **Header:** format, followed by bullet points.
+                Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
                 Skip pure administrative items unless they have significant public impact.
 
                 Text to analyze:
