@@ -20,10 +20,8 @@
 		
 		try {
 			// Check if this is a static route that should not be handled as a city
-			const staticRoutes = ['about', 'api', 'admin'];
-			if (staticRoutes.includes(city_url)) {
-				// Redirect to 404 or handle appropriately
-				goto('/');
+			if (city_url === 'about') {
+				goto('/about');
 				return;
 			}
 			
