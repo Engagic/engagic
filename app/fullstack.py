@@ -552,15 +552,14 @@ class AgendaProcessor:
                 chunk_prompt = f"""Analyze this portion of a city council meeting agenda packet and extract the key information 
                 that residents should know about. Focus on:
 
-                1. Agenda Items: What specific issues/proposals are being discussed?
-                2. Public Impact: How might these affect residents' daily lives?
-                3. Financial Details: Any budget items, costs, or financial impacts
-                4. Location/Property Details: Specific addresses, developments, or geographic areas affected
-                5. Timing: When things will happen, deadlines, or implementation dates
-                6. Public Participation: Opportunities for public comment or hearings
+                1. **Agenda Items**: What specific issues/proposals are being discussed?
+                2. **Public Impact**: How might these affect residents' daily lives?
+                3. **Financial Details**: Any budget items, costs, or financial impacts
+                4. **Location/Property Details**: Specific addresses, developments, or geographic areas affected
+                5. **Timing**: When things will happen, deadlines, or implementation dates
+                6. **Public Participation**: Opportunities for public comment or hearings
 
-                IMPORTANT: Do NOT use markdown formatting. No asterisks, no bold text, no headers with #.
-                Format as plain text with simple dashes for bullet points. 
+                Format with clear headers using **Header:** format, followed by bullet points.
                 Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
                 Skip pure administrative items unless they have significant public impact.
 
