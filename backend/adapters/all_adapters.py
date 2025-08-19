@@ -8,7 +8,7 @@ import os
 from urllib.parse import urlencode, urljoin, urlparse, parse_qs
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from pdf_scraper_utils import deep_scrape_pdfs
+from backend.adapters.pdf_utils import deep_scrape_pdfs
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -1118,7 +1118,7 @@ class CivicPlusAdapter:
                         meeting_info["meeting_date"] = datetime.strptime(date_text, fmt)
                         logger.debug(f"  Parsed date: {meeting_info['meeting_date']}")
                         break
-                    except:
+                    except Exception:
                         continue
 
                 if "meeting_date" not in meeting_info:
@@ -1375,7 +1375,7 @@ class CivicPlusAdapter:
                                 meeting_info["meeting_date"] = datetime.strptime(
                                     date_str, "%m%d%Y"
                                 )
-                            except:
+                            except Exception:
                                 pass
 
                         meetings.append(meeting_info)

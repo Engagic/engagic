@@ -9,17 +9,17 @@ from dataclasses import dataclass
 from enum import Enum
 from collections import defaultdict
 
-from databases.database_manager import DatabaseManager
-from fullstack import AgendaProcessor
-from adapters import (
+from backend.database.database_manager import DatabaseManager
+from backend.core.processor import AgendaProcessor
+from backend.adapters.all_adapters import (
     PrimeGovAdapter, 
     CivicClerkAdapter, 
     LegistarAdapter, 
     GranicusAdapter, 
     NovusAgendaAdapter
 )
-from config import config
-from utils import generate_city_banana
+from backend.core.config import config
+from backend.core.utils import generate_city_banana
 
 logger = logging.getLogger("engagic")
 

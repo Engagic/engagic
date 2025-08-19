@@ -10,7 +10,7 @@ class Config:
 
     def __init__(self):
         # Database configuration - separate databases for better organization
-        self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", "/root/engagic/app/data")
+        self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", "/root/engagic/data")
         self.LOCATIONS_DB_PATH = os.getenv(
             "ENGAGIC_LOCATIONS_DB", f"{self.DB_DIR}/locations.db"
         )
@@ -27,7 +27,7 @@ class Config:
             self.MEETINGS_DB_PATH = legacy_db_path
             logger.warning("Using legacy ENGAGIC_DB_PATH for meetings database")
 
-        self.LOG_PATH = os.getenv("ENGAGIC_LOG_PATH", "/root/engagic/app/engagic.log")
+        self.LOG_PATH = os.getenv("ENGAGIC_LOG_PATH", "/root/engagic/engagic.log")
 
         # API configuration
         self.API_HOST = os.getenv("ENGAGIC_HOST", "0.0.0.0")

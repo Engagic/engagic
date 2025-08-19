@@ -23,8 +23,8 @@ from pathlib import Path
 # Add app directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from background_processor import BackgroundProcessor
-from config import config
+from backend.services.background_processor import BackgroundProcessor
+from backend.core.config import config
 
 # Configure logging
 logging.basicConfig(

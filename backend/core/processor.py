@@ -22,14 +22,13 @@ import requests
 import anthropic
 from typing import List, Dict, Any, Optional, Union
 from urllib.parse import urlparse
-from pathlib import Path
 
 # PDF processing
 from PyPDF2 import PdfReader
 
 # Our modules
-from databases import DatabaseManager
-from config import config
+from backend.database import DatabaseManager
+from backend.core.config import config
 
 logger = logging.getLogger("engagic")
 
@@ -50,7 +49,7 @@ def validate_url(url: str) -> None:
         raise ValueError(f"Invalid URL length: {len(url) if url else 0}")
     
     parsed = urlparse(url)
-    if not parsed.scheme in ['http', 'https']:
+    if parsed.scheme not in ['http', 'https']:
         raise ValueError("URL must use HTTP or HTTPS")
     
     if not parsed.netloc:
@@ -147,7 +146,7 @@ class AgendaProcessor:
         try:
             from nltk.corpus import words
             return civic_words.union(set(word.lower() for word in words.words()[:5000]))
-        except:
+        except Exception:
             return civic_words
     
     def process_agenda_with_cache(self, meeting_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1043,10 +1042,10 @@ if __name__ == "__main__":
     
     print("=== SUMMARY ===")
     print(summary)
-    print(f"\n=== PROCESSING INFO ===")
+    print("\n=== PROCESSING INFO ===")
     print(f"Method: {method}")
     print(f"Cost: ${cost:.3f}")
-    print(f"\n=== STATS ===")
+    print("\n=== STATS ===")
     stats = processor.get_processing_stats()
     for key, value in stats.items():
         print(f"{key}: {value}")

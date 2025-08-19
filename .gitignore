@@ -203,4 +203,4 @@ meetings.db
 /data/
 /logs/
 __pycache__/
-.venv/
+.venv/*.tar.gz
