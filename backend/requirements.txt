@@ -6,6 +6,7 @@ sqlalchemy-mate<2.0
 sqlalchemy<2.0
 uszipcode
 PyPDF2
+PyMuPDF
 anthropic
 mistralai>=1.0.0
 nltk
