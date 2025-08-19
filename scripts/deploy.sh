@@ -2,7 +2,7 @@
 # engagic deployment script - handles both API and daemon
 set -e
 
-APP_DIR="/root/engagic/app"
+APP_DIR="/root/engagic"
 VENV_DIR="/root/engagic/.venv"
 API_PID_FILE="/tmp/engagic-api.pid"
 DAEMON_SERVICE="engagic-daemon"
@@ -69,7 +69,7 @@ setup_env() {
     
     # Install dependencies with uv
     source "$VENV_DIR/bin/activate"
-    uv pip install -r requirements.txt
+    uv pip install -r backend/requirements.txt
 }
 
 create_daemon_service() {
@@ -85,7 +85,7 @@ Type=simple
 User=root
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=$VENV_DIR/bin/python daemon.py
+ExecStart=$VENV_DIR/bin/python -m backend.services.daemon
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -112,10 +112,10 @@ start_api() {
     cd "$APP_DIR"
     
     # Check if using uvicorn in requirements
-    if grep -q "uvicorn" requirements.txt; then
-        nohup uvicorn app:app --host 0.0.0.0 --port 8000 > /tmp/engagic-api.log 2>&1 &
+    if grep -q "uvicorn" backend/requirements.txt; then
+        nohup uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 > /tmp/engagic-api.log 2>&1 &
     else
-        nohup python app.py > /tmp/engagic-api.log 2>&1 &
+        nohup python -m backend.api.main > /tmp/engagic-api.log 2>&1 &
     fi
     
     local pid=$!
@@ -217,20 +217,27 @@ status_all() {
     echo -e "${BLUE}=== Engagic Status ===${NC}"
     echo ""
     
-    # API status
+    # API status - check systemd first, then PID file
     echo -e "${BLUE}API Status:${NC}"
-    local api_pid=$(check_api_process)
-    if [ -n "$api_pid" ]; then
-        echo -e "${GREEN}  Running (PID: $api_pid)${NC}"
-        echo "  Logs: tail -f /tmp/engagic-api.log"
+    if systemctl is-active --quiet "engagic-api"; then
+        echo -e "${GREEN}  Running (systemd)${NC}"
+        echo "  Logs: journalctl -u engagic-api -f"
         echo "  Test: curl http://localhost:8000/"
-        
-        if command -v ps &> /dev/null; then
-            local mem=$(ps -p "$api_pid" -o %mem | tail -1)
-            echo "  Memory usage: ${mem}%"
-        fi
+        systemctl status "engagic-api" --no-pager | grep -E "Active:|Main PID:" | sed 's/^/  /'
     else
-        echo -e "${YELLOW}  Not running${NC}"
+        local api_pid=$(check_api_process)
+        if [ -n "$api_pid" ]; then
+            echo -e "${GREEN}  Running (PID: $api_pid)${NC}"
+            echo "  Logs: tail -f /tmp/engagic-api.log"
+            echo "  Test: curl http://localhost:8000/"
+            
+            if command -v ps &> /dev/null; then
+                local mem=$(ps -p "$api_pid" -o %mem | tail -1)
+                echo "  Memory usage: ${mem}%"
+            fi
+        else
+            echo -e "${YELLOW}  Not running${NC}"
+        fi
     fi
     
     echo ""
@@ -312,7 +319,7 @@ quick_update() {
     cd "$APP_DIR"
     git pull
     source "$VENV_DIR/bin/activate"
-    uv pip install -r requirements.txt
+    uv pip install -r backend/requirements.txt
     restart_all
     log "Update complete!"
 }
@@ -332,7 +339,7 @@ deploy_full() {
 daemon_status() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    python daemon.py --status
+    python -m backend.services.daemon --status
 }
 
 sync_city() {
@@ -342,13 +349,13 @@ sync_city() {
     
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    python daemon.py --sync-city "$1"
+    python -m backend.services.daemon --sync-city "$1"
 }
 
 process_unprocessed() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    python background_processor.py --process-all-unprocessed
+    python -m backend.services.background_processor --process-all-unprocessed
 }
 
 show_help() {
