@@ -169,20 +169,6 @@
 					</div>
 					
 					<div class="meeting-list">
-						{#each upcomingMeetings as meeting}
-							<a href="/{city_url}/{generateMeetingSlug(meeting)}" class="meeting-card upcoming-meeting">
-								<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
-								<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
-								{#if meeting.processed_summary}
-									<div class="meeting-status status-ready">AI Summary Available</div>
-								{:else if meeting.packet_url}
-									<div class="meeting-status status-packet">Agenda Packet Available</div>
-								{:else}
-									<div class="meeting-status status-none">No agenda posted yet</div>
-								{/if}
-							</a>
-						{/each}
-						
 						{#if showPastMeetings}
 							{#if pastMeetings.length > 0}
 								<h3 class="past-meetings-divider">Past Meetings</h3>
@@ -201,6 +187,20 @@
 								</a>
 							{/each}
 						{/if}
+						
+						{#each upcomingMeetings as meeting}
+							<a href="/{city_url}/{generateMeetingSlug(meeting)}" class="meeting-card upcoming-meeting">
+								<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
+								<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
+								{#if meeting.processed_summary}
+									<div class="meeting-status status-ready">AI Summary Available</div>
+								{:else if meeting.packet_url}
+									<div class="meeting-status status-packet">Agenda Packet Available</div>
+								{:else}
+									<div class="meeting-status status-none">No agenda posted yet</div>
+								{/if}
+							</a>
+						{/each}
 					</div>
 				{:else}
 					<div class="no-meetings">
