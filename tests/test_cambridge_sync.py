@@ -1,11 +1,12 @@
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 #!/usr/bin/env python3
 """Test Cambridge sync to debug why meetings aren't being stored"""
 
 import logging
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from backend.adapters.all_adapters import GranicusAdapter
 from backend.database import DatabaseManager
 from backend.core.config import config
