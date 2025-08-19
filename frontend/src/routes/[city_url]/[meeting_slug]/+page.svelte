@@ -79,6 +79,27 @@
 					  day === 3 || day === 23 ? 'rd' : 'th';
 		return `${monthName} ${day}${suffix}, ${year}`;
 	}
+
+	function cleanSummary(rawSummary: string): string {
+		if (!rawSummary) return '';
+		
+		// Remove ugly document headers
+		let cleaned = rawSummary
+			.replace(/=== DOCUMENT \d+ ===/g, '')
+			.replace(/--- SECTION \d+ SUMMARY ---/g, '')
+			.replace(/Here's a concise summary of the[^:]*:/gi, '')
+			.replace(/Here's a summary of the[^:]*:/gi, '')
+			.replace(/Summary of the[^:]*:/gi, '')
+			.trim();
+		
+		// Clean up extra whitespace
+		cleaned = cleaned
+			.replace(/\n{3,}/g, '\n\n')
+			.replace(/^\s*\n+/, '')
+			.trim();
+		
+		return cleaned;
+	}
 	
 	
 </script>
@@ -132,7 +153,7 @@
 			
 			{#if selectedMeeting.processed_summary}
 				<div class="meeting-summary">
-					{selectedMeeting.processed_summary}
+					{cleanSummary(selectedMeeting.processed_summary)}
 				</div>
 			{:else}
 				<div class="no-summary">
