@@ -199,6 +199,19 @@ body {
 	color: var(--civic-blue);
 }
 
+.status-ready {
+	color: var(--civic-green);
+	font-weight: 500;
+}
+
+.status-packet {
+	color: var(--civic-blue);
+}
+
+.status-none {
+	color: var(--civic-gray);
+}
+
 .error-message {
 	color: #92400e;
 	padding: 1.2rem;
@@ -253,12 +266,49 @@ body {
 
 .meeting-summary {
 	font-family: Georgia, 'Times New Roman', Times, serif;
-	line-height: 1.75;
+	line-height: 1.8;
 	white-space: pre-wrap;
 	font-size: 1.1rem;
 	color: #374151;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+	max-width: none;
+	background: var(--civic-white);
+	padding: 2rem;
+	border-radius: 12px;
+	border: 1px solid var(--civic-border);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.meeting-summary h2,
+.meeting-summary h3 {
+	color: var(--civic-dark);
+	margin: 1.5rem 0 0.75rem 0;
+	font-family: 'IBM Plex Mono', monospace;
+	font-weight: 500;
+}
+
+.meeting-summary h2 {
+	font-size: 1.3rem;
+	border-bottom: 2px solid var(--civic-border);
+	padding-bottom: 0.5rem;
+}
+
+.meeting-summary h3 {
+	font-size: 1.1rem;
+}
+
+.meeting-summary ul {
+	margin: 1rem 0;
+	padding-left: 1.5rem;
+}
+
+.meeting-summary li {
+	margin-bottom: 0.5rem;
+}
+
+.meeting-summary p {
+	margin-bottom: 1rem;
 }
 
 .back-button {

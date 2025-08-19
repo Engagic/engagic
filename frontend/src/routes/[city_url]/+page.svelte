@@ -175,7 +175,13 @@
 						<div class="meeting-card" onclick={() => handleMeetingClick(meeting)}>
 							<div class="meeting-title">{(meeting.title || meeting.meeting_name).replace(/ on \d{4}-\d{2}-\d{2}.*$/, '')} on {formatMeetingDate(meeting.start || meeting.meeting_date).replace(/ - \d{1,2}:\d{2}\s*[AP]M$/i, '')}</div>
 							<div class="meeting-date">{extractTime(meeting.start || meeting.meeting_date)}</div>
-							<div class="meeting-status">Click to view agenda</div>
+							{#if meeting.processed_summary}
+								<div class="meeting-status status-ready">AI Summary Available</div>
+							{:else if meeting.packet_url}
+								<div class="meeting-status status-packet">Agenda Packet Available</div>
+							{:else}
+								<div class="meeting-status status-none">No agenda posted yet</div>
+							{/if}
 						</div>
 					{/each}
 				</div>

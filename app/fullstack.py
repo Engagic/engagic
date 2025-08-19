@@ -543,7 +543,7 @@ class AgendaProcessor:
         logger.info(f"Split into {len(chunks)} chunks for processing")
         
         summaries = []
-        rate_limit_delay = 2  # Conservative delay between API calls
+        rate_limit_delay = 5  # Conservative delay between API calls to avoid rate limits
         
         for i, chunk in enumerate(chunks):
             logger.info(f"Processing chunk {i + 1}/{len(chunks)}...")
