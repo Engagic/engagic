@@ -9,6 +9,9 @@
 	let searchResults: SearchResult | null = $state(null);
 	let loading = $state(true);
 	let error = $state('');
+	let showPastMeetings = $state(false);
+	let upcomingMeetings: Meeting[] = $state([]);
+	let pastMeetings: Meeting[] = $state([]);
 
 	onMount(async () => {
 		await loadCityMeetings();
@@ -35,60 +38,31 @@
 			const searchQuery = `${parsed.cityName}, ${parsed.state}`;
 			const result = await searchMeetings(searchQuery);
 			
-			// Sort meetings by date (soonest first)
+			// Sort meetings by date (soonest first) using standardized dates
 			if (result.success && result.meetings) {
 				result.meetings.sort((a, b) => {
-					// Get full date strings (including time if present)
-					const dateStringA = a.start || a.meeting_date;
-					const dateStringB = b.start || b.meeting_date;
-					
-					// Parse the date strings for format: "MMM DD, YYYY - HH:MM AM/PM"
-					const parseDateTime = (dateStr: string) => {
-						// Remove the dash and trim
-						const cleanedStr = dateStr.replace(' - ', ' ').trim();
-						
-						// Parse using Date constructor which handles "MMM DD, YYYY HH:MM AM/PM"
-						const date = new Date(cleanedStr);
-						
-						// If that didn't work, try manual parsing
-						if (isNaN(date.getTime())) {
-							// Split by spaces
-							const parts = cleanedStr.split(' ');
-							if (parts.length >= 5) {
-								// Format: "MMM DD, YYYY HH:MM AM/PM"
-								const monthStr = parts[0];
-								const day = parseInt(parts[1].replace(',', ''), 10);
-								const year = parseInt(parts[2], 10);
-								const time = parts[3];
-								const ampm = parts[4];
-								
-								// Convert month name to number
-								const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-								const month = months.indexOf(monthStr);
-								
-								// Parse time
-								let [hours, minutes] = time.split(':').map(n => parseInt(n, 10));
-								
-								// Convert to 24-hour format
-								if (ampm.toUpperCase() === 'PM' && hours !== 12) {
-									hours += 12;
-								} else if (ampm.toUpperCase() === 'AM' && hours === 12) {
-									hours = 0;
-								}
-								
-								return new Date(year, month, day, hours, minutes);
-							}
-						}
-						
-						return date;
-					};
-					
-					const dateA = parseDateTime(dateStringA);
-					const dateB = parseDateTime(dateStringB);
+					// Use standardized meeting_date field
+					const dateA = new Date(a.meeting_date);
+					const dateB = new Date(b.meeting_date);
 					
 					// Return comparison (ascending order - soonest first)
 					return dateA.getTime() - dateB.getTime();
 				});
+				
+				// Split meetings into upcoming and past using standardized dates
+				const now = new Date();
+				upcomingMeetings = [];
+				pastMeetings = [];
+				
+				for (const meeting of result.meetings) {
+					const meetingDate = new Date(meeting.meeting_date);
+					
+					if (meetingDate >= now) {
+						upcomingMeetings.push(meeting);
+					} else {
+						pastMeetings.push(meeting);
+					}
+				}
 			}
 			
 			searchResults = result;
@@ -106,30 +80,36 @@
 	}
 
 	function formatMeetingDate(dateString: string): string {
-		// Handle date strings with time like "2025-09-09 9:30 AM"
-		// Extract just the date part
-		const datePart = dateString.split(' ')[0];
+		// Parse the standardized date format (YYYY-MM-DD HH:MM:SS)
+		const date = new Date(dateString);
 		
-		// Parse the date components manually to avoid timezone issues
-		const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
-		
-		if (isNaN(year) || isNaN(month) || isNaN(day)) {
+		if (isNaN(date.getTime())) {
 			// Fallback for unparseable dates
 			return dateString;
 		}
 		
 		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-		const monthName = months[month - 1]; // month is 1-based in the date string
-		const suffix = day === 1 || day === 21 || day === 31 ? 'st' : 
-					  day === 2 || day === 22 ? 'nd' : 
-					  day === 3 || day === 23 ? 'rd' : 'th';
+		const monthName = months[date.getMonth()];
+		const day = date.getDate();
+		const year = date.getFullYear();
+		
 		return `${monthName} ${day}, ${year}`;
 	}
 
 	function extractTime(dateString: string): string {
-		// Extract just the time portion like "09:30 AM"
-		const timeMatch = dateString.match(/(\d{1,2}:\d{2}\s*[AP]M)/i);
-		return timeMatch ? timeMatch[1] : '';
+		// Parse the standardized date format and extract time
+		const date = new Date(dateString);
+		
+		if (isNaN(date.getTime())) {
+			return '';
+		}
+		
+		// Format time as "H:MM AM/PM"
+		return date.toLocaleTimeString('en-US', { 
+			hour: 'numeric', 
+			minute: '2-digit',
+			hour12: true 
+		});
 	}
 </script>
 
@@ -170,21 +150,63 @@
 	{:else if searchResults}
 		{#if searchResults.success}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
-				<div class="meeting-list">
-					{#each searchResults.meetings as meeting}
-						<div class="meeting-card" onclick={() => handleMeetingClick(meeting)}>
-							<div class="meeting-title">{(meeting.title || meeting.meeting_name).replace(/ on \d{4}-\d{2}-\d{2}.*$/, '')} on {formatMeetingDate(meeting.start || meeting.meeting_date).replace(/ - \d{1,2}:\d{2}\s*[AP]M$/i, '')}</div>
-							<div class="meeting-date">{extractTime(meeting.start || meeting.meeting_date)}</div>
-							{#if meeting.processed_summary}
-								<div class="meeting-status status-ready">AI Summary Available</div>
-							{:else if meeting.packet_url}
-								<div class="meeting-status status-packet">Agenda Packet Available</div>
-							{:else}
-								<div class="meeting-status status-none">No agenda posted yet</div>
+				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
+					<div class="meetings-filter">
+						{#if upcomingMeetings.length > 0}
+							<h2 class="meetings-section-title">Upcoming Meetings</h2>
+						{/if}
+						{#if pastMeetings.length > 0 && upcomingMeetings.length === 0}
+							<h2 class="meetings-section-title">No Upcoming Meetings</h2>
+						{/if}
+						{#if pastMeetings.length > 0}
+							<button 
+								class="toggle-past-btn" 
+								onclick={() => showPastMeetings = !showPastMeetings}
+							>
+								{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({pastMeetings.length})
+							</button>
+						{/if}
+					</div>
+					
+					<div class="meeting-list">
+						{#each upcomingMeetings as meeting}
+							<a href="/{city_url}/{generateMeetingSlug(meeting)}" class="meeting-card upcoming-meeting">
+								<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
+								<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
+								{#if meeting.processed_summary}
+									<div class="meeting-status status-ready">AI Summary Available</div>
+								{:else if meeting.packet_url}
+									<div class="meeting-status status-packet">Agenda Packet Available</div>
+								{:else}
+									<div class="meeting-status status-none">No agenda posted yet</div>
+								{/if}
+							</a>
+						{/each}
+						
+						{#if showPastMeetings}
+							{#if pastMeetings.length > 0}
+								<h3 class="past-meetings-divider">Past Meetings</h3>
 							{/if}
-						</div>
-					{/each}
-				</div>
+							{#each pastMeetings as meeting}
+								<a href="/{city_url}/{generateMeetingSlug(meeting)}" class="meeting-card past-meeting">
+									<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
+									<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
+									{#if meeting.processed_summary}
+										<div class="meeting-status status-ready">AI Summary Available</div>
+									{:else if meeting.packet_url}
+										<div class="meeting-status status-packet">Agenda Packet Available</div>
+									{:else}
+										<div class="meeting-status status-none">No agenda posted yet</div>
+									{/if}
+								</a>
+							{/each}
+						{/if}
+					</div>
+				{:else}
+					<div class="no-meetings">
+						No meetings found for this city
+					</div>
+				{/if}
 			{:else}
 				<div class="no-meetings">
 					{searchResults.message || 'No meetings found for this city'}
