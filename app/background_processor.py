@@ -265,7 +265,7 @@ class BackgroundProcessor:
                 # Sync with retry logic
                 result = self._sync_city_with_retry(city)
                 logger.info(
-                    f"Sync completed for {city.get('city_name', 'unknown')}: "
+                    f"Sync completed for {city_banana}: "
                     f"{result.status}"
                 )
                 results.append(result)
@@ -323,7 +323,7 @@ class BackgroundProcessor:
         start_time = time.time()
 
         try:
-            logger.info(f"Syncing {city_name} ({city_banana}) with {vendor}")
+            logger.info(f"Syncing {city_banana} with {vendor}")
             result.status = SyncStatus.IN_PROGRESS
 
             # Get adapter
@@ -332,7 +332,7 @@ class BackgroundProcessor:
             if not adapter:
                 result.status = SyncStatus.SKIPPED
                 result.error_message = f"Unsupported vendor: {vendor}"
-                logger.debug(f"Skipping {city_name} - unsupported vendor: {vendor}")
+                logger.debug(f"Skipping {city_banana} - unsupported vendor: {vendor}")
                 return result
 
             # Scrape ALL meetings first (for user display) - simple and direct
@@ -345,14 +345,14 @@ class BackgroundProcessor:
                 meetings_with_packets = [m for m in all_meetings if m.get('packet_url')]
 
             except Exception as e:
-                logger.error(f"Error fetching meetings for {city_name}: {e}")
+                logger.error(f"Error fetching meetings for {city_banana}: {e}")
                 result.status = SyncStatus.FAILED
                 result.error_message = str(e)
                 return result
 
             result.meetings_found = len(all_meetings)
             logger.info(
-                f"Found {len(all_meetings)} total meetings for {city_name}, "
+                f"Found {len(all_meetings)} total meetings for {city_banana}, "
                 f"{len(meetings_with_packets)} have packets"
             )
 
@@ -437,7 +437,7 @@ class BackgroundProcessor:
             result.duration_seconds = time.time() - start_time
 
             logger.info(
-                f"Synced {city_name}: {result.meetings_found} meetings found, "
+                f"Synced {city_banana}: {result.meetings_found} meetings found, "
                 f"{len(meetings_with_packets)} have packets, {processed_count} processed"
             )
 
@@ -445,7 +445,7 @@ class BackgroundProcessor:
             result.status = SyncStatus.FAILED
             result.error_message = str(e)
             result.duration_seconds = time.time() - start_time
-            logger.error(f"Failed to sync {city_name}: {e}")
+            logger.error(f"Failed to sync {city_banana}: {e}")
 
             # Add small delay on error to avoid hammering
             time.sleep(2 + random.uniform(0, 1))

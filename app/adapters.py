@@ -186,7 +186,7 @@ class GranicusAdapter:
         
         if not upcoming_header:
             logger.warning(f"No 'Upcoming Events' or 'Upcoming Meetings' section found for {self.slug}")
-            return
+            return []
 
         # Find the table that follows the "Upcoming Events" header
         upcoming_table = None
@@ -200,7 +200,7 @@ class GranicusAdapter:
 
         if not upcoming_table:
             logger.warning(f"No upcoming events table found for {self.slug}")
-            return
+            return []
 
         logger.info(f"Processing upcoming events table for {self.slug}")
 

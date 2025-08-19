@@ -232,7 +232,7 @@ class AgendaProcessor:
             return self._process_multiple_pdfs(url)
         
         # Tier 1: PyPDF2 text extraction + regular text API (cheapest)
-        logger.info("Attempting Tier 1: PyPDF2 text extraction + text API...")
+        logger.info(f"Attempting Tier 1: PyPDF2 text extraction + text API for {url[:80]}...")
         try:
             text = self._tier1_extract_text(url)
             if text and self._is_good_text_quality(text):
@@ -243,12 +243,17 @@ class AgendaProcessor:
                 self.stats["total_cost"] += cost
                 logger.info(f"Tier 1 successful - PyPDF2 + text API (cost: ${cost:.3f})")
                 return summary, "tier1_pypdf2_text_api", cost
+            else:
+                if not text:
+                    logger.warning(f"Tier 1 failed: No text extracted from PDF {url[:80]}")
+                else:
+                    logger.warning(f"Tier 1 failed: Poor text quality - {len(text)} chars extracted from {url[:80]}")
         except Exception as e:
-            logger.debug(f"Tier 1 failed: {e}")
+            logger.warning(f"Tier 1 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
         
         # Tier 2: Mistral OCR + regular text API (moderate cost)
         if self.mistral_client:
-            logger.info("Attempting Tier 2: Mistral OCR + text API...")
+            logger.info(f"Attempting Tier 2: Mistral OCR + text API for {url[:80]}...")
             try:
                 text, ocr_cost = self._tier2_mistral_ocr(url)
                 if text and self._is_good_text_quality(text):
@@ -260,12 +265,19 @@ class AgendaProcessor:
                     self.stats["total_cost"] += total_cost
                     logger.info(f"Tier 2 successful - Mistral OCR + text API (cost: ${total_cost:.3f})")
                     return summary, "tier2_mistral_text_api", total_cost
+                else:
+                    if not text:
+                        logger.warning(f"Tier 2 failed: No text from Mistral OCR for {url[:80]}")
+                    else:
+                        logger.warning(f"Tier 2 failed: Poor OCR quality - {len(text)} chars from {url[:80]}")
             except Exception as e:
-                logger.debug(f"Tier 2 failed: {e}")
+                logger.warning(f"Tier 2 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
+        else:
+            logger.debug("Tier 2 skipped: No Mistral client available")
         
         # Tier 3: Claude PDF API (most expensive, last resort)
         if self.pdf_processor:
-            logger.info("Attempting Tier 3: Claude PDF API...")
+            logger.info(f"Attempting Tier 3: Claude PDF API for {url[:80]}...")
             try:
                 summary = self._tier3_claude_pdf_api(url)
                 if summary:
@@ -275,11 +287,25 @@ class AgendaProcessor:
                     self.stats["total_cost"] += cost
                     logger.info(f"Tier 3 successful - Claude PDF API (cost: ${cost:.3f})")
                     return summary, "tier3_claude_pdf_api", cost
+                else:
+                    logger.error(f"Tier 3 failed: No summary returned from PDF API for {url[:80]}")
             except Exception as e:
-                logger.error(f"Tier 3 failed: {e}")
+                logger.error(f"Tier 3 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
+        else:
+            logger.debug("Tier 3 skipped: No PDF processor available (API key missing)")
         
-        # All tiers failed
-        raise ProcessingError("All processing tiers failed - unable to process PDF")
+        # All tiers failed - provide detailed explanation
+        failure_reasons = []
+        if "docs.google.com/gview" in url:
+            failure_reasons.append("Google Docs viewer URLs are not directly processable")
+        if not self.api_key:
+            failure_reasons.append("No API key available for AI processing")
+        if not self.pdf_processor:
+            failure_reasons.append("PDF API processor not available")
+        
+        reason_str = "; ".join(failure_reasons) if failure_reasons else "Unknown reasons"
+        logger.error(f"All processing tiers failed for {url[:80]} - {reason_str}")
+        raise ProcessingError(f"All processing tiers failed - {reason_str}")
     
     def _tier1_extract_text(self, url: str) -> Optional[str]:
         """Tier 1: Extract text using PyPDF2
