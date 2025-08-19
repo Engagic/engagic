@@ -1,1 +1,0 @@
-../backend/adapters/all_adapters.py
