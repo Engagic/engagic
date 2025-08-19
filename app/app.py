@@ -950,49 +950,8 @@ async def get_metrics():
 async def get_analytics():
     """Get comprehensive analytics for public dashboard"""
     try:
-        # Get core stats
-        cache_stats = db.get_cache_stats()
+        # Get only hard, verifiable facts from the database
         meetings_stats = db.meetings.get_meetings_stats()
-        analytics_summary = db.get_analytics_summary(days=30)
-        
-        # Calculate additional impressive metrics
-        with db.meetings.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Total processing time saved for users
-            cursor.execute("""
-                SELECT SUM(processing_time_seconds) as total_processing_time,
-                       COUNT(*) as total_summaries,
-                       AVG(processing_time_seconds) as avg_processing_time
-                FROM meetings 
-                WHERE processed_summary IS NOT NULL
-            """)
-            processing_stats = cursor.fetchone()
-            
-            # Pages of documents processed (estimate)
-            cursor.execute("""
-                SELECT COUNT(*) as meetings_with_summaries
-                FROM meetings 
-                WHERE processed_summary IS NOT NULL 
-                AND LENGTH(processed_summary) > 100
-            """)
-            quality_summaries = cursor.fetchone()
-            
-            # Recent activity (last 30 days)
-            cursor.execute("""
-                SELECT COUNT(*) as recent_meetings,
-                       COUNT(CASE WHEN processed_summary IS NOT NULL THEN 1 END) as recent_summaries
-                FROM meetings 
-                WHERE last_accessed > datetime('now', '-30 days')
-            """)
-            recent_activity = cursor.fetchone()
-            
-            # Geographic coverage
-            cursor.execute("""
-                SELECT COUNT(DISTINCT city_banana) as unique_cities_covered
-                FROM meetings
-            """)
-            coverage_stats = cursor.fetchone()
         
         # Get city stats from locations database
         with db.locations.get_connection() as conn:
@@ -1006,56 +965,34 @@ async def get_analytics():
             cursor.execute("SELECT COUNT(*) as total_zipcodes FROM zipcodes")
             zipcodes_covered = cursor.fetchone()
         
-        # Calculate derived metrics
-        total_processing_time = processing_stats["total_processing_time"] or 0
-        total_summaries = processing_stats["total_summaries"] or 0
-        avg_processing_time = processing_stats["avg_processing_time"] or 0
-        
-        # Estimate pages processed (assume 10 pages average per meeting packet)
-        estimated_pages = total_summaries * 10
-        
-        # Estimate time saved for citizens (assume 15 minutes to read a typical agenda)
-        citizen_time_saved_hours = total_summaries * 0.25  # 15 minutes = 0.25 hours
-        
-        # AI processing efficiency
-        ai_time_saved_ratio = (citizen_time_saved_hours * 3600) / max(total_processing_time, 1)
+        # Get actual summary count
+        with db.meetings.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) as summaries_count
+                FROM meetings 
+                WHERE processed_summary IS NOT NULL
+            """)
+            summaries_stats = cursor.fetchone()
+            
+            # Get active cities (cities with at least one meeting)
+            cursor.execute("""
+                SELECT COUNT(DISTINCT city_banana) as active_cities
+                FROM meetings
+            """)
+            active_cities_stats = cursor.fetchone()
         
         return {
             "success": True,
             "timestamp": datetime.now().isoformat(),
-            "headline_metrics": {
+            "real_metrics": {
                 "cities_covered": total_cities["total_cities"],
                 "meetings_tracked": meetings_stats["meetings_count"],
-                "agendas_summarized": total_summaries,
+                "agendas_summarized": summaries_stats["summaries_count"],
                 "states_covered": states_covered["states_covered"],
-                "zipcodes_served": zipcodes_covered["total_zipcodes"]
-            },
-            "impact_metrics": {
-                "estimated_pages_processed": estimated_pages,
-                "citizen_hours_saved": round(citizen_time_saved_hours, 1),
-                "ai_efficiency_ratio": round(ai_time_saved_ratio, 1),
-                "average_summary_time": round(avg_processing_time, 2),
-                "recent_activity_30d": recent_activity["recent_meetings"]
-            },
-            "quality_metrics": {
-                "processing_success_rate": round((total_summaries / max(meetings_stats["meetings_count"], 1)) * 100, 1),
-                "high_quality_summaries": quality_summaries["meetings_with_summaries"],
-                "recent_summaries_30d": recent_activity["recent_summaries"],
-                "active_cities": coverage_stats["unique_cities_covered"]
-            },
-            "growth_metrics": {
-                "daily_searches": analytics_summary.get("avg_daily_searches", 0),
-                "successful_searches": analytics_summary.get("successful_searches", 0),
-                "city_requests": analytics_summary.get("city_requests", 0),
-                "search_success_rate": round(analytics_summary.get("search_success_rate", 0), 1)
-            },
-            "fun_facts": [
-                f"Our AI has read the equivalent of {estimated_pages:,} pages of government documents",
-                f"We've saved citizens an estimated {citizen_time_saved_hours:,.0f} hours of reading time",
-                f"Our processing is {ai_time_saved_ratio:.0f}x faster than human reading",
-                f"We cover {states_covered['states_covered']} states and {total_cities['total_cities']} cities",
-                f"That's {zipcodes_covered['total_zipcodes']:,} zip codes worth of civic engagement!"
-            ]
+                "zipcodes_served": zipcodes_covered["total_zipcodes"],
+                "active_cities": active_cities_stats["active_cities"]
+            }
         }
         
     except Exception as e:

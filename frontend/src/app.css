@@ -333,11 +333,35 @@ body {
 	color: var(--civic-gray);
 }
 
-.github-link {
-	display: inline-flex;
-	flex-direction: column-reverse; 
+.footer-links {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
 	align-items: center;
-	gap: 0.25rem;
+	margin-bottom: 0.5rem;
+}
+
+.about-link {
+	justify-self: end;
+	color: var(--civic-blue);
+	text-decoration: none;
+	font-weight: 500;
+	font-size: 0.9rem;
+}
+
+.about-link:hover {
+	text-decoration: underline;
+}
+
+.divider {
+	color: var(--civic-gray);
+	margin: 0 1rem;
+}
+
+.github-link {
+	justify-self: start;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
 	color: var(--civic-gray);
 	text-decoration: none;
 	font-size: 0.9rem;
@@ -345,13 +369,19 @@ body {
 }
 
 .github-link:hover {
-	color: var(--civic-blue);
+	color: var(--civic-dark);
 }
 
 .github-icon {
 	width: 20px;
 	height: 20px;
 	fill: currentColor;
+}
+
+.footer-text {
+	font-size: 0.85rem;
+	color: var(--civic-gray);
+	margin: 0;
 }
 
 @media (max-width: 640px) {
@@ -388,186 +418,14 @@ body {
 		word-wrap: break-word;
 		overflow-wrap: break-word;
 	}
-}
-
-/* Analytics Dashboard */
-.analytics-dashboard {
-	margin: 3rem 0 2rem 0;
-	padding: 2rem;
-	background: linear-gradient(135deg, var(--civic-white) 0%, #f8fafc 100%);
-	border-radius: 12px;
-	border: 1px solid var(--civic-border);
-	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-.dashboard-title {
-	text-align: center;
-	font-size: 1.5rem;
-	font-weight: 500;
-	color: var(--civic-dark);
-	margin-bottom: 2rem;
-	background: linear-gradient(135deg, var(--civic-blue), var(--civic-accent));
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
-}
-
-.metrics-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-	gap: 1.5rem;
-	margin-bottom: 2rem;
-}
-
-.metric-card {
-	text-align: center;
-	padding: 1.5rem 1rem;
-	background: var(--civic-white);
-	border-radius: 8px;
-	border: 1px solid var(--civic-border);
-	transition: all 0.3s ease;
-	position: relative;
-	overflow: hidden;
-}
-
-.metric-card.highlight {
-	border-color: var(--civic-blue);
-	box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
-}
-
-.metric-card.highlight::before {
-	content: '';
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	height: 3px;
-	background: linear-gradient(90deg, var(--civic-blue), var(--civic-accent));
-}
-
-.metric-card:hover {
-	transform: translateY(-2px);
-	box-shadow: 0 4px 8px rgba(79, 70, 229, 0.15);
-}
-
-.metric-number {
-	font-size: 2rem;
-	font-weight: 500;
-	color: var(--civic-blue);
-	margin-bottom: 0.5rem;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.metric-label {
-	font-size: 0.9rem;
-	color: var(--civic-gray);
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-	font-weight: 500;
-}
-
-.secondary-metrics {
-	background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-	border-radius: 8px;
-	padding: 1.5rem;
-	margin-bottom: 1.5rem;
-}
-
-.metric-row {
-	display: flex;
-	justify-content: space-around;
-	flex-wrap: wrap;
-	gap: 1rem;
-}
-
-.metric-stat {
-	font-size: 0.9rem;
-	color: var(--civic-dark);
-	font-weight: 500;
-	text-align: center;
-	white-space: nowrap;
-}
-
-.fun-facts {
-	text-align: center;
-}
-
-.fun-fact {
-	font-size: 1rem;
-	color: var(--civic-dark);
-	padding: 1rem;
-	background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-	border-radius: 8px;
-	border-left: 4px solid #f59e0b;
-	margin: 0.5rem 0;
-	font-style: italic;
-}
-
-.analytics-loading {
-	margin: 3rem 0 2rem 0;
-	padding: 2rem;
-	background: var(--civic-white);
-	border-radius: 12px;
-	border: 1px solid var(--civic-border);
-}
-
-.loading-shimmer {
-	height: 200px;
-	background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-	background-size: 200% 100%;
-	animation: shimmer 1.5s infinite;
-	border-radius: 8px;
-}
-
-@keyframes shimmer {
-	0% {
-		background-position: -200% 0;
-	}
-	100% {
-		background-position: 200% 0;
-	}
-}
-
-/* Responsive adjustments for analytics */
-@media (max-width: 768px) {
-	.analytics-dashboard {
-		margin: 2rem 0 1rem 0;
-		padding: 1.5rem;
-	}
 	
-	.dashboard-title {
-		font-size: 1.25rem;
-		margin-bottom: 1.5rem;
-	}
-	
-	.metrics-grid {
-		grid-template-columns: repeat(2, 1fr);
-		gap: 1rem;
-	}
-	
-	.metric-card {
-		padding: 1rem 0.5rem;
-	}
-	
-	.metric-number {
-		font-size: 1.5rem;
-	}
-	
-	.metric-label {
-		font-size: 0.8rem;
-	}
-	
-	.metric-row {
+	.footer-links {
 		flex-direction: column;
-		text-align: center;
+		gap: 0.5rem;
 	}
 	
-	.metric-stat {
-		white-space: normal;
-	}
-	
-	.fun-fact {
-		font-size: 0.9rem;
-		padding: 0.75rem;
+	.divider {
+		display: none;
 	}
 }
+
