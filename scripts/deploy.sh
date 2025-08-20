@@ -101,41 +101,29 @@ EOF
 
 # API Management
 start_api() {
-    local existing_pid=$(check_api_process)
-    if [ -n "$existing_pid" ]; then
-        warn "API already running (PID: $existing_pid)"
-        return
-    fi
+    log "Starting API service..."
+    systemctl enable engagic-api
     
-    log "Starting engagic API..."
-    source "$VENV_DIR/bin/activate"
-    cd "$APP_DIR"
-    
-    # Check if using uvicorn in requirements
-    if grep -q "uvicorn" backend/requirements.txt; then
-        nohup uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 > /tmp/engagic-api.log 2>&1 &
+    if systemctl is-active --quiet engagic-api; then
+        warn "API already running, restarting..."
+        systemctl restart engagic-api
     else
-        nohup python -m backend.api.main > /tmp/engagic-api.log 2>&1 &
+        systemctl start engagic-api
     fi
-    
-    local pid=$!
-    echo "$pid" > "$API_PID_FILE"
     
     sleep 2
-    if ps -p "$pid" > /dev/null 2>&1; then
-        log "API started successfully (PID: $pid)"
-        log "API logs: tail -f /tmp/engagic-api.log"
+    if systemctl is-active --quiet engagic-api; then
+        log "API started successfully"
+        log "API logs: journalctl -u engagic-api -f"
     else
         error "Failed to start API"
     fi
 }
 
 stop_api() {
-    local existing_pid=$(check_api_process)
-    if [ -n "$existing_pid" ]; then
-        log "Stopping API (PID: $existing_pid)..."
-        kill "$existing_pid"
-        rm -f "$API_PID_FILE"
+    if systemctl is-active --quiet engagic-api; then
+        log "Stopping API..."
+        systemctl stop engagic-api
         log "API stopped"
     else
         warn "API not running"
@@ -144,9 +132,13 @@ stop_api() {
 
 restart_api() {
     log "Restarting API..."
-    stop_api
-    sleep 1
-    start_api
+    systemctl restart engagic-api
+    sleep 2
+    if systemctl is-active --quiet engagic-api; then
+        log "API restarted successfully"
+    else
+        error "Failed to restart API"
+    fi
 }
 
 # Daemon Management
@@ -186,9 +178,13 @@ stop_daemon() {
 
 restart_daemon() {
     log "Restarting daemon..."
-    stop_daemon
-    sleep 1
-    start_daemon
+    systemctl restart "$DAEMON_SERVICE"
+    sleep 2
+    if systemctl is-active --quiet "$DAEMON_SERVICE"; then
+        log "Daemon restarted successfully"
+    else
+        error "Failed to restart daemon"
+    fi
 }
 
 # Combined operations
@@ -425,7 +421,7 @@ case "${1:-help}" in
     
     # Status and logs
     status)         status_all ;;
-    logs-api)       tail -f /tmp/engagic-api.log ;;
+    logs-api)       journalctl -u engagic-api -f ;;
     logs-daemon)    journalctl -u "$DAEMON_SERVICE" -f ;;
     
     # Testing
