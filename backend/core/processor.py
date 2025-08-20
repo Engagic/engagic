@@ -166,6 +166,10 @@ class AgendaProcessor:
         cached_meeting = self.db.get_cached_summary(packet_url)
         if cached_meeting:
             logger.info(f"Cache hit for {packet_url}")
+            
+            # Update processing_cache hit count
+            self._update_cache_hit_count(packet_url)
+            
             return {
                 "success": True,
                 "summary": cached_meeting["processed_summary"],
@@ -191,6 +195,9 @@ class AgendaProcessor:
             meeting_data["processing_cost"] = cost
             
             meeting_id = self.db.store_meeting_summary(meeting_data, summary, processing_time)
+            
+            # Store in processing_cache
+            self._store_in_processing_cache(packet_url, summary, processing_time)
             
             logger.info(f"Processed agenda {packet_url} in {processing_time:.1f}s using {method} (cost: ${cost:.3f})")
             
@@ -998,6 +1005,59 @@ class AgendaProcessor:
         output_cost = (output_tokens / 1000) * 7.50  # $7.50 per 1K tokens (batch rate)
         
         return input_cost + output_cost
+    
+    def _update_cache_hit_count(self, packet_url: str):
+        """Update cache hit count in processing_cache table"""
+        try:
+            with self.db.meetings.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Serialize packet_url if it's a list
+                lookup_url = packet_url
+                if isinstance(packet_url, list):
+                    lookup_url = json.dumps(packet_url)
+                
+                cursor.execute("""
+                    UPDATE processing_cache 
+                    SET cache_hit_count = cache_hit_count + 1,
+                        last_accessed = CURRENT_TIMESTAMP
+                    WHERE packet_url = ?
+                """, (lookup_url,))
+                
+                conn.commit()
+        except Exception as e:
+            logger.debug(f"Could not update cache hit count: {e}")
+    
+    def _store_in_processing_cache(self, packet_url: str, summary: str, processing_time: float):
+        """Store processing results in processing_cache table"""
+        try:
+            with self.db.meetings.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Serialize packet_url if it's a list
+                lookup_url = packet_url
+                if isinstance(packet_url, list):
+                    lookup_url = json.dumps(packet_url)
+                
+                # Generate content hash
+                content_hash = hashlib.md5(summary.encode()).hexdigest() if summary else None
+                
+                cursor.execute("""
+                    INSERT OR REPLACE INTO processing_cache
+                    (packet_url, content_hash, summary_size, 
+                     processing_duration_seconds, cache_hit_count, created_at)
+                    VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                """, (
+                    lookup_url,
+                    content_hash,
+                    len(summary) if summary else 0,
+                    processing_time
+                ))
+                
+                conn.commit()
+                logger.debug(f"Stored in processing_cache: {packet_url}")
+        except Exception as e:
+            logger.error(f"Failed to store in processing_cache: {e}")
     
     def get_processing_stats(self) -> Dict[str, Any]:
         """Get comprehensive processing statistics"""
