@@ -1,7 +1,8 @@
-// Re-export everything from the new modules
+// API module exports
 export * from './types';
+export { config, errorMessages } from './config';
 
-// Export the API functions for existing code
+// Export API functions
 import { apiClient } from './api-client';
 export const searchMeetings = apiClient.searchMeetings.bind(apiClient);
 export const getCachedSummary = apiClient.getCachedSummary.bind(apiClient);

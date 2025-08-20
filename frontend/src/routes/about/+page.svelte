@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getAnalytics, type AnalyticsData } from '$lib/api';
+	import { getAnalytics, type AnalyticsData } from '$lib/api/index';
 	import { onMount } from 'svelte';
 
 	let analytics: AnalyticsData | null = $state(null);

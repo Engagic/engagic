@@ -22,8 +22,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-mono": "^5.0.0",
-    "@tanstack/svelte-virtual": "^3.13.12"
+    "@fontsource/ibm-plex-mono": "^5.0.0"
   },
   "type": "module"
 }

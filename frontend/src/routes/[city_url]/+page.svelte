@@ -2,8 +2,8 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api';
-	import { generateMeetingSlug, parseCityUrl } from '$lib/utils';
+	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
+	import { generateMeetingSlug, parseCityUrl } from '$lib/utils/utils';
 
 	let city_url = $page.params.city_url;
 	let searchResults: SearchResult | null = $state(null);
@@ -40,7 +40,7 @@
 			
 			// Sort meetings by date (soonest first) using standardized dates
 			if (result.success && result.meetings) {
-				result.meetings.sort((a, b) => {
+				result.meetings.sort((a: Meeting, b: Meeting) => {
 					// Use standardized meeting_date field
 					const dateA = new Date(a.meeting_date);
 					const dateB = new Date(b.meeting_date);
@@ -114,7 +114,7 @@
 </script>
 
 <svelte:head>
-	<title>{searchResults?.city_name ? `${searchResults.city_name}, ${searchResults.state}` : 'City'} - engagic</title>
+	<title>{searchResults && 'city_name' in searchResults ? `${searchResults.city_name}, ${searchResults.state}` : 'City'} - engagic</title>
 	<meta name="description" content="Local government meetings and agendas" />
 </svelte:head>
 
@@ -127,7 +127,7 @@
 
 	<div class="city-header">
 		<a href="/" class="back-link">← Back to search</a>
-		{#if searchResults?.city_name}
+		{#if searchResults && searchResults.success}
 			<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
 			{#if searchResults.cached}
 				<div class="processing-status">Cached results</div>
@@ -209,7 +209,7 @@
 				{/if}
 			{:else}
 				<div class="no-meetings">
-					{searchResults.message || 'No meetings found for this city'}
+					{'message' in searchResults ? searchResults.message : 'No meetings found for this city'}
 				</div>
 			{/if}
 		{:else}

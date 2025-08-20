@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { apiClient } from '$lib/api-client';
-	import type { SearchResult, CityOption } from '$lib/types';
-	import { isSearchSuccess, isSearchAmbiguous } from '$lib/types';
-	import { generateCityUrl } from '$lib/utils';
-	import { validateSearchQuery } from '$lib/sanitize';
-	import { logger } from '$lib/logger';
+	import { apiClient } from '$lib/api/api-client';
+	import type { SearchResult, CityOption } from '$lib/api/types';
+	import { isSearchSuccess, isSearchAmbiguous } from '$lib/api/types';
+	import { generateCityUrl } from '$lib/utils/utils';
+	import { validateSearchQuery } from '$lib/utils/sanitize';
+	import { logger } from '$lib/services/logger';
 
 	let searchQuery = $state('');
 	let searchResults: SearchResult | null = $state(null);

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api';
-	import { parseCityUrl, generateMeetingSlug } from '$lib/utils';
+	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
+	import { parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 
 	let city_url = $page.params.city_url;
 	let meeting_slug = $page.params.meeting_slug;
@@ -40,7 +40,7 @@
 					error = 'Meeting not found';
 				}
 			} else {
-				error = result.message || 'Failed to load city meetings';
+				error = 'message' in result ? result.message : 'Failed to load city meetings';
 			}
 		} catch (err) {
 			console.error('Failed to load meeting:', err);
@@ -111,11 +111,11 @@
 			if (headerMatch) {
 				// Save any accumulated text first
 				if (currentText.trim()) {
-					processed.push({ type: 'text', content: currentText.trim() });
+					processed.push({ type: 'text' as const, content: currentText.trim() });
 					currentText = '';
 				}
 				// Add the header
-				processed.push({ type: 'header', content: headerMatch[1] });
+				processed.push({ type: 'header' as const, content: headerMatch[1] });
 			} else {
 				// Accumulate regular text (with light markdown cleanup)
 				let cleanedLine = line
@@ -132,7 +132,7 @@
 		
 		// Add any remaining text
 		if (currentText.trim()) {
-			processed.push({ type: 'text', content: currentText.trim() });
+			processed.push({ type: 'text' as const, content: currentText.trim() });
 		}
 		
 		return processed;
@@ -154,7 +154,7 @@
 		</header>
 
 	<div class="city-header">
-		<a href="/{city_url}" class="back-link">← Back to {searchResults?.city_name || 'city'} meetings</a>
+		<a href="/{city_url}" class="back-link">← Back to {searchResults && searchResults.success ? searchResults.city_name : 'city'} meetings</a>
 	</div>
 
 	{#if selectedMeeting?.packet_url}

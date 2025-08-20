@@ -1,4 +1,4 @@
-import type { Meeting } from './api';
+import type { Meeting } from '../api/types';
 
 export function generateCityUrl(cityName: string, state: string): string {
 	// Clean city name: remove spaces, periods, apostrophes, make lowercase
