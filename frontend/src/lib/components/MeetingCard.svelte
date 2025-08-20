@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { Meeting } from '../types';
-	import { generateMeetingSlug } from '../utils';
-	import { formatMeetingDate, extractTime } from '../date-utils';
+	import type { Meeting } from '../api/types';
+	import { generateMeetingSlug } from '../utils/utils';
+	import { formatMeetingDate, extractTime } from '../utils/date-utils';
 	
 	interface Props {
 		meeting: Meeting;
@@ -19,7 +19,6 @@
 <a 
 	href="/{cityUrl}/{meetingSlug}" 
 	class="meeting-card {isPast ? 'past-meeting' : 'upcoming-meeting'}"
-	role="listitem"
 	aria-label="{meeting.title || meeting.meeting_name} on {formattedDate} at {time}"
 >
 	<div class="meeting-title">

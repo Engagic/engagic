@@ -11,7 +11,7 @@ import { ApiError, NetworkError } from './types';
 async function fetchWithRetry(
 	url: string, 
 	options: RequestInit = {},
-	retries = config.maxRetries
+	retries: number = config.maxRetries
 ): Promise<Response> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), config.requestTimeout);

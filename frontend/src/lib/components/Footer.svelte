@@ -2,7 +2,7 @@
 	// Reusable footer component
 </script>
 
-<footer class="footer" role="contentinfo">
+<footer class="footer">
 	<div class="footer-links">
 		<a href="/about" class="about-link" aria-label="About engagic">About</a>
 		<span class="divider" aria-hidden="true">•</span>
