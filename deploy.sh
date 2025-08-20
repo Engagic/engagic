@@ -1,0 +1,1 @@
+/root/engagic/scripts/deploy.sh
