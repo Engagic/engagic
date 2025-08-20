@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { searchMeetings, type SearchResult, type CityOption } from '$lib/api';
+	import { apiClient } from '$lib/api-client';
+	import type { SearchResult, CityOption } from '$lib/types';
+	import { isSearchSuccess, isSearchAmbiguous } from '$lib/types';
 	import { generateCityUrl } from '$lib/utils';
+	import { validateSearchQuery } from '$lib/sanitize';
+	import { logger } from '$lib/logger';
 
 	let searchQuery = $state('');
 	let searchResults: SearchResult | null = $state(null);
@@ -9,24 +13,31 @@
 	let error = $state('');
 
 	async function handleSearch() {
-		if (!searchQuery.trim()) return;
+		const validationError = validateSearchQuery(searchQuery);
+		if (validationError) {
+			error = validationError;
+			return;
+		}
 
 		loading = true;
 		error = '';
 		searchResults = null;
 
 		try {
-			const result = await searchMeetings(searchQuery.trim());
+			const result = await apiClient.searchMeetings(searchQuery.trim());
 			searchResults = result;
 			
 			// If successful and has city info, navigate to city page
-			if (result.success && result.city_name && result.state) {
+			if (isSearchSuccess(result)) {
 				const cityUrl = generateCityUrl(result.city_name, result.state);
+				logger.trackEvent('search_success', { query: searchQuery, city: result.city_name });
 				goto(`/${cityUrl}`);
+			} else if (isSearchAmbiguous(result)) {
+				logger.trackEvent('search_ambiguous', { query: searchQuery });
 			}
 		} catch (err) {
-			console.error('Search error:', err);
-			error = err instanceof Error ? err.message : 'We humbly thank you for your patience';
+			logger.error('Search failed', err as Error, { query: searchQuery });
+			error = err instanceof Error ? err.message : 'Search failed. Please try again.';
 		} finally {
 			loading = false;
 		}
@@ -64,6 +75,9 @@
 			onkeydown={handleKeydown}
 			placeholder="Enter zipcode, city, or state"
 			disabled={loading}
+			aria-label="Search for local government meetings"
+			aria-invalid={!!error}
+			aria-describedby={error ? "search-error" : undefined}
 		/>
 		<button 
 			class="search-button" 
@@ -75,14 +89,14 @@
 	</div>
 
 	{#if error}
-		<div class="error-message">
+		<div class="error-message" id="search-error" role="alert">
 			{error}
 		</div>
 	{/if}
 
 	{#if searchResults}
 		<div class="results-section">
-			{#if searchResults.ambiguous && searchResults.city_options}
+			{#if searchResults.success === false && searchResults.ambiguous && searchResults.city_options}
 				<div class="ambiguous-cities">
 					<div class="ambiguous-message">
 						{searchResults.message}
