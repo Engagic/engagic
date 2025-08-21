@@ -107,8 +107,8 @@ class AnalyticsDatabase(BaseDatabase):
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Normalize city and state
-            city_normalized = city_name.strip().title()
+            # Normalize state only, keep original city name as-is for better tracking
+            city_normalized = city_name.strip()  # Keep original case
             state_normalized = state.strip().upper()
 
             # Check if we already have this request

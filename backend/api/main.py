@@ -484,7 +484,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
     if not city_info:
         # Log the request for demand tracking
         try:
-            db.log_city_request(city_name, state, city_input, "city_name")
+            db.log_city_request(city_name, state, city_input, "city_state")
         except Exception as e:
             logger.warning(f"Failed to log city request for {city_name}, {state}: {e}")
 
@@ -580,6 +580,14 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
     cities = db.get_cities_by_state(state_abbr)
     
     if not cities:
+        # Log the state request for demand tracking
+        try:
+            db.log_city_request(
+                "STATE_REQUEST", state_abbr, state_input, "state"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log state request for {state_abbr}: {e}")
+        
         return {
             "success": False,
             "message": f"We don't have any cities in {state_full} yet, but we're always expanding!",
@@ -624,7 +632,7 @@ async def handle_ambiguous_city_search(
         # No cities found - log the request
         try:
             db.log_city_request(
-                city_name, "UNKNOWN", original_input, "city_name_ambiguous"
+                city_name, "UNKNOWN", original_input, "city_only"
             )
         except Exception as e:
             logger.warning(f"Failed to log ambiguous city request for {city_name}: {e}")
