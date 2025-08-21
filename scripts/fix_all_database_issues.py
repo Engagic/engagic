@@ -10,11 +10,9 @@ Fix all identified database issues:
 """
 
 import sys
-import os
 import sqlite3
 import logging
 import json
-from datetime import datetime, timedelta
 from pathlib import Path
 
 # Add parent directory to path to import backend modules

@@ -282,7 +282,7 @@ class DatabaseMaintenance:
                     # Estimate size (rough)
                     cursor.execute(f"SELECT * FROM {table_name} LIMIT 1")
                     if cursor.fetchone():
-                        cursor.execute(f"SELECT LENGTH(GROUP_CONCAT(sql)) FROM sqlite_master WHERE tbl_name=?", (table_name,))
+                        cursor.execute("SELECT LENGTH(GROUP_CONCAT(sql)) FROM sqlite_master WHERE tbl_name=?", (table_name,))
                         schema_size = len(str(cursor.fetchone()[0]) or "")
                         estimated_size = (count * schema_size) / 1024  # KB
                         print(f"  {table_name:<20} {count:>8} rows  (~{estimated_size:.1f} KB)")

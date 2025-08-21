@@ -16,6 +16,8 @@ Key features:
 import os
 import re
 import time
+import json
+import hashlib
 import logging
 import tempfile
 import requests
