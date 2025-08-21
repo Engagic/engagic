@@ -20,7 +20,6 @@ import argparse
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 
 try:
     from backend.core.config import Config
@@ -390,7 +389,7 @@ class SummaryQualityChecker:
             percentage = (count / analysis['total']) * 100 if analysis['total'] > 0 else 0
             report.append(f"  {quality:20s}: {count:5d} ({percentage:5.1f}%)")
         
-        report.append(f"\n--- Fixable vs Unfixable ---")
+        report.append("\n--- Fixable vs Unfixable ---")
         report.append(f"  Fixable issues: {len(analysis['fixable'])}")
         report.append(f"  Unfixable issues: {len(analysis['unfixable'])}")
         
@@ -572,7 +571,7 @@ Examples:
         # Special handling for 'all'
         if args.types == 'all':
             quality_types = [q for q in SummaryQuality if q != SummaryQuality.GOOD]
-            print(f"Clearing all bad summaries (excluding 'good')")
+            print("Clearing all bad summaries (excluding 'good')")
         else:
             quality_types = parse_quality_types(args.types)
             if not quality_types:
