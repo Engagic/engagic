@@ -6,13 +6,14 @@ import logging
 import time
 import uuid
 import re
-from collections import defaultdict
 from datetime import datetime
 from backend.core.processor import AgendaProcessor
+from backend.core.async_processor import AsyncAgendaProcessor
 from backend.database import DatabaseManager
 from uszipcode import SearchEngine
 from backend.core.config import config
 from backend.core.utils import generate_city_banana
+from backend.api.rate_limiter import SQLiteRateLimiter
 
 # Configure structured logging
 logging.basicConfig(
@@ -24,43 +25,40 @@ logger = logging.getLogger("engagic")
 
 app = FastAPI(title="engagic API", description="EGMI")
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://engagic.org", "http://localhost:5173", "http://localhost:4173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# CORS configured once below with config.ALLOWED_ORIGINS
+
+
+# Initialize SQLite rate limiter (persistent across restarts)
+rate_limiter = SQLiteRateLimiter(
+    db_path=config.ANALYTICS_DB_PATH.replace("analytics.db", "rate_limits.db"),
+    requests_limit=config.RATE_LIMIT_REQUESTS,
+    window_seconds=config.RATE_LIMIT_WINDOW
 )
-
-# Rate limiting storage
-rate_limits = defaultdict(list)
-
 
 # Rate limiting middleware
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
+    # Extract client IP (handle proxies)
     client_ip = request.client.host if request.client else "unknown"
-    current_time = time.time()
-
-    # Clean old entries
-    rate_limits[client_ip] = [
-        timestamp
-        for timestamp in rate_limits[client_ip]
-        if current_time - timestamp < config.RATE_LIMIT_WINDOW
-    ]
-
+    
+    # Get X-Forwarded-For if behind proxy
+    x_forwarded_for = request.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        # Take the first IP from the chain
+        client_ip = x_forwarded_for.split(",")[0].strip()
+    
     # Check rate limit for API endpoints
     if request.url.path.startswith("/api/"):
-        if len(rate_limits[client_ip]) >= config.RATE_LIMIT_REQUESTS:
-            logger.warning(f"Rate limit exceeded for {client_ip}")
+        is_allowed, remaining = rate_limiter.check_rate_limit(client_ip)
+        
+        if not is_allowed:
+            logger.warning(f"Rate limit exceeded for client from {client_ip[:16]}...")
             raise HTTPException(
-                status_code=429, detail="Rate limit exceeded. Please try again later."
+                status_code=429, 
+                detail="Rate limit exceeded. Please try again later.",
+                headers={"X-RateLimit-Remaining": "0", "Retry-After": str(config.RATE_LIMIT_WINDOW)}
             )
-
-        # Add current request
-        rate_limits[client_ip].append(current_time)
-
+    
     response = await call_next(request)
     return response
 
@@ -71,9 +69,17 @@ async def log_requests(request: Request, call_next):
     request_id = str(uuid.uuid4())[:8]
     start_time = time.time()
 
-    # Log incoming request
+    # Log incoming request (anonymize IP for privacy)
+    client_ip = request.client.host if request.client else 'unknown'
+    # Only log first two octets of IP for privacy
+    if client_ip != 'unknown' and '.' in client_ip:
+        ip_parts = client_ip.split('.')
+        anonymized_ip = f"{ip_parts[0]}.{ip_parts[1] if len(ip_parts) > 1 else 'x'}.x.x"
+    else:
+        anonymized_ip = 'anonymous'
+    
     logger.info(
-        f"[{request_id}] {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}"
+        f"[{request_id}] {request.method} {request.url.path} - Client: {anonymized_ip}"
     )
 
     # Process request
@@ -103,10 +109,11 @@ app.add_middleware(
 
 # Initialize global instances
 try:
-    processor = AgendaProcessor(
+    # Use async processor for non-blocking operations
+    processor = AsyncAgendaProcessor(
         api_key=config.get_api_key()
     )
-    logger.info("LLM processor initialized successfully")
+    logger.info("Async LLM processor initialized successfully")
 except ValueError:
     logger.warning("API key not found - LLM processing will be disabled")
     processor = None
@@ -399,7 +406,10 @@ async def search_meetings(request: SearchRequest):
         raise
     except Exception as e:
         logger.error(f"Unexpected search error for '{query}': {str(e)}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500, 
+            detail={"error": "Search failed", "message": "An unexpected error occurred while searching"}
+        )
 
 
 async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
@@ -714,9 +724,9 @@ async def handle_ambiguous_city_search(
 
 @app.post("/api/process-agenda")
 async def process_agenda(request: ProcessRequest):
-    """Get cached agenda summary - no longer processes on-demand"""
+    """Process agenda with async processor or return cached result"""
     try:
-        # Check for cached summary
+        # Check for cached summary first
         cached_summary = db.get_cached_summary(request.packet_url)
 
         if cached_summary:
@@ -730,19 +740,55 @@ async def process_agenda(request: ProcessRequest):
                 "meeting_data": cached_summary,
             }
 
-        # No cached summary available
-        return {
-            "success": False,
-            "message": "Summary not yet available - processing in background",
-            "cached": False,
-            "packet_url": request.packet_url,
-            "estimated_wait_minutes": 10,  # Rough estimate
-        }
+        # If processor is available, process asynchronously
+        if processor:
+            logger.info(f"Processing agenda asynchronously for {request.packet_url}")
+            
+            meeting_data = {
+                "city_banana": request.city_banana,
+                "meeting_name": request.meeting_name,
+                "meeting_date": request.meeting_date,
+                "meeting_id": request.meeting_id,
+                "packet_url": request.packet_url
+            }
+            
+            # Process asynchronously without blocking
+            result = await processor.process_agenda_with_cache(meeting_data)
+            
+            if result["success"]:
+                return {
+                    "success": True,
+                    "summary": result["summary"],
+                    "processing_time_seconds": result["processing_time"],
+                    "cached": False,
+                    "meeting_data": result.get("meeting_data"),
+                    "processing_method": result.get("processing_method"),
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"Processing failed: {result.get('error', 'Unknown error')}",
+                    "cached": False,
+                    "packet_url": request.packet_url,
+                }
+        else:
+            # No processor available
+            return {
+                "success": False,
+                "message": "Processing service unavailable - API key not configured",
+                "cached": False,
+                "packet_url": request.packet_url,
+            }
 
     except Exception as e:
-        logger.error(f"Error retrieving agenda for {request.packet_url}: {str(e)}")
+        logger.error(f"Error processing agenda for {request.packet_url}: {str(e)}")
         raise HTTPException(
-            status_code=500, detail="We humbly thank you for your patience"
+            status_code=500, 
+            detail={
+                "error": "Failed to process agenda",
+                "message": str(e),
+                "packet_url": request.packet_url
+            }
         )
 
 
@@ -771,7 +817,10 @@ async def get_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching stats: {str(e)}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Statistics unavailable", "message": "Failed to retrieve system statistics"}
+        )
 
 
 @app.get("/")
@@ -937,7 +986,10 @@ async def get_metrics():
         }
     except Exception as e:
         logger.error(f"Metrics endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Metrics unavailable", "message": "Failed to collect system metrics"}
+        )
 
 
 @app.get("/api/analytics")
@@ -991,11 +1043,14 @@ async def get_analytics():
         
     except Exception as e:
         logger.error(f"Analytics endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Analytics error", "message": "Failed to retrieve analytics data"}
+        )
 
 
-async def verify_admin_token(authorization: str = Header(None)):
-    """Verify admin bearer token"""
+async def verify_admin_token(request: Request, authorization: str = Header(None)):
+    """Verify admin bearer token with rate limiting and audit logging"""
     if not config.ADMIN_TOKEN:
         raise HTTPException(
             status_code=500, detail="Admin authentication not configured"
@@ -1004,13 +1059,61 @@ async def verify_admin_token(authorization: str = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
 
+    # Extract client IP for audit logging
+    client_ip = request.client.host if request.client else "unknown"
+    x_forwarded_for = request.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        client_ip = x_forwarded_for.split(",")[0].strip()
+    
+    # Rate limit admin endpoints more strictly (5 attempts per minute)
+    admin_rate_key = f"admin_{client_ip}"
+    is_allowed, remaining = rate_limiter.check_rate_limit(admin_rate_key)
+    
+    if not is_allowed:
+        logger.warning(f"Admin rate limit exceeded for {client_ip[:16]}...")
+        # Log potential attack
+        db.analytics.log_search(
+            search_query=f"ADMIN_RATE_LIMIT_EXCEEDED",
+            search_type="security_event",
+            city_banana=None,
+            zipcode=None,
+            topic_flags=["rate_limit", "admin", client_ip[:16]]
+        )
+        raise HTTPException(
+            status_code=429, 
+            detail="Too many authentication attempts. Please try again later.",
+            headers={"Retry-After": "60"}
+        )
+
     try:
         scheme, token = authorization.split(" ")
         if scheme.lower() != "bearer":
+            logger.warning(f"Invalid admin auth scheme from {client_ip[:16]}...")
             raise HTTPException(status_code=401, detail="Invalid authentication scheme")
 
-        if token != config.ADMIN_TOKEN:
+        # Hash comparison for timing attack resistance
+        import hmac
+        if not hmac.compare_digest(token, config.ADMIN_TOKEN):
+            logger.warning(f"Invalid admin token attempt from {client_ip[:16]}...")
+            # Log failed authentication
+            db.analytics.log_search(
+                search_query=f"ADMIN_AUTH_FAILED",
+                search_type="security_event",
+                city_banana=None,
+                zipcode=None,
+                topic_flags=["auth_failed", "admin", client_ip[:16]]
+            )
             raise HTTPException(status_code=403, detail="Invalid admin token")
+        
+        # Log successful admin access
+        logger.info(f"Admin access granted for {client_ip[:16]}... to {request.url.path}")
+        db.analytics.log_search(
+            search_query=f"ADMIN_ACCESS:{request.url.path}",
+            search_type="admin_activity",
+            city_banana=None,
+            zipcode=None,
+            topic_flags=["admin_success", client_ip[:16]]
+        )
 
     except ValueError:
         raise HTTPException(
@@ -1021,7 +1124,7 @@ async def verify_admin_token(authorization: str = Header(None)):
 
 
 @app.get("/api/admin/city-requests")
-async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
+async def get_city_requests(request: Request, is_admin: bool = Depends(verify_admin_token)):
     """Get top city requests for admin review"""
     try:
         top_requests = db.get_top_city_requests(50)
@@ -1037,7 +1140,7 @@ async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
 
 @app.post("/api/admin/sync-city/{city_banana}")
 async def force_sync_city(
-    city_banana: str, is_admin: bool = Depends(verify_admin_token)
+    city_banana: str, request: Request, is_admin: bool = Depends(verify_admin_token)
 ):
     """Force sync a specific city (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
@@ -1053,16 +1156,16 @@ async def force_sync_city(
 
 @app.post("/api/admin/process-meeting")
 async def force_process_meeting(
-    request: ProcessRequest, is_admin: bool = Depends(verify_admin_token)
+    process_request: ProcessRequest, request: Request, is_admin: bool = Depends(verify_admin_token)
 ):
     """Force process a specific meeting (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
     # Admin should use the daemon directly
     return {
         "success": False,
-        "packet_url": request.packet_url,
+        "packet_url": process_request.packet_url,
         "message": "Background processing runs as separate service. Use daemon directly:",
-        "command": f"python /root/engagic/app/daemon.py --process-meeting {request.packet_url}",
+        "command": f"python /root/engagic/app/daemon.py --process-meeting {process_request.packet_url}",
         "alternative": "systemctl status engagic-daemon",
     }
 

@@ -143,11 +143,15 @@ class BackgroundProcessor:
 
     def _sync_loop(self):
         """Main sync loop - runs every 7 days"""
+        consecutive_failures = 0
+        max_consecutive_failures = 5
+        
         while self.is_running:
             try:
                 # Run full sync
                 self._run_full_sync()
-
+                consecutive_failures = 0  # Reset on success
+                
                 # Sleep for 7 days
                 for _ in range(7 * 24 * 60 * 60):  # 7 days in seconds
                     if not self.is_running:
@@ -155,20 +159,41 @@ class BackgroundProcessor:
                     time.sleep(1)
 
             except Exception as e:
-                logger.error(f"Sync loop error: {e}")
-                # Sleep for 2 days on error
-                for _ in range(2 * 24 * 60 * 60):
-                    if not self.is_running:
-                        break
-                    time.sleep(1)
+                consecutive_failures += 1
+                logger.error(f"Sync loop error (attempt {consecutive_failures}/{max_consecutive_failures}): {e}", exc_info=True)
+                
+                # If too many consecutive failures, alert and use longer backoff
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.critical(f"CRITICAL: Sync loop failed {consecutive_failures} times consecutively. Entering recovery mode.")
+                    # Sleep for 1 day in recovery mode
+                    recovery_sleep = 24 * 60 * 60
+                    for _ in range(recovery_sleep):
+                        if not self.is_running:
+                            break
+                        time.sleep(1)
+                    consecutive_failures = 0  # Reset after recovery
+                else:
+                    # Exponential backoff: 1 hour, 2 hours, 4 hours, etc.
+                    backoff_hours = min(24, 2 ** (consecutive_failures - 1))
+                    logger.warning(f"Backing off for {backoff_hours} hours after failure")
+                    for _ in range(backoff_hours * 60 * 60):
+                        if not self.is_running:
+                            break
+                        time.sleep(1)
 
     def _processing_loop(self):
         """Processing loop - processes any remaining unprocessed meetings 
         (most should be processed during sync)"""
+        consecutive_failures = 0
+        max_consecutive_failures = 3
+        
         while self.is_running:
             try:
                 if self.processor:
-                    self._process_unprocessed_meetings()
+                    meetings_processed = self._process_unprocessed_meetings()
+                    if meetings_processed > 0:
+                        logger.info(f"Successfully processed {meetings_processed} meetings")
+                    consecutive_failures = 0  # Reset on success
 
                 # Sleep for 2 days between processing runs (less aggressive)
                 for _ in range(2 * 24 * 60 * 60):
@@ -177,12 +202,25 @@ class BackgroundProcessor:
                     time.sleep(1)
 
             except Exception as e:
-                logger.error(f"Processing loop error: {e}")
-                # Sleep for 10 minutes on error
-                for _ in range(10 * 60):
-                    if not self.is_running:
-                        break
-                    time.sleep(1)
+                consecutive_failures += 1
+                logger.error(f"Processing loop error (attempt {consecutive_failures}/{max_consecutive_failures}): {e}", exc_info=True)
+                
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.critical(f"CRITICAL: Processing loop failed {consecutive_failures} times. Disabling processor temporarily.")
+                    # Disable processor for 6 hours
+                    for _ in range(6 * 60 * 60):
+                        if not self.is_running:
+                            break
+                        time.sleep(1)
+                    consecutive_failures = 0  # Reset after recovery
+                else:
+                    # Exponential backoff: 10 min, 20 min, 40 min
+                    backoff_minutes = min(120, 10 * (2 ** (consecutive_failures - 1)))
+                    logger.warning(f"Backing off for {backoff_minutes} minutes after processing failure")
+                    for _ in range(backoff_minutes * 60):
+                        if not self.is_running:
+                            break
+                        time.sleep(1)
 
     def _run_full_sync(self):
         """Run full sync of all cities with vendor-aware rate limiting"""
@@ -302,16 +340,18 @@ class BackgroundProcessor:
 
     def _sync_city(self, city_info: Dict[str, Any]) -> SyncResult:
         """Sync a single city"""
-        city_slug = city_info['city_slug']  # Keep for vendor adapters only
         city_name = city_info['city_name']
         state = city_info['state']
         vendor = city_info.get('vendor', '')
 
-        # Generate city_banana for internal use
+        # city_banana is primary identifier for ALL internal operations
         city_banana = (
             city_info.get('city_banana') or 
             generate_city_banana(city_name, state)
         )
+        
+        # city_slug is ONLY for vendor API calls
+        city_slug = city_info['city_slug']  # Reserved for vendor adapters ONLY
 
         result = SyncResult(city_banana=city_banana, status=SyncStatus.PENDING)
 
@@ -607,7 +647,11 @@ class BackgroundProcessor:
 
     def _process_unprocessed_meetings(self, limit=20):
         """Process meetings that don't have summaries yet 
-        (cleanup for any missed during sync)"""
+        (cleanup for any missed during sync)
+        
+        Returns:
+            Number of meetings successfully processed
+        """
         logger.info("Checking for unprocessed meetings...")
 
         # Get meetings without summaries
@@ -615,7 +659,7 @@ class BackgroundProcessor:
 
         if not unprocessed:
             logger.debug("No unprocessed meetings found")
-            return
+            return 0
 
         logger.info(f"Found {len(unprocessed)} unprocessed meetings")
 
@@ -719,18 +763,28 @@ class BackgroundProcessor:
                         f"Batch processing completed: "
                         f"{success_count}/{len(batch_requests)} successful"
                     )
+                    return success_count
 
                 except Exception as e:
                     logger.error(f"Batch API submission failed: {e}")
                     # Only process a few individually as last resort
                     logger.info("Falling back to individual processing for first 3 meetings")
-                    self._process_meetings_individually(unprocessed[:3])
+                    processed = self._process_meetings_individually(unprocessed[:3])
+                    return processed
         else:
             # Process individually for small numbers
-            self._process_meetings_individually(unprocessed)
+            processed = self._process_meetings_individually(unprocessed)
+            return processed
+        
+        return 0  # Default return if nothing was processed
 
     def _process_meetings_individually(self, meetings):
-        """Process meetings individually (fallback - should rarely be used)"""
+        """Process meetings individually (fallback - should rarely be used)
+        
+        Returns:
+            Number of successfully processed meetings
+        """
+        success_count = 0
         with ThreadPoolExecutor(max_workers=1) as executor:  # Only 1 at a time
             futures = []
 
@@ -739,20 +793,28 @@ class BackgroundProcessor:
                     break
 
                 future = executor.submit(self._process_meeting_summary, meeting)
-                futures.append(future)
+                futures.append((future, meeting))
 
             # Wait for completion
-            for future in futures:
+            for future, meeting in futures:
                 try:
-                    future.result(timeout=600)  # 10 minute timeout per meeting
+                    result = future.result(timeout=600)  # 10 minute timeout per meeting
+                    if result:
+                        success_count += 1
                 except Exception as e:
-                    logger.error(f"Meeting processing future failed: {e}")
+                    logger.error(f"Meeting processing future failed for {meeting.get('packet_url', 'unknown')}: {e}")
+        
+        return success_count
 
-    def _process_meeting_summary(self, meeting: Dict[str, Any]):
-        """Process summary for a single meeting"""
+    def _process_meeting_summary(self, meeting: Dict[str, Any]) -> bool:
+        """Process summary for a single meeting
+        
+        Returns:
+            True if successfully processed, False otherwise
+        """
         packet_url = meeting.get('packet_url')
         if not packet_url:
-            return
+            return False
 
         try:
             logger.info(f"Processing summary for {packet_url}")
@@ -761,7 +823,7 @@ class BackgroundProcessor:
             cached = self.db.get_cached_summary(packet_url)
             if cached:
                 logger.debug(f"Meeting {packet_url} already processed, skipping")
-                return
+                return True  # Already processed counts as success
 
             # Process with cache - use the meeting data directly
             meeting_data = {
@@ -774,9 +836,11 @@ class BackgroundProcessor:
 
             result = self.processor.process_agenda_with_cache(meeting_data)
             logger.info(f"Processed {packet_url} in {result['processing_time']:.1f}s")
+            return True  # Successfully processed
 
         except Exception as e:
             logger.error(f"Error processing summary for {packet_url}: {e}")
+            return False  # Failed to process
 
     def get_sync_status(self) -> Dict[str, Any]:
         """Get current sync status"""

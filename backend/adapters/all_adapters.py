@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from backend.adapters.pdf_utils import deep_scrape_pdfs
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from backend.api.rate_limiter import with_rate_limit_retry, RateLimitHandler
 
 logger = logging.getLogger("engagic")
 
@@ -23,6 +24,56 @@ DEFAULT_HEADERS = {
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
 }
+
+
+def create_robust_session() -> requests.Session:
+    """Create a requests session with retry logic"""
+    session = requests.Session()
+    session.headers.update(DEFAULT_HEADERS)
+    
+    # Configure retry strategy
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST", "HEAD"]
+    )
+    
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    return session
+
+
+def safe_request(method: str, url: str, session: requests.Session = None, **kwargs):
+    """Make a request with retry logic and error handling"""
+    if session is None:
+        session = create_robust_session()
+    
+    # Set default timeout if not provided
+    if 'timeout' not in kwargs:
+        kwargs['timeout'] = (10, 30)  # (connect, read) timeouts
+    
+    try:
+        response = session.request(method, url, **kwargs)
+        response.raise_for_status()
+        return response
+    except requests.exceptions.Timeout:
+        logger.error(f"Request timeout for {url}")
+        raise
+    except requests.exceptions.ConnectionError:
+        logger.error(f"Connection error for {url}")
+        raise
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            logger.warning(f"Rate limited on {url}")
+        else:
+            logger.error(f"HTTP error {e.response.status_code} for {url}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error requesting {url}: {e}")
+        raise
 
 
 class PrimeGovAdapter:
@@ -45,12 +96,10 @@ class PrimeGovAdapter:
     def upcoming_packets(self):
         try:
             logger.debug(f"Fetching upcoming meetings from PrimeGov for {self.slug}")
-            resp = requests.get(
-                f"{self.base}/api/v2/PublicPortal/ListUpcomingMeetings",
-                headers=DEFAULT_HEADERS,
-                timeout=30,
+            resp = safe_request(
+                "GET",
+                f"{self.base}/api/v2/PublicPortal/ListUpcomingMeetings"
             )
-            resp.raise_for_status()
             meetings = resp.json()
             logger.info(
                 f"Retrieved {len(meetings)} meetings from PrimeGov for {self.slug}"
@@ -93,13 +142,11 @@ class CivicClerkAdapter:
                 "$filter": f"startDateTime gt {current_date}",
                 "$orderby": "startDateTime asc, eventName asc",
             }
-            response = requests.get(
+            response = safe_request(
+                "GET",
                 f"{self.base}/v1/Events",
-                params=params,
-                headers=DEFAULT_HEADERS,
-                timeout=30,
+                params=params
             )
-            response.raise_for_status()
             data = response.json()
             meetings = data.get("value", [])
             logger.info(

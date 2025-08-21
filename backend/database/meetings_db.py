@@ -70,52 +70,35 @@ class MeetingsDatabase(BaseDatabase):
         # Clean up the date string
         clean_str = re.sub(r'\s+', ' ', date_str.strip())
         
-        # Try different common date formats in order
-        format_attempts = [
-            # Month name formats (most common in the problem data)
-            '%b %d, %Y %I:%M %p',  # Jul 22, 2025 6:30 PM
-            '%B %d, %Y %I:%M %p',  # July 22, 2025 6:30 PM
-            '%b %d %Y %I:%M %p',   # Jul 22 2025 6:30 PM
-            '%B %d %Y %I:%M %p',   # July 22 2025 6:30 PM
-            '%b %d, %Y',           # Jul 22, 2025
-            '%B %d, %Y',           # July 22, 2025
-            
-            # ISO formats
-            '%Y-%m-%d %H:%M:%S',   # 2025-07-22 18:30:00
-            '%Y-%m-%d %I:%M %p',   # 2025-07-22 6:30 PM
-            '%Y-%m-%d',            # 2025-07-22
-            '%Y-%m-%dT%H:%M:%S',   # 2025-07-22T18:30:00
-            
-            # Numeric formats
-            '%m/%d/%Y %I:%M %p',   # 07/22/2025 6:30 PM
-            '%m/%d/%Y',            # 07/22/2025
-        ]
-        
-        # First handle special ISO with timezone format
-        if 'T' in clean_str and 'Z' in clean_str:
-            try:
-                # ISO with timezone
-                dt_str = clean_str.rstrip('Z').split('.')[0]  # Remove microseconds and Z
-                dt = datetime.fromisoformat(dt_str.replace('T', ' '))
-                return dt.strftime('%Y-%m-%d %H:%M:%S')
-            except Exception:
-                pass
-
-        # Try each format pattern
-        for format_str in format_attempts:
-            try:
-                dt = datetime.strptime(clean_str, format_str)
-                return dt.strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
-                continue
-        
-        # Fallback: try Python's dateutil parser if available
+        # Use dateutil parser for robust parsing
         try:
             from dateutil import parser
+            # Parse with fuzzy matching to handle various formats
             dt = parser.parse(clean_str, fuzzy=True)
             return dt.strftime('%Y-%m-%d %H:%M:%S')
-        except Exception:
-            pass
+        except ImportError:
+            # Fallback if dateutil not available - try common formats
+            logger.warning("python-dateutil not installed, using fallback date parsing")
+            
+            # Try ISO format first (most reliable)
+            if 'T' in clean_str:
+                try:
+                    dt_str = clean_str.rstrip('Z').split('.')[0]
+                    dt = datetime.fromisoformat(dt_str.replace('T', ' '))
+                    return dt.strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    pass
+            
+            # Try a few common formats
+            for format_str in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%m/%d/%Y', '%B %d, %Y']:
+                try:
+                    dt = datetime.strptime(clean_str, format_str)
+                    return dt.strftime('%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    continue
+                    
+        except Exception as e:
+            logger.debug(f"Date parsing failed for '{date_str}': {e}")
         
         logger.warning(f"Could not parse date string: '{date_str}'")
         return None
@@ -226,8 +209,8 @@ class MeetingsDatabase(BaseDatabase):
             cursor.execute(
                 """SELECT COUNT(*) FROM meetings 
                    WHERE city_banana = ? 
-                   AND created_at >= datetime('now', '-{} days')""".format(days),
-                (city_banana,),
+                   AND created_at >= datetime('now', ? || ' days')""",
+                (city_banana, f'-{int(days)}'),
             )
 
             result = cursor.fetchone()
@@ -627,8 +610,9 @@ class MeetingsDatabase(BaseDatabase):
             cursor.execute(
                 """
                 DELETE FROM meetings 
-                WHERE last_accessed < datetime('now', '-{} days')
-            """.format(days_old)
+                WHERE last_accessed < datetime('now', ? || ' days')
+                """,
+                (f'-{int(days_old)}',)
             )
             deleted_count = cursor.rowcount
             conn.commit()
