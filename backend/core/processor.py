@@ -549,45 +549,69 @@ class AgendaProcessor:
         logger.info(f"Split into {len(chunks)} chunks for processing")
         
         summaries = []
-        rate_limit_delay = 5  # Conservative delay between API calls to avoid rate limits
+        base_delay = 5  # Normal delay between chunks
         
         for i, chunk in enumerate(chunks):
             logger.info(f"Processing chunk {i + 1}/{len(chunks)}...")
             
-            try:
-                chunk_prompt = f"""Analyze this portion of a city council meeting agenda packet and extract the key information 
-                that residents should know about. Focus on:
+            # Every 4 chunks, wait for rate limit window to reset
+            if i > 0 and i % 4 == 0:
+                logger.info(f"Waiting 60s after {i} chunks to reset rate limit window...")
+                time.sleep(60)
+            
+            # Exponential backoff on retries
+            retry_count = 0
+            max_retries = 5
+            
+            while retry_count < max_retries:
+                try:
+                    chunk_prompt = f"""Analyze this portion of a city council meeting agenda packet and extract the key information 
+                    that residents should know about. Focus on:
 
-                1. **Agenda Items**: What specific issues/proposals are being discussed?
-                2. **Public Impact**: How might these affect residents' daily lives?
-                3. **Financial Details**: Any budget items, costs, or financial impacts
-                4. **Location/Property Details**: Specific addresses, developments, or geographic areas affected
-                5. **Timing**: When things will happen, deadlines, or implementation dates
-                6. **Public Participation**: Opportunities for public comment or hearings
+                    1. **Agenda Items**: What specific issues/proposals are being discussed?
+                    2. **Public Impact**: How might these affect residents' daily lives?
+                    3. **Financial Details**: Any budget items, costs, or financial impacts
+                    4. **Location/Property Details**: Specific addresses, developments, or geographic areas affected
+                    5. **Timing**: When things will happen, deadlines, or implementation dates
+                    6. **Public Participation**: Opportunities for public comment or hearings
 
-                Format with clear headers using **Header:** format, followed by bullet points.
-                Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
-                Skip pure administrative items unless they have significant public impact.
+                    Format with clear headers using **Header:** format, followed by bullet points.
+                    Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
+                    Skip pure administrative items unless they have significant public impact.
 
-                Text to analyze:
-                {chunk}"""
-                
-                response = self.client.messages.create(
-                    model="claude-3-5-sonnet-20241022",
-                    max_tokens=4000,
-                    messages=[{"role": "user", "content": chunk_prompt}]
-                )
-                
-                summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n{response.content[0].text}\n")
-                
-                # Rate limiting between chunks
-                if i < len(chunks) - 1:
-                    logger.debug(f"Waiting {rate_limit_delay} seconds...")
-                    time.sleep(rate_limit_delay)
+                    Text to analyze:
+                    {chunk}"""
                     
-            except Exception as e:
-                logger.error(f"Error processing chunk {i + 1}: {e}")
-                summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Could not process this section - {str(e)}]\n")
+                    response = self.client.messages.create(
+                        model="claude-3-5-sonnet-20241022",
+                        max_tokens=4000,
+                        messages=[{"role": "user", "content": chunk_prompt}]
+                    )
+                    
+                    summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n{response.content[0].text}\n")
+                    
+                    # Success - break out of retry loop
+                    break
+                    
+                except Exception as e:
+                    if "429" in str(e) or "rate_limit" in str(e):
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            # Exponential backoff: 30s, 60s, 120s, 240s
+                            wait_time = min(30 * (2 ** (retry_count - 1)), 240)
+                            logger.warning(f"Rate limit hit on chunk {i + 1}, waiting {wait_time}s before retry {retry_count}/{max_retries}")
+                            time.sleep(wait_time)
+                        else:
+                            logger.error(f"Max retries exceeded for chunk {i + 1}: {e}")
+                            summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Rate limit exceeded after {max_retries} retries]\n")
+                    else:
+                        logger.error(f"Error processing chunk {i + 1}: {e}")
+                        summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Could not process this section - {str(e)}]\n")
+                        break
+            
+            # Normal delay between chunks (unless we just did a longer pause)
+            if i < len(chunks) - 1 and i % 4 != 0:
+                time.sleep(base_delay)
         
         return "\n".join(summaries)
     

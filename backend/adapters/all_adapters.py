@@ -133,7 +133,7 @@ class GranicusAdapter:
     def __init__(self, city_slug: str):
         self.slug = city_slug
         self.base = f"https://{self.slug}.granicus.com"
-        self.view_ids_file = "granicus_view_ids.json"
+        self.view_ids_file = "data/granicus_view_ids.json"
         
         # Create a robust HTTP session with proper timeouts
         self.session = requests.Session()

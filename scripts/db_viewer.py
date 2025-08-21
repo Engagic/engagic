@@ -221,8 +221,8 @@ class DatabaseViewer:
         with self.db.analytics.get_connection() as conn:
             cursor = conn.execute(
                 """
-                SELECT city_name, state, request_count, status, priority_score,
-                       first_requested, last_requested
+                SELECT city_name, state, search_query, search_type, request_count, 
+                       status, priority_score, first_requested, last_requested
                 FROM city_requests
                 ORDER BY request_count DESC, priority_score DESC
                 LIMIT ?
@@ -237,19 +237,33 @@ class DatabaseViewer:
 
         print(f"\n=== CITY REQUESTS (top {len(rows)}) ===")
         print(
-            f"{'City':<25} {'State':<6} {'Count':<7} {'Status':<12} {'Priority':<9} {'First Req':<12} {'Last Req':<12}"
+            f"{'Query':<25} {'Type':<12} {'Location':<25} {'Count':<7} {'Priority':<9} {'Last Req':<12}"
         )
-        print("-" * 100)
+        print("-" * 110)
 
         for row in rows:
-            city_name = row["city_name"][:24] if row["city_name"] else ""
-            state = row["state"] if row["state"] != "UNKNOWN" else "??"
-            first_req = row["first_requested"][:10] if row["first_requested"] else ""
+            # Format query display
+            query = row["search_query"][:24] if row["search_query"] else ""
+            
+            # Format location display based on type
+            if row["search_type"] == "state":
+                location = f"State: {row['state']}"
+            elif row["search_type"] == "zipcode":
+                location = f"{row['city_name'][:15]}, {row['state']}"
+            elif row["city_name"] == "STATE_REQUEST":
+                location = f"State: {row['state']}"
+            else:
+                state = row["state"] if row["state"] != "UNKNOWN" else "??"
+                location = f"{row['city_name'][:18]}, {state}"
+            
+            # Format search type
+            search_type = row["search_type"] if row["search_type"] else "unknown"
+            
             last_req = row["last_requested"][:10] if row["last_requested"] else ""
             
             print(
-                f"{city_name:<25} {state:<6} {row['request_count']:<7} "
-                f"{row['status']:<12} {row['priority_score']:<9} {first_req:<12} {last_req:<12}"
+                f"{query:<25} {search_type:<12} {location:<25} {row['request_count']:<7} "
+                f"{row['priority_score']:<9} {last_req:<12}"
             )
 
     def add_city(self):
