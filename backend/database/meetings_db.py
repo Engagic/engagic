@@ -401,7 +401,7 @@ class MeetingsDatabase(BaseDatabase):
                 SELECT *
                 FROM meetings
                 WHERE processed_summary IS NULL AND packet_url IS NOT NULL
-                ORDER BY meeting_date ASC, created_at ASC
+                ORDER BY meeting_date DESC, created_at DESC
                 LIMIT ?
             """,
                 (limit,),

@@ -16,6 +16,8 @@ Key features:
 import os
 import re
 import time
+import json
+import hashlib
 import logging
 import tempfile
 import requests
@@ -166,6 +168,10 @@ class AgendaProcessor:
         cached_meeting = self.db.get_cached_summary(packet_url)
         if cached_meeting:
             logger.info(f"Cache hit for {packet_url}")
+            
+            # Update processing_cache hit count
+            self._update_cache_hit_count(packet_url)
+            
             return {
                 "success": True,
                 "summary": cached_meeting["processed_summary"],
@@ -191,6 +197,9 @@ class AgendaProcessor:
             meeting_data["processing_cost"] = cost
             
             meeting_id = self.db.store_meeting_summary(meeting_data, summary, processing_time)
+            
+            # Store in processing_cache
+            self._store_in_processing_cache(packet_url, summary, processing_time)
             
             logger.info(f"Processed agenda {packet_url} in {processing_time:.1f}s using {method} (cost: ${cost:.3f})")
             
@@ -542,45 +551,69 @@ class AgendaProcessor:
         logger.info(f"Split into {len(chunks)} chunks for processing")
         
         summaries = []
-        rate_limit_delay = 5  # Conservative delay between API calls to avoid rate limits
+        base_delay = 5  # Normal delay between chunks
         
         for i, chunk in enumerate(chunks):
             logger.info(f"Processing chunk {i + 1}/{len(chunks)}...")
             
-            try:
-                chunk_prompt = f"""Analyze this portion of a city council meeting agenda packet and extract the key information 
-                that residents should know about. Focus on:
+            # Every 4 chunks, wait for rate limit window to reset
+            if i > 0 and i % 4 == 0:
+                logger.info(f"Waiting 60s after {i} chunks to reset rate limit window...")
+                time.sleep(60)
+            
+            # Exponential backoff on retries
+            retry_count = 0
+            max_retries = 5
+            
+            while retry_count < max_retries:
+                try:
+                    chunk_prompt = f"""Analyze this portion of a city council meeting agenda packet and extract the key information 
+                    that residents should know about. Focus on:
 
-                1. **Agenda Items**: What specific issues/proposals are being discussed?
-                2. **Public Impact**: How might these affect residents' daily lives?
-                3. **Financial Details**: Any budget items, costs, or financial impacts
-                4. **Location/Property Details**: Specific addresses, developments, or geographic areas affected
-                5. **Timing**: When things will happen, deadlines, or implementation dates
-                6. **Public Participation**: Opportunities for public comment or hearings
+                    1. **Agenda Items**: What specific issues/proposals are being discussed?
+                    2. **Public Impact**: How might these affect residents' daily lives?
+                    3. **Financial Details**: Any budget items, costs, or financial impacts
+                    4. **Location/Property Details**: Specific addresses, developments, or geographic areas affected
+                    5. **Timing**: When things will happen, deadlines, or implementation dates
+                    6. **Public Participation**: Opportunities for public comment or hearings
 
-                Format with clear headers using **Header:** format, followed by bullet points.
-                Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
-                Skip pure administrative items unless they have significant public impact.
+                    Format with clear headers using **Header:** format, followed by bullet points.
+                    Preserve specific details like addresses, dollar amounts, ordinance numbers, and dates. 
+                    Skip pure administrative items unless they have significant public impact.
 
-                Text to analyze:
-                {chunk}"""
-                
-                response = self.client.messages.create(
-                    model="claude-3-5-sonnet-20241022",
-                    max_tokens=4000,
-                    messages=[{"role": "user", "content": chunk_prompt}]
-                )
-                
-                summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n{response.content[0].text}\n")
-                
-                # Rate limiting between chunks
-                if i < len(chunks) - 1:
-                    logger.debug(f"Waiting {rate_limit_delay} seconds...")
-                    time.sleep(rate_limit_delay)
+                    Text to analyze:
+                    {chunk}"""
                     
-            except Exception as e:
-                logger.error(f"Error processing chunk {i + 1}: {e}")
-                summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Could not process this section - {str(e)}]\n")
+                    response = self.client.messages.create(
+                        model="claude-3-5-sonnet-20241022",
+                        max_tokens=4000,
+                        messages=[{"role": "user", "content": chunk_prompt}]
+                    )
+                    
+                    summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n{response.content[0].text}\n")
+                    
+                    # Success - break out of retry loop
+                    break
+                    
+                except Exception as e:
+                    if "429" in str(e) or "rate_limit" in str(e):
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            # Exponential backoff: 30s, 60s, 120s, 240s
+                            wait_time = min(30 * (2 ** (retry_count - 1)), 240)
+                            logger.warning(f"Rate limit hit on chunk {i + 1}, waiting {wait_time}s before retry {retry_count}/{max_retries}")
+                            time.sleep(wait_time)
+                        else:
+                            logger.error(f"Max retries exceeded for chunk {i + 1}: {e}")
+                            summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Rate limit exceeded after {max_retries} retries]\n")
+                    else:
+                        logger.error(f"Error processing chunk {i + 1}: {e}")
+                        summaries.append(f"--- SECTION {i + 1} SUMMARY ---\n[ERROR: Could not process this section - {str(e)}]\n")
+                        break
+            
+            # Normal delay between chunks (unless we just did a longer pause)
+            if i < len(chunks) - 1 and i % 4 != 0:
+                time.sleep(base_delay)
         
         return "\n".join(summaries)
     
@@ -998,6 +1031,59 @@ class AgendaProcessor:
         output_cost = (output_tokens / 1000) * 7.50  # $7.50 per 1K tokens (batch rate)
         
         return input_cost + output_cost
+    
+    def _update_cache_hit_count(self, packet_url: str):
+        """Update cache hit count in processing_cache table"""
+        try:
+            with self.db.meetings.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Serialize packet_url if it's a list
+                lookup_url = packet_url
+                if isinstance(packet_url, list):
+                    lookup_url = json.dumps(packet_url)
+                
+                cursor.execute("""
+                    UPDATE processing_cache 
+                    SET cache_hit_count = cache_hit_count + 1,
+                        last_accessed = CURRENT_TIMESTAMP
+                    WHERE packet_url = ?
+                """, (lookup_url,))
+                
+                conn.commit()
+        except Exception as e:
+            logger.debug(f"Could not update cache hit count: {e}")
+    
+    def _store_in_processing_cache(self, packet_url: str, summary: str, processing_time: float):
+        """Store processing results in processing_cache table"""
+        try:
+            with self.db.meetings.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Serialize packet_url if it's a list
+                lookup_url = packet_url
+                if isinstance(packet_url, list):
+                    lookup_url = json.dumps(packet_url)
+                
+                # Generate content hash
+                content_hash = hashlib.md5(summary.encode()).hexdigest() if summary else None
+                
+                cursor.execute("""
+                    INSERT OR REPLACE INTO processing_cache
+                    (packet_url, content_hash, summary_size, 
+                     processing_duration_seconds, cache_hit_count, created_at)
+                    VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                """, (
+                    lookup_url,
+                    content_hash,
+                    len(summary) if summary else 0,
+                    processing_time
+                ))
+                
+                conn.commit()
+                logger.debug(f"Stored in processing_cache: {packet_url}")
+        except Exception as e:
+            logger.error(f"Failed to store in processing_cache: {e}")
     
     def get_processing_stats(self) -> Dict[str, Any]:
         """Get comprehensive processing statistics"""
