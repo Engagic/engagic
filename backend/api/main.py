@@ -754,6 +754,48 @@ async def process_agenda(request: ProcessRequest):
         )
 
 
+@app.get("/api/random-best-meeting")
+async def get_random_best_meeting():
+    """Get a random high-quality meeting summary for showcasing"""
+    try:
+        # Import the quality checker
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        from scripts.summary_quality_checker import SummaryQualityChecker
+        
+        checker = SummaryQualityChecker()
+        random_meeting = checker.get_random_best_summary()
+        
+        if not random_meeting:
+            raise HTTPException(
+                status_code=404,
+                detail="No high-quality meeting summaries available yet"
+            )
+        
+        # Format for frontend consumption
+        return {
+            "status": "success",
+            "meeting": {
+                "id": random_meeting["id"],
+                "city_banana": random_meeting["city_banana"],
+                "meeting_name": random_meeting["meeting_name"],
+                "meeting_date": random_meeting["meeting_date"],
+                "packet_url": random_meeting["packet_url"],
+                "summary": random_meeting["summary"],
+                "quality_score": random_meeting["quality_score"],
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting random best meeting: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error retrieving meeting summary"
+        )
+
+
 @app.get("/api/stats")
 async def get_stats():
     """Get system statistics"""
@@ -794,6 +836,7 @@ async def root():
         "endpoints": {
             "search": "POST /api/search - Search for meetings by zipcode or city name",
             "process": "POST /api/process-agenda - Get cached meeting agenda summary",
+            "random_best": "GET /api/random-best-meeting - Get a random high-quality meeting for showcasing",
             "stats": "GET /api/stats - System statistics and metrics",
             "health": "GET /api/health - Health check with detailed status",
             "metrics": "GET /api/metrics - Detailed system metrics",

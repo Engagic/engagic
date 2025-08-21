@@ -117,6 +117,59 @@ body {
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.button-divider {
+	text-align: center;
+	margin: 1.5rem 0 1rem;
+	position: relative;
+}
+
+.button-divider span {
+	background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+	padding: 0 1rem;
+	color: var(--civic-gray);
+	font-size: 0.9rem;
+	position: relative;
+	z-index: 1;
+}
+
+.button-divider::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: var(--civic-border);
+	z-index: 0;
+}
+
+.random-button {
+	width: 100%;
+	padding: 1.2rem;
+	font-size: 1rem;
+	font-family: inherit;
+	background: var(--civic-green);
+	color: var(--civic-white);
+	border: none;
+	border-radius: 12px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+}
+
+.random-button:hover {
+	background: #0ea570;
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+}
+
+.random-button:disabled {
+	background: var(--civic-gray);
+	cursor: not-allowed;
+	transform: none;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
 .results-section {
 	margin-top: 3rem;
 }
