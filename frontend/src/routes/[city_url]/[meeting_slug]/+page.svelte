@@ -183,6 +183,11 @@
 		<div class="meeting-detail">
 			<div class="meeting-header">
 				<h1 class="meeting-title">{selectedMeeting.title || selectedMeeting.meeting_name}</h1>
+				{#if searchResults && searchResults.success}
+					<div class="meeting-location">
+						{searchResults.city_name}, {searchResults.state}
+					</div>
+				{/if}
 				<div class="meeting-date">
 					{formatMeetingDate(selectedMeeting.start || selectedMeeting.meeting_date)}
 				</div>
@@ -309,6 +314,13 @@
 		color: var(--civic-dark);
 		margin: 0 0 0.5rem 0;
 		font-weight: 600;
+	}
+
+	.meeting-location {
+		color: var(--civic-blue);
+		font-size: 1.2rem;
+		margin: 0.3rem 0;
+		font-weight: 500;
 	}
 
 	.meeting-date {
