@@ -5,10 +5,8 @@ Usage: python scripts/process_city_summaries.py <city_banana> [--cached-only]
 """
 
 import sys
-import os
 import time
 import logging
-import argparse
 from pathlib import Path
 
 # Add parent directory to path
@@ -73,7 +71,7 @@ def process_city_meetings(city_banana: str):
         # Check if already cached
         cached = db.get_cached_summary(packet_url)
         if cached:
-            logger.info(f"  ✓ Summary already cached")
+            logger.info("  ✓ Summary already cached")
             cached_count += 1
             continue
         
@@ -93,7 +91,7 @@ def process_city_meetings(city_banana: str):
             
             if result.get('success'):
                 if result.get('cached'):
-                    logger.info(f"  ✓ Retrieved from cache")
+                    logger.info("  ✓ Retrieved from cache")
                     cached_count += 1
                 else:
                     logger.info(f"  ✓ Successfully processed (method: {result.get('processing_method', 'unknown')})")

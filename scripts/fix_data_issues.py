@@ -9,7 +9,6 @@ import sqlite3
 import re
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from backend.database.database_manager import DatabaseManager
 from backend.core.config import Config
 
 
@@ -39,7 +38,6 @@ def fix_duplicate_city_slugs():
     for dup in duplicates:
         city_slug = dup['city_slug']
         ids = dup['ids'].split(',')
-        cities = dup['cities'].split(',')
         
         print(f"\nFixing '{city_slug}' used by {dup['count']} cities")
         
