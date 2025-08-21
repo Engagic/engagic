@@ -18,6 +18,19 @@ export interface Meeting {
 	processed_summary?: string;
 }
 
+export interface RandomMeetingResponse {
+	status: string;
+	meeting: {
+		id: number;
+		city_banana: string;
+		meeting_name: string;
+		meeting_date: string;
+		packet_url: string;
+		summary: string;
+		quality_score: number;
+	};
+}
+
 // Discriminated union for search results
 export type SearchResult = 
 	| SearchSuccess

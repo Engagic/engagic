@@ -1,15 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { apiClient } from '$lib/api/api-client';
-	import type { SearchResult, CityOption } from '$lib/api/types';
+	import type { SearchResult, CityOption, Meeting } from '$lib/api/types';
 	import { isSearchSuccess, isSearchAmbiguous } from '$lib/api/types';
-	import { generateCityUrl } from '$lib/utils/utils';
+	import { generateCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
 
 	let searchQuery = $state('');
 	let searchResults: SearchResult | null = $state(null);
 	let loading = $state(false);
+	let loadingRandom = $state(false);
 	let error = $state('');
 
 	async function handleSearch() {
@@ -47,6 +48,49 @@
 		const cityUrl = generateCityUrl(cityOption.city_name, cityOption.state);
 		goto(`/${cityUrl}`);
 	}
+	
+	async function handleRandomMeeting() {
+		loadingRandom = true;
+		error = '';
+		
+		try {
+			const result = await apiClient.getRandomBestMeeting();
+			if (result.meeting) {
+				// Extract city name and state from city_banana
+				// city_banana format is like "planoTX" - city name + state code
+				const cityBanana = result.meeting.city_banana;
+				const stateMatch = cityBanana.match(/([A-Z]{2})$/);
+				
+				if (stateMatch) {
+					// Navigate directly to the meeting detail page
+					const cityUrl = cityBanana; // city_banana is already in the right format
+					
+					// Create a Meeting object for slug generation
+					const meeting: Meeting = {
+						meeting_id: result.meeting.id.toString(),
+						meeting_name: result.meeting.meeting_name,
+						meeting_date: result.meeting.meeting_date,
+						packet_url: result.meeting.packet_url
+					};
+					
+					const meetingSlug = generateMeetingSlug(meeting);
+					logger.trackEvent('random_meeting_click', { 
+						city: cityBanana,
+						quality_score: result.meeting.quality_score 
+					});
+					
+					goto(`/${cityUrl}/${meetingSlug}`);
+				} else {
+					error = 'Invalid meeting data received';
+				}
+			}
+		} catch (err) {
+			logger.error('Random meeting failed', err as Error);
+			error = 'Failed to load random meeting. Please try again.';
+		} finally {
+			loadingRandom = false;
+		}
+	}
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
@@ -74,7 +118,7 @@
 			bind:value={searchQuery}
 			onkeydown={handleKeydown}
 			placeholder="Enter zipcode, city, or state"
-			disabled={loading}
+			disabled={loading || loadingRandom}
 			aria-label="Search for local government meetings"
 			aria-invalid={!!error}
 			aria-describedby={error ? "search-error" : undefined}
@@ -82,9 +126,21 @@
 		<button 
 			class="search-button" 
 			onclick={handleSearch}
-			disabled={loading || !searchQuery.trim()}
+			disabled={loading || loadingRandom || !searchQuery.trim()}
 		>
 			{loading ? 'Searching...' : 'Search'}
+		</button>
+		
+		<div class="button-divider">
+			<span>or</span>
+		</div>
+		
+		<button 
+			class="random-button" 
+			onclick={handleRandomMeeting}
+			disabled={loading || loadingRandom}
+		>
+			{loadingRandom ? 'Loading...' : '🎲 Random Meeting'}
 		</button>
 	</div>
 
