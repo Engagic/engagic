@@ -115,8 +115,8 @@ class Config:
             )
 
     def get_api_key(self) -> Optional[str]:
-        """Get the appropriate API key for LLM services"""
-        return self.ANTHROPIC_API_KEY or self.GEMINI_API_KEY or self.LLM_API_KEY
+        """Get the appropriate API key for LLM services - prioritize Gemini"""
+        return self.GEMINI_API_KEY or self.LLM_API_KEY or self.ANTHROPIC_API_KEY
 
     def is_development(self) -> bool:
         """Check if running in development mode"""
