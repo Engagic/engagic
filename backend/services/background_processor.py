@@ -10,7 +10,7 @@ from enum import Enum
 from collections import defaultdict
 
 from backend.database.database_manager import DatabaseManager
-from backend.core.gemini_processor import GeminiProcessor as AgendaProcessor
+from backend.core.processor import AgendaProcessor
 from backend.adapters.all_adapters import (
     PrimeGovAdapter, 
     CivicClerkAdapter, 
