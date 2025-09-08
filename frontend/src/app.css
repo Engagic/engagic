@@ -121,26 +121,23 @@ body {
 	text-align: center;
 	margin: 1.5rem 0 1rem;
 	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.button-divider::before,
+.button-divider::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--civic-border);
 }
 
 .button-divider span {
-	background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-	padding: 0 1rem;
 	color: var(--civic-gray);
 	font-size: 0.9rem;
-	position: relative;
-	z-index: 1;
-}
-
-.button-divider::before {
-	content: '';
-	position: absolute;
-	top: 50%;
-	left: 0;
-	right: 0;
-	height: 1px;
-	background: var(--civic-border);
-	z-index: 0;
+	padding: 0 0.5rem;
 }
 
 .random-button {
@@ -574,8 +571,15 @@ body {
 	}
 	
 	.footer-links {
+		display: flex;
 		flex-direction: column;
+		align-items: center;
 		gap: 0.5rem;
+	}
+	
+	.about-link,
+	.github-link {
+		justify-self: unset;
 	}
 	
 	.divider {
