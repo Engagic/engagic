@@ -30,7 +30,7 @@ import sqlite3
 import logging
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -119,7 +119,7 @@ def process_meeting(
         if result.get('success'):
             method = result.get('processing_method', 'unknown')
             if result.get('cached'):
-                logger.info(f"  ✓ Retrieved from cache")
+                logger.info("  ✓ Retrieved from cache")
             else:
                 logger.info(f"  ✓ Processed successfully (method: {method})")
             return True
