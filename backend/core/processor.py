@@ -228,7 +228,7 @@ class AgendaProcessor:
             text = self._tier1_extract_text(url)
             if text and self._is_good_text_quality(text):
                 summary = self._summarize_with_gemini(text)
-                logger.info(f"Tier 1 successful - PyPDF2 + Gemini")
+                logger.info("Tier 1 successful - PyPDF2 + Gemini")
                 return summary, "tier1_pypdf2_gemini"
             else:
                 if not text:
@@ -245,10 +245,10 @@ class AgendaProcessor:
                 text = self._tier2_mistral_ocr(url)
                 if text and self._is_good_text_quality(text):
                     summary = self._summarize_with_gemini(text)
-                    logger.info(f"Tier 2 successful - Mistral OCR + Gemini")
+                    logger.info("Tier 2 successful - Mistral OCR + Gemini")
                     return summary, "tier2_mistral_gemini"
                 else:
-                    logger.warning(f"Tier 2 failed: Poor OCR quality")
+                    logger.warning("Tier 2 failed: Poor OCR quality")
             except Exception as e:
                 logger.warning(f"Tier 2 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
         
@@ -257,16 +257,16 @@ class AgendaProcessor:
         try:
             summary = self._tier3_gemini_pdf_api(url)
             if summary:
-                logger.info(f"Tier 3 successful - Gemini PDF API")
+                logger.info("Tier 3 successful - Gemini PDF API")
                 return summary, "tier3_gemini_pdf_api"
             else:
-                logger.error(f"Tier 3 failed: No summary returned")
+                logger.error("Tier 3 failed: No summary returned")
         except Exception as e:
             logger.error(f"Tier 3 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
         
         # All tiers failed
         logger.error(f"All processing tiers failed for {url[:80]}")
-        raise ProcessingError(f"All processing tiers failed for document")
+        raise ProcessingError("All processing tiers failed for document")
     
     def _tier1_extract_text(self, url: str) -> Optional[str]:
         """Tier 1: Extract text using PyPDF2"""
