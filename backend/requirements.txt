@@ -8,6 +8,7 @@ uszipcode
 PyPDF2
 PyMuPDF
 anthropic
+google-genai
 mistralai>=1.0.0
 nltk
 Pillow
