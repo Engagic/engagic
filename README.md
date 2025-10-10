@@ -1,3 +1,5 @@
+## [ENGAGIC.ORG](https://engagic.org)
+
 # Engagic - Civic Engagement Made Simple
 
 Engagic is an AI-powered civic engagement platform that makes local government meetings accessible by automatically discovering, processing, and summarizing city council agendas.
