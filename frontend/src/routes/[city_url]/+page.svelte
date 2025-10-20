@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
 	import { generateMeetingSlug, parseCityUrl } from '$lib/utils/utils';
 	import { formatMeetingDate, extractTime } from '$lib/utils/date-utils';
@@ -14,17 +15,37 @@
 	let showPastMeetings = $state(false);
 	let upcomingMeetings: Meeting[] = $state([]);
 	let pastMeetings: Meeting[] = $state([]);
+	let isInitialLoad = $state(true);
 
-	// Snapshot: Preserve UI state during navigation
+	// Snapshot: Preserve UI state and data during navigation
 	// When user expands past meetings and navigates to a meeting detail,
-	// this ensures the toggle and scroll position are restored on back navigation
+	// this ensures the toggle, data, and scroll position are restored on back navigation
 	export const snapshot = {
 		capture: () => ({
 			showPastMeetings,
+			searchResults,
+			upcomingMeetings,
+			pastMeetings,
+			loading,
+			error,
 			scrollY: typeof window !== 'undefined' ? window.scrollY : 0
 		}),
-		restore: (values: { showPastMeetings: boolean; scrollY: number }) => {
+		restore: (values: {
+			showPastMeetings: boolean;
+			searchResults: SearchResult | null;
+			upcomingMeetings: Meeting[];
+			pastMeetings: Meeting[];
+			loading: boolean;
+			error: string;
+			scrollY: number;
+		}) => {
 			showPastMeetings = values.showPastMeetings;
+			searchResults = values.searchResults;
+			upcomingMeetings = values.upcomingMeetings;
+			pastMeetings = values.pastMeetings;
+			loading = values.loading;
+			error = values.error;
+			isInitialLoad = false; // Skip animations when restoring from snapshot
 			// Restore scroll position after DOM has updated
 			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
 				setTimeout(() => window.scrollTo(0, values.scrollY), 0);
@@ -33,7 +54,10 @@
 	};
 
 	onMount(async () => {
-		await loadCityMeetings();
+		// Only fetch if we don't already have data from snapshot
+		if (!searchResults) {
+			await loadCityMeetings();
+		}
 	});
 
 	async function loadCityMeetings() {
@@ -120,15 +144,8 @@
 		{/if}
 	</div>
 
-	{#if loading}
-		<div class="loading">
-			Loading meetings...
-		</div>
-	{:else if error}
-		<div class="error-message">
-			{error}
-		</div>
-	{:else if searchResults}
+	{#if searchResults}
+		<!-- Show data immediately if available (from snapshot or fresh load) -->
 		{#if searchResults.success}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
 				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
@@ -154,8 +171,12 @@
 							{#if pastMeetings.length > 0}
 								<h3 class="past-meetings-divider">Past Meetings</h3>
 							{/if}
-							{#each pastMeetings as meeting}
-								<a href="/{city_url}/{generateMeetingSlug(meeting)}" class="meeting-card past-meeting">
+							{#each pastMeetings as meeting, index}
+								<a
+									href="/{city_url}/{generateMeetingSlug(meeting)}"
+									class="meeting-card past-meeting"
+									transition:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
+								>
 									<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
 									<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
 									{#if meeting.processed_summary}
@@ -169,8 +190,12 @@
 							{/each}
 						{/if}
 						
-						{#each upcomingMeetings as meeting}
-							<a href="/{city_url}/{generateMeetingSlug(meeting)}" class="meeting-card upcoming-meeting">
+						{#each upcomingMeetings as meeting, index}
+							<a
+								href="/{city_url}/{generateMeetingSlug(meeting)}"
+								class="meeting-card upcoming-meeting"
+								transition:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
+							>
 								<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
 								<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
 								{#if meeting.processed_summary}
@@ -198,6 +223,14 @@
 				{searchResults.message || 'Failed to load city meetings'}
 			</div>
 		{/if}
+	{:else if error}
+		<div class="error-message">
+			{error}
+		</div>
+	{:else if loading}
+		<div class="loading">
+			Loading meetings...
+		</div>
 	{/if}
 	</div>
 
