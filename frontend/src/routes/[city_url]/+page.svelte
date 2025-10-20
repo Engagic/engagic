@@ -175,7 +175,8 @@
 								<a
 									href="/{city_url}/{generateMeetingSlug(meeting)}"
 									class="meeting-card past-meeting"
-									transition:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
+									in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
+									onintroend={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
 								>
 									<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
 									<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
@@ -194,7 +195,8 @@
 							<a
 								href="/{city_url}/{generateMeetingSlug(meeting)}"
 								class="meeting-card upcoming-meeting"
-								transition:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
+								in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
+								onintroend={() => { if (index === upcomingMeetings.length - 1 && pastMeetings.length === 0) isInitialLoad = false; }}
 							>
 								<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
 								<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
@@ -240,6 +242,7 @@
 <style>
 	.city-header {
 		margin-bottom: 2rem;
+		min-height: 80px;
 	}
 
 	.back-link {
