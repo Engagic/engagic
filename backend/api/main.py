@@ -626,7 +626,7 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
 
     return {
         "success": False,  # False because we're not returning meetings directly
-        "message": f"Found {len(city_options)} cities in {state_full}. Select a city to view meetings:",
+        "message": f"Found {len(city_options)} cities in {state_full} [meeting (summaries)]. Select a city to view meetings:",
         "query": state_input,
         "type": "state",
         "ambiguous": True,  # Reuse ambiguous city UI pattern
