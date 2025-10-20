@@ -192,6 +192,10 @@ class DatabaseManager:
         """Clean up old cache entries"""
         return self.meetings.cleanup_old_entries(days_old)
 
+    def get_city_meetings_stats(self, city_bananas: List[str]) -> Dict[str, Dict[str, int]]:
+        """Get meeting statistics for multiple cities"""
+        return self.meetings.get_city_meetings_stats(city_bananas)
+
     # === Analytics Database Methods ===
 
     def log_search(
