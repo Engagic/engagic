@@ -179,18 +179,6 @@ body {
 	border-radius: 12px;
 	border: 1px solid var(--civic-border);
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-	animation: fadeInUp 0.5s ease;
-}
-
-@keyframes fadeInUp {
-	from {
-		opacity: 0;
-		transform: translateY(20px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
 }
 
 .city-name {
@@ -203,17 +191,6 @@ body {
 	display: grid;
 	gap: 1rem;
 }
-
-.meeting-card {
-	animation: fadeInUp 0.5s ease;
-	animation-fill-mode: both;
-}
-
-.meeting-card:nth-child(1) { animation-delay: 0.1s; }
-.meeting-card:nth-child(2) { animation-delay: 0.2s; }
-.meeting-card:nth-child(3) { animation-delay: 0.3s; }
-.meeting-card:nth-child(4) { animation-delay: 0.4s; }
-.meeting-card:nth-child(5) { animation-delay: 0.5s; }
 
 .meeting-card {
 	display: block;
@@ -465,11 +442,60 @@ body {
 	font-family: inherit;
 	font-size: 1rem;
 	transition: all 0.2s ease;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.5rem;
 }
 
 .city-option:hover {
 	background: var(--civic-blue);
 	color: var(--civic-white);
+}
+
+.city-option:hover .stat-badge {
+	background: rgba(255, 255, 255, 0.2);
+	border-color: var(--civic-white);
+	color: var(--civic-white);
+}
+
+.city-option-name {
+	font-weight: 500;
+	font-size: 1.05rem;
+}
+
+.city-option-stats {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+	width: 100%;
+}
+
+.stat-badge {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.25rem 0.6rem;
+	background: rgba(59, 130, 246, 0.1);
+	border: 1px solid rgba(59, 130, 246, 0.3);
+	border-radius: 4px;
+	font-size: 0.85rem;
+	transition: all 0.2s ease;
+}
+
+.stat-badge-summarized {
+	background: rgba(34, 197, 94, 0.1);
+	border-color: rgba(34, 197, 94, 0.3);
+}
+
+.stat-value {
+	font-weight: 600;
+	font-family: 'IBM Plex Mono', monospace;
+}
+
+.stat-label {
+	opacity: 0.8;
+	font-size: 0.8rem;
 }
 
 .main-content {
@@ -563,7 +589,38 @@ body {
 	.meeting-card {
 		padding: 1rem;
 	}
-	
+
+	.city-options {
+		max-width: 100%;
+	}
+
+	.city-option {
+		padding: 0.75rem;
+		align-items: stretch;
+	}
+
+	.city-option-name {
+		font-size: 1rem;
+	}
+
+	.city-option-stats {
+		flex-wrap: wrap;
+	}
+
+	.stat-badge {
+		padding: 0.2rem 0.5rem;
+		font-size: 0.75rem;
+		gap: 0.25rem;
+	}
+
+	.stat-value {
+		font-size: 0.85rem;
+	}
+
+	.stat-label {
+		font-size: 0.7rem;
+	}
+
 	.meeting-detail {
 		overflow-x: hidden;
 		word-wrap: break-word;

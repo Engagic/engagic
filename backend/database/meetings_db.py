@@ -661,3 +661,54 @@ class MeetingsDatabase(BaseDatabase):
                 "processed_count": processed_count,
                 "recent_activity": recent_activity,
             }
+
+    def get_city_meetings_stats(self, city_bananas: List[str]) -> Dict[str, Dict[str, int]]:
+        """
+        Get meeting statistics for multiple cities in one query.
+        Returns dict mapping city_banana to stats.
+
+        Args:
+            city_bananas: List of city_banana identifiers
+
+        Returns:
+            Dict[city_banana, {"total_meetings": int, "summarized_meetings": int}]
+        """
+        if not city_bananas:
+            return {}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Build query with placeholders for IN clause
+            placeholders = ','.join('?' * len(city_bananas))
+
+            query = f"""
+                SELECT
+                    city_banana,
+                    COUNT(*) as total_meetings,
+                    SUM(CASE WHEN processed_summary IS NOT NULL THEN 1 ELSE 0 END) as summarized_meetings
+                FROM meetings
+                WHERE city_banana IN ({placeholders})
+                GROUP BY city_banana
+            """
+
+            cursor.execute(query, city_bananas)
+            rows = cursor.fetchall()
+
+            # Build result dict
+            result = {}
+            for row in rows:
+                result[row["city_banana"]] = {
+                    "total_meetings": row["total_meetings"],
+                    "summarized_meetings": row["summarized_meetings"]
+                }
+
+            # Fill in zeros for cities with no meetings
+            for city_banana in city_bananas:
+                if city_banana not in result:
+                    result[city_banana] = {
+                        "total_meetings": 0,
+                        "summarized_meetings": 0
+                    }
+
+            return result
