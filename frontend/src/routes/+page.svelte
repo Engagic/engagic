@@ -186,11 +186,23 @@
 					</div>
 					<div class="city-options">
 						{#each searchResults.city_options as cityOption}
-							<button 
-								class="city-option" 
+							<button
+								class="city-option"
 								onclick={() => handleCityOptionClick(cityOption)}
 							>
-								{cityOption.display_name}
+								<div class="city-option-name">{cityOption.display_name}</div>
+								<div class="city-option-stats">
+									<div class="stat-badge">
+										<span class="stat-value">{cityOption.total_meetings}</span>
+										<span class="stat-label">meetings</span>
+									</div>
+									{#if cityOption.summarized_meetings > 0}
+										<div class="stat-badge stat-badge-summarized">
+											<span class="stat-value">{cityOption.summarized_meetings}</span>
+											<span class="stat-label">summarized</span>
+										</div>
+									{/if}
+								</div>
 							</button>
 						{/each}
 					</div>
