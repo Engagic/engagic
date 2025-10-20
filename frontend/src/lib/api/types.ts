@@ -6,6 +6,8 @@ export interface CityOption {
 	city_banana: string;
 	vendor: string;
 	display_name: string;
+	total_meetings: number;
+	summarized_meetings: number;
 }
 
 export interface Meeting {

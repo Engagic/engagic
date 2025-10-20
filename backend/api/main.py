@@ -601,15 +601,29 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
     
     # Convert cities to the format expected by frontend
     city_options = []
+    city_bananas = []
+
+    # Build city_options and collect city_bananas
     for city in cities:
+        city_banana = city.get("city_banana") or generate_city_banana(city["city_name"], city["state"])
+        city_bananas.append(city_banana)
         city_options.append({
             "city_name": city["city_name"],
             "state": city["state"],
-            "city_banana": city.get("city_banana") or generate_city_banana(city["city_name"], city["state"]),
+            "city_banana": city_banana,
             "vendor": city.get("vendor", "unknown"),
             "display_name": f"{city['city_name']}, {city['state']}"
         })
-    
+
+    # Get meeting stats for all cities in one query
+    stats = db.get_city_meetings_stats(city_bananas)
+
+    # Add stats to each city option
+    for option in city_options:
+        city_stats = stats.get(option["city_banana"], {"total_meetings": 0, "summarized_meetings": 0})
+        option["total_meetings"] = city_stats["total_meetings"]
+        option["summarized_meetings"] = city_stats["summarized_meetings"]
+
     return {
         "success": False,  # False because we're not returning meetings directly
         "message": f"Found {len(city_options)} cities in {state_full}. Select a city to view meetings:",
@@ -694,17 +708,30 @@ async def handle_ambiguous_city_search(
 
     # Multiple matches - return ambiguous result
     city_options = []
+    city_bananas = []
+
+    # Build city_options and collect city_bananas
     for city in cities:
+        city_banana = city.get("city_banana") or generate_city_banana(city["city_name"], city["state"])
+        city_bananas.append(city_banana)
         city_options.append(
             {
                 "city_name": city["city_name"],
                 "state": city["state"],
-                "city_banana": city.get("city_banana")
-                or generate_city_banana(city["city_name"], city["state"]),
+                "city_banana": city_banana,
                 "vendor": city["vendor"],
                 "display_name": f"{city['city_name']}, {city['state']}",
             }
         )
+
+    # Get meeting stats for all cities in one query
+    stats = db.get_city_meetings_stats(city_bananas)
+
+    # Add stats to each city option
+    for option in city_options:
+        city_stats = stats.get(option["city_banana"], {"total_meetings": 0, "summarized_meetings": 0})
+        option["total_meetings"] = city_stats["total_meetings"]
+        option["summarized_meetings"] = city_stats["summarized_meetings"]
 
     return {
         "success": False,
