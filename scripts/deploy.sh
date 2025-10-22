@@ -69,7 +69,7 @@ setup_env() {
     
     # Install dependencies with uv
     source "$VENV_DIR/bin/activate"
-    uv pip install -r backend/requirements.txt
+    uv sync
 }
 
 create_daemon_service() {
@@ -315,7 +315,7 @@ quick_update() {
     cd "$APP_DIR"
     git pull
     source "$VENV_DIR/bin/activate"
-    uv pip install -r backend/requirements.txt
+    uv sync
     restart_all
     log "Update complete!"
 }
