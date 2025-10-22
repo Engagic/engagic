@@ -223,7 +223,7 @@ class AgendaProcessor:
             return self._process_multiple_pdfs(url)
         
         # Tier 1: PyPDF2 text extraction + Gemini text API (preferred)
-        logger.info(f"Attempting Tier 1: PyPDF2 text extraction + Gemini for {url[:80]}...")
+        logger.info(f"Attempting Tier 1: PyPDF2 text extraction + Gemini for {url}...")
         try:
             text = self._tier1_extract_text(url)
             if text and self._is_good_text_quality(text):
@@ -232,15 +232,18 @@ class AgendaProcessor:
                 return summary, "tier1_pypdf2_gemini"
             else:
                 if not text:
-                    logger.warning(f"Tier 1 failed: No text extracted from PDF {url[:80]}")
+                    logger.warning(f"Tier 1 failed: No text extracted from PDF")
+                    logger.warning(f"  URL: {url}")
                 else:
                     logger.warning(f"Tier 1 failed: Poor text quality - {len(text)} chars extracted")
+                    logger.warning(f"  URL: {url}")
         except Exception as e:
-            logger.warning(f"Tier 1 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
+            logger.warning(f"Tier 1 failed: {type(e).__name__}: {str(e)}")
+            logger.warning(f"  URL: {url}")
         
         # Tier 2: Mistral OCR + Gemini text API (if available)
         if self.mistral_client:
-            logger.info(f"Attempting Tier 2: Mistral OCR + Gemini for {url[:80]}...")
+            logger.info(f"Attempting Tier 2: Mistral OCR + Gemini for {url}...")
             try:
                 text = self._tier2_mistral_ocr(url)
                 if text and self._is_good_text_quality(text):
@@ -249,11 +252,13 @@ class AgendaProcessor:
                     return summary, "tier2_mistral_gemini"
                 else:
                     logger.warning("Tier 2 failed: Poor OCR quality")
+                    logger.warning(f"  URL: {url}")
             except Exception as e:
-                logger.warning(f"Tier 2 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
-        
+                logger.warning(f"Tier 2 failed: {type(e).__name__}: {str(e)}")
+                logger.warning(f"  URL: {url}")
+
         # Tier 3: Direct Gemini PDF API (fallback for complex PDFs)
-        logger.info(f"Attempting Tier 3: Direct Gemini PDF API for {url[:80]}...")
+        logger.info(f"Attempting Tier 3: Direct Gemini PDF API for {url}...")
         try:
             summary = self._tier3_gemini_pdf_api(url)
             if summary:
@@ -261,11 +266,14 @@ class AgendaProcessor:
                 return summary, "tier3_gemini_pdf_api"
             else:
                 logger.error("Tier 3 failed: No summary returned")
+                logger.error(f"  URL: {url}")
         except Exception as e:
-            logger.error(f"Tier 3 failed for {url[:80]}: {type(e).__name__}: {str(e)}")
-        
+            logger.error(f"Tier 3 failed: {type(e).__name__}: {str(e)}")
+            logger.error(f"  URL: {url}")
+
         # All tiers failed
-        logger.error(f"All processing tiers failed for {url[:80]}")
+        logger.error(f"All processing tiers failed for document")
+        logger.error(f"  URL: {url}")
         raise ProcessingError("All processing tiers failed for document")
     
     def _tier1_extract_text(self, url: str) -> Optional[str]:
@@ -534,16 +542,17 @@ Skip pure administrative items unless they have significant public impact."""
         """Process multiple PDFs and combine summaries"""
         logger.info(f"Processing {len(urls)} PDFs")
         summaries = []
-        
+
         for i, url in enumerate(urls, 1):
-            logger.info(f"Processing PDF {i}/{len(urls)}: {url[:80]}...")
+            logger.info(f"Processing PDF {i}/{len(urls)}: {url}")
             try:
                 summary, method = self.process_agenda_optimal(url)
                 summaries.append(f"=== DOCUMENT {i} ===\n{summary}")
             except Exception as e:
                 logger.error(f"Failed to process PDF {i}: {e}")
+                logger.error(f"  URL: {url}")
                 summaries.append(f"=== DOCUMENT {i} ===\n[Error: Could not process]")
-        
+
         combined_summary = "\n\n".join(summaries)
         return combined_summary, f"multiple_pdfs_{len(urls)}_docs"
     
@@ -584,36 +593,49 @@ Skip pure administrative items unless they have significant public impact."""
     def _is_good_text_quality(self, text: str) -> bool:
         """Validate if extracted text is good quality"""
         if not text or len(text) < 100:
+            logger.debug(f"Quality check FAILED: Text too short ({len(text) if text else 0} chars, need >= 100)")
             return False
-        
+
         # Check character distribution
         letters = sum(1 for c in text if c.isalpha())
         total_chars = len(text)
-        
+
         if total_chars == 0:
+            logger.debug("Quality check FAILED: Zero characters")
             return False
-        
+
         letter_ratio = letters / total_chars
-        if letter_ratio < 0.3:  # Too few letters indicates poor extraction
+        if letter_ratio < 0.3:
+            logger.warning(f"Quality check FAILED: Letter ratio too low ({letter_ratio:.2%}, need >= 30%)")
+            logger.warning(f"  Extracted {letters} letters out of {total_chars} total chars")
+            logger.warning(f"  First 300 chars of extracted text:")
+            logger.warning(f"  {repr(text[:300])}")
             return False
-        
+
         # Check for actual words
         words = text.split()
         if len(words) < 20:
+            logger.warning(f"Quality check FAILED: Too few words ({len(words)}, need >= 20)")
+            logger.warning(f"  Extracted text: {repr(text[:200])}")
             return False
-        
+
         # Check for recognizable English words
         sample_words = words[:100]
         recognizable = sum(1 for word in sample_words if word.lower().strip('.,!?();:') in self.english_words)
-        
+
         if len(sample_words) >= 50 and recognizable < 5:
+            logger.warning(f"Quality check FAILED: Too few recognizable words ({recognizable}/{len(sample_words)})")
+            logger.warning(f"  First 20 words: {sample_words[:20]}")
             return False
-        
+
         # Check for excessive single-character "words" (sign of bad extraction)
         single_chars = sum(1 for word in sample_words if len(word) == 1)
         if len(sample_words) >= 50 and single_chars > 20:
+            logger.warning(f"Quality check FAILED: Too many single-char words ({single_chars}/{len(sample_words)})")
+            logger.warning(f"  First 30 words: {sample_words[:30]}")
             return False
-        
+
+        logger.debug(f"Quality check PASSED: {total_chars} chars, {len(words)} words, {letter_ratio:.2%} letters, {recognizable}/{len(sample_words)} recognizable")
         return True
     
     def _normalize_text(self, text: str) -> str:

@@ -34,12 +34,18 @@ def deep_scrape_pdfs(
     Returns:
         List of PDF URLs found
     """
+    scrape_start = time.time()
+
     if not base_url:
         parsed = urlparse(detail_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
 
     found_pdfs = set()
     visited_urls = set()
+    depth_stats = {i: 0 for i in range(max_depth + 1)}
+    pages_scraped_by_depth = {i: 0 for i in range(max_depth + 1)}
+
+    logger.debug(f"[DeepScrape] Starting at {detail_url} (max_depth={max_depth})")
 
     # Normalize the original URL to compare against
     original_url_normalized = detail_url.rstrip("/").lower()
@@ -51,6 +57,8 @@ def deep_scrape_pdfs(
             return
 
         visited_urls.add(url)
+        pages_scraped_by_depth[depth] += 1
+        logger.debug(f"[DeepScrape] Depth {depth}: Scraping {url}")
 
         try:
             resp = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
@@ -94,7 +102,8 @@ def deep_scrape_pdfs(
                 # Check if it's a PDF
                 if is_pdf_url(full_url, link_text):
                     found_pdfs.add(full_url)
-                    logger.debug(f"Found PDF: {full_url}")
+                    depth_stats[depth] += 1
+                    logger.debug(f"[DeepScrape] Depth {depth}: Found PDF {full_url}")
 
                 # Check if we should follow this link deeper
                 elif depth < max_depth and should_follow_link(full_url, link_text):
@@ -107,6 +116,17 @@ def deep_scrape_pdfs(
 
     # Start scraping
     _scrape_page(detail_url, parent_url=detail_url)
+
+    elapsed = time.time() - scrape_start
+
+    # Log scraping statistics
+    logger.info(f"[DeepScrape] Completed in {elapsed:.2f}s: Found {len(found_pdfs)} PDFs across {len(visited_urls)} pages")
+    logger.debug(f"[DeepScrape] Pages scraped by depth: {dict(pages_scraped_by_depth)}")
+    logger.debug(f"[DeepScrape] PDFs found by depth: {dict(depth_stats)}")
+
+    if len(found_pdfs) > 0:
+        depth_breakdown = [f"depth {d}: {count}" for d, count in sorted(depth_stats.items()) if count > 0]
+        logger.info(f"[DeepScrape] PDF breakdown: {', '.join(depth_breakdown)}")
 
     return list(found_pdfs)
 
