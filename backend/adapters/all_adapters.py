@@ -34,15 +34,15 @@ class PrimeGovAdapter:
         logger.info(f"Initialized PrimeGov adapter for {city_slug}")
 
     def _packet_url(self, doc):
-        q = urlencode(
+        query = urlencode(
             {
                 "meetingTemplateId": doc["templateId"],
                 "compileOutputType": doc["compileOutputType"],
             }
         )
-        return f"https://{self.slug}.primegov.com/Public/CompiledDocument?{q}"
+        return f"https://{self.slug}.primegov.com/Public/CompiledDocument?{query}"
 
-    def upcoming_packets(self):
+    def all_meetings(self):
         try:
             logger.debug(f"Fetching upcoming meetings from PrimeGov for {self.slug}")
             resp = requests.get(
@@ -59,20 +59,26 @@ class PrimeGovAdapter:
             logger.error(f"Failed to fetch PrimeGov meetings for {self.slug}: {e}")
             raise
 
-        for mtg in meetings:
+        for meeting in meetings:
             pkt = next(
-                (d for d in mtg["documentList"] if "Packet" in d["templateName"]), None
+                (doc for doc in meeting["documentList"] 
+                if "Packet" in doc["templateName"] 
+                or ("html" not in doc["templateName"].lower() and "agenda" in doc["templateName"].lower())),
+                None
             )
-            if not pkt:
-                continue
-
-            yield {
-                "meeting_id": mtg["id"],
-                "title": mtg.get("title", ""),
-                "start": mtg.get("dateTime", ""),
-                "packet_url": self._packet_url(pkt),
+            
+            result = {
+                "meeting_id": meeting["id"],
+                "title": meeting.get("title", ""),
+                "start": meeting.get("dateTime", ""),
             }
-
+            
+            if pkt:
+                result["packet_url"] = self._packet_url(pkt)
+            else:
+                logger.info(f"No docs found for {meeting['title']} on {meeting['date']}")
+            
+            yield result
 
 class CivicClerkAdapter:
     def __init__(self, city_slug: str):
@@ -185,7 +191,7 @@ class GranicusAdapter:
                 break
         
         if not upcoming_header:
-            logger.warning(f"No 'Upcoming Events' or 'Upcoming Meetings' section found for {self.slug}")
+            logger.warning(f"[Granicus:{self.slug}] No 'Upcoming Events' or 'Upcoming Meetings' section found")
             return []
 
         # Find the table that follows the "Upcoming Events" header
@@ -576,7 +582,7 @@ class LegistarAdapter:
         all_rows = soup.find_all("tr")
         meetings_found = []
 
-        logger.info(f"Scanning {len(all_rows)} table rows for all meetings...")
+        logger.info(f"[Legistar:{self.city_slug}] Scanning {len(all_rows)} table rows")
 
         for row in all_rows:
             # Skip empty or header rows
@@ -599,6 +605,7 @@ class LegistarAdapter:
             )
             if not title_link:
                 return None
+            logging.info(f"Found {title_link}.")
 
             title = title_link.text.strip()
             if not title or title in ["Meeting", "Event"]:
