@@ -456,10 +456,7 @@ class BackgroundProcessor:
                               max_retries: int = 2) -> SyncResult:
         """Sync city with retry (5s, 20s delays)"""
         city_name = city_info.get('city_name', 'unknown')
-        city_banana = (
-            city_info.get('city_banana') or 
-            generate_city_banana(city_name, city_info.get('state'))
-        )
+        city_banana = city_info.get('city_banana')
 
         wait_times = [5, 20]  # Fixed wait times for attempts
 
@@ -514,13 +511,7 @@ class BackgroundProcessor:
     def _should_sync_city(self, city_info: Dict[str, Any]) -> bool:
         """Determine if city needs syncing based on activity patterns"""
         # Use city_banana for internal operations
-        city_name = city_info.get('city_name')
-        state = city_info.get('state')
-        city_banana = (
-            city_info.get('city_banana') or 
-            generate_city_banana(city_name, state)
-        )
-
+        city_banana = city_info.get('city_banana')
         if not city_banana:
             return True
 
