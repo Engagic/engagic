@@ -397,7 +397,7 @@ class BackgroundProcessor:
                     )
 
                     if not meeting.get("packet_url"):
-                        logger.debug(f"Meeting has no packet - stored for display only")
+                        logger.debug("Meeting has no packet - stored for display only")
 
                 except Exception as e:
                     logger.error(
