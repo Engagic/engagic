@@ -96,16 +96,6 @@ class DatabaseManager:
 
         return count
 
-    def update_city(
-        self,
-        city_id: int,
-        vendor: str = None,
-        city_slug: str = None,
-        city_banana: str = None,
-    ) -> bool:
-        """Update city vendor and/or city_slug information"""
-        return self.locations.update_city(city_id, vendor, city_slug, city_banana)
-
     def _delete_meetings_by_city_banana(self, city_banana: str) -> int:
         """Helper to delete all meetings for a city banana"""
         with self.meetings.get_connection() as conn:
