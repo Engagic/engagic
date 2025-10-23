@@ -1,10 +1,8 @@
 import { config, errorMessages } from './config';
-import type { 
-	SearchResult, 
-	CachedSummary, 
-	AnalyticsData, 
-	Meeting,
-	RandomMeetingResponse 
+import type {
+	SearchResult,
+	AnalyticsData,
+	RandomMeetingResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -82,38 +80,10 @@ export const apiClient = {
 				body: JSON.stringify({ query }),
 			}
 		);
-		
+
 		return response.json();
 	},
-	
-	async getCachedSummary(
-		meeting: Meeting, 
-		cityBanana: string
-	): Promise<CachedSummary> {
-		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/process-agenda`,
-			{
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					packet_url: meeting.packet_url,
-					city_banana: cityBanana,
-					meeting_name: meeting.title,
-					meeting_date: meeting.date,
-					meeting_id: meeting.id,
-				}),
-			}
-		);
-		
-		const result = await response.json();
-		
-		if (!result.success && result.message?.includes('not yet available')) {
-			throw new ApiError(errorMessages.noAgenda, 404, false);
-		}
-		
-		return result;
-	},
-	
+
 	async getAnalytics(): Promise<AnalyticsData> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/analytics`
