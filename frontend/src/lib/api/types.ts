@@ -11,13 +11,17 @@ export interface CityOption {
 }
 
 export interface Meeting {
-	meeting_id: string;
-	title?: string;
-	start?: string;
+	id: string;
+	city_banana: string;
+	title: string;
+	date: string; // ISO format datetime
 	packet_url?: string | string[];
-	meeting_name?: string;
-	meeting_date: string; // Always required, standardized format
-	processed_summary?: string;
+	summary?: string;
+	processing_status?: string;
+	processing_method?: string;
+	processing_time?: number;
+	created_at?: string;
+	updated_at?: string;
 }
 
 export interface RandomMeetingResponse {
