@@ -12,11 +12,12 @@ from collections import defaultdict
 from backend.database.database_manager import DatabaseManager
 from backend.core.processor import AgendaProcessor
 from backend.adapters.all_adapters import (
-    PrimeGovAdapter, 
-    CivicClerkAdapter, 
-    LegistarAdapter, 
-    GranicusAdapter, 
-    NovusAgendaAdapter
+    PrimeGovAdapter,
+    CivicClerkAdapter,
+    LegistarAdapter,
+    GranicusAdapter,
+    NovusAgendaAdapter,
+    CivicPlusAdapter
 )
 from backend.core.config import config
 from backend.core.utils import generate_city_banana
@@ -198,8 +199,8 @@ class BackgroundProcessor:
 
         # Group cities by vendor for polite crawling (only supported vendors)
         supported_vendors = {
-            "primegov", "civicclerk", "legistar", 
-            "granicus", "novusagenda"
+            "primegov", "civicclerk", "legistar",
+            "granicus", "novusagenda", "civicplus"
         }
         by_vendor = {}
         skipped_count = 0
@@ -332,13 +333,9 @@ class BackgroundProcessor:
                 logger.debug(f"Skipping {city_banana} - unsupported vendor: {vendor}")
                 return result
 
-            # Scrape ALL meetings first (for user display) - simple and direct
+            # Fetch meetings using unified adapter interface
             try:
-                if hasattr(adapter, 'all_meetings'):
-                    all_meetings = list(adapter.all_meetings())
-                else:
-                    all_meetings = list(adapter.upcoming_packets())
-
+                all_meetings = list(adapter.fetch_meetings())
                 meetings_with_packets = [m for m in all_meetings if m.get('packet_url')]
 
             except Exception as e:
@@ -367,62 +364,40 @@ class BackgroundProcessor:
                     break
 
                 try:
-                    # Store meeting data
-                    meeting_data = {
-                        "city_banana": city_banana,  # Use city_banana for internal storage
-                        "meeting_name": meeting.get("title"),
-                        "packet_url": meeting.get("packet_url"),
-                        "meeting_date": meeting.get("start"),
-                        "meeting_id": meeting.get("meeting_id")
-                    }
+                    # Parse date from adapter format
+                    from backend.database.unified_db import Meeting
+                    from datetime import datetime
 
-                    # Check if meeting has changed before processing
-                    has_changed = self.db.has_meeting_changed(meeting_data)
-                    if not has_changed:
-                        logger.debug(
-                            f"Meeting unchanged, skipping: {meeting.get('packet_url')}"
-                        )
-                        processed_count += 1  # Count as processed since it's unchanged
-                        continue
+                    meeting_date = None
+                    if meeting.get("start"):
+                        try:
+                            # Try parsing ISO format first
+                            meeting_date = datetime.fromisoformat(meeting["start"].replace('Z', '+00:00'))
+                        except Exception:
+                            # Adapter's _parse_date will handle other formats
+                            pass
+
+                    # Create Meeting object
+                    meeting_obj = Meeting(
+                        id=meeting.get("meeting_id", ""),
+                        city_banana=city_banana,
+                        title=meeting.get("title", ""),
+                        date=meeting_date,
+                        packet_url=meeting.get("packet_url"),
+                        summary=None,
+                        processing_status="pending"
+                    )
+
+                    # Store meeting (upsert) - unified DB handles duplicates
+                    stored_meeting = self.db.store_meeting(meeting_obj)
+                    processed_count += 1
 
                     logger.debug(
-                        f"Meeting changed or new, updating: {meeting.get('packet_url')}"
+                        f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})"
                     )
-                    logger.info(
-                        f"Storing meeting: {meeting_data.get('meeting_name')} "
-                        f"(id: {meeting_data.get('meeting_id')})"
-                    )
-                    self.db.store_meeting_data(meeting_data)
 
-                    # Process summary ONLY if meeting has a packet AND LLM available
-                    if meeting.get("packet_url") and self.processor:
-                        cached = self.db.get_cached_summary(meeting["packet_url"])
-                        if not cached:
-                            logger.info(
-                                f"Processing summary for {meeting['packet_url']} (has packet)"
-                            )
-                            try:
-                                self.processor.process_agenda_with_cache(meeting_data)
-                                processed_count += 1
-                                logger.info(
-                                    f"Successfully processed summary for "
-                                    f"{meeting['packet_url']}"
-                                )
-                            except Exception as proc_error:
-                                logger.error(
-                                    f"Error processing summary for "
-                                    f"{meeting['packet_url']}: {proc_error}"
-                                )
-                        else:
-                            processed_count += 1
-                            logger.debug(
-                                f"Summary already cached for {meeting['packet_url']}"
-                            )
-                    elif not meeting.get("packet_url"):
-                        logger.debug(
-                            f"Meeting '{meeting.get('title')}' has no packet - "
-                            f"stored for display only"
-                        )
+                    if not meeting.get("packet_url"):
+                        logger.debug("Meeting has no packet - stored for display only")
 
                 except Exception as e:
                     logger.error(
@@ -572,8 +547,8 @@ class BackgroundProcessor:
         """Get appropriate adapter for vendor"""
         # Only process cities with supported adapters
         supported_vendors = {
-            "primegov", "civicclerk", "legistar", 
-            "granicus", "novusagenda"
+            "primegov", "civicclerk", "legistar",
+            "granicus", "novusagenda", "civicplus"
         }
 
         if vendor not in supported_vendors:
@@ -590,6 +565,8 @@ class BackgroundProcessor:
             return GranicusAdapter(city_slug)
         elif vendor == "novusagenda":
             return NovusAgendaAdapter(city_slug)
+        elif vendor == "civicplus":
+            return CivicPlusAdapter(city_slug)
         else:
             return None
 
@@ -787,13 +764,22 @@ class BackgroundProcessor:
 
     def force_sync_city(self, city_banana: str) -> SyncResult:
         """Force sync a specific city"""
-        city_info = self.db.get_city_by_banana(city_banana)
-        if not city_info:
+        city = self.db.get_city(banana=city_banana)
+        if not city:
             return SyncResult(
-                city_banana=city_banana, 
-                status=SyncStatus.FAILED, 
+                city_banana=city_banana,
+                status=SyncStatus.FAILED,
                 error_message="City not found"
             )
+
+        # Convert City dataclass to dict format expected by _sync_city
+        city_info = {
+            'city_banana': city.banana,
+            'city_name': city.name,
+            'state': city.state,
+            'vendor': city.vendor,
+            'city_slug': city.vendor_slug,
+        }
 
         # Temporarily set is_running to True for the sync
         old_is_running = self.is_running
