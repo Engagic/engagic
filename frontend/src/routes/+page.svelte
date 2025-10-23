@@ -96,8 +96,8 @@
 					const meeting: Meeting = {
 						id: result.meeting.id.toString(),
 						city_banana: result.meeting.city_banana,
-						title: result.meeting.meeting_name,
-						date: result.meeting.meeting_date,
+						title: result.meeting.title,
+						date: result.meeting.date,
 						packet_url: result.meeting.packet_url
 					};
 					

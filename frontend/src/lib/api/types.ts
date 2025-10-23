@@ -17,11 +17,6 @@ export interface Meeting {
 	date: string; // ISO format datetime
 	packet_url?: string | string[];
 	summary?: string;
-	processing_status?: string;
-	processing_method?: string;
-	processing_time?: number;
-	created_at?: string;
-	updated_at?: string;
 }
 
 export interface RandomMeetingResponse {
@@ -29,8 +24,8 @@ export interface RandomMeetingResponse {
 	meeting: {
 		id: number;
 		city_banana: string;
-		meeting_name: string;
-		meeting_date: string;
+		title: string;
+		date: string;
 		packet_url: string;
 		summary: string;
 		quality_score: number;
@@ -68,20 +63,6 @@ interface SearchError {
 	ambiguous?: false;
 	message: string;
 	query?: string;
-}
-
-// API response types
-export interface CachedSummary {
-	success: boolean;
-	summary?: string;
-	cached?: boolean;
-	meeting_data?: {
-		packet_url?: string | string[];
-		meeting_name?: string;
-		meeting_date?: string;
-		meeting_id?: string;
-	};
-	error?: string;
 }
 
 export interface AnalyticsData {
