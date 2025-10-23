@@ -364,7 +364,7 @@ class AgendaProcessor:
             
             try:
                 # Upload file to Gemini
-                uploaded_file = self.client.files.upload(path=tmp_path)
+                uploaded_file = self.client.files.upload(file=tmp_path)
                 logger.info(f"Uploaded PDF to Gemini: {uploaded_file.name}")
                 
                 # Determine which model to use based on PDF size
