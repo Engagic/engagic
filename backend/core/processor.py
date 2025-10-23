@@ -228,7 +228,7 @@ class AgendaProcessor:
                 return summary, "tier1_pypdf2_gemini"
             else:
                 if not text:
-                    logger.warning(f"Tier 1 failed: No text extracted from PDF")
+                    logger.warning("Tier 1 failed: No text extracted from PDF")
                     logger.warning(f"  URL: {url}")
                 else:
                     logger.warning(f"Tier 1 failed: Poor text quality - {len(text)} chars extracted")
@@ -268,7 +268,7 @@ class AgendaProcessor:
             logger.error(f"  URL: {url}")
 
         # All tiers failed
-        logger.error(f"All processing tiers failed for document")
+        logger.error("All processing tiers failed for document")
         logger.error(f"  URL: {url}")
         raise ProcessingError("All processing tiers failed for document")
     
@@ -604,7 +604,7 @@ Skip pure administrative items unless they have significant public impact."""
         if letter_ratio < 0.3:
             logger.warning(f"Quality check FAILED: Letter ratio too low ({letter_ratio:.2%}, need >= 30%)")
             logger.warning(f"  Extracted {letters} letters out of {total_chars} total chars")
-            logger.warning(f"  First 300 chars of extracted text:")
+            logger.warning("  First 300 chars of extracted text:")
             logger.warning(f"  {repr(text[:300])}")
             return False
 
