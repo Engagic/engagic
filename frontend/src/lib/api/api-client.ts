@@ -98,9 +98,9 @@ export const apiClient = {
 				body: JSON.stringify({
 					packet_url: meeting.packet_url,
 					city_banana: cityBanana,
-					meeting_name: meeting.title || meeting.meeting_name,
-					meeting_date: meeting.meeting_date,
-					meeting_id: meeting.meeting_id,
+					meeting_name: meeting.title,
+					meeting_date: meeting.date,
+					meeting_id: meeting.id,
 				}),
 			}
 		);

@@ -143,7 +143,7 @@
 </script>
 
 <svelte:head>
-	<title>{selectedMeeting?.title || selectedMeeting?.meeting_name || 'Meeting'} - engagic</title>
+	<title>{selectedMeeting?.title || selectedMeeting?.title || 'Meeting'} - engagic</title>
 	<meta name="description" content="City council meeting agenda and summary" />
 </svelte:head>
 
@@ -183,19 +183,19 @@
 	{:else if selectedMeeting}
 		<div class="meeting-detail">
 			<div class="meeting-header">
-				<h1 class="meeting-title">{selectedMeeting.title || selectedMeeting.meeting_name}</h1>
+				<h1 class="meeting-title">{selectedMeeting.title || selectedMeeting.title}</h1>
 				{#if searchResults && searchResults.success}
 					<div class="meeting-location">
 						{searchResults.city_name}, {searchResults.state}
 					</div>
 				{/if}
 				<div class="meeting-date">
-					{formatMeetingDate(selectedMeeting.start || selectedMeeting.meeting_date)}
+					{formatMeetingDate(selectedMeeting.meeting_date)}
 				</div>
 			</div>
 			
-			{#if selectedMeeting.processed_summary}
-				{@const processedContent = processSummary(selectedMeeting.processed_summary)}
+			{#if selectedMeeting.summary}
+				{@const processedContent = processSummary(selectedMeeting.summary)}
 				<div class="meeting-summary">
 					{#if processedContent.length === 1 && processedContent[0].type === 'text'}
 						<!-- Plain text summary without headers -->

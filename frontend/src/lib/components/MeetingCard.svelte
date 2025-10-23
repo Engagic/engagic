@@ -12,24 +12,24 @@
 	let { meeting, cityUrl, isPast = false }: Props = $props();
 	
 	const meetingSlug = $derived(generateMeetingSlug(meeting));
-	const formattedDate = $derived(formatMeetingDate(meeting.meeting_date));
-	const time = $derived(extractTime(meeting.meeting_date));
+	const formattedDate = $derived(formatMeetingDate(meeting.date));
+	const time = $derived(extractTime(meeting.date));
 </script>
 
-<a 
-	href="/{cityUrl}/{meetingSlug}" 
+<a
+	href="/{cityUrl}/{meetingSlug}"
 	class="meeting-card {isPast ? 'past-meeting' : 'upcoming-meeting'}"
-	aria-label="{meeting.title || meeting.meeting_name} on {formattedDate} at {time}"
+	aria-label="{meeting.title} on {formattedDate} at {time}"
 >
 	<div class="meeting-title">
-		{meeting.title || meeting.meeting_name} on {formattedDate}
+		{meeting.title} on {formattedDate}
 	</div>
 	
 	<div class="meeting-date" aria-hidden="true">
 		{time}
 	</div>
 	
-	{#if meeting.processed_summary}
+	{#if meeting.summary}
 		<div class="meeting-status status-ready" role="status">
 			<span class="sr-only">Status:</span> AI Summary Available
 		</div>
