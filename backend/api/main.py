@@ -12,7 +12,6 @@ from backend.core.processor import AgendaProcessor
 from backend.database import DatabaseManager
 from uszipcode import SearchEngine
 from backend.core.config import config
-from backend.core.utils import generate_city_banana
 
 # Configure structured logging
 logging.basicConfig(
@@ -439,7 +438,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
         "cached": False,
         "query": zipcode,
         "type": "zipcode",
-        "message": f"No meetings available yet for {city_info['city_name']} - check back soon as we sync with the city website",
+        "message": f"No meetings available yet for {city.name} - check back soon as we sync with the city website",
     }
 
 
