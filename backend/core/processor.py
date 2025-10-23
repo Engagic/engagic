@@ -97,12 +97,8 @@ class AgendaProcessor:
         self.flash_model_name = 'gemini-2.5-flash'
         self.flash_lite_model_name = 'gemini-2.5-flash-lite'
         
-        # Initialize database
-        self.db = DatabaseManager(
-            locations_db_path=config.LOCATIONS_DB_PATH,
-            meetings_db_path=config.MEETINGS_DB_PATH,
-            analytics_db_path=config.ANALYTICS_DB_PATH,
-        )
+        # Initialize unified database
+        self.db = DatabaseManager(config.UNIFIED_DB_PATH)
         
         # Initialize Mistral OCR if available (for Tier 2 fallback)
         self.mistral_api_key = mistral_api_key or os.getenv("MISTRAL_API_KEY")
