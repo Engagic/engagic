@@ -199,8 +199,8 @@ class BackgroundProcessor:
 
         # Group cities by vendor for polite crawling (only supported vendors)
         supported_vendors = {
-            "primegov", "civicclerk", "legistar", 
-            "granicus", "novusagenda"
+            "primegov", "civicclerk", "legistar",
+            "granicus", "novusagenda", "civicplus"
         }
         by_vendor = {}
         skipped_count = 0
@@ -573,8 +573,8 @@ class BackgroundProcessor:
         """Get appropriate adapter for vendor"""
         # Only process cities with supported adapters
         supported_vendors = {
-            "primegov", "civicclerk", "legistar", 
-            "granicus", "novusagenda"
+            "primegov", "civicclerk", "legistar",
+            "granicus", "novusagenda", "civicplus"
         }
 
         if vendor not in supported_vendors:
@@ -591,6 +591,8 @@ class BackgroundProcessor:
             return GranicusAdapter(city_slug)
         elif vendor == "novusagenda":
             return NovusAgendaAdapter(city_slug)
+        elif vendor == "civicplus":
+            return CivicPlusAdapter(city_slug)
         else:
             return None
 

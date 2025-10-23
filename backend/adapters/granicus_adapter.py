@@ -15,7 +15,6 @@ import hashlib
 from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse, urljoin
-from bs4 import BeautifulSoup
 from backend.adapters.base_adapter import BaseAdapter, logger
 
 

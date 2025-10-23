@@ -5,7 +5,6 @@ Fetches upcoming events for the next month
 
 import requests
 from datetime import datetime, timedelta
-from urllib.parse import quote
 
 def fetch_upcoming_events(client_name: str, token: str = None, days_forward: int = 30):
     """
