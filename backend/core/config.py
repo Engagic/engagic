@@ -9,23 +9,16 @@ class Config:
     """Configuration management for engagic"""
 
     def __init__(self):
-        # Database configuration - separate databases for better organization
+        # Database configuration - unified database (Phase 1 refactor)
         self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", "/root/engagic/data")
-        self.LOCATIONS_DB_PATH = os.getenv(
-            "ENGAGIC_LOCATIONS_DB", f"{self.DB_DIR}/locations.db"
-        )
-        self.MEETINGS_DB_PATH = os.getenv(
-            "ENGAGIC_MEETINGS_DB", f"{self.DB_DIR}/meetings.db"
-        )
-        self.ANALYTICS_DB_PATH = os.getenv(
-            "ENGAGIC_ANALYTICS_DB", f"{self.DB_DIR}/analytics.db"
+        self.UNIFIED_DB_PATH = os.getenv(
+            "ENGAGIC_UNIFIED_DB", f"{self.DB_DIR}/engagic.db"
         )
 
-        # Legacy support - if old DB_PATH is set, use it for meetings
-        legacy_db_path = os.getenv("ENGAGIC_DB_PATH")
-        if legacy_db_path:
-            self.MEETINGS_DB_PATH = legacy_db_path
-            logger.warning("Using legacy ENGAGIC_DB_PATH for meetings database")
+        # Legacy paths kept for migration script only
+        self.LOCATIONS_DB_PATH = f"{self.DB_DIR}/locations.db"
+        self.MEETINGS_DB_PATH = f"{self.DB_DIR}/meetings.db"
+        self.ANALYTICS_DB_PATH = f"{self.DB_DIR}/analytics.db"
 
         self.LOG_PATH = os.getenv("ENGAGIC_LOG_PATH", "/root/engagic/engagic.log")
 
@@ -98,16 +91,11 @@ class Config:
         if not self.ANTHROPIC_API_KEY and not self.GEMINI_API_KEY and not self.LLM_API_KEY:
             logger.warning("No LLM API key configured - AI features will be disabled")
 
-        # Ensure database directories exist
-        for db_path in [
-            self.LOCATIONS_DB_PATH,
-            self.MEETINGS_DB_PATH,
-            self.ANALYTICS_DB_PATH,
-        ]:
-            db_dir = os.path.dirname(db_path)
-            if db_dir and not os.path.exists(db_dir):
-                logger.info(f"Creating database directory: {db_dir}")
-                os.makedirs(db_dir, exist_ok=True)
+        # Ensure database directory exists
+        db_dir = os.path.dirname(self.UNIFIED_DB_PATH)
+        if db_dir and not os.path.exists(db_dir):
+            logger.info(f"Creating database directory: {db_dir}")
+            os.makedirs(db_dir, exist_ok=True)
 
         if not os.path.exists(os.path.dirname(self.LOG_PATH)):
             logger.warning(
@@ -126,11 +114,7 @@ class Config:
         """Get a summary of current configuration (excluding secrets)"""
         return {
             "db_dir": self.DB_DIR,
-            "databases": {
-                "locations": os.path.basename(self.LOCATIONS_DB_PATH),
-                "meetings": os.path.basename(self.MEETINGS_DB_PATH),
-                "analytics": os.path.basename(self.ANALYTICS_DB_PATH),
-            },
+            "database": os.path.basename(self.UNIFIED_DB_PATH),
             "api_host": self.API_HOST,
             "api_port": self.API_PORT,
             "debug": self.DEBUG,
