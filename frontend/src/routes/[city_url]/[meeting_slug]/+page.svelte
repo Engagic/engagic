@@ -190,7 +190,7 @@
 					</div>
 				{/if}
 				<div class="meeting-date">
-					{formatMeetingDate(selectedMeeting.meeting_date)}
+					{formatMeetingDate(selectedMeeting.date)}
 				</div>
 			</div>
 			
