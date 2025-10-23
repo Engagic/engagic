@@ -333,13 +333,9 @@ class BackgroundProcessor:
                 logger.debug(f"Skipping {city_banana} - unsupported vendor: {vendor}")
                 return result
 
-            # Scrape ALL meetings first (for user display) - simple and direct
+            # Fetch meetings using unified adapter interface
             try:
-                if hasattr(adapter, 'all_meetings'):
-                    all_meetings = list(adapter.all_meetings())
-                else:
-                    all_meetings = list(adapter.upcoming_packets())
-
+                all_meetings = list(adapter.fetch_meetings())
                 meetings_with_packets = [m for m in all_meetings if m.get('packet_url')]
 
             except Exception as e:
@@ -790,13 +786,22 @@ class BackgroundProcessor:
 
     def force_sync_city(self, city_banana: str) -> SyncResult:
         """Force sync a specific city"""
-        city_info = self.db.get_city_by_banana(city_banana)
-        if not city_info:
+        city = self.db.get_city(banana=city_banana)
+        if not city:
             return SyncResult(
-                city_banana=city_banana, 
-                status=SyncStatus.FAILED, 
+                city_banana=city_banana,
+                status=SyncStatus.FAILED,
                 error_message="City not found"
             )
+
+        # Convert City dataclass to dict format expected by _sync_city
+        city_info = {
+            'city_banana': city.banana,
+            'city_name': city.name,
+            'state': city.state,
+            'vendor': city.vendor,
+            'city_slug': city.vendor_slug,
+        }
 
         # Temporarily set is_running to True for the sync
         old_is_running = self.is_running
