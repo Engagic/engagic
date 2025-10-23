@@ -364,62 +364,40 @@ class BackgroundProcessor:
                     break
 
                 try:
-                    # Store meeting data
-                    meeting_data = {
-                        "city_banana": city_banana,  # Use city_banana for internal storage
-                        "meeting_name": meeting.get("title"),
-                        "packet_url": meeting.get("packet_url"),
-                        "meeting_date": meeting.get("start"),
-                        "meeting_id": meeting.get("meeting_id")
-                    }
+                    # Parse date from adapter format
+                    from backend.database.unified_db import Meeting
+                    from datetime import datetime
 
-                    # Check if meeting has changed before processing
-                    has_changed = self.db.has_meeting_changed(meeting_data)
-                    if not has_changed:
-                        logger.debug(
-                            f"Meeting unchanged, skipping: {meeting.get('packet_url')}"
-                        )
-                        processed_count += 1  # Count as processed since it's unchanged
-                        continue
+                    meeting_date = None
+                    if meeting.get("start"):
+                        try:
+                            # Try parsing ISO format first
+                            meeting_date = datetime.fromisoformat(meeting["start"].replace('Z', '+00:00'))
+                        except Exception:
+                            # Adapter's _parse_date will handle other formats
+                            pass
+
+                    # Create Meeting object
+                    meeting_obj = Meeting(
+                        id=meeting.get("meeting_id", ""),
+                        city_banana=city_banana,
+                        title=meeting.get("title", ""),
+                        date=meeting_date,
+                        packet_url=meeting.get("packet_url"),
+                        summary=None,
+                        processing_status="pending"
+                    )
+
+                    # Store meeting (upsert) - unified DB handles duplicates
+                    stored_meeting = self.db.store_meeting(meeting_obj)
+                    processed_count += 1
 
                     logger.debug(
-                        f"Meeting changed or new, updating: {meeting.get('packet_url')}"
+                        f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})"
                     )
-                    logger.info(
-                        f"Storing meeting: {meeting_data.get('meeting_name')} "
-                        f"(id: {meeting_data.get('meeting_id')})"
-                    )
-                    self.db.store_meeting_data(meeting_data)
 
-                    # Process summary ONLY if meeting has a packet AND LLM available
-                    if meeting.get("packet_url") and self.processor:
-                        cached = self.db.get_cached_summary(meeting["packet_url"])
-                        if not cached:
-                            logger.info(
-                                f"Processing summary for {meeting['packet_url']} (has packet)"
-                            )
-                            try:
-                                self.processor.process_agenda_with_cache(meeting_data)
-                                processed_count += 1
-                                logger.info(
-                                    f"Successfully processed summary for "
-                                    f"{meeting['packet_url']}"
-                                )
-                            except Exception as proc_error:
-                                logger.error(
-                                    f"Error processing summary for "
-                                    f"{meeting['packet_url']}: {proc_error}"
-                                )
-                        else:
-                            processed_count += 1
-                            logger.debug(
-                                f"Summary already cached for {meeting['packet_url']}"
-                            )
-                    elif not meeting.get("packet_url"):
-                        logger.debug(
-                            f"Meeting '{meeting.get('title')}' has no packet - "
-                            f"stored for display only"
-                        )
+                    if not meeting.get("packet_url"):
+                        logger.debug(f"Meeting has no packet - stored for display only")
 
                 except Exception as e:
                     logger.error(
