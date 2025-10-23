@@ -78,14 +78,11 @@ class SyncResult:
 
 
 class BackgroundProcessor:
-    def __init__(self, locations_db_path: str = None, meetings_db_path: str = None, 
-                 analytics_db_path: str = None):
-        # Use config paths if not provided
-        locations_path = locations_db_path or config.LOCATIONS_DB_PATH
-        meetings_path = meetings_db_path or config.MEETINGS_DB_PATH
-        analytics_path = analytics_db_path or config.ANALYTICS_DB_PATH
+    def __init__(self, unified_db_path: str = None):
+        # Use config path if not provided
+        db_path = unified_db_path or config.UNIFIED_DB_PATH
 
-        self.db = DatabaseManager(locations_path, meetings_path, analytics_path)
+        self.db = DatabaseManager(db_path)
         self.processor = None
         self.is_running = False
         self.sync_thread = None
