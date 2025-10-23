@@ -13,7 +13,6 @@ Key improvements:
 
 import logging
 import sqlite3
-import hashlib
 import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime

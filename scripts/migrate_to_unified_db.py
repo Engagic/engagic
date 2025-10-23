@@ -31,8 +31,7 @@ import os
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from backend.database.unified_db import UnifiedDatabase, City, Meeting
-from backend.core.utils import generate_city_banana
+from backend.database.unified_db import UnifiedDatabase, Meeting
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,15 +71,15 @@ class DatabaseMigrator:
 
         if self.locations_db.exists():
             shutil.copy2(self.locations_db, backup_dir / "locations.db")
-            logger.info(f"  Backed up locations.db")
+            logger.info("  Backed up locations.db")
 
         if self.meetings_db.exists():
             shutil.copy2(self.meetings_db, backup_dir / "meetings.db")
-            logger.info(f"  Backed up meetings.db")
+            logger.info("  Backed up meetings.db")
 
         if self.analytics_db.exists():
             shutil.copy2(self.analytics_db, backup_dir / "analytics.db")
-            logger.info(f"  Backed up analytics.db")
+            logger.info("  Backed up analytics.db")
 
         logger.info(f"Backup complete at {backup_dir}")
         return backup_dir
