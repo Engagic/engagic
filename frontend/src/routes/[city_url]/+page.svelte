@@ -85,8 +85,8 @@
 			if (result.success && result.meetings) {
 				result.meetings.sort((a: Meeting, b: Meeting) => {
 					// Use standardized meeting_date field
-					const dateA = new Date(a.meeting_date);
-					const dateB = new Date(b.meeting_date);
+					const dateA = new Date(a.date);
+					const dateB = new Date(b.date);
 					
 					// Return comparison (ascending order - soonest first)
 					return dateA.getTime() - dateB.getTime();
@@ -98,7 +98,7 @@
 				pastMeetings = [];
 				
 				for (const meeting of result.meetings) {
-					const meetingDate = new Date(meeting.meeting_date);
+					const meetingDate = new Date(meeting.date);
 					
 					if (meetingDate >= now) {
 						upcomingMeetings.push(meeting);
@@ -178,9 +178,9 @@
 									in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 									onintroend={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
 								>
-									<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
-									<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
-									{#if meeting.processed_summary}
+									<div class="meeting-title">{meeting.title} on {formatMeetingDate(meeting.date)}</div>
+									<div class="meeting-date">{extractTime(meeting.date)}</div>
+									{#if meeting.summary}
 										<div class="meeting-status status-ready">AI Summary Available</div>
 									{:else if meeting.packet_url}
 										<div class="meeting-status status-packet">Agenda Packet Available</div>
@@ -198,9 +198,9 @@
 								in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 								onintroend={() => { if (index === upcomingMeetings.length - 1 && pastMeetings.length === 0) isInitialLoad = false; }}
 							>
-								<div class="meeting-title">{(meeting.title || meeting.meeting_name)} on {formatMeetingDate(meeting.meeting_date)}</div>
-								<div class="meeting-date">{extractTime(meeting.meeting_date)}</div>
-								{#if meeting.processed_summary}
+								<div class="meeting-title">{meeting.title} on {formatMeetingDate(meeting.date)}</div>
+								<div class="meeting-date">{extractTime(meeting.date)}</div>
+								{#if meeting.summary}
 									<div class="meeting-status status-ready">AI Summary Available</div>
 								{:else if meeting.packet_url}
 									<div class="meeting-status status-packet">Agenda Packet Available</div>
