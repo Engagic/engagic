@@ -309,9 +309,9 @@ class DatabaseViewer:
         print("\n=== UPDATE CITY ===")
         self.show_cities_table(20)
 
-        city_id = input("Enter city ID to update: ").strip()
-        if not city_id.isdigit():
-            print("Invalid city ID")
+        city_banana = input("Enter city_banana to update: ").strip()
+        if not city_banana:
+            print("Invalid city_banana")
             return False
 
         field = input(
@@ -333,46 +333,46 @@ class DatabaseViewer:
                 if field in ["city_name", "state"]:
                     # Get current values
                     cursor.execute(
-                        "SELECT city_name, state FROM cities WHERE id = ?",
-                        (int(city_id),)
+                        "SELECT city_name, state FROM cities WHERE city_banana = ?",
+                        (city_banana,)
                     )
                     current = cursor.fetchone()
                     if not current:
-                        print(f"No city found with ID {city_id}")
+                        print(f"No city found with city_banana {city_banana}")
                         return False
-                    
+
                     # Determine new values
                     new_city_name = new_value if field == "city_name" else current["city_name"]
                     new_state = new_value if field == "state" else current["state"]
-                    
+
                     # Calculate new city_banana
                     import re
-                    city_banana = re.sub(r'[^a-zA-Z0-9]', '', new_city_name).lower() + new_state.upper()
-                    
+                    new_city_banana = re.sub(r'[^a-zA-Z0-9]', '', new_city_name).lower() + new_state.upper()
+
                     # Update with new city_banana
                     cursor.execute(
                         f"""
-                        UPDATE cities 
-                        SET {field} = ?, city_banana = ?, updated_at = CURRENT_TIMESTAMP 
-                        WHERE id = ?
+                        UPDATE cities
+                        SET {field} = ?, city_banana = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE city_banana = ?
                     """,
-                        (new_value, city_banana, int(city_id)),
+                        (new_value, new_city_banana, city_banana),
                     )
                 else:
                     cursor.execute(
                         f"""
-                        UPDATE cities SET {field} = ?, updated_at = CURRENT_TIMESTAMP 
-                        WHERE id = ?
+                        UPDATE cities SET {field} = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE city_banana = ?
                     """,
-                        (new_value, int(city_id)),
+                        (new_value, city_banana),
                     )
 
                 if cursor.rowcount == 0:
-                    print(f"No city found with ID {city_id}")
+                    print(f"No city found with city_banana {city_banana}")
                     return False
 
                 conn.commit()
-                print(f"Updated city {city_id}: {field} = '{new_value}'")
+                print(f"Updated city {city_banana}: {field} = '{new_value}'")
                 return True
         except Exception as e:
             print(f"Error updating city: {e}")
