@@ -48,16 +48,17 @@ class City:
     @classmethod
     def from_db_row(cls, row: sqlite3.Row) -> 'City':
         """Create City from database row"""
+        row_dict = dict(row)
         return cls(
-            banana=row['city_banana'],
-            name=row['name'],
-            state=row['state'],
-            vendor=row['vendor'],
-            vendor_slug=row['vendor_slug'],
-            county=row.get('county'),
-            status=row.get('status', 'active'),
-            created_at=datetime.fromisoformat(row['created_at']) if row.get('created_at') else None,
-            updated_at=datetime.fromisoformat(row['updated_at']) if row.get('updated_at') else None
+            banana=row_dict['city_banana'],
+            name=row_dict['name'],
+            state=row_dict['state'],
+            vendor=row_dict['vendor'],
+            vendor_slug=row_dict['vendor_slug'],
+            county=row_dict.get('county'),
+            status=row_dict.get('status', 'active'),
+            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None,
+            updated_at=datetime.fromisoformat(row_dict['updated_at']) if row_dict.get('updated_at') else None
         )
 
 
@@ -90,18 +91,19 @@ class Meeting:
     @classmethod
     def from_db_row(cls, row: sqlite3.Row) -> 'Meeting':
         """Create Meeting from database row"""
+        row_dict = dict(row)
         return cls(
-            id=row['id'],
-            city_banana=row['city_banana'],
-            title=row['title'],
-            date=datetime.fromisoformat(row['date']) if row.get('date') else None,
-            packet_url=row.get('packet_url'),
-            summary=row.get('summary'),
-            processing_status=row.get('processing_status', 'pending'),
-            processing_method=row.get('processing_method'),
-            processing_time=row.get('processing_time'),
-            created_at=datetime.fromisoformat(row['created_at']) if row.get('created_at') else None,
-            updated_at=datetime.fromisoformat(row['updated_at']) if row.get('updated_at') else None
+            id=row_dict['id'],
+            city_banana=row_dict['city_banana'],
+            title=row_dict['title'],
+            date=datetime.fromisoformat(row_dict['date']) if row_dict.get('date') else None,
+            packet_url=row_dict.get('packet_url'),
+            summary=row_dict.get('summary'),
+            processing_status=row_dict.get('processing_status', 'pending'),
+            processing_method=row_dict.get('processing_method'),
+            processing_time=row_dict.get('processing_time'),
+            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None,
+            updated_at=datetime.fromisoformat(row_dict['updated_at']) if row_dict.get('updated_at') else None
         )
 
 
@@ -321,6 +323,7 @@ class UnifiedDatabase:
         self,
         state: str = None,
         vendor: str = None,
+        name: str = None,
         status: str = "active",
         limit: int = None
     ) -> List[City]:
@@ -330,6 +333,7 @@ class UnifiedDatabase:
         Args:
             state: Filter by state (e.g., "CA")
             vendor: Filter by vendor (e.g., "primegov")
+            name: Filter by exact name match (for ambiguous city search)
             status: Filter by status (default: "active")
             limit: Maximum results to return
         """
@@ -344,6 +348,10 @@ class UnifiedDatabase:
             conditions.append("vendor = ?")
             params.append(vendor)
 
+        if name:
+            conditions.append("LOWER(name) = ?")
+            params.append(name.lower())
+
         query = f"""
             SELECT * FROM cities
             WHERE {' AND '.join(conditions)}
@@ -357,6 +365,31 @@ class UnifiedDatabase:
         cursor.execute(query, params)
 
         return [City.from_db_row(row) for row in cursor.fetchall()]
+
+    def get_city_meeting_stats(self, city_bananas: List[str]) -> Dict[str, Dict[str, int]]:
+        """Get meeting statistics for multiple cities at once"""
+        if not city_bananas:
+            return {}
+
+        placeholders = ','.join('?' * len(city_bananas))
+        cursor = self.conn.cursor()
+        cursor.execute(f"""
+            SELECT
+                city_banana,
+                COUNT(*) as total_meetings,
+                SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as summarized_meetings
+            FROM meetings
+            WHERE city_banana IN ({placeholders})
+            GROUP BY city_banana
+        """, city_bananas)
+
+        return {
+            row['city_banana']: {
+                'total_meetings': row['total_meetings'],
+                'summarized_meetings': row['summarized_meetings']
+            }
+            for row in cursor.fetchall()
+        }
 
     def add_city(
         self,

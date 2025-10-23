@@ -400,25 +400,9 @@ async def search_meetings(request: SearchRequest):
 
 async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
     """Handle zipcode search with cache-first approach"""
-    # Update search log
-    db.log_search(zipcode, "zipcode", zipcode=zipcode)
-
     # Check database - CACHED ONLY
-    city_info = db.get_city_by_zipcode(zipcode)
-    if not city_info:
-        # Log the request for demand tracking
-        try:
-            # Try to get city info from zipcode for logging
-            result = zipcode_search.by_zipcode(zipcode)
-            if result and result.major_city:
-                city_name = result.major_city
-                state = result.state
-                db.log_city_request(
-                    city_name, state, zipcode, "zipcode", zipcode=zipcode
-                )
-        except Exception as e:
-            logger.warning(f"Failed to log city request for zipcode {zipcode}: {e}")
-
+    city = db.get_city(zipcode=zipcode)
+    if not city:
         return {
             "success": False,
             "message": "We're not covering that area yet, but we're always expanding! Thanks for your interest - we'll prioritize cities with high demand.",
@@ -427,24 +411,18 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             "meetings": [],
         }
 
-    # Get cached meetings using city_banana
-    city_banana = city_info.get("city_banana") or generate_city_banana(
-        city_info["city_name"], city_info["state"]
-    )
-    meetings = db.get_meetings_by_city(city_banana, 50)
+    # Get cached meetings
+    meetings = db.get_meetings(city_bananas=[city.banana], limit=50)
 
     if meetings:
-        logger.info(
-            f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info.get('state', 'Unknown')}"
-        )
+        logger.info(f"Found {len(meetings)} cached meetings for {city.name}, {city.state}")
         return {
             "success": True,
-            "city_name": city_info["city_name"],
-            "state": city_info["state"],
-            "city_banana": city_info.get("city_banana")
-            or generate_city_banana(city_info["city_name"], city_info["state"]),
-            "vendor": city_info["vendor"],
-            "meetings": meetings,
+            "city_name": city.name,
+            "state": city.state,
+            "city_banana": city.banana,
+            "vendor": city.vendor,
+            "meetings": [m.to_dict() for m in meetings],
             "cached": True,
             "query": zipcode,
             "type": "zipcode",
@@ -453,11 +431,10 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
     # No cached meetings - background processor will handle this
     return {
         "success": True,
-        "city_name": city_info["city_name"],
-        "state": city_info["state"],
-        "city_banana": city_info.get("city_banana")
-        or generate_city_banana(city_info["city_name"], city_info["state"]),
-        "vendor": city_info["vendor"],
+        "city_name": city.name,
+        "state": city.state,
+        "city_banana": city.banana,
+        "vendor": city.vendor,
         "meetings": [],
         "cached": False,
         "query": zipcode,
@@ -476,14 +453,8 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         return await handle_ambiguous_city_search(city_name, city_input)
 
     # Check database - CACHED ONLY
-    city_info = db.get_city_by_name(city_name, state)
-    if not city_info:
-        # Log the request for demand tracking
-        try:
-            db.log_city_request(city_name, state, city_input, "city_state")
-        except Exception as e:
-            logger.warning(f"Failed to log city request for {city_name}, {state}: {e}")
-
+    city = db.get_city(name=city_name, state=state)
+    if not city:
         return {
             "success": False,
             "message": f"We're not covering {city_name}, {state} yet, but we're always expanding! Your interest has been noted - we prioritize cities with high demand.",
@@ -492,25 +463,18 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
             "meetings": [],
         }
 
-    # Log search with city_id
-    db.log_search(city_input, "city_name", city_id=city_info["id"])
-
-    # Get cached meetings using city_banana
-    city_banana = city_info.get("city_banana") or generate_city_banana(
-        city_info["city_name"], city_info["state"]
-    )
-    meetings = db.get_meetings_by_city(city_banana, 50)
+    # Get cached meetings
+    meetings = db.get_meetings(city_bananas=[city.banana], limit=50)
 
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
         return {
             "success": True,
-            "city_name": city_info["city_name"],
-            "state": city_info["state"],
-            "city_banana": city_info.get("city_banana")
-            or generate_city_banana(city_info["city_name"], city_info["state"]),
-            "vendor": city_info["vendor"],
-            "meetings": meetings,
+            "city_name": city.name,
+            "state": city.state,
+            "city_banana": city.banana,
+            "vendor": city.vendor,
+            "meetings": [m.to_dict() for m in meetings],
             "cached": True,
             "query": city_input,
             "type": "city_name",
@@ -519,11 +483,10 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
     # No cached meetings - return empty
     return {
         "success": False,
-        "city_name": city_info["city_name"],
-        "state": city_info["state"],
-        "city_banana": city_info.get("city_banana")
-        or generate_city_banana(city_info["city_name"], city_info["state"]),
-        "vendor": city_info["vendor"],
+        "city_name": city.name,
+        "state": city.state,
+        "city_banana": city.banana,
+        "vendor": city.vendor,
         "meetings": [],
         "cached": True,
         "query": city_input,
@@ -573,17 +536,9 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
         }
     
     # Get all cities in this state
-    cities = db.get_cities_by_state(state_abbr)
-    
+    cities = db.get_cities(state=state_abbr)
+
     if not cities:
-        # Log the state request for demand tracking
-        try:
-            db.log_city_request(
-                "STATE_REQUEST", state_abbr, state_input, "state"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to log state request for {state_abbr}: {e}")
-        
         return {
             "success": False,
             "message": f"We don't have any cities in {state_full} yet, but we're always expanding!",
@@ -591,28 +546,23 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
             "type": "state",
             "meetings": [],
         }
-    
-    # Log the state search
-    db.log_search(state_input, "state")
-    
+
     # Convert cities to the format expected by frontend
     city_options = []
-    city_bananas = []
+    city_bananas = [city.banana for city in cities]
 
-    # Build city_options and collect city_bananas
+    # Build city_options
     for city in cities:
-        city_banana = city.get("city_banana") or generate_city_banana(city["city_name"], city["state"])
-        city_bananas.append(city_banana)
         city_options.append({
-            "city_name": city["city_name"],
-            "state": city["state"],
-            "city_banana": city_banana,
-            "vendor": city.get("vendor", "unknown"),
-            "display_name": f"{city['city_name']}, {city['state']}"
+            "city_name": city.name,
+            "state": city.state,
+            "city_banana": city.banana,
+            "vendor": city.vendor,
+            "display_name": f"{city.name}, {city.state}"
         })
 
     # Get meeting stats for all cities in one query
-    stats = db.get_city_meetings_stats(city_bananas)
+    stats = db.get_city_meeting_stats(city_bananas)
 
     # Add stats to each city option
     for option in city_options:
@@ -636,17 +586,9 @@ async def handle_ambiguous_city_search(
     """Handle city search when no state is provided - check for ambiguous matches"""
 
     # Look for all cities with this name
-    cities = db.get_cities_by_name_only(city_name)
+    cities = db.get_cities(name=city_name)
 
     if not cities:
-        # No cities found - log the request
-        try:
-            db.log_city_request(
-                city_name, "UNKNOWN", original_input, "city_only"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to log ambiguous city request for {city_name}: {e}")
-
         return {
             "success": False,
             "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') - your interest has been noted!",
@@ -658,29 +600,20 @@ async def handle_ambiguous_city_search(
 
     if len(cities) == 1:
         # Only one match - proceed with this city
-        city_info = cities[0]
+        city = cities[0]
 
-        # Log search with city_id
-        db.log_search(original_input, "city_name", city_id=city_info["id"])
-
-        # Get meetings for this city using city_banana
-        city_banana = city_info.get("city_banana") or generate_city_banana(
-            city_info["city_name"], city_info["state"]
-        )
-        meetings = db.get_meetings_by_city(city_banana, 50)
+        # Get meetings for this city
+        meetings = db.get_meetings(city_bananas=[city.banana], limit=50)
 
         if meetings:
-            logger.info(
-                f"Found {len(meetings)} cached meetings for {city_info['city_name']}, {city_info['state']}"
-            )
+            logger.info(f"Found {len(meetings)} cached meetings for {city.name}, {city.state}")
             return {
                 "success": True,
-                "city_name": city_info["city_name"],
-                "state": city_info["state"],
-                "city_banana": city_info.get("city_banana")
-                or generate_city_banana(city_info["city_name"], city_info["state"]),
-                "vendor": city_info["vendor"],
-                "meetings": meetings,
+                "city_name": city.name,
+                "state": city.state,
+                "city_banana": city.banana,
+                "vendor": city.vendor,
+                "meetings": [m.to_dict() for m in meetings],
                 "cached": True,
                 "query": original_input,
                 "type": "city_name",
@@ -689,39 +622,34 @@ async def handle_ambiguous_city_search(
         else:
             return {
                 "success": False,
-                "city_name": city_info["city_name"],
-                "state": city_info["state"],
-                "city_banana": city_info.get("city_banana")
-                or generate_city_banana(city_info["city_name"], city_info["state"]),
-                "vendor": city_info["vendor"],
+                "city_name": city.name,
+                "state": city.state,
+                "city_banana": city.banana,
+                "vendor": city.vendor,
                 "meetings": [],
                 "cached": True,
                 "query": original_input,
                 "type": "city_name",
-                "message": f"No meetings cached yet for {city_info['city_name']}, {city_info['state']}, please check back soon!",
+                "message": f"No meetings cached yet for {city.name}, {city.state}, please check back soon!",
                 "ambiguous": False,
             }
 
     # Multiple matches - return ambiguous result
     city_options = []
-    city_bananas = []
+    city_bananas = [city.banana for city in cities]
 
-    # Build city_options and collect city_bananas
+    # Build city_options
     for city in cities:
-        city_banana = city.get("city_banana") or generate_city_banana(city["city_name"], city["state"])
-        city_bananas.append(city_banana)
-        city_options.append(
-            {
-                "city_name": city["city_name"],
-                "state": city["state"],
-                "city_banana": city_banana,
-                "vendor": city["vendor"],
-                "display_name": f"{city['city_name']}, {city['state']}",
-            }
-        )
+        city_options.append({
+            "city_name": city.name,
+            "state": city.state,
+            "city_banana": city.banana,
+            "vendor": city.vendor,
+            "display_name": f"{city.name}, {city.state}",
+        })
 
     # Get meeting stats for all cities in one query
-    stats = db.get_city_meetings_stats(city_bananas)
+    stats = db.get_city_meeting_stats(city_bananas)
 
     # Add stats to each city option
     for option in city_options:
@@ -823,7 +751,7 @@ async def get_random_best_meeting():
 async def get_stats():
     """Get system statistics"""
     try:
-        stats = db.get_cache_stats()
+        stats = db.get_stats()
         queue_stats = db.get_processing_queue_stats()
         request_stats = db.get_city_request_stats()
 
@@ -930,18 +858,18 @@ async def health_check():
 
     try:
         # Database health check
-        db_health = db.get_system_health()
-        health_status["checks"]["databases"] = db_health
-
-        if db_health["overall_status"] != "healthy":
-            health_status["status"] = "degraded"
+        stats = db.get_stats()
+        health_status["checks"]["databases"] = {
+            "status": "healthy",
+            "cities": stats["active_cities"],
+            "meetings": stats["total_meetings"]
+        }
 
         # Add basic stats
-        stats = db.get_cache_stats()
         health_status["checks"]["data_summary"] = {
-            "cities": stats.get("cities_count", 0),
-            "meetings": stats.get("meetings_count", 0),
-            "processed": stats.get("processed_count", 0),
+            "cities": stats["active_cities"],
+            "meetings": stats["total_meetings"],
+            "processed": stats["summarized_meetings"],
         }
     except Exception as e:
         health_status["checks"]["databases"] = {"status": "unhealthy", "error": str(e)}
@@ -979,7 +907,7 @@ async def health_check():
 async def get_metrics():
     """Basic metrics endpoint for monitoring"""
     try:
-        stats = db.get_cache_stats()
+        stats = db.get_stats()
         queue_stats = db.get_processing_queue_stats()
         request_stats = db.get_city_request_stats()
 
@@ -1177,7 +1105,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--init-db":
         logger.info("Initializing databases...")
         # Access the database manager to trigger creation
-        _ = db.get_cache_stats()
+        _ = db.get_stats()
         logger.info("Databases initialized successfully")
         sys.exit(0)
 

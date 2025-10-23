@@ -105,19 +105,22 @@ class DatabaseMigrator:
 
         for city_row in cities:
             try:
-                city_banana = city_row['city_banana']
-                name = city_row['city_name']
-                state = city_row['state']
-                vendor = city_row['vendor']
-                vendor_slug = city_row['city_slug']
-                county = city_row.get('county')
+                # Convert Row to dict for easier access
+                city = dict(city_row)
+
+                city_banana = city['city_banana']
+                name = city['city_name']
+                state = city['state']
+                vendor = city.get('vendor') or 'unknown'
+                vendor_slug = city.get('city_slug') or ''
+                county = city.get('county')
 
                 # Get zipcodes for this city
                 cursor.execute("""
                     SELECT zipcode FROM zipcodes
                     WHERE city_id = ?
                     ORDER BY is_primary DESC
-                """, (city_row['id'],))
+                """, (city['id'],))
                 zipcodes = [row['zipcode'] for row in cursor.fetchall()]
 
                 if not self.dry_run:
@@ -136,7 +139,8 @@ class DatabaseMigrator:
                     logger.info(f"  Migrated {migrated}/{len(cities)} cities...")
 
             except Exception as e:
-                logger.error(f"  Error migrating city {city_row['city_name']}: {e}")
+                city_name = dict(city_row).get('city_name', 'Unknown')
+                logger.error(f"  Error migrating city {city_name}: {e}")
                 errors += 1
 
         locations_conn.close()
@@ -164,16 +168,19 @@ class DatabaseMigrator:
 
         for meeting_row in meetings:
             try:
+                # Convert Row to dict for easier access
+                meeting_dict = dict(meeting_row)
+
                 # Generate meeting ID if missing
-                meeting_id = meeting_row.get('meeting_id')
+                meeting_id = meeting_dict.get('meeting_id')
                 if not meeting_id:
                     # Generate from hash
                     import hashlib
-                    hash_input = f"{meeting_row['city_banana']}_{meeting_row['meeting_name']}_{meeting_row['meeting_date']}"
+                    hash_input = f"{meeting_dict['city_banana']}_{meeting_dict.get('meeting_name', '')}_{meeting_dict.get('meeting_date', '')}"
                     meeting_id = "auto_" + hashlib.md5(hash_input.encode()).hexdigest()[:12]
 
                 # Parse date
-                date_str = meeting_row.get('meeting_date')
+                date_str = meeting_dict.get('meeting_date')
                 meeting_date = None
                 if date_str:
                     try:
@@ -182,23 +189,23 @@ class DatabaseMigrator:
                         logger.warning(f"  Could not parse date: {date_str}")
 
                 # Determine processing status
-                if meeting_row.get('processed_summary'):
+                if meeting_dict.get('processed_summary'):
                     status = "completed"
-                elif meeting_row.get('packet_url'):
+                elif meeting_dict.get('packet_url'):
                     status = "pending"
                 else:
                     status = "no_packet"
 
                 meeting = Meeting(
                     id=meeting_id,
-                    city_banana=meeting_row['city_banana'],
-                    title=meeting_row.get('meeting_name', 'Untitled Meeting'),
+                    city_banana=meeting_dict['city_banana'],
+                    title=meeting_dict.get('meeting_name', 'Untitled Meeting'),
                     date=meeting_date,
-                    packet_url=meeting_row.get('packet_url'),
-                    summary=meeting_row.get('processed_summary'),
+                    packet_url=meeting_dict.get('packet_url'),
+                    summary=meeting_dict.get('processed_summary'),
                     processing_status=status,
                     processing_method=None,  # Not tracked in old schema
-                    processing_time=meeting_row.get('processing_time_seconds')
+                    processing_time=meeting_dict.get('processing_time_seconds')
                 )
 
                 if not self.dry_run:
@@ -209,7 +216,8 @@ class DatabaseMigrator:
                     logger.info(f"  Migrated {migrated}/{len(meetings)} meetings...")
 
             except Exception as e:
-                logger.error(f"  Error migrating meeting {meeting_row.get('meeting_name')}: {e}")
+                meeting_name = dict(meeting_row).get('meeting_name', 'Unknown')
+                logger.error(f"  Error migrating meeting {meeting_name}: {e}")
                 errors += 1
 
         meetings_conn.close()
