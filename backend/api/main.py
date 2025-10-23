@@ -111,12 +111,8 @@ except ValueError:
     logger.warning("API key not found - LLM processing will be disabled")
     processor = None
 
-# Initialize database manager with separate databases
-db = DatabaseManager(
-    locations_db_path=config.LOCATIONS_DB_PATH,
-    meetings_db_path=config.MEETINGS_DB_PATH,
-    analytics_db_path=config.ANALYTICS_DB_PATH,
-)
+# Initialize unified database
+db = DatabaseManager(config.UNIFIED_DB_PATH)
 zipcode_search = SearchEngine()
 
 
