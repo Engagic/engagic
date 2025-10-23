@@ -945,38 +945,29 @@ async def get_metrics():
 async def get_analytics():
     """Get comprehensive analytics for public dashboard"""
     try:
-        # Get only hard, verifiable facts from the database
-        meetings_stats = db.meetings.get_meetings_stats()
-        
-        # Get city stats from locations database
-        with db.locations.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) as total_cities FROM cities")
-            total_cities = cursor.fetchone()
-            
-            cursor.execute("SELECT COUNT(DISTINCT state) as states_covered FROM cities")
-            states_covered = cursor.fetchone()
-            
-            cursor.execute("SELECT COUNT(*) as total_zipcodes FROM zipcodes")
-            zipcodes_covered = cursor.fetchone()
-        
-        # Get actual summary count
-        with db.meetings.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT COUNT(*) as summaries_count
-                FROM meetings 
-                WHERE processed_summary IS NOT NULL
-            """)
-            summaries_stats = cursor.fetchone()
-            
-            # Get active cities (cities with at least one meeting)
-            cursor.execute("""
-                SELECT COUNT(DISTINCT city_banana) as active_cities
-                FROM meetings
-            """)
-            active_cities_stats = cursor.fetchone()
-        
+        # Get stats directly from unified database
+        cursor = db.conn.cursor()
+
+        # City stats
+        cursor.execute("SELECT COUNT(*) as total_cities FROM cities")
+        total_cities = dict(cursor.fetchone())
+
+        cursor.execute("SELECT COUNT(DISTINCT state) as states_covered FROM cities")
+        states_covered = dict(cursor.fetchone())
+
+        cursor.execute("SELECT COUNT(DISTINCT zipcode) as total_zipcodes FROM city_zipcodes")
+        zipcodes_covered = dict(cursor.fetchone())
+
+        # Meeting stats
+        cursor.execute("SELECT COUNT(*) as meetings_count FROM meetings")
+        meetings_stats = dict(cursor.fetchone())
+
+        cursor.execute("SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''")
+        summaries_stats = dict(cursor.fetchone())
+
+        cursor.execute("SELECT COUNT(DISTINCT city_banana) as active_cities FROM meetings")
+        active_cities_stats = dict(cursor.fetchone())
+
         return {
             "success": True,
             "timestamp": datetime.now().isoformat(),
@@ -989,7 +980,7 @@ async def get_analytics():
                 "active_cities": active_cities_stats["active_cities"]
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Analytics endpoint failed: {e}")
         raise HTTPException(status_code=500, detail="We humbly thank you for your patience")

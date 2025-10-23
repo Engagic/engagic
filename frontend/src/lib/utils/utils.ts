@@ -14,11 +14,11 @@ export function generateCityUrl(cityName: string, state: string): string {
 }
 
 export function generateMeetingSlug(meeting: Meeting): string {
-	// Use meeting title or name
-	const title = meeting.title || meeting.meeting_name || 'meeting';
-	
-	// Extract date from meeting date or start
-	const dateStr = meeting.meeting_date || meeting.start || '';
+	// Use meeting title
+	const title = meeting.title || 'meeting';
+
+	// Extract date from meeting date
+	const dateStr = meeting.date || '';
 	let dateSlug = '';
 	
 	if (dateStr) {
