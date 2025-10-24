@@ -25,6 +25,8 @@ import tempfile
 import requests
 from typing import List, Dict, Any, Optional, Union
 from urllib.parse import urlparse
+from dataclasses import dataclass
+from enum import Enum
 
 # PDF processing
 from PyPDF2 import PdfReader
@@ -52,6 +54,27 @@ FLASH_LITE_MAX_PAGES = 50      # Or under 50 pages
 class ProcessingError(Exception):
     """Base exception for PDF processing errors"""
     pass
+
+
+class ResultType(Enum):
+    """Result type for batch processing"""
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+@dataclass
+class BatchMessage:
+    """Message content from batch processing"""
+    content: List[Dict[str, str]]
+
+
+@dataclass 
+class BatchResult:
+    """Result from batch processing"""
+    custom_id: str
+    result_type: ResultType
+    message: Optional[BatchMessage] = None
+    error: Optional[str] = None
 
 
 def validate_url(url: str) -> None:
@@ -447,6 +470,15 @@ Skip pure administrative items unless they have significant public impact."""
     def _download_pdf(self, url: str) -> Optional[bytes]:
         """Download PDF with validation and size limits"""
         try:
+            # Handle Google Docs viewer URLs
+            if 'docs.google.com/gview' in url:
+                from urllib.parse import parse_qs, unquote
+                parsed = urlparse(url)
+                params = parse_qs(parsed.query)
+                if 'url' in params:
+                    url = unquote(params['url'][0])
+                    logger.debug(f"Extracted actual PDF URL from Google Docs viewer: {url}")
+            
             response = requests.get(
                 url,
                 timeout=30,
@@ -608,6 +640,219 @@ Skip pure administrative items unless they have significant public impact."""
         """Legacy compatibility method"""
         summary, method = self.process_agenda_optimal(url)
         return summary
+    
+    def process_batch_agendas(
+        self, 
+        batch_requests: List[Dict[str, str]], 
+        wait_for_results: bool = True,
+        return_raw: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Process multiple agendas using Gemini's Batch API for 50% cost savings
+        
+        Args:
+            batch_requests: List of {"url": packet_url, "custom_id": custom_id}
+            wait_for_results: Whether to wait for batch completion (default True)
+            return_raw: Whether to return raw batch results (default False)
+            
+        Returns:
+            List of processing results matching the input custom_ids
+        """
+        if not batch_requests:
+            return []
+            
+        logger.info(f"Processing {len(batch_requests)} agendas using Gemini Batch API (50% cost savings)")
+        
+        try:
+            # Prepare inline requests for Gemini batch
+            inline_requests = []
+            request_map = {}  # Map custom_id to original request
+            
+            for req in batch_requests:
+                try:
+                    # Handle both single URLs and lists of URLs
+                    urls = req["url"] if isinstance(req["url"], list) else [req["url"]]
+                    
+                    # Extract text from all URLs
+                    all_texts = []
+                    for url in urls:
+                        text = self._tier1_extract_text(url)
+                        if text and self._is_good_text_quality(text):
+                            all_texts.append(text)
+                    
+                    if not all_texts:
+                        logger.warning(f"Skipping {req['custom_id']} - failed text extraction from all URLs")
+                        continue
+                    
+                    # Combine all texts
+                    text = "\n\n--- NEXT DOCUMENT ---\n\n".join(all_texts)
+                    
+                    # Get appropriate prompt based on document size
+                    page_count = self._estimate_page_count(text)
+                    if page_count <= 30:
+                        prompt = self._get_short_agenda_prompt(text)
+                    else:
+                        prompt = self._get_comprehensive_prompt() + f"\n\nAgenda text:\n{text}"
+                    
+                    # Create inline request for Gemini batch
+                    inline_requests.append({
+                        'contents': [{
+                            'parts': [{'text': prompt}],
+                            'role': 'user'
+                        }],
+                        'generation_config': {
+                            'temperature': 0.3,
+                            'max_output_tokens': 8192
+                        }
+                    })
+                    
+                    # Store mapping for result processing
+                    request_map[len(inline_requests) - 1] = req
+                    
+                except Exception as e:
+                    logger.error(f"Error preparing batch request for {req['custom_id']}: {e}")
+                    continue
+            
+            if not inline_requests:
+                logger.warning("No valid batch requests to process")
+                return []
+            
+            # Submit to Gemini Batch API
+            # Confidence: 9/10 - Using inline requests for smaller batches
+            batch_job = self.client.batches.create(
+                model=self.flash_model_name,  # Use Flash for batch processing
+                src=inline_requests,
+                config={
+                    'display_name': f"agenda-batch-{time.time()}"
+                }
+            )
+            
+            batch_name = batch_job.name
+            logger.info(f"Submitted batch {batch_name} with {len(inline_requests)} requests")
+            
+            if not wait_for_results:
+                return [{"batch_id": batch_name, "status": "submitted"}]
+            
+            # Poll for completion
+            max_wait_time = 3600  # 1 hour max wait
+            poll_interval = 30    # Check every 30 seconds
+            waited_time = 0
+            
+            completed_states = {
+                'JOB_STATE_SUCCEEDED',
+                'JOB_STATE_FAILED', 
+                'JOB_STATE_CANCELLED',
+                'JOB_STATE_EXPIRED'
+            }
+            
+            while waited_time < max_wait_time:
+                batch_job = self.client.batches.get(name=batch_name)
+                
+                if batch_job.state.name in completed_states:
+                    logger.info(f"Batch {batch_name} completed with state: {batch_job.state.name}")
+                    break
+                
+                logger.info(f"Batch {batch_name} still processing... ({waited_time}s waited, state: {batch_job.state.name})")
+                time.sleep(poll_interval)
+                waited_time += poll_interval
+            
+            if waited_time >= max_wait_time:
+                logger.error(f"Batch {batch_name} timed out after {max_wait_time}s")
+                return []
+            
+            if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
+                logger.error(f"Batch {batch_name} failed with state: {batch_job.state.name}")
+                if batch_job.error:
+                    logger.error(f"Error details: {batch_job.error}")
+                return []
+            
+            # Process results
+            results = []
+            
+            if batch_job.dest and batch_job.dest.inlined_responses:
+                for i, inline_response in enumerate(batch_job.dest.inlined_responses):
+                    if i not in request_map:
+                        logger.warning(f"No mapping found for response index {i}")
+                        continue
+                    
+                    original_req = request_map[i]
+                    
+                    if inline_response.response:
+                        try:
+                            # Extract summary text from response
+                            summary = inline_response.response.text
+                            
+                            # Create result object matching expected format
+                            result = BatchResult(
+                                custom_id=original_req["custom_id"],
+                                result_type=ResultType.SUCCEEDED,
+                                message=BatchMessage(content=[{'text': summary}]),
+                                error=None
+                            )
+                            
+                            results.append(result)
+                            logger.info(f"Successfully processed {original_req['custom_id']}")
+                            
+                        except Exception as e:
+                            logger.error(f"Error extracting response for {original_req['custom_id']}: {e}")
+                            
+                            result = BatchResult(
+                                custom_id=original_req["custom_id"],
+                                result_type=ResultType.FAILED,
+                                message=None,
+                                error=str(e)
+                            )
+                            
+                            results.append(result)
+                    
+                    elif inline_response.error:
+                        logger.error(f"Batch item {original_req['custom_id']} failed: {inline_response.error}")
+                        
+                        result = BatchResult(
+                            custom_id=original_req["custom_id"],
+                            result_type=ResultType.FAILED,
+                            message=None,
+                            error=str(inline_response.error)
+                        )
+                        
+                        results.append(result)
+            
+            successful_count = sum(1 for r in results if r.result_type == ResultType.SUCCEEDED)
+            logger.info(f"Batch processing complete: {successful_count}/{len(results)} successful")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Batch processing failed: {e}")
+            
+            # Fallback to individual processing
+            logger.info("Falling back to individual processing")
+            results = []
+            for req in batch_requests:
+                try:
+                    summary, method = self.process_agenda_optimal(req["url"])
+                    
+                    result = BatchResult(
+                        custom_id=req["custom_id"],
+                        result_type=ResultType.SUCCEEDED,
+                        message=BatchMessage(content=[{'text': summary}]),
+                        error=None
+                    )
+                    
+                    results.append(result)
+                    
+                except Exception as e:
+                    logger.error(f"Individual processing failed for {req['custom_id']}: {e}")
+                    
+                    result = BatchResult(
+                        custom_id=req["custom_id"],
+                        result_type=ResultType.FAILED,
+                        message=None,
+                        error=str(e)
+                    )
+                    
+                    results.append(result)
+            
+            return results
 
 
 def create_processor(**kwargs) -> AgendaProcessor:
