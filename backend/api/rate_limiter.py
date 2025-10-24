@@ -108,8 +108,11 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
                         time.sleep(delay)
                     else:
                         logger.error(f"Max retries ({handler.max_retries}) exceeded in {func.__name__}")
-            
-            raise last_error
+
+            if last_error is not None:
+                raise last_error
+            else:
+                raise RuntimeError(f"Max retries exceeded in {func.__name__} with no error recorded")
         
         return wrapper
     

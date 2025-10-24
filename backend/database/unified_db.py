@@ -22,6 +22,11 @@ from pathlib import Path
 logger = logging.getLogger("engagic")
 
 
+class DatabaseConnectionError(Exception):
+    """Raised when database connection is not established"""
+    pass
+
+
 @dataclass
 class City:
     """City entity - single source of truth"""
@@ -138,6 +143,9 @@ class UnifiedDatabase:
 
     def _init_schema(self):
         """Initialize unified database schema"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
         schema = """
         -- Cities table: Core city registry
         CREATE TABLE IF NOT EXISTS cities (
@@ -267,11 +275,11 @@ class UnifiedDatabase:
 
     def get_city(
         self,
-        banana: str = None,
-        name: str = None,
-        state: str = None,
-        vendor_slug: str = None,
-        zipcode: str = None
+        banana: Optional[str] = None,
+        name: Optional[str] = None,
+        state: Optional[str] = None,
+        vendor_slug: Optional[str] = None,
+        zipcode: Optional[str] = None
     ) -> Optional[City]:
         """
         Unified city lookup - replaces 4+ separate methods.
@@ -288,6 +296,8 @@ class UnifiedDatabase:
             get_city(vendor_slug="cityofpaloalto")
             get_city(zipcode="94301")
         """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
         cursor = self.conn.cursor()
 
         if banana:
@@ -320,11 +330,11 @@ class UnifiedDatabase:
 
     def get_cities(
         self,
-        state: str = None,
-        vendor: str = None,
-        name: str = None,
+        state: Optional[str] = None,
+        vendor: Optional[str] = None,
+        name: Optional[str] = None,
         status: str = "active",
-        limit: int = None
+        limit: Optional[int] = None
     ) -> List[City]:
         """
         Batch city lookup with filters.
@@ -336,6 +346,7 @@ class UnifiedDatabase:
             status: Filter by status (default: "active")
             limit: Maximum results to return
         """
+        assert self.conn is not None, "Database connection not established"
         conditions = ["status = ?"]
         params = [status]
 
@@ -370,6 +381,7 @@ class UnifiedDatabase:
         if not city_bananas:
             return {}
 
+        assert self.conn is not None, "Database connection not established"
         placeholders = ','.join('?' * len(city_bananas))
         cursor = self.conn.cursor()
         cursor.execute(f"""
@@ -397,10 +409,11 @@ class UnifiedDatabase:
         state: str,
         vendor: str,
         vendor_slug: str,
-        county: str = None,
-        zipcodes: List[str] = None
+        county: Optional[str] = None,
+        zipcodes: Optional[List[str]] = None
     ) -> City:
         """Add a new city to the database"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
         cursor.execute("""
@@ -422,10 +435,15 @@ class UnifiedDatabase:
         self.conn.commit()
         logger.info(f"Added city: {banana} ({name}, {state})")
 
-        return self.get_city(banana=banana)
+        result = self.get_city(banana=banana)
+        if result is None:
+            raise DatabaseConnectionError(f"Failed to retrieve newly added city: {banana}")
+        return result
 
     def get_city_zipcodes(self, city_banana: str) -> List[str]:
         """Get all zipcodes for a city"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT zipcode FROM city_zipcodes
@@ -439,6 +457,7 @@ class UnifiedDatabase:
 
     def get_meeting(self, meeting_id: str) -> Optional[Meeting]:
         """Get a single meeting by ID"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,))
 
@@ -447,10 +466,10 @@ class UnifiedDatabase:
 
     def get_meetings(
         self,
-        city_bananas: List[str] = None,
-        start_date: datetime = None,
-        end_date: datetime = None,
-        has_summary: bool = None,
+        city_bananas: Optional[List[str]] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        has_summary: Optional[bool] = None,
         limit: int = 50
     ) -> List[Meeting]:
         """
@@ -463,6 +482,7 @@ class UnifiedDatabase:
             has_summary: Filter by whether summary exists
             limit: Maximum results
         """
+        assert self.conn is not None, "Database connection not established"
         conditions = []
         params = []
 
@@ -501,6 +521,7 @@ class UnifiedDatabase:
 
     def store_meeting(self, meeting: Meeting) -> Meeting:
         """Store or update a meeting"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
         cursor.execute("""
@@ -521,7 +542,9 @@ class UnifiedDatabase:
         ))
 
         self.conn.commit()
-        return self.get_meeting(meeting.id)
+        result = self.get_meeting(meeting.id)
+        assert result is not None, f"Failed to retrieve newly stored meeting: {meeting.id}"
+        return result
 
     def update_meeting_summary(
         self,
@@ -531,6 +554,7 @@ class UnifiedDatabase:
         processing_time: float
     ):
         """Update meeting with processed summary"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
         cursor.execute("""
@@ -548,6 +572,7 @@ class UnifiedDatabase:
 
     def get_unprocessed_meetings(self, limit: int = 50) -> List[Meeting]:
         """Get meetings that need summary processing"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT * FROM meetings
@@ -559,10 +584,53 @@ class UnifiedDatabase:
 
         return [Meeting.from_db_row(row) for row in cursor.fetchall()]
 
+    def get_city_meeting_frequency(self, city_banana: str, days: int = 30) -> int:
+        """Get count of meetings for a city in the last N days"""
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM meetings
+            WHERE city_banana = ?
+            AND date >= datetime('now', '-' || ? || ' days')
+        """, (city_banana, days))
+
+        result = cursor.fetchone()
+        return result['count'] if result else 0
+
+    def get_city_last_sync(self, city_banana: str) -> Optional[datetime]:
+        """Get the last sync time for a city (most recent meeting created_at)"""
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT MAX(created_at) as last_sync
+            FROM meetings
+            WHERE city_banana = ?
+        """, (city_banana,))
+
+        result = cursor.fetchone()
+        if result and result['last_sync']:
+            return datetime.fromisoformat(result['last_sync'])
+        return None
+
+    def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Meeting]:
+        """Get meeting by packet URL"""
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM meetings
+            WHERE packet_url = ?
+            LIMIT 1
+        """, (packet_url,))
+
+        row = cursor.fetchone()
+        return Meeting.from_db_row(row) if row else None
+
     # ========== Processing Cache Operations ==========
 
     def get_cached_summary(self, packet_url: str) -> Optional[Dict[str, Any]]:
         """Check if packet URL has been processed before"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
         # Serialize URL if it's a list
@@ -595,6 +663,7 @@ class UnifiedDatabase:
         processing_time: float
     ):
         """Store processing result in cache"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
         lookup_url = json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
@@ -611,6 +680,7 @@ class UnifiedDatabase:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics"""
+        assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
         cursor.execute("SELECT COUNT(*) as count FROM cities WHERE status = 'active'")
