@@ -680,12 +680,10 @@ async def process_agenda(request: ProcessRequest):
         if cached_summary:
             return {
                 "success": True,
-                "summary": cached_summary["processed_summary"],
-                "processing_time_seconds": cached_summary.get(
-                    "processing_time_seconds", 0
-                ),
+                "summary": cached_summary.summary,
+                "processing_time_seconds": cached_summary.processing_time or 0,
                 "cached": True,
-                "meeting_data": cached_summary,
+                "meeting_data": cached_summary.to_dict(),
             }
 
         # No cached summary available
