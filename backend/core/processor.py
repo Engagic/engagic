@@ -632,11 +632,6 @@ Skip pure administrative items unless they have significant public impact."""
         except Exception as e:
             logger.error(f"Failed to store in processing_cache: {e}")
     
-    def process_agenda(self, url: str, **kwargs) -> str:
-        """Legacy compatibility method"""
-        summary, method = self.process_agenda_optimal(url)
-        return summary
-    
     def process_batch_agendas(
         self, 
         batch_requests: List[Dict[str, str]], 
@@ -721,8 +716,10 @@ Skip pure administrative items unless they have significant public impact."""
                     'display_name': f"agenda-batch-{time.time()}"
                 }
             )
-            
+
             batch_name = batch_job.name
+            if not batch_name:
+                raise ValueError("Batch job created but no name returned")
             logger.info(f"Submitted batch {batch_name} with {len(inline_requests)} requests")
             
             if not wait_for_results:
@@ -742,21 +739,23 @@ Skip pure administrative items unless they have significant public impact."""
             
             while waited_time < max_wait_time:
                 batch_job = self.client.batches.get(name=batch_name)
-                
-                if batch_job.state.name in completed_states:
+
+                if batch_job.state and batch_job.state.name in completed_states:
                     logger.info(f"Batch {batch_name} completed with state: {batch_job.state.name}")
                     break
-                
-                logger.info(f"Batch {batch_name} still processing... ({waited_time}s waited, state: {batch_job.state.name})")
+
+                state_name = batch_job.state.name if batch_job.state else "unknown"
+                logger.info(f"Batch {batch_name} still processing... ({waited_time}s waited, state: {state_name})")
                 time.sleep(poll_interval)
                 waited_time += poll_interval
-            
+
             if waited_time >= max_wait_time:
                 logger.error(f"Batch {batch_name} timed out after {max_wait_time}s")
                 return []
-            
-            if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
-                logger.error(f"Batch {batch_name} failed with state: {batch_job.state.name}")
+
+            if not batch_job.state or batch_job.state.name != 'JOB_STATE_SUCCEEDED':
+                state_name = batch_job.state.name if batch_job.state else "unknown"
+                logger.error(f"Batch {batch_name} failed with state: {state_name}")
                 if batch_job.error:
                     logger.error(f"Error details: {batch_job.error}")
                 return []
@@ -781,7 +780,7 @@ Skip pure administrative items unless they have significant public impact."""
                             result = BatchResult(
                                 custom_id=original_req["custom_id"],
                                 result_type=ResultType.SUCCEEDED,
-                                message=BatchMessage(content=[{'text': summary}]),
+                                message=BatchMessage(content=[{'text': summary or ""}]),
                                 error=None
                             )
                             
