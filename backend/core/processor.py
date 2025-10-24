@@ -36,7 +36,7 @@ from google import genai
 from google.genai import types
 
 # Our modules
-from backend.database import DatabaseManager
+from backend.database import UnifiedDatabase
 from backend.core.config import config
 
 logger = logging.getLogger("engagic")
@@ -124,7 +124,7 @@ class AgendaProcessor:
         self.flash_lite_model_name = 'gemini-2.5-flash-lite'
 
         # Initialize unified database
-        self.db = DatabaseManager(config.UNIFIED_DB_PATH)
+        self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 
         # Load basic English words for validation
         self.english_words = self._load_basic_english_words()
