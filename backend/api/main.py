@@ -771,6 +771,29 @@ async def get_stats():
         raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
 
 
+@app.get("/api/queue-stats")
+async def get_queue_stats():
+    """Get processing queue statistics (Phase 4)"""
+    try:
+        queue_stats = db.get_queue_stats()
+
+        return {
+            "status": "healthy",
+            "queue": {
+                "pending": queue_stats.get("pending_count", 0),
+                "processing": queue_stats.get("processing_count", 0),
+                "completed": queue_stats.get("completed_count", 0),
+                "failed": queue_stats.get("failed_count", 0),
+                "permanently_failed": queue_stats.get("permanently_failed", 0),
+                "avg_processing_seconds": round(queue_stats.get("avg_processing_seconds", 0), 2),
+            },
+            "note": "Queue is processed continuously by background daemon",
+        }
+    except Exception as e:
+        logger.error(f"Error fetching queue stats: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching queue statistics")
+
+
 @app.get("/")
 async def root():
     """API status and info"""
@@ -785,6 +808,7 @@ async def root():
             "process": "POST /api/process-agenda - Get cached meeting agenda summary",
             "random_best": "GET /api/random-best-meeting - Get a random high-quality meeting for showcasing",
             "stats": "GET /api/stats - System statistics and metrics",
+            "queue_stats": "GET /api/queue-stats - Processing queue statistics",
             "health": "GET /api/health - Health check with detailed status",
             "metrics": "GET /api/metrics - Detailed system metrics",
             "admin": {

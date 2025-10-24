@@ -197,6 +197,24 @@ class UnifiedDatabase:
             last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- Processing queue: Decoupled PDF processing queue (Phase 4)
+        CREATE TABLE IF NOT EXISTS processing_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            packet_url TEXT NOT NULL UNIQUE,
+            meeting_id TEXT,
+            city_banana TEXT,
+            status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+            priority INTEGER DEFAULT 0,
+            retry_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            error_message TEXT,
+            processing_metadata TEXT,
+            FOREIGN KEY (city_banana) REFERENCES cities(city_banana) ON DELETE CASCADE,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+        );
+
         -- Tenants table: B2B customers (Phase 5)
         CREATE TABLE IF NOT EXISTS tenants (
             id TEXT PRIMARY KEY,
@@ -262,6 +280,9 @@ class UnifiedDatabase:
         CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
         CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
         CREATE INDEX IF NOT EXISTS idx_processing_cache_hash ON processing_cache(content_hash);
+        CREATE INDEX IF NOT EXISTS idx_queue_status ON processing_queue(status);
+        CREATE INDEX IF NOT EXISTS idx_queue_priority ON processing_queue(priority DESC);
+        CREATE INDEX IF NOT EXISTS idx_queue_city ON processing_queue(city_banana);
         CREATE INDEX IF NOT EXISTS idx_tenant_coverage_city ON tenant_coverage(city_banana);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_tenant ON tracked_items(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_city ON tracked_items(city_banana);
@@ -702,6 +723,250 @@ class UnifiedDatabase:
             "pending_meetings": pending_meetings,
             "summary_rate": f"{summarized_meetings / total_meetings * 100:.1f}%" if total_meetings > 0 else "0%"
         }
+
+    # === Processing Queue Methods (Phase 4) ===
+
+    def enqueue_for_processing(self, packet_url: str, meeting_id: str, city_banana: str,
+                               priority: int = 0, metadata: Optional[Dict[str, Any]] = None) -> int:
+        """Add a packet URL to the processing queue with priority"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+        metadata_json = json.dumps(metadata) if metadata else None
+
+        try:
+            cursor.execute(
+                """
+                INSERT INTO processing_queue
+                (packet_url, meeting_id, city_banana, priority, processing_metadata)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (packet_url, meeting_id, city_banana, priority, metadata_json)
+            )
+            self.conn.commit()
+            queue_id = cursor.lastrowid
+            logger.info(f"Enqueued {packet_url} for processing with priority {priority}")
+            return queue_id
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE constraint failed" in str(e):
+                logger.debug(f"Packet {packet_url} already in queue")
+                return -1
+            raise
+
+    def get_next_for_processing(self, city_banana: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get next item from processing queue based on priority and status"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+
+        if city_banana:
+            cursor.execute(
+                """
+                SELECT * FROM processing_queue
+                WHERE status = 'pending' AND city_banana = ?
+                ORDER BY priority DESC, created_at ASC
+                LIMIT 1
+                """,
+                (city_banana,)
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT * FROM processing_queue
+                WHERE status = 'pending'
+                ORDER BY priority DESC, created_at ASC
+                LIMIT 1
+                """
+            )
+
+        row = cursor.fetchone()
+        if row:
+            # Mark as processing
+            cursor.execute(
+                """
+                UPDATE processing_queue
+                SET status = 'processing', started_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (row['id'],)
+            )
+            self.conn.commit()
+
+            result = dict(row)
+            if result.get('processing_metadata'):
+                result['processing_metadata'] = json.loads(result['processing_metadata'])
+            return result
+        return None
+
+    def mark_processing_complete(self, queue_id: int) -> None:
+        """Mark a queue item as completed"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            UPDATE processing_queue
+            SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (queue_id,)
+        )
+        self.conn.commit()
+        logger.info(f"Marked queue item {queue_id} as completed")
+
+    def mark_processing_failed(self, queue_id: int, error_message: str, increment_retry: bool = True) -> None:
+        """Mark a queue item as failed with error message"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+
+        if increment_retry:
+            cursor.execute(
+                """
+                UPDATE processing_queue
+                SET status = 'failed',
+                    error_message = ?,
+                    retry_count = retry_count + 1,
+                    completed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (error_message, queue_id)
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE processing_queue
+                SET status = 'failed',
+                    error_message = ?,
+                    completed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (error_message, queue_id)
+            )
+        self.conn.commit()
+        logger.warning(f"Marked queue item {queue_id} as failed: {error_message}")
+
+    def reset_failed_items(self, max_retries: int = 3) -> int:
+        """Reset failed items back to pending if under retry limit"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            UPDATE processing_queue
+            SET status = 'pending', error_message = NULL
+            WHERE status = 'failed' AND retry_count < ?
+            """,
+            (max_retries,)
+        )
+        reset_count = cursor.rowcount
+        self.conn.commit()
+        logger.info(f"Reset {reset_count} failed items back to pending")
+        return reset_count
+
+    def get_queue_stats(self) -> Dict[str, Any]:
+        """Get processing queue statistics"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+        stats = {}
+
+        # Count by status
+        cursor.execute(
+            """
+            SELECT status, COUNT(*) as count
+            FROM processing_queue
+            GROUP BY status
+            """
+        )
+        for row in cursor.fetchall():
+            stats[f"{row['status']}_count"] = row['count']
+
+        # Failed with high retry count
+        cursor.execute(
+            """
+            SELECT COUNT(*) as count
+            FROM processing_queue
+            WHERE status = 'failed' AND retry_count >= 3
+            """
+        )
+        result = cursor.fetchone()
+        stats['permanently_failed'] = result['count'] if result else 0
+
+        # Average processing time
+        cursor.execute(
+            """
+            SELECT AVG(julianday(completed_at) - julianday(started_at)) * 86400 as avg_seconds
+            FROM processing_queue
+            WHERE status = 'completed' AND completed_at IS NOT NULL AND started_at IS NOT NULL
+            """
+        )
+        result = cursor.fetchone()
+        avg_time = result['avg_seconds'] if result else None
+        stats['avg_processing_seconds'] = avg_time if avg_time else 0
+
+        return stats
+
+    def bulk_enqueue_unprocessed_meetings(self, limit: Optional[int] = None) -> int:
+        """Bulk enqueue all unprocessed meetings with packet URLs"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+
+        # Find all meetings with packet URLs but no summaries
+        query = """
+            SELECT m.packet_url, m.id, m.city_banana, m.date
+            FROM meetings m
+            LEFT JOIN processing_queue pq ON m.packet_url = pq.packet_url
+            WHERE m.packet_url IS NOT NULL
+            AND m.summary IS NULL
+            AND pq.id IS NULL
+            ORDER BY m.date DESC
+        """
+
+        if limit:
+            query += f" LIMIT {limit}"
+
+        cursor.execute(query)
+        meetings = cursor.fetchall()
+
+        enqueued = 0
+        for meeting in meetings:
+            # Calculate priority based on meeting date recency
+            if meeting['date']:
+                try:
+                    meeting_date = datetime.fromisoformat(meeting['date']) if isinstance(meeting['date'], str) else meeting['date']
+                    days_old = (datetime.now() - meeting_date).days
+                except Exception:
+                    days_old = 999
+            else:
+                days_old = 999
+
+            priority = max(0, 100 - days_old)  # Recent meetings get higher priority
+
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO processing_queue
+                    (packet_url, meeting_id, city_banana, priority)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (meeting['packet_url'], meeting['id'], meeting['city_banana'], priority)
+                )
+                enqueued += 1
+            except sqlite3.IntegrityError:
+                logger.debug(f"Skipping already queued packet: {meeting['packet_url']}")
+
+        self.conn.commit()
+        logger.info(f"Bulk enqueued {enqueued} meetings for processing")
+        return enqueued
 
     def close(self):
         """Close database connection"""
