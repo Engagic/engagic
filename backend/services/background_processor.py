@@ -10,6 +10,7 @@ from enum import Enum
 from collections import defaultdict
 
 from backend.database.database_manager import DatabaseManager
+from backend.database.unified_db import City, Meeting
 from backend.core.processor import AgendaProcessor
 from backend.adapters.all_adapters import (
     PrimeGovAdapter,
@@ -20,7 +21,6 @@ from backend.adapters.all_adapters import (
     CivicPlusAdapter
 )
 from backend.core.config import config
-from backend.core.utils import generate_city_banana
 
 logger = logging.getLogger("engagic")
 
@@ -79,7 +79,7 @@ class SyncResult:
 
 
 class BackgroundProcessor:
-    def __init__(self, unified_db_path: str = None):
+    def __init__(self, unified_db_path: Optional[str] = None):
         # Use config path if not provided
         db_path = unified_db_path or config.UNIFIED_DB_PATH
 
@@ -194,7 +194,7 @@ class BackgroundProcessor:
         # Clear failed cities from previous run
         self.failed_cities.clear()
 
-        cities = self.db.get_all_cities()
+        cities = self.db.get_cities(status="active")
         logger.info(f"Syncing {len(cities)} cities with rate limiting...")
 
         # Group cities by vendor for polite crawling (only supported vendors)
@@ -206,13 +206,13 @@ class BackgroundProcessor:
         skipped_count = 0
 
         for city in cities:
-            vendor = city.get('vendor', 'unknown')
+            vendor = city.vendor
             if vendor in supported_vendors:
                 by_vendor.setdefault(vendor, []).append(city)
             else:
                 skipped_count += 1
                 logger.debug(
-                    f"Skipping city {city.get('city_name', 'unknown')} "
+                    f"Skipping city {city.name} "
                     f"with unsupported vendor: {vendor}"
                 )
 
@@ -243,15 +243,10 @@ class BackgroundProcessor:
                 # Check if city needs syncing based on frequency
                 if not self._should_sync_city(city):
                     logger.debug(
-                        f"Skipping {city.get('city_name', 'unknown')} - "
-                        f"doesn't need sync yet"
-                    )
-                    city_banana = (
-                        city.get('city_banana') or 
-                        generate_city_banana(city.get('city_name'), city.get('state'))
+                        f"Skipping {city.name} - doesn't need sync yet"
                     )
                     results.append(SyncResult(
-                        city_banana=city_banana,
+                        city_banana=city.banana,
                         status=SyncStatus.SKIPPED,
                         error_message="Not due for sync based on frequency"
                     ))
@@ -263,18 +258,14 @@ class BackgroundProcessor:
                 # Sync with retry logic
                 result = self._sync_city_with_retry(city)
                 logger.info(
-                    f"Sync completed for {city_banana}: "
+                    f"Sync completed for {city.banana}: "
                     f"{result.status}"
                 )
                 results.append(result)
 
                 # Track failed cities
                 if result.status == SyncStatus.FAILED:
-                    city_banana = (
-                        city.get('city_banana') or 
-                        generate_city_banana(city.get('city_name'), city.get('state'))
-                    )
-                    self.failed_cities.add(city_banana)
+                    self.failed_cities.add(city.banana)
 
             # Break between vendor groups to be extra polite
             if vendor_cities:  # Only sleep if we processed cities
@@ -298,22 +289,11 @@ class BackgroundProcessor:
             logger.warning(f"Failed cities: {', '.join(sorted(self.failed_cities))}")
         self.last_full_sync = datetime.now()
 
-    def _sync_city(self, city_info: Dict[str, Any]) -> SyncResult:
+    def _sync_city(self, city: City) -> SyncResult:
         """Sync a single city"""
-        city_slug = city_info['city_slug']  # Keep for vendor adapters only
-        city_name = city_info['city_name']
-        state = city_info['state']
-        vendor = city_info.get('vendor', '')
+        result = SyncResult(city_banana=city.banana, status=SyncStatus.PENDING)
 
-        # Generate city_banana for internal use
-        city_banana = (
-            city_info.get('city_banana') or 
-            generate_city_banana(city_name, state)
-        )
-
-        result = SyncResult(city_banana=city_banana, status=SyncStatus.PENDING)
-
-        if not vendor:
+        if not city.vendor:
             result.status = SyncStatus.SKIPPED
             result.error_message = "No vendor configured"
             return result
@@ -321,16 +301,16 @@ class BackgroundProcessor:
         start_time = time.time()
 
         try:
-            logger.info(f"Syncing {city_banana} with {vendor}")
+            logger.info(f"Syncing {city.banana} with {city.vendor}")
             result.status = SyncStatus.IN_PROGRESS
 
-            # Get adapter
-            adapter = self._get_adapter(vendor, city_slug)
+            # Get adapter (vendor_slug is vendor-specific identifier)
+            adapter = self._get_adapter(city.vendor, city.vendor_slug)
 
             if not adapter:
                 result.status = SyncStatus.SKIPPED
-                result.error_message = f"Unsupported vendor: {vendor}"
-                logger.debug(f"Skipping {city_banana} - unsupported vendor: {vendor}")
+                result.error_message = f"Unsupported vendor: {city.vendor}"
+                logger.debug(f"Skipping {city.banana} - unsupported vendor: {city.vendor}")
                 return result
 
             # Fetch meetings using unified adapter interface
@@ -339,14 +319,14 @@ class BackgroundProcessor:
                 meetings_with_packets = [m for m in all_meetings if m.get('packet_url')]
 
             except Exception as e:
-                logger.error(f"Error fetching meetings for {city_banana}: {e}")
+                logger.error(f"Error fetching meetings for {city.banana}: {e}")
                 result.status = SyncStatus.FAILED
                 result.error_message = str(e)
                 return result
 
             result.meetings_found = len(all_meetings)
             logger.info(
-                f"Found {len(all_meetings)} total meetings for {city_banana}, "
+                f"Found {len(all_meetings)} total meetings for {city.banana}, "
                 f"{len(meetings_with_packets)} have packets"
             )
 
@@ -380,7 +360,7 @@ class BackgroundProcessor:
                     # Create Meeting object
                     meeting_obj = Meeting(
                         id=meeting.get("meeting_id", ""),
-                        city_banana=city_banana,
+                        city_banana=city.banana,
                         title=meeting.get("title", ""),
                         date=meeting_date,
                         packet_url=meeting.get("packet_url"),
@@ -409,7 +389,7 @@ class BackgroundProcessor:
             result.duration_seconds = time.time() - start_time
 
             logger.info(
-                f"Synced {city_banana}: {result.meetings_found} meetings found, "
+                f"Synced {city.banana}: {result.meetings_found} meetings found, "
                 f"{len(meetings_with_packets)} have packets, {processed_count} processed"
             )
 
@@ -417,24 +397,24 @@ class BackgroundProcessor:
             result.status = SyncStatus.FAILED
             result.error_message = str(e)
             result.duration_seconds = time.time() - start_time
-            logger.error(f"Failed to sync {city_banana}: {e}")
+            logger.error(f"Failed to sync {city.banana}: {e}")
 
             # Add small delay on error to avoid hammering
             time.sleep(2 + random.uniform(0, 1))
 
         return result
 
-    def _sync_city_with_retry(self, city_info: Dict[str, Any], 
+    def _sync_city_with_retry(self, city: City,
                               max_retries: int = 2) -> SyncResult:
         """Sync city with retry (5s, 20s delays)"""
-        city_name = city_info.get('city_name', 'unknown')
-        city_banana = city_info.get('city_banana')
+        city_name = city.name
+        city_banana = city.banana
 
         wait_times = [5, 20]  # Fixed wait times for attempts
 
         for attempt in range(max_retries):
             try:
-                result = self._sync_city(city_info)
+                result = self._sync_city(city)
 
                 # If successful or skipped, return immediately
                 if result.status in [SyncStatus.COMPLETED, SyncStatus.SKIPPED]:
@@ -480,17 +460,12 @@ class BackgroundProcessor:
             error_message="Unknown retry error"
         )
 
-    def _should_sync_city(self, city_info: Dict[str, Any]) -> bool:
+    def _should_sync_city(self, city: City) -> bool:
         """Determine if city needs syncing based on activity patterns"""
-        # Use city_banana for internal operations
-        city_banana = city_info.get('city_banana')
-        if not city_banana:
-            return True
-
         try:
             # Check recent meeting frequency
-            recent_meetings = self.db.get_city_meeting_frequency(city_banana, days=30)
-            last_sync = self.db.get_city_last_sync(city_banana)
+            recent_meetings = self.db.get_city_meeting_frequency(city.banana, days=30)
+            last_sync = self.db.get_city_last_sync(city.banana)
 
             if not last_sync:
                 return True  # Never synced before
@@ -508,27 +483,16 @@ class BackgroundProcessor:
                 return hours_since_sync >= 168  # Sync weekly
 
         except Exception as e:
-            logger.warning(f"Error checking sync schedule for {city_banana}: {e}")
+            logger.warning(f"Error checking sync schedule for {city.banana}: {e}")
             return True  # Sync on error to be safe
 
-    def _prioritize_cities(self, cities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _prioritize_cities(self, cities: List[City]) -> List[City]:
         """Sort cities by sync priority (high activity first)"""
-        def get_priority(city):
+        def get_priority(city: City) -> float:
             try:
-                # Use city_banana for internal operations
-                city_name = city.get('city_name')
-                state = city.get('state')
-                city_banana = (
-                    city.get('city_banana') or 
-                    generate_city_banana(city_name, state)
-                )
-
-                if not city_banana:
-                    return 0
-
                 # Get recent activity
-                recent_meetings = self.db.get_city_meeting_frequency(city_banana, days=30)
-                last_sync = self.db.get_city_last_sync(city_banana)
+                recent_meetings = self.db.get_city_meeting_frequency(city.banana, days=30)
+                last_sync = self.db.get_city_last_sync(city.banana)
 
                 if not last_sync:
                     return 1000  # Never synced gets highest priority
@@ -584,115 +548,40 @@ class BackgroundProcessor:
 
         logger.info(f"Found {len(unprocessed)} unprocessed meetings")
 
-        # Always use batch processing to avoid rate limits
-        if len(unprocessed) >= 1 and self.processor:  # Use batch for ANY meetings
-            logger.info(
-                f"Using batch API for {len(unprocessed)} meetings to avoid rate limits"
-            )
+        # TODO(Phase 4): Implement batch processing via job queue for efficiency
+        # For now, process meetings individually
+        if self.processor:
+            logger.info(f"Processing {len(unprocessed)} meetings individually...")
 
-            # Convert to meeting data format
-            meeting_data_list = []
+            success_count = 0
             for meeting in unprocessed:
-                if meeting.get('packet_url'):
-                    meeting_data = {
-                        "packet_url": meeting['packet_url'],
-                        "city_banana": meeting.get('city_banana'),
-                        "meeting_name": meeting.get('meeting_name'),
-                        "meeting_date": meeting.get('meeting_date'),
-                        "meeting_id": meeting.get('meeting_id'),
-                    }
-                    meeting_data_list.append(meeting_data)
+                if not meeting.packet_url:
+                    continue
 
-            if meeting_data_list:
                 try:
-                    # Prepare batch requests for the batch API
-                    batch_requests = []
-                    meeting_map = {}  # Map custom_id to meeting data
+                    meeting_data = {
+                        "packet_url": meeting.packet_url,
+                        "city_banana": meeting.city_banana,
+                        "meeting_name": meeting.title,
+                        "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                        "meeting_id": meeting.id,
+                    }
 
-                    for meeting_data in meeting_data_list:
-                        custom_id = (
-                            f"{meeting_data.get('city_banana', 'unknown')}_"
-                            f"{meeting_data.get('meeting_id', time.time())}"
-                        )
-                        batch_requests.append({
-                            "url": meeting_data["packet_url"],
-                            "custom_id": custom_id
-                        })
-                        meeting_map[custom_id] = meeting_data
+                    if self.processor:
+                        result = self.processor.process_agenda_with_cache(meeting_data)
 
-                    logger.info(
-                        f"Submitting {len(batch_requests)} PDFs to batch API "
-                        f"(50% cost savings, no rate limits)"
-                    )
-
-                    # Submit batch and wait for results (async processing, no rate limits!)
-                    batch_results = self.processor.process_batch_agendas(
-                        batch_requests,
-                        wait_for_results=True,
-                        return_raw=False
-                    )
-
-                    # Process and store results
-                    success_count = 0
-                    if isinstance(batch_results, list):
-                        for result in batch_results:
-                            try:
-                                custom_id = result.custom_id
-                                meeting_data = meeting_map.get(custom_id)
-
-                                if not meeting_data:
-                                    logger.warning(
-                                        f"No meeting data found for custom_id: {custom_id}"
-                                    )
-                                    continue
-
-                                if (result.result_type.value == "succeeded" and 
-                                    result.message):
-                                    # Extract summary from the result
-                                    content = result.message.get("content", [])
-                                    if (content and isinstance(content, list) and 
-                                        len(content) > 0):
-                                        summary = content[0].get("text", "")
-                                        if summary:
-                                            # Store using the same method as individual processing
-                                            self.db.store_summary(
-                                                meeting_data["packet_url"],
-                                                summary,
-                                                processing_method="batch_api"
-                                            )
-                                            success_count += 1
-                                            logger.info(
-                                                f"Stored batch result for "
-                                                f"{meeting_data['packet_url']}"
-                                            )
-                                        else:
-                                            logger.warning(
-                                                f"Empty summary for "
-                                                f"{meeting_data['packet_url']}"
-                                            )
-                                else:
-                                    logger.error(
-                                        f"Batch processing failed for "
-                                        f"{meeting_data.get('packet_url', 'unknown')}: "
-                                        f"{result.error}"
-                                    )
-
-                            except Exception as e:
-                                logger.error(f"Error processing batch result: {e}")
-
-                    logger.info(
-                        f"Batch processing completed: "
-                        f"{success_count}/{len(batch_requests)} successful"
-                    )
+                        if result.get("success"):
+                            success_count += 1
+                            logger.info(f"Processed {meeting.packet_url} in {result.get('processing_time', 0):.1f}s")
+                        else:
+                            logger.error(f"Failed to process {meeting.packet_url}: {result.get('error')}")
+                    else:
+                        logger.warning(f"Skipping {meeting.packet_url} - processor not available")
 
                 except Exception as e:
-                    logger.error(f"Batch API submission failed: {e}")
-                    # Only process a few individually as last resort
-                    logger.info("Falling back to individual processing for first 3 meetings")
-                    self._process_meetings_individually(unprocessed[:3])
-        else:
-            # Process individually for small numbers
-            self._process_meetings_individually(unprocessed)
+                    logger.error(f"Error processing {meeting.packet_url}: {e}")
+
+            logger.info(f"Successfully processed {success_count}/{len(unprocessed)} meetings")
 
     def _process_meetings_individually(self, meetings):
         """Process meetings individually (fallback - should rarely be used)"""
@@ -713,50 +602,50 @@ class BackgroundProcessor:
                 except Exception as e:
                     logger.error(f"Meeting processing future failed: {e}")
 
-    def _process_meeting_summary(self, meeting: Dict[str, Any]):
+    def _process_meeting_summary(self, meeting: Meeting):
         """Process summary for a single meeting"""
-        packet_url = meeting.get('packet_url')
-        if not packet_url:
+        if not meeting.packet_url:
             return
 
         try:
-            logger.info(f"Processing summary for {packet_url}")
+            logger.info(f"Processing summary for {meeting.packet_url}")
 
             # Check if still unprocessed (avoid race conditions)
-            cached = self.db.get_cached_summary(packet_url)
+            cached = self.db.get_cached_summary(meeting.packet_url)
             if cached:
-                logger.debug(f"Meeting {packet_url} already processed, skipping")
+                logger.debug(f"Meeting {meeting.packet_url} already processed, skipping")
                 return
 
             # Process with cache - use the meeting data directly
             meeting_data = {
-                "packet_url": packet_url,
-                "city_banana": meeting.get('city_banana'),  # Fixed: use meeting data
-                "meeting_name": meeting.get('meeting_name'),
-                "meeting_date": meeting.get('meeting_date'),
-                "meeting_id": meeting.get('meeting_id'),
+                "packet_url": meeting.packet_url,
+                "city_banana": meeting.city_banana,
+                "meeting_name": meeting.title,
+                "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                "meeting_id": meeting.id,
             }
 
-            result = self.processor.process_agenda_with_cache(meeting_data)
-            logger.info(f"Processed {packet_url} in {result['processing_time']:.1f}s")
+            if self.processor:
+                result = self.processor.process_agenda_with_cache(meeting_data)
+                logger.info(f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s")
+            else:
+                logger.warning(f"Skipping {meeting.packet_url} - processor not available")
 
         except Exception as e:
-            logger.error(f"Error processing summary for {packet_url}: {e}")
+            logger.error(f"Error processing summary for {meeting.packet_url}: {e}")
 
     def get_sync_status(self) -> Dict[str, Any]:
         """Get current sync status"""
-        stats = self.db.get_cache_stats()
+        stats = self.db.get_stats()
         return {
             "is_running": self.is_running,
             "last_full_sync": (
                 self.last_full_sync.isoformat() if self.last_full_sync else None
             ),
-            "cities_count": stats.get("cities_count", 0),
-            "meetings_count": stats.get("meetings_count", 0),
-            "processed_count": stats.get("processed_count", 0),
-            "unprocessed_count": (
-                stats.get("meetings_count", 0) - stats.get("processed_count", 0)
-            ),
+            "active_cities": stats.get("active_cities", 0),
+            "total_meetings": stats.get("total_meetings", 0),
+            "summarized_meetings": stats.get("summarized_meetings", 0),
+            "pending_meetings": stats.get("pending_meetings", 0),
             "failed_cities": list(self.failed_cities),
             "failed_count": len(self.failed_cities),
             "current_sync_status": dict(self.current_sync_status)
@@ -772,21 +661,12 @@ class BackgroundProcessor:
                 error_message="City not found"
             )
 
-        # Convert City dataclass to dict format expected by _sync_city
-        city_info = {
-            'city_banana': city.banana,
-            'city_name': city.name,
-            'state': city.state,
-            'vendor': city.vendor,
-            'city_slug': city.vendor_slug,
-        }
-
         # Temporarily set is_running to True for the sync
         old_is_running = self.is_running
         self.is_running = True
 
         try:
-            result = self._sync_city_with_retry(city_info)
+            result = self._sync_city_with_retry(city)
 
             # Track failed cities (no locks needed)
             if result.status == SyncStatus.FAILED:

@@ -142,12 +142,11 @@ class AgendaProcessor:
         
         # Extract city context for logging
         city_banana = meeting_data.get("city_banana", "unknown")
-        meeting_title = meeting_data.get("title", "")
 
         # Check cache first
         cached_meeting = self.db.get_cached_summary(packet_url)
         if cached_meeting:
-            logger.info(f"[Cache] HIT - {city_banana} - {packet_url}")
+            logger.info(f"[Cache] HIT - {city_banana}")
 
             # Update processing_cache hit count
             self._update_cache_hit_count(packet_url)
@@ -162,26 +161,29 @@ class AgendaProcessor:
             }
 
         # Process with Gemini
-        logger.info(f"[Cache] MISS - {city_banana} - Processing new document...")
+        logger.info(f"[Cache] MISS - {city_banana}")
         start_time = time.time()
-        
+
         try:
             # Process the agenda
             summary, method = self.process_agenda_optimal(packet_url)
-            
+
             # Store in database
             processing_time = time.time() - start_time
             meeting_data["processed_summary"] = summary
             meeting_data["processing_time_seconds"] = processing_time
             meeting_data["processing_method"] = method
-            
-            meeting_id = self.db.store_meeting_summary(meeting_data, summary, processing_time)
-            
+
+            # Update meeting with summary
+            meeting_id = meeting_data.get("meeting_id")
+            if meeting_id:
+                self.db.update_meeting_summary(meeting_id, summary, method, processing_time)
+
             # Store in processing_cache
             self._store_in_processing_cache(packet_url, summary, processing_time)
-            
-            logger.info(f"Processed agenda {packet_url} in {processing_time:.1f}s using {method}")
-            
+
+            logger.info(f"[Processing] SUCCESS - {city_banana}")
+
             return {
                 "success": True,
                 "summary": summary,
@@ -191,13 +193,14 @@ class AgendaProcessor:
                 "meeting_id": meeting_id,
                 "processing_method": method
             }
-            
+
         except Exception as e:
-            logger.error(f"Failed to process agenda: {e}")
+            processing_time = time.time() - start_time
+            logger.error(f"[Processing] FAILED - {city_banana} - {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "error": str(e),
-                "processing_time": time.time() - start_time,
+                "processing_time": processing_time,
                 "cached": False
             }
     
@@ -223,44 +226,25 @@ class AgendaProcessor:
             return self._process_multiple_pdfs(url)
 
         # Tier 1: PyPDF2 text extraction + Gemini text API (free tier)
-        start_time = time.time()
-        logger.info(f"[Tier1] Starting PyPDF2 + Gemini processing: {url}")
-
         try:
             text = self._tier1_extract_text(url)
             if text and self._is_good_text_quality(text):
                 summary = self._summarize_with_gemini(text)
-                duration = time.time() - start_time
-                logger.info(
-                    f"[Tier1] SUCCESS - Processed in {duration:.1f}s "
-                    f"({len(text)} chars extracted, {len(summary)} chars summary)"
-                )
+                logger.info(f"[Tier1] SUCCESS - {url}")
                 return summary, "tier1_pypdf2_gemini"
             else:
-                duration = time.time() - start_time
                 if not text:
-                    logger.warning(
-                        f"[Tier1] FAILED - No text extracted from PDF after {duration:.1f}s - {url}"
-                    )
+                    logger.warning(f"[Tier1] FAILED - No text extracted - {url}")
                 else:
-                    logger.warning(
-                        f"[Tier1] FAILED - Poor text quality after {duration:.1f}s "
-                        f"({len(text)} chars extracted, failed quality check) - {url}"
-                    )
+                    logger.warning(f"[Tier1] FAILED - Poor text quality ({len(text)} chars) - {url}")
 
         except Exception as e:
-            duration = time.time() - start_time
-            logger.warning(
-                f"[Tier1] FAILED - Exception after {duration:.1f}s: "
-                f"{type(e).__name__}: {str(e)} - {url}"
-            )
+            logger.warning(f"[Tier1] FAILED - {type(e).__name__}: {str(e)} - {url}")
 
         # Free tier: fail fast (no expensive fallbacks)
         # TODO: When you have paid customers, check subscription tier here
         # and enable Tier 2/3 from backend/archived/premium_processing_tiers.py
-        logger.error(
-            f"[Tier1] REJECTED - Document requires premium tier (scanned or complex PDF) - {url}"
-        )
+        logger.error(f"[Tier1] REJECTED - Requires premium tier - {url}")
         raise ProcessingError(
             "Document requires premium tier for processing. "
             "This PDF may be scanned or have complex formatting that requires OCR."
@@ -376,7 +360,9 @@ class AgendaProcessor:
                 contents=prompt,
                 config=config
             )
-            
+
+            if response.text is None:
+                raise ValueError("Gemini returned no text in response")
             return response.text
             
         except Exception as e:
@@ -566,7 +552,8 @@ Skip pure administrative items unless they have significant public impact."""
     def _update_cache_hit_count(self, packet_url: str):
         """Update cache hit count in processing_cache table"""
         try:
-            with self.db.meetings.get_connection() as conn:
+            conn = self.db.conn
+            if conn:
                 cursor = conn.cursor()
                 
                 # Serialize packet_url if it's a list
@@ -588,7 +575,8 @@ Skip pure administrative items unless they have significant public impact."""
     def _store_in_processing_cache(self, packet_url: str, summary: str, processing_time: float):
         """Store processing results in processing_cache table"""
         try:
-            with self.db.meetings.get_connection() as conn:
+            conn = self.db.conn
+            if conn:
                 cursor = conn.cursor()
                 
                 # Serialize packet_url if it's a list
