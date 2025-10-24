@@ -118,9 +118,9 @@ class BackgroundProcessor:
         self.sync_thread = threading.Thread(target=self._sync_loop, daemon=True)
         self.sync_thread.start()
 
-        # Start processing thread (processes any remaining unprocessed meetings every 2 hours)
+        # Start processing thread (continuously processes jobs from the queue)
         self.processing_thread = threading.Thread(
-            target=self._processing_loop, 
+            target=self._processing_loop,
             daemon=True
         )
         self.processing_thread.start()
@@ -161,26 +161,17 @@ class BackgroundProcessor:
                     time.sleep(1)
 
     def _processing_loop(self):
-        """Processing loop - processes any remaining unprocessed meetings 
-        (most should be processed during sync)"""
-        while self.is_running:
-            try:
-                if self.processor:
-                    self._process_unprocessed_meetings()
+        """Processing loop - continuously processes jobs from the queue (Phase 4)"""
+        if not self.processor:
+            logger.warning("Processor not available - processing loop will not run")
+            return
 
-                # Sleep for 2 days between processing runs (less aggressive)
-                for _ in range(2 * 24 * 60 * 60):
-                    if not self.is_running:
-                        break
-                    time.sleep(1)
-
-            except Exception as e:
-                logger.error(f"Processing loop error: {e}")
-                # Sleep for 10 minutes on error
-                for _ in range(10 * 60):
-                    if not self.is_running:
-                        break
-                    time.sleep(1)
+        try:
+            # Run the queue processor continuously
+            self._process_queue()
+        except Exception as e:
+            logger.error(f"Processing loop error: {e}")
+            # Processing loop will be restarted by daemon if it crashes
 
     def _run_full_sync(self):
         """Run full sync of all cities with vendor-aware rate limiting"""
@@ -376,7 +367,23 @@ class BackgroundProcessor:
                         f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})"
                     )
 
-                    if not meeting.get("packet_url"):
+                    # Enqueue for processing if it has a packet URL
+                    if meeting.get("packet_url"):
+                        # Calculate priority based on meeting date recency
+                        if meeting_date:
+                            days_old = (datetime.now() - meeting_date).days
+                        else:
+                            days_old = 999
+                        priority = max(0, 100 - days_old)  # Recent meetings get higher priority
+
+                        self.db.enqueue_for_processing(
+                            packet_url=meeting["packet_url"],
+                            meeting_id=stored_meeting.id,
+                            city_banana=city.banana,
+                            priority=priority
+                        )
+                        logger.debug(f"Enqueued {meeting['packet_url']} with priority {priority}")
+                    else:
                         logger.debug("Meeting has no packet - stored for display only")
 
                 except Exception as e:
@@ -582,6 +589,78 @@ class BackgroundProcessor:
                     logger.error(f"Error processing {meeting.packet_url}: {e}")
 
             logger.info(f"Successfully processed {success_count}/{len(unprocessed)} meetings")
+
+    def _process_queue(self):
+        """Process jobs from the processing queue (Phase 4)"""
+        logger.info("Starting queue processor...")
+
+        while self.is_running:
+            try:
+                # Get next job from queue
+                job = self.db.get_next_for_processing()
+
+                if not job:
+                    # No jobs available, sleep briefly
+                    time.sleep(5)
+                    continue
+
+                queue_id = job['id']
+                packet_url = job['packet_url']
+                meeting_id = job['meeting_id']
+                city_banana = job['city_banana']
+
+                logger.info(f"Processing queue job {queue_id}: {packet_url}")
+
+                try:
+                    # Get meeting from database
+                    meeting = self.db.get_meeting(meeting_id)
+                    if not meeting:
+                        self.db.mark_processing_failed(
+                            queue_id,
+                            "Meeting not found in database"
+                        )
+                        continue
+
+                    # Process the meeting using existing logic
+                    meeting_data = {
+                        "packet_url": packet_url,
+                        "city_banana": city_banana,
+                        "meeting_name": meeting.title,
+                        "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                        "meeting_id": meeting_id,
+                    }
+
+                    if self.processor:
+                        result = self.processor.process_agenda_with_cache(meeting_data)
+
+                        if result.get("success"):
+                            self.db.mark_processing_complete(queue_id)
+                            logger.info(
+                                f"Queue job {queue_id} completed in {result.get('processing_time', 0):.1f}s"
+                            )
+                        else:
+                            error_msg = result.get("error", "Unknown error")
+                            self.db.mark_processing_failed(queue_id, error_msg)
+                            logger.error(f"Queue job {queue_id} failed: {error_msg}")
+                    else:
+                        self.db.mark_processing_failed(
+                            queue_id,
+                            "Processor not available",
+                            increment_retry=False
+                        )
+                        logger.warning(f"Skipping queue job {queue_id} - processor not available")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    self.db.mark_processing_failed(queue_id, error_msg)
+                    logger.error(f"Error processing queue job {queue_id}: {e}")
+                    # Sleep briefly on error to avoid tight loop
+                    time.sleep(2)
+
+            except Exception as e:
+                logger.error(f"Queue processor error: {e}")
+                # Sleep on error to avoid tight loop
+                time.sleep(10)
 
     def _process_meetings_individually(self, meetings):
         """Process meetings individually (fallback - should rarely be used)"""

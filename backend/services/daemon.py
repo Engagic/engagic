@@ -64,7 +64,7 @@ class EngagicDaemon:
             self.processor.start()
             
             logger.info("Daemon started successfully")
-            logger.info("Background processor running - syncing cities every 3 days, processing summaries every 2 hours")
+            logger.info("Background processor running - syncing cities every 7 days, processing queue continuously")
             
             # Keep main thread alive
             while not self.shutdown_requested:
@@ -101,33 +101,40 @@ class EngagicDaemon:
         """Show daemon status"""
         try:
             status = self.processor.get_sync_status()
-            print("\n=== Engagic Daemon Status ===")
-            print(f"Background processor running: {status['is_running']}")
-            print(f"Last full sync: {status['last_full_sync'] or 'Never'}")
-            print(f"Cities: {status['cities_count']}")
-            print(f"Total meetings: {status['meetings_count']}")
-            print(f"Processed meetings: {status['processed_count']}")
-            print(f"Unprocessed queue: {status['unprocessed_count']}")
-            print(f"Current sync status: {status['current_sync_status']}")
-            
+            logger.info("=== Engagic Daemon Status ===")
+            logger.info(f"Background processor running: {status['is_running']}")
+            logger.info(f"Last full sync: {status['last_full_sync'] or 'Never'}")
+            logger.info(f"Active cities: {status.get('active_cities', 0)}")
+            logger.info(f"Total meetings: {status.get('total_meetings', 0)}")
+            logger.info(f"Summarized meetings: {status.get('summarized_meetings', 0)}")
+            logger.info(f"Pending meetings: {status.get('pending_meetings', 0)}")
+
             # Show failed cities if any
             if status.get('failed_count', 0) > 0:
-                print(f"\nFailed Cities ({status['failed_count']}):")
+                logger.warning(f"Failed Cities ({status['failed_count']}):")
                 for city in sorted(status.get('failed_cities', [])):
-                    print(f"  - {city}")
-            
-            # Show recent activity
-            # TODO(Phase 4): Add proper job queue stats when queue infrastructure is implemented
+                    logger.warning(f"  - {city}")
+
+            # Show database and queue stats
             stats = self.processor.db.get_stats()
-            print("\nDatabase Stats:")
-            print(f"  Total meetings: {stats.get('total_meetings', 0)}")
-            print(f"  Summarized: {stats.get('summarized_meetings', 0)}")
-            print(f"  Pending: {stats.get('pending_meetings', 0)}")
-            print(f"  Summary rate: {stats.get('summary_rate', '0%')}")
-            
+            logger.info("Database Stats:")
+            logger.info(f"  Total meetings: {stats.get('total_meetings', 0)}")
+            logger.info(f"  Summarized: {stats.get('summarized_meetings', 0)}")
+            logger.info(f"  Pending: {stats.get('pending_meetings', 0)}")
+            logger.info(f"  Summary rate: {stats.get('summary_rate', '0%')}")
+
+            # Show queue stats (Phase 4)
+            queue_stats = self.processor.db.get_queue_stats()
+            logger.info("Processing Queue Stats:")
+            logger.info(f"  Pending: {queue_stats.get('pending_count', 0)}")
+            logger.info(f"  Processing: {queue_stats.get('processing_count', 0)}")
+            logger.info(f"  Completed: {queue_stats.get('completed_count', 0)}")
+            logger.info(f"  Failed: {queue_stats.get('failed_count', 0)}")
+            logger.info(f"  Permanently failed: {queue_stats.get('permanently_failed', 0)}")
+            logger.info(f"  Avg processing time: {queue_stats.get('avg_processing_seconds', 0):.1f}s")
+
         except Exception as e:
             logger.error(f"Error getting status: {e}")
-            print(f"Error getting status: {e}")
 
 
 def main():
@@ -152,7 +159,7 @@ def main():
             daemon.show_status()
         elif args.process_meeting:
             success = daemon.processor.force_process_meeting(args.process_meeting)
-            print(f"Processing result: {'Success' if success else 'Failed'}")
+            logger.info(f"Processing result: {'Success' if success else 'Failed'}")
         else:
             # Run as daemon
             daemon.start()
