@@ -628,8 +628,8 @@ class UnifiedDatabase:
 
     # ========== Processing Cache Operations ==========
 
-    def get_cached_summary(self, packet_url: str) -> Optional[Dict[str, Any]]:
-        """Check if packet URL has been processed before"""
+    def get_cached_summary(self, packet_url: str) -> Optional[Meeting]:
+        """Get meeting by packet URL if it has been processed"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
@@ -637,13 +637,14 @@ class UnifiedDatabase:
         lookup_url = json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
 
         cursor.execute("""
-            SELECT * FROM processing_cache
-            WHERE packet_url = ?
+            SELECT * FROM meetings
+            WHERE packet_url = ? AND summary IS NOT NULL
+            LIMIT 1
         """, (lookup_url,))
 
         row = cursor.fetchone()
         if row:
-            # Update hit count
+            # Update cache hit count
             cursor.execute("""
                 UPDATE processing_cache
                 SET cache_hit_count = cache_hit_count + 1,
@@ -652,7 +653,7 @@ class UnifiedDatabase:
             """, (lookup_url,))
             self.conn.commit()
 
-            return dict(row)
+            return Meeting.from_db_row(row)
 
         return None
 
