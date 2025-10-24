@@ -171,16 +171,13 @@ class AgendaProcessor:
         if cached_meeting:
             logger.info(f"[Cache] HIT - {city_banana}")
 
-            # Update processing_cache hit count
-            self._update_cache_hit_count(packet_url)
-
             return {
                 "success": True,
-                "summary": cached_meeting["processed_summary"],
-                "processing_time": cached_meeting.get("processing_time_seconds", 0),
+                "summary": cached_meeting.summary,
+                "processing_time": cached_meeting.processing_time or 0,
                 "cached": True,
-                "meeting_data": cached_meeting,
-                "processing_method": cached_meeting.get("processing_method", "cached")
+                "meeting_data": cached_meeting.to_dict(),
+                "processing_method": cached_meeting.processing_method or "cached"
             }
 
         # Process with Gemini
@@ -621,13 +618,12 @@ Skip pure administrative items unless they have significant public impact."""
                 
                 cursor.execute("""
                     INSERT OR REPLACE INTO processing_cache
-                    (packet_url, content_hash, summary_size, 
-                     processing_duration_seconds, cache_hit_count, created_at)
-                    VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                    (packet_url, content_hash, processing_method,
+                     processing_time, cache_hit_count, created_at)
+                    VALUES (?, ?, 'tier1_pypdf2_gemini', ?, 0, CURRENT_TIMESTAMP)
                 """, (
                     lookup_url,
                     content_hash,
-                    len(summary) if summary else 0,
                     processing_time
                 ))
                 
