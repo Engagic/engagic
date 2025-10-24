@@ -10,7 +10,7 @@ Extracts common patterns:
 
 import logging
 import requests
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterator
 from datetime import datetime
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -249,14 +249,14 @@ class BaseAdapter:
         element = soup.select_one(selector)
         return element.get_text(strip=True) if element else ""
 
-    def fetch_meetings(self) -> List[Dict[str, Any]]:
+    def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
         """
         Fetch meetings from vendor API/website.
 
         Must be implemented by subclass.
 
         Returns:
-            List of meeting dictionaries with keys:
+            Iterator of meeting dictionaries with keys:
                 - meeting_id: str
                 - title: str
                 - start: str (ISO datetime)
