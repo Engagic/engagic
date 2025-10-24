@@ -651,7 +651,8 @@ class UnifiedDatabase:
 
     def get_cached_summary(self, packet_url: str) -> Optional[Meeting]:
         """Get meeting by packet URL if it has been processed"""
-        assert self.conn is not None, "Database connection not established"
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
         cursor = self.conn.cursor()
 
         # Serialize URL if it's a list
@@ -747,6 +748,8 @@ class UnifiedDatabase:
             )
             self.conn.commit()
             queue_id = cursor.lastrowid
+            if queue_id is None:
+                raise DatabaseConnectionError("Failed to get queue ID after insert")
             logger.info(f"Enqueued {packet_url} for processing with priority {priority}")
             return queue_id
         except sqlite3.IntegrityError as e:
