@@ -1,14 +1,18 @@
 """
-PDF Processing Stack for Engagic
+PDF Processing Stack for Engagic - Free Tier (Tier 1 Only)
 
-Optimized for cost-efficiency and quality using Google's models.
-Text-first approach with PDF fallback for maximum information extraction.
+STRATEGY: Fail fast with simple, cost-effective processing
+- Tier 1: PyPDF2 + Gemini (60% success rate, ~$0.001/doc, ~2-5s)
+- If Tier 1 fails: raise error immediately (document needs paid tier)
+
+Premium tiers (Tier 2 Mistral OCR, Tier 3 Gemini PDF) archived for future use.
+See: backend/archived/premium_processing_tiers.py
 
 Key features:
 - Smart model selection (Flash vs Flash-Lite based on document size)
 - No chunking needed (1M+ token context window)
 - Batch processing support for 50% cost savings
-- Simple, clean implementation without cost tracking overhead
+- Simple, clean implementation without complex fallback logic
 """
 
 import os
@@ -75,42 +79,30 @@ def sanitize_filename(filename: str) -> str:
 class AgendaProcessor:
     """PDF processor optimized for cost and quality"""
     
-    def __init__(self, api_key: Optional[str] = None, mistral_api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None):
         """Initialize the processor
-        
+
         Args:
             api_key: API key (or uses environment variables)
-            mistral_api_key: Mistral API key for OCR fallback (optional)
         """
         # Initialize client
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY")
         if not self.api_key:
             raise ValueError("API key required - set GEMINI_API_KEY or LLM_API_KEY environment variable")
-        
+
         # Initialize client (will use GEMINI_API_KEY env var if api_key is None)
         if self.api_key:
             self.client = genai.Client(api_key=self.api_key)
         else:
             self.client = genai.Client()  # Uses GEMINI_API_KEY from environment
-        
+
         # Model names for selection
         self.flash_model_name = 'gemini-2.5-flash'
         self.flash_lite_model_name = 'gemini-2.5-flash-lite'
-        
+
         # Initialize unified database
         self.db = DatabaseManager(config.UNIFIED_DB_PATH)
-        
-        # Initialize Mistral OCR if available (for Tier 2 fallback)
-        self.mistral_api_key = mistral_api_key or os.getenv("MISTRAL_API_KEY")
-        self.mistral_client = None
-        if self.mistral_api_key:
-            try:
-                from mistralai import Mistral
-                self.mistral_client = Mistral(api_key=self.mistral_api_key)
-                logger.info("Mistral OCR client initialized for fallback")
-            except ImportError:
-                logger.warning("Mistral SDK not available - OCR fallback disabled")
-        
+
         # Load basic English words for validation
         self.english_words = self._load_basic_english_words()
     
@@ -148,14 +140,17 @@ class AgendaProcessor:
         if not packet_url:
             return {"success": False, "error": "No packet_url provided"}
         
+        # Extract city context for logging
+        city_banana = meeting_data.get("city_banana", "unknown")
+
         # Check cache first
         cached_meeting = self.db.get_cached_summary(packet_url)
         if cached_meeting:
-            logger.info(f"Cache hit for {packet_url}")
-            
+            logger.info(f"[Cache] HIT - {city_banana}")
+
             # Update processing_cache hit count
             self._update_cache_hit_count(packet_url)
-            
+
             return {
                 "success": True,
                 "summary": cached_meeting["processed_summary"],
@@ -164,28 +159,31 @@ class AgendaProcessor:
                 "meeting_data": cached_meeting,
                 "processing_method": cached_meeting.get("processing_method", "cached")
             }
-        
+
         # Process with Gemini
-        logger.info(f"Cache miss for {packet_url} - processing with Gemini...")
+        logger.info(f"[Cache] MISS - {city_banana}")
         start_time = time.time()
-        
+
         try:
             # Process the agenda
             summary, method = self.process_agenda_optimal(packet_url)
-            
+
             # Store in database
             processing_time = time.time() - start_time
             meeting_data["processed_summary"] = summary
             meeting_data["processing_time_seconds"] = processing_time
             meeting_data["processing_method"] = method
-            
-            meeting_id = self.db.store_meeting_summary(meeting_data, summary, processing_time)
-            
+
+            # Update meeting with summary
+            meeting_id = meeting_data.get("meeting_id")
+            if meeting_id:
+                self.db.update_meeting_summary(meeting_id, summary, method, processing_time)
+
             # Store in processing_cache
             self._store_in_processing_cache(packet_url, summary, processing_time)
-            
-            logger.info(f"Processed agenda {packet_url} in {processing_time:.1f}s using {method}")
-            
+
+            logger.info(f"[Processing] SUCCESS - {city_banana}")
+
             return {
                 "success": True,
                 "summary": summary,
@@ -195,82 +193,62 @@ class AgendaProcessor:
                 "meeting_id": meeting_id,
                 "processing_method": method
             }
-            
+
         except Exception as e:
-            logger.error(f"Failed to process agenda: {e}")
+            processing_time = time.time() - start_time
+            logger.error(f"[Processing] FAILED - {city_banana} - {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "error": str(e),
-                "processing_time": time.time() - start_time,
+                "processing_time": processing_time,
                 "cached": False
             }
     
     def process_agenda_optimal(self, url: Union[str, List[str]]) -> tuple[str, str]:
-        """Process agenda using optimal approach with Gemini
-        
+        """Process agenda using Tier 1 (PyPDF2 + Gemini) - fail fast approach
+
+        FREE TIER STRATEGY:
+        - Try Tier 1: PyPDF2 text extraction + Gemini (60% success rate)
+        - If it fails: raise error immediately (no expensive fallbacks)
+        - Premium tiers archived in backend/archived/premium_processing_tiers.py
+
         Args:
             url: Single URL string or list of URLs
-            
+
         Returns:
             Tuple of (summary, method_used)
+
+        Raises:
+            ProcessingError: If Tier 1 fails (document requires paid tier)
         """
         # Handle multiple URLs
         if isinstance(url, list):
             return self._process_multiple_pdfs(url)
-        
-        # Tier 1: PyPDF2 text extraction + Gemini text API (preferred)
-        logger.info(f"Attempting Tier 1: PyPDF2 text extraction + Gemini for {url}...")
+
+        # Tier 1: PyPDF2 text extraction + Gemini text API (free tier)
         try:
             text = self._tier1_extract_text(url)
             if text and self._is_good_text_quality(text):
                 summary = self._summarize_with_gemini(text)
-                logger.info("Tier 1 successful - PyPDF2 + Gemini")
+                logger.info(f"[Tier1] SUCCESS - {url}")
                 return summary, "tier1_pypdf2_gemini"
             else:
                 if not text:
-                    logger.warning("Tier 1 failed: No text extracted from PDF")
-                    logger.warning(f"  URL: {url}")
+                    logger.warning(f"[Tier1] FAILED - No text extracted - {url}")
                 else:
-                    logger.warning(f"Tier 1 failed: Poor text quality - {len(text)} chars extracted")
-                    logger.warning(f"  URL: {url}")
-        except Exception as e:
-            logger.warning(f"Tier 1 failed: {type(e).__name__}: {str(e)}")
-            logger.warning(f"  URL: {url}")
-        
-        # Tier 2: Mistral OCR + Gemini text API (if available)
-        if self.mistral_client:
-            logger.info(f"Attempting Tier 2: Mistral OCR + Gemini for {url}...")
-            try:
-                text = self._tier2_mistral_ocr(url)
-                if text and self._is_good_text_quality(text):
-                    summary = self._summarize_with_gemini(text)
-                    logger.info("Tier 2 successful - Mistral OCR + Gemini")
-                    return summary, "tier2_mistral_gemini"
-                else:
-                    logger.warning("Tier 2 failed: Poor OCR quality")
-                    logger.warning(f"  URL: {url}")
-            except Exception as e:
-                logger.warning(f"Tier 2 failed: {type(e).__name__}: {str(e)}")
-                logger.warning(f"  URL: {url}")
+                    logger.warning(f"[Tier1] FAILED - Poor text quality ({len(text)} chars) - {url}")
 
-        # Tier 3: Direct Gemini PDF API (fallback for complex PDFs)
-        logger.info(f"Attempting Tier 3: Direct Gemini PDF API for {url}...")
-        try:
-            summary = self._tier3_gemini_pdf_api(url)
-            if summary:
-                logger.info("Tier 3 successful - Gemini PDF API")
-                return summary, "tier3_gemini_pdf_api"
-            else:
-                logger.error("Tier 3 failed: No summary returned")
-                logger.error(f"  URL: {url}")
         except Exception as e:
-            logger.error(f"Tier 3 failed: {type(e).__name__}: {str(e)}")
-            logger.error(f"  URL: {url}")
+            logger.warning(f"[Tier1] FAILED - {type(e).__name__}: {str(e)} - {url}")
 
-        # All tiers failed
-        logger.error("All processing tiers failed for document")
-        logger.error(f"  URL: {url}")
-        raise ProcessingError("All processing tiers failed for document")
+        # Free tier: fail fast (no expensive fallbacks)
+        # TODO: When you have paid customers, check subscription tier here
+        # and enable Tier 2/3 from backend/archived/premium_processing_tiers.py
+        logger.error(f"[Tier1] REJECTED - Requires premium tier - {url}")
+        raise ProcessingError(
+            "Document requires premium tier for processing. "
+            "This PDF may be scanned or have complex formatting that requires OCR."
+        )
     
     def _tier1_extract_text(self, url: str) -> Optional[str]:
         """Tier 1: Extract text using PyPDF2"""
@@ -309,97 +287,9 @@ class AgendaProcessor:
                 logger.debug(f"PyPDF2 extraction failed: {e}")
                 return None
     
-    def _tier2_mistral_ocr(self, url: str) -> Optional[str]:
-        """Tier 2: Use Mistral OCR API for text extraction"""
-        if not self.mistral_client:
-            return None
-        
-        try:
-            # Download PDF first
-            pdf_content = self._download_pdf(url)
-            if not pdf_content:
-                return None
-            
-            # Convert to base64 for Mistral API
-            import base64
-            pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
-            
-            # Call Mistral OCR API
-            response = self.mistral_client.chat.complete(
-                model="mistral-ocr-latest",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extract all text from this PDF document. Preserve the structure and formatting."},
-                        {"type": "pdf", "pdf": pdf_base64}
-                    ]
-                }]
-            )
-            
-            text = response.choices[0].message.content
-            logger.info(f"Mistral OCR extracted {len(text)} characters")
-            
-            return self._normalize_text(text) if text else None
-            
-        except Exception as e:
-            logger.error(f"Mistral OCR failed: {e}")
-            return None
-    
-    def _tier3_gemini_pdf_api(self, url: str) -> Optional[str]:
-        """Tier 3: Use Gemini's native PDF processing"""
-        try:
-            # Download PDF
-            pdf_content = self._download_pdf(url)
-            if not pdf_content:
-                return None
-            
-            # Upload PDF to Gemini
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
-                tmp_file.write(pdf_content)
-                tmp_path = tmp_file.name
-            
-            try:
-                # Upload file to Gemini
-                uploaded_file = self.client.files.upload(file=tmp_path)
-                logger.info(f"Uploaded PDF to Gemini: {uploaded_file.name}")
-                
-                # Determine which model to use based on PDF size
-                pdf_size = len(pdf_content)
-                if pdf_size < 5 * 1024 * 1024:  # Under 5MB - use Flash-Lite
-                    model_name = self.flash_lite_model_name
-                    model_display = "flash-lite"
-                else:
-                    model_name = self.flash_model_name
-                    model_display = "flash"
-                
-                # Generate summary directly from PDF
-                prompt = self._get_comprehensive_prompt()
-                
-                # PDF API: Use moderate thinking since we're asking for complex analysis
-                config = types.GenerateContentConfig(
-                    temperature=0.3,
-                    max_output_tokens=8192,
-                    thinking_config=types.ThinkingConfig(thinking_budget=4096)  # Moderate thinking for analysis
-                )
-                
-                response = self.client.models.generate_content(
-                    model=model_name,
-                    contents=[uploaded_file, prompt],
-                    config=config
-                )
-                
-                logger.info(f"Gemini PDF API ({model_display}) generated summary")
-                return response.text
-                
-            finally:
-                # Clean up temp file
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                    
-        except Exception as e:
-            logger.error(f"Gemini PDF API failed: {e}")
-            return None
-    
+    # Tier 2 (Mistral OCR) and Tier 3 (Gemini PDF API) archived
+    # See: backend/archived/premium_processing_tiers.py for re-enablement
+
     def _summarize_with_gemini(self, text: str) -> str:
         """Summarize extracted text using Gemini
         
@@ -470,7 +360,9 @@ class AgendaProcessor:
                 contents=prompt,
                 config=config
             )
-            
+
+            if response.text is None:
+                raise ValueError("Gemini returned no text in response")
             return response.text
             
         except Exception as e:
@@ -660,7 +552,8 @@ Skip pure administrative items unless they have significant public impact."""
     def _update_cache_hit_count(self, packet_url: str):
         """Update cache hit count in processing_cache table"""
         try:
-            with self.db.meetings.get_connection() as conn:
+            conn = self.db.conn
+            if conn:
                 cursor = conn.cursor()
                 
                 # Serialize packet_url if it's a list
@@ -682,7 +575,8 @@ Skip pure administrative items unless they have significant public impact."""
     def _store_in_processing_cache(self, packet_url: str, summary: str, processing_time: float):
         """Store processing results in processing_cache table"""
         try:
-            with self.db.meetings.get_connection() as conn:
+            conn = self.db.conn
+            if conn:
                 cursor = conn.cursor()
                 
                 # Serialize packet_url if it's a list

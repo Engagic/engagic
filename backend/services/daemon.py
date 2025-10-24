@@ -117,11 +117,13 @@ class EngagicDaemon:
                     print(f"  - {city}")
             
             # Show recent activity
-            queue_stats = self.processor.db.get_processing_queue_stats()
-            print("\nProcessing Queue:")
-            print(f"  Success rate: {queue_stats['success_rate']:.1f}%")
-            print(f"  Recent meetings (24h): {queue_stats['recent_count']}")
-            print(f"  Total with packet URLs: {queue_stats['total_meetings']}")
+            # TODO(Phase 4): Add proper job queue stats when queue infrastructure is implemented
+            stats = self.processor.db.get_stats()
+            print("\nDatabase Stats:")
+            print(f"  Total meetings: {stats.get('total_meetings', 0)}")
+            print(f"  Summarized: {stats.get('summarized_meetings', 0)}")
+            print(f"  Pending: {stats.get('pending_meetings', 0)}")
+            print(f"  Summary rate: {stats.get('summary_rate', '0%')}")
             
         except Exception as e:
             logger.error(f"Error getting status: {e}")

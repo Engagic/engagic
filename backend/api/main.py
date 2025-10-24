@@ -243,7 +243,7 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
                     return normalize_city_name(city), state_map[potential_state]
 
     # No state found
-    return input_str, None
+    return input_str, ""
 
 
 def is_state_query(query: str) -> bool:
@@ -729,8 +729,8 @@ async def get_random_best_meeting():
             "meeting": {
                 "id": random_meeting["id"],
                 "city_banana": random_meeting["city_banana"],
-                "meeting_name": random_meeting["meeting_name"],
-                "meeting_date": random_meeting["meeting_date"],
+                "title": random_meeting["meeting_name"],
+                "date": random_meeting["meeting_date"],
                 "packet_url": random_meeting["packet_url"],
                 "summary": random_meeting["summary"],
                 "quality_score": random_meeting["quality_score"],
@@ -751,21 +751,18 @@ async def get_stats():
     """Get system statistics"""
     try:
         stats = db.get_stats()
-        queue_stats = db.get_processing_queue_stats()
-        request_stats = db.get_city_request_stats()
 
+        # TODO(Phase 5): Add analytics tracking for user behavior
+        # For now, use API logs to track usage patterns
         return {
             "status": "healthy",
-            "cities": stats.get("cities_count", 0),
-            "meetings": stats.get("meetings_count", 0),
-            "processed": stats.get("processed_count", 0),
-            "recent_activity": stats.get("recent_activity", 0),
-            "city_requests": request_stats,
+            "active_cities": stats.get("active_cities", 0),
+            "total_meetings": stats.get("total_meetings", 0),
+            "summarized_meetings": stats.get("summarized_meetings", 0),
+            "pending_meetings": stats.get("pending_meetings", 0),
+            "summary_rate": stats.get("summary_rate", "0%"),
             "background_processing": {
                 "service_status": "separate_daemon",
-                "unprocessed_queue": queue_stats.get("unprocessed_count", 0),
-                "processing_success_rate": f"{queue_stats.get('success_rate', 0):.1f}%",
-                "recent_meetings": queue_stats.get("recent_count", 0),
                 "note": "Check daemon status: systemctl status engagic-daemon",
             },
         }
@@ -907,28 +904,15 @@ async def get_metrics():
     """Basic metrics endpoint for monitoring"""
     try:
         stats = db.get_stats()
-        queue_stats = db.get_processing_queue_stats()
-        request_stats = db.get_city_request_stats()
 
+        # TODO(Phase 5): Add detailed metrics tracking
         return {
             "timestamp": datetime.now().isoformat(),
             "database": {
-                "cities_count": stats.get("cities_count", 0),
-                "meetings_count": stats.get("meetings_count", 0),
-                "processed_count": stats.get("processed_count", 0),
-                "recent_activity": stats.get("recent_activity", 0),
-            },
-            "processing": {
-                "unprocessed_queue": queue_stats.get("unprocessed_count", 0),
-                "success_rate": f"{queue_stats.get('success_rate', 0):.1f}%",
-                "recent_meetings": queue_stats.get("recent_count", 0),
-            },
-            "demand": {
-                "total_city_requests": request_stats.get(
-                    "total_unique_cities_requested", 0
-                ),
-                "total_demand": request_stats.get("total_demand", 0),
-                "recent_requests": request_stats.get("recent_activity", 0),
+                "active_cities": stats.get("active_cities", 0),
+                "total_meetings": stats.get("total_meetings", 0),
+                "summarized_meetings": stats.get("summarized_meetings", 0),
+                "pending_meetings": stats.get("pending_meetings", 0),
             },
             "configuration": {
                 "rate_limit_window": config.RATE_LIMIT_WINDOW,
@@ -946,6 +930,8 @@ async def get_analytics():
     """Get comprehensive analytics for public dashboard"""
     try:
         # Get stats directly from unified database
+        if db.conn is None:
+            raise HTTPException(status_code=500, detail="Database connection not established")
         cursor = db.conn.cursor()
 
         # City stats
@@ -1015,16 +1001,14 @@ async def verify_admin_token(authorization: str = Header(None)):
 @app.get("/api/admin/city-requests")
 async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
     """Get top city requests for admin review"""
-    try:
-        top_requests = db.get_top_city_requests(50)
-        return {
-            "success": True,
-            "city_requests": top_requests,
-            "total_count": len(top_requests),
-        }
-    except Exception as e:
-        logger.error(f"Error getting city requests: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get city requests")
+    # TODO(Phase 5): Implement analytics tracking for city requests
+    # For now, check API logs for usage patterns
+    return {
+        "success": True,
+        "message": "City request tracking not yet implemented. Check API logs for usage patterns.",
+        "city_requests": [],
+        "total_count": 0,
+    }
 
 
 @app.post("/api/admin/sync-city/{city_banana}")
