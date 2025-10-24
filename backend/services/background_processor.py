@@ -9,8 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from collections import defaultdict
 
-from backend.database.database_manager import DatabaseManager
-from backend.database.unified_db import City, Meeting
+from backend.database import UnifiedDatabase, City, Meeting
 from backend.core.processor import AgendaProcessor
 from backend.adapters.all_adapters import (
     PrimeGovAdapter,
@@ -83,7 +82,7 @@ class BackgroundProcessor:
         # Use config path if not provided
         db_path = unified_db_path or config.UNIFIED_DB_PATH
 
-        self.db = DatabaseManager(db_path)
+        self.db = UnifiedDatabase(db_path)
         self.processor = None
         self.is_running = False
         self.sync_thread = None
