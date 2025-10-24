@@ -9,7 +9,7 @@ import re
 from collections import defaultdict
 from datetime import datetime
 from backend.core.processor import AgendaProcessor
-from backend.database import DatabaseManager
+from backend.database import UnifiedDatabase
 from uszipcode import SearchEngine
 from backend.core.config import config
 
@@ -111,7 +111,7 @@ except ValueError:
     processor = None
 
 # Initialize unified database
-db = DatabaseManager(config.UNIFIED_DB_PATH)
+db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 zipcode_search = SearchEngine()
 
 
