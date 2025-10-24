@@ -85,6 +85,7 @@ Type=simple
 User=root
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=-/root/.llm_secrets
 ExecStart=$VENV_DIR/bin/python -m backend.services.daemon
 Restart=always
 RestartSec=10
@@ -345,12 +346,16 @@ sync_city() {
     
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
+    # Source API keys if available
+    [ -f ~/.llm_secrets ] && source ~/.llm_secrets
     python -m backend.services.daemon --sync-city "$1"
 }
 
 process_unprocessed() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
+    # Source API keys if available
+    [ -f ~/.llm_secrets ] && source ~/.llm_secrets
     python -m backend.services.background_processor --process-all-unprocessed
 }
 
