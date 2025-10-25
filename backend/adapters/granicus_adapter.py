@@ -86,7 +86,7 @@ class GranicusAdapter(BaseAdapter):
         logger.info(f"[granicus:{self.slug}] Discovering view_id (testing 1-100)...")
 
         # Try to find view_id with current year data
-        for i in range(1, 101):
+        for i in range(1, 1010):
             try:
                 response = self._get(f"{base_url}{i}", timeout=10)
                 if (
@@ -101,15 +101,6 @@ class GranicusAdapter(BaseAdapter):
 
         # Fallback: accept view_id without current year
         logger.warning(f"[granicus:{self.slug}] No view_id with {current_year} data, trying any year...")
-        for i in range(1, 101):
-            try:
-                response = self._get(f"{base_url}{i}", timeout=10)
-                if "ViewPublisher" in response.text and ("Meeting" in response.text or "Agenda" in response.text):
-                    logger.warning(f"[granicus:{self.slug}] Using view_id {i} (may have stale data)")
-                    return i
-            except Exception:
-                continue
-
         raise RuntimeError(f"Could not discover view_id for {self.base_url}")
 
     def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
@@ -191,12 +182,20 @@ class GranicusAdapter(BaseAdapter):
                 id_string = f"{title}_{start}"
                 meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
 
-            yield {
+            # Parse meeting status from title
+            meeting_status = self._parse_meeting_status(title)
+
+            result = {
                 "meeting_id": meeting_id,
                 "title": title,
                 "start": start,
                 "packet_url": packet_url,
             }
+
+            if meeting_status:
+                result["meeting_status"] = meeting_status
+
+            yield result
 
     def _extract_meeting_id(self, url: str) -> Optional[str]:
         """Extract clip_id or event_id from Granicus URL"""
