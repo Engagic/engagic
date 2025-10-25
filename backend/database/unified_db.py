@@ -183,8 +183,6 @@ class AgendaItem:
 class UnifiedDatabase:
     """
     Single database interface for all Engagic data.
-
-    Replaces the old 3-database architecture with a unified approach.
     Key design: Prefer specific lookups over generic queries.
     """
 

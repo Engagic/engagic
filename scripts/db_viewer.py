@@ -8,18 +8,14 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from backend.database.database_manager import DatabaseManager
+from backend.database.unified_db import UnifiedDatabase
 from backend.core.config import Config
 
 
 class DatabaseViewer:
     def __init__(self):
         config = Config()
-        self.db = DatabaseManager(
-            locations_db_path=config.LOCATIONS_DB_PATH,
-            meetings_db_path=config.MEETINGS_DB_PATH,
-            analytics_db_path=config.ANALYTICS_DB_PATH,
-        )
+        self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 
     def show_cities_table(self, limit=50):
         """Display cities table with zipcode counts"""
