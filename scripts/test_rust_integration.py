@@ -15,7 +15,7 @@ print("=" * 70)
 # Test 1: Import processor with Rust extractor
 print("\n1. Testing imports...")
 try:
-    from backend.core.processor import AgendaProcessor
+    from ..backend.core.processor import AgendaProcessor
     print("   SUCCESS: Imported AgendaProcessor")
 except Exception as e:
     print(f"   FAILED: {e}")
