@@ -4,7 +4,7 @@ Legistar Adapter - API integration for Legistar platform
 Cities using Legistar: Seattle WA, NYC, Cambridge MA, and many others
 """
 
-from typing import Dict, Any, Iterator, Optional
+from typing import Dict, Any, Iterator, Optional, List
 from datetime import datetime, timedelta
 from backend.adapters.base_adapter import BaseAdapter, logger
 
@@ -94,4 +94,115 @@ class LegistarAdapter(BaseAdapter):
             if meeting_status:
                 result["meeting_status"] = meeting_status
 
+            # Fetch agenda items with attachments (Legistar always has this structure)
+            items = self.fetch_event_items(event_id)
+            if items:
+                result["items"] = items
+
             yield result
+
+    def fetch_event_items(self, event_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch agenda items and their attachments for a specific event.
+
+        Args:
+            event_id: Legistar event ID
+
+        Returns:
+            List of agenda items with structure:
+            [{
+                'item_id': str,
+                'title': str,
+                'sequence': int,
+                'matter_id': str | None,
+                'attachments': [{'name': str, 'url': str, 'type': str}]
+            }]
+        """
+        # Fetch event items
+        items_url = f"{self.base_url}/events/{event_id}/eventitems"
+        params = {}
+        if self.api_token:
+            params["token"] = self.api_token
+
+        try:
+            response = self._get(items_url, params=params)
+            event_items = response.json()
+        except Exception as e:
+            logger.error(f"[legistar:{self.slug}] Failed to fetch items for event {event_id}: {e}")
+            return []
+
+        logger.debug(f"[legistar:{self.slug}] Fetched {len(event_items)} items for event {event_id}")
+
+        processed_items = []
+
+        for item in event_items:
+            item_id = item.get("EventItemId")
+            title = (item.get("EventItemTitle") or "").strip()
+            sequence = item.get("EventItemAgendaSequence", 0)
+            matter_id = item.get("EventItemMatterId")
+
+            # Fetch attachments if matter exists
+            attachments = []
+            if matter_id:
+                attachments = self._fetch_matter_attachments(matter_id)
+
+            processed_items.append({
+                "item_id": str(item_id),
+                "title": title,
+                "sequence": sequence,
+                "matter_id": str(matter_id) if matter_id else None,
+                "attachments": attachments
+            })
+
+        items_with_attachments = sum(1 for item in processed_items if item["attachments"])
+        logger.info(f"[legistar:{self.slug}] Event {event_id}: {len(processed_items)} items total, {items_with_attachments} with attachments")
+        return processed_items
+
+    def _fetch_matter_attachments(self, matter_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch attachments for a specific matter.
+
+        Args:
+            matter_id: Legistar matter ID
+
+        Returns:
+            List of attachments: [{'name': str, 'url': str, 'type': str}]
+        """
+        attachments_url = f"{self.base_url}/matters/{matter_id}/attachments"
+        params = {}
+        if self.api_token:
+            params["token"] = self.api_token
+
+        try:
+            response = self._get(attachments_url, params=params)
+            raw_attachments = response.json()
+        except Exception as e:
+            logger.warning(f"[legistar:{self.slug}] Failed to fetch attachments for matter {matter_id}: {e}")
+            return []
+
+        attachments = []
+
+        for att in raw_attachments:
+            name = (att.get("MatterAttachmentName") or "").strip()
+            url = (att.get("MatterAttachmentHyperlink") or "").strip()
+
+            if not url:
+                continue
+
+            # Determine file type from URL
+            url_lower = url.lower()
+            if url_lower.endswith(".pdf"):
+                file_type = "pdf"
+            elif url_lower.endswith((".doc", ".docx")):
+                file_type = "doc"
+            else:
+                # Unknown type, include it anyway
+                file_type = "unknown"
+
+            attachments.append({
+                "name": name,
+                "url": url,
+                "type": file_type
+            })
+
+        return attachments
