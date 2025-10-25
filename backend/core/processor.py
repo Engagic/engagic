@@ -15,21 +15,14 @@ Key features:
 - Simple, clean implementation without complex fallback logic
 """
 
-import os
 import re
 import time
 import json
 import hashlib
 import logging
-import tempfile
-import requests
 from typing import List, Dict, Any, Optional, Union
-from urllib.parse import urlparse
 from dataclasses import dataclass
 from enum import Enum
-
-# PDF processing
-from PyPDF2 import PdfReader
 
 # Google AI
 from google import genai
@@ -38,13 +31,9 @@ from google.genai import types
 # Our modules
 from backend.database import UnifiedDatabase
 from backend.core.config import config
+from backend.core.pdf_extractor_rust import RustPdfExtractor
 
 logger = logging.getLogger("engagic")
-
-# Security and processing limits
-MAX_PDF_SIZE = 200 * 1024 * 1024  # 200MB max
-MAX_PAGES = 1000  # Maximum pages to process
-MAX_URL_LENGTH = 2000
 
 # Model thresholds
 FLASH_LITE_MAX_CHARS = 200000  # Use Flash-Lite for documents under ~200K chars
@@ -68,35 +57,13 @@ class BatchMessage:
     content: List[Dict[str, str]]
 
 
-@dataclass 
+@dataclass
 class BatchResult:
     """Result from batch processing"""
     custom_id: str
     result_type: ResultType
     message: Optional[BatchMessage] = None
     error: Optional[str] = None
-
-
-def validate_url(url: str) -> None:
-    """Validate URL for security"""
-    if not url or len(url) > MAX_URL_LENGTH:
-        raise ValueError(f"Invalid URL length: {len(url) if url else 0}")
-    
-    parsed = urlparse(url)
-    if parsed.scheme not in ['http', 'https']:
-        raise ValueError("URL must use HTTP or HTTPS")
-    
-    if not parsed.netloc:
-        raise ValueError("URL must have a valid domain")
-
-
-def sanitize_filename(filename: str) -> str:
-    """Sanitize filename for safe file operations"""
-    # Remove directory traversal attempts
-    filename = os.path.basename(filename)
-    # Remove/replace unsafe characters
-    filename = re.sub(r'[^\w\-_\.]', '_', filename)
-    return filename[:255]  # Limit length
 
 
 class AgendaProcessor:
@@ -126,30 +93,9 @@ class AgendaProcessor:
         # Initialize unified database
         self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 
-        # Load basic English words for validation
-        self.english_words = self._load_basic_english_words()
-    
-    def _load_basic_english_words(self) -> set:
-        """Load basic English words for text quality validation"""
-        # Essential civic and government terms
-        civic_words = {
-            "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
-            "council", "city", "meeting", "agenda", "item", "public", "comment", "session",
-            "board", "commission", "appointment", "ordinance", "resolution", "budget",
-            "planning", "zoning", "development", "traffic", "safety", "park", "library",
-            "police", "fire", "emergency", "infrastructure", "project", "contract",
-            "approval", "review", "hearing", "vote", "motion", "approve", "deny",
-            "discussion", "report", "presentation", "staff", "department", "mayor",
-            "member", "chair", "chairman", "chairwoman", "minutes", "action", "adopt"
-        }
-        
-        # Try to load NLTK words if available
-        try:
-            from nltk.corpus import words
-            return civic_words.union(set(word.lower() for word in words.words()[:5000]))
-        except Exception:
-            return civic_words
-    
+        # Initialize Rust PDF extractor
+        self.pdf_extractor = RustPdfExtractor()
+
     def process_agenda_with_cache(self, meeting_data: Dict[str, Any]) -> Dict[str, Any]:
         """Main entry point - process agenda with caching
         
@@ -245,18 +191,15 @@ class AgendaProcessor:
         if isinstance(url, list):
             return self._process_multiple_pdfs(url)
 
-        # Tier 1: PyPDF2 text extraction + Gemini text API (free tier)
+        # Tier 1: Rust lopdf extraction + Gemini text API (free tier)
         try:
-            text = self._tier1_extract_text(url)
-            if text and self._is_good_text_quality(text):
+            text = self.pdf_extractor.extract_from_url(url)
+            if text:
                 summary = self._summarize_with_gemini(text)
                 logger.info(f"[Tier1] SUCCESS - {url}")
-                return summary, "tier1_pypdf2_gemini"
+                return summary, "tier1_rust_gemini"
             else:
-                if not text:
-                    logger.warning(f"[Tier1] FAILED - No text extracted - {url}")
-                else:
-                    logger.warning(f"[Tier1] FAILED - Poor text quality ({len(text)} chars) - {url}")
+                logger.warning(f"[Tier1] FAILED - No text extracted or poor quality - {url}")
 
         except Exception as e:
             logger.warning(f"[Tier1] FAILED - {type(e).__name__}: {str(e)} - {url}")
@@ -269,44 +212,7 @@ class AgendaProcessor:
             "Document requires premium tier for processing. "
             "This PDF may be scanned or have complex formatting that requires OCR."
         )
-    
-    def _tier1_extract_text(self, url: str) -> Optional[str]:
-        """Tier 1: Extract text using PyPDF2"""
-        validate_url(url)
-        
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Download PDF
-            pdf_content = self._download_pdf(url)
-            if not pdf_content:
-                return None
-            
-            pdf_path = os.path.join(temp_dir, "agenda.pdf")
-            with open(pdf_path, "wb") as f:
-                f.write(pdf_content)
-            
-            # Extract text with PyPDF2
-            try:
-                reader = PdfReader(pdf_path)
-                if len(reader.pages) > MAX_PAGES:
-                    logger.warning(f"PDF has {len(reader.pages)} pages, truncating to {MAX_PAGES}")
-                
-                all_text = []
-                for i, page in enumerate(reader.pages[:MAX_PAGES]):
-                    try:
-                        text = page.extract_text()
-                        if text.strip():
-                            all_text.append(f"--- PAGE {i+1} ---\n{text}")
-                    except Exception as e:
-                        logger.debug(f"Failed to extract page {i+1}: {e}")
-                        continue
-                
-                combined_text = "\n".join(all_text)
-                return self._normalize_text(combined_text) if combined_text.strip() else None
-                
-            except Exception as e:
-                logger.debug(f"PyPDF2 extraction failed: {e}")
-                return None
-    
+
     # Tier 2 (Mistral OCR) and Tier 3 (Gemini PDF API) archived
     # See: backend/archived/premium_processing_tiers.py for re-enablement
 
@@ -462,17 +368,17 @@ Skip pure administrative items unless they have significant public impact."""
         for i, url in enumerate(urls, 1):
             logger.info(f"Extracting text from PDF {i}/{len(urls)}: {url}")
             try:
-                text = self._tier1_extract_text(url)
-                if text and self._is_good_text_quality(text):
+                text = self.pdf_extractor.extract_from_url(url)
+                if text:
                     # Label each document for model context
                     doc_label = "MAIN AGENDA" if i == 1 else f"SUPPLEMENTAL MATERIAL {i-1}"
                     all_text_parts.append(f"=== {doc_label} ===\n{text}")
-                    logger.info(f"[Tier1] Extracted {len(text)} chars from document {i}")
+                    logger.info(f"[Rust] Extracted {len(text)} chars from document {i}")
                 else:
-                    logger.warning(f"[Tier1] Poor quality or no text from PDF {i}")
+                    logger.warning(f"[Rust] No text from PDF {i}")
                     failed_pdfs.append(i)
             except Exception as e:
-                logger.error(f"[Tier1] Failed to extract from PDF {i}: {type(e).__name__}: {str(e)}")
+                logger.error(f"[Rust] Failed to extract from PDF {i}: {type(e).__name__}: {str(e)}")
                 failed_pdfs.append(i)
 
         # If we got no usable text from any PDF, fail fast
@@ -561,15 +467,15 @@ Skip pure administrative items unless they have significant public impact."""
                 logger.info(f"[Item] Extracting from: {att_name}")
 
                 try:
-                    text = self._tier1_extract_text(att_url)
-                    if text and self._is_good_text_quality(text):
+                    text = self.pdf_extractor.extract_from_url(att_url)
+                    if text:
                         all_text_parts.append(f"=== {att_name} ===\n{text}")
                         processed_count += 1
-                        logger.info(f"[Item] Extracted {len(text)} chars from {att_name}")
+                        logger.info(f"[Rust] Extracted {len(text)} chars from {att_name}")
                     else:
-                        logger.warning(f"[Item] Poor quality or no text from {att_name}")
+                        logger.warning(f"[Rust] No text from {att_name}")
                 except Exception as e:
-                    logger.warning(f"[Item] Failed to extract from {att_name}: {e}")
+                    logger.warning(f"[Rust] Failed to extract from {att_name}: {e}")
 
             # If no usable text, return empty result
             if not all_text_parts:
@@ -732,109 +638,6 @@ Attached documents:
 
         return combined
 
-    def _download_pdf(self, url: str) -> Optional[bytes]:
-        """Download PDF with validation and size limits"""
-        try:
-            # Handle Google Docs viewer URLs
-            if 'docs.google.com/gview' in url:
-                from urllib.parse import parse_qs, unquote
-                parsed = urlparse(url)
-                params = parse_qs(parsed.query)
-                if 'url' in params:
-                    url = unquote(params['url'][0])
-                    logger.debug(f"Extracted actual PDF URL from Google Docs viewer: {url}")
-            
-            response = requests.get(
-                url,
-                timeout=30,
-                stream=True,
-                headers={"User-Agent": "Engagic-Gemini-Processor/1.0"}
-            )
-            response.raise_for_status()
-            
-            # Check content length
-            content_length = response.headers.get("content-length")
-            if content_length and int(content_length) > MAX_PDF_SIZE:
-                logger.error(f"PDF too large: {content_length} bytes")
-                return None
-            
-            # Download with size checking
-            pdf_content = b""
-            downloaded = 0
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    downloaded += len(chunk)
-                    if downloaded > MAX_PDF_SIZE:
-                        logger.error("PDF exceeds maximum size")
-                        return None
-                    pdf_content += chunk
-            
-            return pdf_content
-            
-        except Exception as e:
-            logger.error(f"Failed to download PDF: {e}")
-            return None
-    
-    def _is_good_text_quality(self, text: str) -> bool:
-        """Validate if extracted text is good quality"""
-        if not text or len(text) < 100:
-            logger.debug(f"Quality check FAILED: Text too short ({len(text) if text else 0} chars, need >= 100)")
-            return False
-
-        # Check character distribution
-        letters = sum(1 for c in text if c.isalpha())
-        total_chars = len(text)
-
-        if total_chars == 0:
-            logger.debug("Quality check FAILED: Zero characters")
-            return False
-
-        letter_ratio = letters / total_chars
-        if letter_ratio < 0.3:
-            logger.warning(f"Quality check FAILED: Letter ratio too low ({letter_ratio:.2%}, need >= 30%)")
-            logger.warning(f"  Extracted {letters} letters out of {total_chars} total chars")
-            logger.warning("  First 300 chars of extracted text:")
-            logger.warning(f"  {repr(text[:300])}")
-            return False
-
-        # Check for actual words
-        words = text.split()
-        if len(words) < 20:
-            logger.warning(f"Quality check FAILED: Too few words ({len(words)}, need >= 20)")
-            logger.warning(f"  Extracted text: {repr(text[:200])}")
-            return False
-
-        # Check for recognizable English words
-        sample_words = words[:100]
-        recognizable = sum(1 for word in sample_words if word.lower().strip('.,!?();:') in self.english_words)
-
-        if len(sample_words) >= 50 and recognizable < 5:
-            logger.warning(f"Quality check FAILED: Too few recognizable words ({recognizable}/{len(sample_words)})")
-            logger.warning(f"  First 20 words: {sample_words[:20]}")
-            return False
-
-        # Check for excessive single-character "words" (sign of bad extraction)
-        single_chars = sum(1 for word in sample_words if len(word) == 1)
-        if len(sample_words) >= 50 and single_chars > 20:
-            logger.warning(f"Quality check FAILED: Too many single-char words ({single_chars}/{len(sample_words)})")
-            logger.warning(f"  First 30 words: {sample_words[:30]}")
-            return False
-
-        logger.debug(f"Quality check PASSED: {total_chars} chars, {len(words)} words, {letter_ratio:.2%} letters, {recognizable}/{len(sample_words)} recognizable")
-        return True
-    
-    def _normalize_text(self, text: str) -> str:
-        """Clean up and normalize extracted text"""
-        # Remove excessive whitespace
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r' {2,}', ' ', text)
-        
-        # Fix common extraction issues
-        text = text.replace('|', 'I')  # Common OCR mistake
-        text = text.replace('‚', ',')  # Unicode comma issue
-        
-        return text.strip()
-    
     def _estimate_page_count(self, text: str) -> int:
         """Estimate page count from text"""
         # Look for page markers first
