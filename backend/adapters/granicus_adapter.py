@@ -182,8 +182,8 @@ class GranicusAdapter(BaseAdapter):
                 id_string = f"{title}_{start}"
                 meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
 
-            # Parse meeting status from title
-            meeting_status = self._parse_meeting_status(title)
+            # Parse meeting status from title and start time
+            meeting_status = self._parse_meeting_status(title, start)
 
             result = {
                 "meeting_id": meeting_id,

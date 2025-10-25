@@ -67,14 +67,15 @@ class PrimeGovAdapter(BaseAdapter):
             )
 
             title = meeting.get("title", "")
+            date_time = meeting.get("dateTime", "")
 
-            # Parse meeting status from title
-            meeting_status = self._parse_meeting_status(title)
+            # Parse meeting status from title and datetime
+            meeting_status = self._parse_meeting_status(title, date_time)
 
             result = {
                 "meeting_id": str(meeting["id"]),
                 "title": title,
-                "start": meeting.get("dateTime", ""),
+                "start": date_time,
             }
 
             if packet_doc:
