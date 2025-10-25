@@ -1,8 +1,8 @@
 # Item-Level Attachment Processing
 
 **Branch:** `dev-item-level-attachments`
-**Status:** Phase 2 Complete (Database Schema) | Phase 3 In Progress
-**Date:** 2025-01-23
+**Status:** Phase 4 Complete (Full Pipeline Working) | Testing In Progress
+**Date:** 2025-01-25
 
 ---
 
@@ -85,7 +85,7 @@ class AgendaItem:
     meeting_id: str             # FK to meetings.id
     title: str
     sequence: int               # Order in agenda
-    attachments: List[str]      # PDF URLs as JSON
+    attachments: List[Any]      # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
     summary: Optional[str]      # Item-level summary
     topics: Optional[List[str]] # Extracted topics
     created_at: Optional[datetime]
@@ -109,6 +109,7 @@ CREATE TABLE agenda_items (
 **Added Methods:**
 - `store_agenda_items(meeting_id, items: List[AgendaItem]) -> int`
 - `get_agenda_items(meeting_id) -> List[AgendaItem]`
+- `update_agenda_item(item_id, summary, topics) -> None`
 
 **Validated:**
 - Table exists in `data/engagic.db`
@@ -117,37 +118,69 @@ CREATE TABLE agenda_items (
 
 ---
 
-## Next Steps
-
-### 🔄 Phase 3: Item-Level Processing
+### ✅ Phase 3: Item-Level Processing
 
 **File:** `backend/core/processor.py`
 
-**Add Methods:**
-1. `process_agenda_item(item_data: Dict, city_banana: str) -> Dict`
-   - Downloads item attachments (configurable limit, PDFs only)
-   - Extracts text (Tier 1: PyPDF2 + Gemini fallback)
-   - Prompt: "Summarize this agenda item titled '{title}' based on attachments. Extract 1-3 main topics."
-   - Returns: `{'summary': str, 'topics': List[str]}`
+**Added Methods:**
+1. **`process_agenda_item(item_data: Dict, city_banana: str) -> Dict`**
+   - Downloads item attachments (filters to PDFs only)
+   - Extracts text using Tier 1 (PyPDF2 + Gemini fallback)
+   - Generates summary with structured prompt asking for:
+     - 2-3 sentence summary of the agenda item
+     - 1-3 main topics (comma-separated)
+   - Uses Flash-Lite for small items (<200K chars), Flash for larger
+   - Returns: `{'success': bool, 'summary': str, 'topics': List[str], 'processing_time': float, 'attachments_processed': int}`
 
-2. `combine_item_summaries(item_summaries: List[str]) -> str`
-   - Synthesizes item summaries into meeting overview
-   - Prompt: "Combine these item summaries into a coherent meeting narrative. Avoid repetition."
+2. **`_summarize_agenda_item(item_title: str, text: str) -> tuple[str, List[str]]`**
+   - Internal method for Gemini API call
+   - Parses response to extract `SUMMARY:` and `TOPICS:` lines
+   - Returns tuple of (summary, topics_list)
 
-3. Modify `process_meeting()` to handle items:
-   - If meeting has `items` field → process per-item
-   - Otherwise → fallback to current monolithic processing
-   - Store item summaries in `agenda_items` table
-   - Store combined summary in `meetings.summary`
+3. **`combine_item_summaries(item_summaries: List[Dict], meeting_title: str) -> str`**
+   - Simple concatenation strategy (no additional LLM call for cost savings)
+   - Formats as: Meeting title + per-item sections with title, summary, and topics
+   - Returns concatenated string
 
-### 🔄 Phase 4: Background Daemon Hook
+**Processing Flow:**
+- If item has no PDF attachments → skip processing, return success with empty result
+- If all attachments fail to extract → return failure with error message
+- If some attachments succeed → combine their text and process
+- Topics extracted via structured prompt parsing
 
-**File:** `backend/services/background_processor.py`
+---
 
-- When storing Legistar meetings, check for `items` field
-- Store agenda items via `db.store_agenda_items()`
-- Process queue: handle items individually or inline
-- Track item-level processing status
+### ✅ Phase 4: Conductor Integration
+
+**File:** `backend/services/conductor.py` (renamed from `background_processor.py`)
+
+**Architectural Changes:**
+- Renamed `BackgroundProcessor` → `Conductor` (orchestrates the entire pipeline)
+- Updated all references in `daemon.py` and function names
+
+**Sync-Time Integration:**
+- Modified `_sync_city()` to detect `items` field in meetings
+- When Legistar meetings include items:
+  - Convert adapter items to `AgendaItem` objects
+  - Store via `db.store_agenda_items()`
+  - Composite ID format: `{meeting_id}_{item_id}`
+  - Attachments stored as full JSON metadata (name/url/type dicts)
+
+**Processing-Time Integration:**
+- Added `_process_meeting_with_items(meeting, agenda_items)` method
+- Modified `_process_meeting_summary()` to check for agenda items:
+  - **If items exist:** Call `_process_meeting_with_items()` for item-level processing
+  - **If no items:** Fall back to monolithic `process_agenda_with_cache()`
+
+**Item Processing Pipeline:**
+1. Load agenda items from DB
+2. For each item with attachments:
+   - Check if already processed (skip if summary exists)
+   - Call `processor.process_agenda_item()`
+   - Update item in DB with summary/topics
+3. Combine all processed item summaries
+4. Update meeting.summary with combined result
+5. Set processing_method to `item_level_{N}_items`
 
 ---
 
@@ -205,12 +238,33 @@ Event (Meeting)
 - 1 meeting → 23 items → 5-10 with attachments → 10-50 pages each → 23 item summaries → 1 combined summary
 
 ### Data Model
-- Meeting stores main packet URL (full agenda PDF)
-- AgendaItems store per-item attachment URLs
-- Both can have summaries (item-level + meeting-level)
-- Topics stored as JSON arrays (future: normalize to separate table)
+- **Meeting** stores main packet URL (full agenda PDF) + combined summary
+- **AgendaItems** store per-item attachment metadata (full dicts with name/url/type)
+  - Flexible format supports both:
+    - **Legistar:** `[{'name': 'Fiscal Note', 'url': '...', 'type': 'pdf'}]`
+    - **PrimeGov (future):** `[{'name': 'Main Packet', 'url': '...', 'page_range': '1-40'}]`
+- Both have summaries (item-level stored in `agenda_items`, meeting-level in `meetings`)
+- Topics stored as JSON arrays in `agenda_items.topics`
+
+### Responsibilities By Layer
+**Adapters (Sync Time):**
+- Extract item structure in vendor-specific format
+- Return flexible attachment metadata (adapters decide structure)
+
+**Database:**
+- Store raw metadata as JSON (no interpretation)
+- Provide CRUD for AgendaItem objects
+
+**Processor (Processing Time):**
+- Parse attachment metadata (handle URLs, page ranges, etc.)
+- Download/extract/summarize content
+- Return updated AgendaItem objects
+
+**Conductor (Orchestration):**
+- Coordinate sync → storage → processing → DB updates
+- Handle fallback to monolithic processing for non-item vendors
 
 ---
 
-**Last Updated:** 2025-01-23
-**Next Milestone:** Phase 3 complete (item-level processor functional)
+**Last Updated:** 2025-01-25
+**Next Milestone:** End-to-end testing with production Legistar data
