@@ -530,6 +530,9 @@ class BackgroundProcessor:
         elif vendor == "civicclerk":
             return CivicClerkAdapter(city_slug)
         elif vendor == "legistar":
+            # NYC requires API token
+            if city_slug == "nyc":
+                return LegistarAdapter(city_slug, api_token=config.NYC_LEGISTAR_TOKEN)
             return LegistarAdapter(city_slug)
         elif vendor == "granicus":
             return GranicusAdapter(city_slug)

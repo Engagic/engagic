@@ -1111,4 +1111,9 @@ if __name__ == "__main__":
         logger.info("Databases initialized successfully")
         sys.exit(0)
 
-    uvicorn.run(app, host=config.API_HOST, port=config.API_PORT)
+    uvicorn.run(
+        app,
+        host=config.API_HOST,
+        port=config.API_PORT,
+        access_log=False  # Disable default uvicorn logs (we have custom middleware logging)
+    )
