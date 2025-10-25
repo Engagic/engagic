@@ -15,6 +15,7 @@ Key features:
 - Simple, clean implementation without complex fallback logic
 """
 
+import os
 import re
 import time
 import json
