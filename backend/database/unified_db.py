@@ -123,6 +123,63 @@ class Meeting:
         )
 
 
+@dataclass
+class AgendaItem:
+    """Agenda item entity - individual items within a meeting"""
+    id: str                     # Vendor-specific item ID
+    meeting_id: str             # Foreign key to Meeting
+    title: str
+    sequence: int               # Order in agenda
+    attachments: List[str]      # List of PDF URLs
+    summary: Optional[str] = None
+    topics: Optional[List[str]] = None  # Extracted topics
+    created_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        data = asdict(self)
+        if self.created_at:
+            data['created_at'] = self.created_at.isoformat()
+        return data
+
+    @classmethod
+    def from_db_row(cls, row: sqlite3.Row) -> 'AgendaItem':
+        """Create AgendaItem from database row"""
+        row_dict = dict(row)
+
+        # Deserialize JSON fields
+        attachments = row_dict.get('attachments')
+        if attachments:
+            try:
+                attachments = json.loads(attachments)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize attachments JSON: {attachments}")
+                attachments = []
+        else:
+            attachments = []
+
+        topics = row_dict.get('topics')
+        if topics:
+            try:
+                topics = json.loads(topics)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize topics JSON: {topics}")
+                topics = None
+        else:
+            topics = None
+
+        return cls(
+            id=row_dict['id'],
+            meeting_id=row_dict['meeting_id'],
+            title=row_dict['title'],
+            sequence=row_dict['sequence'],
+            attachments=attachments,
+            summary=row_dict.get('summary'),
+            topics=topics,
+            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None
+        )
+
+
 class UnifiedDatabase:
     """
     Single database interface for all Engagic data.
@@ -197,6 +254,19 @@ class UnifiedDatabase:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (city_banana) REFERENCES cities(city_banana) ON DELETE CASCADE
+        );
+
+        -- Agenda items: Individual items within meetings
+        CREATE TABLE IF NOT EXISTS agenda_items (
+            id TEXT PRIMARY KEY,
+            meeting_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            attachments TEXT,
+            summary TEXT,
+            topics TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
         );
 
         -- Processing cache: Track PDF processing for cost optimization
@@ -660,6 +730,70 @@ class UnifiedDatabase:
 
         row = cursor.fetchone()
         return Meeting.from_db_row(row) if row else None
+
+    # ========== Agenda Item Operations ==========
+
+    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
+        """
+        Store agenda items for a meeting.
+
+        Args:
+            meeting_id: The meeting ID these items belong to
+            items: List of AgendaItem objects
+
+        Returns:
+            Number of items stored
+        """
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+
+        stored_count = 0
+
+        for item in items:
+            # Serialize JSON fields
+            attachments_json = json.dumps(item.attachments) if item.attachments else None
+            topics_json = json.dumps(item.topics) if item.topics else None
+
+            cursor.execute("""
+                INSERT OR REPLACE INTO agenda_items
+                (id, meeting_id, title, sequence, attachments, summary, topics)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                item.id,
+                meeting_id,
+                item.title,
+                item.sequence,
+                attachments_json,
+                item.summary,
+                topics_json
+            ))
+            stored_count += 1
+
+        self.conn.commit()
+        logger.debug(f"Stored {stored_count} agenda items for meeting {meeting_id}")
+        return stored_count
+
+    def get_agenda_items(self, meeting_id: str) -> List[AgendaItem]:
+        """
+        Get all agenda items for a meeting, ordered by sequence.
+
+        Args:
+            meeting_id: The meeting ID
+
+        Returns:
+            List of AgendaItem objects
+        """
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM agenda_items
+            WHERE meeting_id = ?
+            ORDER BY sequence ASC
+        """, (meeting_id,))
+
+        rows = cursor.fetchall()
+        return [AgendaItem.from_db_row(row) for row in rows]
 
     # ========== Processing Cache Operations ==========
 
