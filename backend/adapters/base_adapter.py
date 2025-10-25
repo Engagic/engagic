@@ -249,6 +249,44 @@ class BaseAdapter:
         element = soup.select_one(selector)
         return element.get_text(strip=True) if element else ""
 
+    def _parse_meeting_status(self, title: str) -> Optional[str]:
+        """
+        Parse meeting title for status keywords.
+
+        Common patterns:
+        - [CANCELLED] - City Council Meeting
+        - (POSTPONED) Regular Meeting
+        - City Council - REVISED
+        - RESCHEDULED: Planning Commission
+
+        Args:
+            title: Meeting title to parse
+
+        Returns:
+            Status string (cancelled, postponed, revised, rescheduled) or None
+        """
+        if not title:
+            return None
+
+        title_upper = title.upper()
+
+        # Status keywords in priority order
+        status_keywords = [
+            ('CANCEL', 'cancelled'),
+            ('POSTPONE', 'postponed'),
+            ('RESCHEDULE', 'rescheduled'),
+            ('REVISED', 'revised'),
+            ('AMENDMENT', 'revised'),
+            ('UPDATED', 'revised'),
+        ]
+
+        for keyword, status in status_keywords:
+            if keyword in title_upper:
+                logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' status in title: {title}")
+                return status
+
+        return None
+
     def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
         """
         Fetch meetings from vendor API/website.
@@ -261,5 +299,6 @@ class BaseAdapter:
                 - title: str
                 - start: str (ISO datetime)
                 - packet_url: Optional[str]
+                - meeting_status: Optional[str] (cancelled, postponed, revised, rescheduled)
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement fetch_meetings()")
