@@ -355,6 +355,7 @@ class BackgroundProcessor:
                         date=meeting_date,
                         packet_url=meeting.get("packet_url"),
                         summary=None,
+                        meeting_status=meeting.get("meeting_status"),
                         processing_status="pending"
                     )
 

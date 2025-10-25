@@ -163,7 +163,7 @@ class CivicPlusAdapter(BaseAdapter):
             title: Meeting title from listing
 
         Returns:
-            Meeting dict or None
+            Meeting dict or None if scraping fails
         """
         try:
             soup = self._fetch_html(url)
@@ -174,19 +174,27 @@ class CivicPlusAdapter(BaseAdapter):
             # Find PDF links
             pdfs = self._discover_pdfs(url, keywords=["agenda", "packet", "minutes"])
 
-            if not pdfs:
-                logger.debug(f"[civicplus:{self.slug}] No PDFs found for: {title}")
-                return None
-
             # Generate meeting ID from URL
             meeting_id = self._extract_meeting_id(url)
 
-            return {
+            # Parse meeting status from title
+            meeting_status = self._parse_meeting_status(title)
+
+            # Log if no PDFs (but still track the meeting)
+            if not pdfs:
+                logger.debug(f"[civicplus:{self.slug}] No PDFs found for: {title}")
+
+            result = {
                 "meeting_id": meeting_id,
                 "title": title,
                 "start": date_text or "",
-                "packet_url": pdfs[0] if len(pdfs) == 1 else pdfs,
+                "packet_url": pdfs[0] if len(pdfs) == 1 else (pdfs if pdfs else None),
             }
+
+            if meeting_status:
+                result["meeting_status"] = meeting_status
+
+            return result
 
         except Exception as e:
             logger.warning(f"[civicplus:{self.slug}] Failed to scrape {url}: {e}")

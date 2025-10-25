@@ -75,6 +75,7 @@ class Meeting:
     date: Optional[datetime]
     packet_url: Optional[str | List[str]]  # Single URL or list for multiple PDFs (main + supplemental)
     summary: Optional[str] = None
+    meeting_status: Optional[str] = None  # cancelled, postponed, revised, rescheduled, or None for normal
     processing_status: str = "pending"  # pending, processing, completed, failed
     processing_method: Optional[str] = None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
     processing_time: Optional[float] = None
@@ -113,6 +114,7 @@ class Meeting:
             date=datetime.fromisoformat(row_dict['date']) if row_dict.get('date') else None,
             packet_url=packet_url,
             summary=row_dict.get('summary'),
+            meeting_status=row_dict.get('meeting_status'),
             processing_status=row_dict.get('processing_status', 'pending'),
             processing_method=row_dict.get('processing_method'),
             processing_time=row_dict.get('processing_time'),
@@ -188,6 +190,7 @@ class UnifiedDatabase:
             date TIMESTAMP,
             packet_url TEXT,
             summary TEXT,
+            meeting_status TEXT,
             processing_status TEXT DEFAULT 'pending',
             processing_method TEXT,
             processing_time REAL,
@@ -557,9 +560,9 @@ class UnifiedDatabase:
 
         cursor.execute("""
             INSERT OR REPLACE INTO meetings
-            (id, city_banana, title, date, packet_url, summary,
+            (id, city_banana, title, date, packet_url, summary, meeting_status,
              processing_status, processing_method, processing_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             meeting.id,
             meeting.city_banana,
@@ -567,6 +570,7 @@ class UnifiedDatabase:
             meeting.date.isoformat() if meeting.date else None,
             meeting.packet_url,
             meeting.summary,
+            meeting.meeting_status,
             meeting.processing_status,
             meeting.processing_method,
             meeting.processing_time
