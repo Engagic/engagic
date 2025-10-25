@@ -17,6 +17,7 @@ export interface Meeting {
 	date: string; // ISO format datetime
 	packet_url?: string | string[];
 	summary?: string;
+	meeting_status?: 'cancelled' | 'postponed' | 'revised' | 'rescheduled' | 'deferred';
 }
 
 export interface RandomMeetingResponse {
