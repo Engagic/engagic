@@ -447,22 +447,56 @@ Format as organized sections with bullet points. Be thorough and detailed.
 Skip pure administrative items unless they have significant public impact."""
     
     def _process_multiple_pdfs(self, urls: List[str]) -> tuple[str, str]:
-        """Process multiple PDFs and combine summaries"""
-        logger.info(f"Processing {len(urls)} PDFs")
-        summaries = []
+        """Process multiple PDFs by extracting all text first, then summarizing with full context
+
+        Strategy: Most multi-PDF cases are main agenda + supplemental materials.
+        The model should reason over the complete context to produce a coherent summary,
+        rather than separate summaries concatenated together.
+        """
+        logger.info(f"Processing {len(urls)} PDFs with combined context")
+
+        # Extract text from all PDFs
+        all_text_parts = []
+        failed_pdfs = []
 
         for i, url in enumerate(urls, 1):
-            logger.info(f"Processing PDF {i}/{len(urls)}: {url}")
+            logger.info(f"Extracting text from PDF {i}/{len(urls)}: {url}")
             try:
-                summary, method = self.process_agenda_optimal(url)
-                summaries.append(f"=== DOCUMENT {i} ===\n{summary}")
+                text = self._tier1_extract_text(url)
+                if text and self._is_good_text_quality(text):
+                    # Label each document for model context
+                    doc_label = "MAIN AGENDA" if i == 1 else f"SUPPLEMENTAL MATERIAL {i-1}"
+                    all_text_parts.append(f"=== {doc_label} ===\n{text}")
+                    logger.info(f"[Tier1] Extracted {len(text)} chars from document {i}")
+                else:
+                    logger.warning(f"[Tier1] Poor quality or no text from PDF {i}")
+                    failed_pdfs.append(i)
             except Exception as e:
-                logger.error(f"Failed to process PDF {i}: {e}")
-                logger.error(f"  URL: {url}")
-                summaries.append(f"=== DOCUMENT {i} ===\n[Error: Could not process]")
+                logger.error(f"[Tier1] Failed to extract from PDF {i}: {type(e).__name__}: {str(e)}")
+                failed_pdfs.append(i)
 
-        combined_summary = "\n\n".join(summaries)
-        return combined_summary, f"multiple_pdfs_{len(urls)}_docs"
+        # If we got no usable text from any PDF, fail fast
+        if not all_text_parts:
+            logger.error(f"[Tier1] REJECTED - No usable text from any of {len(urls)} PDFs")
+            raise ProcessingError(
+                f"All {len(urls)} documents require premium tier for processing. "
+                "These PDFs may be scanned or have complex formatting that requires OCR."
+            )
+
+        # Combine all text and summarize with full context
+        combined_text = "\n\n".join(all_text_parts)
+        logger.info(f"[Tier1] Combined {len(all_text_parts)}/{len(urls)} documents ({len(combined_text)} chars total)")
+
+        # Summarize with full context (model sees all documents at once)
+        summary = self._summarize_with_gemini(combined_text)
+
+        # Note partial failures in the summary if any PDFs couldn't be processed
+        if failed_pdfs:
+            failure_note = f"\n\n[Note: {len(failed_pdfs)} of {len(urls)} documents could not be processed]"
+            summary += failure_note
+            logger.warning(f"Partial success: {len(all_text_parts)}/{len(urls)} documents processed")
+
+        return summary, f"multiple_pdfs_{len(urls)}_combined"
     
     def _download_pdf(self, url: str) -> Optional[bytes]:
         """Download PDF with validation and size limits"""
