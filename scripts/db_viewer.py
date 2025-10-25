@@ -27,12 +27,13 @@ class DatabaseViewer:
         )
         print("-" * 115)
 
-        for row in rows:
-            zipcodes_display = f"({row['zipcode_count']} zips)"
+        for city in cities:
+
+            zipcodes_display = self.db.get_zipcodes(banana=city.banana)
             print(
-                f"{row['id']:<4} {row['city_name'][:19]:<20} {row['state']:<6} "
-                f"{row['city_banana'][:19]:<20} {row['city_slug'][:19]:<20} "
-                f"{row['vendor'] or '':<12} {row['status']:<8} {zipcodes_display}"
+                f"{city.banana:<20} {city.name[:19]:<20} {city.state:<6} "
+                f"{city.slug:<20} {city.vendor:<12} "
+                f"{city.status:<8} {zipcodes_display}"
             )
 
     def show_zipcodes_table(self, limit=50):
