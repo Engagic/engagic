@@ -35,7 +35,7 @@ from typing import List, Dict, Any
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.database.database_manager import DatabaseManager
+from backend.database.unified_db import UnifiedDatabase
 from backend.core.config import config
 from backend.core.processor import AgendaProcessor
 
@@ -78,7 +78,7 @@ def parse_packet_urls(packet_url: str) -> List[str]:
 
 def process_meeting(
     processor: Any,
-    db: DatabaseManager,
+    db: UnifiedDatabase,
     meeting: Dict[str, Any],
     skip_cached: bool = True
 ) -> bool:
@@ -172,19 +172,6 @@ def get_unprocessed_meetings(
     
     return meetings
 
-
-def get_city_meetings(
-    db: DatabaseManager,
-    city_banana: str,
-    limit: int = None
-) -> List[Dict[str, Any]]:
-    """Get all meetings for a specific city"""
-    
-    meetings = db.get_meetings_by_city(city_banana, limit or 1000)
-    # Filter to only those with packet URLs
-    return [m for m in meetings if m.get('packet_url')]
-
-
 def main():
     parser = argparse.ArgumentParser(description='Process Engagic meeting summaries')
     parser.add_argument('--city', help='Process specific city (e.g., paloaltoCA)')
@@ -207,12 +194,8 @@ def main():
         parser.error("Cannot use both --city and --unprocessed")
     
     # Initialize database
-    db = DatabaseManager(
-        locations_db_path=config.LOCATIONS_DB_PATH,
-        meetings_db_path=config.MEETINGS_DB_PATH,
-        analytics_db_path=config.ANALYTICS_DB_PATH
-    )
-    
+    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+
     # Initialize processor
     try:
         processor = get_processor()
@@ -224,7 +207,7 @@ def main():
     # Get meetings to process
     if args.city:
         logger.info(f"Processing meetings for city: {args.city}")
-        meetings = get_city_meetings(db, args.city, args.limit)
+        meetings = db.get_meetings(bananas=args.city)
     else:
         exclude_cities = args.exclude_cities or []
         if 'newyorkNY' not in exclude_cities:
