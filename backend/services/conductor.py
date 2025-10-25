@@ -733,7 +733,7 @@ class Conductor:
                 self._process_meeting_with_items(meeting, agenda_items)
             else:
                 # Fall back to monolithic processing
-                logger.info(f"[MonolithicProcessing] No items found, processing meeting as single unit")
+                logger.info("[MonolithicProcessing] No items found, processing meeting as single unit")
                 meeting_data = {
                     "packet_url": meeting.packet_url,
                     "city_banana": meeting.city_banana,
@@ -749,7 +749,6 @@ class Conductor:
 
     def _process_meeting_with_items(self, meeting: Meeting, agenda_items: List):
         """Process a meeting at item-level granularity"""
-        from backend.database.unified_db import AgendaItem
 
         start_time = time.time()
         processed_items = []
@@ -826,7 +825,7 @@ class Conductor:
                 f"{len(failed_items)} failed in {processing_time:.1f}s"
             )
         else:
-            logger.warning(f"[ItemProcessing] No items could be processed")
+            logger.warning("[ItemProcessing] No items could be processed")
 
     def get_sync_status(self) -> Dict[str, Any]:
         """Get current sync status"""

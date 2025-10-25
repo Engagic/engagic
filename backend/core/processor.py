@@ -439,7 +439,7 @@ Skip pure administrative items unless they have significant public impact."""
         pdf_attachments = [att for att in attachments if att.get('type') == 'pdf']
 
         if not pdf_attachments:
-            logger.info(f"[Item] No PDF attachments, skipping processing")
+            logger.info("[Item] No PDF attachments, skipping processing")
             return {
                 'success': True,
                 'summary': None,
@@ -480,7 +480,7 @@ Skip pure administrative items unless they have significant public impact."""
 
             # If no usable text, return empty result
             if not all_text_parts:
-                logger.warning(f"[Item] No usable text from any attachment")
+                logger.warning("[Item] No usable text from any attachment")
                 return {
                     'success': False,
                     'error': 'No usable text extracted from attachments',
