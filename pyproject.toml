@@ -23,6 +23,7 @@ dependencies = [
     "uszipcode>=1.0.1",
     "uvicorn>=0.35.0",
     "pyright>=1.1.389",
+    "maturin",
 ]
 
 [project.optional-dependencies]
