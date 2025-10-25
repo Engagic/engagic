@@ -659,7 +659,7 @@ class UnifiedDatabase:
 
     # ========== Processing Cache Operations ==========
 
-    def get_cached_summary(self, packet_url: str) -> Optional[Meeting]:
+    def get_cached_summary(self, packet_url: str | List[str]) -> Optional[Meeting]:
         """Get meeting by packet URL if it has been processed"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
