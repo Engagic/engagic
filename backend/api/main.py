@@ -377,10 +377,16 @@ async def search_meetings(request: SearchRequest):
 
         logger.info(f"Search request: '{query}'")
 
+        # Special case: "new york" or "new york city" -> NYC (not the state)
+        query_lower = query.lower()
+        if query_lower in ["new york", "new york city"]:
+            logger.info("nyc redirect")
+            return await handle_city_search("new york, ny")
+
         # Determine if input is zipcode, state, or city name
         is_zipcode = query.isdigit() and len(query) == 5
         is_state = is_state_query(query)
-        
+
         logger.info(f"Query analysis - is_zipcode: {is_zipcode}, is_state: {is_state}")
 
         if is_zipcode:
@@ -571,7 +577,7 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
 
     return {
         "success": False,  # False because we're not returning meetings directly
-        "message": f"Found {len(city_options)} cities in {state_full} [meeting (summaries)]. Select a city to view meetings:",
+        "message": f"Found {len(city_options)} cities in {state_full} -- [meetings (summaries)]. Select a city to view its meetings:",
         "query": state_input,
         "type": "state",
         "ambiguous": True,  # Reuse ambiguous city UI pattern
