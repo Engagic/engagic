@@ -19,40 +19,21 @@ class DatabaseViewer:
 
     def show_cities_table(self, limit=50):
         """Display cities table with zipcode counts"""
-        with self.db.locations.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT c.id, c.city_name, c.state, c.city_banana, c.city_slug, c.vendor, c.status,
-                       c.county, c.created_at,
-                       COUNT(z.zipcode) as zipcode_count,
-                       GROUP_CONCAT(z.zipcode) as zipcodes
-                FROM cities c
-                LEFT JOIN zipcodes z ON c.id = z.city_id
-                GROUP BY c.id
-                ORDER BY c.city_name, c.state
-                LIMIT ?
-            """,
-                (limit,),
-            )
-            rows = cursor.fetchall()
+        cities = self.db.get_cities(limit=limit)
 
-            if not rows:
-                print("No cities found.")
-                return
+        print(f"\n=== CITIES TABLE (showing {len(cities)}) ===")
+        print(
+            f"{'ID':<4} {'City':<20} {'State':<6} {'Banana':<20} {'Slug':<20} {'Vendor':<12} {'Status':<8} {'ZIPs':<4}"
+        )
+        print("-" * 115)
 
-            print(f"\n=== CITIES TABLE (showing {len(rows)}) ===")
+        for row in rows:
+            zipcodes_display = f"({row['zipcode_count']} zips)"
             print(
-                f"{'ID':<4} {'City':<20} {'State':<6} {'Banana':<20} {'Slug':<20} {'Vendor':<12} {'Status':<8} {'ZIPs':<4}"
+                f"{row['id']:<4} {row['city_name'][:19]:<20} {row['state']:<6} "
+                f"{row['city_banana'][:19]:<20} {row['city_slug'][:19]:<20} "
+                f"{row['vendor'] or '':<12} {row['status']:<8} {zipcodes_display}"
             )
-            print("-" * 115)
-
-            for row in rows:
-                zipcodes_display = f"({row['zipcode_count']} zips)"
-                print(
-                    f"{row['id']:<4} {row['city_name'][:19]:<20} {row['state']:<6} "
-                    f"{row['city_banana'][:19]:<20} {row['city_slug'][:19]:<20} "
-                    f"{row['vendor'] or '':<12} {row['status']:<8} {zipcodes_display}"
-                )
 
     def show_zipcodes_table(self, limit=50):
         """Display zipcodes table with city information"""
