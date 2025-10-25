@@ -497,7 +497,241 @@ Skip pure administrative items unless they have significant public impact."""
             logger.warning(f"Partial success: {len(all_text_parts)}/{len(urls)} documents processed")
 
         return summary, f"multiple_pdfs_{len(urls)}_combined"
-    
+
+    def process_agenda_item(self, item_data: Dict[str, Any], city_banana: str) -> Dict[str, Any]:
+        """Process a single agenda item with its attachments
+
+        Args:
+            item_data: Dictionary with structure:
+                {
+                    'item_id': str,
+                    'title': str,
+                    'sequence': int,
+                    'attachments': [{'name': str, 'url': str, 'type': str}, ...]
+                }
+            city_banana: City identifier for logging
+
+        Returns:
+            Dictionary with:
+                {
+                    'success': bool,
+                    'summary': str,
+                    'topics': List[str],
+                    'processing_time': float,
+                    'attachments_processed': int,
+                    'error': str (if success=False)
+                }
+        """
+        start_time = time.time()
+        item_title = item_data.get('title', 'Untitled Item')
+        attachments = item_data.get('attachments', [])
+
+        logger.info(f"[Item] Processing: {item_title[:80]}")
+
+        # Filter to PDF attachments only
+        pdf_attachments = [att for att in attachments if att.get('type') == 'pdf']
+
+        if not pdf_attachments:
+            logger.info(f"[Item] No PDF attachments, skipping processing")
+            return {
+                'success': True,
+                'summary': None,
+                'topics': [],
+                'processing_time': time.time() - start_time,
+                'attachments_processed': 0
+            }
+
+        # TODO: Add configurable limits here (max 5 attachments, max 50 pages each)
+        # For now, process all PDF attachments
+        logger.info(f"[Item] Found {len(pdf_attachments)} PDF attachments")
+
+        try:
+            # Extract text from all PDF attachments
+            all_text_parts = []
+            processed_count = 0
+
+            for i, att in enumerate(pdf_attachments, 1):
+                att_name = att.get('name', f'Attachment {i}')
+                att_url = att.get('url')
+
+                if not att_url:
+                    logger.warning(f"[Item] Attachment {i} has no URL, skipping")
+                    continue
+
+                logger.info(f"[Item] Extracting from: {att_name}")
+
+                try:
+                    text = self._tier1_extract_text(att_url)
+                    if text and self._is_good_text_quality(text):
+                        all_text_parts.append(f"=== {att_name} ===\n{text}")
+                        processed_count += 1
+                        logger.info(f"[Item] Extracted {len(text)} chars from {att_name}")
+                    else:
+                        logger.warning(f"[Item] Poor quality or no text from {att_name}")
+                except Exception as e:
+                    logger.warning(f"[Item] Failed to extract from {att_name}: {e}")
+
+            # If no usable text, return empty result
+            if not all_text_parts:
+                logger.warning(f"[Item] No usable text from any attachment")
+                return {
+                    'success': False,
+                    'error': 'No usable text extracted from attachments',
+                    'processing_time': time.time() - start_time,
+                    'attachments_processed': 0
+                }
+
+            # Combine all attachment text
+            combined_text = "\n\n".join(all_text_parts)
+
+            # Generate item summary with topic extraction
+            summary, topics = self._summarize_agenda_item(item_title, combined_text)
+
+            processing_time = time.time() - start_time
+            logger.info(f"[Item] Processed in {processing_time:.1f}s - {processed_count} attachments, {len(topics)} topics")
+
+            return {
+                'success': True,
+                'summary': summary,
+                'topics': topics,
+                'processing_time': processing_time,
+                'attachments_processed': processed_count
+            }
+
+        except Exception as e:
+            logger.error(f"[Item] Processing failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'processing_time': time.time() - start_time,
+                'attachments_processed': 0
+            }
+
+    def _summarize_agenda_item(self, item_title: str, text: str) -> tuple[str, List[str]]:
+        """Summarize a single agenda item and extract topics
+
+        Args:
+            item_title: Title of the agenda item
+            text: Combined text from all attachments
+
+        Returns:
+            Tuple of (summary, topics_list)
+        """
+        text_size = len(text)
+        page_count = self._estimate_page_count(text)
+
+        # Use Flash-Lite for smaller items
+        if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
+            model_name = self.flash_lite_model_name
+        else:
+            model_name = self.flash_model_name
+
+        logger.info(f"[Item] Summarizing {page_count} pages ({text_size} chars)")
+
+        prompt = f"""This is a single agenda item from a city council meeting. The item is titled:
+
+"{item_title}"
+
+Based on the attached documents below, provide:
+
+1. A concise 2-3 sentence summary of what this agenda item is about, focusing on:
+   - The main action or decision being proposed
+   - Key details (amounts, locations, dates)
+   - Why it matters to citizens
+
+2. Extract 1-3 main topics discussed in this item (e.g., "affordable housing", "traffic safety", "budget allocation"). Return these as a simple comma-separated list.
+
+Format your response EXACTLY as:
+
+SUMMARY: [your 2-3 sentence summary here]
+
+TOPICS: topic1, topic2, topic3
+
+Attached documents:
+{text}"""
+
+        try:
+            # Simple config for item-level processing
+            config = types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=2048
+            )
+
+            response = self.client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=config
+            )
+
+            if not response.text:
+                raise ValueError("Gemini returned no text")
+
+            # Parse response
+            response_text = response.text.strip()
+
+            # Extract summary and topics
+            summary = ""
+            topics = []
+
+            for line in response_text.split('\n'):
+                line = line.strip()
+                if line.startswith('SUMMARY:'):
+                    summary = line.replace('SUMMARY:', '').strip()
+                elif line.startswith('TOPICS:'):
+                    topics_str = line.replace('TOPICS:', '').strip()
+                    topics = [t.strip() for t in topics_str.split(',') if t.strip()]
+
+            # Fallback if parsing failed
+            if not summary:
+                summary = response_text[:500]
+                logger.warning("[Item] Failed to parse SUMMARY from response, using truncated text")
+
+            if not topics:
+                logger.warning("[Item] No topics extracted from response")
+
+            return summary, topics
+
+        except Exception as e:
+            logger.error(f"[Item] Summarization failed: {e}")
+            raise
+
+    def combine_item_summaries(self, item_summaries: List[Dict[str, Any]], meeting_title: str) -> str:
+        """Combine multiple item summaries into a single meeting summary via concatenation
+
+        Args:
+            item_summaries: List of dicts with structure:
+                [
+                    {'sequence': 1, 'title': '...', 'summary': '...', 'topics': [...]},
+                    {'sequence': 2, 'title': '...', 'summary': '...', 'topics': [...]},
+                    ...
+                ]
+            meeting_title: Title of the meeting
+
+        Returns:
+            Combined meeting summary string
+        """
+        logger.info(f"[Combine] Concatenating {len(item_summaries)} item summaries")
+
+        if not item_summaries:
+            return "No agenda items were processed for this meeting."
+
+        # Build concatenated summary
+        summary_parts = [f"Meeting: {meeting_title}\n"]
+
+        for item in sorted(item_summaries, key=lambda x: x.get('sequence', 0)):
+            title = item.get('title', 'Untitled')
+            summary = item.get('summary')
+            topics = item.get('topics', [])
+
+            if summary:
+                topics_str = f" [{', '.join(topics)}]" if topics else ""
+                summary_parts.append(f"\n{title}{topics_str}\n{summary}")
+
+        combined = "\n".join(summary_parts)
+        logger.info(f"[Combine] Created {len(combined)} char summary from {len(item_summaries)} items")
+
+        return combined
+
     def _download_pdf(self, url: str) -> Optional[bytes]:
         """Download PDF with validation and size limits"""
         try:
