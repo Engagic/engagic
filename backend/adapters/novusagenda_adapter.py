@@ -46,8 +46,11 @@ class NovusAgendaAdapter(BaseAdapter):
             meeting_type = cells[1].get_text(strip=True)
             # location = cells[2].get_text(strip=True)  # Available if needed
 
-            # Parse meeting status from title
-            meeting_status = self._parse_meeting_status(meeting_type)
+            # Time is often in cell 3 or 4 depending on layout
+            time_field = cells[3].get_text(strip=True) if len(cells) > 3 else ""
+
+            # Parse meeting status from title and time field
+            meeting_status = self._parse_meeting_status(meeting_type, time_field)
 
             # Find PDF link
             pdf_link = row.find("a", href=re.compile(r"DisplayAgendaPDF\.ashx"))

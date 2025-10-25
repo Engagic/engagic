@@ -68,12 +68,13 @@ class LegistarAdapter(BaseAdapter):
             event_date = event.get("EventDate")
             event_name = event.get("EventBodyName", "")
             event_location = event.get("EventLocation")
+            event_agenda_status = event.get("EventAgendaStatusName", "")
 
             # Get packet URL (EventAgendaFile is the agenda packet PDF)
             packet_url = event.get("EventAgendaFile")
 
-            # Parse meeting status from title
-            meeting_status = self._parse_meeting_status(event_name)
+            # Parse meeting status from title and agenda status
+            meeting_status = self._parse_meeting_status(event_name, event_agenda_status)
 
             # Log if no packet (but still track the meeting)
             if not packet_url:
