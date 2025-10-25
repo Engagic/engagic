@@ -165,24 +165,15 @@
 		<div class="packet-url-box">
 			<div class="packet-url-content">
 				<span class="packet-url-label">
-					Summarized through Google's Gemini API from {urls.length > 1 ? `${urls.length} meeting packets` : 'this meeting packet'}:
+					Summarized through Google's Gemini API from {urls.length > 1 ? `${urls.length} meeting packets` : 'the meeting packet'}:
 				</span>
-				{#if urls.length === 1}
-					<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="packet-url-link">
-						{urls[0]}
-					</a>
-				{:else}
-					<div class="multi-url-list">
-						{#each urls as url, i}
-							<div class="url-item">
-								<span class="url-label">{i === 0 ? 'Main Agenda' : `Supplemental Material ${i}`}:</span>
-								<a href={url} target="_blank" rel="noopener noreferrer" class="packet-url-link">
-									{url}
-								</a>
-							</div>
-						{/each}
-					</div>
-				{/if}
+				<div class="multi-url-compact">
+					{#each urls as url, i}
+						<a href={url} target="_blank" rel="noopener noreferrer" class="compact-url-link">
+							{urls.length === 1 ? 'View Agenda Packet' : (i === 0 ? 'Main Agenda' : `Supplemental ${i}`)}
+						</a>{#if i < urls.length - 1}<span class="url-separator">•</span>{/if}
+					{/each}
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -197,6 +188,13 @@
 		</div>
 	{:else if selectedMeeting}
 		<div class="meeting-detail">
+			{#if selectedMeeting.meeting_status}
+				<div class="meeting-alert-banner">
+					<span class="alert-icon">!</span>
+					<span class="alert-text">This meeting has been {selectedMeeting.meeting_status}</span>
+				</div>
+			{/if}
+
 			<div class="meeting-header">
 				<h1 class="meeting-title">{selectedMeeting.title || selectedMeeting.title}</h1>
 				{#if searchResults && searchResults.success}
@@ -268,47 +266,36 @@
 		color: var(--civic-dark);
 		font-size: 0.85rem;
 		line-height: 1.4;
+		margin-bottom: 0.5rem;
 	}
 
-	.packet-url-link {
+	.multi-url-compact {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.compact-url-link {
 		color: var(--civic-blue);
 		text-decoration: none;
-		word-break: break-word;
-		overflow-wrap: break-word;
 		font-size: 0.85rem;
-		width: 100%;
-		display: block;
-		line-height: 1.4;
-	}
-
-	.packet-url-link:hover {
-		text-decoration: underline;
-	}
-
-	.multi-url-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		width: 100%;
-		margin-top: 0.5rem;
-	}
-
-	.url-item {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		padding: 0.5rem;
+		font-weight: 500;
+		padding: 0.25rem 0.5rem;
 		background: white;
 		border-radius: 4px;
-		border: 1px solid #e0f2fe;
+		border: 1px solid #bae6fd;
+		transition: background 0.2s;
 	}
 
-	.url-label {
-		font-weight: 600;
-		color: var(--civic-dark);
-		font-size: 0.8rem;
-		text-transform: uppercase;
-		letter-spacing: 0.02em;
+	.compact-url-link:hover {
+		background: #f0f9ff;
+		text-decoration: none;
+	}
+
+	.url-separator {
+		color: #94a3b8;
+		font-size: 0.9rem;
 	}
 
 	.city-header {
@@ -333,6 +320,38 @@
 		background: var(--civic-white);
 		border-radius: 8px;
 		border: 1px solid var(--civic-border);
+	}
+
+	.meeting-alert-banner {
+		background: #fef2f2;
+		border: 1px solid #fecaca;
+		border-radius: 6px;
+		padding: 0.75rem 1rem;
+		margin-bottom: 1.5rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.alert-icon {
+		flex-shrink: 0;
+		width: 24px;
+		height: 24px;
+		background: #dc2626;
+		color: white;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-weight: 700;
+		font-size: 0.9rem;
+	}
+
+	.alert-text {
+		color: #991b1b;
+		font-weight: 600;
+		font-size: 0.95rem;
+		text-transform: capitalize;
 	}
 
 	.meeting-header {
@@ -475,8 +494,9 @@
 			font-size: 0.8rem;
 		}
 
-		.packet-url-link {
-			font-size: 0.75rem;
+		.compact-url-link {
+			font-size: 0.8rem;
+			padding: 0.2rem 0.4rem;
 		}
 
 		.back-link {

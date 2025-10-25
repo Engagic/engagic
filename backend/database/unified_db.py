@@ -130,7 +130,7 @@ class AgendaItem:
     meeting_id: str             # Foreign key to Meeting
     title: str
     sequence: int               # Order in agenda
-    attachments: List[str]      # List of PDF URLs
+    attachments: List[Any]      # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
     summary: Optional[str] = None
     topics: Optional[List[str]] = None  # Extracted topics
     created_at: Optional[datetime] = None
@@ -794,6 +794,30 @@ class UnifiedDatabase:
 
         rows = cursor.fetchall()
         return [AgendaItem.from_db_row(row) for row in rows]
+
+    def update_agenda_item(self, item_id: str, summary: str, topics: List[str]) -> None:
+        """
+        Update an agenda item with processed summary and topics.
+
+        Args:
+            item_id: The agenda item ID
+            summary: The processed summary
+            topics: List of extracted topics
+        """
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+
+        topics_json = json.dumps(topics) if topics else None
+
+        cursor.execute("""
+            UPDATE agenda_items
+            SET summary = ?,
+                topics = ?
+            WHERE id = ?
+        """, (summary, topics_json, item_id))
+
+        self.conn.commit()
+        logger.debug(f"Updated agenda item {item_id} with summary and topics")
 
     # ========== Processing Cache Operations ==========
 
