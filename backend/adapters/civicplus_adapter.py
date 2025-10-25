@@ -177,8 +177,8 @@ class CivicPlusAdapter(BaseAdapter):
             # Generate meeting ID from URL
             meeting_id = self._extract_meeting_id(url)
 
-            # Parse meeting status from title
-            meeting_status = self._parse_meeting_status(title)
+            # Parse meeting status from title and date
+            meeting_status = self._parse_meeting_status(title, date_text)
 
             # Log if no PDFs (but still track the meeting)
             if not pdfs:

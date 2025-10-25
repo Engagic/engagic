@@ -70,9 +70,10 @@ class CivicClerkAdapter(BaseAdapter):
             )
 
             event_name = meeting.get("eventName", "")
+            start_time = meeting.get("startDateTime", "")
 
-            # Parse meeting status from title
-            meeting_status = self._parse_meeting_status(event_name)
+            # Parse meeting status from title and start time
+            meeting_status = self._parse_meeting_status(event_name, start_time)
 
             # Log if no packet (but still track the meeting)
             if not packet:

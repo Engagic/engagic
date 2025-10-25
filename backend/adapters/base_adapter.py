@@ -249,43 +249,51 @@ class BaseAdapter:
         element = soup.select_one(selector)
         return element.get_text(strip=True) if element else ""
 
-    def _parse_meeting_status(self, title: str) -> Optional[str]:
+    def _parse_meeting_status(self, title: str, date_str: Optional[str] = None) -> Optional[str]:
         """
-        Parse meeting title for status keywords.
+        Parse meeting title and date/time for status keywords.
 
         Common patterns:
         - [CANCELLED] - City Council Meeting
         - (POSTPONED) Regular Meeting
         - City Council - REVISED
         - RESCHEDULED: Planning Commission
+        - Date field: "POSTPONED - TBD"
 
         Args:
             title: Meeting title to parse
+            date_str: Optional date/time string to check
 
         Returns:
-            Status string (cancelled, postponed, revised, rescheduled) or None
+            Status string (cancelled, postponed, revised, rescheduled, deferred) or None
         """
-        if not title:
-            return None
-
-        title_upper = title.upper()
-
         # Status keywords in priority order
         status_keywords = [
             ('CANCEL', 'cancelled'),
             ('POSTPONE', 'postponed'),
+            ('DEFER', 'deferred'),
             ('RESCHEDULE', 'rescheduled'),
             ('REVISED', 'revised'),
             ('AMENDMENT', 'revised'),
             ('UPDATED', 'revised'),
         ]
+        current_status = None
+        # Check title
+        if title:
+            title_upper = title.upper()
+            for keyword, status in status_keywords:
+                if keyword in title_upper:
+                    logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' in title: {title}")
+                    current_status = status
+        # Check date/time string
+        if date_str:
+            date_upper = str(date_str).upper()
+            for keyword, status in status_keywords:
+                if keyword in date_upper:
+                    logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' in date: {date_str}")
+                    current_status = status
 
-        for keyword, status in status_keywords:
-            if keyword in title_upper:
-                logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' status in title: {title}")
-                return status
-
-        return None
+        return current_status
 
     def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
         """
