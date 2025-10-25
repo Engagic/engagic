@@ -73,10 +73,10 @@ class Meeting:
     city_banana: str         # Foreign key to City
     title: str
     date: Optional[datetime]
-    packet_url: Optional[str]  # Can be JSON list for multiple PDFs
+    packet_url: Optional[str | List[str]]  # Single URL or list for multiple PDFs (main + supplemental)
     summary: Optional[str] = None
     processing_status: str = "pending"  # pending, processing, completed, failed
-    processing_method: Optional[str] = None  # tier1_fast, tier3_gemini_pdf
+    processing_method: Optional[str] = None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
     processing_time: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -96,12 +96,22 @@ class Meeting:
     def from_db_row(cls, row: sqlite3.Row) -> 'Meeting':
         """Create Meeting from database row"""
         row_dict = dict(row)
+
+        # Deserialize packet_url if it's a JSON list
+        packet_url = row_dict.get('packet_url')
+        if packet_url and packet_url.startswith('['):
+            try:
+                packet_url = json.loads(packet_url)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize packet_url JSON: {packet_url}")
+                pass  # Keep as string if JSON parsing fails
+
         return cls(
             id=row_dict['id'],
             city_banana=row_dict['city_banana'],
             title=row_dict['title'],
             date=datetime.fromisoformat(row_dict['date']) if row_dict.get('date') else None,
-            packet_url=row_dict.get('packet_url'),
+            packet_url=packet_url,
             summary=row_dict.get('summary'),
             processing_status=row_dict.get('processing_status', 'pending'),
             processing_method=row_dict.get('processing_method'),
