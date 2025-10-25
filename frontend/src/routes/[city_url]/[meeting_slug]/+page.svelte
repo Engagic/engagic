@@ -159,15 +159,30 @@
 	</div>
 
 	{#if selectedMeeting?.packet_url}
-		{@const packetUrl = Array.isArray(selectedMeeting.packet_url) 
-			? selectedMeeting.packet_url[0] 
-			: selectedMeeting.packet_url}
+		{@const urls = Array.isArray(selectedMeeting.packet_url)
+			? selectedMeeting.packet_url
+			: [selectedMeeting.packet_url]}
 		<div class="packet-url-box">
 			<div class="packet-url-content">
-				<span class="packet-url-label">Summarized through Google's Gemini API from this meeting-packet URL:</span>
-				<a href={packetUrl} target="_blank" rel="noopener noreferrer" class="packet-url-link">
-					{packetUrl}
-				</a>
+				<span class="packet-url-label">
+					Summarized through Google's Gemini API from {urls.length > 1 ? `${urls.length} meeting packets` : 'this meeting packet'}:
+				</span>
+				{#if urls.length === 1}
+					<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="packet-url-link">
+						{urls[0]}
+					</a>
+				{:else}
+					<div class="multi-url-list">
+						{#each urls as url, i}
+							<div class="url-item">
+								<span class="url-label">{i === 0 ? 'Main Agenda' : `Supplemental Material ${i}`}:</span>
+								<a href={url} target="_blank" rel="noopener noreferrer" class="packet-url-link">
+									{url}
+								</a>
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -268,6 +283,32 @@
 
 	.packet-url-link:hover {
 		text-decoration: underline;
+	}
+
+	.multi-url-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		width: 100%;
+		margin-top: 0.5rem;
+	}
+
+	.url-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.5rem;
+		background: white;
+		border-radius: 4px;
+		border: 1px solid #e0f2fe;
+	}
+
+	.url-label {
+		font-weight: 600;
+		color: var(--civic-dark);
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
 	}
 
 	.city-header {
