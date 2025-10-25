@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fix all identified database issues:
-1. Implement processing_cache usage
+1. Implement cache usage
 2. Fix meetings with invalid dates  
 3. Clean orphaned analytics records
 4. Remove old backup table
@@ -256,9 +256,9 @@ class DatabaseFixer:
             
         logger.info(f"Aggregated analytics for {self.stats['analytics_aggregated']} days")
 
-    def migrate_to_processing_cache(self):
-        """Migrate existing summaries to use processing_cache table"""
-        logger.info("Migrating to processing_cache usage...")
+    def migrate_to_cache(self):
+        """Migrate existing summaries to use cache table"""
+        logger.info("Migrating to cache usage...")
         
         with self.db.meetings.get_connection() as conn:
             cursor = conn.cursor()
@@ -283,10 +283,10 @@ class DatabaseFixer:
                 import hashlib
                 content_hash = hashlib.md5(summary.encode()).hexdigest() if summary else None
                 
-                # Insert into processing_cache
+                # Insert into cache
                 try:
                     cursor.execute("""
-                        INSERT OR IGNORE INTO processing_cache
+                        INSERT OR IGNORE INTO cache
                         (packet_url, content_hash, summary_size, 
                          processing_duration_seconds, cache_hit_count, created_at)
                         VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
@@ -306,7 +306,7 @@ class DatabaseFixer:
             
             conn.commit()
             
-        logger.info(f"Migrated {self.stats['cache_migrated']} entries to processing_cache")
+        logger.info(f"Migrated {self.stats['cache_migrated']} entries to cache")
 
     def add_data_validation_triggers(self):
         """Add triggers to prevent future data issues"""
@@ -349,8 +349,8 @@ class DatabaseFixer:
             invalid_dates = cursor.fetchone()[0]
             logger.info(f"Meetings with invalid dates: {invalid_dates}")
             
-            # Check processing_cache
-            cursor.execute("SELECT COUNT(*) FROM processing_cache")
+            # Check cache
+            cursor.execute("SELECT COUNT(*) FROM cache")
             cache_entries = cursor.fetchone()[0]
             logger.info(f"Processing cache entries: {cache_entries}")
             
@@ -387,7 +387,7 @@ class DatabaseFixer:
             self.clean_orphaned_analytics()
             self.remove_backup_table()
             self.implement_search_analytics()
-            self.migrate_to_processing_cache()
+            self.migrate_to_cache()
             self.add_data_validation_triggers()
             self.verify_fixes()
             

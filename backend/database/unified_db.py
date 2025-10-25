@@ -34,7 +34,7 @@ class City:
     name: str                # Palo Alto
     state: str               # CA
     vendor: str              # primegov, legistar, granicus, etc.
-    vendor_slug: str         # cityofpaloalto (vendor-specific)
+    slug: str         # cityofpaloalto (vendor-specific)
     county: Optional[str] = None
     status: str = "active"
     created_at: Optional[datetime] = None
@@ -58,7 +58,7 @@ class City:
             name=row_dict['name'],
             state=row_dict['state'],
             vendor=row_dict['vendor'],
-            vendor_slug=row_dict['vendor_slug'],
+            slug=row_dict['slug'],
             county=row_dict.get('county'),
             status=row_dict.get('status', 'active'),
             created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None,
@@ -220,7 +220,7 @@ class UnifiedDatabase:
             name TEXT NOT NULL,
             state TEXT NOT NULL,
             vendor TEXT NOT NULL,
-            vendor_slug TEXT NOT NULL,
+            slug TEXT NOT NULL,
             county TEXT,
             status TEXT DEFAULT 'active',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -229,7 +229,7 @@ class UnifiedDatabase:
         );
 
         -- City zipcodes: Many-to-many relationship
-        CREATE TABLE IF NOT EXISTS city_zipcodes (
+        CREATE TABLE IF NOT EXISTS zipcodes (
             banana TEXT NOT NULL,
             zipcode TEXT NOT NULL,
             is_primary BOOLEAN DEFAULT FALSE,
@@ -255,7 +255,7 @@ class UnifiedDatabase:
         );
 
         -- Agenda items: Individual items within meetings
-        CREATE TABLE IF NOT EXISTS agenda_items (
+        CREATE TABLE IF NOT EXISTS items (
             id TEXT PRIMARY KEY,
             meeting_id TEXT NOT NULL,
             title TEXT NOT NULL,
@@ -268,7 +268,7 @@ class UnifiedDatabase:
         );
 
         -- Processing cache: Track PDF processing for cost optimization
-        CREATE TABLE IF NOT EXISTS processing_cache (
+        CREATE TABLE IF NOT EXISTS cache (
             packet_url TEXT PRIMARY KEY,
             content_hash TEXT,
             processing_method TEXT,
@@ -279,7 +279,7 @@ class UnifiedDatabase:
         );
 
         -- Processing queue: Decoupled PDF processing queue (Phase 4)
-        CREATE TABLE IF NOT EXISTS processing_queue (
+        CREATE TABLE IF NOT EXISTS queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             packet_url TEXT NOT NULL UNIQUE,
             meeting_id TEXT,
@@ -356,14 +356,14 @@ class UnifiedDatabase:
         CREATE INDEX IF NOT EXISTS idx_cities_vendor ON cities(vendor);
         CREATE INDEX IF NOT EXISTS idx_cities_state ON cities(state);
         CREATE INDEX IF NOT EXISTS idx_cities_status ON cities(status);
-        CREATE INDEX IF NOT EXISTS idx_city_zipcodes_zipcode ON city_zipcodes(zipcode);
-        CREATE INDEX IF NOT EXISTS idx_meetings_city ON meetings(banana);
+        CREATE INDEX IF NOT EXISTS idx_zipcodes_zipcode ON zipcodes(zipcode);
+        CREATE INDEX IF NOT EXISTS idx_meetings_banana ON meetings(banana);
         CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
         CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
-        CREATE INDEX IF NOT EXISTS idx_processing_cache_hash ON processing_cache(content_hash);
-        CREATE INDEX IF NOT EXISTS idx_queue_status ON processing_queue(status);
-        CREATE INDEX IF NOT EXISTS idx_queue_priority ON processing_queue(priority DESC);
-        CREATE INDEX IF NOT EXISTS idx_queue_city ON processing_queue(banana);
+        CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(content_hash);
+        CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status);
+        CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue(priority DESC);
+        CREATE INDEX IF NOT EXISTS idx_queue_city ON queue(banana);
         CREATE INDEX IF NOT EXISTS idx_tenant_coverage_city ON tenant_coverage(banana);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_tenant ON tracked_items(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_city ON tracked_items(banana);
@@ -380,7 +380,7 @@ class UnifiedDatabase:
         banana: Optional[str] = None,
         name: Optional[str] = None,
         state: Optional[str] = None,
-        vendor_slug: Optional[str] = None,
+        slug: Optional[str] = None,
         zipcode: Optional[str] = None
     ) -> Optional[City]:
         """
@@ -388,14 +388,14 @@ class UnifiedDatabase:
 
         Uses most specific parameter provided:
         - banana: Direct primary key lookup (fastest)
-        - vendor_slug: Lookup by vendor-specific identifier
+        - slug: Lookup by vendor-specific identifier
         - zipcode: Lookup via city_zipcodes join
         - name + state: Normalized name matching
 
         Examples:
             get_city(banana="paloaltoCA")
             get_city(name="Palo Alto", state="CA")
-            get_city(vendor_slug="cityofpaloalto")
+            get_city(slug="cityofpaloalto")
             get_city(zipcode="94301")
         """
         if self.conn is None:
@@ -405,9 +405,9 @@ class UnifiedDatabase:
         if banana:
             # Direct primary key lookup
             cursor.execute("SELECT * FROM cities WHERE banana = ?", (banana,))
-        elif vendor_slug:
+        elif slug:
             # Lookup by vendor slug
-            cursor.execute("SELECT * FROM cities WHERE vendor_slug = ?", (vendor_slug,))
+            cursor.execute("SELECT * FROM cities WHERE slug = ?", (slug,))
         elif zipcode:
             # Lookup via zipcode join
             cursor.execute("""
@@ -510,7 +510,7 @@ class UnifiedDatabase:
         name: str,
         state: str,
         vendor: str,
-        vendor_slug: str,
+        slug: str,
         county: Optional[str] = None,
         zipcodes: Optional[List[str]] = None
     ) -> City:
@@ -520,9 +520,9 @@ class UnifiedDatabase:
 
         cursor.execute("""
             INSERT OR REPLACE INTO cities
-            (banana, name, state, vendor, vendor_slug, county)
+            (banana, name, state, vendor, slug, county)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (banana, name, state, vendor, vendor_slug, county))
+        """, (banana, name, state, vendor, slug, county))
 
         # Add zipcodes if provided
         if zipcodes:
@@ -838,7 +838,7 @@ class UnifiedDatabase:
         if row:
             # Update cache hit count
             cursor.execute("""
-                UPDATE processing_cache
+                UPDATE cache
                 SET cache_hit_count = cache_hit_count + 1,
                     last_accessed = CURRENT_TIMESTAMP
                 WHERE packet_url = ?
@@ -862,7 +862,7 @@ class UnifiedDatabase:
         lookup_url = json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
 
         cursor.execute("""
-            INSERT OR REPLACE INTO processing_cache
+            INSERT OR REPLACE INTO cache
             (packet_url, processing_method, processing_time, cache_hit_count)
             VALUES (?, ?, ?, 0)
         """, (lookup_url, processing_method, processing_time))
@@ -910,7 +910,7 @@ class UnifiedDatabase:
         try:
             cursor.execute(
                 """
-                INSERT INTO processing_queue
+                INSERT INTO queue
                 (packet_url, meeting_id, banana, priority, processing_metadata)
                 VALUES (?, ?, ?, ?, ?)
                 """,
@@ -938,7 +938,7 @@ class UnifiedDatabase:
         if banana:
             cursor.execute(
                 """
-                SELECT * FROM processing_queue
+                SELECT * FROM queue
                 WHERE status = 'pending' AND banana = ?
                 ORDER BY priority DESC, created_at ASC
                 LIMIT 1
@@ -948,7 +948,7 @@ class UnifiedDatabase:
         else:
             cursor.execute(
                 """
-                SELECT * FROM processing_queue
+                SELECT * FROM queue
                 WHERE status = 'pending'
                 ORDER BY priority DESC, created_at ASC
                 LIMIT 1
@@ -960,7 +960,7 @@ class UnifiedDatabase:
             # Mark as processing
             cursor.execute(
                 """
-                UPDATE processing_queue
+                UPDATE queue
                 SET status = 'processing', started_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -982,7 +982,7 @@ class UnifiedDatabase:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            UPDATE processing_queue
+            UPDATE queue
             SET status = 'completed', completed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -1001,7 +1001,7 @@ class UnifiedDatabase:
         if increment_retry:
             cursor.execute(
                 """
-                UPDATE processing_queue
+                UPDATE queue
                 SET status = 'failed',
                     error_message = ?,
                     retry_count = retry_count + 1,
@@ -1013,7 +1013,7 @@ class UnifiedDatabase:
         else:
             cursor.execute(
                 """
-                UPDATE processing_queue
+                UPDATE queue
                 SET status = 'failed',
                     error_message = ?,
                     completed_at = CURRENT_TIMESTAMP
@@ -1032,7 +1032,7 @@ class UnifiedDatabase:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            UPDATE processing_queue
+            UPDATE queue
             SET status = 'pending', error_message = NULL
             WHERE status = 'failed' AND retry_count < ?
             """,
@@ -1055,7 +1055,7 @@ class UnifiedDatabase:
         cursor.execute(
             """
             SELECT status, COUNT(*) as count
-            FROM processing_queue
+            FROM queue
             GROUP BY status
             """
         )
@@ -1066,7 +1066,7 @@ class UnifiedDatabase:
         cursor.execute(
             """
             SELECT COUNT(*) as count
-            FROM processing_queue
+            FROM queue
             WHERE status = 'failed' AND retry_count >= 3
             """
         )
@@ -1077,7 +1077,7 @@ class UnifiedDatabase:
         cursor.execute(
             """
             SELECT AVG(julianday(completed_at) - julianday(started_at)) * 86400 as avg_seconds
-            FROM processing_queue
+            FROM queue
             WHERE status = 'completed' AND completed_at IS NOT NULL AND started_at IS NOT NULL
             """
         )
@@ -1098,7 +1098,7 @@ class UnifiedDatabase:
         query = """
             SELECT m.packet_url, m.id, m.banana, m.date
             FROM meetings m
-            LEFT JOIN processing_queue pq ON m.packet_url = pq.packet_url
+            LEFT JOIN queue pq ON m.packet_url = pq.packet_url
             WHERE m.packet_url IS NOT NULL
             AND m.summary IS NULL
             AND pq.id IS NULL
@@ -1128,7 +1128,7 @@ class UnifiedDatabase:
             try:
                 cursor.execute(
                     """
-                    INSERT INTO processing_queue
+                    INSERT INTO queue
                     (packet_url, meeting_id, banana, priority)
                     VALUES (?, ?, ?, ?)
                     """,

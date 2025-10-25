@@ -294,8 +294,8 @@ class Conductor:
             logger.info(f"Syncing {city.banana} with {city.vendor}")
             result.status = SyncStatus.IN_PROGRESS
 
-            # Get adapter (vendor_slug is vendor-specific identifier)
-            adapter = self._get_adapter(city.vendor, city.vendor_slug)
+            # Get adapter (slug is vendor-specific identifier)
+            adapter = self._get_adapter(city.vendor, city.slug)
 
             if not adapter:
                 result.status = SyncStatus.SKIPPED

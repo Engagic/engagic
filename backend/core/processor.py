@@ -146,8 +146,8 @@ class AgendaProcessor:
             if meeting_id:
                 self.db.update_meeting_summary(meeting_id, summary, method, processing_time)
 
-            # Store in processing_cache
-            self._store_in_processing_cache(packet_url, summary, processing_time)
+            # Store in cache
+            self._store_in_cache(packet_url, summary, processing_time)
 
             logger.info(f"[Processing] SUCCESS - {city_banana}")
 
@@ -651,7 +651,7 @@ Attached documents:
         return max(1, len(text) // chars_per_page)
     
     def _update_cache_hit_count(self, packet_url: str):
-        """Update cache hit count in processing_cache table"""
+        """Update cache hit count in cache table"""
         try:
             conn = self.db.conn
             if conn:
@@ -663,7 +663,7 @@ Attached documents:
                     lookup_url = json.dumps(packet_url)
                 
                 cursor.execute("""
-                    UPDATE processing_cache 
+                    UPDATE cache 
                     SET cache_hit_count = cache_hit_count + 1,
                         last_accessed = CURRENT_TIMESTAMP
                     WHERE packet_url = ?
@@ -673,8 +673,8 @@ Attached documents:
         except Exception as e:
             logger.debug(f"Could not update cache hit count: {e}")
     
-    def _store_in_processing_cache(self, packet_url: str, summary: str, processing_time: float):
-        """Store processing results in processing_cache table"""
+    def _store_in_cache(self, packet_url: str, summary: str, processing_time: float):
+        """Store processing results in cache table"""
         try:
             conn = self.db.conn
             if conn:
@@ -689,7 +689,7 @@ Attached documents:
                 content_hash = hashlib.md5(summary.encode()).hexdigest() if summary else None
                 
                 cursor.execute("""
-                    INSERT OR REPLACE INTO processing_cache
+                    INSERT OR REPLACE INTO cache
                     (packet_url, content_hash, processing_method,
                      processing_time, cache_hit_count, created_at)
                     VALUES (?, ?, 'tier1_pypdf2_gemini', ?, 0, CURRENT_TIMESTAMP)
@@ -700,9 +700,9 @@ Attached documents:
                 ))
                 
                 conn.commit()
-                logger.debug(f"Stored in processing_cache: {packet_url}")
+                logger.debug(f"Stored in cache: {packet_url}")
         except Exception as e:
-            logger.error(f"Failed to store in processing_cache: {e}")
+            logger.error(f"Failed to store in cache: {e}")
     
     def process_batch_agendas(
         self, 
