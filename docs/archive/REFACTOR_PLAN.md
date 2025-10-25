@@ -53,7 +53,7 @@
 
 - **Before:** 3 databases, 15+ lookup methods, 1,400 lines
 - **After:** 1 database, single get_city() method, 979 lines
-- **Pattern:** Unified city lookup with optional parameters (banana, name+state, vendor_slug, zipcode)
+- **Pattern:** Unified city lookup with optional parameters (banana, name+state, slug, zipcode)
 - **Win:** city_banana as primary key provides vendor-agnostic identifier ("paloaltoCA")
 
 ### Adapter Layer (Phase 2)
