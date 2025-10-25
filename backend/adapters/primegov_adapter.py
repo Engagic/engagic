@@ -66,9 +66,14 @@ class PrimeGovAdapter(BaseAdapter):
                 None
             )
 
+            title = meeting.get("title", "")
+
+            # Parse meeting status from title
+            meeting_status = self._parse_meeting_status(title)
+
             result = {
                 "meeting_id": str(meeting["id"]),
-                "title": meeting.get("title", ""),
+                "title": title,
                 "start": meeting.get("dateTime", ""),
             }
 
@@ -76,8 +81,11 @@ class PrimeGovAdapter(BaseAdapter):
                 result["packet_url"] = self._build_packet_url(packet_doc)
             else:
                 logger.debug(
-                    f"[primegov:{self.slug}] No packet found for: {meeting.get('title')} "
+                    f"[primegov:{self.slug}] No packet found for: {title} "
                     f"on {meeting.get('date')}"
                 )
+
+            if meeting_status:
+                result["meeting_status"] = meeting_status
 
             yield result
