@@ -194,9 +194,9 @@ class AgendaProcessor:
 
         # Tier 1: Rust lopdf extraction + Gemini text API (free tier)
         try:
-            text = self.pdf_extractor.extract_from_url(url)
-            if text:
-                summary = self._summarize_with_gemini(text)
+            result = self.pdf_extractor.extract_from_url(url)
+            if result.get('success') and result.get('text'):
+                summary = self._summarize_with_gemini(result['text'])
                 logger.info(f"[Tier1] SUCCESS - {url}")
                 return summary, "tier1_rust_gemini"
             else:
@@ -369,8 +369,9 @@ Skip pure administrative items unless they have significant public impact."""
         for i, url in enumerate(urls, 1):
             logger.info(f"Extracting text from PDF {i}/{len(urls)}: {url}")
             try:
-                text = self.pdf_extractor.extract_from_url(url)
-                if text:
+                result = self.pdf_extractor.extract_from_url(url)
+                if result.get('success') and result.get('text'):
+                    text = result['text']
                     # Label each document for model context
                     doc_label = "MAIN AGENDA" if i == 1 else f"SUPPLEMENTAL MATERIAL {i-1}"
                     all_text_parts.append(f"=== {doc_label} ===\n{text}")
@@ -468,8 +469,9 @@ Skip pure administrative items unless they have significant public impact."""
                 logger.info(f"[Item] Extracting from: {att_name}")
 
                 try:
-                    text = self.pdf_extractor.extract_from_url(att_url)
-                    if text:
+                    result = self.pdf_extractor.extract_from_url(att_url)
+                    if result.get('success') and result.get('text'):
+                        text = result['text']
                         all_text_parts.append(f"=== {att_name} ===\n{text}")
                         processed_count += 1
                         logger.info(f"[Rust] Extracted {len(text)} chars from {att_name}")
@@ -738,9 +740,12 @@ Attached documents:
                     # Extract text from all URLs
                     all_texts = []
                     for url in urls:
-                        text = self._tier1_extract_text(url)
-                        if text and self._is_good_text_quality(text):
-                            all_texts.append(text)
+                        result = self.pdf_extractor.extract_from_url(url)
+                        if result.get('success') and result.get('text'):
+                            text = result['text']
+                            # Validate text quality using the extractor's validator
+                            if self.pdf_extractor.validate_text(text):
+                                all_texts.append(text)
                     
                     if not all_texts:
                         logger.warning(f"Skipping {req['custom_id']} - failed text extraction from all URLs")

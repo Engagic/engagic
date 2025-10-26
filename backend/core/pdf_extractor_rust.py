@@ -1,14 +1,14 @@
 """Rust PDF extractor - thin Python wrapper"""
 
 import logging
+import os
 import time
-from typing import Dict, Optional
+from typing import Dict, Any
 from engagic_core import PdfExtractor
 
 logger = logging.getLogger("engagic")
 
 # Enable Rust tracing output (set RUST_LOG env var if not set)
-import os
 if 'RUST_LOG' not in os.environ:
     os.environ['RUST_LOG'] = 'debug'
 
@@ -19,7 +19,7 @@ class RustPdfExtractor:
     def __init__(self):
         self._extractor = PdfExtractor()
 
-    def extract_from_url(self, url: str) -> Dict[str, any]:
+    def extract_from_url(self, url: str) -> Dict[str, Any]:
         """Extract text from PDF URL
 
         Returns dict with extraction results:
@@ -64,7 +64,7 @@ class RustPdfExtractor:
                 'extraction_time': extraction_time
             }
 
-    def extract_from_bytes(self, pdf_bytes: bytes) -> Dict[str, any]:
+    def extract_from_bytes(self, pdf_bytes: bytes) -> Dict[str, Any]:
         """Extract text from PDF bytes
 
         Returns dict with extraction results (same format as extract_from_url)
@@ -85,7 +85,7 @@ class RustPdfExtractor:
                     'extraction_time': extraction_time
                 }
             else:
-                logger.warning(f"[Rust] Extraction from bytes failed")
+                logger.warning("[Rust] Extraction from bytes failed")
                 return {
                     'success': False,
                     'error': 'Extraction returned no result',

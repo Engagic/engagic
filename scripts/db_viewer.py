@@ -162,7 +162,7 @@ class DatabaseViewer:
         """Display processing queue"""
         stats = self.db.get_queue_stats()
 
-        print(f"\n=== PROCESSING QUEUE STATISTICS ===")
+        print("\n=== PROCESSING QUEUE STATISTICS ===")
         print(f"Pending:     {stats.get('pending_count', 0)}")
         print(f"Processing:  {stats.get('processing_count', 0)}")
         print(f"Completed:   {stats.get('completed_count', 0)}")
