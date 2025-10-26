@@ -145,8 +145,8 @@ if args.pdf_url:
             from backend.core.processor import AgendaProcessor
 
             # Check if LLM is available
-            if not processor.llm_processor:
-                print("   SKIPPED: No LLM processor available (set GEMINI_API_KEY)")
+            if not processor.client:
+                print("   SKIPPED: No LLM client available (set GEMINI_API_KEY)")
             else:
                 meeting_data = {
                     "packet_url": pdf_url,
