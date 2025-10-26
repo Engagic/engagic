@@ -594,7 +594,7 @@ class Conductor:
                 try:
                     meeting_data = {
                         "packet_url": meeting.packet_url,
-                        "city_banana": meeting.city_banana,
+                        "city_banana": meeting.banana,
                         "meeting_name": meeting.title,
                         "meeting_date": meeting.date.isoformat() if meeting.date else None,
                         "meeting_id": meeting.id,
@@ -736,7 +736,7 @@ class Conductor:
                 logger.info("[MonolithicProcessing] No items found, processing meeting as single unit")
                 meeting_data = {
                     "packet_url": meeting.packet_url,
-                    "city_banana": meeting.city_banana,
+                    "city_banana": meeting.banana,
                     "meeting_name": meeting.title,
                     "meeting_date": meeting.date.isoformat() if meeting.date else None,
                     "meeting_id": meeting.id,
@@ -782,7 +782,12 @@ class Conductor:
             }
 
             # Process this item
-            result = self.processor.process_agenda_item(item_data, meeting.city_banana)
+            if not self.processor:
+                logger.warning(f"Skipping {item.title[:50]} - processor not available")
+                failed_items.append(item.sequence)
+                continue
+
+            result = self.processor.process_agenda_item(item_data, meeting.banana)
 
             if result['success']:
                 # Update item in database
@@ -805,7 +810,7 @@ class Conductor:
                 logger.warning(f"[ItemProcessing] ✗ Failed: {result.get('error')}")
 
         # Combine item summaries into meeting summary
-        if processed_items:
+        if processed_items and self.processor:
             combined_summary = self.processor.combine_item_summaries(
                 item_summaries=processed_items,
                 meeting_title=meeting.title
