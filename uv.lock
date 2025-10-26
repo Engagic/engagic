@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 
 [[package]]
@@ -241,7 +241,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.15" },
     { name = "anthropic", specifier = ">=0.64.0" },
     { name = "beautifulsoup4", specifier = ">=4.13.5" },
-    { name = "engagic-core", directory = "infra" },
+    { name = "engagic-core", editable = "infra" },
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "google-genai" },
     { name = "lxml" },
@@ -265,7 +265,7 @@ provides-extras = ["premium"]
 [[package]]
 name = "engagic-core"
 version = "0.1.0"
-source = { directory = "infra" }
+source = { editable = "infra" }
 dependencies = [
     { name = "maturin" },
 ]

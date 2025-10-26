@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
-use lopdf::Document;
+use poppler::Document;
 use unicode_normalization::UnicodeNormalization;
 use regex::Regex;
 
@@ -40,12 +40,13 @@ impl PdfExtractor {
     }
 
     /// Extract text from PDF bytes
+    /// Confidence: 9/10 - poppler handles Identity-H and other complex encodings
     pub fn extract_from_bytes(&self, pdf_bytes: &[u8]) -> PyResult<Option<PdfExtractionResult>> {
-        // Parse PDF
-        let document = Document::load_mem(pdf_bytes)
+        // Load PDF document using poppler
+        let document = Document::from_data(pdf_bytes, None)
             .map_err(|e| PyValueError::new_err(format!("PDF parsing failed: {}", e)))?;
 
-        let page_count = document.get_pages().len();
+        let page_count = document.n_pages() as usize;
 
         // Limit pages
         let pages_to_process = page_count.min(self.max_pages);
@@ -53,21 +54,23 @@ impl PdfExtractor {
         // Extract text from each page
         let mut all_text = Vec::new();
 
-        for page_num in 1..=pages_to_process {
-            match extract_page_text(&document, page_num as u32) {
-                Ok(text) if !text.is_empty() => {
-                    all_text.push(format!("--- PAGE {} ---\n{}", page_num, text));
+        for page_num in 0..pages_to_process {
+            match document.page(page_num as i32) {
+                Some(page) => {
+                    if let Some(text) = page.text() {
+                        if !text.is_empty() {
+                            all_text.push(format!("--- PAGE {} ---\n{}", page_num + 1, text));
+                        }
+                    }
                 }
-                Ok(_) => {
-                    // Empty page, skip
-                }
-                Err(e) => {
-                    tracing::debug!("Failed to extract page {}: {}", page_num, e);
+                None => {
+                    tracing::debug!("Failed to get page {}", page_num + 1);
                 }
             }
         }
 
         if all_text.is_empty() {
+            tracing::warn!("No text extracted from PDF");
             return Ok(None);
         }
 
@@ -86,14 +89,6 @@ impl PdfExtractor {
             "Extracted text preview (first 500 chars): {}...",
             preview.replace('\n', " ")
         );
-
-        // Check for lopdf encoding failures (Identity-H, etc.)
-        if normalized.contains("Unimplemented") || normalized.contains("?Identity-H") {
-            tracing::warn!(
-                "Detected unsupported font encoding (Identity-H/CIDFont). Lopdf cannot decode this PDF. Fall back to PyMuPDF."
-            );
-            return Ok(None);
-        }
 
         // Validate quality
         if !self.validator.is_good_quality(&normalized) {
@@ -122,18 +117,6 @@ pub struct PdfExtractionResult {
     pub page_count: usize,
     #[pyo3(get)]
     pub pages_processed: usize,
-}
-
-// Extract text from a single page using lopdf
-// Confidence: 7/10 - lopdf's text extraction is good but not perfect for all PDFs
-fn extract_page_text(document: &Document, page_num: u32) -> Result<String, Box<dyn std::error::Error>> {
-    let _page_id = document
-        .get_pages()
-        .get(&page_num)
-        .ok_or("Page not found")?;
-
-    let text = document.extract_text(&[page_num])?;
-    Ok(text)
 }
 
 // Normalize extracted text
