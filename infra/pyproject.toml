@@ -11,6 +11,9 @@ classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
 ]
+dependencies = [
+    "maturin>=1.9.6",
+]
 
 [tool.maturin]
 module-name = "engagic_core"
