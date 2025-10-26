@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [[package]]
@@ -266,6 +266,12 @@ provides-extras = ["premium"]
 name = "engagic-core"
 version = "0.1.0"
 source = { directory = "infra" }
+dependencies = [
+    { name = "maturin" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "maturin", specifier = ">=1.9.6" }]
 
 [[package]]
 name = "eval-type-backport"
