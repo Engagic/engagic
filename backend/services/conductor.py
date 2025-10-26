@@ -350,12 +350,12 @@ class Conductor:
                     # Create Meeting object
                     meeting_obj = Meeting(
                         id=meeting.get("meeting_id", ""),
-                        city_banana=city.banana,
+                        banana=city.banana,
                         title=meeting.get("title", ""),
                         date=meeting_date,
                         packet_url=meeting.get("packet_url"),
                         summary=None,
-                        meeting_status=meeting.get("meeting_status"),
+                        status=meeting.get("meeting_status"),
                         processing_status="pending"
                     )
 
@@ -402,7 +402,7 @@ class Conductor:
                         self.db.enqueue_for_processing(
                             packet_url=meeting["packet_url"],
                             meeting_id=stored_meeting.id,
-                            city_banana=city.banana,
+                            banana=city.banana,
                             priority=priority
                         )
                         logger.debug(f"Enqueued {meeting['packet_url']} with priority {priority}")
