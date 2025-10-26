@@ -87,6 +87,14 @@ impl PdfExtractor {
             preview.replace('\n', " ")
         );
 
+        // Check for lopdf encoding failures (Identity-H, etc.)
+        if normalized.contains("Unimplemented") || normalized.contains("?Identity-H") {
+            tracing::warn!(
+                "Detected unsupported font encoding (Identity-H/CIDFont). Lopdf cannot decode this PDF. Fall back to PyMuPDF."
+            );
+            return Ok(None);
+        }
+
         // Validate quality
         if !self.validator.is_good_quality(&normalized) {
             return Ok(None);
