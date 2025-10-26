@@ -192,13 +192,13 @@ class AgendaProcessor:
         if isinstance(url, list):
             return self._process_multiple_pdfs(url)
 
-        # Tier 1: Rust poppler extraction + Gemini text API (free tier)
+        # Tier 1: PyMuPDF extraction + Gemini text API (free tier)
         try:
             result = self.pdf_extractor.extract_from_url(url)
             if result.get('success') and result.get('text'):
                 summary = self._summarize_with_gemini(result['text'])
                 logger.info(f"[Tier1] SUCCESS - {url}")
-                return summary, "tier1_rust_gemini"
+                return summary, "tier1_pymupdf_gemini"
             else:
                 logger.warning(f"[Tier1] FAILED - No text extracted or poor quality - {url}")
 
@@ -375,12 +375,12 @@ Skip pure administrative items unless they have significant public impact."""
                     # Label each document for model context
                     doc_label = "MAIN AGENDA" if i == 1 else f"SUPPLEMENTAL MATERIAL {i-1}"
                     all_text_parts.append(f"=== {doc_label} ===\n{text}")
-                    logger.info(f"[Rust] Extracted {len(text)} chars from document {i}")
+                    logger.info(f"[PyMuPDF] Extracted {len(text)} chars from document {i}")
                 else:
-                    logger.warning(f"[Rust] No text from PDF {i}")
+                    logger.warning(f"[PyMuPDF] No text from PDF {i}")
                     failed_pdfs.append(i)
             except Exception as e:
-                logger.error(f"[Rust] Failed to extract from PDF {i}: {type(e).__name__}: {str(e)}")
+                logger.error(f"[PyMuPDF] Failed to extract from PDF {i}: {type(e).__name__}: {str(e)}")
                 failed_pdfs.append(i)
 
         # If we got no usable text from any PDF, fail fast
@@ -474,11 +474,11 @@ Skip pure administrative items unless they have significant public impact."""
                         text = result['text']
                         all_text_parts.append(f"=== {att_name} ===\n{text}")
                         processed_count += 1
-                        logger.info(f"[Rust] Extracted {len(text)} chars from {att_name}")
+                        logger.info(f"[PyMuPDF] Extracted {len(text)} chars from {att_name}")
                     else:
-                        logger.warning(f"[Rust] No text from {att_name}")
+                        logger.warning(f"[PyMuPDF] No text from {att_name}")
                 except Exception as e:
-                    logger.warning(f"[Rust] Failed to extract from {att_name}: {e}")
+                    logger.warning(f"[PyMuPDF] Failed to extract from {att_name}: {e}")
 
             # If no usable text, return empty result
             if not all_text_parts:

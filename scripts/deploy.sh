@@ -41,22 +41,6 @@ check_uv() {
     fi
 }
 
-check_rust_deps() {
-    # Check if Rust is installed
-    if ! command -v cargo &> /dev/null; then
-        warn "Rust toolchain not found, installing dependencies..."
-        bash "$APP_DIR/scripts/setup_vps_deps.sh"
-        source "$HOME/.cargo/env"
-    fi
-
-    # Verify poppler-glib is available
-    if ! pkg-config --exists poppler-glib; then
-        warn "Poppler library not found, installing dependencies..."
-        bash "$APP_DIR/scripts/setup_vps_deps.sh"
-    fi
-
-    log "Rust dependencies verified"
-}
 
 check_api_process() {
     if [ -f "$API_PID_FILE" ]; then
@@ -75,7 +59,6 @@ check_api_process() {
 setup_env() {
     log "Setting up Python environment with uv..."
     check_uv
-    check_rust_deps
 
     cd "$APP_DIR"
 
@@ -85,10 +68,10 @@ setup_env() {
         log "Created virtual environment with uv"
     fi
 
-    # Install dependencies with uv (will build Rust extension via maturin)
+    # Install dependencies with uv
     source "$VENV_DIR/bin/activate"
     uv sync
-    log "Dependencies installed (including Rust extensions)"
+    log "Dependencies installed"
 }
 
 create_daemon_service() {
@@ -334,11 +317,18 @@ quick_update() {
     log "Quick update..."
     cd "$APP_DIR"
     git pull
-    check_rust_deps
     source "$VENV_DIR/bin/activate"
     uv sync
     restart_all
     log "Update complete!"
+}
+
+sync_deps() {
+    log "Syncing dependencies..."
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    uv sync
+    log "Dependencies synced!"
 }
 
 deploy_full() {
@@ -379,13 +369,6 @@ process_unprocessed() {
     python -m backend.services.background_processor --process-all-unprocessed
 }
 
-rust_build() {
-    log "Quick Rust rebuild (debug mode)..."
-    cd "$APP_DIR"
-    bash scripts/setup_rust.sh
-    log "Rust extension rebuilt"
-}
-
 show_help() {
     echo "Engagic Deployment Script"
     echo ""
@@ -402,9 +385,7 @@ show_help() {
     echo "  update                    - Quick update (git pull + restart)"
     echo "  deploy                    - Full deployment"
     echo "  test                      - Test all services"
-    echo ""
-    echo "Development:"
-    echo "  rubu                      - Quick Rust rebuild (debug mode)"
+    echo "  sync                      - Sync dependencies"
     echo ""
     echo "API Commands:"
     echo "  logs-api                  - Show API logs"
@@ -465,9 +446,7 @@ case "${1:-help}" in
     # Deployment
     update)         quick_update ;;
     deploy)         deploy_full ;;
-
-    # Development
-    rubu)           rust_build ;;
+    sync)           sync_deps ;;
 
     # Daemon specific
     daemon-status)  daemon_status ;;
