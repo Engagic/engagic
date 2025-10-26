@@ -417,7 +417,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
         }
 
     # Get cached meetings
-    meetings = db.get_meetings(city_bananas=[city.banana], limit=50)
+    meetings = db.get_meetings(bananas=[city.banana], limit=50)
 
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city.name}, {city.state}")
@@ -469,7 +469,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         }
 
     # Get cached meetings
-    meetings = db.get_meetings(city_bananas=[city.banana], limit=50)
+    meetings = db.get_meetings(bananas=[city.banana], limit=50)
 
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
@@ -608,7 +608,7 @@ async def handle_ambiguous_city_search(
         city = cities[0]
 
         # Get meetings for this city
-        meetings = db.get_meetings(city_bananas=[city.banana], limit=50)
+        meetings = db.get_meetings(bananas=[city.banana], limit=50)
 
         if meetings:
             logger.info(f"Found {len(meetings)} cached meetings for {city.name}, {city.state}")
@@ -969,7 +969,7 @@ async def get_analytics():
         cursor.execute("SELECT COUNT(DISTINCT state) as states_covered FROM cities")
         states_covered = dict(cursor.fetchone())
 
-        cursor.execute("SELECT COUNT(DISTINCT zipcode) as total_zipcodes FROM city_zipcodes")
+        cursor.execute("SELECT COUNT(DISTINCT zipcode) as total_zipcodes FROM zipcodes")
         zipcodes_covered = dict(cursor.fetchone())
 
         # Meeting stats

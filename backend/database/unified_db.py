@@ -389,7 +389,7 @@ class UnifiedDatabase:
         Uses most specific parameter provided:
         - banana: Direct primary key lookup (fastest)
         - slug: Lookup by vendor-specific identifier
-        - zipcode: Lookup via city_zipcodes join
+        - zipcode: Lookup via zipcodes join
         - name + state: Normalized name matching
 
         Examples:
@@ -412,7 +412,7 @@ class UnifiedDatabase:
             # Lookup via zipcode join
             cursor.execute("""
                 SELECT c.* FROM cities c
-                JOIN city_zipcodes cz ON c.banana = cz.banana
+                JOIN zipcodes cz ON c.banana = cz.banana
                 WHERE cz.zipcode = ?
                 LIMIT 1
             """, (zipcode,))
@@ -529,7 +529,7 @@ class UnifiedDatabase:
             for i, zipcode in enumerate(zipcodes):
                 is_primary = (i == 0)
                 cursor.execute("""
-                    INSERT OR IGNORE INTO city_zipcodes
+                    INSERT OR IGNORE INTO zipcodes
                     (banana, zipcode, is_primary)
                     VALUES (?, ?, ?)
                 """, (banana, zipcode, is_primary))
@@ -548,7 +548,7 @@ class UnifiedDatabase:
             raise DatabaseConnectionError("Database connection not established")
         cursor = self.conn.cursor()
         cursor.execute("""
-            SELECT zipcode FROM city_zipcodes
+            SELECT zipcode FROM zipcodes
             WHERE banana = ?
             ORDER BY is_primary DESC, zipcode
         """, (banana,))
@@ -590,7 +590,7 @@ class UnifiedDatabase:
 
         if bananas:
             placeholders = ','.join('?' * len(bananas))
-            conditions.append(f"bananas IN ({placeholders})")
+            conditions.append(f"banana IN ({placeholders})")
             params.extend(bananas)
 
         if start_date:
@@ -753,7 +753,7 @@ class UnifiedDatabase:
             topics_json = json.dumps(item.topics) if item.topics else None
 
             cursor.execute("""
-                INSERT OR REPLACE INTO agenda_items
+                INSERT OR REPLACE INTO items
                 (id, meeting_id, title, sequence, attachments, summary, topics)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -785,7 +785,7 @@ class UnifiedDatabase:
         cursor = self.conn.cursor()
 
         cursor.execute("""
-            SELECT * FROM agenda_items
+            SELECT * FROM items
             WHERE meeting_id = ?
             ORDER BY sequence ASC
         """, (meeting_id,))
@@ -808,7 +808,7 @@ class UnifiedDatabase:
         topics_json = json.dumps(topics) if topics else None
 
         cursor.execute("""
-            UPDATE agenda_items
+            UPDATE items
             SET summary = ?,
                 topics = ?
             WHERE id = ?
