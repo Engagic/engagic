@@ -32,7 +32,7 @@ premium = [
     "mistralai>=1.0.0",  # For Tier 2 OCR processing (paid customers only)
 ]
 [tool.uv.sources]
-engagic-core = { path = "backend-rs", editable = true }
+engagic-core = { path = "infra", editable = true }
 
 [tool.pyright]
 include = ["backend"]
