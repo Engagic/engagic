@@ -76,6 +76,17 @@ impl PdfExtractor {
         // Normalize and validate
         let normalized = normalize_text(&combined_text);
 
+        // Debug: show text preview before validation
+        let preview = if normalized.len() > 500 {
+            &normalized[..500]
+        } else {
+            &normalized
+        };
+        tracing::debug!(
+            "Extracted text preview (first 500 chars): {}...",
+            preview.replace('\n', " ")
+        );
+
         // Validate quality
         if !self.validator.is_good_quality(&normalized) {
             return Ok(None);

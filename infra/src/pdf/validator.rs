@@ -102,10 +102,16 @@ impl TextValidator {
             .count();
 
         if sample_words.len() >= 50 && recognizable < self.min_recognizable {
+            // Show first 30 words to debug what we're extracting
+            let preview: Vec<&str> = sample_words.iter().take(30).copied().collect();
             tracing::warn!(
                 "Quality check FAILED: Too few recognizable words ({}/{})",
                 recognizable,
                 sample_words.len()
+            );
+            tracing::warn!(
+                "First 30 words extracted: {:?}",
+                preview
             );
             return false;
         }
