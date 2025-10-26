@@ -3,7 +3,7 @@
 export interface CityOption {
 	city_name: string;
 	state: string;
-	city_banana: string;
+	banana: string;
 	vendor: string;
 	display_name: string;
 	total_meetings: number;
@@ -12,7 +12,7 @@ export interface CityOption {
 
 export interface Meeting {
 	id: string;
-	city_banana: string;
+	banana: string;
 	title: string;
 	date: string; // ISO format datetime
 	packet_url?: string | string[];
@@ -24,7 +24,7 @@ export interface RandomMeetingResponse {
 	status: string;
 	meeting: {
 		id: number;
-		city_banana: string;
+		banana: string;
 		title: string;
 		date: string;
 		packet_url: string;
@@ -43,7 +43,7 @@ interface SearchSuccess {
 	success: true;
 	city_name: string;
 	state: string;
-	city_banana: string;
+	banana: string;
 	vendor: string;
 	meetings: Meeting[];
 	cached: boolean;
