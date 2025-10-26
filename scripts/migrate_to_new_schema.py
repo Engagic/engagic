@@ -77,6 +77,12 @@ def migrate_database(db_path: str, dry_run: bool = False):
         # Disable foreign keys during migration
         cursor.execute("PRAGMA foreign_keys=OFF")
 
+        # Clean up any leftover temp tables from previous failed runs
+        temp_tables = ['cities_new', 'zipcodes_new', 'meetings_new', 'items_new',
+                      'cache_new', 'queue_new', 'tenant_coverage_new', 'tracked_items_new']
+        for temp_table in temp_tables:
+            cursor.execute(f"DROP TABLE IF EXISTS {temp_table}")
+
         # ========== MIGRATE CITIES TABLE ==========
         print("1. Migrating cities table (city_banana → banana, vendor_slug → slug)...")
 
@@ -547,8 +553,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Migrate Engagic database to new simplified schema")
     parser.add_argument(
         "--db-path",
-        default="backend/database/engagic.db",
-        help="Path to database file (default: backend/database/engagic.db)"
+        default="data/engagic.db",
+        help="Path to database file (default: data/engagic.db)"
     )
     parser.add_argument(
         "--dry-run",
