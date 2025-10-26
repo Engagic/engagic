@@ -633,7 +633,7 @@ class Conductor:
                 queue_id = job['id']
                 packet_url = job['packet_url']
                 meeting_id = job['meeting_id']
-                city_banana = job['city_banana']
+                banana = job['banana']
 
                 logger.info(f"Processing queue job {queue_id}: {packet_url}")
 
@@ -650,7 +650,7 @@ class Conductor:
                     # Process the meeting using existing logic
                     meeting_data = {
                         "packet_url": packet_url,
-                        "city_banana": city_banana,
+                        "banana": banana,
                         "meeting_name": meeting.title,
                         "meeting_date": meeting.date.isoformat() if meeting.date else None,
                         "meeting_id": meeting_id,

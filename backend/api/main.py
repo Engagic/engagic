@@ -328,7 +328,7 @@ class SearchRequest(BaseModel):
 
 class ProcessRequest(BaseModel):
     packet_url: str
-    city_banana: str
+    banana: str
     meeting_name: Optional[str] = None
     meeting_date: Optional[str] = None
     meeting_id: Optional[str] = None
@@ -347,8 +347,8 @@ class ProcessRequest(BaseModel):
 
         return v.strip()
 
-    @validator("city_banana")
-    def validate_city_banana(cls, v):
+    @validator("banana")
+    def validate_banana(cls, v):
         if not v or not v.strip():
             raise ValueError("City banana cannot be empty")
 
@@ -425,7 +425,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
             "success": True,
             "city_name": city.name,
             "state": city.state,
-            "city_banana": city.banana,
+            "banana": city.banana,
             "vendor": city.vendor,
             "meetings": [m.to_dict() for m in meetings],
             "cached": True,
@@ -438,7 +438,7 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
         "success": True,
         "city_name": city.name,
         "state": city.state,
-        "city_banana": city.banana,
+        "banana": city.banana,
         "vendor": city.vendor,
         "meetings": [],
         "cached": False,
@@ -477,7 +477,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
             "success": True,
             "city_name": city.name,
             "state": city.state,
-            "city_banana": city.banana,
+            "banana": city.banana,
             "vendor": city.vendor,
             "meetings": [m.to_dict() for m in meetings],
             "cached": True,
@@ -490,7 +490,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         "success": False,
         "city_name": city.name,
         "state": city.state,
-        "city_banana": city.banana,
+        "banana": city.banana,
         "vendor": city.vendor,
         "meetings": [],
         "cached": True,
@@ -554,24 +554,24 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
 
     # Convert cities to the format expected by frontend
     city_options = []
-    city_bananas = [city.banana for city in cities]
+    bananas = [city.banana for city in cities]
 
     # Build city_options
     for city in cities:
         city_options.append({
             "city_name": city.name,
             "state": city.state,
-            "city_banana": city.banana,
+            "banana": city.banana,
             "vendor": city.vendor,
             "display_name": f"{city.name}, {city.state}"
         })
 
     # Get meeting stats for all cities in one query
-    stats = db.get_city_meeting_stats(city_bananas)
+    stats = db.get_city_meeting_stats(bananas)
 
     # Add stats to each city option
     for option in city_options:
-        city_stats = stats.get(option["city_banana"], {"total_meetings": 0, "summarized_meetings": 0})
+        city_stats = stats.get(option["banana"], {"total_meetings": 0, "summarized_meetings": 0})
         option["total_meetings"] = city_stats["total_meetings"]
         option["summarized_meetings"] = city_stats["summarized_meetings"]
 
@@ -616,7 +616,7 @@ async def handle_ambiguous_city_search(
                 "success": True,
                 "city_name": city.name,
                 "state": city.state,
-                "city_banana": city.banana,
+                "banana": city.banana,
                 "vendor": city.vendor,
                 "meetings": [m.to_dict() for m in meetings],
                 "cached": True,
@@ -629,7 +629,7 @@ async def handle_ambiguous_city_search(
                 "success": False,
                 "city_name": city.name,
                 "state": city.state,
-                "city_banana": city.banana,
+                "banana": city.banana,
                 "vendor": city.vendor,
                 "meetings": [],
                 "cached": True,
@@ -641,24 +641,24 @@ async def handle_ambiguous_city_search(
 
     # Multiple matches - return ambiguous result
     city_options = []
-    city_bananas = [city.banana for city in cities]
+    bananas = [city.banana for city in cities]
 
     # Build city_options
     for city in cities:
         city_options.append({
             "city_name": city.name,
             "state": city.state,
-            "city_banana": city.banana,
+            "banana": city.banana,
             "vendor": city.vendor,
             "display_name": f"{city.name}, {city.state}",
         })
 
     # Get meeting stats for all cities in one query
-    stats = db.get_city_meeting_stats(city_bananas)
+    stats = db.get_city_meeting_stats(bananas)
 
     # Add stats to each city option
     for option in city_options:
-        city_stats = stats.get(option["city_banana"], {"total_meetings": 0, "summarized_meetings": 0})
+        city_stats = stats.get(option["banana"], {"total_meetings": 0, "summarized_meetings": 0})
         option["total_meetings"] = city_stats["total_meetings"]
         option["summarized_meetings"] = city_stats["summarized_meetings"]
 
@@ -732,7 +732,7 @@ async def get_random_best_meeting():
             "status": "success",
             "meeting": {
                 "id": random_meeting["id"],
-                "city_banana": random_meeting["city_banana"],
+                "banana": random_meeting["banana"],
                 "title": random_meeting["meeting_name"],
                 "date": random_meeting["meeting_date"],
                 "packet_url": random_meeting["packet_url"],
@@ -845,7 +845,7 @@ async def root():
                 "url": "/api/process-agenda",
                 "body": {
                     "packet_url": "https://example.com/agenda.pdf",
-                    "city_banana": "paloaltoCA",
+                    "banana": "paloaltoCA",
                     "meeting_name": "City Council Meeting",
                 },
                 "description": "Get cached AI summary of meeting agenda",
@@ -979,7 +979,7 @@ async def get_analytics():
         cursor.execute("SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''")
         summaries_stats = dict(cursor.fetchone())
 
-        cursor.execute("SELECT COUNT(DISTINCT city_banana) as active_cities FROM meetings")
+        cursor.execute("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
         active_cities_stats = dict(cursor.fetchone())
 
         return {
@@ -1039,18 +1039,18 @@ async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
     }
 
 
-@app.post("/api/admin/sync-city/{city_banana}")
+@app.post("/api/admin/sync-city/{banana}")
 async def force_sync_city(
-    city_banana: str, is_admin: bool = Depends(verify_admin_token)
+    banana: str, is_admin: bool = Depends(verify_admin_token)
 ):
     """Force sync a specific city (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
-    # Admin should use the daemon directly: python daemon.py --sync-city CITY_BANANA
+    # Admin should use the daemon directly: python daemon.py --sync-city BANANA
     return {
         "success": False,
-        "city_banana": city_banana,
+        "banana": banana,
         "message": "Background processing runs as separate service. Use daemon directly:",
-        "command": f"python /root/engagic/app/daemon.py --sync-city {city_banana}",
+        "command": f"python /root/engagic/app/daemon.py --sync-city {banana}",
         "alternative": "systemctl status engagic-daemon",
     }
 

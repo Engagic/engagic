@@ -83,27 +83,27 @@
 		try {
 			const result = await apiClient.getRandomBestMeeting();
 			if (result.meeting) {
-				// Extract city name and state from city_banana
-				// city_banana format is like "planoTX" - city name + state code
-				const cityBanana = result.meeting.city_banana;
-				const stateMatch = cityBanana.match(/([A-Z]{2})$/);
-				
+				// Extract city name and state from banana
+				// banana format is like "planoTX" - city name + state code
+				const banana = result.meeting.banana;
+				const stateMatch = banana.match(/([A-Z]{2})$/);
+
 				if (stateMatch) {
 					// Navigate directly to the meeting detail page
-					const cityUrl = cityBanana; // city_banana is already in the right format
-					
+					const cityUrl = banana; // banana is already in the right format
+
 					// Create a Meeting object for slug generation
 					const meeting: Meeting = {
 						id: result.meeting.id.toString(),
-						city_banana: result.meeting.city_banana,
+						banana: result.meeting.banana,
 						title: result.meeting.title,
 						date: result.meeting.date,
 						packet_url: result.meeting.packet_url
 					};
-					
+
 					const meetingSlug = generateMeetingSlug(meeting);
-					logger.trackEvent('random_meeting_click', { 
-						city: cityBanana,
+					logger.trackEvent('random_meeting_click', {
+						city: banana,
 						quality_score: result.meeting.quality_score 
 					});
 					
