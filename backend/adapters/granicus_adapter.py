@@ -86,7 +86,7 @@ class GranicusAdapter(BaseAdapter):
         logger.info(f"[granicus:{self.slug}] Discovering view_id (testing 1-100)...")
 
         # Try to find view_id with current year data
-        for i in range(1, 1010):
+        for i in range(1, 500):
             try:
                 response = self._get(f"{base_url}{i}", timeout=10)
                 if (
