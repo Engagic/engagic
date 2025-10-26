@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
-use mupdf::Document;
+use mupdf::{Document, TextPageOptions};
 use unicode_normalization::UnicodeNormalization;
 use regex::Regex;
 
@@ -43,7 +43,7 @@ impl PdfExtractor {
     /// Confidence: 9/10 - mupdf handles Identity-H and other complex encodings
     pub fn extract_from_bytes(&self, pdf_bytes: &[u8]) -> PyResult<Option<PdfExtractionResult>> {
         // Load PDF document using mupdf
-        let document = Document::from_bytes(pdf_bytes)
+        let document = Document::from_bytes(pdf_bytes, "application/pdf")
             .map_err(|e| PyValueError::new_err(format!("PDF parsing failed: {}", e)))?;
 
         let page_count = document.page_count()
@@ -59,11 +59,17 @@ impl PdfExtractor {
             match document.load_page(page_num as i32) {
                 Ok(page) => {
                     // Extract text using TextPage
-                    match page.to_text_page() {
+                    match page.to_text_page(TextPageOptions::empty()) {
                         Ok(text_page) => {
-                            let text = text_page.to_string();
-                            if !text.is_empty() {
-                                all_text.push(format!("--- PAGE {} ---\n{}", page_num + 1, text));
+                            match text_page.to_text() {
+                                Ok(text) => {
+                                    if !text.is_empty() {
+                                        all_text.push(format!("--- PAGE {} ---\n{}", page_num + 1, text));
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::debug!("Failed to convert text page to text for page {}: {}", page_num + 1, e);
+                                }
                             }
                         }
                         Err(e) => {

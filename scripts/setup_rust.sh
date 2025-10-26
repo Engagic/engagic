@@ -13,7 +13,8 @@ case "$MODE" in
     release)
         echo "Building Rust extension (RELEASE mode - slow build, fast runtime)..."
         cd infra
-        maturin develop --release
+        # Simple: maturin develop handles everything
+        maturin develop --release --uv
         ;;
     watch)
         echo "Watching Rust files for changes..."
@@ -29,7 +30,8 @@ case "$MODE" in
     debug|*)
         echo "Building Rust extension (DEBUG mode - fast build, slower runtime)..."
         cd infra
-        maturin develop
+        # Simple: maturin develop handles everything
+        maturin develop --uv
         ;;
 esac
 

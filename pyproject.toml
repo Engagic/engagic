@@ -33,7 +33,7 @@ premium = [
 ]
 
 [tool.uv.sources]
-engagic-core = { path = "infra", editable = true }
+engagic-core = { path = "infra" }
 
 [tool.pyright]
 include = ["backend"]
