@@ -156,11 +156,11 @@ if args.pdf_url:
                     "meeting_id": "test_meeting_001"
                 }
 
-                print(f"   Processing agenda...")
+                print("   Processing agenda...")
                 result = processor.process_agenda_with_cache(meeting_data)
 
                 if result.get('success'):
-                    print(f"   SUCCESS: Generated summary")
+                    print("   SUCCESS: Generated summary")
                     print(f"   Processing time: {result.get('processing_time', 0):.2f}s")
                     print(f"   Method: {result.get('processing_method', 'unknown')}")
 
@@ -171,7 +171,7 @@ if args.pdf_url:
 
                     # Check cache
                     if result.get('cached'):
-                        print(f"   Result was cached")
+                        print("   Result was cached")
                 else:
                     print(f"   FAILED: {result.get('error', 'Unknown error')}")
 
