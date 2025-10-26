@@ -1,11 +1,11 @@
-"""Rust PDF extractor with PyMuPDF fallback for Identity-H fonts"""
+"""PDF extractor using Rust (poppler) with PyMuPDF fallback"""
 
 import logging
 import os
 import time
 import requests
 from typing import Dict, Any
-from engagic_core import PdfExtractor
+from engagic_core import PdfExtractor as PdfExtractorCore
 import fitz  # PyMuPDF
 
 logger = logging.getLogger("engagic")
@@ -15,11 +15,11 @@ if 'RUST_LOG' not in os.environ:
     os.environ['RUST_LOG'] = 'debug'
 
 
-class RustPdfExtractor:
-    """Direct wrapper around Rust PDF extractor"""
+class PdfExtractor:
+    """PDF extractor using Rust (poppler) with PyMuPDF fallback"""
 
     def __init__(self):
-        self._extractor = PdfExtractor()
+        self._extractor = PdfExtractorCore()
 
     def extract_from_url(self, url: str) -> Dict[str, Any]:
         """Extract text from PDF URL with PyMuPDF fallback
@@ -50,7 +50,7 @@ class RustPdfExtractor:
                     'extraction_time': extraction_time
                 }
             else:
-                logger.warning(f"[Rust poppler] Extraction failed for {url} (likely Identity-H fonts), falling back to PyMuPDF")
+                logger.warning(f"[Rust poppler] Extraction failed for {url}, falling back to PyMuPDF")
                 return self._fallback_pymupdf(url, start_time)
 
         except Exception as e:
@@ -73,7 +73,7 @@ class RustPdfExtractor:
                 return {
                     'success': True,
                     'text': result.text,
-                    'method': 'rust_lopdf',
+                    'method': 'rust_poppler',
                     'page_count': result.page_count,
                     'extraction_time': extraction_time
                 }
@@ -97,3 +97,41 @@ class RustPdfExtractor:
     def validate_text(self, text: str) -> bool:
         """Validate text quality"""
         return self._extractor.validate_text(text)
+
+    def _fallback_pymupdf(self, url: str, start_time: float) -> Dict[str, Any]:
+        """Fallback to PyMuPDF for rare PDF parsing failures"""
+        try:
+            # Download PDF
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            pdf_bytes = response.content
+
+            # Extract with PyMuPDF
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            text_parts = []
+            for page_num, page in enumerate(doc, 1):
+                text_parts.append(f"--- PAGE {page_num} ---\n{page.get_text()}")
+
+            full_text = "\n\n".join(text_parts)
+            page_count = len(doc)
+            doc.close()
+
+            extraction_time = time.time() - start_time
+            logger.info(f"[PyMuPDF fallback] Extracted {page_count} pages, {len(full_text)} chars in {extraction_time:.2f}s")
+
+            return {
+                'success': True,
+                'text': full_text,
+                'method': 'pymupdf_fallback',
+                'page_count': page_count,
+                'extraction_time': extraction_time
+            }
+
+        except Exception as e:
+            extraction_time = time.time() - start_time
+            logger.error(f"[PyMuPDF fallback] Failed for {url}: {e}")
+            return {
+                'success': False,
+                'error': f"PyMuPDF fallback failed: {str(e)}",
+                'extraction_time': extraction_time
+            }

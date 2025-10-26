@@ -32,7 +32,7 @@ from google.genai import types
 # Our modules
 from backend.database import UnifiedDatabase
 from backend.core.config import config
-from backend.core.pdf_extractor_rust import RustPdfExtractor
+from backend.core.pdf_extractor import PdfExtractor
 
 logger = logging.getLogger("engagic")
 
@@ -94,8 +94,8 @@ class AgendaProcessor:
         # Initialize unified database
         self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 
-        # Initialize Rust PDF extractor
-        self.pdf_extractor = RustPdfExtractor()
+        # Initialize PDF extractor
+        self.pdf_extractor = PdfExtractor()
 
     def process_agenda_with_cache(self, meeting_data: Dict[str, Any]) -> Dict[str, Any]:
         """Main entry point - process agenda with caching
@@ -192,7 +192,7 @@ class AgendaProcessor:
         if isinstance(url, list):
             return self._process_multiple_pdfs(url)
 
-        # Tier 1: Rust lopdf extraction + Gemini text API (free tier)
+        # Tier 1: Rust poppler extraction + Gemini text API (free tier)
         try:
             result = self.pdf_extractor.extract_from_url(url)
             if result.get('success') and result.get('text'):
