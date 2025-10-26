@@ -7,6 +7,11 @@ from engagic_core import PdfExtractor
 
 logger = logging.getLogger("engagic")
 
+# Enable Rust tracing output (set RUST_LOG env var if not set)
+import os
+if 'RUST_LOG' not in os.environ:
+    os.environ['RUST_LOG'] = 'debug'
+
 
 class RustPdfExtractor:
     """Direct wrapper around Rust PDF extractor"""
