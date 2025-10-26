@@ -31,8 +31,9 @@ dependencies = [
 premium = [
     "mistralai>=1.0.0",  # For Tier 2 OCR processing (paid customers only)
 ]
+
 [tool.uv.sources]
-engagic-core = { path = "infra", editable = true }
+engagic-core = { path = "infra", editable = false }
 
 [tool.pyright]
 include = ["backend"]
