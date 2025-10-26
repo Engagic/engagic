@@ -1,9 +1,11 @@
-"""Rust PDF extractor - thin Python wrapper"""
+"""Rust PDF extractor with PyMuPDF fallback for Identity-H fonts"""
 
 import logging
 import time
+import requests
 from typing import Dict, Optional
 from engagic_core import PdfExtractor
+import fitz  # PyMuPDF
 
 logger = logging.getLogger("engagic")
 
@@ -20,7 +22,7 @@ class RustPdfExtractor:
         self._extractor = PdfExtractor()
 
     def extract_from_url(self, url: str) -> Dict[str, any]:
-        """Extract text from PDF URL
+        """Extract text from PDF URL with PyMuPDF fallback
 
         Returns dict with extraction results:
         {
@@ -39,30 +41,21 @@ class RustPdfExtractor:
             extraction_time = time.time() - start_time
 
             if result:
-                logger.info(f"[Rust] Extracted {result.page_count} pages, {len(result.text)} chars in {extraction_time:.2f}s")
+                logger.info(f"[Rust poppler] Extracted {result.page_count} pages, {len(result.text)} chars in {extraction_time:.2f}s")
                 return {
                     'success': True,
                     'text': result.text,
-                    'method': 'rust_lopdf',
+                    'method': 'rust_poppler',
                     'page_count': result.page_count,
                     'extraction_time': extraction_time
                 }
             else:
-                logger.warning(f"[Rust] Extraction failed for {url}")
-                return {
-                    'success': False,
-                    'error': 'Extraction returned no result',
-                    'extraction_time': extraction_time
-                }
+                logger.warning(f"[Rust poppler] Extraction failed for {url} (likely Identity-H fonts), falling back to PyMuPDF")
+                return self._fallback_pymupdf(url, start_time)
 
         except Exception as e:
-            extraction_time = time.time() - start_time
-            logger.error(f"[Rust] Extraction error for {url}: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'extraction_time': extraction_time
-            }
+            logger.warning(f"[Rust poppler] Extraction error for {url}: {e}, falling back to PyMuPDF")
+            return self._fallback_pymupdf(url, start_time)
 
     def extract_from_bytes(self, pdf_bytes: bytes) -> Dict[str, any]:
         """Extract text from PDF bytes
