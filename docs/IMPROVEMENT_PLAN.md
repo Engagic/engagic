@@ -86,14 +86,14 @@
 
 ### Week 1-2: Rust PDF Extractor Integration (ACTIVE)
 
-**Goal:** Replace PyPDF2 with Rust lopdf for 5-10x speed improvement
+**Goal:** Replace PyPDF2 with Rust (poppler) for 5-10x speed improvement
 
 **Tasks:**
 - [x] Build Rust PDF extractor with PyO3 bindings
 - [x] Test Python ↔ Rust integration
-- [ ] Create Python wrapper (`backend/core/pdf_extractor_rust.py`)
+- [x] Create Python wrapper (`backend/core/pdf_extractor.py`)
 - [ ] Benchmark Rust vs PyPDF2 on 50 real PDFs
-- [ ] Update `processor.py` to use Rust extractor
+- [x] Update `processor.py` to use Rust extractor
 - [ ] Refactor `processor.py` into focused modules:
   - `pdf_extractor.py` - PDF download/extract (delegates to Rust)
   - `summarizer.py` - Gemini API calls
