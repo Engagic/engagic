@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
-use poppler::Document;
+use mupdf::Document;
 use unicode_normalization::UnicodeNormalization;
 use regex::Regex;
 
@@ -40,13 +40,14 @@ impl PdfExtractor {
     }
 
     /// Extract text from PDF bytes
-    /// Confidence: 9/10 - poppler handles Identity-H and other complex encodings
+    /// Confidence: 9/10 - mupdf handles Identity-H and other complex encodings
     pub fn extract_from_bytes(&self, pdf_bytes: &[u8]) -> PyResult<Option<PdfExtractionResult>> {
-        // Load PDF document using poppler
-        let document = Document::from_data(pdf_bytes, None)
+        // Load PDF document using mupdf
+        let document = Document::from_bytes(pdf_bytes)
             .map_err(|e| PyValueError::new_err(format!("PDF parsing failed: {}", e)))?;
 
-        let page_count = document.n_pages() as usize;
+        let page_count = document.page_count()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get page count: {}", e)))? as usize;
 
         // Limit pages
         let pages_to_process = page_count.min(self.max_pages);
@@ -55,16 +56,23 @@ impl PdfExtractor {
         let mut all_text = Vec::new();
 
         for page_num in 0..pages_to_process {
-            match document.page(page_num as i32) {
-                Some(page) => {
-                    if let Some(text) = page.text() {
-                        if !text.is_empty() {
-                            all_text.push(format!("--- PAGE {} ---\n{}", page_num + 1, text));
+            match document.load_page(page_num as i32) {
+                Ok(page) => {
+                    // Extract text using TextPage
+                    match page.to_text_page() {
+                        Ok(text_page) => {
+                            let text = text_page.to_string();
+                            if !text.is_empty() {
+                                all_text.push(format!("--- PAGE {} ---\n{}", page_num + 1, text));
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!("Failed to extract text from page {}: {}", page_num + 1, e);
                         }
                     }
                 }
-                None => {
-                    tracing::debug!("Failed to get page {}", page_num + 1);
+                Err(e) => {
+                    tracing::debug!("Failed to load page {}: {}", page_num + 1, e);
                 }
             }
         }
