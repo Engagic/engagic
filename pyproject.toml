@@ -24,12 +24,16 @@ dependencies = [
     "uvicorn>=0.35.0",
     "pyright>=1.1.407",
     "maturin",
+    "engagic-core",
 ]
 
 [project.optional-dependencies]
 premium = [
     "mistralai>=1.0.0",  # For Tier 2 OCR processing (paid customers only)
 ]
+[tool.uv.sources]
+engagic-core = { path = "backend-rs", editable = true }
+
 [tool.pyright]
 include = ["backend"]
 exclude = ["**/__pycache__", ".venv", "venv"]
