@@ -353,12 +353,25 @@ sync_city() {
     if [ -z "$1" ]; then
         error "City banana required (e.g., paloaltoCA)"
     fi
-    
+
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
     # Source API keys if available
     [ -f ~/.llm_secrets ] && source ~/.llm_secrets
-    python -m backend.services.daemon --sync-city "$1"
+    python -m backend.services.conductor --sync-city "$1"
+}
+
+sync_and_process_city() {
+    if [ -z "$1" ]; then
+        error "City banana required (e.g., paloaltoCA)"
+    fi
+
+    log "Syncing and processing $1..."
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    # Source API keys if available
+    [ -f ~/.llm_secrets ] && source ~/.llm_secrets
+    python -m backend.services.conductor --sync-and-process-city "$1"
 }
 
 process_unprocessed() {
@@ -393,14 +406,16 @@ show_help() {
     echo "Background Processor Commands:"
     echo "  logs-daemon               - Show daemon logs"
     echo "  daemon-status             - Show processing status"
-    echo "  sync-city CITY_BANANA     - Force sync specific city"
+    echo "  sync-city CITY_BANANA     - Force sync specific city (enqueues only)"
+    echo "  sync-and-process CITY     - Sync city and immediately process all meetings"
     echo "  process-unprocessed       - Process all unprocessed meetings"
     echo ""
     echo "Examples:"
-    echo "  $0 deploy                 # First time setup"
-    echo "  $0 update                 # Quick update from git"
-    echo "  $0 sync-city paloaltoCA   # Sync Palo Alto"
-    echo "  $0 status                 # Check everything"
+    echo "  $0 deploy                      # First time setup"
+    echo "  $0 update                      # Quick update from git"
+    echo "  $0 sync-city paloaltoCA        # Sync Palo Alto (just fetch + enqueue)"
+    echo "  $0 sync-and-process paloaltoCA # Sync + process immediately (test item detection)"
+    echo "  $0 status                      # Check everything"
 }
 
 # Main command handling
@@ -451,6 +466,7 @@ case "${1:-help}" in
     # Daemon specific
     daemon-status)  daemon_status ;;
     sync-city)      sync_city "$2" ;;
+    sync-and-process) sync_and_process_city "$2" ;;
     process-unprocessed) process_unprocessed ;;
 
     # Help
