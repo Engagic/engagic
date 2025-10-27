@@ -1194,6 +1194,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Configure logging for CLI usage
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler()]
+    )
+
     processor = Conductor()
 
     if args.sync_city:
