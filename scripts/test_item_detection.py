@@ -14,11 +14,14 @@ import sys
 import argparse
 from pathlib import Path
 
+
 # Add app directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.database.unified_db import UnifiedDatabase
 from backend.core.processor import AgendaProcessor
+from backend.core.config import config
+
 import logging
 
 # Configure logging
@@ -113,8 +116,8 @@ def main():
     args = parser.parse_args()
 
     # Initialize database and processor
-    db = UnifiedDatabase()
-    processor = AgendaProcessor(db)
+    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+    processor = AgendaProcessor()
 
     print(f"\n{'='*80}")
     print("ITEM DETECTION TEST (No LLM calls, no credits used)")
@@ -130,24 +133,24 @@ def main():
         test_meeting_detection(db, processor, meeting, 1, 1)
     else:
         # Test recent meetings for city
-        city = db.get_city_by_banana(args.city_banana)
+        city = db.get_city(args.city_banana)
         if not city:
             print(f"❌ City not found: {args.city_banana}")
             print("\nAvailable cities:")
-            cities = db.get_all_cities()
-            for c in sorted(cities, key=lambda x: x.city_name)[:20]:
-                print(f"  - {c.city_banana} ({c.city_name})")
+            cities = db.get_cities()
+            for c in sorted(cities, key=lambda x: x.name)[:20]:
+                print(f"  - {c.banana} ({c.name})")
             return
 
-        print(f"City: {city.city_name}")
-        print(f"Banana: {city.city_banana}")
+        print(f"City: {city.name}")
+        print(f"Banana: {city.banana}")
 
         # Get recent meetings with packets
-        meetings = db.get_recent_meetings_for_city(city.city_banana, limit=args.limit * 2)
+        meetings = db.get_meetings(city.banana, limit=args.limit * 2)
         meetings_with_packets = [m for m in meetings if m.packet_url][:args.limit]
 
         if not meetings_with_packets:
-            print(f"\n❌ No meetings with packets found for {city.city_name}")
+            print(f"\n❌ No meetings with packets found for {city.name}")
             return
 
         print(f"Testing {len(meetings_with_packets)} meetings with packets...\n")
