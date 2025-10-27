@@ -991,6 +991,96 @@ class Conductor:
             # Restore original is_running state
             self.is_running = old_is_running
 
+    def sync_and_process_city(self, city_banana: str) -> Dict[str, Any]:
+        """Sync a city and immediately process all its queued jobs
+
+        Returns:
+            Dictionary with sync_result and processing stats
+        """
+        logger.info(f"Starting sync-and-process for {city_banana}")
+
+        # Step 1: Sync the city (fetches meetings, stores, enqueues)
+        sync_result = self.force_sync_city(city_banana)
+
+        if sync_result.status != SyncStatus.COMPLETED:
+            logger.error(f"Sync failed for {city_banana}: {sync_result.error_message}")
+            return {
+                'sync_status': sync_result.status.value,
+                'sync_error': sync_result.error_message,
+                'meetings_found': sync_result.meetings_found,
+                'processed_count': 0
+            }
+
+        logger.info(f"Sync complete: {sync_result.meetings_found} meetings found")
+
+        # Step 2: Process all queued jobs for this city
+        if not self.processor:
+            logger.warning("Processor not available - meetings queued but not processed")
+            return {
+                'sync_status': sync_result.status.value,
+                'meetings_found': sync_result.meetings_found,
+                'processed_count': 0,
+                'warning': 'Processor not available'
+            }
+
+        logger.info(f"Processing queued jobs for {city_banana}...")
+        processed_count = 0
+        failed_count = 0
+
+        # Temporarily enable processing
+        old_is_running = self.is_running
+        self.is_running = True
+
+        try:
+            # Process all jobs for this city
+            while True:
+                # Get next job for this city
+                job = self.db.get_next_for_processing(banana=city_banana)
+
+                if not job:
+                    break  # No more jobs for this city
+
+                queue_id = job['id']
+                meeting_id = job['meeting_id']
+                packet_url = job['packet_url']
+
+                logger.info(f"Processing job {queue_id}: {packet_url}")
+
+                try:
+                    meeting = self.db.get_meeting(meeting_id)
+                    if not meeting:
+                        self.db.mark_processing_failed(queue_id, "Meeting not found")
+                        failed_count += 1
+                        continue
+
+                    # Process the meeting (item-aware)
+                    self._process_meeting_summary(meeting)
+                    self.db.mark_processing_complete(queue_id)
+                    processed_count += 1
+                    logger.info(f"✓ Processed {packet_url}")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    self.db.mark_processing_failed(queue_id, error_msg)
+                    failed_count += 1
+                    logger.error(f"✗ Failed to process {packet_url}: {e}")
+
+            logger.info(
+                f"Processing complete for {city_banana}: "
+                f"{processed_count} succeeded, {failed_count} failed"
+            )
+
+            return {
+                'sync_status': sync_result.status.value,
+                'meetings_found': sync_result.meetings_found,
+                'processed_count': processed_count,
+                'failed_count': failed_count
+            }
+
+        finally:
+            # Restore original is_running state
+            self.is_running = old_is_running
+
     def force_process_meeting(self, packet_url: str) -> bool:
         """Force process a specific meeting"""
         if not self.processor:
@@ -1085,17 +1175,18 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Background processor for engagic")
     parser.add_argument("--sync-city", help="Sync specific city by city_banana")
+    parser.add_argument("--sync-and-process-city", help="Sync city and immediately process all its meetings")
     parser.add_argument("--process-meeting", help="Process specific meeting by packet URL")
     parser.add_argument("--full-sync", action="store_true", help="Run full sync once")
     parser.add_argument(
-        "--process-all-unprocessed", 
-        action="store_true", 
+        "--process-all-unprocessed",
+        action="store_true",
         help="Process ALL unprocessed meetings"
     )
     parser.add_argument(
-        "--batch-size", 
-        type=int, 
-        default=20, 
+        "--batch-size",
+        type=int,
+        default=20,
         help="Batch size for processing (default: 20)"
     )
     parser.add_argument("--status", action="store_true", help="Show status")
@@ -1108,6 +1199,9 @@ if __name__ == "__main__":
     if args.sync_city:
         result = processor.force_sync_city(args.sync_city)
         print(f"Sync result: {result}")
+    elif args.sync_and_process_city:
+        result = processor.sync_and_process_city(args.sync_and_process_city)
+        print(f"Sync and process result: {result}")
     elif args.process_meeting:
         success = processor.force_process_meeting(args.process_meeting)
         print(f"Process result: {'Success' if success else 'Failed'}")
