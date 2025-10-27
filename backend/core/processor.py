@@ -886,6 +886,42 @@ Attached documents:
         agenda_section_size = min(int(len(text) * 0.2), 50000)
         agenda_section = text[:agenda_section_size]
 
+        # Find the actual agenda section (between section markers and before content)
+        # Common section headers that indicate start of real agenda items
+        start_markers = [
+            r'BUSINESS\s+ITEMS?',
+            r'ACTION\s+ITEMS?',
+            r'CONSENT\s+(CALENDAR|AGENDA)',
+            r'REGULAR\s+AGENDA',
+            r'DISCUSSION\s+ITEMS?',
+            r'PUBLIC\s+HEARINGS?',
+            r'INFORMATION\s+REPORTS?'
+        ]
+
+        # Find where agenda items start (after section markers)
+        agenda_start = 0
+        for marker_pattern in start_markers:
+            match = re.search(marker_pattern, agenda_section, re.IGNORECASE)
+            if match and match.start() > agenda_start:
+                agenda_start = match.start()
+
+        # Find where agenda ends (before adjournment or actual content)
+        end_markers = [
+            r'ADJOURNMENT',
+            r'^\d+\s+(MINUTES|TRANSCRIPT)',  # Line-numbered minutes/transcripts
+            r'Item\s+\d+[:\s]+Staff Report Pg\.',  # Actual item content
+        ]
+
+        agenda_end = agenda_section_size
+        for marker_pattern in end_markers:
+            match = re.search(marker_pattern, agenda_section[agenda_start:], re.IGNORECASE | re.MULTILINE)
+            if match:
+                agenda_end = agenda_start + match.start()
+                break
+
+        # Only search for items in the actual agenda section
+        actual_agenda = agenda_section[agenda_start:agenda_end]
+
         agenda_patterns = [
             (r"\n\s*(\d+)\.\s+([A-Z][^\n]{10,200})", 'numbered'),      # "1. ITEM NAME"
             (r"\n\s*([A-Z])\.\s+([A-Z][^\n]{10,200})", 'lettered'),    # "A. ITEM NAME"
@@ -895,9 +931,14 @@ Attached documents:
         # Extract agenda items with their titles
         agenda_items = []
         for pattern, item_type in agenda_patterns:
-            for match in re.finditer(pattern, agenda_section, re.IGNORECASE):
+            for match in re.finditer(pattern, actual_agenda, re.IGNORECASE):
                 item_num = match.group(1)
                 item_title = match.group(2).strip()
+
+                # Skip if this looks like a line number (single word or very short)
+                if len(item_title) < 15 or item_title.upper() in ['MINUTES', 'PARKS', 'RECREATION', 'COMMISSION', 'MEETING', 'REGULAR']:
+                    continue
+
                 # Clean up title - remove extra whitespace, CEQA status, etc
                 item_title = re.sub(r'\s+', ' ', item_title)
                 item_title = re.sub(r';?\s*CEQA[^;]*$', '', item_title, flags=re.IGNORECASE)
@@ -906,14 +947,14 @@ Attached documents:
                     'number': item_num,
                     'title': item_title[:150],  # Cap title length
                     'type': item_type,
-                    'agenda_pos': match.start()
+                    'agenda_pos': agenda_start + match.start()
                 })
 
         if not agenda_items:
-            logger.info(f"[ItemDetection] No agenda items found in first {agenda_section_size} chars")
+            logger.info(f"[ItemDetection] No agenda items found in agenda section (searched {len(actual_agenda)} chars between markers)")
             return []
 
-        logger.info(f"[ItemDetection] Found {len(agenda_items)} items in agenda section")
+        logger.info(f"[ItemDetection] Found {len(agenda_items)} items in agenda section (between positions {agenda_start}-{agenda_end})")
 
         # PASS 2: Find where these items appear again in the body
         # Search for item titles in the remainder of the document
