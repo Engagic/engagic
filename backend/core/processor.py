@@ -594,7 +594,11 @@ Attached documents:
                     'contents': [{
                         'parts': [{'text': prompt}],
                         'role': 'user'
-                    }]
+                    }],
+                    'config': {
+                        'temperature': 0.3,
+                        'max_output_tokens': 2048
+                    }
                 })
 
                 request_map[i] = req
@@ -1052,7 +1056,7 @@ Attached documents:
                             'parts': [{'text': prompt}],
                             'role': 'user'
                         }],
-                        'generation_config': {
+                        'config': {
                             'temperature': 0.3,
                             'max_output_tokens': 8192
                         }
