@@ -39,7 +39,7 @@ def test_meeting_detection(db, processor, meeting, meeting_num, total):
     print(f"{'='*80}")
     print(f"Title: {meeting.title}")
     print(f"Date: {meeting.date}")
-    print(f"City: {meeting.city_name}")
+    print(f"City: {meeting.banana}")
     print(f"Packet URL: {meeting.packet_url}")
 
     if not meeting.packet_url:
@@ -109,7 +109,7 @@ def test_meeting_detection(db, processor, meeting, meeting_num, total):
 
 def main():
     parser = argparse.ArgumentParser(description="Test item detection without using credits")
-    parser.add_argument("city_banana", help="City banana (e.g., paloaltoCA)")
+    parser.add_argument("banana", help="City banana (e.g., paloaltoCA)")
     parser.add_argument("--limit", type=int, default=10, help="Max meetings to test (default: 10)")
     parser.add_argument("--meeting-url", help="Test specific meeting by packet URL")
 
@@ -133,9 +133,9 @@ def main():
         test_meeting_detection(db, processor, meeting, 1, 1)
     else:
         # Test recent meetings for city
-        city = db.get_city(args.city_banana)
+        city = db.get_city(args.banana)
         if not city:
-            print(f"❌ City not found: {args.city_banana}")
+            print(f"❌ City not found: {args.banana}")
             print("\nAvailable cities:")
             cities = db.get_cities()
             for c in sorted(cities, key=lambda x: x.name)[:20]:
@@ -146,7 +146,7 @@ def main():
         print(f"Banana: {city.banana}")
 
         # Get recent meetings with packets
-        meetings = db.get_meetings(city.banana, limit=args.limit * 2)
+        meetings = db.get_meetings(bananas=[city.banana], limit=args.limit * 2)
         meetings_with_packets = [m for m in meetings if m.packet_url][:args.limit]
 
         if not meetings_with_packets:
