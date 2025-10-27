@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.database.unified_db import UnifiedDatabase
-from backend.core.processor import PDFProcessor
+from backend.core.processor import AgendaProcessor
 import logging
 
 # Configure logging
@@ -114,7 +114,7 @@ def main():
 
     # Initialize database and processor
     db = UnifiedDatabase()
-    processor = PDFProcessor(db)
+    processor = AgendaProcessor(db)
 
     print(f"\n{'='*80}")
     print("ITEM DETECTION TEST (No LLM calls, no credits used)")
