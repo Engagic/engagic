@@ -564,9 +564,6 @@ Skip pure administrative items unless they have significant public impact."""
                 text_size = len(text)
                 page_count = self._estimate_page_count(text)
 
-                # Use Flash-Lite for smaller items
-                model_name = self.flash_lite_model_name if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES else self.flash_model_name
-
                 # Build prompt for this item
                 prompt = f"""This is a single agenda item from a city council meeting. The item is titled:
 
@@ -868,10 +865,13 @@ Attached documents:
 
     def detect_agenda_items(self, text: str, max_chunk_size: int = 75000) -> List[Dict[str, Any]]:
         """
-        Detect agenda items from monolithic PDF text using smart chunking.
+        Detect agenda items from monolithic PDF text using two-pass approach.
 
-        Based on original engagic chunker - respects agenda boundaries but groups
-        into reasonable chunks to avoid over-splitting.
+        Pass 1: Extract agenda items from beginning (table of contents style)
+        Pass 2: Find where those items appear again in body (detailed content starts)
+
+        This handles packets where the first few pages are an agenda, followed by
+        hundreds of pages of attachments/reports organized by item.
 
         Args:
             text: Extracted PDF text
@@ -881,95 +881,145 @@ Attached documents:
             List of detected items: [{'sequence': N, 'title': '...', 'text': '...', 'start_page': N}, ...]
             Empty list if no clear item structure detected
         """
-        # Original agenda item boundary patterns
+        # PASS 1: Find agenda items in the first portion (likely table of contents)
+        # Assume agenda is in first 20% or 50K chars, whichever is smaller
+        agenda_section_size = min(int(len(text) * 0.2), 50000)
+        agenda_section = text[:agenda_section_size]
+
         agenda_patterns = [
-            r"\n\s*\d+\.\s+[A-Z]",      # "1. ITEM NAME"
-            r"\n\s*[A-Z]\.\s+[A-Z]",    # "A. ITEM NAME"
-            r"\n\s*Item\s+\d+",         # "Item 1"
-            r"\n\s*AGENDA\s+ITEM",      # "AGENDA ITEM"
+            (r"\n\s*(\d+)\.\s+([A-Z][^\n]{10,200})", 'numbered'),      # "1. ITEM NAME"
+            (r"\n\s*([A-Z])\.\s+([A-Z][^\n]{10,200})", 'lettered'),    # "A. ITEM NAME"
+            (r"\n\s*(Item\s+\d+)[:\s]+([^\n]{10,200})", 'item'),        # "Item 1: NAME"
         ]
 
-        # Find all potential split points
-        split_points = [0]
-        for pattern in agenda_patterns:
-            for match in re.finditer(pattern, text, re.IGNORECASE):
-                split_points.append(match.start())
+        # Extract agenda items with their titles
+        agenda_items = []
+        for pattern, item_type in agenda_patterns:
+            for match in re.finditer(pattern, agenda_section, re.IGNORECASE):
+                item_num = match.group(1)
+                item_title = match.group(2).strip()
+                # Clean up title - remove extra whitespace, CEQA status, etc
+                item_title = re.sub(r'\s+', ' ', item_title)
+                item_title = re.sub(r';?\s*CEQA[^;]*$', '', item_title, flags=re.IGNORECASE)
+
+                agenda_items.append({
+                    'number': item_num,
+                    'title': item_title[:150],  # Cap title length
+                    'type': item_type,
+                    'agenda_pos': match.start()
+                })
+
+        if not agenda_items:
+            logger.info(f"[ItemDetection] No agenda items found in first {agenda_section_size} chars")
+            return []
+
+        logger.info(f"[ItemDetection] Found {len(agenda_items)} items in agenda section")
+
+        # PASS 2: Find where these items appear again in the body
+        # Search for item titles in the remainder of the document
+        split_points = [0]  # Start of document
+
+        for item in agenda_items:
+            # Create search patterns for this item title
+            # Try exact match and fuzzy match (accounting for line breaks, extra spaces)
+            title_pattern = re.escape(item['title'][:50])  # Use first 50 chars for matching
+            title_pattern = title_pattern.replace(r'\ ', r'\s+')  # Allow flexible whitespace
+
+            # Search starting after the agenda section
+            search_start = agenda_section_size
+            match = re.search(title_pattern, text[search_start:], re.IGNORECASE)
+
+            if match:
+                boundary_pos = search_start + match.start()
+                split_points.append(boundary_pos)
+                logger.debug(f"[ItemDetection] Found '{item['number']}. {item['title'][:40]}...' at position {boundary_pos}")
+            else:
+                # Fallback: search for just the item number pattern
+                num_pattern = rf"\n\s*{re.escape(item['number'])}\.\s+"
+                match = re.search(num_pattern, text[search_start:])
+                if match:
+                    boundary_pos = search_start + match.start()
+                    split_points.append(boundary_pos)
+                    logger.debug(f"[ItemDetection] Found item {item['number']} (by number only) at position {boundary_pos}")
 
         split_points = sorted(set(split_points))
         split_points.append(len(text))
 
-        # Debug: Show what we found
-        logger.info(f"[ItemDetection] Found {len(split_points) - 2} boundaries from {len(text)} chars")
-        if len(split_points) <= 10:
-            for i, pos in enumerate(split_points[1:-1][:10]):  # Show first 10 boundaries
-                context = text[max(0, pos-20):pos+80].replace('\n', ' ')
-                logger.debug(f"[ItemDetection] Boundary {i+1} at pos {pos}: ...{context}...")
+        logger.info(f"[ItemDetection] Found {len(split_points) - 2} boundaries in {len(text)} chars document")
 
         # If too few boundaries found, not worth chunking
-        if len(split_points) < 4:  # Need at least 3 items (0, item1, item2, end)
+        if len(split_points) < 3:  # Need at least 2 items (0, item1, end)
             logger.info(f"[ItemDetection] Only {len(split_points) - 2} boundaries found - processing monolithically")
             return []
 
-        # Create chunks at every boundary, then intelligently combine small ones
-        # Step 1: Create initial chunks at every boundary
-        initial_chunks = []
+        # Create chunks at every boundary
+        # Each chunk should correspond to an agenda item's detailed content
+        chunks = []
         for i in range(1, len(split_points)):
             chunk_text = text[split_points[i-1]:split_points[i]]
-            initial_chunks.append({
+
+            # Try to match this chunk to an agenda item
+            # Find which agenda item this boundary corresponds to
+            chunk_start_pos = split_points[i-1]
+            matching_item = None
+
+            for item in agenda_items:
+                # Check if this chunk starts near where we found this item in the body
+                # (We added boundary positions to split_points in pass 2)
+                if abs(chunk_start_pos - search_start) < 1000 or chunk_start_pos == 0:
+                    # First chunk (before detailed content starts)
+                    continue
+                # Try to find the item number at the start of this chunk
+                chunk_preview = chunk_text[:200]
+                if re.search(rf"\n\s*{re.escape(item['number'])}\.\s+", chunk_preview):
+                    matching_item = item
+                    break
+
+            chunks.append({
                 'start_pos': split_points[i-1],
                 'end_pos': split_points[i],
-                'text': chunk_text
+                'text': chunk_text,
+                'agenda_item': matching_item
             })
 
-        # Step 2: Combine adjacent small chunks (but keep large ones separate)
-        chunks = []
-        current_combined = None
+        # Filter out chunks that are too small (likely agenda header) and combine if needed
+        meaningful_chunks = []
+        for chunk in chunks:
+            # Skip very small chunks (likely just agenda section)
+            if len(chunk['text']) < 1000 and chunk['start_pos'] == 0:
+                logger.debug(f"[ItemDetection] Skipping small header chunk ({len(chunk['text'])} chars)")
+                continue
+            meaningful_chunks.append(chunk)
 
-        for chunk in initial_chunks:
-            if current_combined is None:
-                current_combined = dict(chunk)  # Start new combined chunk
-            elif len(current_combined['text']) + len(chunk['text']) <= max_chunk_size:
-                # Small enough to combine
-                current_combined['end_pos'] = chunk['end_pos']
-                current_combined['text'] += chunk['text']
-            else:
-                # Current combined chunk is full, save it and start new
-                chunks.append(current_combined)
-                current_combined = dict(chunk)
-
-        # Don't forget the last chunk
-        if current_combined:
-            chunks.append(current_combined)
-
-        logger.info(f"[ItemDetection] Combined {len(initial_chunks)} boundaries into {len(chunks)} chunks")
-
-        # If only got 1 chunk, fall back to monolithic
-        if len(chunks) <= 1:
-            logger.info(f"[ItemDetection] Only 1 chunk after grouping - processing monolithically")
+        if len(meaningful_chunks) <= 1:
+            logger.info(f"[ItemDetection] Only {len(meaningful_chunks)} meaningful chunks - processing monolithically")
             return []
 
         # Cap at reasonable number of chunks
-        if len(chunks) > 50:
-            logger.warning(f"[ItemDetection] {len(chunks)} chunks detected - too many! Processing monolithically")
+        if len(meaningful_chunks) > 50:
+            logger.warning(f"[ItemDetection] {len(meaningful_chunks)} chunks detected - too many! Processing monolithically")
             return []
+
+        logger.info(f"[ItemDetection] Created {len(meaningful_chunks)} chunks from {len(agenda_items)} agenda items")
 
         # Convert chunks to items with metadata
         result = []
-        for i, chunk in enumerate(chunks):
-            # Try to extract title from beginning of chunk
-            chunk_start = chunk['text'][:200]
-            title = "Section " + str(i + 1)
-
-            # Try to find a title in first few lines
-            for pattern in agenda_patterns:
-                match = re.search(pattern, chunk_start, re.IGNORECASE)
-                if match:
-                    # Extract text after the pattern up to newline
-                    title_start = match.end()
-                    title_text = chunk_start[title_start:].split('\n')[0].strip()
-                    if title_text:
-                        title = title_text[:100]  # Cap at 100 chars
-                    break
+        for i, chunk in enumerate(meaningful_chunks):
+            # Use the matched agenda item if we found one
+            if chunk['agenda_item']:
+                item_num = chunk['agenda_item']['number']
+                title = f"{item_num}. {chunk['agenda_item']['title']}"
+            else:
+                # Fallback: try to extract title from chunk
+                title = f"Section {i + 1}"
+                chunk_preview = chunk['text'][:300]
+                for pattern, _ in agenda_patterns:
+                    match = re.search(pattern, chunk_preview, re.IGNORECASE)
+                    if match:
+                        title_text = match.group(2).strip() if match.lastindex and match.lastindex >= 2 else ""
+                        if title_text:
+                            title = f"{match.group(1)}. {title_text[:100]}"
+                        break
 
             # Try to extract page number
             page_match = re.search(r'--- PAGE (\d+) ---', chunk['text'][:500])
@@ -982,7 +1032,6 @@ Attached documents:
                 'start_page': start_page
             })
 
-        logger.info(f"[ItemDetection] Created {len(result)} chunks from agenda structure")
         return result
     
     def _update_cache_hit_count(self, packet_url: str):

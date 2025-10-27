@@ -633,7 +633,6 @@ class Conductor:
                 queue_id = job['id']
                 packet_url = job['packet_url']
                 meeting_id = job['meeting_id']
-                banana = job['banana']
 
                 logger.info(f"Processing queue job {queue_id}: {packet_url}")
 
@@ -724,8 +723,9 @@ class Conductor:
                 # Try to detect items from PDF structure
                 logger.info("[ItemDetection] No items in DB, attempting to detect from PDF")
                 try:
-                    # Extract text from PDF
-                    result = self.processor.pdf_extractor.extract_from_url(meeting.packet_url)
+                    # Extract text from PDF (handle list or single URL)
+                    packet_url = meeting.packet_url[0] if isinstance(meeting.packet_url, list) else meeting.packet_url
+                    result = self.processor.pdf_extractor.extract_from_url(packet_url)
                     if result.get('success') and result.get('text'):
                         extracted_text = result['text']
 
@@ -823,7 +823,7 @@ class Conductor:
         failed_items = []
 
         if not self.processor:
-            logger.warning(f"[ItemProcessing] Processor not available")
+            logger.warning("[ItemProcessing] Processor not available")
             return
 
         # Separate already-processed items from items that need processing
