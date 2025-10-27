@@ -436,11 +436,8 @@ Skip pure administrative items unless they have significant public impact."""
 
         logger.info(f"[Item] Processing: {item_title[:80]}")
 
-        # Filter to PDF attachments only
-        pdf_attachments = [att for att in attachments if att.get('type') == 'pdf']
-
-        if not pdf_attachments:
-            logger.info("[Item] No PDF attachments, skipping processing")
+        if not attachments:
+            logger.info("[Item] No attachments, skipping processing")
             return {
                 'success': True,
                 'summary': None,
@@ -449,36 +446,49 @@ Skip pure administrative items unless they have significant public impact."""
                 'attachments_processed': 0
             }
 
-        # TODO: Add configurable limits here (max 5 attachments, max 50 pages each)
-        # For now, process all PDF attachments
-        logger.info(f"[Item] Found {len(pdf_attachments)} PDF attachments")
+        logger.info(f"[Item] Found {len(attachments)} attachment(s)")
 
         try:
-            # Extract text from all PDF attachments
+            # Process attachments - handle both URL-based and text segment types
             all_text_parts = []
             processed_count = 0
 
-            for i, att in enumerate(pdf_attachments, 1):
-                att_name = att.get('name', f'Attachment {i}')
-                att_url = att.get('url')
+            for i, att in enumerate(attachments, 1):
+                att_type = att.get('type', 'unknown')
 
-                if not att_url:
-                    logger.warning(f"[Item] Attachment {i} has no URL, skipping")
+                # Case 1: Text segment (from item detection)
+                if att_type == 'text_segment':
+                    text_content = att.get('content', '')
+                    if text_content:
+                        all_text_parts.append(text_content)
+                        processed_count += 1
+                        logger.info(f"[Item] Using text segment ({len(text_content)} chars)")
                     continue
 
-                logger.info(f"[Item] Extracting from: {att_name}")
+                # Case 2: PDF attachment with URL (from Legistar/adapters)
+                if att_type == 'pdf':
+                    att_name = att.get('name', f'Attachment {i}')
+                    att_url = att.get('url')
 
-                try:
-                    result = self.pdf_extractor.extract_from_url(att_url)
-                    if result.get('success') and result.get('text'):
-                        text = result['text']
-                        all_text_parts.append(f"=== {att_name} ===\n{text}")
-                        processed_count += 1
-                        logger.info(f"[PyMuPDF] Extracted {len(text)} chars from {att_name}")
-                    else:
-                        logger.warning(f"[PyMuPDF] No text from {att_name}")
-                except Exception as e:
-                    logger.warning(f"[PyMuPDF] Failed to extract from {att_name}: {e}")
+                    if not att_url:
+                        logger.warning(f"[Item] PDF attachment {i} has no URL, skipping")
+                        continue
+
+                    logger.info(f"[Item] Extracting from PDF: {att_name}")
+
+                    try:
+                        result = self.pdf_extractor.extract_from_url(att_url)
+                        if result.get('success') and result.get('text'):
+                            text = result['text']
+                            all_text_parts.append(f"=== {att_name} ===\n{text}")
+                            processed_count += 1
+                            logger.info(f"[PyMuPDF] Extracted {len(text)} chars from {att_name}")
+                        else:
+                            logger.warning(f"[PyMuPDF] No text from {att_name}")
+                    except Exception as e:
+                        logger.warning(f"[PyMuPDF] Failed to extract from {att_name}: {e}")
+                else:
+                    logger.debug(f"[Item] Skipping attachment type: {att_type}")
 
             # If no usable text, return empty result
             if not all_text_parts:
@@ -515,6 +525,199 @@ Skip pure administrative items unless they have significant public impact."""
                 'processing_time': time.time() - start_time,
                 'attachments_processed': 0
             }
+
+    def process_batch_items(self, item_requests: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Process multiple agenda items using Gemini Batch API for 50% cost savings.
+
+        Args:
+            item_requests: List of dicts with structure:
+                [{
+                    'item_id': str,
+                    'title': str,
+                    'text': str,  # Pre-extracted and concatenated text
+                    'sequence': int
+                }, ...]
+
+        Returns:
+            List of results: [{
+                'item_id': str,
+                'success': bool,
+                'summary': str,
+                'topics': List[str],
+                'error': str (if failed)
+            }, ...]
+        """
+        if not item_requests:
+            return []
+
+        logger.info(f"[BatchItems] Processing {len(item_requests)} items using Batch API (50% savings)")
+
+        try:
+            # Prepare inline requests for Gemini batch
+            inline_requests = []
+            request_map = {}
+
+            for i, req in enumerate(item_requests):
+                item_title = req['title']
+                text = req['text']
+                text_size = len(text)
+                page_count = self._estimate_page_count(text)
+
+                # Use Flash-Lite for smaller items
+                model_name = self.flash_lite_model_name if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES else self.flash_model_name
+
+                # Build prompt for this item
+                prompt = f"""This is a single agenda item from a city council meeting. The item is titled:
+
+"{item_title}"
+
+Based on the attached documents below, provide:
+
+1. A concise 2-3 sentence summary of what this agenda item is about, focusing on:
+   - The main action or decision being proposed
+   - Key details (amounts, locations, dates)
+   - Why it matters to citizens
+
+2. Extract 1-3 main topics discussed in this item (e.g., "affordable housing", "traffic safety", "budget allocation"). Return these as a simple comma-separated list.
+
+Format your response EXACTLY as:
+
+SUMMARY: [your 2-3 sentence summary here]
+
+TOPICS: topic1, topic2, topic3
+
+Attached documents:
+{text}"""
+
+                inline_requests.append({
+                    'contents': [{
+                        'parts': [{'text': prompt}],
+                        'role': 'user'
+                    }],
+                    'generation_config': {
+                        'temperature': 0.3,
+                        'max_output_tokens': 2048
+                    }
+                })
+
+                request_map[i] = req
+
+            # Submit to Gemini Batch API
+            logger.info(f"[BatchItems] Submitting batch with {len(inline_requests)} items")
+
+            batch_job = self.client.batches.create(
+                model=self.flash_model_name,
+                src=inline_requests,
+                config={
+                    'display_name': f"item-batch-{time.time()}"
+                }
+            )
+
+            batch_name = batch_job.name
+            if not batch_name:
+                raise ValueError("Batch job created but no name returned")
+
+            logger.info(f"[BatchItems] Submitted batch {batch_name}")
+
+            # Poll for completion
+            max_wait_time = 1800  # 30 minutes max
+            poll_interval = 10    # Check every 10 seconds
+            waited_time = 0
+
+            completed_states = {
+                'JOB_STATE_SUCCEEDED',
+                'JOB_STATE_FAILED',
+                'JOB_STATE_CANCELLED',
+                'JOB_STATE_EXPIRED'
+            }
+
+            while waited_time < max_wait_time:
+                batch_job = self.client.batches.get(name=batch_name)
+
+                if batch_job.state and batch_job.state.name in completed_states:
+                    logger.info(f"[BatchItems] Batch {batch_name} completed: {batch_job.state.name}")
+                    break
+
+                state_name = batch_job.state.name if batch_job.state else "unknown"
+                if waited_time % 30 == 0:  # Log every 30s
+                    logger.info(f"[BatchItems] Batch processing... ({waited_time}s, state: {state_name})")
+
+                time.sleep(poll_interval)
+                waited_time += poll_interval
+
+            if waited_time >= max_wait_time:
+                logger.error(f"[BatchItems] Batch timed out after {max_wait_time}s")
+                return [{'item_id': req['item_id'], 'success': False, 'error': 'Batch timeout'} for req in item_requests]
+
+            if not batch_job.state or batch_job.state.name != 'JOB_STATE_SUCCEEDED':
+                state_name = batch_job.state.name if batch_job.state else "unknown"
+                logger.error(f"[BatchItems] Batch failed: {state_name}")
+                return [{'item_id': req['item_id'], 'success': False, 'error': f'Batch failed: {state_name}'} for req in item_requests]
+
+            # Process results
+            results = []
+
+            if batch_job.dest and batch_job.dest.inlined_responses:
+                for i, inline_response in enumerate(batch_job.dest.inlined_responses):
+                    if i not in request_map:
+                        logger.warning(f"[BatchItems] No mapping found for response {i}")
+                        continue
+
+                    original_req = request_map[i]
+
+                    if inline_response.response:
+                        try:
+                            response_text = inline_response.response.text.strip()
+
+                            # Parse summary and topics
+                            summary = ""
+                            topics = []
+
+                            for line in response_text.split('\n'):
+                                line = line.strip()
+                                if line.startswith('SUMMARY:'):
+                                    summary = line.replace('SUMMARY:', '').strip()
+                                elif line.startswith('TOPICS:'):
+                                    topics_str = line.replace('TOPICS:', '').strip()
+                                    topics = [t.strip() for t in topics_str.split(',') if t.strip()]
+
+                            if not summary:
+                                summary = response_text[:500]
+                                logger.warning(f"[BatchItems] Failed to parse SUMMARY for {original_req['item_id']}")
+
+                            results.append({
+                                'item_id': original_req['item_id'],
+                                'success': True,
+                                'summary': summary,
+                                'topics': topics
+                            })
+
+                        except Exception as e:
+                            logger.error(f"[BatchItems] Error parsing response for {original_req['item_id']}: {e}")
+                            results.append({
+                                'item_id': original_req['item_id'],
+                                'success': False,
+                                'error': str(e)
+                            })
+
+                    elif inline_response.error:
+                        logger.error(f"[BatchItems] Item {original_req['item_id']} failed: {inline_response.error}")
+                        results.append({
+                            'item_id': original_req['item_id'],
+                            'success': False,
+                            'error': str(inline_response.error)
+                        })
+
+            successful = sum(1 for r in results if r['success'])
+            logger.info(f"[BatchItems] Batch complete: {successful}/{len(results)} successful")
+
+            return results
+
+        except Exception as e:
+            logger.error(f"[BatchItems] Batch processing failed: {e}")
+            # Fallback: return failures for all items
+            return [{'item_id': req['item_id'], 'success': False, 'error': str(e)} for req in item_requests]
 
     def _summarize_agenda_item(self, item_title: str, text: str) -> tuple[str, List[str]]:
         """Summarize a single agenda item and extract topics
@@ -647,10 +850,96 @@ Attached documents:
         page_markers = re.findall(r'--- PAGE (\d+) ---', text)
         if page_markers:
             return len(page_markers)
-        
+
         # Estimate based on character count
         chars_per_page = 3000
         return max(1, len(text) // chars_per_page)
+
+    def detect_agenda_items(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Detect agenda items from monolithic PDF text using regex patterns.
+
+        Based on original engagic approach - looks for common municipal agenda patterns:
+        - "1. ITEM NAME" or "Item 1:"
+        - "AGENDA ITEM 1"
+        - Section headers
+
+        Args:
+            text: Extracted PDF text
+
+        Returns:
+            List of detected items: [{'sequence': 1, 'title': '...', 'text': '...', 'start_page': N}, ...]
+            Empty list if no clear item structure detected
+        """
+        # Common agenda item patterns
+        patterns = [
+            r'\n\s*(\d+)\.\s+([A-Z][^\n]{10,100})',           # "1. CALL TO ORDER"
+            r'\n\s*Item\s+(\d+)[:\.]?\s+([^\n]{10,100})',     # "Item 1: Public Comment"
+            r'\n\s*AGENDA\s+ITEM\s+(\d+)[:\.]?\s+([^\n]*)',   # "AGENDA ITEM 1"
+            r'\n\s*([A-Z])\.\s+([A-Z][^\n]{10,100})',         # "A. CONSENT CALENDAR"
+        ]
+
+        # Find all potential item boundaries
+        items_found = []
+
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                position = match.start()
+                sequence_str = match.group(1)
+                title = match.group(2).strip()
+
+                # Try to extract page number from context
+                text_before = text[max(0, position-200):position]
+                page_match = re.search(r'--- PAGE (\d+) ---', text_before)
+                start_page = int(page_match.group(1)) if page_match else None
+
+                # Convert letter sequences (A, B, C) to numbers
+                if sequence_str.isalpha():
+                    sequence = ord(sequence_str.upper()) - ord('A') + 1
+                else:
+                    try:
+                        sequence = int(sequence_str)
+                    except ValueError:
+                        continue
+
+                items_found.append({
+                    'sequence': sequence,
+                    'title': title,
+                    'position': position,
+                    'start_page': start_page
+                })
+
+        # Deduplicate and sort by position
+        items_found.sort(key=lambda x: x['position'])
+
+        # Remove duplicates (same position within 50 chars)
+        deduplicated = []
+        for item in items_found:
+            if not deduplicated or (item['position'] - deduplicated[-1]['position']) > 50:
+                deduplicated.append(item)
+
+        # If we found fewer than 3 items, probably not a structured agenda
+        if len(deduplicated) < 3:
+            logger.info(f"[ItemDetection] Only found {len(deduplicated)} items - not enough for structured processing")
+            return []
+
+        # Extract text for each item
+        result = []
+        for i, item in enumerate(deduplicated):
+            start_pos = item['position']
+            end_pos = deduplicated[i+1]['position'] if i+1 < len(deduplicated) else len(text)
+
+            item_text = text[start_pos:end_pos].strip()
+
+            result.append({
+                'sequence': item['sequence'],
+                'title': item['title'],
+                'text': item_text,
+                'start_page': item['start_page']
+            })
+
+        logger.info(f"[ItemDetection] Detected {len(result)} agenda items from PDF structure")
+        return result
     
     def _update_cache_hit_count(self, packet_url: str):
         """Update cache hit count in cache table"""
