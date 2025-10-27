@@ -729,7 +729,25 @@ class Conductor:
                     if result.get('success') and result.get('text'):
                         extracted_text = result['text']
 
-                        # Detect items using pattern matching
+                        # Check document size - skip item detection for small packets
+                        page_count = self.processor._estimate_page_count(extracted_text)
+                        text_size = len(extracted_text)
+
+                        if page_count <= 10 or text_size < 30000:
+                            logger.info(f"[ItemDetection] Small packet ({page_count} pages, {text_size} chars) - processing monolithically")
+                            # Fall back to monolithic processing
+                            meeting_data = {
+                                "packet_url": meeting.packet_url,
+                                "city_banana": meeting.banana,
+                                "meeting_name": meeting.title,
+                                "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                                "meeting_id": meeting.id,
+                            }
+                            result = self.processor.process_agenda_with_cache(meeting_data)
+                            logger.info(f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s")
+                            return
+
+                        # Detect items using pattern matching (for larger packets)
                         detected_items = self.processor.detect_agenda_items(extracted_text)
 
                         if detected_items:

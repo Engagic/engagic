@@ -668,7 +668,18 @@ Attached documents:
 
                     if inline_response.response:
                         try:
-                            response_text = inline_response.response.text.strip()
+                            # Handle empty/None responses from Gemini
+                            response_text = inline_response.response.text
+                            if not response_text:
+                                logger.warning(f"[BatchItems] Empty response from Gemini for {original_req['item_id']}")
+                                results.append({
+                                    'item_id': original_req['item_id'],
+                                    'success': False,
+                                    'error': 'Empty response from Gemini'
+                                })
+                                continue
+
+                            response_text = response_text.strip()
 
                             # Parse summary and topics
                             summary = ""
@@ -918,16 +929,39 @@ Attached documents:
             if not deduplicated or (item['position'] - deduplicated[-1]['position']) > 50:
                 deduplicated.append(item)
 
-        # If we found fewer than 3 items, probably not a structured agenda
-        if len(deduplicated) < 3:
-            logger.info(f"[ItemDetection] Only found {len(deduplicated)} items - not enough for structured processing")
+        # Filter out boilerplate/procedural items
+        boilerplate_patterns = [
+            r'written\s+public\s+comment',
+            r'in\s+person\s+public\s+comment',
+            r'spoken\s+public\s+comment',
+            r'speaker\s+request',
+            r'oral\s+communication',
+            r'public\s+participation',
+            r'call\s+to\s+order',
+            r'roll\s+call',
+            r'pledge\s+of\s+allegiance',
+            r'adjournment',
+        ]
+
+        filtered = []
+        for item in deduplicated:
+            title_lower = item['title'].lower()
+            is_boilerplate = any(re.search(pattern, title_lower) for pattern in boilerplate_patterns)
+            if not is_boilerplate:
+                filtered.append(item)
+            else:
+                logger.debug(f"[ItemDetection] Filtered boilerplate: {item['title'][:60]}")
+
+        # If we found fewer than 3 real items after filtering, probably not worth item-level processing
+        if len(filtered) < 3:
+            logger.info(f"[ItemDetection] Only {len(filtered)} non-boilerplate items found (filtered {len(deduplicated) - len(filtered)}) - processing monolithically")
             return []
 
-        # Extract text for each item
+        # Extract text for each item (using filtered list)
         result = []
-        for i, item in enumerate(deduplicated):
+        for i, item in enumerate(filtered):
             start_pos = item['position']
-            end_pos = deduplicated[i+1]['position'] if i+1 < len(deduplicated) else len(text)
+            end_pos = filtered[i+1]['position'] if i+1 < len(filtered) else len(text)
 
             item_text = text[start_pos:end_pos].strip()
 
