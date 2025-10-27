@@ -866,113 +866,109 @@ Attached documents:
         chars_per_page = 3000
         return max(1, len(text) // chars_per_page)
 
-    def detect_agenda_items(self, text: str) -> List[Dict[str, Any]]:
+    def detect_agenda_items(self, text: str, max_chunk_size: int = 75000) -> List[Dict[str, Any]]:
         """
-        Detect agenda items from monolithic PDF text using regex patterns.
+        Detect agenda items from monolithic PDF text using smart chunking.
 
-        Based on original engagic approach - looks for common municipal agenda patterns:
-        - "1. ITEM NAME" or "Item 1:"
-        - "AGENDA ITEM 1"
-        - Section headers
+        Based on original engagic chunker - respects agenda boundaries but groups
+        into reasonable chunks to avoid over-splitting.
 
         Args:
             text: Extracted PDF text
+            max_chunk_size: Maximum characters per chunk (default 75K)
 
         Returns:
-            List of detected items: [{'sequence': 1, 'title': '...', 'text': '...', 'start_page': N}, ...]
+            List of detected items: [{'sequence': N, 'title': '...', 'text': '...', 'start_page': N}, ...]
             Empty list if no clear item structure detected
         """
-        # Common agenda item patterns
-        patterns = [
-            r'\n\s*(\d+)\.\s+([A-Z][^\n]{10,100})',           # "1. CALL TO ORDER"
-            r'\n\s*Item\s+(\d+)[:\.]?\s+([^\n]{10,100})',     # "Item 1: Public Comment"
-            r'\n\s*AGENDA\s+ITEM\s+(\d+)[:\.]?\s+([^\n]*)',   # "AGENDA ITEM 1"
-            r'\n\s*([A-Z])\.\s+([A-Z][^\n]{10,100})',         # "A. CONSENT CALENDAR"
+        # Original agenda item boundary patterns
+        agenda_patterns = [
+            r"\n\s*\d+\.\s+[A-Z]",      # "1. ITEM NAME"
+            r"\n\s*[A-Z]\.\s+[A-Z]",    # "A. ITEM NAME"
+            r"\n\s*Item\s+\d+",         # "Item 1"
+            r"\n\s*AGENDA\s+ITEM",      # "AGENDA ITEM"
         ]
 
-        # Find all potential item boundaries
-        items_found = []
-
-        for pattern in patterns:
+        # Find all potential split points
+        split_points = [0]
+        for pattern in agenda_patterns:
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                position = match.start()
-                sequence_str = match.group(1)
-                title = match.group(2).strip()
+                split_points.append(match.start())
 
-                # Try to extract page number from context
-                text_before = text[max(0, position-200):position]
-                page_match = re.search(r'--- PAGE (\d+) ---', text_before)
-                start_page = int(page_match.group(1)) if page_match else None
+        split_points = sorted(set(split_points))
+        split_points.append(len(text))
 
-                # Convert letter sequences (A, B, C) to numbers
-                if sequence_str.isalpha():
-                    sequence = ord(sequence_str.upper()) - ord('A') + 1
-                else:
-                    try:
-                        sequence = int(sequence_str)
-                    except ValueError:
-                        continue
-
-                items_found.append({
-                    'sequence': sequence,
-                    'title': title,
-                    'position': position,
-                    'start_page': start_page
-                })
-
-        # Deduplicate and sort by position
-        items_found.sort(key=lambda x: x['position'])
-
-        # Remove duplicates (same position within 50 chars)
-        deduplicated = []
-        for item in items_found:
-            if not deduplicated or (item['position'] - deduplicated[-1]['position']) > 50:
-                deduplicated.append(item)
-
-        # Filter out boilerplate/procedural items
-        boilerplate_patterns = [
-            r'written\s+public\s+comment',
-            r'in\s+person\s+public\s+comment',
-            r'spoken\s+public\s+comment',
-            r'speaker\s+request',
-            r'oral\s+communication',
-            r'public\s+participation',
-            r'call\s+to\s+order',
-            r'roll\s+call',
-            r'pledge\s+of\s+allegiance',
-            r'adjournment',
-        ]
-
-        filtered = []
-        for item in deduplicated:
-            title_lower = item['title'].lower()
-            is_boilerplate = any(re.search(pattern, title_lower) for pattern in boilerplate_patterns)
-            if not is_boilerplate:
-                filtered.append(item)
-            else:
-                logger.debug(f"[ItemDetection] Filtered boilerplate: {item['title'][:60]}")
-
-        # If we found fewer than 3 real items after filtering, probably not worth item-level processing
-        if len(filtered) < 3:
-            logger.info(f"[ItemDetection] Only {len(filtered)} non-boilerplate items found (filtered {len(deduplicated) - len(filtered)}) - processing monolithically")
+        # If too few boundaries found, not worth chunking
+        if len(split_points) < 4:  # Need at least 3 items (0, item1, item2, end)
+            logger.info(f"[ItemDetection] Only {len(split_points) - 2} boundaries found - processing monolithically")
             return []
 
-        # Extract text for each item (using filtered list)
-        result = []
-        for i, item in enumerate(filtered):
-            start_pos = item['position']
-            end_pos = filtered[i+1]['position'] if i+1 < len(filtered) else len(text)
+        # Group split points into appropriately sized chunks
+        chunks = []
+        current_chunk_start = 0
 
-            item_text = text[start_pos:end_pos].strip()
+        for i in range(1, len(split_points)):
+            chunk_end = split_points[i]
+            chunk_size = chunk_end - current_chunk_start
+
+            if chunk_size > max_chunk_size and chunks:
+                # Start new chunk at previous boundary
+                chunk_text = text[current_chunk_start:split_points[i - 1]]
+                chunks.append({
+                    'start_pos': current_chunk_start,
+                    'end_pos': split_points[i - 1],
+                    'text': chunk_text
+                })
+                current_chunk_start = split_points[i - 1]
+            elif i == len(split_points) - 1:
+                # Last chunk
+                chunk_text = text[current_chunk_start:chunk_end]
+                chunks.append({
+                    'start_pos': current_chunk_start,
+                    'end_pos': chunk_end,
+                    'text': chunk_text
+                })
+
+        # If only got 1 chunk, fall back to monolithic
+        if len(chunks) <= 1:
+            logger.info(f"[ItemDetection] Only 1 chunk after grouping - processing monolithically")
+            return []
+
+        # Cap at reasonable number of chunks
+        if len(chunks) > 50:
+            logger.warning(f"[ItemDetection] {len(chunks)} chunks detected - too many! Processing monolithically")
+            return []
+
+        # Convert chunks to items with metadata
+        result = []
+        for i, chunk in enumerate(chunks):
+            # Try to extract title from beginning of chunk
+            chunk_start = chunk['text'][:200]
+            title = "Section " + str(i + 1)
+
+            # Try to find a title in first few lines
+            for pattern in agenda_patterns:
+                match = re.search(pattern, chunk_start, re.IGNORECASE)
+                if match:
+                    # Extract text after the pattern up to newline
+                    title_start = match.end()
+                    title_text = chunk_start[title_start:].split('\n')[0].strip()
+                    if title_text:
+                        title = title_text[:100]  # Cap at 100 chars
+                    break
+
+            # Try to extract page number
+            page_match = re.search(r'--- PAGE (\d+) ---', chunk['text'][:500])
+            start_page = int(page_match.group(1)) if page_match else None
 
             result.append({
-                'sequence': item['sequence'],
-                'title': item['title'],
-                'text': item_text,
-                'start_page': item['start_page']
+                'sequence': i + 1,
+                'title': title,
+                'text': chunk['text'],
+                'start_page': start_page
             })
 
-        logger.info(f"[ItemDetection] Detected {len(result)} agenda items from PDF structure")
+        logger.info(f"[ItemDetection] Created {len(result)} chunks from agenda structure")
         return result
     
     def _update_cache_hit_count(self, packet_url: str):
