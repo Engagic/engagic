@@ -898,36 +898,50 @@ Attached documents:
         split_points = sorted(set(split_points))
         split_points.append(len(text))
 
+        # Debug: Show what we found
+        logger.info(f"[ItemDetection] Found {len(split_points) - 2} boundaries from {len(text)} chars")
+        if len(split_points) <= 10:
+            for i, pos in enumerate(split_points[1:-1][:10]):  # Show first 10 boundaries
+                context = text[max(0, pos-20):pos+80].replace('\n', ' ')
+                logger.debug(f"[ItemDetection] Boundary {i+1} at pos {pos}: ...{context}...")
+
         # If too few boundaries found, not worth chunking
         if len(split_points) < 4:  # Need at least 3 items (0, item1, item2, end)
             logger.info(f"[ItemDetection] Only {len(split_points) - 2} boundaries found - processing monolithically")
             return []
 
-        # Group split points into appropriately sized chunks
-        chunks = []
-        current_chunk_start = 0
-
+        # Create chunks at every boundary, then intelligently combine small ones
+        # Step 1: Create initial chunks at every boundary
+        initial_chunks = []
         for i in range(1, len(split_points)):
-            chunk_end = split_points[i]
-            chunk_size = chunk_end - current_chunk_start
+            chunk_text = text[split_points[i-1]:split_points[i]]
+            initial_chunks.append({
+                'start_pos': split_points[i-1],
+                'end_pos': split_points[i],
+                'text': chunk_text
+            })
 
-            if chunk_size > max_chunk_size and chunks:
-                # Start new chunk at previous boundary
-                chunk_text = text[current_chunk_start:split_points[i - 1]]
-                chunks.append({
-                    'start_pos': current_chunk_start,
-                    'end_pos': split_points[i - 1],
-                    'text': chunk_text
-                })
-                current_chunk_start = split_points[i - 1]
-            elif i == len(split_points) - 1:
-                # Last chunk
-                chunk_text = text[current_chunk_start:chunk_end]
-                chunks.append({
-                    'start_pos': current_chunk_start,
-                    'end_pos': chunk_end,
-                    'text': chunk_text
-                })
+        # Step 2: Combine adjacent small chunks (but keep large ones separate)
+        chunks = []
+        current_combined = None
+
+        for chunk in initial_chunks:
+            if current_combined is None:
+                current_combined = dict(chunk)  # Start new combined chunk
+            elif len(current_combined['text']) + len(chunk['text']) <= max_chunk_size:
+                # Small enough to combine
+                current_combined['end_pos'] = chunk['end_pos']
+                current_combined['text'] += chunk['text']
+            else:
+                # Current combined chunk is full, save it and start new
+                chunks.append(current_combined)
+                current_combined = dict(chunk)
+
+        # Don't forget the last chunk
+        if current_combined:
+            chunks.append(current_combined)
+
+        logger.info(f"[ItemDetection] Combined {len(initial_chunks)} boundaries into {len(chunks)} chunks")
 
         # If only got 1 chunk, fall back to monolithic
         if len(chunks) <= 1:
