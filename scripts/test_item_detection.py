@@ -146,7 +146,7 @@ def main():
         print(f"Banana: {city.banana}")
 
         # Get recent meetings with packets
-        meetings = db.get_meetings(city.banana, limit=args.limit * 2)
+        meetings = db.get_meetings(bananas=[city.banana], limit=args.limit * 2)
         meetings_with_packets = [m for m in meetings if m.packet_url][:args.limit]
 
         if not meetings_with_packets:
