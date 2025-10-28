@@ -200,25 +200,46 @@ start_daemon() {
 }
 
 stop_daemon() {
+    log "Stopping daemon..."
+
+    # Disable first to prevent auto-restart
+    systemctl disable "$DAEMON_SERVICE" 2>/dev/null || true
+
     if systemctl is-active --quiet "$DAEMON_SERVICE"; then
-        log "Stopping daemon..."
-        systemctl kill --signal=SIGKILL "$DAEMON_SERVICE"
-        systemctl disable "$DAEMON_SERVICE"
-        log "Daemon stopped and disabled"
+        # Use timeout to prevent hanging on graceful shutdown
+        # Try stop first (proper way), but with 5 second timeout
+        log "Stopping daemon (5s timeout)..."
+        timeout 5 systemctl stop "$DAEMON_SERVICE" 2>/dev/null || {
+            # If timeout or stop fails, force kill
+            warn "Stop timed out, sending SIGKILL..."
+            systemctl kill --signal=SIGKILL "$DAEMON_SERVICE"
+            sleep 2
+        }
+    fi
+
+    # Kill any orphaned processes
+    if pgrep -f "backend.services.daemon" > /dev/null; then
+        warn "Found orphaned daemon processes, killing..."
+        pkill -9 -f "backend.services.daemon"
+        sleep 1
+    fi
+
+    # Final verification
+    if systemctl is-active --quiet "$DAEMON_SERVICE" || pgrep -f "backend.services.daemon" > /dev/null; then
+        error "Failed to stop daemon"
     else
-        warn "Daemon not running"
+        log "Daemon stopped and disabled"
     fi
 }
 
 restart_daemon() {
     log "Restarting daemon..."
-    systemctl restart "$DAEMON_SERVICE"
-    sleep 2
-    if systemctl is-active --quiet "$DAEMON_SERVICE"; then
-        log "Daemon restarted successfully"
-    else
-        error "Failed to restart daemon"
-    fi
+
+    # Clean stop first
+    stop_daemon
+
+    # Then start
+    start_daemon
 }
 
 # Combined operations

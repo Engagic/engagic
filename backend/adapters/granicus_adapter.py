@@ -175,7 +175,9 @@ class GranicusAdapter(BaseAdapter):
                         # Extract PDFs from AgendaViewer page
                         pdfs = self._extract_pdfs_from_agenda_viewer(agenda_url)
                         if pdfs:
-                            packet_url = pdfs if len(pdfs) > 1 else pdfs[0]
+                            # TODO: Handle multiple PDFs better (store as JSON array or separate items table)
+                            # For now, just take the first PDF to unblock processing
+                            packet_url = pdfs[0]
 
             # Generate fallback meeting_id
             if not meeting_id:

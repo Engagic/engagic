@@ -253,87 +253,107 @@ class DatabaseViewer:
             return False
 
     def update_city(self):
-        """Update city information"""
-        print("\n=== UPDATE CITY ===")
-        self.show_cities_table(20)
+        """Update city information - continuous edit mode"""
+        current_banana = None
 
-        banana = input("Enter banana to update: ").strip()
-        if not banana:
-            print("Invalid banana")
-            return False
+        while True:
+            if not current_banana:
+                print("\n=== UPDATE CITY ===")
+                self.show_cities_table(20)
 
-        # Get current city
-        city = self.db.get_city(banana=banana)
-        if not city:
-            print(f"No city found with banana {banana}")
-            return False
+                banana = input("\nEnter banana to update (or 'q' to quit): ").strip()
+                if not banana or banana.lower() == 'q':
+                    return False
 
-        print(f"\nCurrent values for {city.name}, {city.state}:")
-        print(f"  name: {city.name}")
-        print(f"  state: {city.state}")
-        print(f"  vendor: {city.vendor}")
-        print(f"  slug: {city.slug}")
-        print(f"  county: {city.county or 'None'}")
-        print(f"  status: {city.status}")
+                # Get current city
+                city = self.db.get_city(banana=banana)
+                if not city:
+                    print(f"No city found with banana {banana}")
+                    continue
 
-        field = input(
-            "\nField to update (name/state/slug/vendor/status/county): "
-        ).strip()
-        valid_fields = ["name", "state", "slug", "vendor", "status", "county"]
-
-        if field not in valid_fields:
-            print(f"Invalid field. Valid: {', '.join(valid_fields)}")
-            return False
-
-        new_value = input(f"New value for {field}: ").strip()
-        if not new_value and field != "county":
-            print("Value cannot be empty (except county)")
-            return False
-
-        try:
-            conn = self.db.conn
-            cursor = conn.cursor()
-
-            # If updating name or state, also update banana
-            if field in ["name", "state"]:
-                new_name = new_value if field == "name" else city.name
-                new_state = new_value if field == "state" else city.state
-
-                # Calculate new banana
-                import re
-                new_banana = re.sub(r'[^a-zA-Z0-9]', '', new_name).lower() + new_state.upper()
-
-                # Update with new banana
-                cursor.execute(
-                    """
-                    UPDATE cities
-                    SET name = ?, state = ?, banana = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE banana = ?
-                """,
-                    (new_name, new_state, new_banana, banana),
-                )
-
-                # Update foreign keys in other tables
-                cursor.execute("UPDATE zipcodes SET banana = ? WHERE banana = ?", (new_banana, banana))
-                cursor.execute("UPDATE meetings SET banana = ? WHERE banana = ?", (new_banana, banana))
-                cursor.execute("UPDATE queue SET banana = ? WHERE banana = ?", (new_banana, banana))
-
-                print(f"Updated city and banana: {banana} → {new_banana}")
+                current_banana = banana
             else:
-                cursor.execute(
-                    f"""
-                    UPDATE cities SET {field} = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE banana = ?
-                """,
-                    (new_value, banana),
-                )
-                print(f"Updated city {banana}: {field} = '{new_value}'")
+                # Refresh city data
+                city = self.db.get_city(banana=current_banana)
+                if not city:
+                    print(f"City {current_banana} no longer exists")
+                    current_banana = None
+                    continue
 
-            conn.commit()
-            return True
-        except Exception as e:
-            print(f"Error updating city: {e}")
-            return False
+            print(f"\n=== {city.name}, {city.state} ({current_banana}) ===")
+            print(f"  name:   {city.name}")
+            print(f"  state:  {city.state}")
+            print(f"  vendor: {city.vendor}")
+            print(f"  slug:   {city.slug}")
+            print(f"  county: {city.county or 'None'}")
+            print(f"  status: {city.status}")
+
+            field = input(
+                "\nField to update (name/state/slug/vendor/status/county) or 'q' to quit: "
+            ).strip()
+
+            if not field or field.lower() == 'q':
+                current_banana = None
+                continue
+
+            valid_fields = ["name", "state", "slug", "vendor", "status", "county"]
+            if field not in valid_fields:
+                print(f"Invalid field. Valid: {', '.join(valid_fields)}")
+                continue
+
+            new_value = input(f"New value for {field} (or 'cancel' to skip): ").strip()
+
+            if new_value.lower() == 'cancel':
+                continue
+
+            if not new_value and field != "county":
+                print("Value cannot be empty (except county)")
+                continue
+
+            try:
+                conn = self.db.conn
+                cursor = conn.cursor()
+
+                # If updating name or state, also update banana
+                if field in ["name", "state"]:
+                    new_name = new_value if field == "name" else city.name
+                    new_state = new_value if field == "state" else city.state
+
+                    # Calculate new banana
+                    import re
+                    new_banana = re.sub(r'[^a-zA-Z0-9]', '', new_name).lower() + new_state.upper()
+
+                    # Update with new banana
+                    cursor.execute(
+                        """
+                        UPDATE cities
+                        SET name = ?, state = ?, banana = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE banana = ?
+                    """,
+                        (new_name, new_state, new_banana, current_banana),
+                    )
+
+                    # Update foreign keys in other tables
+                    cursor.execute("UPDATE zipcodes SET banana = ? WHERE banana = ?", (new_banana, current_banana))
+                    cursor.execute("UPDATE meetings SET banana = ? WHERE banana = ?", (new_banana, current_banana))
+                    cursor.execute("UPDATE queue SET banana = ? WHERE banana = ?", (new_banana, current_banana))
+
+                    print(f"Updated city and banana: {current_banana} → {new_banana}")
+                    current_banana = new_banana
+                else:
+                    cursor.execute(
+                        f"""
+                        UPDATE cities SET {field} = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE banana = ?
+                    """,
+                        (new_value, current_banana),
+                    )
+                    print(f"Updated {field} = '{new_value}'")
+
+                conn.commit()
+            except Exception as e:
+                print(f"Error updating city: {e}")
+                continue
 
     def search_database(self):
         """Search across all tables"""
