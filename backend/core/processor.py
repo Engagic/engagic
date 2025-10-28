@@ -897,9 +897,8 @@ Attached documents:
         """
         Universal agenda parser. Works by:
         1. Extract cover page agenda listing (source of truth for item metadata)
-        2. Detect repeating structural markers in body
-        3. Split on strongest boundary signals
-        4. Match chunks back to cover metadata via footers/context
+        2. Find where those items appear in the body text
+        3. Split on those boundaries
         """
         # Normalize page breaks and excessive newlines
         text = re.sub(r'\f+', '\n\n', pdf_text)
@@ -929,14 +928,14 @@ Attached documents:
 
         logger.info(f"[Chunker] Found {len(agenda_items)} items in cover section")
 
-        # Step 3: Find item boundaries in body
-        boundaries = self._detect_item_boundaries(body_text)
+        # Step 3: Find where cover items appear in body
+        boundaries = self._find_item_boundaries_by_title(body_text, agenda_items)
 
         if not boundaries or len(boundaries) < 2:
-            logger.info(f"[Chunker] Insufficient boundaries in body (found {len(boundaries) if boundaries else 0})")
+            logger.info(f"[Chunker] Insufficient boundaries found by title search (found {len(boundaries) if boundaries else 0})")
             return []
 
-        # Step 4: Chunk and match to metadata
+        # Step 4: Create chunks from boundaries
         chunks = []
         for i, boundary in enumerate(boundaries):
             start = boundary['start']
@@ -947,22 +946,18 @@ Attached documents:
             if len(content) < 100:  # Skip tiny chunks
                 continue
 
-            # Extract item ID from content (footers, headers)
-            detected_id = self._extract_item_id_from_content(content)
-
-            # Match to cover metadata
-            metadata = self._match_to_agenda(detected_id, content, agenda_items)
-
             # Extract page number if available
             page_match = re.search(r'--- PAGE (\d+) ---', content[:500])
             start_page = int(page_match.group(1)) if page_match else None
 
             chunks.append({
                 'sequence': i + 1,
-                'title': f"{metadata['item_id']}. {metadata['title']}",
+                'title': f"{boundary['item_id']}. {boundary['title']}",
                 'text': content,
                 'start_page': start_page
             })
+
+        logger.info(f"[Chunker] Created {len(chunks)} chunks from {len(agenda_items)} cover items")
 
         return chunks if len(chunks) >= 2 else []
 
@@ -1066,6 +1061,57 @@ Attached documents:
         deduped.sort(key=lambda x: x['item_number'])
 
         return deduped
+
+    def _find_item_boundaries_by_title(self, body_text: str, agenda_items: List[Dict]) -> List[Dict]:
+        """
+        Find where each cover agenda item appears in the body text.
+        Searches for item titles from cover, using fuzzy matching.
+        """
+        boundaries = []
+
+        for item in agenda_items:
+            title = item['title']
+            item_id = item['item_id']
+
+            # Try to find this title in the body
+            # First, try exact match (accounting for whitespace differences)
+            title_pattern = re.escape(title[:80])  # Use first 80 chars
+            title_pattern = title_pattern.replace(r'\ ', r'\s+')  # Allow flexible whitespace
+
+            match = re.search(title_pattern, body_text, re.IGNORECASE)
+
+            if match:
+                boundaries.append({
+                    'start': match.start(),
+                    'item_id': item_id,
+                    'title': title,
+                    'match_type': 'exact'
+                })
+                logger.debug(f"[Chunker] Found item {item_id} at position {match.start()}")
+            else:
+                # Try searching for item number + common headers
+                # Pattern: "Item 1" or footer patterns like "Item 1: ... Pg. X of Y"
+                num_patterns = [
+                    rf'Item\s+{re.escape(item_id)}[\s:]',
+                    rf'\n{re.escape(item_id)}\.\s*\n',  # Numbered like "1.\n"
+                ]
+
+                for pattern in num_patterns:
+                    match = re.search(pattern, body_text, re.IGNORECASE)
+                    if match:
+                        boundaries.append({
+                            'start': match.start(),
+                            'item_id': item_id,
+                            'title': title,
+                            'match_type': 'by_number'
+                        })
+                        logger.debug(f"[Chunker] Found item {item_id} by number at position {match.start()}")
+                        break
+
+        # Sort by position in document
+        boundaries.sort(key=lambda x: x['start'])
+
+        return boundaries
 
     def _detect_item_boundaries(self, body_text: str) -> List[Dict[str, int]]:
         """
