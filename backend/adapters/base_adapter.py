@@ -53,6 +53,21 @@ class BaseAdapter:
 
         logger.info(f"Initialized {vendor} adapter for {city_slug}")
 
+    def __enter__(self):
+        """Context manager entry - returns self for 'with' statement"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup session on exit"""
+        if hasattr(self, 'session'):
+            self.session.close()
+        return False
+
+    def close(self):
+        """Explicit cleanup method for non-context-manager usage"""
+        if hasattr(self, 'session'):
+            self.session.close()
+
     def _create_session(self) -> requests.Session:
         """
         Create HTTP session with retry logic and proper headers.

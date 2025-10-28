@@ -154,6 +154,10 @@ class AgendaProcessor:
             if result.get('success') and result.get('text'):
                 summary = self.summarizer.summarize_meeting(result['text'])
                 logger.info(f"[Tier1] SUCCESS - {url}")
+
+                # Cleanup: free PDF text memory
+                del result
+
                 return summary, "tier1_pymupdf_gemini"
             else:
                 logger.warning(f"[Tier1] FAILED - No text extracted or poor quality - {url}")
@@ -217,6 +221,10 @@ class AgendaProcessor:
             failure_note = f"\n\n[Note: {len(failed_pdfs)} of {len(urls)} documents could not be processed]"
             summary += failure_note
             logger.warning(f"Partial success: {len(all_text_parts)}/{len(urls)} documents processed")
+
+        # Cleanup: free memory immediately (50-100MB per large meeting)
+        del all_text_parts
+        del combined_text
 
         return summary, f"multiple_pdfs_{len(urls)}_combined"
 
