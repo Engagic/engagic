@@ -64,6 +64,9 @@ class Config:
         # Admin authentication
         self.ADMIN_TOKEN = os.getenv("ENGAGIC_ADMIN_TOKEN", "")
 
+        # Vendor API tokens
+        self.NYC_LEGISTAR_TOKEN = os.getenv("NYC_LEGISTAR_TOKEN", "")
+
         # Validate configuration
         self._validate()
 

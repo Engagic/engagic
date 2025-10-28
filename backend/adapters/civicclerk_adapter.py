@@ -64,21 +64,33 @@ class CivicClerkAdapter(BaseAdapter):
             packet = next(
                 (
                     doc for doc in meeting.get("publishedFiles", [])
-                    if doc.get("type") == "Agenda Packet"
+                    if doc.get("type") in ["Agenda Packet", "Agenda"]
                 ),
                 None
             )
 
-            # Skip meetings without packets
-            if not packet:
-                logger.debug(
-                    f"[civicclerk:{self.slug}] No packet for: {meeting.get('eventName')}"
-                )
-                continue
+            event_name = meeting.get("eventName", "")
+            start_time = meeting.get("startDateTime", "")
 
-            yield {
+            # Parse meeting status from title and start time
+            meeting_status = self._parse_meeting_status(event_name, start_time)
+
+            # Log if no packet (but still track the meeting)
+            if not packet:
+                file_types = [doc.get("type") for doc in meeting.get("publishedFiles", [])]
+                logger.debug(
+                    f"[civicclerk:{self.slug}] No packet for: {event_name}, "
+                    f"available files: {file_types}"
+                )
+
+            result = {
                 "meeting_id": str(meeting["id"]),
-                "title": meeting.get("eventName", ""),
+                "title": event_name,
                 "start": meeting.get("startDateTime", ""),
-                "packet_url": self._build_packet_url(packet),
+                "packet_url": self._build_packet_url(packet) if packet else None,
             }
+
+            if meeting_status:
+                result["meeting_status"] = meeting_status
+
+            yield result

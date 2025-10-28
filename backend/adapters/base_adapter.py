@@ -194,7 +194,7 @@ class BaseAdapter:
         response = self._get(url)
         return BeautifulSoup(response.text, 'html.parser')
 
-    def _discover_pdfs(self, url: str, keywords: List[str] = None) -> List[str]:
+    def _discover_pdfs(self, url: str, keywords: Optional[List[str]] = None) -> List[str]:
         """
         Discover PDF links on a page, optionally filtering by keywords.
 
@@ -249,6 +249,52 @@ class BaseAdapter:
         element = soup.select_one(selector)
         return element.get_text(strip=True) if element else ""
 
+    def _parse_meeting_status(self, title: str, date_str: Optional[str] = None) -> Optional[str]:
+        """
+        Parse meeting title and date/time for status keywords.
+
+        Common patterns:
+        - [CANCELLED] - City Council Meeting
+        - (POSTPONED) Regular Meeting
+        - City Council - REVISED
+        - RESCHEDULED: Planning Commission
+        - Date field: "POSTPONED - TBD"
+
+        Args:
+            title: Meeting title to parse
+            date_str: Optional date/time string to check
+
+        Returns:
+            Status string (cancelled, postponed, revised, rescheduled, deferred) or None
+        """
+        # Status keywords in priority order
+        status_keywords = [
+            ('CANCEL', 'cancelled'),
+            ('POSTPONE', 'postponed'),
+            ('DEFER', 'deferred'),
+            ('RESCHEDULE', 'rescheduled'),
+            ('REVISED', 'revised'),
+            ('AMENDMENT', 'revised'),
+            ('UPDATED', 'revised'),
+        ]
+        current_status = None
+        # Check title
+        if title:
+            title_upper = title.upper()
+            for keyword, status in status_keywords:
+                if keyword in title_upper:
+                    logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' in title: {title}")
+                    current_status = status
+        # Check date/time string
+        if date_str:
+            date_upper = str(date_str).upper()
+            for keyword, status in status_keywords:
+                if keyword in date_upper:
+                    logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' in date: {date_str}")
+                    current_status = status
+
+        return current_status
+
     def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
         """
         Fetch meetings from vendor API/website.
@@ -261,5 +307,6 @@ class BaseAdapter:
                 - title: str
                 - start: str (ISO datetime)
                 - packet_url: Optional[str]
+                - meeting_status: Optional[str] (cancelled, postponed, revised, rescheduled)
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement fetch_meetings()")

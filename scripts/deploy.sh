@@ -41,6 +41,7 @@ check_uv() {
     fi
 }
 
+
 check_api_process() {
     if [ -f "$API_PID_FILE" ]; then
         local pid=$(cat "$API_PID_FILE")
@@ -58,18 +59,19 @@ check_api_process() {
 setup_env() {
     log "Setting up Python environment with uv..."
     check_uv
-    
+
     cd "$APP_DIR"
-    
+
     # Create venv with uv if doesn't exist
     if [ ! -d "$VENV_DIR" ]; then
         uv venv "$VENV_DIR"
         log "Created virtual environment with uv"
     fi
-    
+
     # Install dependencies with uv
     source "$VENV_DIR/bin/activate"
     uv sync
+    log "Dependencies installed"
 }
 
 create_daemon_service() {
@@ -321,6 +323,14 @@ quick_update() {
     log "Update complete!"
 }
 
+sync_deps() {
+    log "Syncing dependencies..."
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    uv sync
+    log "Dependencies synced!"
+}
+
 deploy_full() {
     info "Full deployment starting..."
     check_uv
@@ -343,12 +353,25 @@ sync_city() {
     if [ -z "$1" ]; then
         error "City banana required (e.g., paloaltoCA)"
     fi
-    
+
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
     # Source API keys if available
     [ -f ~/.llm_secrets ] && source ~/.llm_secrets
-    python -m backend.services.daemon --sync-city "$1"
+    python -m backend.services.conductor --sync-city "$1"
+}
+
+sync_and_process_city() {
+    if [ -z "$1" ]; then
+        error "City banana required (e.g., paloaltoCA)"
+    fi
+
+    log "Syncing and processing $1..."
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    # Source API keys if available
+    [ -f ~/.llm_secrets ] && source ~/.llm_secrets
+    python -m backend.services.conductor --sync-and-process-city "$1"
 }
 
 process_unprocessed() {
@@ -375,6 +398,7 @@ show_help() {
     echo "  update                    - Quick update (git pull + restart)"
     echo "  deploy                    - Full deployment"
     echo "  test                      - Test all services"
+    echo "  sync                      - Sync dependencies"
     echo ""
     echo "API Commands:"
     echo "  logs-api                  - Show API logs"
@@ -382,14 +406,16 @@ show_help() {
     echo "Background Processor Commands:"
     echo "  logs-daemon               - Show daemon logs"
     echo "  daemon-status             - Show processing status"
-    echo "  sync-city CITY_BANANA     - Force sync specific city"
+    echo "  sync-city CITY_BANANA     - Force sync specific city (enqueues only)"
+    echo "  sync-and-process CITY     - Sync city and immediately process all meetings"
     echo "  process-unprocessed       - Process all unprocessed meetings"
     echo ""
     echo "Examples:"
-    echo "  $0 deploy                 # First time setup"
-    echo "  $0 update                 # Quick update from git"
-    echo "  $0 sync-city paloaltoCA   # Sync Palo Alto"
-    echo "  $0 status                 # Check everything"
+    echo "  $0 deploy                      # First time setup"
+    echo "  $0 update                      # Quick update from git"
+    echo "  $0 sync-city paloaltoCA        # Sync Palo Alto (just fetch + enqueue)"
+    echo "  $0 sync-and-process paloaltoCA # Sync + process immediately (test item detection)"
+    echo "  $0 status                      # Check everything"
 }
 
 # Main command handling
@@ -435,12 +461,14 @@ case "${1:-help}" in
     # Deployment
     update)         quick_update ;;
     deploy)         deploy_full ;;
-    
+    sync)           sync_deps ;;
+
     # Daemon specific
     daemon-status)  daemon_status ;;
     sync-city)      sync_city "$2" ;;
+    sync-and-process) sync_and_process_city "$2" ;;
     process-unprocessed) process_unprocessed ;;
-    
+
     # Help
     help|*)         show_help ;;
 esac

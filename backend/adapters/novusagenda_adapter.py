@@ -46,23 +46,44 @@ class NovusAgendaAdapter(BaseAdapter):
             meeting_type = cells[1].get_text(strip=True)
             # location = cells[2].get_text(strip=True)  # Available if needed
 
+            # Time is often in cell 3 or 4 depending on layout
+            time_field = cells[3].get_text(strip=True) if len(cells) > 3 else ""
+
+            # Parse meeting status from title and time field
+            meeting_status = self._parse_meeting_status(meeting_type, time_field)
+
             # Find PDF link
             pdf_link = row.find("a", href=re.compile(r"DisplayAgendaPDF\.ashx"))
-            if not pdf_link:
-                continue
+            packet_url = None
+            meeting_id = None
 
-            # Extract meeting ID
-            pdf_href = pdf_link.get("href", "")
-            meeting_id_match = re.search(r"MeetingID=(\d+)", pdf_href)
-            if not meeting_id_match:
-                continue
+            if pdf_link:
+                # Extract meeting ID
+                pdf_href = pdf_link.get("href", "")
+                meeting_id_match = re.search(r"MeetingID=(\d+)", pdf_href)
+                if meeting_id_match:
+                    meeting_id = meeting_id_match.group(1)
+                    packet_url = f"{self.base_url}/agendapublic/{pdf_href}"
 
-            meeting_id = meeting_id_match.group(1)
-            packet_url = f"{self.base_url}/agendapublic/{pdf_href}"
+            # Generate fallback meeting_id if not found
+            if not meeting_id:
+                import hashlib
+                id_string = f"{meeting_type}_{date}"
+                meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
 
-            yield {
+            if not packet_url:
+                logger.debug(
+                    f"[novusagenda:{self.slug}] No packet for: {meeting_type} on {date}"
+                )
+
+            result = {
                 "meeting_id": meeting_id,
                 "title": meeting_type,
                 "start": date,
                 "packet_url": packet_url,
             }
+
+            if meeting_status:
+                result["meeting_status"] = meeting_status
+
+            yield result

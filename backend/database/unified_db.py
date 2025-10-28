@@ -34,7 +34,7 @@ class City:
     name: str                # Palo Alto
     state: str               # CA
     vendor: str              # primegov, legistar, granicus, etc.
-    vendor_slug: str         # cityofpaloalto (vendor-specific)
+    slug: str         # cityofpaloalto (vendor-specific)
     county: Optional[str] = None
     status: str = "active"
     created_at: Optional[datetime] = None
@@ -54,11 +54,11 @@ class City:
         """Create City from database row"""
         row_dict = dict(row)
         return cls(
-            banana=row_dict['city_banana'],
+            banana=row_dict['banana'],
             name=row_dict['name'],
             state=row_dict['state'],
             vendor=row_dict['vendor'],
-            vendor_slug=row_dict['vendor_slug'],
+            slug=row_dict['slug'],
             county=row_dict.get('county'),
             status=row_dict.get('status', 'active'),
             created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None,
@@ -70,11 +70,12 @@ class City:
 class Meeting:
     """Meeting entity with optional summary"""
     id: str                  # Unique meeting ID
-    city_banana: str         # Foreign key to City
+    banana: str              # Foreign key to City
     title: str
     date: Optional[datetime]
     packet_url: Optional[str | List[str]]  # Single URL or list for multiple PDFs (main + supplemental)
     summary: Optional[str] = None
+    status: Optional[str] = None  # cancelled, postponed, revised, rescheduled, or None for normal
     processing_status: str = "pending"  # pending, processing, completed, failed
     processing_method: Optional[str] = None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
     processing_time: Optional[float] = None
@@ -108,11 +109,12 @@ class Meeting:
 
         return cls(
             id=row_dict['id'],
-            city_banana=row_dict['city_banana'],
+            banana=row_dict['banana'],
             title=row_dict['title'],
             date=datetime.fromisoformat(row_dict['date']) if row_dict.get('date') else None,
             packet_url=packet_url,
             summary=row_dict.get('summary'),
+            status=row_dict.get('status'),
             processing_status=row_dict.get('processing_status', 'pending'),
             processing_method=row_dict.get('processing_method'),
             processing_time=row_dict.get('processing_time'),
@@ -121,11 +123,66 @@ class Meeting:
         )
 
 
+@dataclass
+class AgendaItem:
+    """Agenda item entity - individual items within a meeting"""
+    id: str                     # Vendor-specific item ID
+    meeting_id: str             # Foreign key to Meeting
+    title: str
+    sequence: int               # Order in agenda
+    attachments: List[Any]      # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
+    summary: Optional[str] = None
+    topics: Optional[List[str]] = None  # Extracted topics
+    created_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        data = asdict(self)
+        if self.created_at:
+            data['created_at'] = self.created_at.isoformat()
+        return data
+
+    @classmethod
+    def from_db_row(cls, row: sqlite3.Row) -> 'AgendaItem':
+        """Create AgendaItem from database row"""
+        row_dict = dict(row)
+
+        # Deserialize JSON fields
+        attachments = row_dict.get('attachments')
+        if attachments:
+            try:
+                attachments = json.loads(attachments)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize attachments JSON: {attachments}")
+                attachments = []
+        else:
+            attachments = []
+
+        topics = row_dict.get('topics')
+        if topics:
+            try:
+                topics = json.loads(topics)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize topics JSON: {topics}")
+                topics = None
+        else:
+            topics = None
+
+        return cls(
+            id=row_dict['id'],
+            meeting_id=row_dict['meeting_id'],
+            title=row_dict['title'],
+            sequence=row_dict['sequence'],
+            attachments=attachments,
+            summary=row_dict.get('summary'),
+            topics=topics,
+            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None
+        )
+
+
 class UnifiedDatabase:
     """
     Single database interface for all Engagic data.
-
-    Replaces the old 3-database architecture with a unified approach.
     Key design: Prefer specific lookups over generic queries.
     """
 
@@ -159,11 +216,11 @@ class UnifiedDatabase:
         schema = """
         -- Cities table: Core city registry
         CREATE TABLE IF NOT EXISTS cities (
-            city_banana TEXT PRIMARY KEY,
+            banana TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             state TEXT NOT NULL,
             vendor TEXT NOT NULL,
-            vendor_slug TEXT NOT NULL,
+            slug TEXT NOT NULL,
             county TEXT,
             status TEXT DEFAULT 'active',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -172,32 +229,46 @@ class UnifiedDatabase:
         );
 
         -- City zipcodes: Many-to-many relationship
-        CREATE TABLE IF NOT EXISTS city_zipcodes (
-            city_banana TEXT NOT NULL,
+        CREATE TABLE IF NOT EXISTS zipcodes (
+            banana TEXT NOT NULL,
             zipcode TEXT NOT NULL,
             is_primary BOOLEAN DEFAULT FALSE,
-            FOREIGN KEY (city_banana) REFERENCES cities(city_banana) ON DELETE CASCADE,
-            PRIMARY KEY (city_banana, zipcode)
+            FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+            PRIMARY KEY (banana, zipcode)
         );
 
         -- Meetings table: Meeting data with optional summaries
         CREATE TABLE IF NOT EXISTS meetings (
             id TEXT PRIMARY KEY,
-            city_banana TEXT NOT NULL,
+            banana TEXT NOT NULL,
             title TEXT NOT NULL,
             date TIMESTAMP,
             packet_url TEXT,
             summary TEXT,
+            status TEXT,
             processing_status TEXT DEFAULT 'pending',
             processing_method TEXT,
             processing_time REAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (city_banana) REFERENCES cities(city_banana) ON DELETE CASCADE
+            FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
+        );
+
+        -- Agenda items: Individual items within meetings
+        CREATE TABLE IF NOT EXISTS items (
+            id TEXT PRIMARY KEY,
+            meeting_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            attachments TEXT,
+            summary TEXT,
+            topics TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
         );
 
         -- Processing cache: Track PDF processing for cost optimization
-        CREATE TABLE IF NOT EXISTS processing_cache (
+        CREATE TABLE IF NOT EXISTS cache (
             packet_url TEXT PRIMARY KEY,
             content_hash TEXT,
             processing_method TEXT,
@@ -208,11 +279,11 @@ class UnifiedDatabase:
         );
 
         -- Processing queue: Decoupled PDF processing queue (Phase 4)
-        CREATE TABLE IF NOT EXISTS processing_queue (
+        CREATE TABLE IF NOT EXISTS queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             packet_url TEXT NOT NULL UNIQUE,
             meeting_id TEXT,
-            city_banana TEXT,
+            banana TEXT,
             status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
             priority INTEGER DEFAULT 0,
             retry_count INTEGER DEFAULT 0,
@@ -221,7 +292,7 @@ class UnifiedDatabase:
             completed_at TIMESTAMP,
             error_message TEXT,
             processing_metadata TEXT,
-            FOREIGN KEY (city_banana) REFERENCES cities(city_banana) ON DELETE CASCADE,
+            FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
             FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
         );
 
@@ -237,11 +308,11 @@ class UnifiedDatabase:
         -- Tenant coverage: Which cities each tenant tracks
         CREATE TABLE IF NOT EXISTS tenant_coverage (
             tenant_id TEXT NOT NULL,
-            city_banana TEXT NOT NULL,
+            banana TEXT NOT NULL,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-            FOREIGN KEY (city_banana) REFERENCES cities(city_banana) ON DELETE CASCADE,
-            PRIMARY KEY (tenant_id, city_banana)
+            FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+            PRIMARY KEY (tenant_id, banana)
         );
 
         -- Tenant keywords: Topics tenants care about
@@ -260,14 +331,14 @@ class UnifiedDatabase:
             item_type TEXT NOT NULL,
             title TEXT NOT NULL,
             description TEXT,
-            city_banana TEXT NOT NULL,
+            banana TEXT NOT NULL,
             first_mentioned_meeting_id TEXT,
             first_seen TIMESTAMP,
             last_seen TIMESTAMP,
             status TEXT DEFAULT 'active',
             metadata TEXT,
             FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-            FOREIGN KEY (city_banana) REFERENCES cities(city_banana) ON DELETE CASCADE
+            FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
         );
 
         -- Tracked item meetings: Link tracked items to meetings
@@ -285,17 +356,17 @@ class UnifiedDatabase:
         CREATE INDEX IF NOT EXISTS idx_cities_vendor ON cities(vendor);
         CREATE INDEX IF NOT EXISTS idx_cities_state ON cities(state);
         CREATE INDEX IF NOT EXISTS idx_cities_status ON cities(status);
-        CREATE INDEX IF NOT EXISTS idx_city_zipcodes_zipcode ON city_zipcodes(zipcode);
-        CREATE INDEX IF NOT EXISTS idx_meetings_city ON meetings(city_banana);
+        CREATE INDEX IF NOT EXISTS idx_zipcodes_zipcode ON zipcodes(zipcode);
+        CREATE INDEX IF NOT EXISTS idx_meetings_banana ON meetings(banana);
         CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
         CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
-        CREATE INDEX IF NOT EXISTS idx_processing_cache_hash ON processing_cache(content_hash);
-        CREATE INDEX IF NOT EXISTS idx_queue_status ON processing_queue(status);
-        CREATE INDEX IF NOT EXISTS idx_queue_priority ON processing_queue(priority DESC);
-        CREATE INDEX IF NOT EXISTS idx_queue_city ON processing_queue(city_banana);
-        CREATE INDEX IF NOT EXISTS idx_tenant_coverage_city ON tenant_coverage(city_banana);
+        CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(content_hash);
+        CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status);
+        CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue(priority DESC);
+        CREATE INDEX IF NOT EXISTS idx_queue_city ON queue(banana);
+        CREATE INDEX IF NOT EXISTS idx_tenant_coverage_city ON tenant_coverage(banana);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_tenant ON tracked_items(tenant_id);
-        CREATE INDEX IF NOT EXISTS idx_tracked_items_city ON tracked_items(city_banana);
+        CREATE INDEX IF NOT EXISTS idx_tracked_items_city ON tracked_items(banana);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_status ON tracked_items(status);
         """
 
@@ -309,7 +380,7 @@ class UnifiedDatabase:
         banana: Optional[str] = None,
         name: Optional[str] = None,
         state: Optional[str] = None,
-        vendor_slug: Optional[str] = None,
+        slug: Optional[str] = None,
         zipcode: Optional[str] = None
     ) -> Optional[City]:
         """
@@ -317,14 +388,14 @@ class UnifiedDatabase:
 
         Uses most specific parameter provided:
         - banana: Direct primary key lookup (fastest)
-        - vendor_slug: Lookup by vendor-specific identifier
-        - zipcode: Lookup via city_zipcodes join
+        - slug: Lookup by vendor-specific identifier
+        - zipcode: Lookup via zipcodes join
         - name + state: Normalized name matching
 
         Examples:
             get_city(banana="paloaltoCA")
             get_city(name="Palo Alto", state="CA")
-            get_city(vendor_slug="cityofpaloalto")
+            get_city(slug="cityofpaloalto")
             get_city(zipcode="94301")
         """
         if self.conn is None:
@@ -333,15 +404,15 @@ class UnifiedDatabase:
 
         if banana:
             # Direct primary key lookup
-            cursor.execute("SELECT * FROM cities WHERE city_banana = ?", (banana,))
-        elif vendor_slug:
+            cursor.execute("SELECT * FROM cities WHERE banana = ?", (banana,))
+        elif slug:
             # Lookup by vendor slug
-            cursor.execute("SELECT * FROM cities WHERE vendor_slug = ?", (vendor_slug,))
+            cursor.execute("SELECT * FROM cities WHERE slug = ?", (slug,))
         elif zipcode:
             # Lookup via zipcode join
             cursor.execute("""
                 SELECT c.* FROM cities c
-                JOIN city_zipcodes cz ON c.city_banana = cz.city_banana
+                JOIN zipcodes cz ON c.banana = cz.banana
                 WHERE cz.zipcode = ?
                 LIMIT 1
             """, (zipcode,))
@@ -407,27 +478,29 @@ class UnifiedDatabase:
 
         return [City.from_db_row(row) for row in cursor.fetchall()]
 
-    def get_city_meeting_stats(self, city_bananas: List[str]) -> Dict[str, Dict[str, int]]:
+    def get_city_meeting_stats(self, bananas: List[str]) -> Dict[str, Dict[str, int]]:
         """Get meeting statistics for multiple cities at once"""
-        if not city_bananas:
+        if not bananas:
             return {}
 
         assert self.conn is not None, "Database connection not established"
-        placeholders = ','.join('?' * len(city_bananas))
+        placeholders = ','.join('?' * len(bananas))
         cursor = self.conn.cursor()
         cursor.execute(f"""
             SELECT
-                city_banana,
+                banana,
                 COUNT(*) as total_meetings,
+                SUM(CASE WHEN packet_url IS NOT NULL AND packet_url != '' THEN 1 ELSE 0 END) as meetings_with_packet,
                 SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as summarized_meetings
             FROM meetings
-            WHERE city_banana IN ({placeholders})
-            GROUP BY city_banana
-        """, city_bananas)
+            WHERE banana IN ({placeholders})
+            GROUP BY banana
+        """, bananas)
 
         return {
-            row['city_banana']: {
+            row['banana']: {
                 'total_meetings': row['total_meetings'],
+                'meetings_with_packet': row['meetings_with_packet'],
                 'summarized_meetings': row['summarized_meetings']
             }
             for row in cursor.fetchall()
@@ -439,7 +512,7 @@ class UnifiedDatabase:
         name: str,
         state: str,
         vendor: str,
-        vendor_slug: str,
+        slug: str,
         county: Optional[str] = None,
         zipcodes: Optional[List[str]] = None
     ) -> City:
@@ -449,17 +522,17 @@ class UnifiedDatabase:
 
         cursor.execute("""
             INSERT OR REPLACE INTO cities
-            (city_banana, name, state, vendor, vendor_slug, county)
+            (banana, name, state, vendor, slug, county)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (banana, name, state, vendor, vendor_slug, county))
+        """, (banana, name, state, vendor, slug, county))
 
         # Add zipcodes if provided
         if zipcodes:
             for i, zipcode in enumerate(zipcodes):
                 is_primary = (i == 0)
                 cursor.execute("""
-                    INSERT OR IGNORE INTO city_zipcodes
-                    (city_banana, zipcode, is_primary)
+                    INSERT OR IGNORE INTO zipcodes
+                    (banana, zipcode, is_primary)
                     VALUES (?, ?, ?)
                 """, (banana, zipcode, is_primary))
 
@@ -471,16 +544,16 @@ class UnifiedDatabase:
             raise DatabaseConnectionError(f"Failed to retrieve newly added city: {banana}")
         return result
 
-    def get_city_zipcodes(self, city_banana: str) -> List[str]:
+    def get_city_zipcodes(self, banana: str) -> List[str]:
         """Get all zipcodes for a city"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
         cursor = self.conn.cursor()
         cursor.execute("""
-            SELECT zipcode FROM city_zipcodes
-            WHERE city_banana = ?
+            SELECT zipcode FROM zipcodes
+            WHERE banana = ?
             ORDER BY is_primary DESC, zipcode
-        """, (city_banana,))
+        """, (banana,))
 
         return [row['zipcode'] for row in cursor.fetchall()]
 
@@ -497,7 +570,7 @@ class UnifiedDatabase:
 
     def get_meetings(
         self,
-        city_bananas: Optional[List[str]] = None,
+        bananas: Optional[List[str]] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         has_summary: Optional[bool] = None,
@@ -507,7 +580,7 @@ class UnifiedDatabase:
         Get meetings with flexible filtering.
 
         Args:
-            city_bananas: Filter by list of city_bananas
+            bananas: Filter by list of bananas
             start_date: Filter by date >= start_date
             end_date: Filter by date <= end_date
             has_summary: Filter by whether summary exists
@@ -517,10 +590,10 @@ class UnifiedDatabase:
         conditions = []
         params = []
 
-        if city_bananas:
-            placeholders = ','.join('?' * len(city_bananas))
-            conditions.append(f"city_banana IN ({placeholders})")
-            params.extend(city_bananas)
+        if bananas:
+            placeholders = ','.join('?' * len(bananas))
+            conditions.append(f"banana IN ({placeholders})")
+            params.extend(bananas)
 
         if start_date:
             conditions.append("date >= ?")
@@ -557,16 +630,17 @@ class UnifiedDatabase:
 
         cursor.execute("""
             INSERT OR REPLACE INTO meetings
-            (id, city_banana, title, date, packet_url, summary,
+            (id, banana, title, date, packet_url, summary, status,
              processing_status, processing_method, processing_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             meeting.id,
-            meeting.city_banana,
+            meeting.banana,
             meeting.title,
             meeting.date.isoformat() if meeting.date else None,
             meeting.packet_url,
             meeting.summary,
+            meeting.status,
             meeting.processing_status,
             meeting.processing_method,
             meeting.processing_time
@@ -615,29 +689,29 @@ class UnifiedDatabase:
 
         return [Meeting.from_db_row(row) for row in cursor.fetchall()]
 
-    def get_city_meeting_frequency(self, city_banana: str, days: int = 30) -> int:
+    def get_city_meeting_frequency(self, banana: str, days: int = 30) -> int:
         """Get count of meetings for a city in the last N days"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT COUNT(*) as count
             FROM meetings
-            WHERE city_banana = ?
+            WHERE banana = ?
             AND date >= datetime('now', '-' || ? || ' days')
-        """, (city_banana, days))
+        """, (banana, days))
 
         result = cursor.fetchone()
         return result['count'] if result else 0
 
-    def get_city_last_sync(self, city_banana: str) -> Optional[datetime]:
+    def get_city_last_sync(self, banana: str) -> Optional[datetime]:
         """Get the last sync time for a city (most recent meeting created_at)"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT MAX(created_at) as last_sync
             FROM meetings
-            WHERE city_banana = ?
-        """, (city_banana,))
+            WHERE banana = ?
+        """, (banana,))
 
         result = cursor.fetchone()
         if result and result['last_sync']:
@@ -657,9 +731,97 @@ class UnifiedDatabase:
         row = cursor.fetchone()
         return Meeting.from_db_row(row) if row else None
 
+    # ========== Agenda Item Operations ==========
+
+    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
+        """
+        Store agenda items for a meeting.
+
+        Args:
+            meeting_id: The meeting ID these items belong to
+            items: List of AgendaItem objects
+
+        Returns:
+            Number of items stored
+        """
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+
+        stored_count = 0
+
+        for item in items:
+            # Serialize JSON fields
+            attachments_json = json.dumps(item.attachments) if item.attachments else None
+            topics_json = json.dumps(item.topics) if item.topics else None
+
+            cursor.execute("""
+                INSERT OR REPLACE INTO items
+                (id, meeting_id, title, sequence, attachments, summary, topics)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                item.id,
+                meeting_id,
+                item.title,
+                item.sequence,
+                attachments_json,
+                item.summary,
+                topics_json
+            ))
+            stored_count += 1
+
+        self.conn.commit()
+        logger.debug(f"Stored {stored_count} agenda items for meeting {meeting_id}")
+        return stored_count
+
+    def get_agenda_items(self, meeting_id: str) -> List[AgendaItem]:
+        """
+        Get all agenda items for a meeting, ordered by sequence.
+
+        Args:
+            meeting_id: The meeting ID
+
+        Returns:
+            List of AgendaItem objects
+        """
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM items
+            WHERE meeting_id = ?
+            ORDER BY sequence ASC
+        """, (meeting_id,))
+
+        rows = cursor.fetchall()
+        return [AgendaItem.from_db_row(row) for row in rows]
+
+    def update_agenda_item(self, item_id: str, summary: str, topics: List[str]) -> None:
+        """
+        Update an agenda item with processed summary and topics.
+
+        Args:
+            item_id: The agenda item ID
+            summary: The processed summary
+            topics: List of extracted topics
+        """
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+
+        topics_json = json.dumps(topics) if topics else None
+
+        cursor.execute("""
+            UPDATE items
+            SET summary = ?,
+                topics = ?
+            WHERE id = ?
+        """, (summary, topics_json, item_id))
+
+        self.conn.commit()
+        logger.debug(f"Updated agenda item {item_id} with summary and topics")
+
     # ========== Processing Cache Operations ==========
 
-    def get_cached_summary(self, packet_url: str) -> Optional[Meeting]:
+    def get_cached_summary(self, packet_url: str | List[str]) -> Optional[Meeting]:
         """Get meeting by packet URL if it has been processed"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -678,7 +840,7 @@ class UnifiedDatabase:
         if row:
             # Update cache hit count
             cursor.execute("""
-                UPDATE processing_cache
+                UPDATE cache
                 SET cache_hit_count = cache_hit_count + 1,
                     last_accessed = CURRENT_TIMESTAMP
                 WHERE packet_url = ?
@@ -702,7 +864,7 @@ class UnifiedDatabase:
         lookup_url = json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
 
         cursor.execute("""
-            INSERT OR REPLACE INTO processing_cache
+            INSERT OR REPLACE INTO cache
             (packet_url, processing_method, processing_time, cache_hit_count)
             VALUES (?, ?, ?, 0)
         """, (lookup_url, processing_method, processing_time))
@@ -738,7 +900,7 @@ class UnifiedDatabase:
 
     # === Processing Queue Methods (Phase 4) ===
 
-    def enqueue_for_processing(self, packet_url: str, meeting_id: str, city_banana: str,
+    def enqueue_for_processing(self, packet_url: str, meeting_id: str, banana: str,
                                priority: int = 0, metadata: Optional[Dict[str, Any]] = None) -> int:
         """Add a packet URL to the processing queue with priority"""
         if self.conn is None:
@@ -750,11 +912,11 @@ class UnifiedDatabase:
         try:
             cursor.execute(
                 """
-                INSERT INTO processing_queue
-                (packet_url, meeting_id, city_banana, priority, processing_metadata)
+                INSERT INTO queue
+                (packet_url, meeting_id, banana, priority, processing_metadata)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (packet_url, meeting_id, city_banana, priority, metadata_json)
+                (packet_url, meeting_id, banana, priority, metadata_json)
             )
             self.conn.commit()
             queue_id = cursor.lastrowid
@@ -768,27 +930,27 @@ class UnifiedDatabase:
                 return -1
             raise
 
-    def get_next_for_processing(self, city_banana: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_next_for_processing(self, banana: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get next item from processing queue based on priority and status"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
         cursor = self.conn.cursor()
 
-        if city_banana:
+        if banana:
             cursor.execute(
                 """
-                SELECT * FROM processing_queue
-                WHERE status = 'pending' AND city_banana = ?
+                SELECT * FROM queue
+                WHERE status = 'pending' AND banana = ?
                 ORDER BY priority DESC, created_at ASC
                 LIMIT 1
                 """,
-                (city_banana,)
+                (banana,)
             )
         else:
             cursor.execute(
                 """
-                SELECT * FROM processing_queue
+                SELECT * FROM queue
                 WHERE status = 'pending'
                 ORDER BY priority DESC, created_at ASC
                 LIMIT 1
@@ -800,7 +962,7 @@ class UnifiedDatabase:
             # Mark as processing
             cursor.execute(
                 """
-                UPDATE processing_queue
+                UPDATE queue
                 SET status = 'processing', started_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -822,7 +984,7 @@ class UnifiedDatabase:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            UPDATE processing_queue
+            UPDATE queue
             SET status = 'completed', completed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -841,7 +1003,7 @@ class UnifiedDatabase:
         if increment_retry:
             cursor.execute(
                 """
-                UPDATE processing_queue
+                UPDATE queue
                 SET status = 'failed',
                     error_message = ?,
                     retry_count = retry_count + 1,
@@ -853,7 +1015,7 @@ class UnifiedDatabase:
         else:
             cursor.execute(
                 """
-                UPDATE processing_queue
+                UPDATE queue
                 SET status = 'failed',
                     error_message = ?,
                     completed_at = CURRENT_TIMESTAMP
@@ -872,7 +1034,7 @@ class UnifiedDatabase:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            UPDATE processing_queue
+            UPDATE queue
             SET status = 'pending', error_message = NULL
             WHERE status = 'failed' AND retry_count < ?
             """,
@@ -895,7 +1057,7 @@ class UnifiedDatabase:
         cursor.execute(
             """
             SELECT status, COUNT(*) as count
-            FROM processing_queue
+            FROM queue
             GROUP BY status
             """
         )
@@ -906,7 +1068,7 @@ class UnifiedDatabase:
         cursor.execute(
             """
             SELECT COUNT(*) as count
-            FROM processing_queue
+            FROM queue
             WHERE status = 'failed' AND retry_count >= 3
             """
         )
@@ -917,7 +1079,7 @@ class UnifiedDatabase:
         cursor.execute(
             """
             SELECT AVG(julianday(completed_at) - julianday(started_at)) * 86400 as avg_seconds
-            FROM processing_queue
+            FROM queue
             WHERE status = 'completed' AND completed_at IS NOT NULL AND started_at IS NOT NULL
             """
         )
@@ -936,9 +1098,9 @@ class UnifiedDatabase:
 
         # Find all meetings with packet URLs but no summaries
         query = """
-            SELECT m.packet_url, m.id, m.city_banana, m.date
+            SELECT m.packet_url, m.id, m.banana, m.date
             FROM meetings m
-            LEFT JOIN processing_queue pq ON m.packet_url = pq.packet_url
+            LEFT JOIN queue pq ON m.packet_url = pq.packet_url
             WHERE m.packet_url IS NOT NULL
             AND m.summary IS NULL
             AND pq.id IS NULL
@@ -968,11 +1130,11 @@ class UnifiedDatabase:
             try:
                 cursor.execute(
                     """
-                    INSERT INTO processing_queue
-                    (packet_url, meeting_id, city_banana, priority)
+                    INSERT INTO queue
+                    (packet_url, meeting_id, banana, priority)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (meeting['packet_url'], meeting['id'], meeting['city_banana'], priority)
+                    (meeting['packet_url'], meeting['id'], meeting['banana'], priority)
                 )
                 enqueued += 1
             except sqlite3.IntegrityError:

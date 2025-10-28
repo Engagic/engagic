@@ -26,6 +26,7 @@ from backend.adapters.granicus_adapter import GranicusAdapter
 from backend.adapters.legistar_adapter import LegistarAdapter
 from backend.adapters.novusagenda_adapter import NovusAgendaAdapter
 from backend.adapters.civicplus_adapter import CivicPlusAdapter
+from backend.adapters.escribe_adapter import EscribeAdapter
 
 __all__ = [
     "BaseAdapter",
@@ -35,4 +36,5 @@ __all__ = [
     "LegistarAdapter",
     "NovusAgendaAdapter",
     "CivicPlusAdapter",
+    "EscribeAdapter",
 ]
