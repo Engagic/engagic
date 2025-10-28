@@ -490,6 +490,7 @@ class UnifiedDatabase:
             SELECT
                 banana,
                 COUNT(*) as total_meetings,
+                SUM(CASE WHEN packet_url IS NOT NULL AND packet_url != '' THEN 1 ELSE 0 END) as meetings_with_packet,
                 SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as summarized_meetings
             FROM meetings
             WHERE banana IN ({placeholders})
@@ -499,6 +500,7 @@ class UnifiedDatabase:
         return {
             row['banana']: {
                 'total_meetings': row['total_meetings'],
+                'meetings_with_packet': row['meetings_with_packet'],
                 'summarized_meetings': row['summarized_meetings']
             }
             for row in cursor.fetchall()

@@ -195,10 +195,11 @@
 									{cityOption.display_name}
 								</button>
 								<div class="city-stats">
-									<span class="stat-meetings">{cityOption.total_meetings}</span>
-									<span class="stat-separator">(</span>
+									<span class="stat-total">{cityOption.total_meetings}</span>
+									<span class="stat-separator">|</span>
+									<span class="stat-packets">{cityOption.meetings_with_packet}</span>
+									<span class="stat-separator">|</span>
 									<span class="stat-summaries">{cityOption.summarized_meetings}</span>
-									<span class="stat-separator">)</span>
 								</div>
 							</div>
 						{/each}
