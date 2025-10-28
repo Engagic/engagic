@@ -71,6 +71,7 @@ export interface AnalyticsData {
 	real_metrics: {
 		cities_covered: number;
 		meetings_tracked: number;
+		meetings_with_packet: number;
 		agendas_summarized: number;
 		states_covered: number;
 		zipcodes_served: number;
