@@ -3,10 +3,142 @@
 import time
 import random
 import logging
-from typing import Optional, Callable, Any, Dict
+import sqlite3
+from pathlib import Path
+from typing import Optional, Callable, Any, Dict, Tuple
 from functools import wraps
 
 logger = logging.getLogger("engagic")
+
+
+class SQLiteRateLimiter:
+    """
+    Persistent rate limiter using SQLite.
+
+    Survives restarts and works across multiple API instances.
+    Stores request timestamps in database for accurate rate limiting.
+    """
+
+    def __init__(self, db_path: str, requests_limit: int = 30, window_seconds: int = 60):
+        """
+        Initialize SQLite rate limiter.
+
+        Args:
+            db_path: Path to SQLite database file
+            requests_limit: Maximum requests allowed in window
+            window_seconds: Time window in seconds
+        """
+        self.db_path = db_path
+        self.requests_limit = requests_limit
+        self.window_seconds = window_seconds
+
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._init_db()
+
+        # Cleanup tracker - avoid running cleanup on every request
+        self._last_cleanup = time.time()
+        self._cleanup_interval = 300  # Run cleanup every 5 minutes
+
+    def _init_db(self):
+        """Initialize rate limiting table"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS rate_limits (
+                    client_ip TEXT NOT NULL,
+                    timestamp REAL NOT NULL,
+                    PRIMARY KEY (client_ip, timestamp)
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rate_limits_ip ON rate_limits(client_ip)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rate_limits_time ON rate_limits(timestamp)")
+            conn.commit()
+            logger.info(f"Initialized persistent rate limiter at {self.db_path}")
+
+    def check_rate_limit(self, client_ip: str) -> Tuple[bool, int]:
+        """
+        Check if client has exceeded rate limit.
+
+        Args:
+            client_ip: Client IP address
+
+        Returns:
+            (is_allowed, remaining_requests)
+        """
+        current_time = time.time()
+        window_start = current_time - self.window_seconds
+
+        # Periodic cleanup to prevent database bloat
+        if current_time - self._last_cleanup > self._cleanup_interval:
+            self._cleanup_old_entries(window_start)
+            self._last_cleanup = current_time
+
+        with sqlite3.connect(self.db_path) as conn:
+            # Enable WAL mode for better concurrency
+            conn.execute("PRAGMA journal_mode=WAL")
+
+            # Count requests in current window
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM rate_limits WHERE client_ip = ? AND timestamp > ?",
+                (client_ip, window_start)
+            )
+            request_count = cursor.fetchone()[0]
+
+            if request_count >= self.requests_limit:
+                return False, 0
+
+            # Add current request
+            try:
+                conn.execute(
+                    "INSERT INTO rate_limits (client_ip, timestamp) VALUES (?, ?)",
+                    (client_ip, current_time)
+                )
+                conn.commit()
+            except sqlite3.IntegrityError:
+                # Duplicate timestamp for same IP (extremely rare)
+                pass
+
+            remaining = self.requests_limit - request_count - 1
+            return True, max(0, remaining)
+
+    def _cleanup_old_entries(self, cutoff_time: float):
+        """Remove entries older than cutoff time"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("DELETE FROM rate_limits WHERE timestamp < ?", (cutoff_time,))
+                deleted = conn.total_changes
+                conn.commit()
+                if deleted > 0:
+                    logger.debug(f"Cleaned up {deleted} old rate limit entries")
+        except Exception as e:
+            logger.error(f"Failed to cleanup rate limit entries: {e}")
+
+    def reset_client(self, client_ip: str):
+        """Reset rate limit for specific client"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM rate_limits WHERE client_ip = ?", (client_ip,))
+            conn.commit()
+            logger.info(f"Reset rate limit for {client_ip}")
+
+    def get_client_status(self, client_ip: str) -> Dict[str, Any]:
+        """Get current rate limit status for a client"""
+        current_time = time.time()
+        window_start = current_time - self.window_seconds
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM rate_limits WHERE client_ip = ? AND timestamp > ?",
+                (client_ip, window_start)
+            )
+            request_count = cursor.fetchone()[0]
+
+            return {
+                "requests_made": request_count,
+                "requests_limit": self.requests_limit,
+                "remaining": max(0, self.requests_limit - request_count),
+                "window_seconds": self.window_seconds,
+                "reset_time": current_time + self.window_seconds
+            }
+
 
 class RateLimitHandler:
     """Handle rate limits with exponential backoff and jitter"""
