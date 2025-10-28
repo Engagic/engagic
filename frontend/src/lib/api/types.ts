@@ -68,16 +68,6 @@ interface SearchError {
 export interface AnalyticsData {
 	success: boolean;
 	timestamp: string;
-	headline_metrics: {
-		cities_covered: number;
-		meetings_tracked: number;
-		agendas_summarized: number;
-		states_covered: number;
-		zipcodes_served: number;
-	};
-	quality_metrics: {
-		active_cities: number;
-	};
 	real_metrics: {
 		cities_covered: number;
 		meetings_tracked: number;
