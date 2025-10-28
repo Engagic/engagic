@@ -4,11 +4,9 @@ Deep dive analysis: Check if any cities have meetings from multiple DIFFERENT ci
 (true cross-contamination, not just wrong slug)
 """
 
-import sys
 import sqlite3
 import json
 import re
-from collections import defaultdict
 from urllib.parse import urlparse
 
 DB_PATH = '/root/engagic/data/engagic.db'
@@ -121,7 +119,7 @@ def main():
             print(f"  Configured slug: {city['slug']}")
             print(f"  Total meetings:  {city['meeting_count']}")
             print(f"  Slugs found:     {', '.join(item['slugs'])}")
-            print(f"  Distribution:")
+            print("  Distribution:")
             for slug, count in sorted(item['slug_counts'].items(), key=lambda x: x[1], reverse=True):
                 pct = (count / city['meeting_count'] * 100)
                 print(f"    - {slug}: {count} meetings ({pct:.1f}%)")

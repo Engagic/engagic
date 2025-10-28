@@ -33,6 +33,7 @@ class MeetingValidator:
             "legistar2.granicus.com",
             f"{slug}.legistar1.com",
             f"{slug}.legistar.com",
+            "docs.google.com",  # Some cities use Google Docs viewer
         ],
         "civicclerk": lambda slug: [f"{slug}.api.civicclerk.com"],
         "novusagenda": lambda slug: [f"{slug}.novusagenda.com"],
@@ -46,6 +47,10 @@ class MeetingValidator:
         "municode": lambda slug: [
             "municodemeetings.com",
             f"{slug}.municodemeetings.com",
+        ],
+        "escribe": lambda slug: [
+            f"{slug}.escribemeetings.com",
+            "escribemeetings.com",
         ],
     }
 

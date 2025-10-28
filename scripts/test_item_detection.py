@@ -83,7 +83,7 @@ def test_meeting_detection(db, processor, meeting, meeting_num, total, debug=Fal
                 print("\n[END COVER]\n")
 
                 # Show start of body
-                print(f"\n[BODY START (first 2000 chars)]")
+                print("\n[BODY START (first 2000 chars)]")
                 print(text[cover_end:cover_end+2000])
                 print("\n[...]\n")
 
@@ -156,7 +156,7 @@ def test_meeting_detection(db, processor, meeting, meeting_num, total, debug=Fal
                 last_page = page_markers[-1] if len(page_markers) > 1 else first_page
                 print(f"  [Pages: {first_page}-{last_page} ({len(page_markers)} page markers)]")
             else:
-                print(f"  [No PAGE markers in first 5000 chars]")
+                print("  [No PAGE markers in first 5000 chars]")
 
         print("\n📊 Summary:")
         print(f"   Total items: {len(detected_items)}")

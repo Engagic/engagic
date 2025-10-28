@@ -4,7 +4,6 @@ Comprehensive city database corruption analysis v2
 Enhanced to properly extract PrimeGov slugs from domain names
 """
 
-import sys
 import sqlite3
 import json
 import re
@@ -26,7 +25,7 @@ def extract_slug_from_url(url, vendor):
                 url = urls[0]
             else:
                 return None
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             return None
     
     parsed = urlparse(url)

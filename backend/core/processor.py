@@ -564,6 +564,8 @@ Skip pure administrative items unless they have significant public impact."""
                 text_size = len(text)
                 page_count = self._estimate_page_count(text)
 
+                logger.debug(f"[BatchItems] Processing item {i}: {item_title} ({text_size} chars, ~{page_count} pages)")
+
                 # Build prompt for this item
                 prompt = f"""This is a single agenda item from a city council meeting. The item is titled:
 
@@ -1341,7 +1343,7 @@ Attached documents:
             actual_agenda = agenda_section
             agenda_start = 0
             agenda_end = agenda_section_size
-            logger.debug(f"[ItemDetection] No clear markers found, searching full agenda section")
+            logger.debug("[ItemDetection] No clear markers found, searching full agenda section")
 
         agenda_patterns = [
             (r"\n\s*(\d+)\.\s*\n\s*([A-Z][^\n]{10,200})", 'numbered'),  # "1.\n Title" (multiline)
