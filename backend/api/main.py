@@ -571,13 +571,14 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
 
     # Add stats to each city option
     for option in city_options:
-        city_stats = stats.get(option["banana"], {"total_meetings": 0, "summarized_meetings": 0})
+        city_stats = stats.get(option["banana"], {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0})
         option["total_meetings"] = city_stats["total_meetings"]
+        option["meetings_with_packet"] = city_stats["meetings_with_packet"]
         option["summarized_meetings"] = city_stats["summarized_meetings"]
 
     return {
         "success": False,  # False because we're not returning meetings directly
-        "message": f"Found {len(city_options)} cities in {state_full} -- [meetings (summaries)]. Select a city to view its meetings:",
+        "message": f"Found {len(city_options)} cities in {state_full} -- [total | with packet | summarized]. Select a city to view its meetings:",
         "query": state_input,
         "type": "state",
         "ambiguous": True,  # Reuse ambiguous city UI pattern
@@ -658,8 +659,9 @@ async def handle_ambiguous_city_search(
 
     # Add stats to each city option
     for option in city_options:
-        city_stats = stats.get(option["banana"], {"total_meetings": 0, "summarized_meetings": 0})
+        city_stats = stats.get(option["banana"], {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0})
         option["total_meetings"] = city_stats["total_meetings"]
+        option["meetings_with_packet"] = city_stats["meetings_with_packet"]
         option["summarized_meetings"] = city_stats["summarized_meetings"]
 
     return {

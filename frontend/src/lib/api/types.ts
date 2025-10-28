@@ -7,6 +7,7 @@ export interface CityOption {
 	vendor: string;
 	display_name: string;
 	total_meetings: number;
+	meetings_with_packet: number;
 	summarized_meetings: number;
 }
 
