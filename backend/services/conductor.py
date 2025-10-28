@@ -1,6 +1,7 @@
 import logging
 import time
 import random
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +23,27 @@ from backend.adapters.all_adapters import (
 from backend.core.config import config
 
 logger = logging.getLogger("engagic")
+
+# Memory monitoring
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    logger.warning("psutil not available - memory monitoring disabled")
+
+
+def log_memory_usage(context: str = ""):
+    """Log current memory usage in MB"""
+    if not PSUTIL_AVAILABLE:
+        return
+    try:
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info()
+        mem_mb = mem_info.rss / 1024 / 1024
+        logger.info(f"[Memory] {context}: {mem_mb:.1f}MB RSS")
+    except Exception as e:
+        logger.debug(f"[Memory] Failed to log: {e}")
 
 
 class RateLimiter:
@@ -257,12 +279,17 @@ class Conductor:
                 if result.status == SyncStatus.FAILED:
                     self.failed_cities.add(city.banana)
 
+                # Log memory every 10 cities to track leak fixes
+                if len(results) % 10 == 0:
+                    log_memory_usage(f"After {len(results)} cities")
+
             # Break between vendor groups to be extra polite
             if vendor_cities:  # Only sleep if we processed cities
                 vendor_break = 30 + random.uniform(0, 10)  # 30-40 seconds
                 logger.info(
                     f"Completed {vendor} cities, taking {vendor_break:.1f}s break..."
                 )
+                log_memory_usage(f"After {vendor} vendor group")
                 time.sleep(vendor_break)
 
         # Log summary
@@ -436,6 +463,9 @@ class Conductor:
                     f"Synced {city.banana}: {result.meetings_found} meetings found, "
                     f"{len(meetings_with_packets)} have packets, {processed_count} processed"
                 )
+
+                # Log memory after adapter cleanup to verify session closed
+                log_memory_usage(f"After {city.banana}")
 
             except Exception as e:
                 result.status = SyncStatus.FAILED
