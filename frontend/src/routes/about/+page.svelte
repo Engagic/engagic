@@ -61,19 +61,31 @@
 					<div class="impact-label">Cities Covered</div>
 					<div class="impact-desc">Local governments across America</div>
 				</div>
-				
+
+				<div class="impact-card">
+					<div class="impact-number">{formatNumber(analytics.real_metrics.meetings_tracked)}</div>
+					<div class="impact-label">Total Meetings</div>
+					<div class="impact-desc">Meetings tracked across all cities</div>
+				</div>
+
+				<div class="impact-card">
+					<div class="impact-number">{formatNumber(analytics.real_metrics.meetings_with_packet)}</div>
+					<div class="impact-label">Meetings with Packets</div>
+					<div class="impact-desc">Agenda documents available</div>
+				</div>
+
 				<div class="impact-card">
 					<div class="impact-number">{formatNumber(analytics.real_metrics.agendas_summarized)}</div>
 					<div class="impact-label">Agendas Summarized</div>
 					<div class="impact-desc">Meeting packets made readable</div>
 				</div>
-				
+
 				<div class="impact-card">
 					<div class="impact-number">{analytics.real_metrics.states_covered}</div>
 					<div class="impact-label">States</div>
 					<div class="impact-desc">Nationwide coverage</div>
 				</div>
-				
+
 				<div class="impact-card">
 					<div class="impact-number">{formatNumber(analytics.real_metrics.zipcodes_served)}</div>
 					<div class="impact-label">Zip Codes</div>

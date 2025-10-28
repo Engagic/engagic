@@ -975,6 +975,9 @@ async def get_analytics():
         cursor.execute("SELECT COUNT(*) as meetings_count FROM meetings")
         meetings_stats = dict(cursor.fetchone())
 
+        cursor.execute("SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''")
+        packets_stats = dict(cursor.fetchone())
+
         cursor.execute("SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''")
         summaries_stats = dict(cursor.fetchone())
 
@@ -987,6 +990,7 @@ async def get_analytics():
             "real_metrics": {
                 "cities_covered": total_cities["total_cities"],
                 "meetings_tracked": meetings_stats["meetings_count"],
+                "meetings_with_packet": packets_stats["packets_count"],
                 "agendas_summarized": summaries_stats["summaries_count"],
                 "states_covered": states_covered["states_covered"],
                 "zipcodes_served": zipcodes_covered["total_zipcodes"],
