@@ -1,0 +1,25 @@
+{
+  "meeting": {
+    "short_agenda": {
+      "description": "For agendas with ≤30 pages - concise summary focused on key items",
+      "variables": ["text"],
+      "template": "This is a city council meeting agenda. Provide a clear, concise summary that covers:\n\n**Key Agenda Items:**\n- List the main topics/issues being discussed\n- Include any public hearings or votes\n- Note any budget or financial items\n\n**Important Details:**\n- Specific addresses, dollar amounts, ordinance numbers\n- Deadlines or implementation dates\n- Public participation opportunities\n\nKeep it brief but informative. Focus on what citizens need to know.\n\nAgenda text:\n{text}"
+    },
+    "comprehensive": {
+      "description": "For large/complex agendas >30 pages - comprehensive detailed analysis",
+      "variables": ["text"],
+      "template": "Analyze this city council meeting agenda and provide a comprehensive summary for residents.\n\n**Complete Agenda Items** (list every single one):\n- Item number and full title\n- Complete description of what's being proposed\n- Department or presenter\n- Action required (vote, discussion, information only)\n\n**Financial Details** (every dollar amount):\n- Budget items with exact amounts\n- Contract values and vendors\n- Grant amounts and sources\n- Fee changes or rate adjustments\n\n**Property and Development** (all locations):\n- Complete addresses for any property discussed\n- Zoning changes with current and proposed zoning\n- Development project names and descriptions\n- Square footage, units, or measurements\n\n**Public Participation**:\n- Public hearing items with times\n- Comment period details\n- How to participate (in person, online, written)\n- Deadlines for input\n\n**Key Details to Preserve**:\n- Exact dollar amounts (not \"several million\" but \"$3,456,789\")\n- Complete addresses (not \"downtown\" but \"123 Main Street\")\n- Full names and titles\n- Precise dates and times\n- Ordinance and resolution numbers\n\nFormat as organized sections with bullet points. Be thorough and detailed.\nSkip pure administrative items unless they have significant public impact.\n\nAgenda text:\n{text}"
+    }
+  },
+  "item": {
+    "standard": {
+      "description": "For individual agenda items with attachments - extracts summary and topics",
+      "variables": ["title", "text"],
+      "response_format": {
+        "type": "structured",
+        "fields": ["SUMMARY", "TOPICS"]
+      },
+      "template": "This is a single agenda item from a city council meeting. The item is titled:\n\n\"{title}\"\n\nBased on the attached documents below, provide:\n\n1. A concise 2-3 sentence summary of what this agenda item is about, focusing on:\n   - The main action or decision being proposed\n   - Key details (amounts, locations, dates)\n   - Why it matters to citizens\n\n2. Extract 1-3 main topics discussed in this item (e.g., \"affordable housing\", \"traffic safety\", \"budget allocation\"). Return these as a simple comma-separated list.\n\nFormat your response EXACTLY as:\n\nSUMMARY: [your 2-3 sentence summary here]\n\nTOPICS: topic1, topic2, topic3\n\nAttached documents:\n{text}"
+    }
+  }
+}
