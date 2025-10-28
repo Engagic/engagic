@@ -23,7 +23,7 @@ from pathlib import Path
 # Add app directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from backend.services.background_processor import BackgroundProcessor
+from backend.services.conductor import Conductor
 from backend.core.config import config
 
 # Configure logging
@@ -40,7 +40,7 @@ logger = logging.getLogger("engagic.daemon")
 
 class EngagicDaemon:
     def __init__(self):
-        self.processor = BackgroundProcessor()
+        self.conductor = Conductor()
         self.running = False
         self.shutdown_requested = False
         
@@ -53,7 +53,7 @@ class EngagicDaemon:
         logger.info(f"Received signal {signum}, shutting down...")
         self.shutdown_requested = True
         if self.running:
-            self.processor.stop()
+            self.conductor.stop()
             
     def start(self):
         """Start the daemon"""
@@ -61,10 +61,10 @@ class EngagicDaemon:
         
         try:
             self.running = True
-            self.processor.start()
+            self.conductor.start()
             
             logger.info("Daemon started successfully")
-            logger.info("Background processor running - syncing cities every 7 days, processing queue continuously")
+            logger.info("Conductor running - syncing cities every 7 days, processing queue continuously")
             
             # Keep main thread alive
             while not self.shutdown_requested:
@@ -80,27 +80,27 @@ class EngagicDaemon:
         """Cleanup resources"""
         logger.info("Cleaning up daemon resources...")
         if self.running:
-            self.processor.stop()
+            self.conductor.stop()
             self.running = False
         logger.info("Daemon stopped")
         
     def run_once(self):
         """Run one full sync cycle and exit"""
         logger.info("Running one-time sync...")
-        self.processor._run_full_sync()
+        self.conductor._run_full_sync()
         logger.info("One-time sync completed")
         
     def sync_city(self, city_slug: str):
         """Sync specific city"""
         logger.info(f"Syncing city: {city_slug}")
-        result = self.processor.force_sync_city(city_slug)
+        result = self.conductor.force_sync_city(city_slug)
         logger.info(f"Sync result: {result}")
         return result
         
     def show_status(self):
         """Show daemon status"""
         try:
-            status = self.processor.get_sync_status()
+            status = self.conductor.get_sync_status()
             logger.info("=== Engagic Daemon Status ===")
             logger.info(f"Background processor running: {status['is_running']}")
             logger.info(f"Last full sync: {status['last_full_sync'] or 'Never'}")
@@ -116,7 +116,7 @@ class EngagicDaemon:
                     logger.warning(f"  - {city}")
 
             # Show database and queue stats
-            stats = self.processor.db.get_stats()
+            stats = self.conductor.db.get_stats()
             logger.info("Database Stats:")
             logger.info(f"  Total meetings: {stats.get('total_meetings', 0)}")
             logger.info(f"  Summarized: {stats.get('summarized_meetings', 0)}")
@@ -124,7 +124,7 @@ class EngagicDaemon:
             logger.info(f"  Summary rate: {stats.get('summary_rate', '0%')}")
 
             # Show queue stats (Phase 4)
-            queue_stats = self.processor.db.get_queue_stats()
+            queue_stats = self.conductor.db.get_queue_stats()
             logger.info("Processing Queue Stats:")
             logger.info(f"  Pending: {queue_stats.get('pending_count', 0)}")
             logger.info(f"  Processing: {queue_stats.get('processing_count', 0)}")
@@ -158,7 +158,7 @@ def main():
         elif args.status:
             daemon.show_status()
         elif args.process_meeting:
-            success = daemon.processor.force_process_meeting(args.process_meeting)
+            success = daemon.conductor.force_process_meeting(args.process_meeting)
             logger.info(f"Processing result: {'Success' if success else 'Failed'}")
         else:
             # Run as daemon

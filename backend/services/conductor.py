@@ -77,7 +77,7 @@ class SyncResult:
     error_message: Optional[str] = None
 
 
-class BackgroundProcessor:
+class Conductor:
     def __init__(self, unified_db_path: Optional[str] = None):
         # Use config path if not provided
         db_path = unified_db_path or config.UNIFIED_DB_PATH
@@ -294,8 +294,8 @@ class BackgroundProcessor:
             logger.info(f"Syncing {city.banana} with {city.vendor}")
             result.status = SyncStatus.IN_PROGRESS
 
-            # Get adapter (vendor_slug is vendor-specific identifier)
-            adapter = self._get_adapter(city.vendor, city.vendor_slug)
+            # Get adapter (slug is vendor-specific identifier)
+            adapter = self._get_adapter(city.vendor, city.slug)
 
             if not adapter:
                 result.status = SyncStatus.SKIPPED
@@ -350,13 +350,26 @@ class BackgroundProcessor:
                     # Create Meeting object
                     meeting_obj = Meeting(
                         id=meeting.get("meeting_id", ""),
-                        city_banana=city.banana,
+                        banana=city.banana,
                         title=meeting.get("title", ""),
                         date=meeting_date,
                         packet_url=meeting.get("packet_url"),
                         summary=None,
+                        status=meeting.get("meeting_status"),
                         processing_status="pending"
                     )
+
+                    # Validate meeting before storing (prevent corruption)
+                    from backend.services.meeting_validator import MeetingValidator
+                    if not MeetingValidator.validate_and_store(
+                        {"packet_url": meeting_obj.packet_url, "title": meeting_obj.title},
+                        city.banana,
+                        city.name,
+                        city.vendor,
+                        city.slug
+                    ):
+                        logger.warning(f"Skipping corrupted meeting: {meeting_obj.title}")
+                        continue
 
                     # Store meeting (upsert) - unified DB handles duplicates
                     stored_meeting = self.db.store_meeting(meeting_obj)
@@ -365,6 +378,29 @@ class BackgroundProcessor:
                     logger.debug(
                         f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})"
                     )
+
+                    # Store agenda items if present (Legistar provides this)
+                    if meeting.get("items"):
+                        from backend.database.unified_db import AgendaItem
+
+                        items = meeting["items"]
+                        agenda_items = []
+
+                        for item_data in items:
+                            agenda_item = AgendaItem(
+                                id=f"{stored_meeting.id}_{item_data['item_id']}",  # Composite ID
+                                meeting_id=stored_meeting.id,
+                                title=item_data.get('title', ''),
+                                sequence=item_data.get('sequence', 0),
+                                attachments=item_data.get('attachments', []),  # Full metadata as JSON
+                                summary=None,  # Will be filled during processing
+                                topics=None    # Will be filled during processing
+                            )
+                            agenda_items.append(agenda_item)
+
+                        if agenda_items:
+                            count = self.db.store_agenda_items(stored_meeting.id, agenda_items)
+                            logger.debug(f"Stored {count} agenda items for {stored_meeting.title}")
 
                     # Enqueue for processing if it has a packet URL
                     if meeting.get("packet_url"):
@@ -378,7 +414,7 @@ class BackgroundProcessor:
                         self.db.enqueue_for_processing(
                             packet_url=meeting["packet_url"],
                             meeting_id=stored_meeting.id,
-                            city_banana=city.banana,
+                            banana=city.banana,
                             priority=priority
                         )
                         logger.debug(f"Enqueued {meeting['packet_url']} with priority {priority}")
@@ -530,6 +566,9 @@ class BackgroundProcessor:
         elif vendor == "civicclerk":
             return CivicClerkAdapter(city_slug)
         elif vendor == "legistar":
+            # NYC requires API token
+            if city_slug == "nyc":
+                return LegistarAdapter(city_slug, api_token=config.NYC_LEGISTAR_TOKEN)
             return LegistarAdapter(city_slug)
         elif vendor == "granicus":
             return GranicusAdapter(city_slug)
@@ -567,7 +606,7 @@ class BackgroundProcessor:
                 try:
                     meeting_data = {
                         "packet_url": meeting.packet_url,
-                        "city_banana": meeting.city_banana,
+                        "city_banana": meeting.banana,
                         "meeting_name": meeting.title,
                         "meeting_date": meeting.date.isoformat() if meeting.date else None,
                         "meeting_id": meeting.id,
@@ -606,7 +645,6 @@ class BackgroundProcessor:
                 queue_id = job['id']
                 packet_url = job['packet_url']
                 meeting_id = job['meeting_id']
-                city_banana = job['city_banana']
 
                 logger.info(f"Processing queue job {queue_id}: {packet_url}")
 
@@ -620,25 +658,14 @@ class BackgroundProcessor:
                         )
                         continue
 
-                    # Process the meeting using existing logic
-                    meeting_data = {
-                        "packet_url": packet_url,
-                        "city_banana": city_banana,
-                        "meeting_name": meeting.title,
-                        "meeting_date": meeting.date.isoformat() if meeting.date else None,
-                        "meeting_id": meeting_id,
-                    }
-
+                    # Use item-aware processing path (checks for items automatically)
                     if self.processor:
-                        result = self.processor.process_agenda_with_cache(meeting_data)
-
-                        if result.get("success"):
+                        try:
+                            self._process_meeting_summary(meeting)
                             self.db.mark_processing_complete(queue_id)
-                            logger.info(
-                                f"Queue job {queue_id} completed in {result.get('processing_time', 0):.1f}s"
-                            )
-                        else:
-                            error_msg = result.get("error", "Unknown error")
+                            logger.info(f"Queue job {queue_id} completed successfully")
+                        except Exception as e:
+                            error_msg = str(e)
                             self.db.mark_processing_failed(queue_id, error_msg)
                             logger.error(f"Queue job {queue_id} failed: {error_msg}")
                     else:
@@ -681,7 +708,7 @@ class BackgroundProcessor:
                     logger.error(f"Meeting processing future failed: {e}")
 
     def _process_meeting_summary(self, meeting: Meeting):
-        """Process summary for a single meeting"""
+        """Process summary for a single meeting (with item-level processing if available)"""
         if not meeting.packet_url:
             return
 
@@ -694,23 +721,266 @@ class BackgroundProcessor:
                 logger.debug(f"Meeting {meeting.packet_url} already processed, skipping")
                 return
 
-            # Process with cache - use the meeting data directly
-            meeting_data = {
-                "packet_url": meeting.packet_url,
-                "city_banana": meeting.city_banana,
-                "meeting_name": meeting.title,
-                "meeting_date": meeting.date.isoformat() if meeting.date else None,
-                "meeting_id": meeting.id,
-            }
-
-            if self.processor:
-                result = self.processor.process_agenda_with_cache(meeting_data)
-                logger.info(f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s")
-            else:
+            if not self.processor:
                 logger.warning(f"Skipping {meeting.packet_url} - processor not available")
+                return
+
+            # Check if meeting has agenda items (item-level processing)
+            agenda_items = self.db.get_agenda_items(meeting.id)
+
+            if agenda_items:
+                logger.info(f"[ItemProcessing] Found {len(agenda_items)} items for {meeting.title}")
+                self._process_meeting_with_items(meeting, agenda_items)
+            else:
+                # Try to detect items from PDF structure
+                logger.info("[ItemDetection] No items in DB, attempting to detect from PDF")
+                try:
+                    # Extract text from PDF (handle list or single URL)
+                    packet_url = meeting.packet_url[0] if isinstance(meeting.packet_url, list) else meeting.packet_url
+                    result = self.processor.pdf_extractor.extract_from_url(packet_url)
+                    if result.get('success') and result.get('text'):
+                        extracted_text = result['text']
+
+                        # Check document size - skip item detection for small packets
+                        page_count = self.processor.summarizer._estimate_page_count(extracted_text)
+                        text_size = len(extracted_text)
+
+                        if page_count <= 10 or text_size < 30000:
+                            logger.info(f"[ItemDetection] Small packet ({page_count} pages, {text_size} chars) - processing monolithically")
+                            # Fall back to monolithic processing
+                            meeting_data = {
+                                "packet_url": meeting.packet_url,
+                                "city_banana": meeting.banana,
+                                "meeting_name": meeting.title,
+                                "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                                "meeting_id": meeting.id,
+                            }
+                            result = self.processor.process_agenda_with_cache(meeting_data)
+                            logger.info(f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s")
+                            return
+
+                        # Detect items using pattern matching (for larger packets)
+                        # Try structural chunking first, fall back to pattern-based
+                        detected_items = self.processor.chunker.chunk_by_structure(extracted_text)
+                        if not detected_items:
+                            detected_items = self.processor.chunker.chunk_by_patterns(extracted_text)
+
+                        if detected_items:
+                            # Convert detected items to AgendaItem objects and store
+                            from backend.database.unified_db import AgendaItem
+
+                            agenda_item_objects = []
+                            for item in detected_items:
+                                agenda_item = AgendaItem(
+                                    id=f"{meeting.id}_item_{item['sequence']}",
+                                    meeting_id=meeting.id,
+                                    title=item['title'],
+                                    sequence=item['sequence'],
+                                    attachments=[{
+                                        'type': 'text_segment',
+                                        'content': item['text'][:5000],  # First 5000 chars
+                                        'start_page': item.get('start_page')
+                                    }],
+                                    summary=None,
+                                    topics=None
+                                )
+                                agenda_item_objects.append(agenda_item)
+
+                            # Store detected items
+                            count = self.db.store_agenda_items(meeting.id, agenda_item_objects)
+                            logger.info(f"[ItemDetection] Stored {count} detected items for {meeting.title}")
+
+                            # Now process with items
+                            self._process_meeting_with_items(meeting, agenda_item_objects)
+                        else:
+                            # No clear item structure - fall back to monolithic
+                            logger.info("[MonolithicProcessing] No item structure detected, processing as single unit")
+                            meeting_data = {
+                                "packet_url": meeting.packet_url,
+                                "city_banana": meeting.banana,
+                                "meeting_name": meeting.title,
+                                "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                                "meeting_id": meeting.id,
+                            }
+                            result = self.processor.process_agenda_with_cache(meeting_data)
+                            logger.info(f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s")
+                    else:
+                        logger.warning("[ItemDetection] PDF extraction failed, falling back to monolithic")
+                        meeting_data = {
+                            "packet_url": meeting.packet_url,
+                            "city_banana": meeting.banana,
+                            "meeting_name": meeting.title,
+                            "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                            "meeting_id": meeting.id,
+                        }
+                        result = self.processor.process_agenda_with_cache(meeting_data)
+                        logger.info(f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s")
+                except Exception as e:
+                    logger.error(f"[ItemDetection] Failed: {e}, falling back to monolithic processing")
+                    meeting_data = {
+                        "packet_url": meeting.packet_url,
+                        "city_banana": meeting.banana,
+                        "meeting_name": meeting.title,
+                        "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                        "meeting_id": meeting.id,
+                    }
+                    result = self.processor.process_agenda_with_cache(meeting_data)
+                    logger.info(f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s")
 
         except Exception as e:
             logger.error(f"Error processing summary for {meeting.packet_url}: {e}")
+
+    def _process_meeting_with_items(self, meeting: Meeting, agenda_items: List):
+        """Process a meeting at item-level granularity using batch API"""
+
+        start_time = time.time()
+        processed_items = []
+        failed_items = []
+
+        if not self.processor:
+            logger.warning("[ItemProcessing] Processor not available")
+            return
+
+        # Separate already-processed items from items that need processing
+        already_processed = []
+        need_processing = []
+
+        for item in agenda_items:
+            if not item.attachments:
+                logger.debug(f"[ItemProcessing] Skipping item without attachments: {item.title[:50]}")
+                continue
+
+            if item.summary:
+                logger.debug(f"[ItemProcessing] Item already processed: {item.title[:50]}")
+                already_processed.append({
+                    'sequence': item.sequence,
+                    'title': item.title,
+                    'summary': item.summary,
+                    'topics': item.topics or []
+                })
+            else:
+                need_processing.append(item)
+
+        # Add already-processed to results
+        processed_items.extend(already_processed)
+
+        if not need_processing:
+            logger.info(f"[ItemProcessing] All {len(already_processed)} items already processed")
+        else:
+            logger.info(f"[ItemProcessing] Extracting text from {len(need_processing)} items for batch processing")
+
+            # STEP 1: Extract text from all items (pre-batch)
+            batch_requests = []
+            item_map = {}
+
+            for item in need_processing:
+                try:
+                    # Extract text from all attachments for this item
+                    all_text_parts = []
+
+                    for att in item.attachments:
+                        att_type = att.get('type', 'unknown')
+
+                        # Text segment (from detected items)
+                        if att_type == 'text_segment':
+                            text_content = att.get('content', '')
+                            if text_content:
+                                all_text_parts.append(text_content)
+
+                        # PDF attachment (from Legistar)
+                        elif att_type == 'pdf':
+                            att_url = att.get('url')
+                            att_name = att.get('name', 'Attachment')
+
+                            if att_url:
+                                try:
+                                    result = self.processor.pdf_extractor.extract_from_url(att_url)
+                                    if result.get('success') and result.get('text'):
+                                        all_text_parts.append(f"=== {att_name} ===\n{result['text']}")
+                                        logger.debug(f"[ItemProcessing] Extracted {len(result['text'])} chars from {att_name}")
+                                    else:
+                                        logger.warning(f"[ItemProcessing] No text from {att_name}")
+                                except Exception as e:
+                                    logger.warning(f"[ItemProcessing] Failed to extract from {att_name}: {e}")
+
+                    if all_text_parts:
+                        combined_text = "\n\n".join(all_text_parts)
+                        batch_requests.append({
+                            'item_id': item.id,
+                            'title': item.title,
+                            'text': combined_text,
+                            'sequence': item.sequence
+                        })
+                        item_map[item.id] = item
+                        logger.debug(f"[ItemProcessing] Prepared {item.title[:50]} ({len(combined_text)} chars)")
+                    else:
+                        logger.warning(f"[ItemProcessing] No text extracted for {item.title[:50]}")
+                        failed_items.append(item.title)
+
+                except Exception as e:
+                    logger.error(f"[ItemProcessing] Error extracting text for {item.title[:50]}: {e}")
+                    failed_items.append(item.title)
+
+            # STEP 2: Batch process all items at once (50% cost savings!)
+            if batch_requests:
+                logger.info(f"[ItemProcessing] Submitting batch with {len(batch_requests)} items to Gemini")
+                batch_results = self.processor.process_batch_items(batch_requests)
+
+                # STEP 3: Store all results
+                for result in batch_results:
+                    item_id = result['item_id']
+                    item = item_map.get(item_id)
+
+                    if not item:
+                        logger.warning(f"[ItemProcessing] No item mapping for {item_id}")
+                        continue
+
+                    if result['success']:
+                        # Update item in database
+                        self.db.update_agenda_item(
+                            item_id=item_id,
+                            summary=result['summary'],
+                            topics=result['topics']
+                        )
+
+                        processed_items.append({
+                            'sequence': item.sequence,
+                            'title': item.title,
+                            'summary': result['summary'],
+                            'topics': result['topics']
+                        })
+
+                        logger.info(f"[ItemProcessing] ✓ {item.title[:60]}")
+                    else:
+                        failed_items.append(item.title)
+                        logger.warning(f"[ItemProcessing] ✗ {item.title[:60]}: {result.get('error')}")
+
+        # Combine item summaries into meeting summary
+        if processed_items and self.processor:
+            # Build combined summary directly (no wrapper function needed)
+            summary_parts = [f"Meeting: {meeting.title}\n"]
+            for item in processed_items:
+                title = item.get('title', 'Untitled Item')
+                summary = item.get('summary', 'No summary available')
+                summary_parts.append(f"\n{title}\n{summary}")
+            summary_parts.append(f"\n\n[Processed {len(processed_items)} items]")
+            combined_summary = "\n".join(summary_parts)
+
+            # Update meeting with combined summary
+            processing_time = time.time() - start_time
+            self.db.update_meeting_summary(
+                meeting_id=meeting.id,
+                summary=combined_summary,
+                processing_method=f"item_level_{len(processed_items)}_items",
+                processing_time=processing_time
+            )
+
+            logger.info(
+                f"[ItemProcessing] ✓ Completed: {len(processed_items)} items processed, "
+                f"{len(failed_items)} failed in {processing_time:.1f}s"
+            )
+        else:
+            logger.warning("[ItemProcessing] No items could be processed")
 
     def get_sync_status(self) -> Dict[str, Any]:
         """Get current sync status"""
@@ -754,6 +1024,96 @@ class BackgroundProcessor:
                 self.failed_cities.discard(city_banana)
 
             return result
+        finally:
+            # Restore original is_running state
+            self.is_running = old_is_running
+
+    def sync_and_process_city(self, city_banana: str) -> Dict[str, Any]:
+        """Sync a city and immediately process all its queued jobs
+
+        Returns:
+            Dictionary with sync_result and processing stats
+        """
+        logger.info(f"Starting sync-and-process for {city_banana}")
+
+        # Step 1: Sync the city (fetches meetings, stores, enqueues)
+        sync_result = self.force_sync_city(city_banana)
+
+        if sync_result.status != SyncStatus.COMPLETED:
+            logger.error(f"Sync failed for {city_banana}: {sync_result.error_message}")
+            return {
+                'sync_status': sync_result.status.value,
+                'sync_error': sync_result.error_message,
+                'meetings_found': sync_result.meetings_found,
+                'processed_count': 0
+            }
+
+        logger.info(f"Sync complete: {sync_result.meetings_found} meetings found")
+
+        # Step 2: Process all queued jobs for this city
+        if not self.processor:
+            logger.warning("Processor not available - meetings queued but not processed")
+            return {
+                'sync_status': sync_result.status.value,
+                'meetings_found': sync_result.meetings_found,
+                'processed_count': 0,
+                'warning': 'Processor not available'
+            }
+
+        logger.info(f"Processing queued jobs for {city_banana}...")
+        processed_count = 0
+        failed_count = 0
+
+        # Temporarily enable processing
+        old_is_running = self.is_running
+        self.is_running = True
+
+        try:
+            # Process all jobs for this city
+            while True:
+                # Get next job for this city
+                job = self.db.get_next_for_processing(banana=city_banana)
+
+                if not job:
+                    break  # No more jobs for this city
+
+                queue_id = job['id']
+                meeting_id = job['meeting_id']
+                packet_url = job['packet_url']
+
+                logger.info(f"Processing job {queue_id}: {packet_url}")
+
+                try:
+                    meeting = self.db.get_meeting(meeting_id)
+                    if not meeting:
+                        self.db.mark_processing_failed(queue_id, "Meeting not found")
+                        failed_count += 1
+                        continue
+
+                    # Process the meeting (item-aware)
+                    self._process_meeting_summary(meeting)
+                    self.db.mark_processing_complete(queue_id)
+                    processed_count += 1
+                    logger.info(f"✓ Processed {packet_url}")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    self.db.mark_processing_failed(queue_id, error_msg)
+                    failed_count += 1
+                    logger.error(f"✗ Failed to process {packet_url}: {e}")
+
+            logger.info(
+                f"Processing complete for {city_banana}: "
+                f"{processed_count} succeeded, {failed_count} failed"
+            )
+
+            return {
+                'sync_status': sync_result.status.value,
+                'meetings_found': sync_result.meetings_found,
+                'processed_count': processed_count,
+                'failed_count': failed_count
+            }
+
         finally:
             # Restore original is_running state
             self.is_running = old_is_running
@@ -821,29 +1181,29 @@ class BackgroundProcessor:
 
 
 # Global instance
-_background_processor = None
+_conductor = None
 
 
-def get_background_processor() -> BackgroundProcessor:
-    """Get global background processor instance"""
-    global _background_processor
-    if _background_processor is None:
-        _background_processor = BackgroundProcessor()
-    return _background_processor
+def get_conductor() -> Conductor:
+    """Get global conductor instance"""
+    global _conductor
+    if _conductor is None:
+        _conductor = Conductor()
+    return _conductor
 
 
-def start_background_processor():
-    """Start the global background processor"""
-    processor = get_background_processor()
-    processor.start()
+def start_conductor():
+    """Start the global conductor"""
+    conductor = get_conductor()
+    conductor.start()
 
 
-def stop_background_processor():
-    """Stop the global background processor"""
-    global _background_processor
-    if _background_processor:
-        _background_processor.stop()
-        _background_processor = None
+def stop_conductor():
+    """Stop the global conductor"""
+    global _conductor
+    if _conductor:
+        _conductor.stop()
+        _conductor = None
 
 
 if __name__ == "__main__":
@@ -852,17 +1212,18 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Background processor for engagic")
     parser.add_argument("--sync-city", help="Sync specific city by city_banana")
+    parser.add_argument("--sync-and-process-city", help="Sync city and immediately process all its meetings")
     parser.add_argument("--process-meeting", help="Process specific meeting by packet URL")
     parser.add_argument("--full-sync", action="store_true", help="Run full sync once")
     parser.add_argument(
-        "--process-all-unprocessed", 
-        action="store_true", 
+        "--process-all-unprocessed",
+        action="store_true",
         help="Process ALL unprocessed meetings"
     )
     parser.add_argument(
-        "--batch-size", 
-        type=int, 
-        default=20, 
+        "--batch-size",
+        type=int,
+        default=20,
         help="Batch size for processing (default: 20)"
     )
     parser.add_argument("--status", action="store_true", help="Show status")
@@ -870,11 +1231,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    processor = BackgroundProcessor()
+    # Configure logging for CLI usage
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler()]
+    )
+
+    processor = Conductor()
 
     if args.sync_city:
         result = processor.force_sync_city(args.sync_city)
         print(f"Sync result: {result}")
+    elif args.sync_and_process_city:
+        result = processor.sync_and_process_city(args.sync_and_process_city)
+        print(f"Sync and process result: {result}")
     elif args.process_meeting:
         success = processor.force_process_meeting(args.process_meeting)
         print(f"Process result: {'Success' if success else 'Failed'}")

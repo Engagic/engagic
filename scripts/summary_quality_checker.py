@@ -24,10 +24,10 @@ from enum import Enum
 try:
     from backend.core.config import Config
     config = Config()
-    MEETINGS_DB_PATH = config.MEETINGS_DB_PATH
+    MEETINGS_DB_PATH = config.UNIFIED_DB_PATH
 except ImportError:
     # Fallback if config not available
-    MEETINGS_DB_PATH = "/root/engagic/data/meetings.db"
+    MEETINGS_DB_PATH = "/root/engagic/data/engagic.db"
 
 logger = logging.getLogger("engagic")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -168,9 +168,9 @@ class SummaryQualityChecker:
         
         # Get all summaries
         cursor.execute("""
-            SELECT id, city_banana, meeting_name, processed_summary 
-            FROM meetings 
-            WHERE processed_summary IS NOT NULL
+            SELECT id, banana, title, summary
+            FROM meetings
+            WHERE summary IS NOT NULL
         """)
         
         results = {
@@ -229,17 +229,17 @@ class SummaryQualityChecker:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, city_banana, meeting_id, processed_summary
-            FROM meetings 
-            WHERE processed_summary IS NOT NULL
+            SELECT id, banana, title, summary
+            FROM meetings
+            WHERE summary IS NOT NULL
         """)
         
         fixable = []
         for row in cursor.fetchall():
-            meeting_id, city, meeting_ref, summary = row
+            meeting_id, banana, title, summary = row
             result = self.check_summary(summary)
             if result.fixable and result.quality != SummaryQuality.GOOD:
-                fixable.append((meeting_id, city, meeting_ref))
+                fixable.append((meeting_id, banana, title))
         
         conn.close()
         return fixable
@@ -251,9 +251,9 @@ class SummaryQualityChecker:
         
         # First identify what would be cleared
         cursor.execute("""
-            SELECT id, city_banana, meeting_name, processed_summary
-            FROM meetings 
-            WHERE processed_summary IS NOT NULL
+            SELECT id, banana, title, summary
+            FROM meetings
+            WHERE summary IS NOT NULL
         """)
         
         to_clear = []
@@ -275,8 +275,8 @@ class SummaryQualityChecker:
             if meeting_ids:
                 placeholders = ','.join('?' * len(meeting_ids))
                 cursor.execute(f"""
-                    UPDATE meetings 
-                    SET processed_summary = NULL, processing_time_seconds = NULL
+                    UPDATE meetings
+                    SET summary = NULL, processing_time = NULL
                     WHERE id IN ({placeholders})
                 """, meeting_ids)
                 conn.commit()
@@ -291,16 +291,16 @@ class SummaryQualityChecker:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, city_banana, meeting_name, meeting_date, packet_url, processed_summary
-            FROM meetings 
-            WHERE processed_summary IS NOT NULL
+            SELECT id, banana, title, date, packet_url, summary
+            FROM meetings
+            WHERE summary IS NOT NULL
             ORDER BY id DESC
         """)
-        
+
         best_summaries = []
-        
+
         for row in cursor.fetchall():
-            meeting_id, city, name, date, packet_url, summary = row
+            meeting_id, banana, title, date, packet_url, summary = row
             result = self.check_summary(summary)
             
             # Only include GOOD quality summaries
@@ -341,8 +341,8 @@ class SummaryQualityChecker:
             
             best_summaries.append({
                 "id": meeting_id,
-                "city_banana": city,
-                "meeting_name": name,
+                "banana": banana,
+                "meeting_name": title,
                 "meeting_date": date,
                 "packet_url": packet_url,
                 "summary": summary,
