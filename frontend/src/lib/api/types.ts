@@ -12,7 +12,6 @@ export interface CityOption {
 }
 
 export interface Meeting {
-	id: string;
 	banana: string;
 	title: string;
 	date: string; // ISO format datetime
@@ -24,7 +23,6 @@ export interface Meeting {
 export interface RandomMeetingResponse {
 	status: string;
 	meeting: {
-		id: number;
 		banana: string;
 		title: string;
 		date: string;

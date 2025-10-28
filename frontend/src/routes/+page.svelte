@@ -94,7 +94,6 @@
 
 					// Create a Meeting object for slug generation
 					const meeting: Meeting = {
-						id: result.meeting.id.toString(),
 						banana: result.meeting.banana,
 						title: result.meeting.title,
 						date: result.meeting.date,
