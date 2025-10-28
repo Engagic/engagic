@@ -60,6 +60,49 @@ def test_meeting_detection(db, processor, meeting, meeting_num, total, debug=Fal
 
         print(f"✓ Extracted {page_count} pages (~{text_size:,} chars)")
 
+        # Debug mode: dump text samples
+        if debug:
+            print(f"\n{'─'*80}")
+            print("DEBUG: Text Analysis")
+            print(f"{'─'*80}")
+
+            # Show first 3000 chars
+            print("\n[First 3000 chars of document]")
+            print(text[:3000])
+            print("\n[...]\n")
+
+            # Try to detect cover end
+            try:
+                cover_end = processor._detect_cover_end(text)
+                print(f"\nCover ends at position: {cover_end} ({cover_end/len(text)*100:.1f}%)")
+
+                # Show cover section
+                print(f"\n[COVER SECTION ({len(text[:cover_end])} chars)]")
+                print(text[:cover_end])
+                print("\n[END COVER]\n")
+
+                # Show start of body
+                print(f"\n[BODY START (first 2000 chars)]")
+                print(text[cover_end:cover_end+2000])
+                print("\n[...]\n")
+
+                # Try to parse cover
+                cover_items = processor._parse_cover_agenda(text[:cover_end])
+                print(f"\nAgenda items found in cover: {len(cover_items)}")
+                for item in cover_items[:10]:
+                    print(f"  {item['item_id']}: {item['title'][:80]}")
+                if len(cover_items) > 10:
+                    print(f"  ... and {len(cover_items) - 10} more")
+
+            except Exception as e:
+                print(f"\n❌ Debug analysis error: {e}")
+                logger.exception("Debug error")
+
+            print(f"\n{'─'*80}\n")
+
+            # Don't continue with detection in debug mode
+            return
+
     except Exception as e:
         print(f"❌ Error extracting PDF: {e}")
         return
@@ -131,7 +174,7 @@ def main():
             print(f"❌ Meeting not found with URL: {args.meeting_url}")
             return
 
-        test_meeting_detection(db, processor, meeting, 1, 1)
+        test_meeting_detection(db, processor, meeting, 1, 1, debug=args.debug)
     else:
         # Test recent meetings for city
         city = db.get_city(args.banana)
@@ -157,7 +200,7 @@ def main():
         print(f"Testing {len(meetings_with_packets)} meetings with packets...\n")
 
         for i, meeting in enumerate(meetings_with_packets, 1):
-            test_meeting_detection(db, processor, meeting, i, len(meetings_with_packets))
+            test_meeting_detection(db, processor, meeting, i, len(meetings_with_packets), debug=args.debug)
 
             # Brief pause between meetings
             if i < len(meetings_with_packets):
