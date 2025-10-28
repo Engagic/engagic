@@ -82,18 +82,6 @@
 					<div class="impact-label">Agendas Summarized</div>
 					<div class="impact-desc">Meeting packets made readable</div>
 				</div>
-
-				<div class="impact-card">
-					<div class="impact-number">{analytics.real_metrics.states_covered}</div>
-					<div class="impact-label">States</div>
-					<div class="impact-desc">Nationwide coverage</div>
-				</div>
-
-				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.zipcodes_served)}</div>
-					<div class="impact-label">Zip Codes</div>
-					<div class="impact-desc">Communities served</div>
-				</div>
 			</div>
 		</section>
 	{:else if loading}

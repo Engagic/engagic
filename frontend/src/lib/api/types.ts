@@ -73,8 +73,6 @@ export interface AnalyticsData {
 		meetings_tracked: number;
 		meetings_with_packet: number;
 		agendas_summarized: number;
-		states_covered: number;
-		zipcodes_served: number;
 		active_cities: number;
 	};
 }
