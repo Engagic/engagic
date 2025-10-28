@@ -4,9 +4,10 @@ set -e
 
 APP_DIR="/root/engagic"
 VENV_DIR="/root/engagic/.venv"
-API_PID_FILE="/tmp/engagic-api.pid"
+API_SERVICE="engagic-api"
 DAEMON_SERVICE="engagic-daemon"
-SERVICE_FILE="/etc/systemd/system/${DAEMON_SERVICE}.service"
+API_SERVICE_FILE="/etc/systemd/system/${API_SERVICE}.service"
+DAEMON_SERVICE_FILE="/etc/systemd/system/${DAEMON_SERVICE}.service"
 
 # Colors for output
 RED='\033[0;31m'
@@ -41,21 +42,6 @@ check_uv() {
     fi
 }
 
-
-check_api_process() {
-    if [ -f "$API_PID_FILE" ]; then
-        local pid=$(cat "$API_PID_FILE")
-        if ps -p "$pid" > /dev/null 2>&1; then
-            echo "$pid"
-        else
-            rm -f "$API_PID_FILE"
-            echo ""
-        fi
-    else
-        echo ""
-    fi
-}
-
 setup_env() {
     log "Setting up Python environment with uv..."
     check_uv
@@ -74,10 +60,50 @@ setup_env() {
     log "Dependencies installed"
 }
 
+create_api_service() {
+    log "Creating systemd service file for API..."
+
+    cat > "$API_SERVICE_FILE" << EOF
+[Unit]
+Description=Engagic API Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=$APP_DIR
+ExecStart=$VENV_DIR/bin/uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=PYTHONPATH=$APP_DIR
+EnvironmentFile=-$APP_DIR/.env
+EnvironmentFile=-/root/.llm_secrets
+
+# Resource limits
+LimitNOFILE=65536
+
+# Security
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    log "API systemd service file created"
+}
+
 create_daemon_service() {
     log "Creating systemd service file for daemon..."
-    
-    cat > "$SERVICE_FILE" << EOF
+
+    cat > "$DAEMON_SERVICE_FILE" << EOF
 [Unit]
 Description=Engagic Background Processing Daemon
 After=network.target
@@ -88,7 +114,7 @@ User=root
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=-/root/.llm_secrets
-ExecStart=$VENV_DIR/bin/python -m backend.services.daemon
+ExecStart=$VENV_DIR/bin/uv run backend.services.daemon
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -97,36 +123,40 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
     systemctl daemon-reload
-    log "Systemd service file created"
+    log "Daemon systemd service file created"
 }
 
 # API Management
 start_api() {
-    log "Starting API service..."
-    systemctl enable engagic-api
-    
-    if systemctl is-active --quiet engagic-api; then
-        warn "API already running, restarting..."
-        systemctl restart engagic-api
-    else
-        systemctl start engagic-api
+    if [ ! -f "$API_SERVICE_FILE" ]; then
+        create_api_service
     fi
-    
+
+    log "Starting API service..."
+    systemctl enable "$API_SERVICE"
+
+    if systemctl is-active --quiet "$API_SERVICE"; then
+        warn "API already running, restarting..."
+        systemctl restart "$API_SERVICE"
+    else
+        systemctl start "$API_SERVICE"
+    fi
+
     sleep 2
-    if systemctl is-active --quiet engagic-api; then
+    if systemctl is-active --quiet "$API_SERVICE"; then
         log "API started successfully"
-        log "API logs: journalctl -u engagic-api -f"
+        log "API logs: journalctl -u $API_SERVICE -f"
     else
         error "Failed to start API"
     fi
 }
 
 stop_api() {
-    if systemctl is-active --quiet engagic-api; then
+    if systemctl is-active --quiet "$API_SERVICE"; then
         log "Stopping API..."
-        systemctl stop engagic-api
+        systemctl stop "$API_SERVICE"
         log "API stopped"
     else
         warn "API not running"
@@ -135,9 +165,9 @@ stop_api() {
 
 restart_api() {
     log "Restarting API..."
-    systemctl restart engagic-api
+    systemctl restart "$API_SERVICE"
     sleep 2
-    if systemctl is-active --quiet engagic-api; then
+    if systemctl is-active --quiet "$API_SERVICE"; then
         log "API restarted successfully"
     else
         error "Failed to restart API"
@@ -146,20 +176,20 @@ restart_api() {
 
 # Daemon Management
 start_daemon() {
-    if [ ! -f "$SERVICE_FILE" ]; then
+    if [ ! -f "$DAEMON_SERVICE_FILE" ]; then
         create_daemon_service
     fi
-    
+
     log "Starting background processor daemon..."
     systemctl enable "$DAEMON_SERVICE"
-    
+
     if systemctl is-active --quiet "$DAEMON_SERVICE"; then
         warn "Daemon already running, restarting..."
         systemctl restart "$DAEMON_SERVICE"
     else
         systemctl start "$DAEMON_SERVICE"
     fi
-    
+
     sleep 2
     if systemctl is-active --quiet "$DAEMON_SERVICE"; then
         log "Daemon started successfully"
@@ -215,32 +245,20 @@ restart_all() {
 status_all() {
     echo -e "${BLUE}=== Engagic Status ===${NC}"
     echo ""
-    
-    # API status - check systemd first, then PID file
+
+    # API status
     echo -e "${BLUE}API Status:${NC}"
-    if systemctl is-active --quiet "engagic-api"; then
-        echo -e "${GREEN}  Running (systemd)${NC}"
-        echo "  Logs: journalctl -u engagic-api -f"
+    if systemctl is-active --quiet "$API_SERVICE"; then
+        echo -e "${GREEN}  Running${NC}"
+        echo "  Logs: journalctl -u $API_SERVICE -f"
         echo "  Test: curl http://localhost:8000/"
-        systemctl status "engagic-api" --no-pager | grep -E "Active:|Main PID:" | sed 's/^/  /'
+        systemctl status "$API_SERVICE" --no-pager | grep -E "Active:|Main PID:" | sed 's/^/  /'
     else
-        local api_pid=$(check_api_process)
-        if [ -n "$api_pid" ]; then
-            echo -e "${GREEN}  Running (PID: $api_pid)${NC}"
-            echo "  Logs: tail -f /tmp/engagic-api.log"
-            echo "  Test: curl http://localhost:8000/"
-            
-            if command -v ps &> /dev/null; then
-                local mem=$(ps -p "$api_pid" -o %mem | tail -1)
-                echo "  Memory usage: ${mem}%"
-            fi
-        else
-            echo -e "${YELLOW}  Not running${NC}"
-        fi
+        echo -e "${YELLOW}  Not running${NC}"
     fi
-    
+
     echo ""
-    
+
     # Daemon status
     echo -e "${BLUE}Background Processor Status:${NC}"
     if systemctl is-active --quiet "$DAEMON_SERVICE"; then
@@ -250,11 +268,11 @@ status_all() {
     else
         echo -e "${YELLOW}  Not running${NC}"
     fi
-    
+
     echo ""
-    
-    # Database stats
-    if [ -n "$api_pid" ]; then
+
+    # Database stats - only if API is running
+    if systemctl is-active --quiet "$API_SERVICE"; then
         echo -e "${BLUE}Database Stats:${NC}"
         curl -s "http://localhost:8000/api/stats" | python3 -m json.tool 2>/dev/null | head -10 | sed 's/^/  /' || echo "  Unable to fetch stats"
     fi
@@ -262,13 +280,13 @@ status_all() {
 
 test_services() {
     log "Testing API endpoints..."
-    
+
     if ! command -v curl &> /dev/null; then
         error "curl is required for testing"
     fi
-    
-    local api_pid=$(check_api_process)
-    if [ -z "$api_pid" ]; then
+
+    # Check systemd status
+    if ! systemctl is-active --quiet "$API_SERVICE"; then
         warn "API not running, skipping tests"
         return
     fi
@@ -346,7 +364,7 @@ deploy_full() {
 daemon_status() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    python -m backend.services.daemon --status
+    uv run backend.services.daemon --status
 }
 
 sync_city() {
@@ -358,7 +376,7 @@ sync_city() {
     source "$VENV_DIR/bin/activate"
     # Source API keys if available
     [ -f ~/.llm_secrets ] && source ~/.llm_secrets
-    python -m backend.services.conductor --sync-city "$1"
+    uv run backend.services.conductor --sync-city "$1"
 }
 
 sync_and_process_city() {
@@ -371,7 +389,7 @@ sync_and_process_city() {
     source "$VENV_DIR/bin/activate"
     # Source API keys if available
     [ -f ~/.llm_secrets ] && source ~/.llm_secrets
-    python -m backend.services.conductor --sync-and-process-city "$1"
+    uv run backend.services.conductor --sync-and-process-city "$1"
 }
 
 process_unprocessed() {
@@ -379,7 +397,7 @@ process_unprocessed() {
     source "$VENV_DIR/bin/activate"
     # Source API keys if available
     [ -f ~/.llm_secrets ] && source ~/.llm_secrets
-    python -m backend.services.background_processor --process-all-unprocessed
+    uv run backend.services.background_processor --process-all-unprocessed
 }
 
 show_help() {
