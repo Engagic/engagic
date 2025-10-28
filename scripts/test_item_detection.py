@@ -12,6 +12,7 @@ Usage:
 
 import sys
 import argparse
+import re
 from pathlib import Path
 
 
@@ -139,6 +140,21 @@ def test_meeting_detection(db, processor, meeting, meeting_num, total, debug=Fal
             page_range = f"~{start_page}-{start_page + pages_in_item if isinstance(start_page, int) else '?'}"
 
             print(f"{item['sequence']:<4} {title:<60} {page_range:<15} {item_size//1000}K")
+
+        # Show content previews
+        print("\n" + "="*80)
+        print("Content Preview (first 500 chars of each chunk):")
+        print("="*80)
+        for item in detected_items[:3]:  # Just first 3 to avoid spam
+            print(f"\n--- Item {item['sequence']}: {item['title'][:50]} ---")
+            preview = item['text'][:500].replace('\n', ' ')[:200]
+            print(f"{preview}...")
+            # Look for page markers
+            page_markers = re.findall(r'--- PAGE (\d+) ---', item['text'][:2000])
+            if page_markers:
+                print(f"  [Found PAGE markers: {', '.join(page_markers[:5])}]")
+            else:
+                print(f"  [No PAGE markers in first 2000 chars]")
 
         print("\n📊 Summary:")
         print(f"   Total items: {len(detected_items)}")
