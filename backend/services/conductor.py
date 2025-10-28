@@ -359,6 +359,18 @@ class Conductor:
                         processing_status="pending"
                     )
 
+                    # Validate meeting before storing (prevent corruption)
+                    from backend.services.meeting_validator import MeetingValidator
+                    if not MeetingValidator.validate_and_store(
+                        {"packet_url": meeting_obj.packet_url, "title": meeting_obj.title},
+                        city.banana,
+                        city.name,
+                        city.vendor,
+                        city.slug
+                    ):
+                        logger.warning(f"Skipping corrupted meeting: {meeting_obj.title}")
+                        continue
+
                     # Store meeting (upsert) - unified DB handles duplicates
                     stored_meeting = self.db.store_meeting(meeting_obj)
                     processed_count += 1
