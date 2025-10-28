@@ -202,8 +202,9 @@ start_daemon() {
 stop_daemon() {
     if systemctl is-active --quiet "$DAEMON_SERVICE"; then
         log "Stopping daemon..."
-        systemctl stop "$DAEMON_SERVICE"
-        log "Daemon stopped"
+        systemctl kill --signal=SIGKILL "$DAEMON_SERVICE"
+        systemctl disable "$DAEMON_SERVICE"
+        log "Daemon stopped and disabled"
     else
         warn "Daemon not running"
     fi
