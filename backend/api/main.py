@@ -965,12 +965,6 @@ async def get_analytics():
         cursor.execute("SELECT COUNT(*) as total_cities FROM cities")
         total_cities = dict(cursor.fetchone())
 
-        cursor.execute("SELECT COUNT(DISTINCT state) as states_covered FROM cities")
-        states_covered = dict(cursor.fetchone())
-
-        cursor.execute("SELECT COUNT(DISTINCT zipcode) as total_zipcodes FROM zipcodes")
-        zipcodes_covered = dict(cursor.fetchone())
-
         # Meeting stats
         cursor.execute("SELECT COUNT(*) as meetings_count FROM meetings")
         meetings_stats = dict(cursor.fetchone())
@@ -992,8 +986,6 @@ async def get_analytics():
                 "meetings_tracked": meetings_stats["meetings_count"],
                 "meetings_with_packet": packets_stats["packets_count"],
                 "agendas_summarized": summaries_stats["summaries_count"],
-                "states_covered": states_covered["states_covered"],
-                "zipcodes_served": zipcodes_covered["total_zipcodes"],
                 "active_cities": active_cities_stats["active_cities"]
             }
         }
