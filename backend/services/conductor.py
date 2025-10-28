@@ -479,7 +479,7 @@ class Conductor:
             return result
 
     def _sync_city_with_retry(self, city: City,
-                              max_retries: int = 2) -> SyncResult:
+                              max_retries: int = 1) -> SyncResult:
         """Sync city with retry (5s, 20s delays)"""
         city_name = city.name
         city_banana = city.banana

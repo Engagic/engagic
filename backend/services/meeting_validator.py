@@ -22,6 +22,7 @@ class MeetingValidator:
         "granicus": lambda slug: [
             f"{slug}.granicus.com",
             "s3.amazonaws.com",  # Granicus uses S3
+            "cloudfront.net",  # Granicus CloudFront CDN
             "legistar.granicus.com",
             "legistar1.granicus.com",
             "legistar2.granicus.com",
