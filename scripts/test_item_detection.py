@@ -150,11 +150,13 @@ def test_meeting_detection(db, processor, meeting, meeting_num, total, debug=Fal
             preview = item['text'][:500].replace('\n', ' ')[:200]
             print(f"{preview}...")
             # Look for page markers
-            page_markers = re.findall(r'--- PAGE (\d+) ---', item['text'][:2000])
+            page_markers = re.findall(r'--- PAGE (\d+) ---', item['text'][:5000])
             if page_markers:
-                print(f"  [Found PAGE markers: {', '.join(page_markers[:5])}]")
+                first_page = page_markers[0]
+                last_page = page_markers[-1] if len(page_markers) > 1 else first_page
+                print(f"  [Pages: {first_page}-{last_page} ({len(page_markers)} page markers)]")
             else:
-                print(f"  [No PAGE markers in first 2000 chars]")
+                print(f"  [No PAGE markers in first 5000 chars]")
 
         print("\n📊 Summary:")
         print(f"   Total items: {len(detected_items)}")
