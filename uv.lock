@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 
 [[package]]
@@ -212,7 +212,6 @@ dependencies = [
     { name = "aiohttp" },
     { name = "anthropic" },
     { name = "beautifulsoup4" },
-    { name = "engagic-core" },
     { name = "fastapi" },
     { name = "google-genai" },
     { name = "lxml" },
@@ -224,6 +223,7 @@ dependencies = [
     { name = "pymupdf" },
     { name = "pypdf2" },
     { name = "pyright" },
+    { name = "python-dateutil" },
     { name = "requests" },
     { name = "sqlalchemy" },
     { name = "sqlalchemy-mate" },
@@ -241,7 +241,6 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.15" },
     { name = "anthropic", specifier = ">=0.64.0" },
     { name = "beautifulsoup4", specifier = ">=4.13.5" },
-    { name = "engagic-core", directory = "infra" },
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "google-genai" },
     { name = "lxml" },
@@ -254,6 +253,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.26.4" },
     { name = "pypdf2", specifier = ">=3.0.1" },
     { name = "pyright", specifier = ">=1.1.407" },
+    { name = "python-dateutil", specifier = ">=2.8.2" },
     { name = "requests" },
     { name = "sqlalchemy", specifier = "<2.0" },
     { name = "sqlalchemy-mate", specifier = "<2.0" },
@@ -261,17 +261,6 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.35.0" },
 ]
 provides-extras = ["premium"]
-
-[[package]]
-name = "engagic-core"
-version = "0.1.0"
-source = { directory = "infra" }
-dependencies = [
-    { name = "maturin" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "maturin", specifier = ">=1.9.6" }]
 
 [[package]]
 name = "eval-type-backport"

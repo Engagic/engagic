@@ -49,9 +49,11 @@ class GeminiSummarizer:
 
         # Load prompts from JSON
         if prompts_path is None:
-            prompts_path = Path(__file__).parent / "prompts.json"
+            prompts_file = Path(__file__).parent / "prompts.json"
+        else:
+            prompts_file = Path(prompts_path)
 
-        with open(prompts_path, 'r') as f:
+        with open(prompts_file, 'r') as f:
             self.prompts = json.load(f)
 
         logger.info(f"[Summarizer] Loaded {len(self.prompts)} prompt categories")
@@ -327,9 +329,11 @@ class GeminiSummarizer:
         try:
             prompt_data = self.prompts[category][prompt_type]
             template = prompt_data['template']
-            return template.format(**variables)
         except KeyError as e:
             raise ValueError(f"Prompt not found: {category}.{prompt_type}") from e
+
+        try:
+            return template.format(**variables)
         except KeyError as e:
             raise ValueError(f"Missing variable for prompt {category}.{prompt_type}: {e}") from e
 

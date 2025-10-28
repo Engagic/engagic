@@ -39,8 +39,9 @@ class PdfExtractor:
             # Extract with PyMuPDF
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text_parts = []
-            for page_num, page in enumerate(doc, 1):
-                text_parts.append(f"--- PAGE {page_num} ---\n{page.get_text()}")
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page.get_text()}")  # type: ignore[attr-defined]
 
             full_text = "\n\n".join(text_parts)
             page_count = len(doc)
@@ -77,8 +78,9 @@ class PdfExtractor:
             # Extract with PyMuPDF
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text_parts = []
-            for page_num, page in enumerate(doc, 1):
-                text_parts.append(f"--- PAGE {page_num} ---\n{page.get_text()}")
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page.get_text()}")  # type: ignore[attr-defined]
 
             full_text = "\n\n".join(text_parts)
             page_count = len(doc)

@@ -742,7 +742,7 @@ class Conductor:
                         extracted_text = result['text']
 
                         # Check document size - skip item detection for small packets
-                        page_count = self.processor._estimate_page_count(extracted_text)
+                        page_count = self.processor.summarizer._estimate_page_count(extracted_text)
                         text_size = len(extracted_text)
 
                         if page_count <= 10 or text_size < 30000:
@@ -760,7 +760,10 @@ class Conductor:
                             return
 
                         # Detect items using pattern matching (for larger packets)
-                        detected_items = self.processor.detect_agenda_items(extracted_text)
+                        # Try structural chunking first, fall back to pattern-based
+                        detected_items = self.processor.chunker.chunk_by_structure(extracted_text)
+                        if not detected_items:
+                            detected_items = self.processor.chunker.chunk_by_patterns(extracted_text)
 
                         if detected_items:
                             # Convert detected items to AgendaItem objects and store
@@ -954,10 +957,14 @@ class Conductor:
 
         # Combine item summaries into meeting summary
         if processed_items and self.processor:
-            combined_summary = self.processor.combine_item_summaries(
-                item_summaries=processed_items,
-                meeting_title=meeting.title
-            )
+            # Build combined summary directly (no wrapper function needed)
+            summary_parts = [f"Meeting: {meeting.title}\n"]
+            for item in processed_items:
+                title = item.get('title', 'Untitled Item')
+                summary = item.get('summary', 'No summary available')
+                summary_parts.append(f"\n{title}\n{summary}")
+            summary_parts.append(f"\n\n[Processed {len(processed_items)} items]")
+            combined_summary = "\n".join(summary_parts)
 
             # Update meeting with combined summary
             processing_time = time.time() - start_time
