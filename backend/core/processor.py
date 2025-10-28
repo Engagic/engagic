@@ -865,13 +865,10 @@ Attached documents:
 
     def detect_agenda_items(self, text: str, max_chunk_size: int = 75000) -> List[Dict[str, Any]]:
         """
-        Detect agenda items from monolithic PDF text using two-pass approach.
+        Universal agenda parser with fallback strategies.
 
-        Pass 1: Extract agenda items from beginning (table of contents style)
-        Pass 2: Find where those items appear again in body (detailed content starts)
-
-        This handles packets where the first few pages are an agenda, followed by
-        hundreds of pages of attachments/reports organized by item.
+        Primary: Structural chunking (cover + body boundary detection)
+        Fallback: Two-pass pattern matching (for unstructured agendas)
 
         Args:
             text: Extracted PDF text
@@ -880,6 +877,330 @@ Attached documents:
         Returns:
             List of detected items: [{'sequence': N, 'title': '...', 'text': '...', 'start_page': N}, ...]
             Empty list if no clear item structure detected
+        """
+        # Try primary approach: structural chunking
+        try:
+            chunks = self._chunk_agenda_by_structure(text)
+            if chunks:
+                logger.info(f"[ItemDetection] Structural chunking succeeded: {len(chunks)} items")
+                return chunks
+        except Exception as e:
+            logger.warning(f"[ItemDetection] Structural chunking failed: {e}")
+
+        # Fallback: two-pass pattern matching
+        logger.info("[ItemDetection] Falling back to pattern-based detection")
+        return self._chunk_agenda_by_patterns(text, max_chunk_size)
+
+    def _chunk_agenda_by_structure(self, pdf_text: str) -> List[Dict[str, Any]]:
+        """
+        Universal agenda parser. Works by:
+        1. Extract cover page agenda listing (source of truth for item metadata)
+        2. Detect repeating structural markers in body
+        3. Split on strongest boundary signals
+        4. Match chunks back to cover metadata via footers/context
+        """
+        # Normalize page breaks and excessive newlines
+        text = re.sub(r'\f+', '\n\n', pdf_text)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+
+        # Step 1: Split cover from body
+        cover_end = self._detect_cover_end(text)
+
+        # If cover_end is very early (< 5% of doc), likely no separate cover
+        if cover_end < len(text) * 0.05:
+            logger.debug("[Chunker] No separate cover detected, using pattern-based fallback")
+            return []
+
+        cover_text = text[:cover_end]
+        body_text = text[cover_end:]
+
+        # Step 2: Extract item metadata from cover
+        agenda_items = self._parse_cover_agenda(cover_text)
+
+        if not agenda_items:
+            logger.debug("[Chunker] No agenda items found in cover")
+            return []
+
+        logger.debug(f"[Chunker] Found {len(agenda_items)} items in cover section")
+
+        # Step 3: Find item boundaries in body
+        boundaries = self._detect_item_boundaries(body_text)
+
+        if not boundaries or len(boundaries) < 2:
+            logger.debug("[Chunker] Insufficient boundaries found in body")
+            return []
+
+        # Step 4: Chunk and match to metadata
+        chunks = []
+        for i, boundary in enumerate(boundaries):
+            start = boundary['start']
+            end = boundaries[i+1]['start'] if i+1 < len(boundaries) else len(body_text)
+
+            content = body_text[start:end].strip()
+
+            if len(content) < 100:  # Skip tiny chunks
+                continue
+
+            # Extract item ID from content (footers, headers)
+            detected_id = self._extract_item_id_from_content(content)
+
+            # Match to cover metadata
+            metadata = self._match_to_agenda(detected_id, content, agenda_items)
+
+            # Extract page number if available
+            page_match = re.search(r'--- PAGE (\d+) ---', content[:500])
+            start_page = int(page_match.group(1)) if page_match else None
+
+            chunks.append({
+                'sequence': i + 1,
+                'title': f"{metadata['item_id']}. {metadata['title']}",
+                'text': content,
+                'start_page': start_page
+            })
+
+        return chunks if len(chunks) >= 2 else []
+
+    def _detect_cover_end(self, text: str) -> int:
+        """
+        Find where cover page ends and item content begins.
+        Signals: first occurrence of repeating report headers, or large structural shift.
+        """
+        # Common report header patterns
+        report_headers = [
+            r'REPORT TO THE',
+            r'AGENDA ITEM',
+            r'Item \d+\s*\n\s*Staff Report',
+            r'STAFF REPORT',
+            r'ACTION ITEM',
+        ]
+
+        # Find first strong header
+        earliest_pos = len(text)
+        for pattern in report_headers:
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if match and match.start() < earliest_pos:
+                earliest_pos = match.start()
+
+        # Better fallback: find first page break after significant content
+        if earliest_pos == len(text):
+            # Look for content density change (agenda is dense, reports have whitespace)
+            chunks = [text[i:i+2000] for i in range(0, min(len(text), 20000), 2000)]
+            for i, chunk in enumerate(chunks[1:], 1):
+                # Count newlines per 100 chars as density metric
+                density = chunk.count('\n') / (len(chunk) / 100)
+                prev_density = chunks[i-1].count('\n') / (len(chunks[i-1]) / 100)
+                # Significant drop in density = transition to report content
+                if density < prev_density * 0.6:
+                    earliest_pos = i * 2000
+                    break
+
+            # Ultimate fallback
+            if earliest_pos == len(text):
+                earliest_pos = int(len(text) * 0.15)
+
+        return earliest_pos
+
+    def _parse_cover_agenda(self, cover_text: str) -> List[Dict[str, Any]]:
+        """
+        Extract agenda item listing from cover page.
+        Universal patterns:
+        - "4. Title here – 45 minutes"
+        - "7. SECTION NAME\n    a. Sub item"
+        - Numbered list structure
+        """
+        items = []
+        lines = cover_text.split('\n')
+
+        current_section = None
+
+        for line in lines:
+            line_stripped = line.strip()
+
+            # Main numbered item: "4. Title"
+            main_match = re.match(r'^(\d+)\.\s+(.+?)(?:\s+[–—-]\s+(\d+)\s+minutes?)?.*$', line_stripped)
+            if main_match:
+                num = int(main_match.group(1))
+                title = main_match.group(2).strip()
+                duration = int(main_match.group(3)) if main_match.group(3) else None
+
+                # Skip if title is too short or looks like junk
+                if len(title) < 10 or title.upper() in ['MINUTES', 'AGENDA', 'MEETING']:
+                    continue
+
+                current_section = num
+
+                items.append({
+                    'item_id': str(num),
+                    'item_number': num,
+                    'title': title,
+                    'duration': duration,
+                    'is_subsection': False
+                })
+                continue
+
+            # Sub-item: "    a. Sub title" (indented)
+            if current_section and (line.startswith('    ') or line.startswith('\t')):
+                sub_match = re.match(r'^([a-z])\.\s+(.+)$', line_stripped)
+                if sub_match:
+                    letter = sub_match.group(1)
+                    title = sub_match.group(2).strip()
+
+                    if len(title) >= 10:
+                        items.append({
+                            'item_id': f"{current_section}{letter}",
+                            'item_number': current_section,
+                            'title': title,
+                            'duration': None,
+                            'is_subsection': True
+                        })
+
+        return items
+
+    def _detect_item_boundaries(self, body_text: str) -> List[Dict[str, int]]:
+        """
+        Find where each item starts in the body text.
+        Strategy: look for repeating structural markers, prefer strongest patterns.
+        """
+        all_boundaries = []
+
+        # Common boundary markers (ordered by strength)
+        patterns = [
+            # Strong: Full report headers
+            (r'(?:REPORT TO THE|AGENDA ITEM|Item \d+)', 'header', 0),
+            # Medium: Page footers with item IDs
+            (r'\n\d+\s*\n\s*(\d+\.?[a-z]?)\s*\n', 'footer', 1),
+            # Weak: Repeated structural elements
+            (r'(?:RECOMMENDATION|BACKGROUND|FISCAL IMPACT)\s*\n', 'section', 2),
+        ]
+
+        # Collect from ALL patterns
+        for pattern, marker_type, strength in patterns:
+            matches = list(re.finditer(pattern, body_text, re.IGNORECASE | re.MULTILINE))
+            if len(matches) >= 2:  # Need multiple occurrences
+                for match in matches:
+                    all_boundaries.append({
+                        'start': match.start(),
+                        'strength': strength,
+                        'marker_type': marker_type,
+                        'text': match.group(0)
+                    })
+
+        if not all_boundaries:
+            return []
+
+        # Deduplicate by preferring strongest marker at each position
+        boundaries = self._dedupe_boundaries_by_strength(all_boundaries)
+
+        # Sort by position
+        boundaries.sort(key=lambda x: x['start'])
+
+        return boundaries
+
+    def _dedupe_boundaries_by_strength(self, boundaries: List[Dict]) -> List[Dict]:
+        """Remove boundaries that are very close together, keeping strongest."""
+        if not boundaries:
+            return []
+
+        # Sort by position, then by strength
+        boundaries.sort(key=lambda x: (x['start'], x['strength']))
+
+        deduped = [boundaries[0]]
+
+        for boundary in boundaries[1:]:
+            # If close to previous (within 100 chars)
+            if boundary['start'] - deduped[-1]['start'] <= 100:
+                # Keep strongest
+                if boundary['strength'] < deduped[-1]['strength']:
+                    deduped[-1] = boundary
+            else:
+                deduped.append(boundary)
+
+        return deduped
+
+    def _extract_item_id_from_content(self, content: str) -> Optional[str]:
+        """
+        Extract item ID from within the content chunk.
+        Look in footers, headers, first lines.
+        """
+        # Check first 500 chars for item markers
+        header = content[:500]
+
+        # Pattern: "Item 4" or "7.a" or "Item 4a"
+        patterns = [
+            r'Item\s+(\d+[a-z]?)',
+            r'^(\d+\.?[a-z]?)\s*$',  # Footer style
+            r'Report.*Item\s+(\d+\.?[a-z]?)',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, header, re.MULTILINE | re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+        # Check page footers (last 300 chars)
+        footer = content[-300:]
+        for pattern in patterns:
+            match = re.search(pattern, footer, re.MULTILINE | re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+        return None
+
+    def _match_to_agenda(self, detected_id: Optional[str], content: str,
+                        agenda_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Match content chunk to cover agenda metadata.
+        Uses detected ID, title fuzzy matching, and position.
+        """
+        # Try exact ID match first
+        if detected_id:
+            for item in agenda_items:
+                if item['item_id'] == detected_id:
+                    return item
+
+        # Try fuzzy title match
+        content_preview = content[:500].lower()
+
+        for item in agenda_items:
+            title_lower = item['title'].lower()
+            # Check if title appears in content
+            if len(title_lower) > 15 and title_lower in content_preview:
+                return item
+
+        # Fallback: return generic metadata
+        return {
+            'item_id': detected_id or 'unknown',
+            'item_number': self._extract_base_number(detected_id) if detected_id else 0,
+            'title': self._extract_title_from_content(content),
+            'duration': None,
+            'is_subsection': False
+        }
+
+    def _extract_base_number(self, item_id: str) -> int:
+        """Extract number from '7a' -> 7, 'Item 4' -> 4."""
+        match = re.search(r'(\d+)', str(item_id))
+        return int(match.group(1)) if match else 0
+
+    def _extract_title_from_content(self, content: str) -> str:
+        """Extract title from content when no cover match found."""
+        # Look for "Report: Title" pattern
+        report_match = re.search(r'Report:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
+        if report_match:
+            return report_match.group(1).strip()
+
+        # Fallback: first substantial line
+        lines = content.split('\n')
+        for line in lines[:10]:
+            line = line.strip()
+            if len(line) > 20 and not line.isupper():
+                return line[:100]
+
+        return "Untitled Item"
+
+    def _chunk_agenda_by_patterns(self, text: str, max_chunk_size: int = 75000) -> List[Dict[str, Any]]:
+        """
+        Fallback pattern-based chunking (original two-pass approach).
+        Used when structural chunking fails.
         """
         # PASS 1: Find agenda items in the first portion (likely table of contents)
         # Assume agenda is in first 20% or 50K chars, whichever is smaller
@@ -898,14 +1219,16 @@ Attached documents:
             r'INFORMATION\s+REPORTS?'
         ]
 
-        # Find where agenda items start (after section markers)
+        # Find where agenda items start (after section markers) - OPTIONAL
         agenda_start = 0
+        found_start_marker = False
         for marker_pattern in start_markers:
             match = re.search(marker_pattern, agenda_section, re.IGNORECASE)
             if match and match.start() > agenda_start:
                 agenda_start = match.start()
+                found_start_marker = True
 
-        # Find where agenda ends (before adjournment or actual content)
+        # Find where agenda ends (before adjournment or actual content) - OPTIONAL
         end_markers = [
             r'ADJOURNMENT',
             r'^\d+\s+(MINUTES|TRANSCRIPT)',  # Line-numbered minutes/transcripts
@@ -913,14 +1236,23 @@ Attached documents:
         ]
 
         agenda_end = agenda_section_size
+        found_end_marker = False
         for marker_pattern in end_markers:
             match = re.search(marker_pattern, agenda_section[agenda_start:], re.IGNORECASE | re.MULTILINE)
             if match:
                 agenda_end = agenda_start + match.start()
+                found_end_marker = True
                 break
 
-        # Only search for items in the actual agenda section
-        actual_agenda = agenda_section[agenda_start:agenda_end]
+        # Only use narrow range if we found BOTH markers, otherwise search full section
+        if found_start_marker and found_end_marker:
+            actual_agenda = agenda_section[agenda_start:agenda_end]
+            logger.debug(f"[ItemDetection] Using marker-based range: {agenda_start}-{agenda_end}")
+        else:
+            actual_agenda = agenda_section
+            agenda_start = 0
+            agenda_end = agenda_section_size
+            logger.debug(f"[ItemDetection] No clear markers found, searching full agenda section")
 
         agenda_patterns = [
             (r"\n\s*(\d+)\.\s+([A-Z][^\n]{10,200})", 'numbered'),      # "1. ITEM NAME"
