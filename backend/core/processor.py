@@ -908,11 +908,6 @@ Attached documents:
         # Step 1: Split cover from body
         cover_end = self._detect_cover_end(text)
 
-        # If cover_end is very early (< 5% of doc), likely no separate cover
-        if cover_end < len(text) * 0.05:
-            logger.info(f"[Chunker] Cover too small ({cover_end}/{len(text)} = {cover_end/len(text)*100:.1f}%), no separate cover")
-            return []
-
         cover_text = text[:cover_end]
         body_text = text[cover_end:]
 
@@ -923,6 +918,13 @@ Attached documents:
 
         if not agenda_items:
             logger.info("[Chunker] No agenda items found in cover")
+            return []
+
+        # If cover is suspiciously small but we found items, it might still be valid
+        # Only reject if cover is < 0.5% AND we found very few items
+        cover_pct = cover_end / len(text)
+        if cover_pct < 0.005 and len(agenda_items) < 3:
+            logger.info(f"[Chunker] Cover too small ({cover_pct*100:.1f}%) with only {len(agenda_items)} items - likely false detection")
             return []
 
         logger.info(f"[Chunker] Found {len(agenda_items)} items in cover section")
@@ -969,13 +971,12 @@ Attached documents:
         Find where cover page ends and item content begins.
         Signals: first occurrence of repeating report headers, or large structural shift.
         """
-        # Common report header patterns
+        # Common report header patterns (require newline before for specificity)
         report_headers = [
-            r'REPORT TO THE',
-            r'AGENDA ITEM',
-            r'Item \d+\s*\n\s*Staff Report',
-            r'STAFF REPORT',
-            r'ACTION ITEM',
+            r'\n\s*REPORT TO THE',
+            r'\n\s*Item \d+\s*\n\s*Staff Report',  # "Item 4\n Staff Report"
+            r'\n\s*STAFF REPORT\s*\n',  # Must be on own line
+            r'\n\s*ACTION ITEM\s*\n',
         ]
 
         # Find first strong header

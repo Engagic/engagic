@@ -32,7 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def test_meeting_detection(db, processor, meeting, meeting_num, total):
+def test_meeting_detection(db, processor, meeting, meeting_num, total, debug=False):
     """Test item detection for a single meeting"""
     print(f"\n{'='*80}")
     print(f"Meeting {meeting_num}/{total}")
@@ -112,6 +112,7 @@ def main():
     parser.add_argument("banana", help="City banana (e.g., paloaltoCA)")
     parser.add_argument("--limit", type=int, default=10, help="Max meetings to test (default: 10)")
     parser.add_argument("--meeting-url", help="Test specific meeting by packet URL")
+    parser.add_argument("--debug", action="store_true", help="Dump extracted text for inspection")
 
     args = parser.parse_args()
 
