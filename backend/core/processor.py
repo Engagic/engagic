@@ -943,11 +943,13 @@ Attached documents:
 
             content = body_text[start:end].strip()
 
-            if len(content) < 100:  # Skip tiny chunks
-                continue
+            # Keep all agenda items from cover, even if small
+            # Small items are typically discussion-only items without staff reports
+            if len(content) < 100:
+                logger.debug(f"[Chunker] Item {boundary['item_id']} has minimal content ({len(content)} chars)")
 
             # Extract page number - search first 5000 chars since headers might not be immediate
-            search_window = content[:5000]
+            search_window = content[:5000] if len(content) > 5000 else content
             page_match = re.search(r'--- PAGE (\d+) ---', search_window)
             start_page = int(page_match.group(1)) if page_match else None
 
