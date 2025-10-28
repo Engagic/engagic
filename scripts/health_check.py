@@ -6,7 +6,6 @@ Shows summary statistics and flags potential issues.
 """
 
 import sqlite3
-import sys
 from collections import defaultdict
 from typing import Dict, List, Tuple
 

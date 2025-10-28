@@ -10,7 +10,7 @@ import sqlite3
 import requests
 import sys
 import time
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, List, Tuple
 from urllib.parse import urlparse
 
 # Confidence: 8/10 - Aggressive verification with fallback patterns
@@ -64,6 +64,11 @@ VENDOR_PATTERNS = {
     },
     "municode": {
         "base_url": lambda slug: f"https://{slug}.municodemeetings.com",
+        "test_path": "/",
+        "success_indicators": [200, 301, 302],
+    },
+    "escribe": {
+        "base_url": lambda slug: f"https://{slug}.escribemeetings.com",
         "test_path": "/",
         "success_indicators": [200, 301, 302],
     },
@@ -132,16 +137,16 @@ def test_granicus_city(slug: str) -> Tuple[bool, int, str]:
 
             if base_url in view_id_cache:
                 cached_view_id = view_id_cache[base_url]
-                # Verify cached view_id still works
+                # Verify cached view_id still works and has current year data
                 test_url = f"{base_url}/ViewPublisher.php?view_id={cached_view_id}"
                 try:
                     response = requests.get(test_url, timeout=TIMEOUT,
                                           headers={"User-Agent": "EngagicCityVerifier/1.0"})
-                    if response.status_code == 200 and "ViewPublisher" in response.text:
+                    if response.status_code == 200 and "ViewPublisher" in response.text and current_year in response.text:
                         return True, 200, f"(cached view_id={cached_view_id})"
-                except:
+                except (requests.RequestException, KeyError):
                     pass  # Cache invalid, will discover below
-        except:
+        except (json.JSONDecodeError, IOError):
             pass  # Cache file corrupt, ignore
 
     # Try first 50 view_ids (balance between thoroughness and speed)
@@ -155,9 +160,10 @@ def test_granicus_city(slug: str) -> Tuple[bool, int, str]:
             )
 
             if response.status_code == 200:
-                # Check if it actually has meeting content
+                # Check if it actually has meeting content with current year data
                 if ("ViewPublisher" in response.text and
-                    ("Meeting" in response.text or "Agenda" in response.text)):
+                    ("Meeting" in response.text or "Agenda" in response.text) and
+                    current_year in response.text):
                     return True, 200, f"(discovered view_id={view_id})"
 
         except Exception:
@@ -214,7 +220,7 @@ def test_granicus_quick(slug: str) -> Tuple[bool, int, str]:
                               headers={"User-Agent": "EngagicCityVerifier/1.0"})
         if response.status_code == 200 and "ViewPublisher" in response.text:
             return True, 200, "(quick test view_id=1)"
-    except:
+    except requests.RequestException:
         pass
 
     return False, 404, "Quick test failed"
@@ -235,11 +241,19 @@ def detect_cross_contamination(db_conn, banana: str, vendor: str, slug: str) -> 
     issues = []
     expected_domains = {
         "primegov": f"{slug}.primegov.com",
-        "granicus": [f"{slug}.granicus.com", "s3.amazonaws.com"],  # Granicus uses S3 too
-        "legistar": ["legistar.granicus.com", "legistar1.granicus.com", "legistar2.granicus.com"],
+        "granicus": [f"{slug}.granicus.com", "s3.amazonaws.com", "docs.google.com"],
+        "legistar": [
+            "legistar.granicus.com",
+            "legistar1.granicus.com",
+            "legistar2.granicus.com",
+            f"{slug}.legistar1.com",
+            f"{slug}.legistar.com",
+            "docs.google.com",
+        ],
         "civicclerk": f"{slug}.api.civicclerk.com",
         "novusagenda": f"{slug}.novusagenda.com",
         "civicplus": f"{slug}.civicplus.com",
+        "escribe": [f"{slug}.escribemeetings.com", "escribemeetings.com"],
     }
 
     expected = expected_domains.get(vendor, [])
@@ -307,7 +321,7 @@ def main():
             # Check for cross-contamination even if config works
             contamination = detect_cross_contamination(conn, banana, vendor, slug)
             if contamination:
-                print(f"  WARNING: Cross-contamination detected:")
+                print("  WARNING: Cross-contamination detected:")
                 for issue in contamination:
                     print(f"    - {issue}")
                 results["cross_contaminated"].append((banana, name, state, vendor, slug, contamination))
@@ -317,7 +331,7 @@ def main():
             results["broken"].append((banana, name, state, vendor, slug, error))
 
             # Try variations
-            print(f"  Trying slug variations...", end=" ")
+            print("  Trying slug variations...", end=" ")
             sys.stdout.flush()
             new_slug = try_slug_variations(vendor, name, state, slug)
 
@@ -384,7 +398,7 @@ def main():
             for fix in sql_fixes:
                 f.write(fix + "\n")
             f.write("\nCOMMIT;\n")
-        print(f"SQL fixes saved to: scripts/auto_generated_fixes.sql")
+        print("SQL fixes saved to: scripts/auto_generated_fixes.sql")
 
     conn.close()
 
