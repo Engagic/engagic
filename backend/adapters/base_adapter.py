@@ -94,9 +94,10 @@ class BaseAdapter:
         """
         kwargs.setdefault('timeout', 30)
 
-        # Disable SSL verification for known problematic S3 buckets (Granicus PDFs)
+        # Disable SSL verification for Granicus domains (known S3 redirect issue)
         # Confidence: 8/10 - Safe for public civic data, Granicus infra issue
-        if 'granicus_production_attachments.s3.amazonaws.com' in url:
+        # Granicus redirects to S3 with mismatched SSL certs, causing verification failures
+        if self.vendor == 'granicus' or 'granicus.com' in url or 'granicus_production_attachments.s3.amazonaws.com' in url:
             kwargs['verify'] = False
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
