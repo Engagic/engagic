@@ -884,8 +884,10 @@ Attached documents:
             if chunks:
                 logger.info(f"[ItemDetection] Structural chunking succeeded: {len(chunks)} items")
                 return chunks
+            else:
+                logger.debug("[ItemDetection] Structural chunking returned empty, trying fallback")
         except Exception as e:
-            logger.warning(f"[ItemDetection] Structural chunking failed: {e}")
+            logger.warning(f"[ItemDetection] Structural chunking exception: {e}", exc_info=True)
 
         # Fallback: two-pass pattern matching
         logger.info("[ItemDetection] Falling back to pattern-based detection")
@@ -908,26 +910,28 @@ Attached documents:
 
         # If cover_end is very early (< 5% of doc), likely no separate cover
         if cover_end < len(text) * 0.05:
-            logger.debug("[Chunker] No separate cover detected, using pattern-based fallback")
+            logger.info(f"[Chunker] Cover too small ({cover_end}/{len(text)} = {cover_end/len(text)*100:.1f}%), no separate cover")
             return []
 
         cover_text = text[:cover_end]
         body_text = text[cover_end:]
 
+        logger.info(f"[Chunker] Cover ends at {cover_end} ({cover_end/len(text)*100:.1f}% of doc)")
+
         # Step 2: Extract item metadata from cover
         agenda_items = self._parse_cover_agenda(cover_text)
 
         if not agenda_items:
-            logger.debug("[Chunker] No agenda items found in cover")
+            logger.info("[Chunker] No agenda items found in cover")
             return []
 
-        logger.debug(f"[Chunker] Found {len(agenda_items)} items in cover section")
+        logger.info(f"[Chunker] Found {len(agenda_items)} items in cover section")
 
         # Step 3: Find item boundaries in body
         boundaries = self._detect_item_boundaries(body_text)
 
         if not boundaries or len(boundaries) < 2:
-            logger.debug("[Chunker] Insufficient boundaries found in body")
+            logger.info(f"[Chunker] Insufficient boundaries in body (found {len(boundaries) if boundaries else 0})")
             return []
 
         # Step 4: Chunk and match to metadata
@@ -976,13 +980,19 @@ Attached documents:
 
         # Find first strong header
         earliest_pos = len(text)
+        found_pattern = None
         for pattern in report_headers:
             match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
             if match and match.start() < earliest_pos:
                 earliest_pos = match.start()
+                found_pattern = pattern
+
+        if found_pattern:
+            logger.debug(f"[CoverEnd] Found pattern '{found_pattern}' at position {earliest_pos}")
 
         # Better fallback: find first page break after significant content
         if earliest_pos == len(text):
+            logger.debug("[CoverEnd] No report headers found, using density analysis")
             # Look for content density change (agenda is dense, reports have whitespace)
             chunks = [text[i:i+2000] for i in range(0, min(len(text), 20000), 2000)]
             for i, chunk in enumerate(chunks[1:], 1):
