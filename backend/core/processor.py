@@ -1014,58 +1014,58 @@ Attached documents:
     def _parse_cover_agenda(self, cover_text: str) -> List[Dict[str, Any]]:
         """
         Extract agenda item listing from cover page.
-        Universal patterns:
-        - "4. Title here – 45 minutes"
-        - "7. SECTION NAME\n    a. Sub item"
-        - Numbered list structure
+        Handles both same-line and multiline formats:
+        - "4. Title here – 45 minutes" (same line)
+        - "4.\n    Title here" (multiline - common in Palo Alto, etc.)
         """
         items = []
-        lines = cover_text.split('\n')
 
-        current_section = None
+        # Use regex patterns that work across line boundaries
+        # Pattern 1: Numbered items (multiline and same-line)
+        numbered_patterns = [
+            r'\n\s*(\d+)\.\s*\n\s*([A-Z][^\n]{10,200})',  # "1.\n Title" (multiline)
+            r'\n\s*(\d+)\.\s+([A-Z][^\n]{10,200})',       # "1. Title" (same line)
+        ]
 
-        for line in lines:
-            line_stripped = line.strip()
+        for pattern in numbered_patterns:
+            for match in re.finditer(pattern, '\n' + cover_text):
+                num = int(match.group(1))
+                title = match.group(2).strip()
 
-            # Main numbered item: "4. Title"
-            main_match = re.match(r'^(\d+)\.\s+(.+?)(?:\s+[–—-]\s+(\d+)\s+minutes?)?.*$', line_stripped)
-            if main_match:
-                num = int(main_match.group(1))
-                title = main_match.group(2).strip()
-                duration = int(main_match.group(3)) if main_match.group(3) else None
+                # Extract duration if present (e.g., "– 45 minutes")
+                duration = None
+                duration_match = re.search(r'[–—-]\s*(\d+)\s*minutes?', title, re.IGNORECASE)
+                if duration_match:
+                    duration = int(duration_match.group(1))
+                    title = title[:duration_match.start()].strip()
 
                 # Skip if title is too short or looks like junk
-                if len(title) < 10 or title.upper() in ['MINUTES', 'AGENDA', 'MEETING']:
+                if len(title) < 10 or title.upper() in ['MINUTES', 'AGENDA', 'MEETING', 'REPORTS']:
                     continue
 
-                current_section = num
+                # Clean up title
+                title = re.sub(r'\s+', ' ', title)
 
                 items.append({
                     'item_id': str(num),
                     'item_number': num,
-                    'title': title,
+                    'title': title[:150],  # Cap length
                     'duration': duration,
                     'is_subsection': False
                 })
-                continue
 
-            # Sub-item: "    a. Sub title" (indented)
-            if current_section and (line.startswith('    ') or line.startswith('\t')):
-                sub_match = re.match(r'^([a-z])\.\s+(.+)$', line_stripped)
-                if sub_match:
-                    letter = sub_match.group(1)
-                    title = sub_match.group(2).strip()
+        # Dedupe by item_id (prefer first occurrence)
+        seen = set()
+        deduped = []
+        for item in items:
+            if item['item_id'] not in seen:
+                seen.add(item['item_id'])
+                deduped.append(item)
 
-                    if len(title) >= 10:
-                        items.append({
-                            'item_id': f"{current_section}{letter}",
-                            'item_number': current_section,
-                            'title': title,
-                            'duration': None,
-                            'is_subsection': True
-                        })
+        # Sort by item number
+        deduped.sort(key=lambda x: x['item_number'])
 
-        return items
+        return deduped
 
     def _detect_item_boundaries(self, body_text: str) -> List[Dict[str, int]]:
         """
