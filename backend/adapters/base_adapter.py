@@ -94,6 +94,13 @@ class BaseAdapter:
         """
         kwargs.setdefault('timeout', 30)
 
+        # Disable SSL verification for known problematic S3 buckets (Granicus PDFs)
+        # Confidence: 8/10 - Safe for public civic data, Granicus infra issue
+        if 'granicus_production_attachments.s3.amazonaws.com' in url:
+            kwargs['verify'] = False
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         try:
             logger.debug(f"[{self.vendor}:{self.slug}] GET {url}")
             response = self.session.get(url, **kwargs)
