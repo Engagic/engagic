@@ -946,8 +946,9 @@ Attached documents:
             if len(content) < 100:  # Skip tiny chunks
                 continue
 
-            # Extract page number if available
-            page_match = re.search(r'--- PAGE (\d+) ---', content[:500])
+            # Extract page number - search first 5000 chars since headers might not be immediate
+            search_window = content[:5000]
+            page_match = re.search(r'--- PAGE (\d+) ---', search_window)
             start_page = int(page_match.group(1)) if page_match else None
 
             chunks.append({
@@ -1072,9 +1073,9 @@ Attached documents:
         for item in agenda_items:
             title = item['title']
             item_id = item['item_id']
+            found = False
 
-            # Try to find this title in the body
-            # First, try exact match (accounting for whitespace differences)
+            # Strategy 1: Try exact title match (flexible whitespace)
             title_pattern = re.escape(title[:80])  # Use first 80 chars
             title_pattern = title_pattern.replace(r'\ ', r'\s+')  # Allow flexible whitespace
 
@@ -1085,31 +1086,60 @@ Attached documents:
                     'start': match.start(),
                     'item_id': item_id,
                     'title': title,
-                    'match_type': 'exact'
+                    'match_type': 'exact_title'
                 })
-                logger.debug(f"[Chunker] Found item {item_id} at position {match.start()}")
-            else:
-                # Try searching for item number + common headers
-                # Pattern: "Item 1" or footer patterns like "Item 1: ... Pg. X of Y"
-                num_patterns = [
-                    rf'Item\s+{re.escape(item_id)}[\s:]',
-                    rf'\n{re.escape(item_id)}\.\s*\n',  # Numbered like "1.\n"
-                ]
+                logger.debug(f"[Chunker] Found item {item_id} by exact title at position {match.start()}")
+                found = True
 
-                for pattern in num_patterns:
-                    match = re.search(pattern, body_text, re.IGNORECASE)
-                    if match:
-                        boundaries.append({
-                            'start': match.start(),
-                            'item_id': item_id,
-                            'title': title,
-                            'match_type': 'by_number'
-                        })
-                        logger.debug(f"[Chunker] Found item {item_id} by number at position {match.start()}")
-                        break
+            # Strategy 2: Try shorter title match (first 40 chars)
+            if not found and len(title) > 40:
+                short_pattern = re.escape(title[:40]).replace(r'\ ', r'\s+')
+                match = re.search(short_pattern, body_text, re.IGNORECASE)
+                if match:
+                    boundaries.append({
+                        'start': match.start(),
+                        'item_id': item_id,
+                        'title': title,
+                        'match_type': 'short_title'
+                    })
+                    logger.debug(f"[Chunker] Found item {item_id} by short title at position {match.start()}")
+                    found = True
+
+            # Strategy 3: Try "Item X" pattern in footers
+            if not found:
+                footer_pattern = rf'Item\s+{re.escape(item_id)}[\s:]'
+                match = re.search(footer_pattern, body_text, re.IGNORECASE)
+                if match:
+                    boundaries.append({
+                        'start': match.start(),
+                        'item_id': item_id,
+                        'title': title,
+                        'match_type': 'footer_item'
+                    })
+                    logger.debug(f"[Chunker] Found item {item_id} by footer at position {match.start()}")
+                    found = True
+
+            # Strategy 4: Try "Staff Report" header with item number nearby
+            if not found:
+                staff_report_pattern = rf'(?:Staff Report|STAFF REPORT).{{0,200}}?(?:Item\s+{re.escape(item_id)}|Report\s+#.*{re.escape(item_id)})'
+                match = re.search(staff_report_pattern, body_text, re.IGNORECASE | re.DOTALL)
+                if match:
+                    boundaries.append({
+                        'start': match.start(),
+                        'item_id': item_id,
+                        'title': title,
+                        'match_type': 'staff_report'
+                    })
+                    logger.debug(f"[Chunker] Found item {item_id} by staff report pattern at position {match.start()}")
+                    found = True
+
+            if not found:
+                logger.warning(f"[Chunker] Could not find item {item_id} '{title[:50]}...' in body text")
 
         # Sort by position in document
         boundaries.sort(key=lambda x: x['start'])
+
+        logger.info(f"[Chunker] Found {len(boundaries)}/{len(agenda_items)} items in body")
 
         return boundaries
 
