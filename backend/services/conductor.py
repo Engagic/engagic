@@ -290,161 +290,163 @@ class Conductor:
 
         start_time = time.time()
 
-        try:
-            logger.info(f"Syncing {city.banana} with {city.vendor}")
-            result.status = SyncStatus.IN_PROGRESS
+        # Get adapter (slug is vendor-specific identifier)
+        adapter = self._get_adapter(city.vendor, city.slug)
 
-            # Get adapter (slug is vendor-specific identifier)
-            adapter = self._get_adapter(city.vendor, city.slug)
+        if not adapter:
+            result.status = SyncStatus.SKIPPED
+            result.error_message = f"Unsupported vendor: {city.vendor}"
+            logger.debug(f"Skipping {city.banana} - unsupported vendor: {city.vendor}")
+            return result
 
-            if not adapter:
-                result.status = SyncStatus.SKIPPED
-                result.error_message = f"Unsupported vendor: {city.vendor}"
-                logger.debug(f"Skipping {city.banana} - unsupported vendor: {city.vendor}")
-                return result
-
-            # Fetch meetings using unified adapter interface
+        # Use context manager to ensure session cleanup
+        with adapter:
             try:
-                all_meetings = list(adapter.fetch_meetings())
-                meetings_with_packets = [m for m in all_meetings if m.get('packet_url')]
+                logger.info(f"Syncing {city.banana} with {city.vendor}")
+                result.status = SyncStatus.IN_PROGRESS
 
-            except Exception as e:
-                logger.error(f"Error fetching meetings for {city.banana}: {e}")
-                result.status = SyncStatus.FAILED
-                result.error_message = str(e)
-                return result
-
-            result.meetings_found = len(all_meetings)
-            logger.info(
-                f"Found {len(all_meetings)} total meetings for {city.banana}, "
-                f"{len(meetings_with_packets)} have packets"
-            )
-
-            # Store ALL meetings (for user display) and process summaries for packet meetings
-            processed_count = 0
-
-            logger.info(f"Starting to process {len(all_meetings)} meetings for storage")
-            for i, meeting in enumerate(all_meetings):
-                logger.debug(
-                    f"Processing meeting {i+1}/{len(all_meetings)}: "
-                    f"{meeting.get('title')}"
-                )
-                if not self.is_running:
-                    logger.warning("Processing stopped - is_running is False")
-                    break
-
+                # Fetch meetings using unified adapter interface
                 try:
-                    # Parse date from adapter format
-                    from backend.database.unified_db import Meeting
-                    from datetime import datetime
-
-                    meeting_date = None
-                    if meeting.get("start"):
-                        try:
-                            # Try parsing ISO format first
-                            meeting_date = datetime.fromisoformat(meeting["start"].replace('Z', '+00:00'))
-                        except Exception:
-                            # Adapter's _parse_date will handle other formats
-                            pass
-
-                    # Create Meeting object
-                    meeting_obj = Meeting(
-                        id=meeting.get("meeting_id", ""),
-                        banana=city.banana,
-                        title=meeting.get("title", ""),
-                        date=meeting_date,
-                        packet_url=meeting.get("packet_url"),
-                        summary=None,
-                        status=meeting.get("meeting_status"),
-                        processing_status="pending"
-                    )
-
-                    # Validate meeting before storing (prevent corruption)
-                    from backend.services.meeting_validator import MeetingValidator
-                    if not MeetingValidator.validate_and_store(
-                        {"packet_url": meeting_obj.packet_url, "title": meeting_obj.title},
-                        city.banana,
-                        city.name,
-                        city.vendor,
-                        city.slug
-                    ):
-                        logger.warning(f"Skipping corrupted meeting: {meeting_obj.title}")
-                        continue
-
-                    # Store meeting (upsert) - unified DB handles duplicates
-                    stored_meeting = self.db.store_meeting(meeting_obj)
-                    processed_count += 1
-
-                    logger.debug(
-                        f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})"
-                    )
-
-                    # Store agenda items if present (Legistar provides this)
-                    if meeting.get("items"):
-                        from backend.database.unified_db import AgendaItem
-
-                        items = meeting["items"]
-                        agenda_items = []
-
-                        for item_data in items:
-                            agenda_item = AgendaItem(
-                                id=f"{stored_meeting.id}_{item_data['item_id']}",  # Composite ID
-                                meeting_id=stored_meeting.id,
-                                title=item_data.get('title', ''),
-                                sequence=item_data.get('sequence', 0),
-                                attachments=item_data.get('attachments', []),  # Full metadata as JSON
-                                summary=None,  # Will be filled during processing
-                                topics=None    # Will be filled during processing
-                            )
-                            agenda_items.append(agenda_item)
-
-                        if agenda_items:
-                            count = self.db.store_agenda_items(stored_meeting.id, agenda_items)
-                            logger.debug(f"Stored {count} agenda items for {stored_meeting.title}")
-
-                    # Enqueue for processing if it has a packet URL
-                    if meeting.get("packet_url"):
-                        # Calculate priority based on meeting date recency
-                        if meeting_date:
-                            days_old = (datetime.now() - meeting_date).days
-                        else:
-                            days_old = 999
-                        priority = max(0, 100 - days_old)  # Recent meetings get higher priority
-
-                        self.db.enqueue_for_processing(
-                            packet_url=meeting["packet_url"],
-                            meeting_id=stored_meeting.id,
-                            banana=city.banana,
-                            priority=priority
-                        )
-                        logger.debug(f"Enqueued {meeting['packet_url']} with priority {priority}")
-                    else:
-                        logger.debug("Meeting has no packet - stored for display only")
+                    all_meetings = list(adapter.fetch_meetings())
+                    meetings_with_packets = [m for m in all_meetings if m.get('packet_url')]
 
                 except Exception as e:
-                    logger.error(
-                        f"Error storing meeting {meeting.get('packet_url', 'unknown')}: {e}"
+                    logger.error(f"Error fetching meetings for {city.banana}: {e}")
+                    result.status = SyncStatus.FAILED
+                    result.error_message = str(e)
+                    return result
+
+                result.meetings_found = len(all_meetings)
+                logger.info(
+                    f"Found {len(all_meetings)} total meetings for {city.banana}, "
+                    f"{len(meetings_with_packets)} have packets"
+                )
+
+                # Store ALL meetings (for user display) and process summaries for packet meetings
+                processed_count = 0
+
+                logger.info(f"Starting to process {len(all_meetings)} meetings for storage")
+                for i, meeting in enumerate(all_meetings):
+                    logger.debug(
+                        f"Processing meeting {i+1}/{len(all_meetings)}: "
+                        f"{meeting.get('title')}"
                     )
+                    if not self.is_running:
+                        logger.warning("Processing stopped - is_running is False")
+                        break
 
-            result.meetings_processed = processed_count
-            result.status = SyncStatus.COMPLETED
-            result.duration_seconds = time.time() - start_time
+                    try:
+                        # Parse date from adapter format
+                        from backend.database.unified_db import Meeting
+                        from datetime import datetime
 
-            logger.info(
-                f"Synced {city.banana}: {result.meetings_found} meetings found, "
-                f"{len(meetings_with_packets)} have packets, {processed_count} processed"
-            )
+                        meeting_date = None
+                        if meeting.get("start"):
+                            try:
+                                # Try parsing ISO format first
+                                meeting_date = datetime.fromisoformat(meeting["start"].replace('Z', '+00:00'))
+                            except Exception:
+                                # Adapter's _parse_date will handle other formats
+                                pass
 
-        except Exception as e:
-            result.status = SyncStatus.FAILED
-            result.error_message = str(e)
-            result.duration_seconds = time.time() - start_time
-            logger.error(f"Failed to sync {city.banana}: {e}")
+                        # Create Meeting object
+                        meeting_obj = Meeting(
+                            id=meeting.get("meeting_id", ""),
+                            banana=city.banana,
+                            title=meeting.get("title", ""),
+                            date=meeting_date,
+                            packet_url=meeting.get("packet_url"),
+                            summary=None,
+                            status=meeting.get("meeting_status"),
+                            processing_status="pending"
+                        )
 
-            # Add small delay on error to avoid hammering
-            time.sleep(2 + random.uniform(0, 1))
+                        # Validate meeting before storing (prevent corruption)
+                        from backend.services.meeting_validator import MeetingValidator
+                        if not MeetingValidator.validate_and_store(
+                            {"packet_url": meeting_obj.packet_url, "title": meeting_obj.title},
+                            city.banana,
+                            city.name,
+                            city.vendor,
+                            city.slug
+                        ):
+                            logger.warning(f"Skipping corrupted meeting: {meeting_obj.title}")
+                            continue
 
-        return result
+                        # Store meeting (upsert) - unified DB handles duplicates
+                        stored_meeting = self.db.store_meeting(meeting_obj)
+                        processed_count += 1
+
+                        logger.debug(
+                            f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})"
+                        )
+
+                        # Store agenda items if present (Legistar provides this)
+                        if meeting.get("items"):
+                            from backend.database.unified_db import AgendaItem
+
+                            items = meeting["items"]
+                            agenda_items = []
+
+                            for item_data in items:
+                                agenda_item = AgendaItem(
+                                    id=f"{stored_meeting.id}_{item_data['item_id']}",  # Composite ID
+                                    meeting_id=stored_meeting.id,
+                                    title=item_data.get('title', ''),
+                                    sequence=item_data.get('sequence', 0),
+                                    attachments=item_data.get('attachments', []),  # Full metadata as JSON
+                                    summary=None,  # Will be filled during processing
+                                    topics=None    # Will be filled during processing
+                                )
+                                agenda_items.append(agenda_item)
+
+                            if agenda_items:
+                                count = self.db.store_agenda_items(stored_meeting.id, agenda_items)
+                                logger.debug(f"Stored {count} agenda items for {stored_meeting.title}")
+
+                        # Enqueue for processing if it has a packet URL
+                        if meeting.get("packet_url"):
+                            # Calculate priority based on meeting date recency
+                            if meeting_date:
+                                days_old = (datetime.now() - meeting_date).days
+                            else:
+                                days_old = 999
+                            priority = max(0, 100 - days_old)  # Recent meetings get higher priority
+
+                            self.db.enqueue_for_processing(
+                                packet_url=meeting["packet_url"],
+                                meeting_id=stored_meeting.id,
+                                banana=city.banana,
+                                priority=priority
+                            )
+                            logger.debug(f"Enqueued {meeting['packet_url']} with priority {priority}")
+                        else:
+                            logger.debug("Meeting has no packet - stored for display only")
+
+                    except Exception as e:
+                        logger.error(
+                            f"Error storing meeting {meeting.get('packet_url', 'unknown')}: {e}"
+                        )
+
+                result.meetings_processed = processed_count
+                result.status = SyncStatus.COMPLETED
+                result.duration_seconds = time.time() - start_time
+
+                logger.info(
+                    f"Synced {city.banana}: {result.meetings_found} meetings found, "
+                    f"{len(meetings_with_packets)} have packets, {processed_count} processed"
+                )
+
+            except Exception as e:
+                result.status = SyncStatus.FAILED
+                result.error_message = str(e)
+                result.duration_seconds = time.time() - start_time
+                logger.error(f"Failed to sync {city.banana}: {e}")
+
+                # Add small delay on error to avoid hammering
+                time.sleep(2 + random.uniform(0, 1))
+
+            return result
 
     def _sync_city_with_retry(self, city: City,
                               max_retries: int = 2) -> SyncResult:
@@ -954,6 +956,9 @@ class Conductor:
                     else:
                         failed_items.append(item.title)
                         logger.warning(f"[ItemProcessing] ✗ {item.title[:60]}: {result.get('error')}")
+
+                # Cleanup: free batch memory immediately
+                del batch_requests
 
         # Combine item summaries into meeting summary
         if processed_items and self.processor:
