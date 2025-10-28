@@ -1266,8 +1266,10 @@ Attached documents:
             logger.debug(f"[ItemDetection] No clear markers found, searching full agenda section")
 
         agenda_patterns = [
-            (r"\n\s*(\d+)\.\s+([A-Z][^\n]{10,200})", 'numbered'),      # "1. ITEM NAME"
-            (r"\n\s*([A-Z])\.\s+([A-Z][^\n]{10,200})", 'lettered'),    # "A. ITEM NAME"
+            (r"\n\s*(\d+)\.\s*\n\s*([A-Z][^\n]{10,200})", 'numbered'),  # "1.\n Title" (multiline)
+            (r"\n\s*(\d+)\.\s+([A-Z][^\n]{10,200})", 'numbered_inline'), # "1. Title" (same line)
+            (r"\n\s*([A-Z])\.\s*\n\s*([A-Z][^\n]{10,200})", 'lettered'), # "A.\n Title"
+            (r"\n\s*([A-Z])\.\s+([A-Z][^\n]{10,200})", 'lettered_inline'),
             (r"\n\s*(Item\s+\d+)[:\s]+([^\n]{10,200})", 'item'),        # "Item 1: NAME"
         ]
 
