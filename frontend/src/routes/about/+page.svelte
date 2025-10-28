@@ -5,12 +5,15 @@
 
 	let analytics: AnalyticsData | null = $state(null);
 	let loading = $state(true);
+	let errorMessage = $state('');
 
 	onMount(async () => {
 		try {
 			analytics = await getAnalytics();
+			console.log('Analytics loaded:', analytics);
 		} catch (err) {
 			console.error('Failed to load analytics:', err);
+			errorMessage = err instanceof Error ? err.message : 'Failed to load analytics';
 		} finally {
 			loading = false;
 		}
@@ -97,6 +100,11 @@
 		<section class="impact-section">
 			<h2>Our Impact</h2>
 			<div class="loading-placeholder">Loading impact metrics...</div>
+		</section>
+	{:else if errorMessage}
+		<section class="impact-section">
+			<h2>Our Impact</h2>
+			<div class="loading-placeholder" style="color: #e74c3c;">{errorMessage}</div>
 		</section>
 	{/if}
 
