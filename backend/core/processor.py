@@ -15,7 +15,6 @@ Premium tiers (Tier 2 Mistral OCR, Tier 3 Gemini PDF) archived for future use.
 See: backend/archived/premium_processing_tiers.py
 """
 
-import os
 import time
 import json
 import logging

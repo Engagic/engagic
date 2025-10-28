@@ -194,7 +194,7 @@ class BaseAdapter:
         response = self._get(url)
         return BeautifulSoup(response.text, 'html.parser')
 
-    def _discover_pdfs(self, url: str, keywords: List[str] = None) -> List[str]:
+    def _discover_pdfs(self, url: str, keywords: Optional[List[str]] = None) -> List[str]:
         """
         Discover PDF links on a page, optionally filtering by keywords.
 
