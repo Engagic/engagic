@@ -6,10 +6,10 @@ import logging
 import time
 import uuid
 import re
-from collections import defaultdict
 from datetime import datetime
 from backend.core.processor import AgendaProcessor
 from backend.database import UnifiedDatabase
+from backend.api.rate_limiter import SQLiteRateLimiter
 from uszipcode import SearchEngine
 from backend.core.config import config
 
@@ -32,33 +32,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rate limiting storage
-rate_limits = defaultdict(list)
+# Persistent rate limiter with SQLite
+rate_limiter = SQLiteRateLimiter(
+    db_path=str(config.UNIFIED_DB_PATH).replace("engagic.db", "rate_limits.db"),
+    requests_limit=config.RATE_LIMIT_REQUESTS,
+    window_seconds=config.RATE_LIMIT_WINDOW
+)
 
 
 # Rate limiting middleware
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     client_ip = request.client.host if request.client else "unknown"
-    current_time = time.time()
-
-    # Clean old entries
-    rate_limits[client_ip] = [
-        timestamp
-        for timestamp in rate_limits[client_ip]
-        if current_time - timestamp < config.RATE_LIMIT_WINDOW
-    ]
 
     # Check rate limit for API endpoints
     if request.url.path.startswith("/api/"):
-        if len(rate_limits[client_ip]) >= config.RATE_LIMIT_REQUESTS:
+        is_allowed, remaining = rate_limiter.check_rate_limit(client_ip)
+
+        if not is_allowed:
             logger.warning(f"Rate limit exceeded for {client_ip}")
             raise HTTPException(
-                status_code=429, detail="Rate limit exceeded. Please try again later."
+                status_code=429,
+                detail="Rate limit exceeded. Please try again later.",
+                headers={"X-RateLimit-Remaining": "0"}
             )
-
-        # Add current request
-        rate_limits[client_ip].append(current_time)
 
     response = await call_next(request)
     return response
