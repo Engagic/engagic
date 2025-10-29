@@ -12,7 +12,7 @@ import re
 from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
-from backend.adapters.base_adapter import BaseAdapter, logger
+from infocore.adapters.base_adapter import BaseAdapter, logger
 
 
 class CivicPlusAdapter(BaseAdapter):

@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from enum import Enum
 from collections import defaultdict
 
-from backend.database import UnifiedDatabase, City, Meeting
-from backend.core.processor import AgendaProcessor
-from backend.adapters.all_adapters import (
+from infocore.database import UnifiedDatabase, City, Meeting
+from infocore.processing.processor import AgendaProcessor
+from infocore.adapters.all_adapters import (
     PrimeGovAdapter,
     CivicClerkAdapter,
     LegistarAdapter,
@@ -20,7 +20,7 @@ from backend.adapters.all_adapters import (
     NovusAgendaAdapter,
     CivicPlusAdapter
 )
-from backend.core.config import config
+from infocore.config import config
 
 logger = logging.getLogger("engagic")
 
@@ -364,7 +364,7 @@ class Conductor:
 
                     try:
                         # Parse date from adapter format
-                        from backend.database.unified_db import Meeting
+                        from infocore.database.unified_db import Meeting
                         from datetime import datetime
 
                         meeting_date = None
@@ -389,7 +389,7 @@ class Conductor:
                         )
 
                         # Validate meeting before storing (prevent corruption)
-                        from backend.services.meeting_validator import MeetingValidator
+                        from infra.meeting_validator import MeetingValidator
                         if not MeetingValidator.validate_and_store(
                             {"packet_url": meeting_obj.packet_url, "title": meeting_obj.title},
                             city.banana,
@@ -410,7 +410,7 @@ class Conductor:
 
                         # Store agenda items if present (Legistar provides this)
                         if meeting.get("items"):
-                            from backend.database.unified_db import AgendaItem
+                            from infocore.database.unified_db import AgendaItem
 
                             items = meeting["items"]
                             agenda_items = []
@@ -799,7 +799,7 @@ class Conductor:
 
                         if detected_items:
                             # Convert detected items to AgendaItem objects and store
-                            from backend.database.unified_db import AgendaItem
+                            from infocore.database.unified_db import AgendaItem
 
                             agenda_item_objects = []
                             for item in detected_items:

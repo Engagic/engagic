@@ -10,8 +10,8 @@ import sqlite3
 from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from backend.database.database_manager import DatabaseManager
-from backend.core.config import Config
+from infocore.database.database_manager import DatabaseManager
+from infocore.config import Config
 
 
 class DatabaseMaintenance:
