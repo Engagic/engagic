@@ -6,7 +6,7 @@ Cities using Legistar: Seattle WA, NYC, Cambridge MA, and many others
 
 from typing import Dict, Any, Iterator, Optional, List
 from datetime import datetime, timedelta
-from backend.adapters.base_adapter import BaseAdapter, logger
+from infocore.adapters.base_adapter import BaseAdapter, logger
 
 
 class LegistarAdapter(BaseAdapter):

@@ -10,7 +10,7 @@ import hashlib
 from typing import Dict, Any, Optional, Iterator
 from datetime import datetime
 from urllib.parse import urljoin
-from backend.adapters.base_adapter import BaseAdapter, logger
+from infocore.adapters.base_adapter import BaseAdapter, logger
 
 
 class EscribeAdapter(BaseAdapter):

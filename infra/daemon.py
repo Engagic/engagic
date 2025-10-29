@@ -23,8 +23,8 @@ from pathlib import Path
 # Add app directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from backend.services.conductor import Conductor
-from backend.core.config import config
+from infra.conductor import Conductor
+from infocore.config import config
 
 # Configure logging
 logging.basicConfig(
