@@ -35,9 +35,9 @@ from typing import List, Dict, Any
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.database.unified_db import UnifiedDatabase
-from backend.core.config import config
-from backend.core.processor import AgendaProcessor
+from infocore.database.unified_db import UnifiedDatabase
+from infocore.config import config
+from infocore.processing.processor import AgendaProcessor
 
 # Setup logging
 logging.basicConfig(

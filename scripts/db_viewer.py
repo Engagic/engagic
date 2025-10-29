@@ -8,8 +8,8 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from backend.database.unified_db import UnifiedDatabase
-from backend.core.config import Config
+from infocore.database.unified_db import UnifiedDatabase
+from infocore.config import Config
 
 
 class DatabaseViewer:

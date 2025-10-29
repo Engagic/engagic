@@ -21,11 +21,11 @@ import logging
 from typing import List, Dict, Any, Optional, Union
 
 # Our modules
-from backend.database import UnifiedDatabase
-from backend.core.config import config
-from backend.core.pdf_extractor import PdfExtractor
-from backend.core.summarizer import GeminiSummarizer
-from backend.core.chunker import AgendaChunker
+from infocore.database import UnifiedDatabase
+from infocore.config import config
+from infocore.processing.pdf_extractor import PdfExtractor
+from infocore.processing.summarizer import GeminiSummarizer
+from infocore.processing.chunker import AgendaChunker
 
 logger = logging.getLogger("engagic")
 

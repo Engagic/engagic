@@ -7,9 +7,9 @@ Tests database, adapters, and processor after Phase 1-3 refactor
 import sys
 sys.path.insert(0, '/root/engagic')
 
-from backend.database import DatabaseManager
-from backend.core.config import config
-from backend.adapters.all_adapters import (
+from infocore.database import DatabaseManager
+from infocore.config import config
+from infocore.adapters.all_adapters import (
     PrimeGovAdapter, CivicClerkAdapter, LegistarAdapter,
     GranicusAdapter, NovusAgendaAdapter, CivicPlusAdapter
 )
@@ -162,7 +162,7 @@ def test_processor():
     print("="*60)
 
     try:
-        from backend.core.processor import AgendaProcessor
+        from infocore.processing.processor import AgendaProcessor
 
         print("\n[3.1] Testing processor initialization...")
         processor = AgendaProcessor()
