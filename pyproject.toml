@@ -34,7 +34,7 @@ premium = [
 ]
 
 [tool.pyright]
-include = ["backend"]
+include = ["infocore", "infra"]
 exclude = ["**/__pycache__", ".venv", "venv"]
 typeCheckingMode = "basic"  # or "standard" or "strict"
 pythonVersion = "3.13"

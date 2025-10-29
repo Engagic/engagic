@@ -7,11 +7,11 @@ import time
 import uuid
 import re
 from datetime import datetime
-from backend.core.processor import AgendaProcessor
-from backend.database import UnifiedDatabase
-from backend.api.rate_limiter import SQLiteRateLimiter
+from infocore.processing.processor import AgendaProcessor
+from infocore.database import UnifiedDatabase
+from infocore.api.rate_limiter import SQLiteRateLimiter
 from uszipcode import SearchEngine
-from backend.core.config import config
+from infocore.config import config
 
 # Configure structured logging
 logging.basicConfig(

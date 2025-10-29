@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 try:
-    from backend.core.config import Config
+    from infocore.config import Config
     config = Config()
     MEETINGS_DB_PATH = config.UNIFIED_DB_PATH
 except ImportError:

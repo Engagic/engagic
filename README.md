@@ -1,165 +1,164 @@
-## [ENGAGIC.ORG](https://engagic.org)
+# Engagic
 
-# Engagic - Civic Engagement Made Simple
+AI-powered civic engagement platform that discovers, processes, and summarizes local government meeting agendas from 500+ cities.
 
-Engagic is an AI-powered civic engagement platform that makes local government meetings accessible by automatically discovering, processing, and summarizing city council agendas.
-
-## Features
-
-- **Meeting Discovery**: Automatically finds and indexes city council meetings from multiple platforms (PrimeGov, CivicClerk, Legistar, etc.)
-- **AI Summaries**: Uses Claude to generate human-readable summaries of lengthy PDF agendas
-- **Smart Search**: Search by zipcode or city name with intelligent disambiguation
-- **Cache-First Design**: Instant responses with pre-processed meeting data
-- **Privacy-First**: No user tracking, no accounts required, just public civic data
+Live at **[engagic.org](https://engagic.org)**
 
 ## Architecture
 
-The system consists of three main components:
+**7,618 lines Python backend**
 
-1. **API Server** (`app/app.py`) - FastAPI backend serving cached meeting data
-2. **Background Daemon** (`app/daemon.py`) - Continuously syncs and processes meeting data
-3. **Frontend** (`frontend/`) - SvelteKit web interface
+- `infocore/api/main.py` - FastAPI server, cache-first serving, multi-modal search
+- `infocore/database/unified_db.py` - Single SQLite database, city/meeting/agenda_items
+- `infra/conductor.py` - Priority job queue, sync scheduling, rate limiting
+- `infocore/adapters/` - 6 vendor adapters with BaseAdapter pattern (94% success rate)
+- `infocore/processing/processor.py` - High-level orchestration (recently refactored: 1,797 → 415 lines)
+- `infocore/processing/summarizer.py` - Gemini API integration
+- `infocore/processing/pdf_extractor.py` - PyMuPDF text extraction
+- `infocore/processing/chunker.py` - Document parsing and boundary detection
+- `frontend/` - SvelteKit (Cloudflare Pages)
 
-## Setup Instructions
+## Key Design Patterns
+
+**Cache-First**: API never fetches live data. Background daemon syncs cities every 72 hours.
+
+**Priority Queue**: Recent meetings processed first. Decouples fast scraping (seconds) from slow AI processing (10-30s).
+
+**Item-Level Processing**: Breaks 500-page packets into 10-50 page items for better failure isolation and granular topic extraction.
+
+**Vendor-Agnostic Identifier**: `city_banana` ("paloaltoCA") used internally instead of vendor-specific slugs.
+
+**Fail-Fast**: Single tier (PyMuPDF + Gemini) for free processing. Premium tiers archived for future paid customers.
+
+## Setup
 
 ### Prerequisites
-
-- Python 3.8+
+- Python 3.13+
 - Node.js 18+
-- Anthropic API key for AI summaries
+- Google Gemini API key
 
-### Backend Setup
-
-1. Clone the repository:
+### Backend
 ```bash
-git clone https://github.com/yourusername/engagic.git
-cd engagic
+# Install dependencies (uses uv)
+uv sync
+
+# Set environment variables
+export GEMINI_API_KEY="your-key"
+export ENGAGIC_DB_DIR="/root/engagic/data"  # VPS path
+export ENGAGIC_ADMIN_TOKEN="secure-token"
+
+# Run API server
+uvicorn infocore.api.main:app --host 0.0.0.0 --port 8000
+
+# Run background daemon (separate terminal)
+python -m infra.daemon
 ```
 
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install Python dependencies:
-```bash
-cd app
-pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-```bash
-# Required
-export ANTHROPIC_API_KEY="your-api-key-here"
-export ENGAGIC_ADMIN_TOKEN="your-secure-admin-token"
-
-# Optional (defaults shown)
-export ENGAGIC_DB_DIR="./data"
-export ENGAGIC_HOST="0.0.0.0"
-export ENGAGIC_PORT="8000"
-export ENGAGIC_LOG_LEVEL="INFO"
-```
-
-5. Initialize the databases:
-```bash
-python app.py --init-db
-```
-
-6. Start the API server:
-```bash
-python app.py
-```
-
-7. In a separate terminal, start the background daemon:
-```bash
-python daemon.py
-```
-
-### Frontend Setup
-
-1. Navigate to the frontend directory:
+### Frontend
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-```bash
 npm install
+npm run dev  # localhost:5173
 ```
-
-3. Start the development server:
-```bash
-npm run dev
-```
-
-The application will be available at `http://localhost:5173`
-
-## Usage
-
-1. **Search for meetings**: Enter a zipcode (e.g., "94301") or city name (e.g., "Palo Alto, CA")
-2. **Browse meetings**: Click on a city to see upcoming meetings
-3. **View summaries**: Click on a meeting to see its AI-generated summary
 
 ## API Endpoints
 
-- `POST /api/search` - Search for meetings by zipcode or city name
-- `POST /api/process-agenda` - Get cached meeting summary
-- `GET /api/health` - System health check
+### Public
+- `POST /api/search` - Search by zipcode, city+state, or state only
+- `POST /api/process-agenda` - Get cached summary (or trigger processing)
+- `GET /api/random-best-meeting` - Discovery feature
 - `GET /api/stats` - Cache statistics
+- `GET /api/queue-stats` - Job queue status
+- `GET /api/health` - Health check with detailed metrics
+- `GET /api/metrics` - Prometheus-style metrics
+- `GET /api/analytics` - Usage analytics
 
-### Admin Endpoints (requires Bearer token)
-
+### Admin (Bearer token required)
 - `GET /api/admin/city-requests` - View requested cities
-- `POST /api/admin/sync-city/{city_slug}` - Force sync a city
-- `POST /api/admin/process-meeting` - Force process a meeting
+- `POST /api/admin/sync-city/{banana}` - Force city sync
+- `POST /api/admin/process-meeting` - Force meeting processing
 
-## Development
+## Search Modes
 
-### Running Tests
-```bash
-cd app
-python -m pytest tests/
-```
+**Zipcode → City**: `"94301"` → Palo Alto, CA meetings
 
-### Adding New City Adapters
+**City + State**: `"Palo Alto, CA"` or `"Palo Alto California"` → Direct match
 
-To support a new city platform, add an adapter class in `app/adapters.py`:
+**State Only**: `"CA"` or `"California"` → List of covered cities with meeting counts
 
-```python
-class NewPlatformAdapter:
-    def __init__(self, city_slug: str):
-        self.city_slug = city_slug
-    
-    def upcoming_packets(self):
-        # Implement meeting discovery logic
-        pass
-```
+**Ambiguous**: `"Springfield"` → Returns multiple state options
+
+Handles 48+ state name variations, case-insensitive, space-normalized.
 
 ## Configuration
 
-Key configuration options via environment variables:
+Environment variables (see `infocore/processing/config.py`):
 
-- `ENGAGIC_RATE_LIMIT_REQUESTS`: API rate limit (default: 30 requests/minute)
-- `ENGAGIC_SYNC_INTERVAL_HOURS`: City sync frequency (default: 72 hours)
-- `ENGAGIC_PROCESSING_INTERVAL_HOURS`: AI processing frequency (default: 2 hours)
-- `ENGAGIC_DEBUG`: Enable debug mode (default: false)
+```bash
+ENGAGIC_DB_DIR="/root/engagic/data"
+ENGAGIC_UNIFIED_DB="/root/engagic/data/engagic.db"
+ENGAGIC_HOST="0.0.0.0"
+ENGAGIC_PORT="8000"
+ENGAGIC_RATE_LIMIT_REQUESTS="30"
+ENGAGIC_RATE_LIMIT_WINDOW="60"
+ENGAGIC_SYNC_INTERVAL_HOURS="72"
+ENGAGIC_PROCESSING_INTERVAL_HOURS="2"
+ENGAGIC_LOG_LEVEL="INFO"
+GEMINI_API_KEY="required"
+ENGAGIC_ADMIN_TOKEN="required"
+```
 
-## Security Considerations
+## Adapters
 
-- Admin endpoints require bearer token authentication
-- All user inputs are validated and sanitized
-- Rate limiting prevents abuse
-- No personal data is collected or stored
+Supported vendors (BaseAdapter pattern):
+- PrimeGov
+- CivicClerk
+- Legistar (with item-level processing)
+- Granicus
+- NovusAgenda
+- CivicPlus
+
+Each adapter: 68-242 lines. Shared logic in BaseAdapter (265 lines).
+
+## Performance
+
+- API response: <100ms (cache hit)
+- PDF extraction: 2-5s (PyMuPDF)
+- Meeting processing: 10-30s (Gemini)
+- Background sync: ~2 hours for 500 cities
+- Memory: ~200MB API, ~500MB daemon
+- Capacity: 500 cities, ~10K meetings
+
+## Development
+
+**Local machine**: Write code only, no testing
+
+**VPS**: Pull changes, test and deploy there
+
+All code uses VPS paths as defaults (`/root/engagic/`).
+
+## Recent Improvements
+
+- Database consolidation: 3 DBs → 1 unified SQLite (-1,549 lines)
+- Adapter refactor with BaseAdapter (-339 lines)
+- Processor modularization: 1,797 → 415 lines (-77%)
+- Item-level processing for Legistar
+- Priority job queue with SQLite backend
+
+Net: -1,725 lines eliminated (29% toward 60% goal)
+
+## Roadmap
+
+See `docs/IMPROVEMENT_PLAN.md` for full technical roadmap.
+
+**Next**: Multi-tenancy foundation (tenant API, coverage filtering, keyword matching)
+
+**Future**: Intelligence layer (topic extraction, tracked items, alerts, webhooks)
 
 ## License
 
-This project is open source. See LICENSE file for details.
+Open source. See LICENSE file.
 
-## Contributing
+## Stack
 
-Contributions are welcome! Reach out through appropriate channels
-
-## Acknowledgments
-
-Built with FastAPI, SvelteKit, SQLite, and Anthropic's Claude AI.
+Python 3.13, FastAPI, SQLite, BeautifulSoup, PyMuPDF, Google Gemini, SvelteKit, Cloudflare Pages
