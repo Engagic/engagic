@@ -12,10 +12,11 @@ Live at **[engagic.org](https://engagic.org)**
 - `infocore/database/unified_db.py` - Single SQLite database, city/meeting/agenda_items
 - `infra/conductor.py` - Priority job queue, sync scheduling, rate limiting
 - `infocore/adapters/` - 6 vendor adapters with BaseAdapter pattern (94% success rate)
-- `infocore/processing/processor.py` - High-level orchestration (recently refactored: 1,797 → 415 lines)
+- `infocore/processing/processor.py` - High-level orchestration (refactored: 1,797 → 415 lines)
 - `infocore/processing/summarizer.py` - Gemini API integration
 - `infocore/processing/pdf_extractor.py` - PyMuPDF text extraction
 - `infocore/processing/chunker.py` - Document parsing and boundary detection
+- `infocore/adapters/html_agenda_parser.py` - HTML agenda parsing (PrimeGov/Granicus)
 - `frontend/` - SvelteKit (Cloudflare Pages)
 
 ## Key Design Patterns
@@ -24,7 +25,7 @@ Live at **[engagic.org](https://engagic.org)**
 
 **Priority Queue**: Recent meetings processed first. Decouples fast scraping (seconds) from slow AI processing (10-30s).
 
-**Item-Level Processing**: Breaks 500-page packets into 10-50 page items for better failure isolation and granular topic extraction.
+**Item-Level Processing**: Breaks 500-page packets into 10-50 page items for better failure isolation and granular topic extraction. Working for 374+ cities (58% of platform): Legistar (API), PrimeGov (HTML agendas), Granicus (HTML agendas + MetaViewer PDFs).
 
 **Vendor-Agnostic Identifier**: `city_banana` ("paloaltoCA") used internally instead of vendor-specific slugs.
 
@@ -111,14 +112,15 @@ ENGAGIC_ADMIN_TOKEN="required"
 ## Adapters
 
 Supported vendors (BaseAdapter pattern):
-- PrimeGov
-- CivicClerk
-- Legistar (with item-level processing)
-- Granicus
+- **Legistar** (110 cities, item-level via API)
+- **PrimeGov** (64 cities, item-level via HTML agendas)
+- **Granicus** (467 cities, 200+ with item-level via HTML agendas)
+- CivicClerk (16 cities)
 - NovusAgenda
 - CivicPlus
 
 Each adapter: 68-242 lines. Shared logic in BaseAdapter (265 lines).
+HTML agenda parser: `html_agenda_parser.py` (shared by PrimeGov/Granicus).
 
 ## Performance
 
@@ -139,21 +141,30 @@ All code uses VPS paths as defaults (`/root/engagic/`).
 
 ## Recent Improvements
 
+**October 2025: Granicus Item-Level Processing**
+- Crossed majority threshold: 174 → 374+ cities with item-level processing (58% of platform)
+- HTML agenda parser for Granicus (200+ cities)
+- MetaViewer PDF extraction with full text (15K+ chars per document)
+- Zero infrastructure changes, same pipeline as Legistar/PrimeGov
+
+**January 2025:**
 - Database consolidation: 3 DBs → 1 unified SQLite (-1,549 lines)
 - Adapter refactor with BaseAdapter (-339 lines)
 - Processor modularization: 1,797 → 415 lines (-77%)
-- Item-level processing for Legistar
+- Item-level processing for Legistar and PrimeGov
 - Priority job queue with SQLite backend
 
-Net: -1,725 lines eliminated (29% toward 60% goal)
+Net: -1,725 lines eliminated
 
 ## Roadmap
 
 See `docs/IMPROVEMENT_PLAN.md` for full technical roadmap.
 
-**Next**: Multi-tenancy foundation (tenant API, coverage filtering, keyword matching)
+**Q4 2025**: Intelligence layer foundations (topic extraction, tracked items, timeline view, basic alerts)
 
-**Future**: Intelligence layer (topic extraction, tracked items, alerts, webhooks)
+**Q1 2026**: Multi-tenancy (tenant API, coverage filtering, keyword matching, Redis rate limiting)
+
+**Future**: CivicClerk/NovusAgenda/CivicPlus item-level processing, Rust conductor migration
 
 ## License
 
