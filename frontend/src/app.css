@@ -20,23 +20,27 @@
 }
 
 body {
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: Georgia, 'Times New Roman', Times, serif;
 	background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
 	color: var(--civic-dark);
-	line-height: 1.6;
+	line-height: 1.7;
 	min-height: 100vh;
 	display: flex;
 	justify-content: center;
 	align-items: flex-start;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 .container {
-	max-width: 700px;
+	max-width: 1000px;
+	min-width: 800px;
 	width: 100%;
 	padding: 4rem 1rem;
 	min-height: 100vh;
 	display: flex;
 	flex-direction: column;
+	margin: 0 auto;
 }
 
 .header {
@@ -45,6 +49,7 @@ body {
 }
 
 .logo {
+	font-family: 'IBM Plex Mono', monospace;
 	font-size: 2rem;
 	font-weight: 500;
 	color: var(--civic-blue);
@@ -60,6 +65,7 @@ body {
 }
 
 .tagline {
+	font-family: 'IBM Plex Mono', monospace;
 	color: var(--civic-gray);
 	font-size: 0.9rem;
 }
@@ -72,7 +78,7 @@ body {
 	width: 100%;
 	padding: 1.4rem;
 	font-size: 1.1rem;
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: Georgia, 'Times New Roman', Times, serif;
 	border: 2px solid var(--civic-border);
 	border-radius: 12px;
 	background: var(--civic-white);
@@ -92,9 +98,9 @@ body {
 .search-button {
 	margin-top: 1rem;
 	width: 100%;
-	padding: 1.2rem;
+	padding: 1rem;
 	font-size: 1rem;
-	font-family: inherit;
+	font-family: 'IBM Plex Mono', monospace;
 	background: var(--civic-blue);
 	color: var(--civic-white);
 	border: none;
@@ -142,9 +148,9 @@ body {
 
 .random-button {
 	width: 100%;
-	padding: 1.2rem;
+	padding: 1rem;
 	font-size: 1rem;
-	font-family: inherit;
+	font-family: 'IBM Plex Mono', monospace;
 	background: var(--civic-green);
 	color: var(--civic-white);
 	border: none;
@@ -183,17 +189,23 @@ body {
 
 .city-name {
 	font-size: 1.2rem;
-	font-weight: 500;
+	font-weight: 600;
 	color: var(--civic-dark);
 }
 
 .meeting-list {
 	display: grid;
 	gap: 1rem;
+	grid-template-columns: 1fr;
+	width: 100%;
+	min-width: 100%;
 }
 
 .meeting-card {
-	display: block;
+	display: block !important;
+	width: 100% !important;
+	max-width: none !important;
+	box-sizing: border-box;
 	background: var(--civic-white);
 	border: 1px solid var(--civic-border);
 	border-radius: 12px;
@@ -212,10 +224,12 @@ body {
 }
 
 .meeting-title {
+	font-family: Georgia, 'Times New Roman', Times, serif;
 	font-size: 1.1rem;
-	font-weight: 500;
+	font-weight: 600;
 	margin-bottom: 0.5rem;
 	color: var(--civic-dark);
+	line-height: 1.4;
 }
 
 .meeting-date {
@@ -249,11 +263,13 @@ body {
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 1rem;
+	width: 100%;
 }
 
 .meetings-section-title {
+	font-family: 'IBM Plex Mono', monospace;
 	font-size: 1.3rem;
-	font-weight: 500;
+	font-weight: 600;
 	color: var(--civic-dark);
 	margin: 0;
 }
@@ -265,7 +281,7 @@ body {
 	border: 2px solid var(--civic-blue);
 	border-radius: 6px;
 	cursor: pointer;
-	font-family: inherit;
+	font-family: 'IBM Plex Mono', monospace;
 	font-size: 0.9rem;
 	transition: all 0.2s ease;
 }
@@ -294,6 +310,7 @@ body {
 }
 
 .error-message {
+	font-family: Georgia, 'Times New Roman', Times, serif;
 	color: #92400e;
 	padding: 1.2rem;
 	background: #fef3c7;
@@ -301,11 +318,12 @@ body {
 	border-radius: 12px;
 	margin-top: 1rem;
 	font-size: 0.95rem;
-	line-height: 1.5;
+	line-height: 1.6;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .info-message {
+	font-family: Georgia, 'Times New Roman', Times, serif;
 	color: var(--civic-blue);
 	padding: 1.2rem;
 	background: #eff6ff;
@@ -313,7 +331,7 @@ body {
 	border-radius: 12px;
 	margin-top: 1rem;
 	font-size: 0.95rem;
-	line-height: 1.5;
+	line-height: 1.6;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
@@ -446,12 +464,12 @@ body {
 	border-radius: 6px;
 	color: var(--civic-blue);
 	cursor: pointer;
-	font-family: inherit;
-	font-size: 1rem;
+	font-family: Georgia, 'Times New Roman', Times, serif;
+	font-size: 1.05rem;
 	transition: all 0.2s ease;
 	flex: 1;
 	text-align: center;
-	font-weight: 500;
+	font-weight: 600;
 }
 
 .city-option:hover {
@@ -463,8 +481,8 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 0.25rem;
-	font-size: 1.2rem;
-	font-weight: 600;
+	font-size: 1.1rem;
+	font-weight: 500;
 	font-family: 'IBM Plex Mono', monospace;
 	white-space: nowrap;
 }
@@ -483,6 +501,8 @@ body {
 
 .main-content {
 	flex: 1;
+	width: 100%;
+	min-width: 0;
 }
 
 .footer {

@@ -29,7 +29,7 @@
 
 	<div class="meeting-content">
 		<div class="meeting-title">
-			{meeting.title} on {formattedDate}
+			{meeting.title}
 		</div>
 
 		{#if meeting.meeting_status}
@@ -39,7 +39,7 @@
 		{/if}
 
 		<div class="meeting-date" aria-hidden="true">
-			{time}
+			{formattedDate} · {time}
 		</div>
 
 		{#if meeting.summary}

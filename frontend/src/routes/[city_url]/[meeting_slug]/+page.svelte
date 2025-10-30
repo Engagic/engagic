@@ -248,8 +248,9 @@
 		display: inline-block;
 		color: var(--civic-blue);
 		text-decoration: none;
+		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 500;
-		font-size: 1.1rem;
+		font-size: 1rem;
 		padding: 0.5rem 0;
 	}
 
@@ -301,29 +302,39 @@
 	}
 
 	.meeting-title {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.8rem;
 		color: var(--civic-dark);
 		margin: 0 0 0.5rem 0;
 		font-weight: 600;
+		line-height: 1.3;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
 	}
 
 	.meeting-location {
+		font-family: 'IBM Plex Mono', monospace;
 		color: var(--civic-blue);
-		font-size: 1.2rem;
+		font-size: 1.1rem;
 		margin: 0.3rem 0;
 		font-weight: 500;
 	}
 
 	.meeting-date {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		color: var(--civic-gray);
-		font-size: 1.1rem;
+		font-size: 1.05rem;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
 	}
 
 	.meeting-summary {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.8;
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		color: #1f2937;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
 	}
 
 	.meeting-summary :global(h1),
@@ -337,13 +348,13 @@
 		margin-top: 2.5rem;
 		margin-bottom: 1rem;
 		line-height: 1.3;
-		font-weight: 700;
+		font-weight: 600;
 	}
 
-	.meeting-summary :global(h1) { font-size: 1.9rem; }
-	.meeting-summary :global(h2) { font-size: 1.6rem; }
-	.meeting-summary :global(h3) { font-size: 1.3rem; }
-	.meeting-summary :global(h4) { font-size: 1.15rem; }
+	.meeting-summary :global(h1) { font-size: 1.75rem; }
+	.meeting-summary :global(h2) { font-size: 1.5rem; }
+	.meeting-summary :global(h3) { font-size: 1.25rem; }
+	.meeting-summary :global(h4) { font-size: 1.1rem; }
 
 	.meeting-summary :global(h1:first-child),
 	.meeting-summary :global(h2:first-child),
@@ -402,7 +413,7 @@
 	}
 
 	.meeting-summary :global(strong) {
-		font-weight: bold;
+		font-weight: 600;
 	}
 
 	.meeting-summary :global(em) {
@@ -431,6 +442,7 @@
 	}
 
 	.no-summary p:first-child {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.2rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -438,7 +450,9 @@
 	}
 
 	.no-summary p:last-child {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 0.95rem;
+		line-height: 1.6;
 		margin: 0;
 	}
 
@@ -478,9 +492,9 @@
 			word-wrap: break-word;
 		}
 
-		.meeting-summary :global(h1) { font-size: 1.5rem; }
-		.meeting-summary :global(h2) { font-size: 1.3rem; }
-		.meeting-summary :global(h3) { font-size: 1.15rem; }
+		.meeting-summary :global(h1) { font-size: 1.4rem; }
+		.meeting-summary :global(h2) { font-size: 1.25rem; }
+		.meeting-summary :global(h3) { font-size: 1.1rem; }
 
 		.meeting-header {
 			margin-bottom: 1.5rem;
