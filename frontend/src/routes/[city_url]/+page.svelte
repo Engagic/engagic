@@ -83,23 +83,32 @@
 			
 			// Sort meetings by date (soonest first) using standardized dates
 			if (result.success && result.meetings) {
-				result.meetings.sort((a: Meeting, b: Meeting) => {
+				// Filter out meetings with no valid date
+				const validMeetings = result.meetings.filter((meeting: Meeting) => {
+					if (!meeting.date || meeting.date === 'null' || meeting.date === '') {
+						return false;
+					}
+					const date = new Date(meeting.date);
+					return !isNaN(date.getTime()) && date.getTime() !== 0;
+				});
+
+				validMeetings.sort((a: Meeting, b: Meeting) => {
 					// Use standardized meeting_date field
 					const dateA = new Date(a.date);
 					const dateB = new Date(b.date);
-					
+
 					// Return comparison (ascending order - soonest first)
 					return dateA.getTime() - dateB.getTime();
 				});
-				
+
 				// Split meetings into upcoming and past using standardized dates
 				const now = new Date();
 				upcomingMeetings = [];
 				pastMeetings = [];
-				
-				for (const meeting of result.meetings) {
+
+				for (const meeting of validMeetings) {
 					const meetingDate = new Date(meeting.date);
-					
+
 					if (meetingDate >= now) {
 						upcomingMeetings.push(meeting);
 					} else {
