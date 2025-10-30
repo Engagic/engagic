@@ -323,6 +323,10 @@
 	}
 
 	@media (max-width: 640px) {
+		.container {
+			width: 100%;
+		}
+
 		.city-title {
 			font-size: 1.5rem;
 		}
