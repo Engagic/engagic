@@ -182,7 +182,7 @@
 			{#if searchResults.success === false && searchResults.ambiguous && searchResults.city_options}
 				<div class="ambiguous-cities">
 					<div class="ambiguous-message">
-						{searchResults.message}
+						{@html searchResults.message}
 					</div>
 					<div class="city-options">
 						{#each searchResults.city_options as cityOption}
