@@ -16,6 +16,7 @@ from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse, urljoin
 from infocore.adapters.base_adapter import BaseAdapter, logger
+from infocore.adapters.html_agenda_parser import parse_granicus_html_agenda
 
 
 class GranicusAdapter(BaseAdapter):
@@ -109,95 +110,112 @@ class GranicusAdapter(BaseAdapter):
         """
         Scrape meetings from Granicus HTML.
 
+        Modern approach: Find all AgendaViewer links on the page directly,
+        rather than relying on specific table structures.
+
         Yields:
-            Meeting dictionaries with meeting_id, title, start, packet_url
+            Meeting dictionaries with meeting_id, title, start, packet_url, items
         """
         soup = self._fetch_html(self.list_url)
 
-        # Find "Upcoming Events" or "Upcoming Meetings" section
-        upcoming_header = soup.find("h2", string="Upcoming Events") or soup.find(
-            "h3", string="Upcoming Events"
+        # Find all links that point to AgendaViewer or direct PDFs
+        all_links = soup.find_all("a", href=True)
+
+        agenda_viewer_links = []
+        for link in all_links:
+            href = link.get("href", "")
+            link_text = link.get_text(strip=True)
+
+            # Look for AgendaViewer links or PDF links related to agendas
+            if "AgendaViewer.php" in href:
+                full_url = urljoin(self.base_url, href)
+                agenda_viewer_links.append((link_text, full_url, link))
+            elif ("Agenda" in link_text or "Meeting" in link_text) and (
+                ".pdf" in href.lower() or "GeneratedAgenda" in href
+            ):
+                full_url = urljoin(self.base_url, href)
+                agenda_viewer_links.append((link_text, full_url, link))
+
+        logger.info(
+            f"[granicus:{self.slug}] Found {len(agenda_viewer_links)} agenda links"
         )
-        if not upcoming_header:
-            upcoming_header = soup.find("h2", string="Upcoming Meetings") or soup.find(
-                "h3", string="Upcoming Meetings"
+
+        if not agenda_viewer_links:
+            logger.warning(
+                f"[granicus:{self.slug}] No agenda links found on ViewPublisher page"
             )
-
-        if not upcoming_header:
-            logger.warning(f"[granicus:{self.slug}] No upcoming events section found")
             return
 
-        # Find table after header
-        upcoming_table = None
-        for sibling in upcoming_header.find_next_siblings():
-            if sibling.name == "table":
-                upcoming_table = sibling
-                break
-            if sibling.name == "div" and sibling.get("class") == ["archive"]:
-                break
+        # Process each agenda link
+        seen_meeting_ids = set()
 
-        if not upcoming_table:
-            logger.warning(f"[granicus:{self.slug}] No upcoming events table found")
-            return
+        for link_text, agenda_url, link_element in agenda_viewer_links:
+            # Extract meeting_id from URL
+            meeting_id = self._extract_meeting_id(agenda_url)
 
-        # Parse meeting rows
-        for row in upcoming_table.find_all("tr"):
-            cells = row.find_all("td")
-            if len(cells) < 2:
+            # Skip duplicates
+            if meeting_id and meeting_id in seen_meeting_ids:
                 continue
 
-            # Skip header rows
-            if any(cell.get("class") == ["listHeader"] for cell in cells):
-                continue
+            if meeting_id:
+                seen_meeting_ids.add(meeting_id)
 
-            # Extract title and date (remove hidden timestamp spans)
-            for span in cells[0].find_all(
-                "span", style=lambda x: x and "display:none" in x
-            ):
-                span.decompose()
-            for span in cells[1].find_all(
-                "span", style=lambda x: x and "display:none" in x
-            ):
-                span.decompose()
+            # Try to extract title and date from surrounding context
+            # Look for parent row or nearby elements
+            title = link_text
+            start = "TBD"
 
-            title = cells[0].get_text(" ", strip=True)
-            start = cells[1].get_text(" ", strip=True)
+            # Try to find date/time in parent row
+            parent_row = link_element.find_parent("tr")
+            if parent_row:
+                cells = parent_row.find_all("td")
+                if len(cells) >= 2:
+                    # Often first cell is title/name, second is date
+                    # Remove hidden spans
+                    for cell in cells:
+                        for span in cell.find_all(
+                            "span", style=lambda x: x and "display:none" in x
+                        ):
+                            span.decompose()
 
-            # Skip rows without meaningful title
-            if not title or title in ["Meeting", "Event"]:
-                continue
+                    # Try to find which cell has date-like content
+                    for cell in cells:
+                        cell_text = cell.get_text(" ", strip=True)
+                        # Look for date patterns (month names, year, etc.)
+                        if any(
+                            month in cell_text
+                            for month in [
+                                "January",
+                                "February",
+                                "March",
+                                "April",
+                                "May",
+                                "June",
+                                "July",
+                                "August",
+                                "September",
+                                "October",
+                                "November",
+                                "December",
+                            ]
+                        ) or any(char.isdigit() and ":" in cell_text for char in cell_text):
+                            start = cell_text
+                        elif not title or title == link_text:
+                            # Use first meaningful cell as title
+                            if cell_text and cell_text != link_text and len(cell_text) > 5:
+                                title = cell_text
 
-            # Look for agenda link
-            agenda_link = row.find("a", string=lambda s: s and "Agenda" in s)
-            packet_url = None
-            meeting_id = None
-
-            if agenda_link:
-                href = agenda_link.get("href", "")
-                if href:
-                    agenda_url = urljoin(self.base_url, href)
-                    meeting_id = self._extract_meeting_id(agenda_url)
-
-                    # Check if direct PDF or agenda viewer page
-                    if (
-                        ".pdf" in agenda_url.lower()
-                        or "GeneratedAgenda.ashx" in agenda_url
-                    ):
-                        packet_url = agenda_url
-                    elif "AgendaViewer.php" in agenda_url:
-                        # Extract PDFs from AgendaViewer page
-                        pdfs = self._extract_pdfs_from_agenda_viewer(agenda_url)
-                        if pdfs:
-                            # TODO: Handle multiple PDFs better (store as JSON array or separate items table)
-                            # For now, just take the first PDF to unblock processing
-                            packet_url = pdfs[0]
-
-            # Generate fallback meeting_id
+            # Fallback meeting_id if not extracted from URL
             if not meeting_id:
-                id_string = f"{title}_{start}"
+                id_string = f"{title}_{start}_{agenda_url}"
                 meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
 
-            # Parse meeting status from title and start time
+            # Determine packet URL
+            packet_url = None
+            if ".pdf" in agenda_url.lower() or "GeneratedAgenda" in agenda_url:
+                packet_url = agenda_url
+
+            # Parse meeting status
             meeting_status = self._parse_meeting_status(title, start)
 
             result = {
@@ -209,6 +227,20 @@ class GranicusAdapter(BaseAdapter):
 
             if meeting_status:
                 result["meeting_status"] = meeting_status
+
+            # Fetch HTML agenda items if this is an AgendaViewer page
+            if "AgendaViewer.php" in agenda_url:
+                try:
+                    items_data = self.fetch_html_agenda_items(agenda_url)
+                    if items_data["items"]:
+                        result["items"] = items_data["items"]
+                        logger.info(
+                            f"[granicus:{self.slug}] Meeting '{title[:40]}...' has {len(items_data['items'])} items"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"[granicus:{self.slug}] Failed to fetch HTML agenda items for {title}: {e}"
+                    )
 
             yield result
 
@@ -258,3 +290,42 @@ class GranicusAdapter(BaseAdapter):
                 f"[granicus:{self.slug}] Failed to extract PDFs from {agenda_url}: {e}"
             )
             return []
+
+    def fetch_html_agenda_items(self, agenda_url: str) -> Dict[str, Any]:
+        """
+        Fetch and parse AgendaViewer HTML to extract items and attachments.
+
+        Note: Some cities' AgendaViewer.php returns PDFs instead of HTML.
+        We detect this and return empty items list for PDF responses.
+
+        Args:
+            agenda_url: URL to AgendaViewer.php page
+
+        Returns:
+            {
+                'participation': {},
+                'items': [{'item_id': str, 'title': str, 'sequence': int, 'attachments': [...]}]
+            }
+        """
+        # Fetch response
+        response = self._get(agenda_url)
+
+        # Check if response is actually a PDF (some cities use AgendaViewer.php for PDFs)
+        content_type = response.headers.get('Content-Type', '').lower()
+        is_pdf = 'application/pdf' in content_type or response.content[:4] == b'%PDF'
+
+        if is_pdf:
+            logger.debug(
+                f"[granicus:{self.slug}] AgendaViewer returned PDF, not HTML - skipping item parsing"
+            )
+            return {'participation': {}, 'items': []}
+
+        # Parse HTML
+        html = response.text
+        parsed = parse_granicus_html_agenda(html)
+
+        logger.info(
+            f"[granicus:{self.slug}] Parsed HTML agenda: {len(parsed['items'])} items"
+        )
+
+        return parsed
