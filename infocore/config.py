@@ -91,7 +91,11 @@ class Config:
             raise ValueError("ENGAGIC_PORT must be between 1 and 65535")
 
         # Log configuration warnings
-        if not self.ANTHROPIC_API_KEY and not self.GEMINI_API_KEY and not self.LLM_API_KEY:
+        if (
+            not self.ANTHROPIC_API_KEY
+            and not self.GEMINI_API_KEY
+            and not self.LLM_API_KEY
+        ):
             logger.warning("No LLM API key configured - AI features will be disabled")
 
         # Ensure database directory exists

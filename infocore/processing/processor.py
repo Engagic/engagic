@@ -32,6 +32,7 @@ logger = logging.getLogger("engagic")
 
 class ProcessingError(Exception):
     """Base exception for PDF processing errors"""
+
     pass
 
 
@@ -50,7 +51,9 @@ class AgendaProcessor:
         self.chunker = AgendaChunker()
         self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 
-        logger.info("[Processor] Initialized with PyMuPDF extractor, Gemini summarizer, and agenda chunker")
+        logger.info(
+            "[Processor] Initialized with PyMuPDF extractor, Gemini summarizer, and agenda chunker"
+        )
 
     def process_agenda_with_cache(self, meeting_data: Dict[str, Any]) -> Dict[str, Any]:
         """Main entry point - process agenda with caching
@@ -80,7 +83,7 @@ class AgendaProcessor:
                 "processing_time": cached_meeting.processing_time or 0,
                 "cached": True,
                 "meeting_data": cached_meeting.to_dict(),
-                "processing_method": cached_meeting.processing_method or "cached"
+                "processing_method": cached_meeting.processing_method or "cached",
             }
 
         # Process with Gemini
@@ -100,7 +103,9 @@ class AgendaProcessor:
             # Update meeting with summary
             meeting_id = meeting_data.get("meeting_id")
             if meeting_id:
-                self.db.update_meeting_summary(meeting_id, summary, method, processing_time)
+                self.db.update_meeting_summary(
+                    meeting_id, summary, method, processing_time
+                )
 
             # Store in cache
             self._store_in_cache(packet_url, summary, processing_time)
@@ -114,17 +119,19 @@ class AgendaProcessor:
                 "cached": False,
                 "meeting_data": meeting_data,
                 "meeting_id": meeting_id,
-                "processing_method": method
+                "processing_method": method,
             }
 
         except Exception as e:
             processing_time = time.time() - start_time
-            logger.error(f"[Processing] FAILED - {city_banana} - {type(e).__name__}: {e}")
+            logger.error(
+                f"[Processing] FAILED - {city_banana} - {type(e).__name__}: {e}"
+            )
             return {
                 "success": False,
                 "error": str(e),
                 "processing_time": processing_time,
-                "cached": False
+                "cached": False,
             }
 
     def process_agenda(self, url: Union[str, List[str]]) -> tuple[str, str]:
@@ -151,8 +158,8 @@ class AgendaProcessor:
         # Tier 1: PyMuPDF extraction + Gemini text API (free tier)
         try:
             result = self.pdf_extractor.extract_from_url(url)
-            if result.get('success') and result.get('text'):
-                summary = self.summarizer.summarize_meeting(result['text'])
+            if result.get("success") and result.get("text"):
+                summary = self.summarizer.summarize_meeting(result["text"])
                 logger.info(f"[Tier1] SUCCESS - {url}")
 
                 # Cleanup: free PDF text memory
@@ -160,7 +167,9 @@ class AgendaProcessor:
 
                 return summary, "tier1_pymupdf_gemini"
             else:
-                logger.warning(f"[Tier1] FAILED - No text extracted or poor quality - {url}")
+                logger.warning(
+                    f"[Tier1] FAILED - No text extracted or poor quality - {url}"
+                )
 
         except Exception as e:
             logger.warning(f"[Tier1] FAILED - {type(e).__name__}: {str(e)} - {url}")
@@ -188,22 +197,30 @@ class AgendaProcessor:
             logger.info(f"Extracting text from PDF {i}/{len(urls)}: {url}")
             try:
                 result = self.pdf_extractor.extract_from_url(url)
-                if result.get('success') and result.get('text'):
-                    text = result['text']
+                if result.get("success") and result.get("text"):
+                    text = result["text"]
                     # Label each document for model context
-                    doc_label = "MAIN AGENDA" if i == 1 else f"SUPPLEMENTAL MATERIAL {i-1}"
+                    doc_label = (
+                        "MAIN AGENDA" if i == 1 else f"SUPPLEMENTAL MATERIAL {i - 1}"
+                    )
                     all_text_parts.append(f"=== {doc_label} ===\n{text}")
-                    logger.info(f"[PyMuPDF] Extracted {len(text)} chars from document {i}")
+                    logger.info(
+                        f"[PyMuPDF] Extracted {len(text)} chars from document {i}"
+                    )
                 else:
                     logger.warning(f"[PyMuPDF] No text from PDF {i}")
                     failed_pdfs.append(i)
             except Exception as e:
-                logger.error(f"[PyMuPDF] Failed to extract from PDF {i}: {type(e).__name__}: {str(e)}")
+                logger.error(
+                    f"[PyMuPDF] Failed to extract from PDF {i}: {type(e).__name__}: {str(e)}"
+                )
                 failed_pdfs.append(i)
 
         # If we got no usable text from any PDF, fail fast
         if not all_text_parts:
-            logger.error(f"[Tier1] REJECTED - No usable text from any of {len(urls)} PDFs")
+            logger.error(
+                f"[Tier1] REJECTED - No usable text from any of {len(urls)} PDFs"
+            )
             raise ProcessingError(
                 f"All {len(urls)} documents require premium tier for processing. "
                 "These PDFs may be scanned or have complex formatting that requires OCR."
@@ -211,7 +228,9 @@ class AgendaProcessor:
 
         # Combine all text and summarize with full context
         combined_text = "\n\n".join(all_text_parts)
-        logger.info(f"[Tier1] Combined {len(all_text_parts)}/{len(urls)} documents ({len(combined_text)} chars total)")
+        logger.info(
+            f"[Tier1] Combined {len(all_text_parts)}/{len(urls)} documents ({len(combined_text)} chars total)"
+        )
 
         # Summarize with full context (model sees all documents at once)
         summary = self.summarizer.summarize_meeting(combined_text)
@@ -220,7 +239,9 @@ class AgendaProcessor:
         if failed_pdfs:
             failure_note = f"\n\n[Note: {len(failed_pdfs)} of {len(urls)} documents could not be processed]"
             summary += failure_note
-            logger.warning(f"Partial success: {len(all_text_parts)}/{len(urls)} documents processed")
+            logger.warning(
+                f"Partial success: {len(all_text_parts)}/{len(urls)} documents processed"
+            )
 
         # Cleanup: free memory immediately (50-100MB per large meeting)
         del all_text_parts
@@ -228,7 +249,9 @@ class AgendaProcessor:
 
         return summary, f"multiple_pdfs_{len(urls)}_combined"
 
-    def process_agenda_item(self, item_data: Dict[str, Any], city_banana: str) -> Dict[str, Any]:
+    def process_agenda_item(
+        self, item_data: Dict[str, Any], city_banana: str
+    ) -> Dict[str, Any]:
         """Process a single agenda item with its attachments
 
         Args:
@@ -253,19 +276,19 @@ class AgendaProcessor:
                 }
         """
         start_time = time.time()
-        item_title = item_data.get('title', 'Untitled Item')
-        attachments = item_data.get('attachments', [])
+        item_title = item_data.get("title", "Untitled Item")
+        attachments = item_data.get("attachments", [])
 
         logger.info(f"[Item] Processing: {item_title[:80]}")
 
         if not attachments:
             logger.info("[Item] No attachments, skipping processing")
             return {
-                'success': True,
-                'summary': None,
-                'topics': [],
-                'processing_time': time.time() - start_time,
-                'attachments_processed': 0
+                "success": True,
+                "summary": None,
+                "topics": [],
+                "processing_time": time.time() - start_time,
+                "attachments_processed": 0,
             }
 
         logger.info(f"[Item] Found {len(attachments)} attachment(s)")
@@ -276,39 +299,47 @@ class AgendaProcessor:
             processed_count = 0
 
             for i, att in enumerate(attachments, 1):
-                att_type = att.get('type', 'unknown')
+                att_type = att.get("type", "unknown")
 
                 # Case 1: Text segment (from item detection)
-                if att_type == 'text_segment':
-                    text_content = att.get('content', '')
+                if att_type == "text_segment":
+                    text_content = att.get("content", "")
                     if text_content:
                         all_text_parts.append(text_content)
                         processed_count += 1
-                        logger.info(f"[Item] Using text segment ({len(text_content)} chars)")
+                        logger.info(
+                            f"[Item] Using text segment ({len(text_content)} chars)"
+                        )
                     continue
 
                 # Case 2: PDF attachment with URL (from Legistar/adapters)
-                if att_type == 'pdf':
-                    att_name = att.get('name', f'Attachment {i}')
-                    att_url = att.get('url')
+                if att_type == "pdf":
+                    att_name = att.get("name", f"Attachment {i}")
+                    att_url = att.get("url")
 
                     if not att_url:
-                        logger.warning(f"[Item] PDF attachment {i} has no URL, skipping")
+                        logger.warning(
+                            f"[Item] PDF attachment {i} has no URL, skipping"
+                        )
                         continue
 
                     logger.info(f"[Item] Extracting from PDF: {att_name}")
 
                     try:
                         result = self.pdf_extractor.extract_from_url(att_url)
-                        if result.get('success') and result.get('text'):
-                            text = result['text']
+                        if result.get("success") and result.get("text"):
+                            text = result["text"]
                             all_text_parts.append(f"=== {att_name} ===\n{text}")
                             processed_count += 1
-                            logger.info(f"[PyMuPDF] Extracted {len(text)} chars from {att_name}")
+                            logger.info(
+                                f"[PyMuPDF] Extracted {len(text)} chars from {att_name}"
+                            )
                         else:
                             logger.warning(f"[PyMuPDF] No text from {att_name}")
                     except Exception as e:
-                        logger.warning(f"[PyMuPDF] Failed to extract from {att_name}: {e}")
+                        logger.warning(
+                            f"[PyMuPDF] Failed to extract from {att_name}: {e}"
+                        )
                 else:
                     logger.debug(f"[Item] Skipping attachment type: {att_type}")
 
@@ -316,10 +347,10 @@ class AgendaProcessor:
             if not all_text_parts:
                 logger.warning("[Item] No usable text from any attachment")
                 return {
-                    'success': False,
-                    'error': 'No usable text extracted from attachments',
-                    'processing_time': time.time() - start_time,
-                    'attachments_processed': 0
+                    "success": False,
+                    "error": "No usable text extracted from attachments",
+                    "processing_time": time.time() - start_time,
+                    "attachments_processed": 0,
                 }
 
             # Combine all attachment text
@@ -329,26 +360,30 @@ class AgendaProcessor:
             summary, topics = self.summarizer.summarize_item(item_title, combined_text)
 
             processing_time = time.time() - start_time
-            logger.info(f"[Item] Processed in {processing_time:.1f}s - {processed_count} attachments, {len(topics)} topics")
+            logger.info(
+                f"[Item] Processed in {processing_time:.1f}s - {processed_count} attachments, {len(topics)} topics"
+            )
 
             return {
-                'success': True,
-                'summary': summary,
-                'topics': topics,
-                'processing_time': processing_time,
-                'attachments_processed': processed_count
+                "success": True,
+                "summary": summary,
+                "topics": topics,
+                "processing_time": processing_time,
+                "attachments_processed": processed_count,
             }
 
         except Exception as e:
             logger.error(f"[Item] Processing failed: {e}")
             return {
-                'success': False,
-                'error': str(e),
-                'processing_time': time.time() - start_time,
-                'attachments_processed': 0
+                "success": False,
+                "error": str(e),
+                "processing_time": time.time() - start_time,
+                "attachments_processed": 0,
             }
 
-    def process_batch_items(self, item_requests: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def process_batch_items(
+        self, item_requests: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Process multiple agenda items using Gemini Batch API for 50% cost savings
 
         Delegates to summarizer.summarize_batch() for actual batch processing.
@@ -374,7 +409,9 @@ class AgendaProcessor:
         if not item_requests:
             return []
 
-        logger.info(f"[Processor] Delegating {len(item_requests)} items to batch summarizer")
+        logger.info(
+            f"[Processor] Delegating {len(item_requests)} items to batch summarizer"
+        )
         return self.summarizer.summarize_batch(item_requests)
 
     def _update_cache_hit_count(self, packet_url: str):
@@ -389,12 +426,15 @@ class AgendaProcessor:
                 if isinstance(packet_url, list):
                     lookup_url = json.dumps(packet_url)
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     UPDATE processing_cache
                     SET hit_count = hit_count + 1,
                         last_accessed = CURRENT_TIMESTAMP
                     WHERE packet_url = ?
-                """, (lookup_url,))
+                """,
+                    (lookup_url,),
+                )
                 conn.commit()
         except Exception as e:
             logger.warning(f"Failed to update cache hit count: {e}")
@@ -411,11 +451,14 @@ class AgendaProcessor:
                 if isinstance(packet_url, list):
                     lookup_url = json.dumps(packet_url)
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT OR REPLACE INTO processing_cache
                     (packet_url, summary, processing_time, created_at, last_accessed, hit_count)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                """, (lookup_url, summary, processing_time))
+                """,
+                    (lookup_url, summary, processing_time),
+                )
                 conn.commit()
                 logger.debug(f"[Cache] Stored summary for {lookup_url}")
         except Exception as e:

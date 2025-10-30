@@ -63,10 +63,11 @@ class CivicClerkAdapter(BaseAdapter):
             # Find agenda packet in published files
             packet = next(
                 (
-                    doc for doc in meeting.get("publishedFiles", [])
+                    doc
+                    for doc in meeting.get("publishedFiles", [])
                     if doc.get("type") in ["Agenda Packet", "Agenda"]
                 ),
-                None
+                None,
             )
 
             event_name = meeting.get("eventName", "")
@@ -77,7 +78,9 @@ class CivicClerkAdapter(BaseAdapter):
 
             # Log if no packet (but still track the meeting)
             if not packet:
-                file_types = [doc.get("type") for doc in meeting.get("publishedFiles", [])]
+                file_types = [
+                    doc.get("type") for doc in meeting.get("publishedFiles", [])
+                ]
                 logger.debug(
                     f"[civicclerk:{self.slug}] No packet for: {event_name}, "
                     f"available files: {file_types}"

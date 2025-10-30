@@ -66,18 +66,23 @@ def tier2_mistral_ocr(self, url: str) -> Optional[str]:
             return None
 
         # Convert to base64 for Mistral API
-        pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+        pdf_base64 = base64.b64encode(pdf_content).decode("utf-8")
 
         # Call Mistral OCR API
         response = self.mistral_client.chat.complete(
             model="mistral-ocr-latest",
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Extract all text from this PDF document. Preserve the structure and formatting."},
-                    {"type": "pdf", "pdf": pdf_base64}
-                ]
-            }]
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Extract all text from this PDF document. Preserve the structure and formatting.",
+                        },
+                        {"type": "pdf", "pdf": pdf_base64},
+                    ],
+                }
+            ],
         )
 
         text = response.choices[0].message.content
@@ -118,7 +123,7 @@ def tier3_gemini_pdf_api(self, url: str) -> Optional[str]:
             return None
 
         # Upload PDF to Gemini
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
             tmp_file.write(pdf_content)
             tmp_path = tmp_file.name
 
@@ -138,19 +143,20 @@ def tier3_gemini_pdf_api(self, url: str) -> Optional[str]:
 
             # Generate summary directly from PDF
             from google.genai import types
+
             prompt = self._get_comprehensive_prompt()
 
             # PDF API: Use moderate thinking since we're asking for complex analysis
             config = types.GenerateContentConfig(
                 temperature=0.3,
                 max_output_tokens=8192,
-                thinking_config=types.ThinkingConfig(thinking_budget=4096)  # Moderate thinking for analysis
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=4096
+                ),  # Moderate thinking for analysis
             )
 
             response = self.client.models.generate_content(
-                model=model_name,
-                contents=[uploaded_file, prompt],
-                config=config
+                model=model_name, contents=[uploaded_file, prompt], config=config
             )
 
             logger.info(f"Gemini PDF API ({model_display}) generated summary")

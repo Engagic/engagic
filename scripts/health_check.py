@@ -65,14 +65,17 @@ def get_cities_with_no_meetings(conn) -> List[Tuple[str, str, str, str]]:
 
 def get_cities_with_most_meetings(conn, limit=10) -> List[Tuple[str, str, str, int]]:
     """Get top cities by meeting count"""
-    cursor = conn.execute("""
+    cursor = conn.execute(
+        """
         SELECT c.banana, c.name, c.state, COUNT(m.id) as meeting_count
         FROM cities c
         INNER JOIN meetings m ON c.banana = m.banana
         GROUP BY c.banana
         ORDER BY meeting_count DESC
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
     return cursor.fetchall()
 
 
@@ -142,12 +145,14 @@ def detect_potential_corruption(conn) -> List[Dict]:
                 patterns = (patterns,)
 
             if not any(p in packet_url.lower() for p in patterns):
-                issues.append({
-                    "banana": banana,
-                    "name": name,
-                    "vendor": vendor,
-                    "packet_url": packet_url[:80],
-                })
+                issues.append(
+                    {
+                        "banana": banana,
+                        "name": name,
+                        "vendor": vendor,
+                        "packet_url": packet_url[:80],
+                    }
+                )
 
     return issues
 
@@ -184,7 +189,9 @@ def main():
     print("AI PROCESSING STATUS")
     print("=" * 80)
     print(f"Total Meetings: {proc_stats['total_meetings']}")
-    print(f"With Summaries: {proc_stats['with_summaries']} ({proc_stats['with_summaries']/max(proc_stats['total_meetings'],1)*100:.1f}%)")
+    print(
+        f"With Summaries: {proc_stats['with_summaries']} ({proc_stats['with_summaries'] / max(proc_stats['total_meetings'], 1) * 100:.1f}%)"
+    )
     print(f"Completed: {proc_stats['completed']}")
     print(f"Pending: {proc_stats['pending']}")
     print(f"Failed: {proc_stats['failed']}")

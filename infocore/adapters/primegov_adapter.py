@@ -32,10 +32,12 @@ class PrimeGovAdapter(BaseAdapter):
         Returns:
             URL to compiled PDF packet
         """
-        query = urlencode({
-            "meetingTemplateId": doc["templateId"],
-            "compileOutputType": doc["compileOutputType"],
-        })
+        query = urlencode(
+            {
+                "meetingTemplateId": doc["templateId"],
+                "compileOutputType": doc["compileOutputType"],
+            }
+        )
         return f"{self.base_url}/Public/CompiledDocument?{query}"
 
     def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
@@ -56,14 +58,15 @@ class PrimeGovAdapter(BaseAdapter):
             # Find packet document (prefer "Packet", fall back to "Agenda" if not HTML)
             packet_doc = next(
                 (
-                    doc for doc in meeting.get("documentList", [])
+                    doc
+                    for doc in meeting.get("documentList", [])
                     if "Packet" in doc.get("templateName", "")
                     or (
                         "html" not in doc.get("templateName", "").lower()
                         and "agenda" in doc.get("templateName", "").lower()
                     )
                 ),
-                None
+                None,
             )
 
             title = meeting.get("title", "")

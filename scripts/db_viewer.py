@@ -6,7 +6,8 @@ Clean interface for managing cities, zipcodes, meetings, and queue
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from infocore.database.unified_db import UnifiedDatabase
 from infocore.config import Config
@@ -45,16 +46,18 @@ class DatabaseViewer:
         for city in cities:
             zipcodes = self.db.get_city_zipcodes(city.banana)
             for i, zipcode in enumerate(zipcodes):
-                results.append({
-                    'zipcode': zipcode,
-                    'city_name': city.name,
-                    'state': city.state,
-                    'banana': city.banana,
-                    'is_primary': i == 0
-                })
+                results.append(
+                    {
+                        "zipcode": zipcode,
+                        "city_name": city.name,
+                        "state": city.state,
+                        "banana": city.banana,
+                        "is_primary": i == 0,
+                    }
+                )
 
         # Sort by zipcode and limit
-        results.sort(key=lambda x: x['zipcode'])
+        results.sort(key=lambda x: x["zipcode"])
         results = results[:limit]
 
         if not results:
@@ -62,9 +65,7 @@ class DatabaseViewer:
             return
 
         print(f"\n=== ZIPCODES TABLE (showing {len(results)}) ===")
-        print(
-            f"{'Zipcode':<8} {'Primary':<8} {'City':<20} {'State':<6} {'Banana':<20}"
-        )
+        print(f"{'Zipcode':<8} {'Primary':<8} {'City':<20} {'State':<6} {'Banana':<20}")
         print("-" * 70)
 
         for row in results:
@@ -82,8 +83,10 @@ class DatabaseViewer:
             # Get matching cities
             all_cities = self.db.get_cities(limit=1000)
             matching_bananas = [
-                c.banana for c in all_cities
-                if city_filter.lower() in c.name.lower() or city_filter.lower() in c.banana.lower()
+                c.banana
+                for c in all_cities
+                if city_filter.lower() in c.name.lower()
+                or city_filter.lower() in c.banana.lower()
             ]
             if matching_bananas:
                 meetings = self.db.get_meetings(bananas=matching_bananas, limit=limit)
@@ -104,7 +107,9 @@ class DatabaseViewer:
 
         for meeting in meetings:
             city = self.db.get_city(banana=meeting.banana)
-            city_display = f"{city.name[:15]}, {city.state}" if city else meeting.banana[:19]
+            city_display = (
+                f"{city.name[:15]}, {city.state}" if city else meeting.banana[:19]
+            )
 
             title = meeting.title[:34] if meeting.title else "Unknown"
 
@@ -130,10 +135,7 @@ class DatabaseViewer:
         for meeting in meetings:
             items = self.db.get_agenda_items(meeting.id)
             for item in items:
-                all_items.append({
-                    'item': item,
-                    'meeting': meeting
-                })
+                all_items.append({"item": item, "meeting": meeting})
 
         # Limit results
         all_items = all_items[:limit]
@@ -147,8 +149,8 @@ class DatabaseViewer:
         print("-" * 100)
 
         for row in all_items:
-            item = row['item']
-            meeting = row['meeting']
+            item = row["item"]
+            meeting = row["meeting"]
 
             meeting_title = meeting.title[:29] if meeting.title else "Unknown"
             item_title = item.title[:39] if item.title else "Unknown"
@@ -169,31 +171,36 @@ class DatabaseViewer:
         print(f"Failed:      {stats.get('failed_count', 0)}")
         print(f"Permanent:   {stats.get('permanently_failed', 0)}")
 
-        avg_time = stats.get('avg_processing_seconds', 0)
+        avg_time = stats.get("avg_processing_seconds", 0)
         if avg_time > 0:
             print(f"Avg time:    {avg_time:.1f}s")
 
         # Show pending items
         conn = self.db.conn
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id, packet_url, meeting_id, banana, status, priority, retry_count
             FROM queue
             WHERE status IN ('pending', 'processing', 'failed')
             ORDER BY priority DESC, created_at ASC
             LIMIT ?
-        """, (limit,))
+        """,
+            (limit,),
+        )
 
         rows = cursor.fetchall()
 
         if rows:
             print(f"\n=== QUEUE ITEMS (showing {len(rows)}) ===")
-            print(f"{'ID':<6} {'Status':<12} {'Priority':<9} {'Retries':<8} {'City':<20} {'URL':<40}")
+            print(
+                f"{'ID':<6} {'Status':<12} {'Priority':<9} {'Retries':<8} {'City':<20} {'URL':<40}"
+            )
             print("-" * 100)
 
             for row in rows:
-                url_display = row['packet_url'][:39] if row['packet_url'] else ""
-                banana = row['banana'][:19] if row['banana'] else ""
+                url_display = row["packet_url"][:39] if row["packet_url"] else ""
+                banana = row["banana"][:19] if row["banana"] else ""
 
                 print(
                     f"{row['id']:<6} {row['status']:<12} {row['priority']:<9} "
@@ -232,7 +239,8 @@ class DatabaseViewer:
 
         # Generate banana
         import re
-        banana = re.sub(r'[^a-zA-Z0-9]', '', city_name).lower() + state.upper()
+
+        banana = re.sub(r"[^a-zA-Z0-9]", "", city_name).lower() + state.upper()
 
         try:
             city = self.db.add_city(
@@ -242,7 +250,7 @@ class DatabaseViewer:
                 vendor=vendor,
                 slug=slug,
                 county=county,
-                zipcodes=zipcodes
+                zipcodes=zipcodes,
             )
             print(f"Added city '{city.name}, {city.state}' with banana {city.banana}")
             if zipcodes:
@@ -262,7 +270,7 @@ class DatabaseViewer:
                 self.show_cities_table(20)
 
                 banana = input("\nEnter banana to update (or 'q' to quit): ").strip()
-                if not banana or banana.lower() == 'q':
+                if not banana or banana.lower() == "q":
                     return False
 
                 # Get current city
@@ -292,7 +300,7 @@ class DatabaseViewer:
                 "\nField to update (name/state/slug/vendor/status/county) or 'q' to quit: "
             ).strip()
 
-            if not field or field.lower() == 'q':
+            if not field or field.lower() == "q":
                 current_banana = None
                 continue
 
@@ -303,7 +311,7 @@ class DatabaseViewer:
 
             new_value = input(f"New value for {field} (or 'cancel' to skip): ").strip()
 
-            if new_value.lower() == 'cancel':
+            if new_value.lower() == "cancel":
                 continue
 
             if not new_value and field != "county":
@@ -321,7 +329,11 @@ class DatabaseViewer:
 
                     # Calculate new banana
                     import re
-                    new_banana = re.sub(r'[^a-zA-Z0-9]', '', new_name).lower() + new_state.upper()
+
+                    new_banana = (
+                        re.sub(r"[^a-zA-Z0-9]", "", new_name).lower()
+                        + new_state.upper()
+                    )
 
                     # Update with new banana
                     cursor.execute(
@@ -334,9 +346,18 @@ class DatabaseViewer:
                     )
 
                     # Update foreign keys in other tables
-                    cursor.execute("UPDATE zipcodes SET banana = ? WHERE banana = ?", (new_banana, current_banana))
-                    cursor.execute("UPDATE meetings SET banana = ? WHERE banana = ?", (new_banana, current_banana))
-                    cursor.execute("UPDATE queue SET banana = ? WHERE banana = ?", (new_banana, current_banana))
+                    cursor.execute(
+                        "UPDATE zipcodes SET banana = ? WHERE banana = ?",
+                        (new_banana, current_banana),
+                    )
+                    cursor.execute(
+                        "UPDATE meetings SET banana = ? WHERE banana = ?",
+                        (new_banana, current_banana),
+                    )
+                    cursor.execute(
+                        "UPDATE queue SET banana = ? WHERE banana = ?",
+                        (new_banana, current_banana),
+                    )
 
                     print(f"Updated city and banana: {current_banana} → {new_banana}")
                     current_banana = new_banana
@@ -370,46 +391,58 @@ class DatabaseViewer:
         # Search cities
         all_cities = self.db.get_cities(limit=1000)
         for city in all_cities:
-            if (query.lower() in city.name.lower() or
-                query.lower() in city.state.lower() or
-                query.lower() in city.banana.lower() or
-                query.lower() in city.slug.lower() or
-                query.lower() in city.vendor.lower()):
-                results.append({
-                    "type": "CITY",
-                    "id": city.banana,
-                    "name": f"{city.name}, {city.state}",
-                    "info": f"{city.banana} ({city.vendor})",
-                    "extra": city.slug
-                })
+            if (
+                query.lower() in city.name.lower()
+                or query.lower() in city.state.lower()
+                or query.lower() in city.banana.lower()
+                or query.lower() in city.slug.lower()
+                or query.lower() in city.vendor.lower()
+            ):
+                results.append(
+                    {
+                        "type": "CITY",
+                        "id": city.banana,
+                        "name": f"{city.name}, {city.state}",
+                        "info": f"{city.banana} ({city.vendor})",
+                        "extra": city.slug,
+                    }
+                )
 
         # Search zipcodes
         for city in all_cities:
             zipcodes = self.db.get_city_zipcodes(city.banana)
             for zipcode in zipcodes:
                 if query in zipcode:
-                    results.append({
-                        "type": "ZIPCODE",
-                        "id": zipcode,
-                        "name": zipcode,
-                        "info": f"{city.name}, {city.state}",
-                        "extra": city.banana
-                    })
+                    results.append(
+                        {
+                            "type": "ZIPCODE",
+                            "id": zipcode,
+                            "name": zipcode,
+                            "info": f"{city.name}, {city.state}",
+                            "extra": city.banana,
+                        }
+                    )
 
         # Search meetings
         meetings = self.db.get_meetings(limit=500)
         for meeting in meetings:
-            if (query.lower() in meeting.title.lower() if meeting.title else False) or query.lower() in meeting.banana.lower():
+            if (
+                query.lower() in meeting.title.lower() if meeting.title else False
+            ) or query.lower() in meeting.banana.lower():
                 city = self.db.get_city(banana=meeting.banana)
                 city_display = f"{city.name}, {city.state}" if city else meeting.banana
 
-                results.append({
-                    "type": "MEETING",
-                    "id": meeting.id[:10],
-                    "name": meeting.title[:40] if meeting.title else "Unknown",
-                    "info": city_display,
-                    "extra": meeting.date.strftime("%Y-%m-%d") if meeting.date else ""
-                })
+                results.append(
+                    {
+                        "type": "MEETING",
+                        "id": meeting.id[:10],
+                        "name": meeting.title[:40] if meeting.title else "Unknown",
+                        "info": city_display,
+                        "extra": meeting.date.strftime("%Y-%m-%d")
+                        if meeting.date
+                        else "",
+                    }
+                )
 
         if not results:
             print("No results found")
@@ -444,16 +477,20 @@ class DatabaseViewer:
         cursor = conn.cursor()
 
         cursor.execute("SELECT COUNT(*) as count FROM zipcodes")
-        zipcode_count = cursor.fetchone()['count']
+        zipcode_count = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(DISTINCT vendor) as count FROM cities WHERE vendor IS NOT NULL")
-        vendor_count = cursor.fetchone()['count']
+        cursor.execute(
+            "SELECT COUNT(DISTINCT vendor) as count FROM cities WHERE vendor IS NOT NULL"
+        )
+        vendor_count = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT vendor, COUNT(*) as count FROM cities WHERE vendor IS NOT NULL GROUP BY vendor ORDER BY count DESC")
+        cursor.execute(
+            "SELECT vendor, COUNT(*) as count FROM cities WHERE vendor IS NOT NULL GROUP BY vendor ORDER BY count DESC"
+        )
         vendor_breakdown = cursor.fetchall()
 
         cursor.execute("SELECT COUNT(*) as count FROM items")
-        item_count = cursor.fetchone()['count']
+        item_count = cursor.fetchone()["count"]
 
         print(f"Zipcodes:            {zipcode_count}")
         print(f"Agenda items:        {item_count}")
@@ -461,10 +498,12 @@ class DatabaseViewer:
 
         if vendor_breakdown:
             print("\nVendor breakdown:")
-            total_cities = stats.get('active_cities', 1)
+            total_cities = stats.get("active_cities", 1)
             for vendor in vendor_breakdown:
-                percentage = (vendor['count'] / total_cities) * 100
-                print(f"  {vendor['vendor']:<15} {vendor['count']:>4} cities ({percentage:.1f}%)")
+                percentage = (vendor["count"] / total_cities) * 100
+                print(
+                    f"  {vendor['vendor']:<15} {vendor['count']:>4} cities ({percentage:.1f}%)"
+                )
 
         # Queue stats
         queue_stats = self.db.get_queue_stats()
@@ -539,7 +578,9 @@ def main():
             viewer.show_zipcodes_table(limit)
 
         elif choice == "3":
-            city_filter = input("Filter by city (optional, press Enter to skip): ").strip()
+            city_filter = input(
+                "Filter by city (optional, press Enter to skip): "
+            ).strip()
             limit = input("How many meetings? (default 20): ").strip()
             limit = int(limit) if limit.isdigit() else 20
             viewer.show_meetings_table(limit, city_filter if city_filter else None)

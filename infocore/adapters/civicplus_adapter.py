@@ -11,6 +11,7 @@ This adapter handles:
 import re
 from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import urlparse, urljoin
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from infocore.adapters.base_adapter import BaseAdapter, logger
 
@@ -67,7 +68,9 @@ class CivicPlusAdapter(BaseAdapter):
                                 break
 
         except Exception as e:
-            logger.debug(f"[civicplus:{self.slug}] Could not check for external system: {e}")
+            logger.debug(
+                f"[civicplus:{self.slug}] Could not check for external system: {e}"
+            )
 
     def _find_agenda_url(self) -> Optional[str]:
         """
@@ -89,7 +92,10 @@ class CivicPlusAdapter(BaseAdapter):
             test_url = f"{self.base_url}{pattern}"
             try:
                 response = self._get(test_url)
-                if response.status_code == 200 and ("agenda" in response.text.lower() or "meeting" in response.text.lower()):
+                if response.status_code == 200 and (
+                    "agenda" in response.text.lower()
+                    or "meeting" in response.text.lower()
+                ):
                     logger.info(f"[civicplus:{self.slug}] Found agenda page: {pattern}")
                     return test_url
             except Exception:
@@ -100,36 +106,61 @@ class CivicPlusAdapter(BaseAdapter):
 
     def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
         """
-        Fetch meetings from CivicPlus site.
+        Fetch meetings from CivicPlus site with date filtering.
 
-        This is complex because CivicPlus sites vary widely in structure.
+        Uses AgendaCenter Search endpoint to limit results to recent meetings only.
+        Default: today to 2 weeks forward.
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url
         """
         agenda_url = self._find_agenda_url()
         if not agenda_url:
-            logger.error(f"[civicplus:{self.slug}] No agenda page found - cannot fetch meetings")
+            logger.error(
+                f"[civicplus:{self.slug}] No agenda page found - cannot fetch meetings"
+            )
             return
 
         try:
-            soup = self._fetch_html(agenda_url)
+            # Calculate date range: today to 2 weeks from now
+            today = datetime.now()
+            end_date = today + timedelta(weeks=2)
+
+            # Format dates as MM/DD/YYYY for CivicPlus
+            start_str = today.strftime("%m/%d/%Y")
+            end_str = end_date.strftime("%m/%d/%Y")
+
+            # Use Search endpoint with date filters if /AgendaCenter exists
+            if "/AgendaCenter" in agenda_url:
+                search_url = f"{self.base_url}/AgendaCenter/Search/?term=&CIDs=all&startDate={start_str}&endDate={end_str}"
+                logger.info(
+                    f"[civicplus:{self.slug}] Using date-filtered search: {start_str} to {end_str}"
+                )
+                soup = self._fetch_html(search_url)
+            else:
+                soup = self._fetch_html(agenda_url)
 
             # Try to find meeting links
             meeting_links = self._extract_meeting_links(soup, agenda_url)
 
-            logger.info(f"[civicplus:{self.slug}] Found {len(meeting_links)} potential meeting links")
+            logger.info(
+                f"[civicplus:{self.slug}] Found {len(meeting_links)} potential meeting links"
+            )
 
             for link_data in meeting_links:
                 # Try to extract meeting info and PDFs
-                meeting = self._scrape_meeting_page(link_data["url"], link_data["title"])
+                meeting = self._scrape_meeting_page(
+                    link_data["url"], link_data["title"]
+                )
                 if meeting:
                     yield meeting
 
         except Exception as e:
             logger.error(f"[civicplus:{self.slug}] Failed to fetch meetings: {e}")
 
-    def _extract_meeting_links(self, soup: BeautifulSoup, base_url: str) -> List[Dict[str, str]]:
+    def _extract_meeting_links(
+        self, soup: BeautifulSoup, base_url: str
+    ) -> List[Dict[str, str]]:
         """
         Extract meeting detail page links from agenda listing.
 
