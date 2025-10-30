@@ -241,12 +241,15 @@ body {
 }
 
 .meeting-date-time {
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 0.85rem;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+	font-size: 0.95rem;
 	font-weight: 500;
 	color: var(--civic-gray);
 	white-space: nowrap;
 	flex-shrink: 0;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
 }
 
 .meeting-status {

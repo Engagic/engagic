@@ -184,6 +184,11 @@
 								<h3 class="past-meetings-divider">Past Meetings</h3>
 							{/if}
 							{#each pastMeetings as meeting, index}
+								{@const date = meeting.date ? new Date(meeting.date) : null}
+								{@const isValidDate = date && !isNaN(date.getTime()) && date.getTime() !== 0}
+								{@const dayOfWeek = isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null}
+								{@const monthDay = isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null}
+								{@const timeStr = extractTime(meeting.date)}
 								<a
 									href="/{city_url}/{generateMeetingSlug(meeting)}"
 									class="meeting-card past-meeting"
@@ -194,9 +199,9 @@
 										<div class="meeting-title">
 											{meeting.title}
 										</div>
-										{#if formatMeetingDate(meeting.date) !== 'Date TBD'}
+										{#if isValidDate}
 											<div class="meeting-date-time">
-												{formatMeetingDate(meeting.date)}{#if extractTime(meeting.date)} • {extractTime(meeting.date)}{/if}
+												{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
 											</div>
 										{/if}
 									</div>
@@ -219,6 +224,11 @@
 						{/if}
 						
 						{#each upcomingMeetings as meeting, index}
+							{@const date = meeting.date ? new Date(meeting.date) : null}
+							{@const isValidDate = date && !isNaN(date.getTime()) && date.getTime() !== 0}
+							{@const dayOfWeek = isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null}
+							{@const monthDay = isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null}
+							{@const timeStr = extractTime(meeting.date)}
 							<a
 								href="/{city_url}/{generateMeetingSlug(meeting)}"
 								class="meeting-card upcoming-meeting"
@@ -229,9 +239,9 @@
 									<div class="meeting-title">
 										{meeting.title}
 									</div>
-									{#if formatMeetingDate(meeting.date) !== 'Date TBD'}
+									{#if isValidDate}
 										<div class="meeting-date-time">
-											{formatMeetingDate(meeting.date)}{#if extractTime(meeting.date)} • {extractTime(meeting.date)}{/if}
+											{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
 										</div>
 									{/if}
 								</div>
