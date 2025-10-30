@@ -335,7 +335,7 @@
 	}
 
 
-	@media (max-width: 768px) {
+	@media (max-width: 640px) {
 		.about-container {
 			padding: 1rem 0.5rem;
 		}
