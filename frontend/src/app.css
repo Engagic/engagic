@@ -1,5 +1,6 @@
 @import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
 
 :root {
 	--civic-blue: #4f46e5;
@@ -34,7 +35,6 @@ body {
 
 .container {
 	max-width: 1000px;
-	min-width: 800px;
 	width: 100%;
 	padding: 4rem 1rem;
 	min-height: 100vh;
@@ -202,9 +202,9 @@ body {
 }
 
 .meeting-card {
-	display: block !important;
-	width: 100% !important;
-	max-width: none !important;
+	display: block;
+	width: 100%;
+	max-width: none;
 	box-sizing: border-box;
 	background: var(--civic-white);
 	border: 1px solid var(--civic-border);
@@ -562,6 +562,12 @@ body {
 	font-size: 0.85rem;
 	color: var(--civic-gray);
 	margin: 0;
+}
+
+@media (max-width: 900px) {
+	.container {
+		padding: 3rem 1.5rem;
+	}
 }
 
 @media (max-width: 640px) {
