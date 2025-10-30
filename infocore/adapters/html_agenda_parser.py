@@ -279,6 +279,7 @@ def parse_granicus_html_agenda(html: str) -> Dict[str, Any]:
                         'name': link_text or f"Attachment {sequence}",
                         'url': href,
                         'meta_id': meta_id,
+                        'type': 'pdf',  # MetaViewer links are PDFs - conductor needs this for extraction
                     })
 
         items.append({
