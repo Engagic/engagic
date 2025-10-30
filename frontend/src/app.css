@@ -236,7 +236,7 @@ body {
 	font-weight: 700;
 	color: var(--civic-dark);
 	line-height: 1.4;
-	letter-spacing: 0.01em;
+	letter-spacing: 0.026em;
 	flex: 1;
 	min-width: 0;
 	-webkit-font-smoothing: antialiased;
@@ -247,7 +247,7 @@ body {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 	font-size: 0.95rem;
 	font-weight: 600;
-	color: #e65100;
+	color: oklab(68.601% 0.15852 0.13842);
 	white-space: nowrap;
 	flex-shrink: 0;
 	-webkit-font-smoothing: antialiased;
