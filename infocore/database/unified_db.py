@@ -88,6 +88,7 @@ class Meeting:
     status: Optional[str] = (
         None  # cancelled, postponed, revised, rescheduled, or None for normal
     )
+    topics: Optional[List[str]] = None  # Aggregated topics from agenda items
     processing_status: str = "pending"  # pending, processing, completed, failed
     processing_method: Optional[str] = (
         None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
@@ -130,6 +131,17 @@ class Meeting:
                 logger.warning(f"Failed to deserialize participation JSON: {participation}")
                 participation = None
 
+        # Deserialize topics if it's JSON
+        topics = row_dict.get("topics")
+        if topics:
+            try:
+                topics = json.loads(topics)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize topics JSON: {topics}")
+                topics = None
+        else:
+            topics = None
+
         return cls(
             id=row_dict["id"],
             banana=row_dict["banana"],
@@ -141,6 +153,7 @@ class Meeting:
             summary=row_dict.get("summary"),
             participation=participation,
             status=row_dict.get("status"),
+            topics=topics,
             processing_status=row_dict.get("processing_status", "pending"),
             processing_method=row_dict.get("processing_method"),
             processing_time=row_dict.get("processing_time"),
@@ -282,6 +295,7 @@ class UnifiedDatabase:
             summary TEXT,
             participation TEXT,
             status TEXT,
+            topics TEXT,
             processing_status TEXT DEFAULT 'pending',
             processing_method TEXT,
             processing_time REAL,
@@ -684,17 +698,18 @@ class UnifiedDatabase:
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
-        # Serialize participation to JSON if present
+        # Serialize JSON fields
         participation_json = (
             json.dumps(meeting.participation) if meeting.participation else None
         )
+        topics_json = json.dumps(meeting.topics) if meeting.topics else None
 
         cursor.execute(
             """
             INSERT OR REPLACE INTO meetings
-            (id, banana, title, date, packet_url, summary, participation, status,
+            (id, banana, title, date, packet_url, summary, participation, status, topics,
              processing_status, processing_method, processing_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 meeting.id,
@@ -705,6 +720,7 @@ class UnifiedDatabase:
                 meeting.summary,
                 participation_json,
                 meeting.status,
+                topics_json,
                 meeting.processing_status,
                 meeting.processing_method,
                 meeting.processing_time,
@@ -725,25 +741,28 @@ class UnifiedDatabase:
         processing_method: str,
         processing_time: float,
         participation: Optional[Dict[str, Any]] = None,
+        topics: Optional[List[str]] = None,
     ):
-        """Update meeting with processed summary and optional participation info"""
+        """Update meeting with processed summary, topics, and optional participation info"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
         participation_json = json.dumps(participation) if participation else None
+        topics_json = json.dumps(topics) if topics else None
 
         cursor.execute(
             """
             UPDATE meetings
             SET summary = ?,
                 participation = ?,
+                topics = ?,
                 processing_status = 'completed',
                 processing_method = ?,
                 processing_time = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """,
-            (summary, participation_json, processing_method, processing_time, meeting_id),
+            (summary, participation_json, topics_json, processing_method, processing_time, meeting_id),
         )
 
         self.conn.commit()
