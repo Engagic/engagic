@@ -84,6 +84,7 @@ class Meeting:
         str | List[str]
     ]  # Single URL or list for multiple PDFs (main + supplemental)
     summary: Optional[str] = None
+    participation: Optional[Dict[str, Any]] = None  # Contact info: email, phone, virtual_url, etc.
     status: Optional[str] = (
         None  # cancelled, postponed, revised, rescheduled, or None for normal
     )
@@ -120,6 +121,15 @@ class Meeting:
                 logger.warning(f"Failed to deserialize packet_url JSON: {packet_url}")
                 pass  # Keep as string if JSON parsing fails
 
+        # Deserialize participation if it's JSON
+        participation = row_dict.get("participation")
+        if participation:
+            try:
+                participation = json.loads(participation)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize participation JSON: {participation}")
+                participation = None
+
         return cls(
             id=row_dict["id"],
             banana=row_dict["banana"],
@@ -129,6 +139,7 @@ class Meeting:
             else None,
             packet_url=packet_url,
             summary=row_dict.get("summary"),
+            participation=participation,
             status=row_dict.get("status"),
             processing_status=row_dict.get("processing_status", "pending"),
             processing_method=row_dict.get("processing_method"),
@@ -269,6 +280,7 @@ class UnifiedDatabase:
             date TIMESTAMP,
             packet_url TEXT,
             summary TEXT,
+            participation TEXT,
             status TEXT,
             processing_status TEXT DEFAULT 'pending',
             processing_method TEXT,
@@ -672,12 +684,17 @@ class UnifiedDatabase:
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
+        # Serialize participation to JSON if present
+        participation_json = (
+            json.dumps(meeting.participation) if meeting.participation else None
+        )
+
         cursor.execute(
             """
             INSERT OR REPLACE INTO meetings
-            (id, banana, title, date, packet_url, summary, status,
+            (id, banana, title, date, packet_url, summary, participation, status,
              processing_status, processing_method, processing_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 meeting.id,
@@ -686,6 +703,7 @@ class UnifiedDatabase:
                 meeting.date.isoformat() if meeting.date else None,
                 meeting.packet_url,
                 meeting.summary,
+                participation_json,
                 meeting.status,
                 meeting.processing_status,
                 meeting.processing_method,
@@ -706,22 +724,26 @@ class UnifiedDatabase:
         summary: str,
         processing_method: str,
         processing_time: float,
+        participation: Optional[Dict[str, Any]] = None,
     ):
-        """Update meeting with processed summary"""
+        """Update meeting with processed summary and optional participation info"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
+
+        participation_json = json.dumps(participation) if participation else None
 
         cursor.execute(
             """
             UPDATE meetings
             SET summary = ?,
+                participation = ?,
                 processing_status = 'completed',
                 processing_method = ?,
                 processing_time = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """,
-            (summary, processing_method, processing_time, meeting_id),
+            (summary, participation_json, processing_method, processing_time, meeting_id),
         )
 
         self.conn.commit()

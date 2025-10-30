@@ -26,6 +26,7 @@ from infocore.config import config
 from infocore.processing.pdf_extractor import PdfExtractor
 from infocore.processing.summarizer import GeminiSummarizer
 from infocore.processing.chunker import AgendaChunker
+from infocore.processing.participation_parser import parse_participation_info
 
 logger = logging.getLogger("engagic")
 
@@ -91,20 +92,22 @@ class AgendaProcessor:
         start_time = time.time()
 
         try:
-            # Process the agenda
-            summary, method = self.process_agenda(packet_url)
+            # Process the agenda (returns summary, method, participation)
+            summary, method, participation = self.process_agenda(packet_url)
 
             # Store in database
             processing_time = time.time() - start_time
             meeting_data["processed_summary"] = summary
             meeting_data["processing_time_seconds"] = processing_time
             meeting_data["processing_method"] = method
+            if participation:
+                meeting_data["participation"] = participation
 
-            # Update meeting with summary
+            # Update meeting with summary and participation
             meeting_id = meeting_data.get("meeting_id")
             if meeting_id:
                 self.db.update_meeting_summary(
-                    meeting_id, summary, method, processing_time
+                    meeting_id, summary, method, processing_time, participation
                 )
 
             # Store in cache
@@ -134,7 +137,7 @@ class AgendaProcessor:
                 "cached": False,
             }
 
-    def process_agenda(self, url: Union[str, List[str]]) -> tuple[str, str]:
+    def process_agenda(self, url: Union[str, List[str]]) -> tuple[str, str, Optional[Dict[str, Any]]]:
         """Process agenda using Tier 1 (PyMuPDF + Gemini) - fail fast approach
 
         FREE TIER STRATEGY:
@@ -146,7 +149,7 @@ class AgendaProcessor:
             url: Single URL string or list of URLs
 
         Returns:
-            Tuple of (summary, method_used)
+            Tuple of (summary, method_used, participation_info)
 
         Raises:
             ProcessingError: If Tier 1 fails (document requires paid tier)
@@ -159,13 +162,22 @@ class AgendaProcessor:
         try:
             result = self.pdf_extractor.extract_from_url(url)
             if result.get("success") and result.get("text"):
-                summary = self.summarizer.summarize_meeting(result["text"])
+                extracted_text = result["text"]
+
+                # Parse participation info BEFORE AI summarization
+                participation = parse_participation_info(extracted_text)
+                if participation:
+                    logger.debug(f"[Participation] Extracted info: {list(participation.keys())}")
+
+                # Summarize meeting
+                summary = self.summarizer.summarize_meeting(extracted_text)
                 logger.info(f"[Tier1] SUCCESS - {url}")
 
                 # Cleanup: free PDF text memory
                 del result
+                del extracted_text
 
-                return summary, "tier1_pymupdf_gemini"
+                return summary, "tier1_pymupdf_gemini", participation
             else:
                 logger.warning(
                     f"[Tier1] FAILED - No text extracted or poor quality - {url}"
@@ -181,7 +193,7 @@ class AgendaProcessor:
             "This PDF may be scanned or have complex formatting that requires OCR."
         )
 
-    def _process_multiple_pdfs(self, urls: List[str]) -> tuple[str, str]:
+    def _process_multiple_pdfs(self, urls: List[str]) -> tuple[str, str, Optional[Dict[str, Any]]]:
         """Process multiple PDFs by extracting all text first, then summarizing with full context
 
         Strategy: Most multi-PDF cases are main agenda + supplemental materials.
@@ -232,6 +244,11 @@ class AgendaProcessor:
             f"[Tier1] Combined {len(all_text_parts)}/{len(urls)} documents ({len(combined_text)} chars total)"
         )
 
+        # Parse participation info from combined text BEFORE summarization
+        participation = parse_participation_info(combined_text)
+        if participation:
+            logger.debug(f"[Participation] Extracted from {len(urls)} PDFs: {list(participation.keys())}")
+
         # Summarize with full context (model sees all documents at once)
         summary = self.summarizer.summarize_meeting(combined_text)
 
@@ -247,7 +264,7 @@ class AgendaProcessor:
         del all_text_parts
         del combined_text
 
-        return summary, f"multiple_pdfs_{len(urls)}_combined"
+        return summary, f"multiple_pdfs_{len(urls)}_combined", participation
 
     def process_agenda_item(
         self, item_data: Dict[str, Any], city_banana: str
