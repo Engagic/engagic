@@ -60,11 +60,9 @@ class PrimeGovAdapter(BaseAdapter):
                 (
                     doc
                     for doc in meeting.get("documentList", [])
-                    if "Packet" in doc.get("templateName", "")
-                    or (
-                        "html" not in doc.get("templateName", "").lower()
-                        and "agenda" in doc.get("templateName", "").lower()
-                    )
+                    if "HTML Agenda" in doc.get("templateName", "")
+                    or "packet" in doc.get("templateName", "").lower()
+                    or "agenda" in doc.get("templateName", "").lower()
                 ),
                 None,
             )
