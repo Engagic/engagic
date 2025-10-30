@@ -42,33 +42,43 @@ Current approach:
 
 ## Current State by Vendor
 
-### Legistar (Already Works!)
+### Legistar (Already Works!) ✅
 - ✅ API returns structured items
 - ✅ `fetch_event_items()` → `fetch_matter_attachments()`
 - ✅ Item-level processing already implemented in conductor
 - ✅ Stores in `agenda_items` table
+- **Coverage:** 110 cities
 
 **Code:** `infocore/adapters/legistar_adapter.py:105-150`
 
-### PrimeGov (HTML Available!)
-- ✅ Has "HTML Agenda" document type
-- ❌ Currently only fetches packet
-- 🔨 **TODO:** Fetch HTML Agenda, parse structure, extract item+attachments
+### PrimeGov (OPERATIONAL!) ✅
+- ✅ Has "HTML Agenda" document type in documentList
+- ✅ Uses `/Portal/Meeting?meetingTemplateId=X` endpoint (NOT `/Public/CompiledDocument`)
+- ✅ Parser extracts `<div class="agenda-item">` elements
+- ✅ Attachments via `/api/compilemeetingattachmenthistory/historyattachment/?historyId=UUID`
+- ✅ Returns items array like Legistar
+- ✅ Participation info extracted (email, phone, zoom, hybrid)
+- **Coverage:** 64 cities
+- **Tested:** Palo Alto City Council (17 items), Finance Committee (2 items)
 
-**Example:** Palo Alto, CA - `cityofpaloalto.primegov.com`
+**Code:** `infocore/adapters/primegov_adapter.py`, `infocore/adapters/html_agenda_parser.py`
 
-### CivicClerk (Check for HTML)
-- ✅ Has `publishedFiles` array
-- ❓ Need to check if HTML agenda type exists
-- ❓ Currently only grabs "Agenda Packet" or "Agenda"
+### CivicClerk (API Available!)
+- ✅ Has `/v1/Meetings/{id}` endpoint with `items` array
+- ✅ Structured JSON like Legistar (not HTML parsing needed)
+- ❌ Tested meetings have empty items array (not populated)
+- 🔨 **TODO:** Find cities with populated items, add `fetch_event_items()` method
+- **Coverage:** 16 cities
+- **Example:** Amarillo, TX - `amarillotx.api.civicclerk.com`
 
-**Example:** Montpelier, VT - `montpelliervt.api.civicclerk.com`
-
-### Granicus (Already Deep Scrapes!)
+### Granicus (HIGHEST PRIORITY - 467 cities!)
 - ✅ `_extract_pdfs_from_agenda_viewer()` already exists
 - ✅ Scrapes agenda viewer page for PDFs
 - ❌ Doesn't connect PDFs to specific items
-- 🔨 **TODO:** Parse HTML structure to map attachments to items
+- ❌ Many cities have broken ViewPublisher URLs
+- 🔨 **TODO:** Parse HTML agenda viewer structure to map items → attachments
+- **Coverage:** 467 cities (LARGEST vendor)
+- **Challenge:** HTML scraping, no clean API like Legistar/CivicClerk
 
 **Code:** `infocore/adapters/granicus_adapter.py:215-240`
 
