@@ -1,0 +1,242 @@
+{
+  "taxonomy": {
+    "housing": {
+      "canonical": "housing",
+      "display_name": "Housing & Development",
+      "synonyms": [
+        "affordable housing",
+        "housing affordability",
+        "low-income housing",
+        "workforce housing",
+        "subsidized housing",
+        "housing development",
+        "residential development",
+        "multifamily housing",
+        "senior housing",
+        "homeless services",
+        "homelessness"
+      ]
+    },
+    "zoning": {
+      "canonical": "zoning",
+      "display_name": "Zoning & Land Use",
+      "synonyms": [
+        "rezoning",
+        "zoning changes",
+        "land use",
+        "zoning ordinance",
+        "zoning amendment",
+        "conditional use permit",
+        "variance",
+        "general plan",
+        "comprehensive plan"
+      ]
+    },
+    "transportation": {
+      "canonical": "transportation",
+      "display_name": "Transportation & Traffic",
+      "synonyms": [
+        "traffic",
+        "traffic safety",
+        "road improvements",
+        "street maintenance",
+        "bike lanes",
+        "bicycle infrastructure",
+        "pedestrian safety",
+        "public transit",
+        "transit",
+        "parking",
+        "parking regulations"
+      ]
+    },
+    "budget": {
+      "canonical": "budget",
+      "display_name": "Budget & Finance",
+      "synonyms": [
+        "budget allocation",
+        "fiscal policy",
+        "spending",
+        "appropriations",
+        "revenue",
+        "taxes",
+        "tax revenue",
+        "financial report",
+        "audit",
+        "bonds",
+        "municipal bonds"
+      ]
+    },
+    "public_safety": {
+      "canonical": "public_safety",
+      "display_name": "Public Safety",
+      "synonyms": [
+        "police",
+        "police budget",
+        "law enforcement",
+        "fire department",
+        "emergency services",
+        "public safety",
+        "crime prevention",
+        "911 services"
+      ]
+    },
+    "environment": {
+      "canonical": "environment",
+      "display_name": "Environment & Sustainability",
+      "synonyms": [
+        "environmental",
+        "sustainability",
+        "climate action",
+        "climate change",
+        "green infrastructure",
+        "renewable energy",
+        "solar",
+        "recycling",
+        "waste management",
+        "water conservation",
+        "air quality",
+        "pollution"
+      ]
+    },
+    "parks": {
+      "canonical": "parks",
+      "display_name": "Parks & Recreation",
+      "synonyms": [
+        "parks and recreation",
+        "recreation",
+        "playground",
+        "community center",
+        "sports facilities",
+        "open space",
+        "trails",
+        "green space"
+      ]
+    },
+    "utilities": {
+      "canonical": "utilities",
+      "display_name": "Utilities & Infrastructure",
+      "synonyms": [
+        "water",
+        "sewer",
+        "wastewater",
+        "stormwater",
+        "drainage",
+        "utilities",
+        "infrastructure",
+        "public works"
+      ]
+    },
+    "economic_development": {
+      "canonical": "economic_development",
+      "display_name": "Economic Development",
+      "synonyms": [
+        "business development",
+        "downtown revitalization",
+        "commercial development",
+        "retail",
+        "small business",
+        "economic growth",
+        "jobs"
+      ]
+    },
+    "education": {
+      "canonical": "education",
+      "display_name": "Education & Schools",
+      "synonyms": [
+        "schools",
+        "school district",
+        "education",
+        "library",
+        "public library",
+        "youth programs"
+      ]
+    },
+    "health": {
+      "canonical": "health",
+      "display_name": "Public Health",
+      "synonyms": [
+        "public health",
+        "health services",
+        "healthcare",
+        "mental health",
+        "covid",
+        "pandemic response"
+      ]
+    },
+    "planning": {
+      "canonical": "planning",
+      "display_name": "City Planning",
+      "synonyms": [
+        "city planning",
+        "urban planning",
+        "master plan",
+        "development plan",
+        "planning commission"
+      ]
+    },
+    "permits": {
+      "canonical": "permits",
+      "display_name": "Permits & Licensing",
+      "synonyms": [
+        "building permit",
+        "permits",
+        "licensing",
+        "business license",
+        "code enforcement",
+        "inspections"
+      ]
+    },
+    "contracts": {
+      "canonical": "contracts",
+      "display_name": "Contracts & Procurement",
+      "synonyms": [
+        "procurement",
+        "contract award",
+        "vendor",
+        "bid",
+        "rfp",
+        "request for proposal",
+        "professional services agreement"
+      ]
+    },
+    "appointments": {
+      "canonical": "appointments",
+      "display_name": "Appointments & Personnel",
+      "synonyms": [
+        "hiring",
+        "personnel",
+        "staff",
+        "commission appointment",
+        "board appointment",
+        "city manager",
+        "city attorney"
+      ]
+    },
+    "other": {
+      "canonical": "other",
+      "display_name": "Other",
+      "synonyms": [
+        "miscellaneous",
+        "general",
+        "administrative"
+      ]
+    }
+  },
+  "prompt_examples": [
+    "housing",
+    "zoning",
+    "transportation",
+    "budget",
+    "public_safety",
+    "environment",
+    "parks",
+    "utilities",
+    "economic_development",
+    "education",
+    "health",
+    "planning",
+    "permits",
+    "contracts",
+    "appointments"
+  ]
+}

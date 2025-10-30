@@ -898,6 +898,175 @@ async def get_queue_stats():
         raise HTTPException(status_code=500, detail="Error fetching queue statistics")
 
 
+@app.get("/api/topics")
+async def get_all_topics():
+    """Get all available canonical topics for browsing/filtering"""
+    try:
+        from infocore.processing.topic_normalizer import get_normalizer
+
+        normalizer = get_normalizer()
+        all_topics = normalizer.get_all_canonical_topics()
+
+        # Build response with display names
+        topics_with_display = [
+            {
+                "canonical": topic,
+                "display_name": normalizer.get_display_name(topic)
+            }
+            for topic in all_topics
+        ]
+
+        return {
+            "success": True,
+            "topics": topics_with_display,
+            "count": len(topics_with_display)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching topics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching topics")
+
+
+class TopicSearchRequest(BaseModel):
+    topic: str
+    banana: Optional[str] = None  # Filter by city
+    limit: int = 50
+
+    @validator("topic")
+    def validate_topic(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Topic cannot be empty")
+        return sanitize_string(v)
+
+
+@app.post("/api/search/by-topic")
+async def search_by_topic(request: TopicSearchRequest):
+    """Search meetings by topic (Phase 1 - Topic Extraction)"""
+    try:
+        from infocore.processing.topic_normalizer import get_normalizer
+
+        # Normalize the search topic
+        normalizer = get_normalizer()
+        normalized_topic = normalizer.normalize_single(request.topic)
+
+        logger.info(f"Topic search: '{request.topic}' -> '{normalized_topic}', city: {request.banana}")
+
+        # Build SQL query to find meetings with this topic
+        conditions = []
+        params = []
+
+        # Topic match (check if JSON array contains the topic)
+        # SQLite JSON support: json_each to expand array
+        conditions.append("EXISTS (SELECT 1 FROM json_each(meetings.topics) WHERE value = ?)")
+        params.append(normalized_topic)
+
+        # City filter
+        if request.banana:
+            conditions.append("meetings.banana = ?")
+            params.append(request.banana)
+
+        # Only return meetings with topics
+        conditions.append("meetings.topics IS NOT NULL")
+
+        where_clause = " AND ".join(conditions)
+
+        query = f"""
+            SELECT * FROM meetings
+            WHERE {where_clause}
+            ORDER BY date DESC
+            LIMIT ?
+        """
+        params.append(request.limit)
+
+        cursor = db.conn.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        meetings = [Meeting.from_db_row(row) for row in rows]
+
+        # For each meeting, get the items that match this topic
+        results = []
+        for meeting in meetings:
+            # Get items with this topic
+            items_query = """
+                SELECT * FROM items
+                WHERE meeting_id = ?
+                AND EXISTS (SELECT 1 FROM json_each(items.topics) WHERE value = ?)
+                ORDER BY sequence ASC
+            """
+            cursor.execute(items_query, (meeting.id, normalized_topic))
+            item_rows = cursor.fetchall()
+
+            from infocore.database.unified_db import AgendaItem
+            matching_items = [AgendaItem.from_db_row(row) for row in item_rows]
+
+            results.append({
+                "meeting": meeting.to_dict(),
+                "matching_items": [
+                    {
+                        "id": item.id,
+                        "title": item.title,
+                        "sequence": item.sequence,
+                        "summary": item.summary,
+                        "topics": item.topics
+                    }
+                    for item in matching_items
+                ]
+            })
+
+        return {
+            "success": True,
+            "query": request.topic,
+            "normalized_topic": normalized_topic,
+            "display_name": normalizer.get_display_name(normalized_topic),
+            "results": results,
+            "count": len(results)
+        }
+
+    except Exception as e:
+        logger.error(f"Error searching by topic '{request.topic}': {str(e)}")
+        raise HTTPException(status_code=500, detail="Error searching by topic")
+
+
+@app.get("/api/topics/popular")
+async def get_popular_topics():
+    """Get most common topics across all meetings (for UI suggestions)"""
+    try:
+        # Query to count topic frequency across all meetings
+        cursor = db.conn.cursor()
+        cursor.execute("""
+            SELECT value as topic, COUNT(*) as count
+            FROM meetings, json_each(meetings.topics)
+            WHERE meetings.topics IS NOT NULL
+            GROUP BY value
+            ORDER BY count DESC
+            LIMIT 20
+        """)
+
+        rows = cursor.fetchall()
+
+        from infocore.processing.topic_normalizer import get_normalizer
+        normalizer = get_normalizer()
+
+        popular_topics = [
+            {
+                "topic": row["topic"],
+                "display_name": normalizer.get_display_name(row["topic"]),
+                "count": row["count"]
+            }
+            for row in rows
+        ]
+
+        return {
+            "success": True,
+            "topics": popular_topics,
+            "count": len(popular_topics)
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching popular topics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching popular topics")
+
+
 @app.get("/")
 async def root():
     """API status and info"""
@@ -911,6 +1080,9 @@ async def root():
             "search": "POST /api/search - Search for meetings by zipcode or city name",
             "process": "POST /api/process-agenda - Get cached meeting agenda summary",
             "random_best": "GET /api/random-best-meeting - Get a random high-quality meeting for showcasing",
+            "topics": "GET /api/topics - Get all available topics for filtering",
+            "topics_popular": "GET /api/topics/popular - Get most common topics across all meetings",
+            "search_by_topic": "POST /api/search/by-topic - Search meetings by topic",
             "stats": "GET /api/stats - System statistics and metrics",
             "queue_stats": "GET /api/queue-stats - Processing queue statistics",
             "health": "GET /api/health - Health check with detailed status",

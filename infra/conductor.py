@@ -12,6 +12,7 @@ from collections import defaultdict
 
 from infocore.database import UnifiedDatabase, City, Meeting
 from infocore.processing.processor import AgendaProcessor
+from infocore.processing.topic_normalizer import get_normalizer
 from infocore.adapters.all_adapters import (
     PrimeGovAdapter,
     CivicClerkAdapter,
@@ -1101,11 +1102,19 @@ class Conductor:
                         continue
 
                     if result["success"]:
-                        # Update item in database
+                        # Normalize topics before storing
+                        raw_topics = result.get("topics", [])
+                        normalized_topics = get_normalizer().normalize(raw_topics)
+
+                        logger.debug(
+                            f"[TopicNormalization] {raw_topics} -> {normalized_topics}"
+                        )
+
+                        # Update item in database with normalized topics
                         self.db.update_agenda_item(
                             item_id=item_id,
                             summary=result["summary"],
-                            topics=result["topics"],
+                            topics=normalized_topics,
                         )
 
                         processed_items.append(
@@ -1113,15 +1122,15 @@ class Conductor:
                                 "sequence": item.sequence,
                                 "title": item.title,
                                 "summary": result["summary"],
-                                "topics": result["topics"],
+                                "topics": normalized_topics,
                             }
                         )
 
-                        logger.info(f"[ItemProcessing] ✓ {item.title[:60]}")
+                        logger.info(f"[ItemProcessing] {item.title[:60]}")
                     else:
                         failed_items.append(item.title)
                         logger.warning(
-                            f"[ItemProcessing] ✗ {item.title[:60]}: {result.get('error')}"
+                            f"[ItemProcessing] FAILED {item.title[:60]}: {result.get('error')}"
                         )
 
                 # Cleanup: free batch memory immediately
@@ -1138,17 +1147,38 @@ class Conductor:
             summary_parts.append(f"\n\n[Processed {len(processed_items)} items]")
             combined_summary = "\n".join(summary_parts)
 
-            # Update meeting with combined summary
+            # Aggregate topics from all items
+            all_topics = []
+            for item in processed_items:
+                all_topics.extend(item.get("topics", []))
+
+            # Count topic frequency and sort by frequency
+            topic_counts = {}
+            for topic in all_topics:
+                topic_counts[topic] = topic_counts.get(topic, 0) + 1
+
+            # Keep topics sorted by frequency (most common first)
+            meeting_topics = sorted(
+                topic_counts.keys(), key=lambda t: topic_counts[t], reverse=True
+            )
+
+            logger.info(
+                f"[TopicAggregation] Aggregated {len(meeting_topics)} unique topics "
+                f"from {len(processed_items)} items: {meeting_topics}"
+            )
+
+            # Update meeting with combined summary and aggregated topics
             processing_time = time.time() - start_time
             self.db.update_meeting_summary(
                 meeting_id=meeting.id,
                 summary=combined_summary,
                 processing_method=f"item_level_{len(processed_items)}_items",
                 processing_time=processing_time,
+                topics=meeting_topics,
             )
 
             logger.info(
-                f"[ItemProcessing] ✓ Completed: {len(processed_items)} items processed, "
+                f"[ItemProcessing] Completed: {len(processed_items)} items processed, "
                 f"{len(failed_items)} failed in {processing_time:.1f}s"
             )
         else:
@@ -1268,13 +1298,13 @@ class Conductor:
                     self._process_meeting_summary(meeting)
                     self.db.mark_processing_complete(queue_id)
                     processed_count += 1
-                    logger.info(f"✓ Processed {packet_url}")
+                    logger.info(f"Processed {packet_url}")
 
                 except Exception as e:
                     error_msg = str(e)
                     self.db.mark_processing_failed(queue_id, error_msg)
                     failed_count += 1
-                    logger.error(f"✗ Failed to process {packet_url}: {e}")
+                    logger.error(f"Failed to process {packet_url}: {e}")
 
             logger.info(
                 f"Processing complete for {city_banana}: "
