@@ -34,9 +34,7 @@ body {
 }
 
 .container {
-	max-width: 1000px;
-	min-width: 800px;
-	width: 100%;
+	width: 800px;
 	padding: 4rem 1rem;
 	min-height: 100vh;
 	display: flex;
@@ -224,29 +222,42 @@ body {
 	box-shadow: 0 8px 24px rgba(79, 70, 229, 0.12);
 }
 
+.meeting-card-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 1rem;
+	margin-bottom: 0.5rem;
+}
+
 .meeting-title {
 	font-family: Georgia, 'Times New Roman', Times, serif;
 	font-size: 1.1rem;
 	font-weight: 600;
-	margin-bottom: 0.5rem;
 	color: var(--civic-dark);
 	line-height: 1.4;
+	flex: 1;
+	min-width: 0;
 }
 
-.meeting-date {
+.meeting-date-time {
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 0.85rem;
+	font-weight: 500;
 	color: var(--civic-gray);
-	font-size: 0.9rem;
-	margin-bottom: 0.5rem;
+	white-space: nowrap;
+	flex-shrink: 0;
 }
 
 .meeting-status {
+	font-family: 'IBM Plex Mono', monospace;
 	font-size: 0.8rem;
-	color: var(--civic-blue);
+	font-weight: 500;
+	color: var(--civic-gray);
 }
 
 .status-ready {
 	color: var(--civic-green);
-	font-weight: 500;
 }
 
 .status-packet {
@@ -503,7 +514,7 @@ body {
 .main-content {
 	flex: 1;
 	width: 100%;
-	min-width: 0;
+	min-width: 100%;
 }
 
 .footer {
@@ -593,6 +604,25 @@ body {
 	
 	.meeting-card {
 		padding: 1rem;
+	}
+
+	.meeting-card-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.25rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.meeting-title {
+		font-size: 1.05rem;
+	}
+
+	.meeting-date-time {
+		font-size: 0.8rem;
+	}
+
+	.meeting-status {
+		font-size: 0.75rem;
 	}
 
 	.meeting-list {

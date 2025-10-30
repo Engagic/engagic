@@ -190,21 +190,29 @@
 									in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 									onintroend={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
 								>
-									<div class="meeting-title">
-										{meeting.title}
+									<div class="meeting-card-header">
+										<div class="meeting-title">
+											{meeting.title}
+										</div>
 										{#if formatMeetingDate(meeting.date) !== 'Date TBD'}
-											on {formatMeetingDate(meeting.date)}
+											<div class="meeting-date-time">
+												{formatMeetingDate(meeting.date)}{#if extractTime(meeting.date)} • {extractTime(meeting.date)}{/if}
+											</div>
 										{/if}
 									</div>
-									{#if extractTime(meeting.date)}
-										<div class="meeting-date">{extractTime(meeting.date)}</div>
-									{/if}
+
 									{#if meeting.summary}
-										<div class="meeting-status status-ready">AI Summary Available</div>
+										<div class="meeting-status status-ready">
+											✓ Summary Ready
+										</div>
 									{:else if meeting.packet_url}
-										<div class="meeting-status status-packet">Agenda Packet Available</div>
+										<div class="meeting-status status-packet">
+											Packet Available
+										</div>
 									{:else}
-										<div class="meeting-status status-none">No agenda posted yet</div>
+										<div class="meeting-status status-none">
+											No agenda posted
+										</div>
 									{/if}
 								</a>
 							{/each}
@@ -217,21 +225,29 @@
 								in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 								onintroend={() => { if (index === upcomingMeetings.length - 1 && pastMeetings.length === 0) isInitialLoad = false; }}
 							>
-								<div class="meeting-title">
-									{meeting.title}
+								<div class="meeting-card-header">
+									<div class="meeting-title">
+										{meeting.title}
+									</div>
 									{#if formatMeetingDate(meeting.date) !== 'Date TBD'}
-										on {formatMeetingDate(meeting.date)}
+										<div class="meeting-date-time">
+											{formatMeetingDate(meeting.date)}{#if extractTime(meeting.date)} • {extractTime(meeting.date)}{/if}
+										</div>
 									{/if}
 								</div>
-								{#if extractTime(meeting.date)}
-									<div class="meeting-date">{extractTime(meeting.date)}</div>
-								{/if}
+
 								{#if meeting.summary}
-									<div class="meeting-status status-ready">AI Summary Available</div>
+									<div class="meeting-status status-ready">
+										✓ Summary Ready
+									</div>
 								{:else if meeting.packet_url}
-									<div class="meeting-status status-packet">Agenda Packet Available</div>
+									<div class="meeting-status status-packet">
+										Packet Available
+									</div>
 								{:else}
-									<div class="meeting-status status-none">No agenda posted yet</div>
+									<div class="meeting-status status-none">
+										No agenda posted
+									</div>
 								{/if}
 							</a>
 						{/each}
