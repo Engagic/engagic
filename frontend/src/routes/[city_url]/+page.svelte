@@ -293,7 +293,7 @@
 
 <style>
 	.container {
-		width: 800px;
+		width: var(--width-meetings);
 	}
 
 	.city-header {

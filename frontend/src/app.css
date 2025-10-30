@@ -12,6 +12,11 @@
 	--civic-border: #e2e8f0;
 	--civic-red: #ef4444;
 	--civic-accent: #8b5cf6;
+
+	/* Progressive widths: search -> meetings -> detail */
+	--width-search: 600px;
+	--width-meetings: 800px;
+	--width-detail: 1000px;
 }
 
 * {
@@ -34,7 +39,7 @@ body {
 }
 
 .container {
-	width: 600px;
+	width: var(--width-search);
 	padding: 4rem 1rem;
 	min-height: 100vh;
 	display: flex;
@@ -382,11 +387,7 @@ body {
 }
 
 .meeting-summary {
-	background: var(--civic-white);
-	padding: 2rem;
-	border-radius: 12px;
-	border: 1px solid var(--civic-border);
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+	margin-top: 2rem;
 }
 
 .summary-content {
