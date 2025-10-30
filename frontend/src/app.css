@@ -569,6 +569,7 @@ body {
 	.container {
 		padding: 1rem 0.5rem;
 		max-width: 100%;
+		min-width: 0;
 		overflow-x: hidden;
 	}
 	
