@@ -184,6 +184,9 @@
 </div>
 
 <style>
+	.container {
+		width: 1000px;
+	}
 
 	.packet-url-box {
 		margin: 1.5rem 0;
