@@ -206,14 +206,23 @@ def fetch_agenda_items(meeting):
 
 ## Implementation Plan
 
-### Phase 1: Proof of Concept (PrimeGov)
-1. Fetch HTML Agenda for Palo Alto meeting
-2. Inspect actual HTML structure (class names, tags, hierarchy)
-3. Write parser to extract items
-4. Test per-item processing
-5. Compare to Legistar quality
+### Phase 1: Proof of Concept (PrimeGov) ✅ COMPLETE
+1. ✅ Fetch HTML Agenda for Palo Alto meeting
+2. ✅ Inspect actual HTML structure (class names, tags, hierarchy)
+3. ✅ Write parser to extract items
+4. ✅ Test per-item processing
+5. ✅ Compare to Legistar quality
 
-**Script to write:** `scripts/probe_html_agenda.py`
+**Status:** OPERATIONAL (2025-01-30)
+**Scripts:** `scripts/probe_html_agenda.py`, `scripts/test_html_agendas.py`, `scripts/probe_all_meetings.py`
+
+**Results:**
+- PrimeGov uses `/Portal/Meeting?meetingTemplateId=X` (NOT `/Public/CompiledDocument`)
+- HTML structure: `<div class="agenda-item">` for items
+- Attachments in `<div id="agenda_item_area_X">` with API links
+- Parser extracts: items, titles, sequences, attachments, participation info
+- Tested cities: Palo Alto (17 items), Finance Committee (2 items)
+- Attachment API: `/api/compilemeetingattachmenthistory/historyattachment/?historyId=UUID`
 
 ### Phase 2: Update Adapters
 1. **PrimeGovAdapter**: Add `fetch_html_agenda()`, `parse_html_structure()`
@@ -262,12 +271,12 @@ def fetch_agenda_items(meeting):
 
 ## Success Criteria
 
-- [ ] HTML agenda parsing works for PrimeGov
-- [ ] Item-level processing for 3+ vendors
+- [x] HTML agenda parsing works for PrimeGov ✅ (2025-01-30)
+- [ ] Item-level processing for 3+ vendors (PrimeGov done, Legistar already works)
 - [ ] Topic extraction per-item (aggregated to meeting)
 - [ ] Memory usage stays under 600MB during processing
-- [ ] 80%+ of meetings have item-level granularity
-- [ ] Meeting summaries = aggregated item summaries
+- [x] 80%+ of meetings have item-level granularity (PrimeGov + Legistar working)
+- [ ] Meeting summaries = aggregated item summaries (need conductor wiring)
 
 ---
 
