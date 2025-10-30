@@ -1,6 +1,6 @@
 # Engagic Vision
 
-**Last Updated:** 2025-01-29
+**Last Updated:** 2025-10-30
 
 ---
 
@@ -85,13 +85,17 @@ Features (to build):
 ### What Works
 - **7,618 lines Python backend**
 - **500 cities, ~10K meetings** in production
+- **374+ cities with item-level processing (58% of platform, 50-80M people)**
+  - Legistar: 110 cities (API-based)
+  - PrimeGov: 64 cities (HTML agendas)
+  - Granicus: 200+ cities (HTML agendas + MetaViewer PDFs)
 - **Cache-first architecture** - API never fetches live, background daemon syncs every 72 hours
-- **6 vendor adapters** with 94% success rate (PrimeGov, CivicClerk, Legistar, Granicus, NovusAgenda, CivicPlus)
-- **Item-level processing** - breaks 500-page packets into 10-50 page chunks for better summaries
+- **6 vendor adapters** with 94% success rate
 - **Priority queue** - recent meetings processed first
 - **PyMuPDF + Gemini** - 80% PDF extraction success, 10-30s processing per meeting
 
 ### Recent Wins
+- **Granicus breakthrough (October 2025)**: 174 → 374+ cities with items (crossed majority threshold)
 - Database consolidation: 3 DBs → 1 unified SQLite (-1,549 lines)
 - Adapter refactor with BaseAdapter pattern (-339 lines)
 - Processor modularization: 1,797 → 415 lines (-77% reduction)
@@ -138,45 +142,31 @@ Features (to build):
 
 **Why first:** Low-hanging fruit, high user value, enables civic action
 
-### Phase 0.5: AI Thinking Traces (Transparency)
+### Phase 1: Topic Extraction (Foundation) - IMMEDIATE PRIORITY
+**Goal:** Automatically tag meetings and agenda items with topics
+
+**Implementation:**
+- Per-item topic extraction using Gemini
+- Aggregate topics at meeting level
+- Database: `meeting_topics` table with standardized taxonomy
+- Classification: "zoning", "affordable housing", "police budget", "transportation", etc.
+- Store topics as JSON array on both items and meetings
+
+**Why first:** The infrastructure breakthrough just happened (374+ cities, 58% coverage, 50-80M people). Without topic extraction, all this granular data is just well-organized text. Topics unlock search, alerts, and profiles - everything else depends on this.
+
+### Phase 1.5: AI Thinking Traces (Transparency) - OPTIONAL
 **Goal:** Show users how AI analyzed the meeting - build trust through transparency
 
 **Implementation:**
 - Test Gemini API for native thinking trace support (gemini-2.0-flash-thinking-exp)
-- If not native, use chain-of-thought prompting:
-  ```xml
-  <thinking>
-  Key observations:
-  - This is a zoning change affecting 50 units
-  - Budget impact: $2M over 3 years
-  - Controversy: neighbors oppose density
-  </thinking>
-  <summary>
-  City Council will vote on...
-  </summary>
-  ```
-- Database schema:
-  ```sql
-  ALTER TABLE meetings ADD COLUMN thinking_trace TEXT;
-  ALTER TABLE agenda_items ADD COLUMN thinking_trace TEXT;
-  ```
-- Frontend: Collapsible section "Show AI reasoning (Ctrl+O)"
+- If not native, use chain-of-thought prompting
+- Database schema: `thinking_trace TEXT` on meetings and agenda_items tables
+- Frontend: Collapsible section "Show AI reasoning"
 - Parse and store both thinking trace + summary
 
 **Cost consideration:** Adds 30-50% more tokens (~$5-10 for 10K meetings)
 
-**Why:** Transparency builds trust. Users see how AI reached conclusions. Educational for civic literacy.
-
-### Phase 1: Topic Extraction (Foundation)
-**Goal:** Automatically tag meetings and agenda items with topics
-
-**Implementation:**
-- Per-item topic extraction (Legistar model + general model)
-- Aggregate topics at meeting level
-- Database: `meeting_topics` table with standardized taxonomy
-- Use Gemini for classification ("zoning", "affordable housing", "police budget", etc.)
-
-**Why first:** Everything else depends on topic matching
+**Why deferred:** Good for transparency, but not blocking. Topic extraction is the critical path.
 
 ### Phase 2: User Profiles (Core Growth)
 **Goal:** Let civilians subscribe to cities and topics
@@ -259,10 +249,10 @@ Features (to build):
 - [x] 500+ cities covered (825 active)
 - [x] 94% adapter success rate
 - [x] 80% PDF extraction success
-- [x] Item-level processing working
+- [x] Item-level processing working for 374+ cities (58% of platform, 50-80M people) - 2025-10-30
 - [x] Contact info parsing (email/phone/virtual_url) - 2025-01-30
-- [ ] AI thinking traces exposed
-- [ ] Topic extraction working
+- [ ] Topic extraction working - NEXT
+- [ ] AI thinking traces exposed - OPTIONAL
 - [ ] 1,000+ cities covered
 
 ### Userland (Engagement)
@@ -293,7 +283,8 @@ Features (to build):
 - **BaseAdapter pattern** - compounds value with each new vendor
 - **city_banana identifier** - vendor-agnostic, eliminates coupling
 - **Priority queue** - improves user experience (recent meetings first)
-- **Item-level processing** - better summaries, granular topics
+- **Item-level processing** - better summaries, granular topics, crossed majority threshold (58% of platform)
+- **HTML agenda parsing** - reusable pattern across vendors (PrimeGov, Granicus), enables item-level processing without clean APIs
 - **Processor modularization** - 77% reduction, dramatically improved maintainability
 - **Prompts as JSON** - rapid iteration without code deployment
 - **Cache-first** - instant API responses, decouples scraping from serving
@@ -318,20 +309,25 @@ Features (to build):
 
 ## The Path Forward
 
-**Near-term (2-4 weeks):**
-1. Topic extraction per item and meeting
+**Immediate (Q4 2025):**
+1. **Topic extraction per item and meeting** - CRITICAL PATH
 2. Basic user profiles (email + city + topics)
 3. Email alert system
 
-**Medium-term (2-3 months):**
+**Near-term (Q1 2026):**
 4. Weekly digest emails
 5. PWA push notifications
 6. Public read-only API
+7. AI thinking traces (optional transparency feature)
 
-**Long-term (6+ months):**
-7. Bluesky/ATProto integrations
-8. B2B tenancy with webhooks
-9. 1,000+ cities covered
+**Medium-term (Q2 2026):**
+8. Bluesky/ATProto integrations
+9. B2B tenancy with webhooks
+10. Remaining vendor item-level processing (CivicClerk, NovusAgenda, CivicPlus)
+
+**Long-term (2026+):**
+11. 1,000+ cities covered
+12. Rust conductor migration
 
 **Philosophy:** Move slow and heal things. Build trust through transparency. Design for civilians, not insiders. Open source the data layer, monetize the services on top.
 
