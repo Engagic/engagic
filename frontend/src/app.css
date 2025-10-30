@@ -35,6 +35,7 @@ body {
 
 .container {
 	max-width: 1000px;
+	min-width: 800px;
 	width: 100%;
 	padding: 4rem 1rem;
 	min-height: 100vh;
@@ -562,12 +563,6 @@ body {
 	font-size: 0.85rem;
 	color: var(--civic-gray);
 	margin: 0;
-}
-
-@media (max-width: 900px) {
-	.container {
-		padding: 3rem 1.5rem;
-	}
 }
 
 @media (max-width: 640px) {
