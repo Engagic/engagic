@@ -152,8 +152,10 @@
 	.about-container {
 		max-width: 1000px;
 		margin: 0 auto;
-		padding: 2rem;
+		padding: 4rem 1rem;
 		color: var(--civic-dark);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
 	}
 
 	.header {
@@ -168,13 +170,15 @@
 	}
 
 	.about-header h1 {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 3rem;
-		font-weight: 500;
+		font-weight: 600;
 		color: var(--civic-blue);
 		margin-bottom: 0.5rem;
 	}
 
 	.subtitle {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.25rem;
 		color: var(--civic-gray);
 		margin-bottom: 2rem;
@@ -198,22 +202,23 @@
 	}
 
 	h2 {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2rem;
-		font-weight: 500;
+		font-weight: 600;
 		color: var(--civic-dark);
 		margin-bottom: 2rem;
 		text-align: center;
 	}
 
 	.mission-content {
-		max-width: 700px;
 		margin: 0 auto;
 		text-align: center;
 	}
 
 	.mission-content p {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.1rem;
-		line-height: 1.7;
+		line-height: 1.8;
 		color: var(--civic-gray);
 		margin-bottom: 1.5rem;
 	}
@@ -235,22 +240,26 @@
 	}
 
 	.impact-number {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 3rem;
-		font-weight: 500;
+		font-weight: 600;
 		color: var(--civic-blue);
 		margin-bottom: 0.5rem;
 	}
 
 	.impact-label {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.1rem;
-		font-weight: 500;
+		font-weight: 600;
 		color: var(--civic-dark);
 		margin-bottom: 0.5rem;
 	}
 
 	.impact-desc {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 0.9rem;
 		color: var(--civic-gray);
+		line-height: 1.5;
 	}
 
 	.loading-placeholder {
@@ -261,7 +270,6 @@
 	}
 
 	.how-steps {
-		max-width: 800px;
 		margin: 0 auto;
 	}
 
@@ -287,14 +295,17 @@
 	}
 
 	.step-content h3 {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.3rem;
+		font-weight: 600;
 		color: var(--civic-dark);
 		margin-bottom: 0.5rem;
 	}
 
 	.step-content p {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		color: var(--civic-gray);
-		line-height: 1.6;
+		line-height: 1.7;
 	}
 
 	.principles-grid {
@@ -310,20 +321,23 @@
 	}
 
 	.principle h3 {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.3rem;
+		font-weight: 600;
 		color: var(--civic-blue);
 		margin-bottom: 1rem;
 	}
 
 	.principle p {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		color: var(--civic-gray);
-		line-height: 1.6;
+		line-height: 1.7;
 	}
 
 
 	@media (max-width: 768px) {
 		.about-container {
-			padding: 1rem;
+			padding: 1rem 0.5rem;
 		}
 
 		.about-header h1 {

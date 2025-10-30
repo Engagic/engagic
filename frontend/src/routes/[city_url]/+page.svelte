@@ -250,6 +250,7 @@
 		margin-bottom: 1rem;
 		color: var(--civic-blue);
 		text-decoration: none;
+		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 500;
 	}
 
@@ -258,6 +259,7 @@
 	}
 
 	.city-title {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2rem;
 		color: var(--civic-dark);
 		margin: 0;
