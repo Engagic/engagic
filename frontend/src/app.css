@@ -505,7 +505,11 @@ body {
 	white-space: nowrap;
 }
 
-.stat-meetings {
+.stat-total {
+	color: var(--civic-gray);
+}
+
+.stat-packets {
 	color: var(--civic-blue);
 }
 
@@ -584,6 +588,7 @@ body {
 
 @media (max-width: 640px) {
 	.container {
+		width: 100%;
 		padding: 1rem 0.5rem;
 		max-width: 100%;
 		min-width: 0;
