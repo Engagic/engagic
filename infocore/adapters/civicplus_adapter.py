@@ -199,8 +199,14 @@ class CivicPlusAdapter(BaseAdapter):
         try:
             soup = self._fetch_html(url)
 
-            # Extract date (look for date patterns)
+            # Extract date string from page or title
             date_text = self._extract_date_from_page(soup)
+            if not date_text:
+                # Try extracting from title (e.g., "October 22, 2025 Regular Meeting")
+                date_text = self._extract_date_from_title(title)
+
+            # Parse the date string using BaseAdapter's robust parser
+            parsed_date = self._parse_date(date_text) if date_text else None
 
             # Find PDF links
             pdfs = self._discover_pdfs(url, keywords=["agenda", "packet", "minutes"])
@@ -218,7 +224,7 @@ class CivicPlusAdapter(BaseAdapter):
             result = {
                 "meeting_id": meeting_id,
                 "title": title,
-                "start": date_text or "",
+                "start": parsed_date.isoformat() if parsed_date else None,
                 "packet_url": pdfs[0] if len(pdfs) == 1 else (pdfs if pdfs else None),
             }
 
@@ -235,13 +241,29 @@ class CivicPlusAdapter(BaseAdapter):
         """Extract meeting date from page using common patterns"""
         # Look for common date patterns in text
         date_patterns = [
+            r"\b\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}\s*[APap][Mm]\b",  # MM/DD/YYYY HH:MM AM/PM
             r"\b\d{1,2}/\d{1,2}/\d{4}\b",  # MM/DD/YYYY
+            r"\b[A-Z][a-z]+ \d{1,2}, \d{4}\s+\d{1,2}:\d{2}\s*[APap][Mm]\b",  # Month DD, YYYY HH:MM AM/PM
             r"\b[A-Z][a-z]+ \d{1,2}, \d{4}\b",  # Month DD, YYYY
         ]
 
         text = soup.get_text()
         for pattern in date_patterns:
             match = re.search(pattern, text)
+            if match:
+                return match.group(0)
+
+        return None
+
+    def _extract_date_from_title(self, title: str) -> Optional[str]:
+        """Extract date from meeting title like 'October 22, 2025 Regular Meeting'"""
+        date_patterns = [
+            r"\b([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})\b",  # Month DD, YYYY or Month DD YYYY
+            r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b",  # MM/DD/YYYY
+        ]
+
+        for pattern in date_patterns:
+            match = re.search(pattern, title)
             if match:
                 return match.group(0)
 
