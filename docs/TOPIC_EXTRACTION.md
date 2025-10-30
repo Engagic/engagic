@@ -56,7 +56,7 @@ normalized = normalizer.normalize(["affordable housing", "zoning changes"])
 ```
 
 ### 3. Aggregation (NEW)
-**Location:** `infra/conductor.py:1150-1168`
+**Location:** `jobs/conductor.py:1150-1168`
 
 After processing all items, topics are aggregated to meeting level:
 ```python
@@ -234,7 +234,7 @@ systemctl restart engagic-daemon
 ### 4. Backfill Existing Meetings (Optional)
 ```bash
 # On VPS: Reprocess all meetings to extract topics
-python infra/conductor.py --process-all-unprocessed --batch-size 20
+python jobs/conductor.py --process-all-unprocessed --batch-size 20
 ```
 
 This will:
@@ -327,7 +327,7 @@ curl http://localhost:8000/api/topics/popular
 **Modified Files:**
 - `infocore/database/unified_db.py` - Added topics to Meeting dataclass and schema
 - `infocore/processing/prompts.json` - Updated item prompt with topic categories
-- `infra/conductor.py` - Added normalization and aggregation
+- `jobs/conductor.py` - Added normalization and aggregation
 - `infocore/api/main.py` - Added 3 new topic endpoints
 
 **Lines Changed:** ~350 additions

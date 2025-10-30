@@ -10,7 +10,7 @@ Live at **[engagic.org](https://engagic.org)**
 
 - `infocore/api/main.py` - FastAPI server, cache-first serving, multi-modal search
 - `infocore/database/unified_db.py` - Single SQLite database, city/meeting/agenda_items
-- `infra/conductor.py` - Priority job queue, sync scheduling, rate limiting
+- `jobs/conductor.py` - Priority job queue, sync scheduling, rate limiting
 - `infocore/adapters/` - 6 vendor adapters with BaseAdapter pattern (94% success rate)
 - `infocore/processing/processor.py` - High-level orchestration (refactored: 1,797 → 415 lines)
 - `infocore/processing/summarizer.py` - Gemini API integration
@@ -52,7 +52,7 @@ export ENGAGIC_ADMIN_TOKEN="secure-token"
 uvicorn infocore.api.main:app --host 0.0.0.0 --port 8000
 
 # Run background daemon (separate terminal)
-python -m infra.daemon
+python -m jobs.daemon
 ```
 
 ### Frontend
