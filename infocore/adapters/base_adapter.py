@@ -59,13 +59,13 @@ class BaseAdapter:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - cleanup session on exit"""
-        if hasattr(self, 'session'):
+        if hasattr(self, "session"):
             self.session.close()
         return False
 
     def close(self):
         """Explicit cleanup method for non-context-manager usage"""
-        if hasattr(self, 'session'):
+        if hasattr(self, "session"):
             self.session.close()
 
     def _create_session(self) -> requests.Session:
@@ -84,7 +84,7 @@ class BaseAdapter:
             total=3,
             backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET", "POST", "HEAD"]
+            allowed_methods=["GET", "POST", "HEAD"],
         )
 
         adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -107,14 +107,19 @@ class BaseAdapter:
         Raises:
             requests.RequestException on failure
         """
-        kwargs.setdefault('timeout', 30)
+        kwargs.setdefault("timeout", 30)
 
         # Disable SSL verification for Granicus domains (known S3 redirect issue)
         # Confidence: 8/10 - Safe for public civic data, Granicus infra issue
         # Granicus redirects to S3 with mismatched SSL certs, causing verification failures
-        if self.vendor == 'granicus' or 'granicus.com' in url or 'granicus_production_attachments.s3.amazonaws.com' in url:
-            kwargs['verify'] = False
+        if (
+            self.vendor == "granicus"
+            or "granicus.com" in url
+            or "granicus_production_attachments.s3.amazonaws.com" in url
+        ):
+            kwargs["verify"] = False
             import urllib3
+
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         try:
@@ -126,7 +131,9 @@ class BaseAdapter:
             logger.error(f"[{self.vendor}:{self.slug}] Timeout fetching {url}")
             raise
         except requests.HTTPError as e:
-            logger.error(f"[{self.vendor}:{self.slug}] HTTP {e.response.status_code} for {url}")
+            logger.error(
+                f"[{self.vendor}:{self.slug}] HTTP {e.response.status_code} for {url}"
+            )
             raise
         except requests.RequestException as e:
             logger.error(f"[{self.vendor}:{self.slug}] Request failed for {url}: {e}")
@@ -134,7 +141,7 @@ class BaseAdapter:
 
     def _post(self, url: str, **kwargs) -> requests.Response:
         """Make POST request with error handling"""
-        kwargs.setdefault('timeout', 30)
+        kwargs.setdefault("timeout", 30)
 
         try:
             logger.debug(f"[{self.vendor}:{self.slug}] POST {url}")
@@ -171,22 +178,19 @@ class BaseAdapter:
             "%Y-%m-%dT%H:%M:%S",
             "%Y-%m-%d %H:%M:%S",
             "%Y-%m-%d",
-
             # US formats with 12-hour time
-            "%b %d, %Y %I:%M %p",      # Jul 22, 2025 6:30 PM
-            "%B %d, %Y %I:%M %p",      # July 22, 2025 6:30 PM
-            "%m/%d/%Y %I:%M %p",       # 07/22/2025 6:30 PM
-            "%m/%d/%Y %I:%M:%S %p",    # 07/22/2025 6:30:00 PM
-
+            "%b %d, %Y %I:%M %p",  # Jul 22, 2025 6:30 PM
+            "%B %d, %Y %I:%M %p",  # July 22, 2025 6:30 PM
+            "%m/%d/%Y %I:%M %p",  # 07/22/2025 6:30 PM
+            "%m/%d/%Y %I:%M:%S %p",  # 07/22/2025 6:30:00 PM
             # US formats with 24-hour time
-            "%b %d, %Y %H:%M",         # Jul 22, 2025 18:30
-            "%B %d, %Y %H:%M",         # July 22, 2025 18:30
-            "%m/%d/%Y %H:%M",          # 07/22/2025 18:30
-
+            "%b %d, %Y %H:%M",  # Jul 22, 2025 18:30
+            "%B %d, %Y %H:%M",  # July 22, 2025 18:30
+            "%m/%d/%Y %H:%M",  # 07/22/2025 18:30
             # Date only formats
-            "%b %d, %Y",               # Jul 22, 2025
-            "%B %d, %Y",               # July 22, 2025
-            "%m/%d/%Y",                # 07/22/2025
+            "%b %d, %Y",  # Jul 22, 2025
+            "%B %d, %Y",  # July 22, 2025
+            "%m/%d/%Y",  # 07/22/2025
         ]
 
         # Try each format
@@ -199,9 +203,12 @@ class BaseAdapter:
         # Fallback: Use dateutil parser for fuzzy parsing
         try:
             from dateutil import parser
+
             return parser.parse(date_str, fuzzy=True)
         except Exception:
-            logger.warning(f"[{self.vendor}:{self.slug}] Could not parse date: {date_str}")
+            logger.warning(
+                f"[{self.vendor}:{self.slug}] Could not parse date: {date_str}"
+            )
             return None
 
     def _fetch_html(self, url: str) -> BeautifulSoup:
@@ -215,9 +222,11 @@ class BaseAdapter:
             BeautifulSoup object
         """
         response = self._get(url)
-        return BeautifulSoup(response.text, 'html.parser')
+        return BeautifulSoup(response.text, "html.parser")
 
-    def _discover_pdfs(self, url: str, keywords: Optional[List[str]] = None) -> List[str]:
+    def _discover_pdfs(
+        self, url: str, keywords: Optional[List[str]] = None
+    ) -> List[str]:
         """
         Discover PDF links on a page, optionally filtering by keywords.
 
@@ -235,15 +244,15 @@ class BaseAdapter:
             soup = self._fetch_html(url)
             pdfs = []
 
-            for link in soup.find_all('a', href=True):
-                href = link['href']
+            for link in soup.find_all("a", href=True):
+                href = link["href"]
                 text = link.get_text().lower()
 
                 # Check if link points to PDF
                 is_pdf = (
-                    '.pdf' in href.lower() or
-                    'pdf' in link.get('type', '').lower() or
-                    any(kw in text for kw in keywords)
+                    ".pdf" in href.lower()
+                    or "pdf" in link.get("type", "").lower()
+                    or any(kw in text for kw in keywords)
                 )
 
                 if is_pdf:
@@ -255,7 +264,9 @@ class BaseAdapter:
             return pdfs
 
         except Exception as e:
-            logger.warning(f"[{self.vendor}:{self.slug}] PDF discovery failed for {url}: {e}")
+            logger.warning(
+                f"[{self.vendor}:{self.slug}] PDF discovery failed for {url}: {e}"
+            )
             return []
 
     def _extract_text(self, soup: BeautifulSoup, selector: str) -> str:
@@ -272,7 +283,9 @@ class BaseAdapter:
         element = soup.select_one(selector)
         return element.get_text(strip=True) if element else ""
 
-    def _parse_meeting_status(self, title: str, date_str: Optional[str] = None) -> Optional[str]:
+    def _parse_meeting_status(
+        self, title: str, date_str: Optional[str] = None
+    ) -> Optional[str]:
         """
         Parse meeting title and date/time for status keywords.
 
@@ -292,13 +305,13 @@ class BaseAdapter:
         """
         # Status keywords in priority order
         status_keywords = [
-            ('CANCEL', 'cancelled'),
-            ('POSTPONE', 'postponed'),
-            ('DEFER', 'deferred'),
-            ('RESCHEDULE', 'rescheduled'),
-            ('REVISED', 'revised'),
-            ('AMENDMENT', 'revised'),
-            ('UPDATED', 'revised'),
+            ("CANCEL", "cancelled"),
+            ("POSTPONE", "postponed"),
+            ("DEFER", "deferred"),
+            ("RESCHEDULE", "rescheduled"),
+            ("REVISED", "revised"),
+            ("AMENDMENT", "revised"),
+            ("UPDATED", "revised"),
         ]
         current_status = None
         # Check title
@@ -306,14 +319,18 @@ class BaseAdapter:
             title_upper = title.upper()
             for keyword, status in status_keywords:
                 if keyword in title_upper:
-                    logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' in title: {title}")
+                    logger.debug(
+                        f"[{self.vendor}:{self.slug}] Detected '{status}' in title: {title}"
+                    )
                     current_status = status
         # Check date/time string
         if date_str:
             date_upper = str(date_str).upper()
             for keyword, status in status_keywords:
                 if keyword in date_upper:
-                    logger.debug(f"[{self.vendor}:{self.slug}] Detected '{status}' in date: {date_str}")
+                    logger.debug(
+                        f"[{self.vendor}:{self.slug}] Detected '{status}' in date: {date_str}"
+                    )
                     current_status = status
 
         return current_status
@@ -332,4 +349,6 @@ class BaseAdapter:
                 - packet_url: Optional[str]
                 - meeting_status: Optional[str] (cancelled, postponed, revised, rescheduled)
         """
-        raise NotImplementedError(f"{self.__class__.__name__} must implement fetch_meetings()")
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement fetch_meetings()"
+        )

@@ -26,7 +26,11 @@ app = FastAPI(title="engagic API", description="EGMI")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://engagic.org", "http://localhost:5173", "http://localhost:4173"],
+    allow_origins=[
+        "https://engagic.org",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,7 +40,7 @@ app.add_middleware(
 rate_limiter = SQLiteRateLimiter(
     db_path=str(config.UNIFIED_DB_PATH).replace("engagic.db", "rate_limits.db"),
     requests_limit=config.RATE_LIMIT_REQUESTS,
-    window_seconds=config.RATE_LIMIT_WINDOW
+    window_seconds=config.RATE_LIMIT_WINDOW,
 )
 
 
@@ -54,7 +58,7 @@ async def rate_limit_middleware(request: Request, call_next):
             raise HTTPException(
                 status_code=429,
                 detail="Rate limit exceeded. Please try again later.",
-                headers={"X-RateLimit-Remaining": "0"}
+                headers={"X-RateLimit-Remaining": "0"},
             )
 
     response = await call_next(request)
@@ -99,9 +103,7 @@ app.add_middleware(
 
 # Initialize global instances
 try:
-    processor = AgendaProcessor(
-        api_key=config.get_api_key()
-    )
+    processor = AgendaProcessor(api_key=config.get_api_key())
     logger.info("LLM processor initialized successfully")
 except ValueError:
     logger.warning("API key not found - LLM processing will be disabled")
@@ -246,32 +248,69 @@ def parse_city_state_input(input_str: str) -> tuple[str, str]:
 def is_state_query(query: str) -> bool:
     """Check if the query is just a state name or abbreviation"""
     query_lower = query.strip().lower()
-    
+
     # State abbreviation map
     state_map = {
-        "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
-        "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
-        "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
-        "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
-        "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
-        "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
-        "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
-        "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
-        "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
-        "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
-        "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
-        "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
-        "wisconsin": "WI", "wyoming": "WY"
+        "alabama": "AL",
+        "alaska": "AK",
+        "arizona": "AZ",
+        "arkansas": "AR",
+        "california": "CA",
+        "colorado": "CO",
+        "connecticut": "CT",
+        "delaware": "DE",
+        "florida": "FL",
+        "georgia": "GA",
+        "hawaii": "HI",
+        "idaho": "ID",
+        "illinois": "IL",
+        "indiana": "IN",
+        "iowa": "IA",
+        "kansas": "KS",
+        "kentucky": "KY",
+        "louisiana": "LA",
+        "maine": "ME",
+        "maryland": "MD",
+        "massachusetts": "MA",
+        "michigan": "MI",
+        "minnesota": "MN",
+        "mississippi": "MS",
+        "missouri": "MO",
+        "montana": "MT",
+        "nebraska": "NE",
+        "nevada": "NV",
+        "new hampshire": "NH",
+        "new jersey": "NJ",
+        "new mexico": "NM",
+        "new york": "NY",
+        "north carolina": "NC",
+        "north dakota": "ND",
+        "ohio": "OH",
+        "oklahoma": "OK",
+        "oregon": "OR",
+        "pennsylvania": "PA",
+        "rhode island": "RI",
+        "south carolina": "SC",
+        "south dakota": "SD",
+        "tennessee": "TN",
+        "texas": "TX",
+        "utah": "UT",
+        "vermont": "VT",
+        "virginia": "VA",
+        "washington": "WA",
+        "west virginia": "WV",
+        "wisconsin": "WI",
+        "wyoming": "WY",
     }
-    
+
     # Check if it's a full state name
     if query_lower in state_map:
         return True
-    
+
     # Check if it's a state abbreviation
     if len(query) == 2 and query.upper() in state_map.values():
         return True
-    
+
     return False
 
 
@@ -397,7 +436,9 @@ async def search_meetings(request: SearchRequest):
         raise
     except Exception as e:
         logger.error(f"Unexpected search error for '{query}': {str(e)}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500, detail="We humbly thank you for your patience"
+        )
 
 
 async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
@@ -417,7 +458,9 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
     meetings = db.get_meetings(bananas=[city.banana], limit=50)
 
     if meetings:
-        logger.info(f"Found {len(meetings)} cached meetings for {city.name}, {city.state}")
+        logger.info(
+            f"Found {len(meetings)} cached meetings for {city.name}, {city.state}"
+        )
         return {
             "success": True,
             "city_name": city.name,
@@ -501,24 +544,61 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
     """Handle state search - return list of cities in that state"""
     # Normalize state input
     state_input_lower = state_input.strip().lower()
-    
+
     # State abbreviation map
     state_map = {
-        "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
-        "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
-        "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
-        "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
-        "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
-        "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
-        "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
-        "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
-        "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
-        "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
-        "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
-        "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
-        "wisconsin": "WI", "wyoming": "WY"
+        "alabama": "AL",
+        "alaska": "AK",
+        "arizona": "AZ",
+        "arkansas": "AR",
+        "california": "CA",
+        "colorado": "CO",
+        "connecticut": "CT",
+        "delaware": "DE",
+        "florida": "FL",
+        "georgia": "GA",
+        "hawaii": "HI",
+        "idaho": "ID",
+        "illinois": "IL",
+        "indiana": "IN",
+        "iowa": "IA",
+        "kansas": "KS",
+        "kentucky": "KY",
+        "louisiana": "LA",
+        "maine": "ME",
+        "maryland": "MD",
+        "massachusetts": "MA",
+        "michigan": "MI",
+        "minnesota": "MN",
+        "mississippi": "MS",
+        "missouri": "MO",
+        "montana": "MT",
+        "nebraska": "NE",
+        "nevada": "NV",
+        "new hampshire": "NH",
+        "new jersey": "NJ",
+        "new mexico": "NM",
+        "new york": "NY",
+        "north carolina": "NC",
+        "north dakota": "ND",
+        "ohio": "OH",
+        "oklahoma": "OK",
+        "oregon": "OR",
+        "pennsylvania": "PA",
+        "rhode island": "RI",
+        "south carolina": "SC",
+        "south dakota": "SD",
+        "tennessee": "TN",
+        "texas": "TX",
+        "utah": "UT",
+        "vermont": "VT",
+        "virginia": "VA",
+        "washington": "WA",
+        "west virginia": "WV",
+        "wisconsin": "WI",
+        "wyoming": "WY",
     }
-    
+
     # Determine state abbreviation
     if state_input_lower in state_map:
         state_abbr = state_map[state_input_lower]
@@ -527,7 +607,9 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
     elif len(state_input) == 2 and state_input.upper() in state_map.values():
         state_abbr = state_input.upper()
         # Find full name from abbreviation
-        state_full = next((k.title() for k, v in state_map.items() if v == state_abbr), state_abbr)
+        state_full = next(
+            (k.title() for k, v in state_map.items() if v == state_abbr), state_abbr
+        )
     else:
         return {
             "success": False,
@@ -536,7 +618,7 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
             "type": "state",
             "meetings": [],
         }
-    
+
     # Get all cities in this state
     cities = db.get_cities(state=state_abbr)
 
@@ -555,20 +637,25 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
 
     # Build city_options
     for city in cities:
-        city_options.append({
-            "city_name": city.name,
-            "state": city.state,
-            "banana": city.banana,
-            "vendor": city.vendor,
-            "display_name": f"{city.name}, {city.state}"
-        })
+        city_options.append(
+            {
+                "city_name": city.name,
+                "state": city.state,
+                "banana": city.banana,
+                "vendor": city.vendor,
+                "display_name": f"{city.name}, {city.state}",
+            }
+        )
 
     # Get meeting stats for all cities in one query
     stats = db.get_city_meeting_stats(bananas)
 
     # Add stats to each city option
     for option in city_options:
-        city_stats = stats.get(option["banana"], {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0})
+        city_stats = stats.get(
+            option["banana"],
+            {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0},
+        )
         option["total_meetings"] = city_stats["total_meetings"]
         option["meetings_with_packet"] = city_stats["meetings_with_packet"]
         option["summarized_meetings"] = city_stats["summarized_meetings"]
@@ -609,7 +696,9 @@ async def handle_ambiguous_city_search(
         meetings = db.get_meetings(bananas=[city.banana], limit=50)
 
         if meetings:
-            logger.info(f"Found {len(meetings)} cached meetings for {city.name}, {city.state}")
+            logger.info(
+                f"Found {len(meetings)} cached meetings for {city.name}, {city.state}"
+            )
             return {
                 "success": True,
                 "city_name": city.name,
@@ -643,20 +732,25 @@ async def handle_ambiguous_city_search(
 
     # Build city_options
     for city in cities:
-        city_options.append({
-            "city_name": city.name,
-            "state": city.state,
-            "banana": city.banana,
-            "vendor": city.vendor,
-            "display_name": f"{city.name}, {city.state}",
-        })
+        city_options.append(
+            {
+                "city_name": city.name,
+                "state": city.state,
+                "banana": city.banana,
+                "vendor": city.vendor,
+                "display_name": f"{city.name}, {city.state}",
+            }
+        )
 
     # Get meeting stats for all cities in one query
     stats = db.get_city_meeting_stats(bananas)
 
     # Add stats to each city option
     for option in city_options:
-        city_stats = stats.get(option["banana"], {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0})
+        city_stats = stats.get(
+            option["banana"],
+            {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0},
+        )
         option["total_meetings"] = city_stats["total_meetings"]
         option["meetings_with_packet"] = city_stats["meetings_with_packet"]
         option["summarized_meetings"] = city_stats["summarized_meetings"]
@@ -714,18 +808,24 @@ async def get_random_best_meeting():
         # Import the quality checker
         import sys
         import os
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+        sys.path.insert(
+            0,
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ),
+        )
         from scripts.summary_quality_checker import SummaryQualityChecker
-        
+
         checker = SummaryQualityChecker()
         random_meeting = checker.get_random_best_summary()
-        
+
         if not random_meeting:
             raise HTTPException(
                 status_code=404,
-                detail="No high-quality meeting summaries available yet"
+                detail="No high-quality meeting summaries available yet",
             )
-        
+
         # Format for frontend consumption
         return {
             "status": "success",
@@ -737,16 +837,13 @@ async def get_random_best_meeting():
                 "packet_url": random_meeting["packet_url"],
                 "summary": random_meeting["summary"],
                 "quality_score": random_meeting["quality_score"],
-            }
+            },
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting random best meeting: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Error retrieving meeting summary"
-        )
+        raise HTTPException(status_code=500, detail="Error retrieving meeting summary")
 
 
 @app.get("/api/stats")
@@ -771,7 +868,9 @@ async def get_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching stats: {str(e)}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500, detail="We humbly thank you for your patience"
+        )
 
 
 @app.get("/api/queue-stats")
@@ -788,7 +887,9 @@ async def get_queue_stats():
                 "completed": queue_stats.get("completed_count", 0),
                 "failed": queue_stats.get("failed_count", 0),
                 "permanently_failed": queue_stats.get("permanently_failed", 0),
-                "avg_processing_seconds": round(queue_stats.get("avg_processing_seconds", 0), 2),
+                "avg_processing_seconds": round(
+                    queue_stats.get("avg_processing_seconds", 0), 2
+                ),
             },
             "note": "Queue is processed continuously by background daemon",
         }
@@ -885,7 +986,7 @@ async def health_check():
         health_status["checks"]["databases"] = {
             "status": "healthy",
             "cities": stats["active_cities"],
-            "meetings": stats["total_meetings"]
+            "meetings": stats["total_meetings"],
         }
 
         # Add basic stats
@@ -949,7 +1050,9 @@ async def get_metrics():
         }
     except Exception as e:
         logger.error(f"Metrics endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500, detail="We humbly thank you for your patience"
+        )
 
 
 @app.get("/api/analytics")
@@ -958,7 +1061,9 @@ async def get_analytics():
     try:
         # Get stats directly from unified database
         if db.conn is None:
-            raise HTTPException(status_code=500, detail="Database connection not established")
+            raise HTTPException(
+                status_code=500, detail="Database connection not established"
+            )
         cursor = db.conn.cursor()
 
         # City stats
@@ -969,10 +1074,14 @@ async def get_analytics():
         cursor.execute("SELECT COUNT(*) as meetings_count FROM meetings")
         meetings_stats = dict(cursor.fetchone())
 
-        cursor.execute("SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''")
+        cursor.execute(
+            "SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''"
+        )
         packets_stats = dict(cursor.fetchone())
 
-        cursor.execute("SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''")
+        cursor.execute(
+            "SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''"
+        )
         summaries_stats = dict(cursor.fetchone())
 
         cursor.execute("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
@@ -986,13 +1095,15 @@ async def get_analytics():
                 "meetings_tracked": meetings_stats["meetings_count"],
                 "meetings_with_packet": packets_stats["packets_count"],
                 "agendas_summarized": summaries_stats["summaries_count"],
-                "active_cities": active_cities_stats["active_cities"]
-            }
+                "active_cities": active_cities_stats["active_cities"],
+            },
         }
 
     except Exception as e:
         logger.error(f"Analytics endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail="We humbly thank you for your patience")
+        raise HTTPException(
+            status_code=500, detail="We humbly thank you for your patience"
+        )
 
 
 async def verify_admin_token(authorization: str = Header(None)):
@@ -1035,9 +1146,7 @@ async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
 
 
 @app.post("/api/admin/sync-city/{banana}")
-async def force_sync_city(
-    banana: str, is_admin: bool = Depends(verify_admin_token)
-):
+async def force_sync_city(banana: str, is_admin: bool = Depends(verify_admin_token)):
     """Force sync a specific city (admin endpoint)"""
     # This endpoint requires the background processor daemon to be running
     # Admin should use the daemon directly: python daemon.py --sync-city BANANA
@@ -1110,5 +1219,5 @@ if __name__ == "__main__":
         app,
         host=config.API_HOST,
         port=config.API_PORT,
-        access_log=False  # Disable default uvicorn logs (we have custom middleware logging)
+        access_log=False,  # Disable default uvicorn logs (we have custom middleware logging)
     )

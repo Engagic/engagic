@@ -14,7 +14,7 @@ from infocore.adapters.primegov_adapter import PrimeGovAdapter
 def check_meeting_details():
     """Check if PrimeGov has an endpoint for meeting details with agenda items"""
     print("PRIMEGOV DEEP PROBE - Looking for agenda items")
-    print("="*80)
+    print("=" * 80)
 
     adapter = PrimeGovAdapter("cityofpaloalto")
 
@@ -28,7 +28,7 @@ def check_meeting_details():
         return
 
     first_meeting = meetings[0]
-    meeting_id = first_meeting['id']
+    meeting_id = first_meeting["id"]
 
     print(f"Meeting ID: {meeting_id}")
     print(f"Title: {first_meeting['title']}")
@@ -53,20 +53,24 @@ def check_meeting_details():
             data = response.json()
 
             print(f"SUCCESS! Status: {response.status_code}")
-            print(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'List'}")
+            print(
+                f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'List'}"
+            )
 
             # Check for agenda items
             if isinstance(data, dict):
                 for key in data.keys():
-                    if 'item' in key.lower() or 'agenda' in key.lower():
+                    if "item" in key.lower() or "agenda" in key.lower():
                         print(f"\n  FOUND KEY: {key}")
                         items = data[key]
                         if isinstance(items, list) and items:
                             print(f"    Contains {len(items)} items")
-                            print(f"    First item keys: {list(items[0].keys()) if isinstance(items[0], dict) else 'N/A'}")
+                            print(
+                                f"    First item keys: {list(items[0].keys()) if isinstance(items[0], dict) else 'N/A'}"
+                            )
 
             # Show full structure if it looks promising
-            if isinstance(data, dict) and any('item' in k.lower() for k in data.keys()):
+            if isinstance(data, dict) and any("item" in k.lower() for k in data.keys()):
                 print("\n  FULL STRUCTURE:")
                 print(json.dumps(data, indent=2, default=str)[:2000])
 

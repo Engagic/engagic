@@ -5,14 +5,20 @@ Tests database, adapters, and processor after Phase 1-3 refactor
 """
 
 import sys
-sys.path.insert(0, '/root/engagic')
+
+sys.path.insert(0, "/root/engagic")
 
 from infocore.database import DatabaseManager
 from infocore.config import config
 from infocore.adapters.all_adapters import (
-    PrimeGovAdapter, CivicClerkAdapter, LegistarAdapter,
-    GranicusAdapter, NovusAgendaAdapter, CivicPlusAdapter
+    PrimeGovAdapter,
+    CivicClerkAdapter,
+    LegistarAdapter,
+    GranicusAdapter,
+    NovusAgendaAdapter,
+    CivicPlusAdapter,
 )
+
 
 def get_adapter_for_city(city):
     """Get appropriate adapter for a city"""
@@ -20,12 +26,12 @@ def get_adapter_for_city(city):
     city_slug = city.vendor_slug
 
     adapter_map = {
-        'primegov': PrimeGovAdapter,
-        'civicclerk': CivicClerkAdapter,
-        'legistar': LegistarAdapter,
-        'granicus': GranicusAdapter,
-        'novusagenda': NovusAgendaAdapter,
-        'civicplus': CivicPlusAdapter
+        "primegov": PrimeGovAdapter,
+        "civicclerk": CivicClerkAdapter,
+        "legistar": LegistarAdapter,
+        "granicus": GranicusAdapter,
+        "novusagenda": NovusAgendaAdapter,
+        "civicplus": CivicPlusAdapter,
     }
 
     adapter_class = adapter_map.get(vendor)
@@ -34,17 +40,18 @@ def get_adapter_for_city(city):
 
     return adapter_class(city_slug)
 
+
 def test_database():
     """Test unified database operations"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 1: Database Operations")
-    print("="*60)
+    print("=" * 60)
 
     db = DatabaseManager(config.UNIFIED_DB_PATH)
 
     # Test 1.1: Get city by banana
     print("\n[1.1] Testing get_city(banana='paloaltoCA')...")
-    city = db.get_city(banana='paloaltoCA')
+    city = db.get_city(banana="paloaltoCA")
     if city:
         print(f"  ✓ Found: {city.name}, {city.state} (vendor: {city.vendor})")
     else:
@@ -53,8 +60,8 @@ def test_database():
 
     # Test 1.2: Get city by name and state
     print("\n[1.2] Testing get_city(name='Palo Alto', state='CA')...")
-    city = db.get_city(name='Palo Alto', state='CA')
-    if city and city.banana == 'paloaltoCA':
+    city = db.get_city(name="Palo Alto", state="CA")
+    if city and city.banana == "paloaltoCA":
         print(f"  ✓ Found: {city.banana}")
     else:
         print("  ✗ FAILED: City lookup by name/state failed")
@@ -62,8 +69,8 @@ def test_database():
 
     # Test 1.3: Get city by zipcode
     print("\n[1.3] Testing get_city(zipcode='94301')...")
-    city = db.get_city(zipcode='94301')
-    if city and city.banana == 'paloaltoCA':
+    city = db.get_city(zipcode="94301")
+    if city and city.banana == "paloaltoCA":
         print(f"  ✓ Found: {city.name} via zipcode")
     else:
         print("  ✗ FAILED: Zipcode lookup failed")
@@ -71,7 +78,7 @@ def test_database():
 
     # Test 1.4: Get cities by vendor
     print("\n[1.4] Testing get_cities(vendor='primegov', limit=5)...")
-    cities = db.get_cities(vendor='primegov', limit=5)
+    cities = db.get_cities(vendor="primegov", limit=5)
     if len(cities) > 0:
         print(f"  ✓ Found {len(cities)} PrimeGov cities:")
         for c in cities[:3]:
@@ -82,7 +89,7 @@ def test_database():
 
     # Test 1.5: Get meetings for city
     print("\n[1.5] Testing get_meetings(city_bananas=['paloaltoCA'], limit=3)...")
-    meetings = db.get_meetings(city_bananas=['paloaltoCA'], limit=3)
+    meetings = db.get_meetings(city_bananas=["paloaltoCA"], limit=3)
     print(f"  ✓ Found {len(meetings)} meetings for Palo Alto")
     if meetings:
         for m in meetings[:2]:
@@ -93,34 +100,39 @@ def test_database():
     if meetings and meetings[0].packet_url:
         cached = db.get_cached_summary(meetings[0].packet_url)
         if cached:
-            print(f"  ✓ Found cached summary ({len(cached.get('processed_summary', ''))} chars)")
+            print(
+                f"  ✓ Found cached summary ({len(cached.get('processed_summary', ''))} chars)"
+            )
         else:
             print("  ⚠ No cached summary (expected for new meetings)")
     else:
         print("  ⚠ No meetings with packet URLs to test cache")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DATABASE TESTS: PASSED ✓")
-    print("="*60)
+    print("=" * 60)
     return True
+
 
 def test_adapters():
     """Test adapter functionality"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 2: Adapter Functionality")
-    print("="*60)
+    print("=" * 60)
 
     db = DatabaseManager(config.UNIFIED_DB_PATH)
 
     # Test one city from each vendor
     test_cases = [
-        ('paloaltoCA', 'primegov', 'Palo Alto, CA'),
-        ('glendoraCA', 'primegov', 'Glendora, CA'),
-        ('newberlinWI', 'civicclerk', 'New Berlin, WI'),
+        ("paloaltoCA", "primegov", "Palo Alto, CA"),
+        ("glendoraCA", "primegov", "Glendora, CA"),
+        ("newberlinWI", "civicclerk", "New Berlin, WI"),
     ]
 
     for banana, expected_vendor, city_display in test_cases:
-        print(f"\n[2.{test_cases.index((banana, expected_vendor, city_display))+1}] Testing {city_display} ({expected_vendor})...")
+        print(
+            f"\n[2.{test_cases.index((banana, expected_vendor, city_display)) + 1}] Testing {city_display} ({expected_vendor})..."
+        )
 
         city = db.get_city(banana=banana)
         if not city:
@@ -144,22 +156,25 @@ def test_adapters():
                 sample = meetings[0]
                 print(f"     Sample: {sample.get('title', 'N/A')[:60]}")
                 print(f"            Date: {sample.get('date', 'N/A')}")
-                print(f"            Has packet: {'packet_url' in sample and sample['packet_url']}")
+                print(
+                    f"            Has packet: {'packet_url' in sample and sample['packet_url']}"
+                )
 
         except Exception as e:
             print(f"  ✗ FAILED: {type(e).__name__}: {str(e)[:100]}")
             continue
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("ADAPTER TESTS: COMPLETED")
-    print("="*60)
+    print("=" * 60)
     return True
+
 
 def test_processor():
     """Test PDF processor"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 3: PDF Processor")
-    print("="*60)
+    print("=" * 60)
 
     try:
         from infocore.processing.processor import AgendaProcessor
@@ -172,7 +187,7 @@ def test_processor():
         db = DatabaseManager(config.UNIFIED_DB_PATH)
         print("\n[3.2] Finding meeting with packet URL...")
 
-        meetings = db.get_meetings(city_bananas=['paloaltoCA'], limit=10)
+        meetings = db.get_meetings(city_bananas=["paloaltoCA"], limit=10)
         test_meeting = None
         for m in meetings:
             if m.packet_url:
@@ -191,13 +206,15 @@ def test_processor():
         print("\n[3.3] Testing process_agenda_with_cache()...")
         print("  → This may take 5-15 seconds if not cached...")
 
-        result = processor.process_agenda_with_cache({
-            'packet_url': test_meeting.packet_url,
-            'city_banana': 'paloaltoCA',
-            'meeting_id': test_meeting.id
-        })
+        result = processor.process_agenda_with_cache(
+            {
+                "packet_url": test_meeting.packet_url,
+                "city_banana": "paloaltoCA",
+                "meeting_id": test_meeting.id,
+            }
+        )
 
-        if result['success']:
+        if result["success"]:
             print("  ✓ Processing successful")
             print(f"    Cached: {result['cached']}")
             print(f"    Processing time: {result['processing_time']:.2f}s")
@@ -208,9 +225,9 @@ def test_processor():
             print(f"  ✗ FAILED: {result.get('error', 'Unknown error')}")
             return False
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("PROCESSOR TESTS: PASSED ✓")
-        print("="*60)
+        print("=" * 60)
         return True
 
     except ImportError as e:
@@ -220,11 +237,12 @@ def test_processor():
         print(f"  ✗ FAILED: {type(e).__name__}: {e}")
         return False
 
+
 def test_api():
     """Test API endpoints"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 4: API Endpoints")
-    print("="*60)
+    print("=" * 60)
 
     try:
         import requests
@@ -241,7 +259,9 @@ def test_api():
                 print(f"  ⚠ Unexpected status: {resp.status_code}")
         except requests.exceptions.ConnectionError:
             print("  ⚠ API not running (this is OK if not started)")
-            print("  To test API, run: cd /root/engagic && uvicorn backend.api.main:app --host 0.0.0.0 --port 8000")
+            print(
+                "  To test API, run: cd /root/engagic && uvicorn infocore.api.main:app --host 0.0.0.0 --port 8000"
+            )
             return True
 
         # Test 4.2: Search by zipcode
@@ -266,9 +286,9 @@ def test_api():
         else:
             print(f"  ✗ FAILED: Status {resp.status_code}")
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("API TESTS: COMPLETED")
-        print("="*60)
+        print("=" * 60)
         return True
 
     except ImportError:
@@ -278,23 +298,24 @@ def test_api():
         print(f"  ✗ FAILED: {type(e).__name__}: {e}")
         return False
 
+
 def main():
     """Run all tests"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("ENGAGIC CORE FUNCTIONALITY TEST SUITE")
     print("Testing Phase 1-3 Refactor")
-    print("="*60)
+    print("=" * 60)
 
     results = {
-        'Database': test_database(),
-        'Adapters': test_adapters(),
-        'Processor': test_processor(),
-        'API': test_api()
+        "Database": test_database(),
+        "Adapters": test_adapters(),
+        "Processor": test_processor(),
+        "API": test_api(),
     }
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("FINAL RESULTS")
-    print("="*60)
+    print("=" * 60)
 
     for test_name, passed in results.items():
         status = "✓ PASSED" if passed else "✗ FAILED"
@@ -302,14 +323,15 @@ def main():
 
     all_passed = all(results.values())
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     if all_passed:
         print("ALL TESTS PASSED ✓")
     else:
         print("SOME TESTS FAILED ✗")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     return 0 if all_passed else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
