@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { marked } from 'marked';
 	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
 	import { parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 	import Footer from '$lib/components/Footer.svelte';
@@ -81,11 +82,11 @@
 		return `${monthName} ${day}${suffix}, ${year}`;
 	}
 
-	function processSummary(rawSummary: string): Array<{type: 'header' | 'text', content: string}> {
-		if (!rawSummary) return [];
-		
-		// Remove ugly document headers
-		let cleaned = rawSummary
+	function cleanSummary(rawSummary: string): string {
+		if (!rawSummary) return '';
+
+		// Remove ugly document headers but keep the markdown formatting
+		return rawSummary
 			.replace(/=== DOCUMENT \d+ ===/g, '')
 			.replace(/--- SECTION \d+ SUMMARY ---/g, '')
 			.replace(/Here's a concise summary of the[^:]*:/gi, '')
@@ -93,50 +94,8 @@
 			.replace(/Here's the key points[^:]*:/gi, '')
 			.replace(/Here's a structured analysis[^:]*:/gi, '')
 			.replace(/Summary of the[^:]*:/gi, '')
-			.trim();
-		
-		// Clean up extra whitespace
-		cleaned = cleaned
 			.replace(/\n{3,}/g, '\n\n')
-			.replace(/^\s*\n+/, '')
 			.trim();
-		
-		// Process into structured content
-		const lines = cleaned.split('\n');
-		const processed = [];
-		let currentText = '';
-		
-		for (const line of lines) {
-			// Check if this line has bold markdown header
-			const headerMatch = line.match(/^\*\*([^*]+):\*\*$/);
-			if (headerMatch) {
-				// Save any accumulated text first
-				if (currentText.trim()) {
-					processed.push({ type: 'text' as const, content: currentText.trim() });
-					currentText = '';
-				}
-				// Add the header
-				processed.push({ type: 'header' as const, content: headerMatch[1] });
-			} else {
-				// Accumulate regular text (with light markdown cleanup)
-				let cleanedLine = line
-					// Remove remaining bold/italic that isn't a header
-					.replace(/\*\*([^*]+)\*\*/g, '$1')
-					.replace(/\*([^*]+)\*/g, '$1')
-					.replace(/_([^_]+)_/g, '$1')
-					// Clean bullet points
-					.replace(/^\s*[\*\+]\s+/g, '- ');
-				
-				currentText += (currentText ? '\n' : '') + cleanedLine;
-			}
-		}
-		
-		// Add any remaining text
-		if (currentText.trim()) {
-			processed.push({ type: 'text' as const, content: currentText.trim() });
-		}
-		
-		return processed;
 	}
 	
 	
@@ -208,25 +167,8 @@
 			</div>
 			
 			{#if selectedMeeting.summary}
-				{@const processedContent = processSummary(selectedMeeting.summary)}
 				<div class="meeting-summary">
-					{#if processedContent.length === 1 && processedContent[0].type === 'text'}
-						<!-- Plain text summary without headers -->
-						<div class="summary-content">
-							{processedContent[0].content}
-						</div>
-					{:else}
-						<!-- Structured summary with headers -->
-						{#each processedContent as block}
-							{#if block.type === 'header'}
-								<h3 class="summary-header">{block.content}</h3>
-							{:else}
-								<div class="summary-text">
-									{block.content}
-								</div>
-							{/if}
-						{/each}
-					{/if}
+					{@html marked(cleanSummary(selectedMeeting.summary))}
 				</div>
 			{:else}
 				<div class="no-summary">
@@ -380,77 +322,103 @@
 	.meeting-summary {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.8;
-		font-size: 1.05rem;
-		color: #374151;
+		font-size: 1.1rem;
+		color: #1f2937;
 	}
-	
-	/* Markdown element styles */
+
 	.meeting-summary :global(h1),
 	.meeting-summary :global(h2),
 	.meeting-summary :global(h3),
-	.meeting-summary :global(h4) {
-		font-family: 'IBM Plex Mono', monospace;
+	.meeting-summary :global(h4),
+	.meeting-summary :global(h5),
+	.meeting-summary :global(h6) {
+		font-family: Georgia, 'Times New Roman', Times, serif;
 		color: var(--civic-dark);
-		margin-top: 1.5rem;
-		margin-bottom: 0.75rem;
-		font-weight: 600;
+		margin-top: 2.5rem;
+		margin-bottom: 1rem;
+		line-height: 1.3;
+		font-weight: 700;
 	}
-	
-	.meeting-summary :global(h1) { font-size: 1.5rem; }
-	.meeting-summary :global(h2) { font-size: 1.3rem; }
-	.meeting-summary :global(h3) { font-size: 1.15rem; }
-	.meeting-summary :global(h4) { font-size: 1.05rem; }
-	
+
+	.meeting-summary :global(h1) { font-size: 1.9rem; }
+	.meeting-summary :global(h2) { font-size: 1.6rem; }
+	.meeting-summary :global(h3) { font-size: 1.3rem; }
+	.meeting-summary :global(h4) { font-size: 1.15rem; }
+
 	.meeting-summary :global(h1:first-child),
 	.meeting-summary :global(h2:first-child),
 	.meeting-summary :global(h3:first-child),
 	.meeting-summary :global(h4:first-child) {
 		margin-top: 0;
 	}
-	
+
 	.meeting-summary :global(p) {
-		margin-bottom: 1rem;
+		margin: 1.5rem 0;
 	}
-	
+
 	.meeting-summary :global(ul),
 	.meeting-summary :global(ol) {
-		margin: 1rem 0;
+		margin: 1.5rem 0;
 		padding-left: 2rem;
 	}
-	
+
 	.meeting-summary :global(li) {
-		margin-bottom: 0.5rem;
+		margin: 0.5rem 0;
 	}
-	
-	.meeting-summary :global(li > ul),
-	.meeting-summary :global(li > ol) {
-		margin-top: 0.5rem;
-		margin-bottom: 0.5rem;
+
+	.meeting-summary :global(blockquote) {
+		margin: 2rem 0;
+		padding-left: 1.5rem;
+		border-left: 4px solid #333;
+		color: #333;
+		font-style: italic;
 	}
-	
+
+	.meeting-summary :global(code) {
+		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+		font-size: 0.9em;
+		background: #f5f5f5;
+		padding: 0.2rem 0.4rem;
+		border-radius: 3px;
+	}
+
+	.meeting-summary :global(pre) {
+		margin: 2rem 0;
+		padding: 1.5rem;
+		background: #f5f5f5;
+		overflow-x: auto;
+		line-height: 1.5;
+		border-radius: 6px;
+	}
+
+	.meeting-summary :global(pre code) {
+		padding: 0;
+		background: none;
+	}
+
+	.meeting-summary :global(a) {
+		color: var(--civic-blue);
+		text-decoration: underline;
+	}
+
 	.meeting-summary :global(strong) {
-		font-weight: 600;
-		color: var(--civic-dark);
+		font-weight: bold;
 	}
-	
+
 	.meeting-summary :global(em) {
 		font-style: italic;
 	}
-	
-	.meeting-summary :global(code) {
-		font-family: 'IBM Plex Mono', monospace;
-		background: #f3f4f6;
-		padding: 0.1rem 0.3rem;
-		border-radius: 3px;
-		font-size: 0.95em;
+
+	.meeting-summary :global(hr) {
+		margin: 3rem 0;
+		border: none;
+		border-top: 1px solid #ddd;
 	}
-	
-	.meeting-summary :global(blockquote) {
-		border-left: 3px solid var(--civic-blue);
-		padding-left: 1rem;
-		margin: 1rem 0;
-		color: #6b7280;
-		font-style: italic;
+
+	.meeting-summary :global(img) {
+		max-width: 100%;
+		height: auto;
+		margin: 2rem 0;
 	}
 
 	.no-summary {
@@ -505,9 +473,14 @@
 
 		.meeting-summary {
 			font-size: 1rem;
+			line-height: 1.7;
 			overflow-wrap: break-word;
 			word-wrap: break-word;
 		}
+
+		.meeting-summary :global(h1) { font-size: 1.5rem; }
+		.meeting-summary :global(h2) { font-size: 1.3rem; }
+		.meeting-summary :global(h3) { font-size: 1.15rem; }
 
 		.meeting-header {
 			margin-bottom: 1.5rem;
