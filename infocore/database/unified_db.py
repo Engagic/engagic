@@ -24,17 +24,19 @@ logger = logging.getLogger("engagic")
 
 class DatabaseConnectionError(Exception):
     """Raised when database connection is not established"""
+
     pass
 
 
 @dataclass
 class City:
     """City entity - single source of truth"""
-    banana: str              # Primary key: paloaltoCA (derived)
-    name: str                # Palo Alto
-    state: str               # CA
-    vendor: str              # primegov, legistar, granicus, etc.
-    slug: str         # cityofpaloalto (vendor-specific)
+
+    banana: str  # Primary key: paloaltoCA (derived)
+    name: str  # Palo Alto
+    state: str  # CA
+    vendor: str  # primegov, legistar, granicus, etc.
+    slug: str  # cityofpaloalto (vendor-specific)
     county: Optional[str] = None
     status: str = "active"
     created_at: Optional[datetime] = None
@@ -44,40 +46,51 @@ class City:
         """Convert to dictionary for JSON serialization"""
         data = asdict(self)
         if self.created_at:
-            data['created_at'] = self.created_at.isoformat()
+            data["created_at"] = self.created_at.isoformat()
         if self.updated_at:
-            data['updated_at'] = self.updated_at.isoformat()
+            data["updated_at"] = self.updated_at.isoformat()
         return data
 
     @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> 'City':
+    def from_db_row(cls, row: sqlite3.Row) -> "City":
         """Create City from database row"""
         row_dict = dict(row)
         return cls(
-            banana=row_dict['banana'],
-            name=row_dict['name'],
-            state=row_dict['state'],
-            vendor=row_dict['vendor'],
-            slug=row_dict['slug'],
-            county=row_dict.get('county'),
-            status=row_dict.get('status', 'active'),
-            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None,
-            updated_at=datetime.fromisoformat(row_dict['updated_at']) if row_dict.get('updated_at') else None
+            banana=row_dict["banana"],
+            name=row_dict["name"],
+            state=row_dict["state"],
+            vendor=row_dict["vendor"],
+            slug=row_dict["slug"],
+            county=row_dict.get("county"),
+            status=row_dict.get("status", "active"),
+            created_at=datetime.fromisoformat(row_dict["created_at"])
+            if row_dict.get("created_at")
+            else None,
+            updated_at=datetime.fromisoformat(row_dict["updated_at"])
+            if row_dict.get("updated_at")
+            else None,
         )
 
 
 @dataclass
 class Meeting:
     """Meeting entity with optional summary"""
-    id: str                  # Unique meeting ID
-    banana: str              # Foreign key to City
+
+    id: str  # Unique meeting ID
+    banana: str  # Foreign key to City
     title: str
     date: Optional[datetime]
-    packet_url: Optional[str | List[str]]  # Single URL or list for multiple PDFs (main + supplemental)
+    packet_url: Optional[
+        str | List[str]
+    ]  # Single URL or list for multiple PDFs (main + supplemental)
     summary: Optional[str] = None
-    status: Optional[str] = None  # cancelled, postponed, revised, rescheduled, or None for normal
+    status: Optional[str] = (
+        None  # cancelled, postponed, revised, rescheduled, or None for normal
+    )
     processing_status: str = "pending"  # pending, processing, completed, failed
-    processing_method: Optional[str] = None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
+    processing_method: Optional[str] = (
+        None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
+    )
     processing_time: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -86,21 +99,21 @@ class Meeting:
         """Convert to dictionary for JSON serialization"""
         data = asdict(self)
         if self.date:
-            data['date'] = self.date.isoformat()
+            data["date"] = self.date.isoformat()
         if self.created_at:
-            data['created_at'] = self.created_at.isoformat()
+            data["created_at"] = self.created_at.isoformat()
         if self.updated_at:
-            data['updated_at'] = self.updated_at.isoformat()
+            data["updated_at"] = self.updated_at.isoformat()
         return data
 
     @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> 'Meeting':
+    def from_db_row(cls, row: sqlite3.Row) -> "Meeting":
         """Create Meeting from database row"""
         row_dict = dict(row)
 
         # Deserialize packet_url if it's a JSON list
-        packet_url = row_dict.get('packet_url')
-        if packet_url and packet_url.startswith('['):
+        packet_url = row_dict.get("packet_url")
+        if packet_url and packet_url.startswith("["):
             try:
                 packet_url = json.loads(packet_url)
             except json.JSONDecodeError:
@@ -108,29 +121,38 @@ class Meeting:
                 pass  # Keep as string if JSON parsing fails
 
         return cls(
-            id=row_dict['id'],
-            banana=row_dict['banana'],
-            title=row_dict['title'],
-            date=datetime.fromisoformat(row_dict['date']) if row_dict.get('date') else None,
+            id=row_dict["id"],
+            banana=row_dict["banana"],
+            title=row_dict["title"],
+            date=datetime.fromisoformat(row_dict["date"])
+            if row_dict.get("date")
+            else None,
             packet_url=packet_url,
-            summary=row_dict.get('summary'),
-            status=row_dict.get('status'),
-            processing_status=row_dict.get('processing_status', 'pending'),
-            processing_method=row_dict.get('processing_method'),
-            processing_time=row_dict.get('processing_time'),
-            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None,
-            updated_at=datetime.fromisoformat(row_dict['updated_at']) if row_dict.get('updated_at') else None
+            summary=row_dict.get("summary"),
+            status=row_dict.get("status"),
+            processing_status=row_dict.get("processing_status", "pending"),
+            processing_method=row_dict.get("processing_method"),
+            processing_time=row_dict.get("processing_time"),
+            created_at=datetime.fromisoformat(row_dict["created_at"])
+            if row_dict.get("created_at")
+            else None,
+            updated_at=datetime.fromisoformat(row_dict["updated_at"])
+            if row_dict.get("updated_at")
+            else None,
         )
 
 
 @dataclass
 class AgendaItem:
     """Agenda item entity - individual items within a meeting"""
-    id: str                     # Vendor-specific item ID
-    meeting_id: str             # Foreign key to Meeting
+
+    id: str  # Vendor-specific item ID
+    meeting_id: str  # Foreign key to Meeting
     title: str
-    sequence: int               # Order in agenda
-    attachments: List[Any]      # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
+    sequence: int  # Order in agenda
+    attachments: List[
+        Any
+    ]  # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
     summary: Optional[str] = None
     topics: Optional[List[str]] = None  # Extracted topics
     created_at: Optional[datetime] = None
@@ -139,16 +161,16 @@ class AgendaItem:
         """Convert to dictionary for JSON serialization"""
         data = asdict(self)
         if self.created_at:
-            data['created_at'] = self.created_at.isoformat()
+            data["created_at"] = self.created_at.isoformat()
         return data
 
     @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> 'AgendaItem':
+    def from_db_row(cls, row: sqlite3.Row) -> "AgendaItem":
         """Create AgendaItem from database row"""
         row_dict = dict(row)
 
         # Deserialize JSON fields
-        attachments = row_dict.get('attachments')
+        attachments = row_dict.get("attachments")
         if attachments:
             try:
                 attachments = json.loads(attachments)
@@ -158,7 +180,7 @@ class AgendaItem:
         else:
             attachments = []
 
-        topics = row_dict.get('topics')
+        topics = row_dict.get("topics")
         if topics:
             try:
                 topics = json.loads(topics)
@@ -169,14 +191,16 @@ class AgendaItem:
             topics = None
 
         return cls(
-            id=row_dict['id'],
-            meeting_id=row_dict['meeting_id'],
-            title=row_dict['title'],
-            sequence=row_dict['sequence'],
+            id=row_dict["id"],
+            meeting_id=row_dict["meeting_id"],
+            title=row_dict["title"],
+            sequence=row_dict["sequence"],
             attachments=attachments,
-            summary=row_dict.get('summary'),
+            summary=row_dict.get("summary"),
             topics=topics,
-            created_at=datetime.fromisoformat(row_dict['created_at']) if row_dict.get('created_at') else None
+            created_at=datetime.fromisoformat(row_dict["created_at"])
+            if row_dict.get("created_at")
+            else None,
         )
 
 
@@ -381,7 +405,7 @@ class UnifiedDatabase:
         name: Optional[str] = None,
         state: Optional[str] = None,
         slug: Optional[str] = None,
-        zipcode: Optional[str] = None
+        zipcode: Optional[str] = None,
     ) -> Optional[City]:
         """
         Unified city lookup - replaces 4+ separate methods.
@@ -410,20 +434,26 @@ class UnifiedDatabase:
             cursor.execute("SELECT * FROM cities WHERE slug = ?", (slug,))
         elif zipcode:
             # Lookup via zipcode join
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT c.* FROM cities c
                 JOIN zipcodes cz ON c.banana = cz.banana
                 WHERE cz.zipcode = ?
                 LIMIT 1
-            """, (zipcode,))
+            """,
+                (zipcode,),
+            )
         elif name and state:
             # Normalized name matching (case-insensitive, space-normalized)
-            normalized_name = name.lower().replace(' ', '')
-            cursor.execute("""
+            normalized_name = name.lower().replace(" ", "")
+            cursor.execute(
+                """
                 SELECT * FROM cities
                 WHERE LOWER(REPLACE(name, ' ', '')) = ?
                 AND UPPER(state) = ?
-            """, (normalized_name, state.upper()))
+            """,
+                (normalized_name, state.upper()),
+            )
         else:
             raise ValueError("Must provide at least one search parameter")
 
@@ -436,7 +466,7 @@ class UnifiedDatabase:
         vendor: Optional[str] = None,
         name: Optional[str] = None,
         status: str = "active",
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
     ) -> List[City]:
         """
         Batch city lookup with filters.
@@ -466,7 +496,7 @@ class UnifiedDatabase:
 
         query = f"""
             SELECT * FROM cities
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             ORDER BY name
         """
 
@@ -484,9 +514,10 @@ class UnifiedDatabase:
             return {}
 
         assert self.conn is not None, "Database connection not established"
-        placeholders = ','.join('?' * len(bananas))
+        placeholders = ",".join("?" * len(bananas))
         cursor = self.conn.cursor()
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             SELECT
                 banana,
                 COUNT(*) as total_meetings,
@@ -495,13 +526,15 @@ class UnifiedDatabase:
             FROM meetings
             WHERE banana IN ({placeholders})
             GROUP BY banana
-        """, bananas)
+        """,
+            bananas,
+        )
 
         return {
-            row['banana']: {
-                'total_meetings': row['total_meetings'],
-                'meetings_with_packet': row['meetings_with_packet'],
-                'summarized_meetings': row['summarized_meetings']
+            row["banana"]: {
+                "total_meetings": row["total_meetings"],
+                "meetings_with_packet": row["meetings_with_packet"],
+                "summarized_meetings": row["summarized_meetings"],
             }
             for row in cursor.fetchall()
         }
@@ -514,34 +547,42 @@ class UnifiedDatabase:
         vendor: str,
         slug: str,
         county: Optional[str] = None,
-        zipcodes: Optional[List[str]] = None
+        zipcodes: Optional[List[str]] = None,
     ) -> City:
         """Add a new city to the database"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO cities
             (banana, name, state, vendor, slug, county)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (banana, name, state, vendor, slug, county))
+        """,
+            (banana, name, state, vendor, slug, county),
+        )
 
         # Add zipcodes if provided
         if zipcodes:
             for i, zipcode in enumerate(zipcodes):
-                is_primary = (i == 0)
-                cursor.execute("""
+                is_primary = i == 0
+                cursor.execute(
+                    """
                     INSERT OR IGNORE INTO zipcodes
                     (banana, zipcode, is_primary)
                     VALUES (?, ?, ?)
-                """, (banana, zipcode, is_primary))
+                """,
+                    (banana, zipcode, is_primary),
+                )
 
         self.conn.commit()
         logger.info(f"Added city: {banana} ({name}, {state})")
 
         result = self.get_city(banana=banana)
         if result is None:
-            raise DatabaseConnectionError(f"Failed to retrieve newly added city: {banana}")
+            raise DatabaseConnectionError(
+                f"Failed to retrieve newly added city: {banana}"
+            )
         return result
 
     def get_city_zipcodes(self, banana: str) -> List[str]:
@@ -549,13 +590,16 @@ class UnifiedDatabase:
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
         cursor = self.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT zipcode FROM zipcodes
             WHERE banana = ?
             ORDER BY is_primary DESC, zipcode
-        """, (banana,))
+        """,
+            (banana,),
+        )
 
-        return [row['zipcode'] for row in cursor.fetchall()]
+        return [row["zipcode"] for row in cursor.fetchall()]
 
     # ========== Meeting Operations ==========
 
@@ -574,7 +618,7 @@ class UnifiedDatabase:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         has_summary: Optional[bool] = None,
-        limit: int = 50
+        limit: int = 50,
     ) -> List[Meeting]:
         """
         Get meetings with flexible filtering.
@@ -591,7 +635,7 @@ class UnifiedDatabase:
         params = []
 
         if bananas:
-            placeholders = ','.join('?' * len(bananas))
+            placeholders = ",".join("?" * len(bananas))
             conditions.append(f"banana IN ({placeholders})")
             params.extend(bananas)
 
@@ -628,27 +672,32 @@ class UnifiedDatabase:
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO meetings
             (id, banana, title, date, packet_url, summary, status,
              processing_status, processing_method, processing_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            meeting.id,
-            meeting.banana,
-            meeting.title,
-            meeting.date.isoformat() if meeting.date else None,
-            meeting.packet_url,
-            meeting.summary,
-            meeting.status,
-            meeting.processing_status,
-            meeting.processing_method,
-            meeting.processing_time
-        ))
+        """,
+            (
+                meeting.id,
+                meeting.banana,
+                meeting.title,
+                meeting.date.isoformat() if meeting.date else None,
+                meeting.packet_url,
+                meeting.summary,
+                meeting.status,
+                meeting.processing_status,
+                meeting.processing_method,
+                meeting.processing_time,
+            ),
+        )
 
         self.conn.commit()
         result = self.get_meeting(meeting.id)
-        assert result is not None, f"Failed to retrieve newly stored meeting: {meeting.id}"
+        assert result is not None, (
+            f"Failed to retrieve newly stored meeting: {meeting.id}"
+        )
         return result
 
     def update_meeting_summary(
@@ -656,13 +705,14 @@ class UnifiedDatabase:
         meeting_id: str,
         summary: str,
         processing_method: str,
-        processing_time: float
+        processing_time: float,
     ):
         """Update meeting with processed summary"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE meetings
             SET summary = ?,
                 processing_status = 'completed',
@@ -670,22 +720,29 @@ class UnifiedDatabase:
                 processing_time = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (summary, processing_method, processing_time, meeting_id))
+        """,
+            (summary, processing_method, processing_time, meeting_id),
+        )
 
         self.conn.commit()
-        logger.info(f"Updated summary for meeting {meeting_id} using {processing_method}")
+        logger.info(
+            f"Updated summary for meeting {meeting_id} using {processing_method}"
+        )
 
     def get_unprocessed_meetings(self, limit: int = 50) -> List[Meeting]:
         """Get meetings that need summary processing"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM meetings
             WHERE processing_status = 'pending'
             AND packet_url IS NOT NULL
             ORDER BY date DESC
             LIMIT ?
-        """, (limit,))
+        """,
+            (limit,),
+        )
 
         return [Meeting.from_db_row(row) for row in cursor.fetchall()]
 
@@ -693,40 +750,49 @@ class UnifiedDatabase:
         """Get count of meetings for a city in the last N days"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT COUNT(*) as count
             FROM meetings
             WHERE banana = ?
             AND date >= datetime('now', '-' || ? || ' days')
-        """, (banana, days))
+        """,
+            (banana, days),
+        )
 
         result = cursor.fetchone()
-        return result['count'] if result else 0
+        return result["count"] if result else 0
 
     def get_city_last_sync(self, banana: str) -> Optional[datetime]:
         """Get the last sync time for a city (most recent meeting created_at)"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT MAX(created_at) as last_sync
             FROM meetings
             WHERE banana = ?
-        """, (banana,))
+        """,
+            (banana,),
+        )
 
         result = cursor.fetchone()
-        if result and result['last_sync']:
-            return datetime.fromisoformat(result['last_sync'])
+        if result and result["last_sync"]:
+            return datetime.fromisoformat(result["last_sync"])
         return None
 
     def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Meeting]:
         """Get meeting by packet URL"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM meetings
             WHERE packet_url = ?
             LIMIT 1
-        """, (packet_url,))
+        """,
+            (packet_url,),
+        )
 
         row = cursor.fetchone()
         return Meeting.from_db_row(row) if row else None
@@ -751,22 +817,27 @@ class UnifiedDatabase:
 
         for item in items:
             # Serialize JSON fields
-            attachments_json = json.dumps(item.attachments) if item.attachments else None
+            attachments_json = (
+                json.dumps(item.attachments) if item.attachments else None
+            )
             topics_json = json.dumps(item.topics) if item.topics else None
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO items
                 (id, meeting_id, title, sequence, attachments, summary, topics)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                item.id,
-                meeting_id,
-                item.title,
-                item.sequence,
-                attachments_json,
-                item.summary,
-                topics_json
-            ))
+            """,
+                (
+                    item.id,
+                    meeting_id,
+                    item.title,
+                    item.sequence,
+                    attachments_json,
+                    item.summary,
+                    topics_json,
+                ),
+            )
             stored_count += 1
 
         self.conn.commit()
@@ -786,11 +857,14 @@ class UnifiedDatabase:
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM items
             WHERE meeting_id = ?
             ORDER BY sequence ASC
-        """, (meeting_id,))
+        """,
+            (meeting_id,),
+        )
 
         rows = cursor.fetchall()
         return [AgendaItem.from_db_row(row) for row in rows]
@@ -809,12 +883,15 @@ class UnifiedDatabase:
 
         topics_json = json.dumps(topics) if topics else None
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE items
             SET summary = ?,
                 topics = ?
             WHERE id = ?
-        """, (summary, topics_json, item_id))
+        """,
+            (summary, topics_json, item_id),
+        )
 
         self.conn.commit()
         logger.debug(f"Updated agenda item {item_id} with summary and topics")
@@ -828,23 +905,31 @@ class UnifiedDatabase:
         cursor = self.conn.cursor()
 
         # Serialize URL if it's a list
-        lookup_url = json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
+        lookup_url = (
+            json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM meetings
             WHERE packet_url = ? AND summary IS NOT NULL
             LIMIT 1
-        """, (lookup_url,))
+        """,
+            (lookup_url,),
+        )
 
         row = cursor.fetchone()
         if row:
             # Update cache hit count
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE cache
                 SET cache_hit_count = cache_hit_count + 1,
                     last_accessed = CURRENT_TIMESTAMP
                 WHERE packet_url = ?
-            """, (lookup_url,))
+            """,
+                (lookup_url,),
+            )
             self.conn.commit()
 
             return Meeting.from_db_row(row)
@@ -852,22 +937,24 @@ class UnifiedDatabase:
         return None
 
     def store_processing_result(
-        self,
-        packet_url: str,
-        processing_method: str,
-        processing_time: float
+        self, packet_url: str, processing_method: str, processing_time: float
     ):
         """Store processing result in cache"""
         assert self.conn is not None, "Database connection not established"
         cursor = self.conn.cursor()
 
-        lookup_url = json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
+        lookup_url = (
+            json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO cache
             (packet_url, processing_method, processing_time, cache_hit_count)
             VALUES (?, ?, ?, 0)
-        """, (lookup_url, processing_method, processing_time))
+        """,
+            (lookup_url, processing_method, processing_time),
+        )
 
         self.conn.commit()
 
@@ -879,29 +966,41 @@ class UnifiedDatabase:
         cursor = self.conn.cursor()
 
         cursor.execute("SELECT COUNT(*) as count FROM cities WHERE status = 'active'")
-        active_cities = cursor.fetchone()['count']
+        active_cities = cursor.fetchone()["count"]
 
         cursor.execute("SELECT COUNT(*) as count FROM meetings")
-        total_meetings = cursor.fetchone()['count']
+        total_meetings = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE summary IS NOT NULL")
-        summarized_meetings = cursor.fetchone()['count']
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM meetings WHERE summary IS NOT NULL"
+        )
+        summarized_meetings = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(*) as count FROM meetings WHERE processing_status = 'pending'")
-        pending_meetings = cursor.fetchone()['count']
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM meetings WHERE processing_status = 'pending'"
+        )
+        pending_meetings = cursor.fetchone()["count"]
 
         return {
             "active_cities": active_cities,
             "total_meetings": total_meetings,
             "summarized_meetings": summarized_meetings,
             "pending_meetings": pending_meetings,
-            "summary_rate": f"{summarized_meetings / total_meetings * 100:.1f}%" if total_meetings > 0 else "0%"
+            "summary_rate": f"{summarized_meetings / total_meetings * 100:.1f}%"
+            if total_meetings > 0
+            else "0%",
         }
 
     # === Processing Queue Methods (Phase 4) ===
 
-    def enqueue_for_processing(self, packet_url: str, meeting_id: str, banana: str,
-                               priority: int = 0, metadata: Optional[Dict[str, Any]] = None) -> int:
+    def enqueue_for_processing(
+        self,
+        packet_url: str,
+        meeting_id: str,
+        banana: str,
+        priority: int = 0,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
         """Add a packet URL to the processing queue with priority"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -916,13 +1015,15 @@ class UnifiedDatabase:
                 (packet_url, meeting_id, banana, priority, processing_metadata)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (packet_url, meeting_id, banana, priority, metadata_json)
+                (packet_url, meeting_id, banana, priority, metadata_json),
             )
             self.conn.commit()
             queue_id = cursor.lastrowid
             if queue_id is None:
                 raise DatabaseConnectionError("Failed to get queue ID after insert")
-            logger.info(f"Enqueued {packet_url} for processing with priority {priority}")
+            logger.info(
+                f"Enqueued {packet_url} for processing with priority {priority}"
+            )
             return queue_id
         except sqlite3.IntegrityError as e:
             if "UNIQUE constraint failed" in str(e):
@@ -930,7 +1031,9 @@ class UnifiedDatabase:
                 return -1
             raise
 
-    def get_next_for_processing(self, banana: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_next_for_processing(
+        self, banana: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Get next item from processing queue based on priority and status"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -945,7 +1048,7 @@ class UnifiedDatabase:
                 ORDER BY priority DESC, created_at ASC
                 LIMIT 1
                 """,
-                (banana,)
+                (banana,),
             )
         else:
             cursor.execute(
@@ -966,13 +1069,15 @@ class UnifiedDatabase:
                 SET status = 'processing', started_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (row['id'],)
+                (row["id"],),
             )
             self.conn.commit()
 
             result = dict(row)
-            if result.get('processing_metadata'):
-                result['processing_metadata'] = json.loads(result['processing_metadata'])
+            if result.get("processing_metadata"):
+                result["processing_metadata"] = json.loads(
+                    result["processing_metadata"]
+                )
             return result
         return None
 
@@ -988,12 +1093,14 @@ class UnifiedDatabase:
             SET status = 'completed', completed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (queue_id,)
+            (queue_id,),
         )
         self.conn.commit()
         logger.info(f"Marked queue item {queue_id} as completed")
 
-    def mark_processing_failed(self, queue_id: int, error_message: str, increment_retry: bool = True) -> None:
+    def mark_processing_failed(
+        self, queue_id: int, error_message: str, increment_retry: bool = True
+    ) -> None:
         """Mark a queue item as failed with error message"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -1010,7 +1117,7 @@ class UnifiedDatabase:
                     completed_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (error_message, queue_id)
+                (error_message, queue_id),
             )
         else:
             cursor.execute(
@@ -1021,7 +1128,7 @@ class UnifiedDatabase:
                     completed_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (error_message, queue_id)
+                (error_message, queue_id),
             )
         self.conn.commit()
         logger.warning(f"Marked queue item {queue_id} as failed: {error_message}")
@@ -1038,7 +1145,7 @@ class UnifiedDatabase:
             SET status = 'pending', error_message = NULL
             WHERE status = 'failed' AND retry_count < ?
             """,
-            (max_retries,)
+            (max_retries,),
         )
         reset_count = cursor.rowcount
         self.conn.commit()
@@ -1062,7 +1169,7 @@ class UnifiedDatabase:
             """
         )
         for row in cursor.fetchall():
-            stats[f"{row['status']}_count"] = row['count']
+            stats[f"{row['status']}_count"] = row["count"]
 
         # Failed with high retry count
         cursor.execute(
@@ -1073,7 +1180,7 @@ class UnifiedDatabase:
             """
         )
         result = cursor.fetchone()
-        stats['permanently_failed'] = result['count'] if result else 0
+        stats["permanently_failed"] = result["count"] if result else 0
 
         # Average processing time
         cursor.execute(
@@ -1084,8 +1191,8 @@ class UnifiedDatabase:
             """
         )
         result = cursor.fetchone()
-        avg_time = result['avg_seconds'] if result else None
-        stats['avg_processing_seconds'] = avg_time if avg_time else 0
+        avg_time = result["avg_seconds"] if result else None
+        stats["avg_processing_seconds"] = avg_time if avg_time else 0
 
         return stats
 
@@ -1116,9 +1223,13 @@ class UnifiedDatabase:
         enqueued = 0
         for meeting in meetings:
             # Calculate priority based on meeting date recency
-            if meeting['date']:
+            if meeting["date"]:
                 try:
-                    meeting_date = datetime.fromisoformat(meeting['date']) if isinstance(meeting['date'], str) else meeting['date']
+                    meeting_date = (
+                        datetime.fromisoformat(meeting["date"])
+                        if isinstance(meeting["date"], str)
+                        else meeting["date"]
+                    )
                     days_old = (datetime.now() - meeting_date).days
                 except Exception:
                     days_old = 999
@@ -1134,7 +1245,7 @@ class UnifiedDatabase:
                     (packet_url, meeting_id, banana, priority)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (meeting['packet_url'], meeting['id'], meeting['banana'], priority)
+                    (meeting["packet_url"], meeting["id"], meeting["banana"], priority),
                 )
                 enqueued += 1
             except sqlite3.IntegrityError:

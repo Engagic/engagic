@@ -43,7 +43,9 @@ class GranicusAdapter(BaseAdapter):
         mappings = self._load_view_id_mappings()
 
         if self.base_url in mappings:
-            logger.info(f"[granicus:{self.slug}] Found cached view_id: {mappings[self.base_url]}")
+            logger.info(
+                f"[granicus:{self.slug}] Found cached view_id: {mappings[self.base_url]}"
+            )
             return mappings[self.base_url]
 
         # Discover and cache
@@ -58,7 +60,7 @@ class GranicusAdapter(BaseAdapter):
         """Load view_id cache from disk"""
         if os.path.exists(self.view_ids_file):
             try:
-                with open(self.view_ids_file, 'r') as f:
+                with open(self.view_ids_file, "r") as f:
                     return json.load(f)
             except Exception as e:
                 logger.warning(f"Could not load view_id cache: {e}")
@@ -67,7 +69,7 @@ class GranicusAdapter(BaseAdapter):
     def _save_view_id_mappings(self, mappings: Dict[str, int]):
         """Save view_id cache to disk"""
         os.makedirs(os.path.dirname(self.view_ids_file), exist_ok=True)
-        with open(self.view_ids_file, 'w') as f:
+        with open(self.view_ids_file, "w") as f:
             json.dump(mappings, f, indent=2)
 
     def _discover_view_id(self) -> int:
@@ -94,7 +96,9 @@ class GranicusAdapter(BaseAdapter):
                     and ("Meeting" in response.text or "Agenda" in response.text)
                     and current_year in response.text
                 ):
-                    logger.info(f"[granicus:{self.slug}] Found view_id {i} with {current_year} data")
+                    logger.info(
+                        f"[granicus:{self.slug}] Found view_id {i} with {current_year} data"
+                    )
                     return i
             except Exception:
                 continue
@@ -111,9 +115,13 @@ class GranicusAdapter(BaseAdapter):
         soup = self._fetch_html(self.list_url)
 
         # Find "Upcoming Events" or "Upcoming Meetings" section
-        upcoming_header = soup.find("h2", string="Upcoming Events") or soup.find("h3", string="Upcoming Events")
+        upcoming_header = soup.find("h2", string="Upcoming Events") or soup.find(
+            "h3", string="Upcoming Events"
+        )
         if not upcoming_header:
-            upcoming_header = soup.find("h2", string="Upcoming Meetings") or soup.find("h3", string="Upcoming Meetings")
+            upcoming_header = soup.find("h2", string="Upcoming Meetings") or soup.find(
+                "h3", string="Upcoming Meetings"
+            )
 
         if not upcoming_header:
             logger.warning(f"[granicus:{self.slug}] No upcoming events section found")
@@ -143,9 +151,13 @@ class GranicusAdapter(BaseAdapter):
                 continue
 
             # Extract title and date (remove hidden timestamp spans)
-            for span in cells[0].find_all('span', style=lambda x: x and 'display:none' in x):
+            for span in cells[0].find_all(
+                "span", style=lambda x: x and "display:none" in x
+            ):
                 span.decompose()
-            for span in cells[1].find_all('span', style=lambda x: x and 'display:none' in x):
+            for span in cells[1].find_all(
+                "span", style=lambda x: x and "display:none" in x
+            ):
                 span.decompose()
 
             title = cells[0].get_text(" ", strip=True)
@@ -167,7 +179,10 @@ class GranicusAdapter(BaseAdapter):
                     meeting_id = self._extract_meeting_id(agenda_url)
 
                     # Check if direct PDF or agenda viewer page
-                    if ".pdf" in agenda_url.lower() or "GeneratedAgenda.ashx" in agenda_url:
+                    if (
+                        ".pdf" in agenda_url.lower()
+                        or "GeneratedAgenda.ashx" in agenda_url
+                    ):
                         packet_url = agenda_url
                     elif "AgendaViewer.php" in agenda_url:
                         # Extract PDFs from AgendaViewer page
@@ -203,11 +218,11 @@ class GranicusAdapter(BaseAdapter):
         params = parse_qs(parsed.query)
 
         # Try clip_id first (event details)
-        if 'clip_id' in params:
+        if "clip_id" in params:
             return f"clip_{params['clip_id'][0]}"
 
         # Try event_id (agenda viewer)
-        if 'event_id' in params:
+        if "event_id" in params:
             return f"event_{params['event_id'][0]}"
 
         return None
@@ -227,15 +242,19 @@ class GranicusAdapter(BaseAdapter):
             pdfs = []
 
             # Look for PDF links in the page
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                if '.pdf' in href.lower() or 'MetaViewer' in href:
+            for link in soup.find_all("a", href=True):
+                href = link["href"]
+                if ".pdf" in href.lower() or "MetaViewer" in href:
                     absolute_url = urljoin(self.base_url, href)
                     pdfs.append(absolute_url)
 
-            logger.debug(f"[granicus:{self.slug}] Found {len(pdfs)} PDFs in AgendaViewer")
+            logger.debug(
+                f"[granicus:{self.slug}] Found {len(pdfs)} PDFs in AgendaViewer"
+            )
             return pdfs
 
         except Exception as e:
-            logger.warning(f"[granicus:{self.slug}] Failed to extract PDFs from {agenda_url}: {e}")
+            logger.warning(
+                f"[granicus:{self.slug}] Failed to extract PDFs from {agenda_url}: {e}"
+            )
             return []

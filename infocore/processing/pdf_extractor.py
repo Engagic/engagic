@@ -48,23 +48,25 @@ class PdfExtractor:
             doc.close()
 
             extraction_time = time.time() - start_time
-            logger.info(f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars in {extraction_time:.2f}s")
+            logger.info(
+                f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars in {extraction_time:.2f}s"
+            )
 
             return {
-                'success': True,
-                'text': full_text,
-                'method': 'pymupdf',
-                'page_count': page_count,
-                'extraction_time': extraction_time
+                "success": True,
+                "text": full_text,
+                "method": "pymupdf",
+                "page_count": page_count,
+                "extraction_time": extraction_time,
             }
 
         except Exception as e:
             extraction_time = time.time() - start_time
             logger.error(f"[PyMuPDF] Failed for {url}: {e}")
             return {
-                'success': False,
-                'error': f"PyMuPDF extraction failed: {str(e)}",
-                'extraction_time': extraction_time
+                "success": False,
+                "error": f"PyMuPDF extraction failed: {str(e)}",
+                "extraction_time": extraction_time,
             }
 
     def extract_from_bytes(self, pdf_bytes: bytes) -> Dict[str, Any]:
@@ -87,23 +89,25 @@ class PdfExtractor:
             doc.close()
 
             extraction_time = time.time() - start_time
-            logger.info(f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars in {extraction_time:.2f}s")
+            logger.info(
+                f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars in {extraction_time:.2f}s"
+            )
 
             return {
-                'success': True,
-                'text': full_text,
-                'method': 'pymupdf',
-                'page_count': page_count,
-                'extraction_time': extraction_time
+                "success": True,
+                "text": full_text,
+                "method": "pymupdf",
+                "page_count": page_count,
+                "extraction_time": extraction_time,
             }
 
         except Exception as e:
             extraction_time = time.time() - start_time
             logger.error(f"[PyMuPDF] Extraction from bytes failed: {e}")
             return {
-                'success': False,
-                'error': f"PyMuPDF extraction failed: {str(e)}",
-                'extraction_time': extraction_time
+                "success": False,
+                "error": f"PyMuPDF extraction failed: {str(e)}",
+                "extraction_time": extraction_time,
             }
 
     def validate_text(self, text: str) -> bool:
