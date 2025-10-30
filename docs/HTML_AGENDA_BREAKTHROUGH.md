@@ -42,33 +42,43 @@ Current approach:
 
 ## Current State by Vendor
 
-### Legistar (Already Works!)
+### Legistar (Already Works!) ✅
 - ✅ API returns structured items
 - ✅ `fetch_event_items()` → `fetch_matter_attachments()`
 - ✅ Item-level processing already implemented in conductor
 - ✅ Stores in `agenda_items` table
+- **Coverage:** 110 cities
 
 **Code:** `infocore/adapters/legistar_adapter.py:105-150`
 
-### PrimeGov (HTML Available!)
-- ✅ Has "HTML Agenda" document type
-- ❌ Currently only fetches packet
-- 🔨 **TODO:** Fetch HTML Agenda, parse structure, extract item+attachments
+### PrimeGov (OPERATIONAL!) ✅
+- ✅ Has "HTML Agenda" document type in documentList
+- ✅ Uses `/Portal/Meeting?meetingTemplateId=X` endpoint (NOT `/Public/CompiledDocument`)
+- ✅ Parser extracts `<div class="agenda-item">` elements
+- ✅ Attachments via `/api/compilemeetingattachmenthistory/historyattachment/?historyId=UUID`
+- ✅ Returns items array like Legistar
+- ✅ Participation info extracted (email, phone, zoom, hybrid)
+- **Coverage:** 64 cities
+- **Tested:** Palo Alto City Council (17 items), Finance Committee (2 items)
 
-**Example:** Palo Alto, CA - `cityofpaloalto.primegov.com`
+**Code:** `infocore/adapters/primegov_adapter.py`, `infocore/adapters/html_agenda_parser.py`
 
-### CivicClerk (Check for HTML)
-- ✅ Has `publishedFiles` array
-- ❓ Need to check if HTML agenda type exists
-- ❓ Currently only grabs "Agenda Packet" or "Agenda"
+### CivicClerk (API Available!)
+- ✅ Has `/v1/Meetings/{id}` endpoint with `items` array
+- ✅ Structured JSON like Legistar (not HTML parsing needed)
+- ❌ Tested meetings have empty items array (not populated)
+- 🔨 **TODO:** Find cities with populated items, add `fetch_event_items()` method
+- **Coverage:** 16 cities
+- **Example:** Amarillo, TX - `amarillotx.api.civicclerk.com`
 
-**Example:** Montpelier, VT - `montpelliervt.api.civicclerk.com`
-
-### Granicus (Already Deep Scrapes!)
+### Granicus (HIGHEST PRIORITY - 467 cities!)
 - ✅ `_extract_pdfs_from_agenda_viewer()` already exists
 - ✅ Scrapes agenda viewer page for PDFs
 - ❌ Doesn't connect PDFs to specific items
-- 🔨 **TODO:** Parse HTML structure to map attachments to items
+- ❌ Many cities have broken ViewPublisher URLs
+- 🔨 **TODO:** Parse HTML agenda viewer structure to map items → attachments
+- **Coverage:** 467 cities (LARGEST vendor)
+- **Challenge:** HTML scraping, no clean API like Legistar/CivicClerk
 
 **Code:** `infocore/adapters/granicus_adapter.py:215-240`
 
@@ -206,14 +216,23 @@ def fetch_agenda_items(meeting):
 
 ## Implementation Plan
 
-### Phase 1: Proof of Concept (PrimeGov)
-1. Fetch HTML Agenda for Palo Alto meeting
-2. Inspect actual HTML structure (class names, tags, hierarchy)
-3. Write parser to extract items
-4. Test per-item processing
-5. Compare to Legistar quality
+### Phase 1: Proof of Concept (PrimeGov) ✅ COMPLETE
+1. ✅ Fetch HTML Agenda for Palo Alto meeting
+2. ✅ Inspect actual HTML structure (class names, tags, hierarchy)
+3. ✅ Write parser to extract items
+4. ✅ Test per-item processing
+5. ✅ Compare to Legistar quality
 
-**Script to write:** `scripts/probe_html_agenda.py`
+**Status:** OPERATIONAL (2025-01-30)
+**Scripts:** `scripts/probe_html_agenda.py`, `scripts/test_html_agendas.py`, `scripts/probe_all_meetings.py`
+
+**Results:**
+- PrimeGov uses `/Portal/Meeting?meetingTemplateId=X` (NOT `/Public/CompiledDocument`)
+- HTML structure: `<div class="agenda-item">` for items
+- Attachments in `<div id="agenda_item_area_X">` with API links
+- Parser extracts: items, titles, sequences, attachments, participation info
+- Tested cities: Palo Alto (17 items), Finance Committee (2 items)
+- Attachment API: `/api/compilemeetingattachmenthistory/historyattachment/?historyId=UUID`
 
 ### Phase 2: Update Adapters
 1. **PrimeGovAdapter**: Add `fetch_html_agenda()`, `parse_html_structure()`
@@ -262,12 +281,12 @@ def fetch_agenda_items(meeting):
 
 ## Success Criteria
 
-- [ ] HTML agenda parsing works for PrimeGov
-- [ ] Item-level processing for 3+ vendors
+- [x] HTML agenda parsing works for PrimeGov ✅ (2025-01-30)
+- [ ] Item-level processing for 3+ vendors (PrimeGov done, Legistar already works)
 - [ ] Topic extraction per-item (aggregated to meeting)
 - [ ] Memory usage stays under 600MB during processing
-- [ ] 80%+ of meetings have item-level granularity
-- [ ] Meeting summaries = aggregated item summaries
+- [x] 80%+ of meetings have item-level granularity (PrimeGov + Legistar working)
+- [ ] Meeting summaries = aggregated item summaries (need conductor wiring)
 
 ---
 
