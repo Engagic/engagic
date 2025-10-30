@@ -38,9 +38,11 @@
 			</div>
 		{/if}
 
-		<div class="meeting-date" aria-hidden="true">
-			{formattedDate} · {time}
-		</div>
+		{#if formattedDate !== 'Date TBD'}
+			<div class="meeting-date" aria-hidden="true">
+				{formattedDate}{#if time} · {time}{/if}
+			</div>
+		{/if}
 
 		{#if meeting.summary}
 			<div class="meeting-status status-ready" role="status">
