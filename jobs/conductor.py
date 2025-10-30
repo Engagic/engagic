@@ -398,7 +398,7 @@ class Conductor:
                         )
 
                         # Validate meeting before storing (prevent corruption)
-                        from infra.meeting_validator import MeetingValidator
+                        from jobs.meeting_validator import MeetingValidator
 
                         if not MeetingValidator.validate_and_store(
                             {
