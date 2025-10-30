@@ -460,6 +460,10 @@
 	}
 
 	@media (max-width: 640px) {
+		.container {
+			width: 100%;
+		}
+
 		.meeting-title {
 			font-size: 1.4rem;
 			word-wrap: break-word;
