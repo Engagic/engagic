@@ -43,7 +43,9 @@ class LegistarAdapter(BaseAdapter):
         end_date = future_date.strftime("%Y-%m-%d")
 
         # Build OData filter
-        filter_str = f"EventDate ge datetime'{start_date}' and EventDate lt datetime'{end_date}'"
+        filter_str = (
+            f"EventDate ge datetime'{start_date}' and EventDate lt datetime'{end_date}'"
+        )
 
         # API parameters
         params = {
@@ -129,10 +131,14 @@ class LegistarAdapter(BaseAdapter):
             response = self._get(items_url, params=params)
             event_items = response.json()
         except Exception as e:
-            logger.error(f"[legistar:{self.slug}] Failed to fetch items for event {event_id}: {e}")
+            logger.error(
+                f"[legistar:{self.slug}] Failed to fetch items for event {event_id}: {e}"
+            )
             return []
 
-        logger.debug(f"[legistar:{self.slug}] Fetched {len(event_items)} items for event {event_id}")
+        logger.debug(
+            f"[legistar:{self.slug}] Fetched {len(event_items)} items for event {event_id}"
+        )
 
         processed_items = []
 
@@ -147,16 +153,22 @@ class LegistarAdapter(BaseAdapter):
             if matter_id:
                 attachments = self._fetch_matter_attachments(matter_id)
 
-            processed_items.append({
-                "item_id": str(item_id),
-                "title": title,
-                "sequence": sequence,
-                "matter_id": str(matter_id) if matter_id else None,
-                "attachments": attachments
-            })
+            processed_items.append(
+                {
+                    "item_id": str(item_id),
+                    "title": title,
+                    "sequence": sequence,
+                    "matter_id": str(matter_id) if matter_id else None,
+                    "attachments": attachments,
+                }
+            )
 
-        items_with_attachments = sum(1 for item in processed_items if item["attachments"])
-        logger.info(f"[legistar:{self.slug}] Event {event_id}: {len(processed_items)} items total, {items_with_attachments} with attachments")
+        items_with_attachments = sum(
+            1 for item in processed_items if item["attachments"]
+        )
+        logger.info(
+            f"[legistar:{self.slug}] Event {event_id}: {len(processed_items)} items total, {items_with_attachments} with attachments"
+        )
         return processed_items
 
     def _fetch_matter_attachments(self, matter_id: int) -> List[Dict[str, Any]]:
@@ -178,7 +190,9 @@ class LegistarAdapter(BaseAdapter):
             response = self._get(attachments_url, params=params)
             raw_attachments = response.json()
         except Exception as e:
-            logger.warning(f"[legistar:{self.slug}] Failed to fetch attachments for matter {matter_id}: {e}")
+            logger.warning(
+                f"[legistar:{self.slug}] Failed to fetch attachments for matter {matter_id}: {e}"
+            )
             return []
 
         attachments = []
@@ -200,10 +214,6 @@ class LegistarAdapter(BaseAdapter):
                 # Unknown type, include it anyway
                 file_type = "unknown"
 
-            attachments.append({
-                "name": name,
-                "url": url,
-                "type": file_type
-            })
+            attachments.append({"name": name, "url": url, "type": file_type})
 
         return attachments

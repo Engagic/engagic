@@ -41,16 +41,22 @@ class EscribeAdapter(BaseAdapter):
         soup = self._fetch_html(list_url)
 
         # Find "Upcoming Meetings" section
-        upcoming_section = soup.find("div", {"role": "region", "aria-label": "List of Upcoming Meetings"})
+        upcoming_section = soup.find(
+            "div", {"role": "region", "aria-label": "List of Upcoming Meetings"}
+        )
 
         if not upcoming_section:
             logger.warning(f"[escribe:{self.slug}] No upcoming meetings section found")
             return
 
         # Parse meeting containers
-        meeting_containers = upcoming_section.find_all("div", class_="upcoming-meeting-container")
+        meeting_containers = upcoming_section.find_all(
+            "div", class_="upcoming-meeting-container"
+        )
 
-        logger.info(f"[escribe:{self.slug}] Found {len(meeting_containers)} upcoming meetings")
+        logger.info(
+            f"[escribe:{self.slug}] Found {len(meeting_containers)} upcoming meetings"
+        )
 
         for container in meeting_containers:
             meeting = self._parse_meeting_container(container)
@@ -90,7 +96,9 @@ class EscribeAdapter(BaseAdapter):
 
         # Extract PDF links (look for agenda PDFs specifically)
         pdf_links = []
-        for link in container.find_all("a", href=re.compile(r"FileStream\.ashx\?DocumentId=")):
+        for link in container.find_all(
+            "a", href=re.compile(r"FileStream\.ashx\?DocumentId=")
+        ):
             aria_label = link.get("aria-label", "").lower()
             # Only include PDFs labeled as "Agenda (PDF)"
             if "pdf" in aria_label and "agenda" in aria_label:
