@@ -83,19 +83,10 @@
 			
 			// Sort meetings by date (soonest first) using standardized dates
 			if (result.success && result.meetings) {
-				// Filter out meetings with no valid date
-				const validMeetings = result.meetings.filter((meeting: Meeting) => {
-					if (!meeting.date || meeting.date === 'null' || meeting.date === '') {
-						return false;
-					}
-					const date = new Date(meeting.date);
-					return !isNaN(date.getTime()) && date.getTime() !== 0;
-				});
-
-				validMeetings.sort((a: Meeting, b: Meeting) => {
-					// Use standardized meeting_date field
-					const dateA = new Date(a.date);
-					const dateB = new Date(b.date);
+				result.meetings.sort((a: Meeting, b: Meeting) => {
+					// Handle null dates by treating them as far future
+					const dateA = a.date ? new Date(a.date) : new Date(9999, 11, 31);
+					const dateB = b.date ? new Date(b.date) : new Date(9999, 11, 31);
 
 					// Return comparison (ascending order - soonest first)
 					return dateA.getTime() - dateB.getTime();
@@ -106,8 +97,20 @@
 				upcomingMeetings = [];
 				pastMeetings = [];
 
-				for (const meeting of validMeetings) {
+				for (const meeting of result.meetings) {
+					if (!meeting.date || meeting.date === 'null' || meeting.date === '') {
+						// Meetings with no date go to upcoming
+						upcomingMeetings.push(meeting);
+						continue;
+					}
+
 					const meetingDate = new Date(meeting.date);
+
+					// Skip invalid dates (epoch 0)
+					if (isNaN(meetingDate.getTime()) || meetingDate.getTime() === 0) {
+						upcomingMeetings.push(meeting);
+						continue;
+					}
 
 					if (meetingDate >= now) {
 						upcomingMeetings.push(meeting);
@@ -187,8 +190,15 @@
 									in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 									onintroend={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
 								>
-									<div class="meeting-title">{meeting.title} on {formatMeetingDate(meeting.date)}</div>
-									<div class="meeting-date">{extractTime(meeting.date)}</div>
+									<div class="meeting-title">
+										{meeting.title}
+										{#if formatMeetingDate(meeting.date) !== 'Date TBD'}
+											on {formatMeetingDate(meeting.date)}
+										{/if}
+									</div>
+									{#if extractTime(meeting.date)}
+										<div class="meeting-date">{extractTime(meeting.date)}</div>
+									{/if}
 									{#if meeting.summary}
 										<div class="meeting-status status-ready">AI Summary Available</div>
 									{:else if meeting.packet_url}
@@ -207,8 +217,15 @@
 								in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 								onintroend={() => { if (index === upcomingMeetings.length - 1 && pastMeetings.length === 0) isInitialLoad = false; }}
 							>
-								<div class="meeting-title">{meeting.title} on {formatMeetingDate(meeting.date)}</div>
-								<div class="meeting-date">{extractTime(meeting.date)}</div>
+								<div class="meeting-title">
+									{meeting.title}
+									{#if formatMeetingDate(meeting.date) !== 'Date TBD'}
+										on {formatMeetingDate(meeting.date)}
+									{/if}
+								</div>
+								{#if extractTime(meeting.date)}
+									<div class="meeting-date">{extractTime(meeting.date)}</div>
+								{/if}
 								{#if meeting.summary}
 									<div class="meeting-status status-ready">AI Summary Available</div>
 								{:else if meeting.packet_url}
