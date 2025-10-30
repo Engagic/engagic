@@ -117,17 +117,23 @@ Features (to build):
 
 ## Roadmap (Growth Features)
 
-### Phase 0: Quick Wins (Immediate Value)
+### Phase 0: Quick Wins (Immediate Value) ✅ BACKEND DONE
 **Goal:** Make participation easier with contact info
 
-**Implementation:**
-- Parse email/phone/address from meeting pages during scraping
-- Store in `meeting_participation` table (email, phone, physical_address, virtual_url)
-- Frontend displays:
-  - Clickable `mailto:city@council.gov` (opens email app)
-  - Clickable `tel:+1-555-0100` (calls on mobile)
-  - Clickable address (opens Google Maps)
-- Pre-filled email via URL params: `mailto:?subject=Re: Agenda Item 5&body=Dear Council...`
+**Backend Implementation (COMPLETED 2025-01-30):**
+- ✅ Parse email/phone/virtual_url/meeting_id from extracted PDF text
+- ✅ Store in `meetings.participation` JSON column
+- ✅ Integrated into processor.py (runs BEFORE AI summarization)
+- ✅ Parser extracts: email, phone (normalized to E.164), virtual_url, meeting_id, is_hybrid flag
+- ✅ Tested and working (Palo Alto example: extracted all fields)
+
+**Frontend Requirements (TODO):**
+- Display participation section prominently on meeting detail pages
+- Clickable `mailto:city@council.gov` (opens email app)
+- Clickable `tel:+1-555-0100` (mobile-friendly phone calls)
+- Clickable Zoom/virtual URLs
+- Badge for "Hybrid Meeting" or "Virtual Only"
+- Pre-filled email with meeting context: `mailto:?subject=Re: [Meeting Title]&body=Dear Council...`
 - No sending on user's behalf (liability), just make it easy to participate
 
 **Why first:** Low-hanging fruit, high user value, enables civic action
@@ -250,11 +256,11 @@ Features (to build):
 ## Success Metrics
 
 ### Infocore (Data Quality)
-- [x] 500+ cities covered
+- [x] 500+ cities covered (825 active)
 - [x] 94% adapter success rate
 - [x] 80% PDF extraction success
 - [x] Item-level processing working
-- [ ] Contact info parsing (email/phone/address)
+- [x] Contact info parsing (email/phone/virtual_url) - 2025-01-30
 - [ ] AI thinking traces exposed
 - [ ] Topic extraction working
 - [ ] 1,000+ cities covered
