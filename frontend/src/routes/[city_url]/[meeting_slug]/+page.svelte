@@ -20,19 +20,19 @@
 	async function loadMeetingData() {
 		loading = true;
 		error = '';
-		
+
 		try {
 			// Parse the city URL
 			const parsed = parseCityUrl(city_url);
 			if (!parsed) {
 				throw new Error('Invalid city URL format');
 			}
-			
+
 			// Search by city name and state to get meetings
 			const searchQuery = `${parsed.cityName}, ${parsed.state}`;
 			const result = await searchMeetings(searchQuery);
 			searchResults = result;
-			
+
 			if (result.success && result.meetings) {
 				// Find the meeting that matches our slug
 				const meeting = findMeetingBySlug(result.meetings, meeting_slug);
@@ -46,7 +46,7 @@
 			}
 		} catch (err) {
 			console.error('Failed to load meeting:', err);
-			error = 'No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting date';
+			error = 'Unable to load meeting data. The agenda packet may not be posted yet, or there may be a temporary issue accessing city records. Please try again later.';
 		} finally {
 			loading = false;
 		}
@@ -102,7 +102,7 @@
 </script>
 
 <svelte:head>
-	<title>{selectedMeeting?.title || selectedMeeting?.title || 'Meeting'} - engagic</title>
+	<title>{selectedMeeting?.title || 'Meeting'} - engagic</title>
 	<meta name="description" content="City council meeting agenda and summary" />
 </svelte:head>
 
@@ -142,20 +142,22 @@
 			Loading meeting...
 		</div>
 	{:else if error}
-		<div class="{error.includes('Packets not posted yet') ? 'info-message' : 'error-message'}">
+		<div class="error-message">
 			{error}
 		</div>
 	{:else if selectedMeeting}
 		<div class="meeting-detail">
 			{#if selectedMeeting.meeting_status}
-				<div class="meeting-alert-banner">
-					<span class="alert-icon">!</span>
+				{@const statusClass = selectedMeeting.meeting_status === 'revised' ? 'meeting-info-banner' : 'meeting-alert-banner'}
+				{@const iconSymbol = selectedMeeting.meeting_status === 'revised' ? 'i' : '!'}
+				<div class={statusClass}>
+					<span class="alert-icon">{iconSymbol}</span>
 					<span class="alert-text">This meeting has been {selectedMeeting.meeting_status}</span>
 				</div>
 			{/if}
 
 			<div class="meeting-header">
-				<h1 class="meeting-title">{selectedMeeting.title || selectedMeeting.title}</h1>
+				<h1 class="meeting-title">{selectedMeeting.title}</h1>
 				{#if searchResults && searchResults.success}
 					<div class="meeting-location">
 						{searchResults.city_name}, {searchResults.state}
@@ -165,7 +167,9 @@
 					{formatMeetingDate(selectedMeeting.date)}
 				</div>
 			</div>
-			
+
+			<div class="meeting-divider"></div>
+
 			{#if selectedMeeting.summary}
 				<div class="meeting-summary">
 					{@html marked(cleanSummary(selectedMeeting.summary))}
@@ -185,7 +189,7 @@
 
 <style>
 	.container {
-		width: 1000px;
+		width: var(--width-detail);
 	}
 
 	.packet-url-box {
@@ -260,7 +264,6 @@
 	.back-link:hover {
 		text-decoration: underline;
 	}
-
 	.meeting-detail {
 		padding: 2rem;
 		background: var(--civic-white);
@@ -271,6 +274,17 @@
 	.meeting-alert-banner {
 		background: #fef2f2;
 		border: 1px solid #fecaca;
+		border-radius: 6px;
+		padding: 0.75rem 1rem;
+		margin-bottom: 1.5rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.meeting-info-banner {
+		background: #eff6ff;
+		border: 1px solid #bfdbfe;
 		border-radius: 6px;
 		padding: 0.75rem 1rem;
 		margin-bottom: 1.5rem;
@@ -293,11 +307,19 @@
 		font-size: 0.9rem;
 	}
 
+	.meeting-info-banner .alert-icon {
+		background: #2563eb;
+	}
+
 	.alert-text {
 		color: #991b1b;
 		font-weight: 600;
 		font-size: 0.95rem;
 		text-transform: capitalize;
+	}
+
+	.meeting-info-banner .alert-text {
+		color: #1e40af;
 	}
 
 	.meeting-header {
@@ -331,11 +353,18 @@
 		-moz-osx-font-smoothing: grayscale;
 	}
 
+	.meeting-divider {
+		margin: 2rem 0;
+		height: 1px;
+		background: var(--civic-border);
+	}
+
 	.meeting-summary {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.8;
 		font-size: 1.05rem;
 		color: #1f2937;
+		padding: 0 2rem;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
@@ -469,9 +498,13 @@
 			word-wrap: break-word;
 			overflow-wrap: break-word;
 		}
-		
+
 		.meeting-detail {
 			padding: 1rem;
+		}
+
+		.meeting-summary {
+			padding: 0 0.5rem;
 		}
 
 		.packet-url-box {
