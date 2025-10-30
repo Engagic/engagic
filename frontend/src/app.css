@@ -34,7 +34,7 @@ body {
 }
 
 .container {
-	width: 800px;
+	width: 600px;
 	padding: 4rem 1rem;
 	min-height: 100vh;
 	display: flex;

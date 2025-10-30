@@ -292,6 +292,10 @@
 </div>
 
 <style>
+	.container {
+		width: 800px;
+	}
+
 	.city-header {
 		margin-bottom: 2rem;
 		min-height: 80px;
