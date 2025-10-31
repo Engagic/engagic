@@ -383,8 +383,15 @@ class GeminiSummarizer:
                         original_req = request_map[i]
 
                         if inline_response.response:
+                            response_text = None  # Initialize for error logging
                             try:
                                 response_text = inline_response.response.text
+
+                                # Log raw response for debugging failures
+                                logger.info(
+                                    f"[Summarizer] Response for {original_req['item_id']}: {len(response_text) if response_text else 0} chars"
+                                )
+
                                 if not response_text:
                                     logger.warning(
                                         f"[Summarizer] Empty response for {original_req['item_id']}"
@@ -415,6 +422,9 @@ class GeminiSummarizer:
                             except Exception as e:
                                 logger.error(
                                     f"[Summarizer] Error parsing response for {original_req['item_id']}: {e}"
+                                )
+                                logger.error(
+                                    f"[Summarizer] Raw response that failed: {response_text[:1000] if response_text else 'None'}"
                                 )
                                 results.append(
                                     {
@@ -658,10 +668,11 @@ class GeminiSummarizer:
 
         except json.JSONDecodeError as e:
             logger.error(f"[Summarizer] Failed to parse JSON response: {e}")
-            logger.debug(f"[Summarizer] Response text: {response_text[:200]}...")
+            logger.error(f"[Summarizer] Full malformed JSON response:\n{response_text}")
             raise
         except Exception as e:
             logger.error(f"[Summarizer] Error validating JSON response: {e}")
+            logger.error(f"[Summarizer] Response that failed validation:\n{response_text}")
             raise
 
     def _clean_summary(self, raw_summary: str) -> str:
