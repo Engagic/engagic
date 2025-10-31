@@ -664,41 +664,41 @@ class Conductor:
 
 
     def _process_meeting_summary(self, meeting: Meeting):
-        """Process summary for a single meeting (with item-level processing if available)"""
-        if not meeting.packet_url:
-            return
-
+        """Process summary for a single meeting (agenda-first: items > packet)"""
         try:
-            logger.info(f"Processing summary for {meeting.packet_url}")
-
-            # Check if still unprocessed (avoid race conditions)
-            cached = self.db.get_cached_summary(meeting.packet_url)
-            if cached:
-                logger.debug(
-                    f"Meeting {meeting.packet_url} already processed, skipping"
-                )
-                return
-
-            if not self.processor:
-                logger.warning(
-                    f"Skipping {meeting.packet_url} - processor not available"
-                )
-                return
-
-            # Check if meeting has agenda items from adapter
+            # AGENDA-FIRST ARCHITECTURE: Check for items before packet_url
             agenda_items = self.db.get_agenda_items(meeting.id)
 
             if agenda_items:
-                # Item-level processing (HTML agenda path)
+                # Item-level processing (HTML agenda path) - PRIMARY PATH
                 logger.info(
                     f"[ItemProcessing] Found {len(agenda_items)} items for {meeting.title}"
                 )
+                if not self.processor:
+                    logger.warning("[ItemProcessing] Processor not available")
+                    return
                 self._process_meeting_with_items(meeting, agenda_items)
-            else:
-                # Monolithic processing (PDF packet path)
+
+            elif meeting.packet_url:
+                # Monolithic processing (PDF packet path) - FALLBACK PATH
                 logger.info(
                     f"[MonolithicProcessing] No items for {meeting.title}, processing packet as single unit"
                 )
+
+                # Check cache
+                cached = self.db.get_cached_summary(meeting.packet_url)
+                if cached:
+                    logger.debug(
+                        f"Meeting {meeting.packet_url} already processed, skipping"
+                    )
+                    return
+
+                if not self.processor:
+                    logger.warning(
+                        f"Skipping {meeting.packet_url} - processor not available"
+                    )
+                    return
+
                 meeting_data = {
                     "packet_url": meeting.packet_url,
                     "city_banana": meeting.banana,
