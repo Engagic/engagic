@@ -1,0 +1,73 @@
+{
+  "item": {
+    "standard": {
+      "description": "For individual agenda items - JSON structured output with markdown fields and thinking trace",
+      "variables": ["title", "text"],
+      "output_format": "json",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "thinking": {
+            "type": "string",
+            "description": "Your reasoning process - 2-5 bullet points analyzing the documents (plain text, use newlines for bullets)"
+          },
+          "summary_markdown": {
+            "type": "string",
+            "description": "Main summary in markdown format (1-5 sentences depending on complexity, can use bold, lists, etc.)"
+          },
+          "citizen_impact_markdown": {
+            "type": "string",
+            "description": "One sentence in markdown explaining how this affects residents (can use bold for emphasis)"
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "housing",
+                "zoning",
+                "transportation",
+                "budget",
+                "public_safety",
+                "environment",
+                "parks",
+                "utilities",
+                "economic_development",
+                "education",
+                "health",
+                "planning",
+                "permits",
+                "contracts",
+                "appointments",
+                "other"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "1-3 main topics from the canonical list only"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Confidence level based on document clarity and completeness"
+          }
+        },
+        "required": ["thinking", "summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
+      },
+      "system_instruction": "You are an expert at analyzing city council agenda items for residents. Think step-by-step, extract concrete details, and explain impact in plain language. Use markdown formatting for clarity.",
+      "template": "Analyze this city council agenda item and extract key information for residents.\n\n# Item Title\n\"{title}\"\n\n# Your Task\n\nProvide a structured JSON response with your analysis.\n\n# Response Format\n\nReturn valid JSON with these fields:\n- **thinking**: Your reasoning process (plain text with newlines, 2-5 bullet points)\n- **summary_markdown**: Main summary (markdown, 1-5 sentences)\n- **citizen_impact_markdown**: How this affects residents (markdown, 1 sentence)\n- **topics**: Array of 1-3 canonical topics\n- **confidence**: \"high\", \"medium\", or \"low\"\n\n# Guidelines\n\n## Thinking Process\nAnalyze the documents:\n- What type of item is this? (development, budget, appointment, contract, etc.)\n- Extract key facts: amounts, dates, locations, names\n- Who/what is affected?\n- Any ambiguities, conflicts, or concerns?\n\nUse plain text with newlines:\n```\n- Major development project\n- 240 units (180 market + 60 affordable at 80% AMI)\n- $2.4M impact fees, new traffic signal required\n- Timeline: Q1 2026 start, Q4 2027 completion\n```\n\n## Summary (1-5 sentences, markdown)\n- **Simple items** (appointments, routine approvals): 1-2 sentences\n- **Complex items** (developments, budget changes): 4-5 sentences\n- Always include: dollar amounts, addresses, dates, ordinance numbers\n- Use **bold** for key numbers and names\n- Use lists for multiple components\n- Plain language, no jargon\n- If unclear/contradictory, note this explicitly\n\n## Topics (1-3 from canonical list)\nhousing, zoning, transportation, budget, public_safety, environment, parks, utilities, economic_development, education, health, planning, permits, contracts, appointments, other\n\n**Always use canonical topics only.** Do not create new topic names.\n\n## Citizen Impact (1 sentence, markdown)\nHow does this affect residents' lives?\n- Direct costs (taxes, fees, fines)\n- Services (trash, water, roads, parks)\n- Rights and regulations (what you can/can't do)\n- Neighborhood changes (development, traffic, noise)\n\nUse **bold** to emphasize impact.\n\n## Confidence\n- **high**: Documents are clear, detailed, and consistent\n- **medium**: Some ambiguity, missing context, or minor conflicts\n- **low**: Documents are unclear, contradictory, severely incomplete, or unreadable\n\n# Examples\n\n## Example 1: Simple Appointment\nTitle: \"Appointment of Jane Smith to Planning Commission\"\nDocuments: Resolution appointing Jane Smith, term 2025-2029, replacing John Doe.\n\nOutput:\n```json\n{\n  \"thinking\": \"- Simple appointment to Planning Commission\\n- Jane Smith replacing John Doe (term expired)\\n- 4-year term: 2025-2029\\n- Routine matter, clear documents\",\n  \"summary_markdown\": \"Jane Smith appointed to Planning Commission for **4-year term (2025-2029)**, replacing John Doe whose term expired.\",\n  \"citizen_impact_markdown\": \"New commissioner will vote on **development projects and zoning changes** affecting your neighborhood.\",\n  \"topics\": [\"appointments\"],\n  \"confidence\": \"high\"\n}\n```\n\n## Example 2: Complex Development\nTitle: \"Approval of Oak Street Mixed-Use Development\"\nDocuments: 45-page development agreement, site plans, traffic study, affordable housing plan.\n\nOutput:\n```json\n{\n  \"thinking\": \"- Major mixed-use development at 1500 Oak Street\\n- 240 total units: 180 market-rate + 60 affordable (80% AMI)\\n- Developer: Acme Properties\\n- $2.4M impact fees + new traffic signal at Oak/Main\\n- 15,000 sq ft retail, 320 parking spaces\\n- Timeline: Q1 2026 groundbreaking, Q4 2027 completion\\n- 15-year affordability covenant on restricted units\",\n  \"summary_markdown\": \"Approves 240-unit mixed-use development at **1500 Oak Street** including:\\n\\n- 180 market-rate apartments\\n- 60 affordable units (80% AMI)\\n- 15,000 sq ft retail\\n- 320 parking spaces\\n\\nDeveloper (Acme Properties) pays **$2.4M in impact fees** and builds new traffic signal at Oak/Main intersection.\\n\\n**Timeline:** Groundbreaking Q1 2026, completion Q4 2027. Includes 15-year affordability covenant.\",\n  \"citizen_impact_markdown\": \"Adds **240 housing units (60 affordable)** to downtown and increases retail options, but may worsen traffic on Oak Street until new signal is installed.\",\n  \"topics\": [\"housing\", \"zoning\", \"transportation\"],\n  \"confidence\": \"high\"\n}\n```\n\n## Example 3: Budget Amendment\nTitle: \"FY2025 Budget Amendment - Parks Department\"\nDocuments: Budget transfer resolution, staff memo.\n\nOutput:\n```json\n{\n  \"thinking\": \"- Budget transfer within Parks Department\\n- $125,000 from general fund to emergency repairs\\n- Purpose: Central Park playground replacement\\n- Equipment failed safety inspection (August 2025)\\n- Completion deadline: December 2025\\n- No new taxes - internal reallocation\",\n  \"summary_markdown\": \"Transfers **$125,000** from Parks Department general fund to emergency repairs budget for Central Park playground equipment replacement. Original equipment failed safety inspection in August 2025. Work to be completed by **December 2025**.\",\n  \"citizen_impact_markdown\": \"Central Park playground **currently closed for safety** will reopen by year-end with new equipment; **no tax increase** required (uses existing budget).\",\n  \"topics\": [\"budget\", \"parks\"],\n  \"confidence\": \"high\"\n}\n```\n\n## Example 4: Unclear Documents\nTitle: \"Downtown Streetscape Improvements\"\nDocuments: Partial memo, unreadable scanned images.\n\nOutput:\n```json\n{\n  \"thinking\": \"- Topic: Downtown streetscape improvements\\n- Documents severely incomplete and unreadable\\n- Can identify project location but not scope or cost\\n- No timeline or contractor information available\\n- Cannot determine impact without readable documents\",\n  \"summary_markdown\": \"Proposes downtown streetscape improvements. **Documents incomplete or unreadable** - specific scope, costs, timeline, and contractor information unavailable.\",\n  \"citizen_impact_markdown\": \"**Impact unclear** due to incomplete documentation - may affect downtown accessibility and parking during construction.\",\n  \"topics\": [\"planning\", \"utilities\"],\n  \"confidence\": \"low\"\n}\n```\n\n# Edge Cases\n\n- **Empty/unreadable documents**: confidence=\"low\", note in both thinking and summary\n- **Title conflicts with content**: Trust content over title, note discrepancy in thinking\n- **Multiple contradictory sources**: Describe both positions in thinking, explain conflict in summary, confidence=\"medium\"\n- **Purely procedural items**: Still explain what's happening, impact can be \"Administrative matter with **no direct public impact**.\"\n\n# Attached Documents\n\n{text}\n\n# Remember\n\n- Think step-by-step first\n- Concrete over vague: **\"$2.4M\"** not \"several million\"\n- Specific over general: **\"1500 Oak Street\"** not \"downtown\"\n- Dates over timeframes: **\"December 2025\"** not \"soon\"\n- Always use canonical topics from the list\n- Citizen impact required for all items\n- Use markdown **bold** to emphasize key facts\n- Return valid JSON"
+    }
+  },
+  "meeting": {
+    "short_agenda": {
+      "description": "LEGACY: For full meeting packets ≤30 pages (rarely used with item-level processing)",
+      "variables": ["text"],
+      "template": "This is a city council meeting agenda. Provide a clear, concise summary that covers:\n\n**Key Agenda Items:**\n- List the main topics/issues being discussed\n- Include any public hearings or votes\n- Note any budget or financial items\n\n**Important Details:**\n- Specific addresses, dollar amounts, ordinance numbers\n- Deadlines or implementation dates\n- Public participation opportunities\n\nKeep it brief but informative. Focus on what citizens need to know.\n\nFormat your response in clean, readable markdown using:\n- ## for section headings\n- Bold for emphasis\n- Bullet lists for items\n- Clear paragraph breaks for readability\n\nAgenda text:\n{text}"
+    },
+    "comprehensive": {
+      "description": "LEGACY: For large/complex agendas >30 pages (rarely used with item-level processing)",
+      "variables": ["text"],
+      "template": "Analyze this city council meeting agenda and provide a comprehensive summary for residents.\n\n**Complete Agenda Items** (list every single one):\n- Item number and full title\n- Complete description of what's being proposed\n- Department or presenter\n- Action required (vote, discussion, information only)\n\n**Financial Details** (every dollar amount):\n- Budget items with exact amounts\n- Contract values and vendors\n- Grant amounts and sources\n- Fee changes or rate adjustments\n\n**Property and Development** (all locations):\n- Complete addresses for any property discussed\n- Zoning changes with current and proposed zoning\n- Development project names and descriptions\n- Square footage, units, or measurements\n\n**Public Participation**:\n- Public hearing items with times\n- Comment period details\n- How to participate (in person, online, written)\n- Deadlines for input\n\n**Key Details to Preserve**:\n- Exact dollar amounts (not \"several million\" but \"$3,456,789\")\n- Complete addresses (not \"downtown\" but \"123 Main Street\")\n- Full names and titles\n- Precise dates and times\n- Ordinance and resolution numbers\n\nBe thorough and detailed. Skip pure administrative items unless they have significant public impact.\n\nFormat your response in clean, readable markdown using:\n- ## for section headings\n- ### for subsections if needed\n- Bold for emphasis\n- Bullet lists for items\n- Clear paragraph breaks for readability\n\nAgenda text:\n{text}"
+    }
+  }
+}
