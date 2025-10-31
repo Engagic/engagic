@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Try fetching HTML agenda for each meeting to see which ones work"""
 
-from infocore.adapters.primegov_adapter import PrimeGovAdapter
+from vendors.adapters.primegov_adapter import PrimeGovAdapter
 from urllib.parse import urlencode
 
 city_slug = "cityofpaloalto"

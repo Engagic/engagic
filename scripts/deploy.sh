@@ -74,7 +74,7 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=$APP_DIR
-ExecStart=$VENV_DIR/bin/uvicorn infocore.api.main:app --host 0.0.0.0 --port 8000
+ExecStart=$VENV_DIR/bin/uvicorn server.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -114,7 +114,7 @@ User=root
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=-/root/.llm_secrets
-ExecStart=$VENV_DIR/bin/uv run engagic-daemon
+ExecStart=$VENV_DIR/bin/uv run engagic-daemon --daemon
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -218,14 +218,14 @@ stop_daemon() {
     fi
 
     # Kill any orphaned processes
-    if pgrep -f "infra.daemon" > /dev/null; then
+    if pgrep -f "engagic-daemon" > /dev/null; then
         warn "Found orphaned daemon processes, killing..."
-        pkill -9 -f "infra.daemon"
+        pkill -9 -f "engagic-daemon"
         sleep 1
     fi
 
     # Final verification
-    if systemctl is-active --quiet "$DAEMON_SERVICE" || pgrep -f "infra.daemon" > /dev/null; then
+    if systemctl is-active --quiet "$DAEMON_SERVICE" || pgrep -f "engagic-daemon" > /dev/null; then
         error "Failed to stop daemon"
     else
         log "Daemon stopped and disabled"
@@ -419,7 +419,7 @@ process_unprocessed() {
     source "$VENV_DIR/bin/activate"
     # Source API keys if available
     [ -f ~/.llm_secrets ] && source ~/.llm_secrets
-    uv run infocore.processing.processor --process-all-unprocessed
+    uv run engagic-conductor --full-sync
 }
 
 show_help() {

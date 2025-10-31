@@ -8,9 +8,9 @@ import sys
 
 sys.path.insert(0, "/root/engagic")
 
-from infocore.database import DatabaseManager
-from infocore.config import config
-from infocore.adapters.all_adapters import (
+from database.db import DatabaseManager
+from config import config
+from vendors.adapters.all_adapters import (
     PrimeGovAdapter,
     CivicClerkAdapter,
     LegistarAdapter,
@@ -177,7 +177,7 @@ def test_processor():
     print("=" * 60)
 
     try:
-        from infocore.processing.processor import AgendaProcessor
+        from pipeline.processor import AgendaProcessor
 
         print("\n[3.1] Testing processor initialization...")
         processor = AgendaProcessor()

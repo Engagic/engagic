@@ -1,7 +1,5 @@
 # Engagic Vision
 
-**Last Updated:** 2025-10-30
-
 ---
 
 ## Inspiration
@@ -80,29 +78,15 @@ Features (to build):
 
 ---
 
-## Implementation (Current State)
+## Implementation (Current Architecture)
 
-### What Works
-- **~6,900 lines Python backend** (down from 7,618, after reorganization + cleanup)
-- **500 cities, ~10K meetings** in production
-- **374+ cities with item-level processing (58% of platform, 50-80M people)**
-  - Legistar: 110 cities (API-based)
-  - PrimeGov: 64 cities (HTML agendas)
-  - Granicus: 200+ cities (HTML agendas + MetaViewer PDFs)
-- **Cache-first architecture** - API never fetches live, background daemon syncs every 72 hours
-- **6 vendor adapters** with 94% success rate
-- **Priority queue** - recent meetings processed first
-- **PyMuPDF + Gemini** - 80% PDF extraction success, 10-30s processing per meeting
-- **Clean architecture** - 6 logical clusters (vendors, parsing, analysis, pipeline, database, server)
-
-### Recent Wins
-- **Directory reorganization (October 2025)**: Entire codebase restructured into logical clusters (-487 lines, cleaner imports)
-- **Granicus breakthrough (October 2025)**: 174 → 374+ cities with items (crossed majority threshold)
-- Database consolidation: 3 DBs → 1 unified SQLite (-1,549 lines)
-- Adapter refactor with BaseAdapter pattern (-339 lines)
-- Processor modularization: 1,797 → 415 lines (-77% reduction)
-- Priority job queue with SQLite backend
-- **Total:** -2,017 lines eliminated
+### Core Components
+- **Vendor adapters** - 6 platforms with BaseAdapter pattern (Legistar, PrimeGov, Granicus, CivicClerk, NovusAgenda, CivicPlus)
+- **Processing pipeline** - Item-level processing where possible, monolithic fallback for PDF-only
+- **Cache-first architecture** - API never fetches live, background daemon syncs continuously
+- **Priority queue** - Recent meetings processed first
+- **SQLite database** - Single unified DB (cities, meetings, items, job_queue)
+- **6 logical clusters** - vendors, parsing, analysis, pipeline, database, server
 
 ### Honest Assessment
 
@@ -124,15 +108,14 @@ Features (to build):
 
 ## Roadmap (Growth Features)
 
-### Phase 0: Quick Wins (Immediate Value) ✅ BACKEND DONE
+### Phase 0: Quick Wins (Immediate Value)
 **Goal:** Make participation easier with contact info
 
-**Backend Implementation (COMPLETED 2025-01-30):**
-- ✅ Parse email/phone/virtual_url/meeting_id from extracted PDF text
+**Backend Implementation (DONE):**
+- ✅ Parse email/phone/virtual_url/meeting_id from agenda text
 - ✅ Store in `meetings.participation` JSON column
-- ✅ Integrated into processor.py (runs BEFORE AI summarization)
-- ✅ Parser extracts: email, phone (normalized to E.164), virtual_url, meeting_id, is_hybrid flag
-- ✅ Tested and working (Palo Alto example: extracted all fields)
+- ✅ Integrated into processing pipeline
+- ✅ Normalized phone numbers, virtual URLs, hybrid meeting detection
 
 **Frontend Requirements (TODO):**
 - Display participation section prominently on meeting detail pages
@@ -249,13 +232,11 @@ Features (to build):
 ## Success Metrics
 
 ### Infocore (Data Quality)
-- [x] 500+ cities covered (825 active)
-- [x] 94% adapter success rate
-- [x] 80% PDF extraction success
-- [x] Item-level processing working for 374+ cities (58% of platform, 50-80M people) - 2025-10-30
-- [x] Contact info parsing (email/phone/virtual_url) - 2025-01-30
-- [ ] Topic extraction working - NEXT
-- [ ] AI thinking traces exposed - OPTIONAL
+- [x] Multi-vendor adapter system operational
+- [x] Item-level processing working (majority of supported cities)
+- [x] Contact info parsing (email/phone/virtual URLs)
+- [ ] Topic extraction and normalization
+- [ ] AI thinking traces exposed
 - [ ] 1,000+ cities covered
 
 ### Userland (Engagement)
@@ -286,9 +267,9 @@ Features (to build):
 - **BaseAdapter pattern** - compounds value with each new vendor
 - **city_banana identifier** - vendor-agnostic, eliminates coupling
 - **Priority queue** - improves user experience (recent meetings first)
-- **Item-level processing** - better summaries, granular topics, crossed majority threshold (58% of platform)
-- **HTML agenda parsing** - reusable pattern across vendors (PrimeGov, Granicus), enables item-level processing without clean APIs
-- **Processor modularization** - 77% reduction, dramatically improved maintainability
+- **Item-level processing** - better summaries, granular topics, enables batch API cost savings
+- **HTML agenda parsing** - reusable pattern across vendors, enables item-level processing without clean APIs
+- **Processor modularization** - dramatic reduction in complexity and maintainability improvement
 - **Prompts as JSON** - rapid iteration without code deployment
 - **Cache-first** - instant API responses, decouples scraping from serving
 

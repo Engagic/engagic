@@ -240,16 +240,16 @@ systemctl restart engagic-daemon
 
 ### 4. Backfill Existing Meetings (Optional)
 ```bash
-# On VPS: Reprocess all meetings to extract topics
-python -m pipeline.conductor --process-all-unprocessed --batch-size 20
+# On VPS: Run full sync to process all meetings
+engagic-conductor --full-sync
 ```
 
 This will:
-- Extract topics from existing meeting items
+- Sync all cities and process their meetings
+- Extract topics from meeting items
 - Normalize and aggregate to meeting level
-- Takes ~5-10 seconds per meeting with items
 
-**Note:** New meetings will automatically get topics during normal processing.
+**Note:** New meetings will automatically get topics during normal processing via the daemon.
 
 ---
 

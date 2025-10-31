@@ -130,7 +130,7 @@ Type=simple
 User=root
 WorkingDirectory=/root/engagic
 EnvironmentFile=/root/engagic/.env
-ExecStart=/root/engagic/.venv/bin/python -m pipeline.daemon
+ExecStart=/root/engagic/.venv/bin/uv run engagic-daemon --daemon
 Restart=always
 RestartSec=10
 
