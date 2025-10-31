@@ -19,44 +19,51 @@ Topic extraction automatically tags meetings and agenda items with standardized 
 ## Architecture
 
 ### 1. AI Extraction (Already Working!)
-**Location:** `infocore/processing/summarizer.py:115-154`
+**Location:** `analysis/llm/summarizer.py`
 
-Topics are extracted during normal item processing:
+Topics are extracted during normal item processing via JSON structured output:
 ```python
-def summarize_item(self, item_title: str, item_text: str):
-    """Returns: (summary, topics_list)"""
+{
+  "topics": ["housing", "zoning"],  # Array of canonical topics
+  "summary_markdown": "...",
+  "confidence": "high"
+}
 ```
 
-The LLM prompt guides toward canonical topics:
-```
-Extract 1-3 main topics discussed in this item. Choose from these standardized categories:
-- housing (affordable housing, development, homelessness)
-- zoning (land use, rezoning, variances)
-- transportation (traffic, roads, transit, parking)
-...
+The LLM prompt (analysis/llm/prompts_v2.json) uses JSON schema with enum validation:
+```json
+{
+  "topics": {
+    "type": "array",
+    "items": {
+      "type": "string",
+      "enum": ["housing", "zoning", "transportation", ...]
+    }
+  }
+}
 ```
 
-### 2. Normalization (NEW)
-**Location:** `infocore/processing/topic_normalizer.py`
+### 2. Normalization
+**Location:** `analysis/topics/normalizer.py`
 
 Maps AI variations to canonical forms:
 - "affordable housing" → `housing`
 - "traffic safety" → `transportation`
 - "rezoning" → `zoning`
 
-**Taxonomy:** `infocore/processing/topic_taxonomy.json` (16 canonical topics)
+**Taxonomy:** `analysis/topics/taxonomy.json` (16 canonical topics)
 
 **Usage:**
 ```python
-from infocore.processing.topic_normalizer import get_normalizer
+from analysis.topics.normalizer import get_normalizer
 
 normalizer = get_normalizer()
 normalized = normalizer.normalize(["affordable housing", "zoning changes"])
 # Returns: ["housing", "zoning"]
 ```
 
-### 3. Aggregation (NEW)
-**Location:** `jobs/conductor.py:1150-1168`
+### 3. Aggregation
+**Location:** `pipeline/conductor.py`
 
 After processing all items, topics are aggregated to meeting level:
 ```python
@@ -234,7 +241,7 @@ systemctl restart engagic-daemon
 ### 4. Backfill Existing Meetings (Optional)
 ```bash
 # On VPS: Reprocess all meetings to extract topics
-python jobs/conductor.py --process-all-unprocessed --batch-size 20
+python -m pipeline.conductor --process-all-unprocessed --batch-size 20
 ```
 
 This will:
@@ -287,7 +294,7 @@ curl http://localhost:8000/api/topics/popular
 15. `appointments` - Appointments & Personnel
 16. `other` - Other
 
-**Synonym Mapping:** See `infocore/processing/topic_taxonomy.json`
+**Synonym Mapping:** See `analysis/topics/taxonomy.json`
 
 ---
 
@@ -318,17 +325,17 @@ curl http://localhost:8000/api/topics/popular
 ## Files Changed
 
 **New Files:**
-- `infocore/processing/topic_taxonomy.json` - Canonical topic definitions
-- `infocore/processing/topic_normalizer.py` - Topic normalization logic
+- `analysis/topics/taxonomy.json` - Canonical topic definitions
+- `analysis/topics/normalizer.py` - Topic normalization logic
 - `scripts/test_topic_extraction.py` - Test suite
 - `scripts/migrate_add_topics.py` - Database migration
 - `docs/TOPIC_EXTRACTION.md` - This document
 
 **Modified Files:**
-- `infocore/database/unified_db.py` - Added topics to Meeting dataclass and schema
-- `infocore/processing/prompts.json` - Updated item prompt with topic categories
-- `jobs/conductor.py` - Added normalization and aggregation
-- `infocore/api/main.py` - Added 3 new topic endpoints
+- `database/db.py` - Added topics to Meeting dataclass and schema
+- `analysis/llm/prompts_v2.json` - JSON schema with topic enum validation
+- `pipeline/conductor.py` - Added normalization and aggregation
+- `server/main.py` - Added 3 new topic endpoints
 
 **Lines Changed:** ~350 additions
 

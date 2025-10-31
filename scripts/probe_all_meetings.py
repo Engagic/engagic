@@ -2,7 +2,6 @@
 """Probe all Palo Alto meetings - see what's actually available"""
 
 from infocore.adapters.primegov_adapter import PrimeGovAdapter
-import json
 
 city_slug = "cityofpaloalto"
 

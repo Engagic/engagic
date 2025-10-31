@@ -34,7 +34,6 @@ def probe_granicus_html(city_slug: str):
             return
 
         # Find a meeting with an AgendaViewer URL
-        target_meeting = None
         agenda_viewer_url = None
 
         for meeting in meetings[:10]:
@@ -71,7 +70,7 @@ def probe_granicus_html(city_slug: str):
         first_link = agenda_viewer_links[0]
         agenda_viewer_url = adapter.base_url + first_link['href'] if not first_link['href'].startswith('http') else first_link['href']
 
-        print(f"\nAnalyzing first AgendaViewer URL:")
+        print("\nAnalyzing first AgendaViewer URL:")
         print(f"  {agenda_viewer_url}")
 
         # Fetch and analyze the AgendaViewer page
