@@ -137,6 +137,49 @@
 		</div>
 	{/if}
 
+	{#if selectedMeeting?.participation}
+		{@const p = selectedMeeting.participation}
+		<div class="participation-box">
+			<div class="participation-header">
+				<span class="participation-label">How to Participate</span>
+				{#if p.is_hybrid}
+					<span class="participation-badge badge-hybrid">Hybrid Meeting</span>
+				{:else if p.is_virtual_only}
+					<span class="participation-badge badge-virtual">Virtual Only</span>
+				{/if}
+			</div>
+			<div class="participation-content">
+				{#if p.virtual_url}
+					<div class="participation-item">
+						<span class="participation-icon">📹</span>
+						<a href={p.virtual_url} target="_blank" rel="noopener noreferrer" class="participation-link">
+							Join Virtual Meeting
+						</a>
+						{#if p.meeting_id}
+							<span class="meeting-id">Meeting ID: {p.meeting_id}</span>
+						{/if}
+					</div>
+				{/if}
+				{#if p.email}
+					<div class="participation-item">
+						<span class="participation-icon">✉️</span>
+						<a href="mailto:{p.email}" class="participation-link">
+							{p.email}
+						</a>
+					</div>
+				{/if}
+				{#if p.phone}
+					<div class="participation-item">
+						<span class="participation-icon">📞</span>
+						<a href="tel:{p.phone}" class="participation-link">
+							{p.phone}
+						</a>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
 	{#if loading}
 		<div class="loading">
 			Loading meeting...
@@ -296,6 +339,89 @@
 	.url-separator {
 		color: #94a3b8;
 		font-size: 0.9rem;
+	}
+
+	.participation-box {
+		margin: 1.5rem 0;
+		padding: 1rem 1.25rem;
+		background: #f0fdf4;
+		border: 1px solid #86efac;
+		border-radius: 8px;
+	}
+
+	.participation-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.participation-label {
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 600;
+		color: #15803d;
+		font-size: 0.85rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.participation-badge {
+		padding: 0.2rem 0.6rem;
+		border-radius: 12px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		font-family: 'IBM Plex Mono', monospace;
+	}
+
+	.badge-hybrid {
+		background: #fef3c7;
+		color: #92400e;
+		border: 1px solid #fbbf24;
+	}
+
+	.badge-virtual {
+		background: #dbeafe;
+		color: #1e40af;
+		border: 1px solid #60a5fa;
+	}
+
+	.participation-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.participation-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.participation-icon {
+		font-size: 1rem;
+		flex-shrink: 0;
+	}
+
+	.participation-link {
+		color: #15803d;
+		text-decoration: none;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 500;
+		transition: color 0.2s;
+	}
+
+	.participation-link:hover {
+		color: #166534;
+		text-decoration: underline;
+	}
+
+	.meeting-id {
+		color: #6b7280;
+		font-size: 0.8rem;
+		font-family: 'IBM Plex Mono', monospace;
+		margin-left: 0.5rem;
 	}
 
 	.city-header {
@@ -779,6 +905,28 @@
 		.attachment-link {
 			font-size: 0.8rem;
 			padding: 0.35rem 0.65rem;
+		}
+
+		.participation-box {
+			padding: 0.75rem 1rem;
+			margin: 1rem 0;
+		}
+
+		.participation-label {
+			font-size: 0.8rem;
+		}
+
+		.participation-link {
+			font-size: 0.85rem;
+		}
+
+		.meeting-id {
+			font-size: 0.75rem;
+		}
+
+		.participation-badge {
+			font-size: 0.7rem;
+			padding: 0.15rem 0.5rem;
 		}
 	}
 </style>
