@@ -39,6 +39,9 @@ export interface Meeting {
 		email?: string;
 		phone?: string;
 		virtual_url?: string;
+		meeting_id?: string;
+		is_hybrid?: boolean;
+		is_virtual_only?: boolean;
 		physical_location?: string;
 	};
 	topics?: string[];
