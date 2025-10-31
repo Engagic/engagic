@@ -12,6 +12,7 @@
 	let selectedMeeting: Meeting | null = $state(null);
 	let loading = $state(true);
 	let error = $state('');
+	let expandedAttachments = $state<Set<string>>(new Set());
 
 	onMount(async () => {
 		await loadMeetingData();
@@ -97,8 +98,18 @@
 			.replace(/\n{3,}/g, '\n\n')
 			.trim();
 	}
-	
-	
+
+	function toggleAttachments(itemId: string) {
+		const newSet = new Set(expandedAttachments);
+		if (newSet.has(itemId)) {
+			newSet.delete(itemId);
+		} else {
+			newSet.add(itemId);
+		}
+		expandedAttachments = newSet;
+	}
+
+
 </script>
 
 <svelte:head>
@@ -117,7 +128,13 @@
 		<a href="/{city_banana}" class="back-link">← Back to {searchResults && searchResults.success ? searchResults.city_name : 'city'} meetings</a>
 	</div>
 
-	{#if selectedMeeting?.packet_url}
+	{#if selectedMeeting?.agenda_url}
+		<div class="agenda-url-box">
+			<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="agenda-url-link">
+				View Full HTML Agenda →
+			</a>
+		</div>
+	{:else if selectedMeeting?.packet_url}
 		{@const urls = Array.isArray(selectedMeeting.packet_url)
 			? selectedMeeting.packet_url
 			: [selectedMeeting.packet_url]}
@@ -249,14 +266,25 @@
 							{/if}
 
 							{#if item.attachments && item.attachments.length > 0}
-								<div class="item-attachments">
-									{#each item.attachments as attachment}
-										{#if attachment.url}
-											<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
-												View Packet{attachment.pages ? ` (${attachment.pages})` : ''}
-											</a>
-										{/if}
-									{/each}
+								<div class="item-attachments-container">
+									<button
+										class="attachments-toggle"
+										onclick={() => toggleAttachments(item.id)}
+									>
+										<span class="toggle-icon">{expandedAttachments.has(item.id) ? '▼' : '▶'}</span>
+										<span class="attachments-count">{item.attachments.length} {item.attachments.length === 1 ? 'attachment' : 'attachments'}</span>
+									</button>
+									{#if expandedAttachments.has(item.id)}
+										<div class="item-attachments">
+											{#each item.attachments as attachment}
+												{#if attachment.url}
+													<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
+														{attachment.name || 'View Packet'}{attachment.pages ? ` (${attachment.pages})` : ''}
+													</a>
+												{/if}
+											{/each}
+										</div>
+									{/if}
 								</div>
 							{/if}
 						</div>
@@ -284,6 +312,33 @@
 <style>
 	.container {
 		width: var(--width-detail);
+	}
+
+	.agenda-url-box {
+		margin: 1.5rem 0;
+		padding: 0;
+		background: transparent;
+		border: none;
+	}
+
+	.agenda-url-link {
+		display: inline-block;
+		padding: 0.75rem 1.25rem;
+		background: var(--civic-blue);
+		color: white;
+		text-decoration: none;
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 600;
+		font-size: 0.9rem;
+		border-radius: 6px;
+		transition: all 0.2s;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	}
+
+	.agenda-url-link:hover {
+		background: #0369a1;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+		transform: translateY(-1px);
 	}
 
 	.packet-url-box {
@@ -793,11 +848,47 @@
 		margin: 0.4rem 0;
 	}
 
+	.item-attachments-container {
+		margin-top: 0.75rem;
+	}
+
+	.attachments-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: white;
+		border: 1px solid #e5e7eb;
+		border-radius: 6px;
+		cursor: pointer;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		color: #64748b;
+		transition: all 0.2s;
+		width: fit-content;
+	}
+
+	.attachments-toggle:hover {
+		background: #f9fafb;
+		border-color: #d1d5db;
+	}
+
+	.toggle-icon {
+		font-size: 0.7rem;
+		color: #94a3b8;
+		transition: transform 0.2s;
+	}
+
+	.attachments-count {
+		font-weight: 500;
+	}
+
 	.item-attachments {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		margin-top: 0.75rem;
+		margin-top: 0.5rem;
+		padding-left: 0.25rem;
 	}
 
 	.attachment-link {
@@ -900,6 +991,16 @@
 
 		.item-topic-tag {
 			font-size: 0.7rem;
+		}
+
+		.agenda-url-link {
+			font-size: 0.85rem;
+			padding: 0.65rem 1rem;
+		}
+
+		.attachments-toggle {
+			font-size: 0.75rem;
+			padding: 0.4rem 0.6rem;
 		}
 
 		.attachment-link {
