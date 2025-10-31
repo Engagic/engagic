@@ -674,7 +674,7 @@ class LegistarAdapter(BaseAdapter):
         self, soup, meeting_id: str, base_url: str
     ) -> List[Dict[str, Any]]:
         """
-        Parse agenda items from meeting detail HTML.
+        Parse agenda items from meeting detail HTML using dedicated parser.
 
         Args:
             soup: BeautifulSoup object of detail page
@@ -684,84 +684,15 @@ class LegistarAdapter(BaseAdapter):
         Returns:
             List of agenda item dictionaries
         """
-        from urllib.parse import urljoin
+        from vendors.adapters.html_agenda_parser import parse_legistar_html_agenda
 
-        items = []
+        # Convert soup back to HTML string for the parser
+        html = str(soup)
 
-        # Find the agenda items table/div
-        # Common patterns in Legistar HTML: table with class containing "grid" or id containing "grid"
-        agenda_table = soup.find("table", id=lambda x: x and "grid" in x.lower() if x else False)
+        # Use dedicated Legistar HTML parser
+        parsed_data = parse_legistar_html_agenda(html, meeting_id, base_url)
 
-        if not agenda_table:
-            # Try alternate selectors
-            agenda_table = soup.find("div", class_=lambda x: x and "agenda" in x.lower() if x else False)
-
-        if not agenda_table:
-            logger.debug(
-                f"[legistar:{self.slug}] No agenda items table found for meeting {meeting_id}"
-            )
-            return items
-
-        # Parse rows for agenda items
-        rows = agenda_table.find_all("tr")
-        item_counter = 0
-
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) < 2:
-                continue
-
-            # Look for item number and title
-            # Pattern varies by Legistar instance, but typically:
-            # Cell 1: Item number (1., 2., A., etc.)
-            # Cell 2: Item title with optional link to detail
-
-            item_num_cell = cells[0]
-            item_title_cell = cells[1] if len(cells) > 1 else None
-
-            if not item_title_cell:
-                continue
-
-            # Extract item number
-            item_number = item_num_cell.get_text(strip=True)
-
-            # Skip if doesn't look like an item number
-            if not re.match(r"^[A-Z0-9]+\.?\s*$", item_number, re.IGNORECASE):
-                continue
-
-            # Extract title
-            item_title = item_title_cell.get_text(strip=True)
-            if not item_title:
-                continue
-
-            item_counter += 1
-
-            # Look for attachments in subsequent cells or nested elements
-            attachments = []
-            for cell in cells[2:]:
-                # Find PDF/doc links
-                links = cell.find_all("a", href=True)
-                for link in links:
-                    href = link.get("href", "")
-                    if ".pdf" in href.lower() or ".doc" in href.lower():
-                        attachment_url = urljoin(base_url, href)
-                        attachment_name = link.get_text(strip=True) or "Attachment"
-
-                        file_type = "pdf" if ".pdf" in href.lower() else "doc"
-
-                        attachments.append({
-                            "name": attachment_name,
-                            "url": attachment_url,
-                            "type": file_type,
-                        })
-
-            items.append({
-                "item_id": f"{meeting_id}-{item_counter}",
-                "title": item_title,
-                "sequence": item_counter,
-                "item_number": item_number,
-                "attachments": attachments,
-            })
+        items = parsed_data.get('items', [])
 
         logger.debug(
             f"[legistar:{self.slug}] Parsed {len(items)} items from HTML for meeting {meeting_id}"

@@ -304,6 +304,156 @@ def parse_granicus_html_agenda(html: str) -> Dict[str, Any]:
     }
 
 
+def parse_legistar_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, Any]:
+    """
+    Parse Legistar MeetingDetail HTML to extract items.
+
+    Legistar structure:
+    - Items in Telerik RadGrid (table.rgMasterTable)
+    - Rows with class rgRow or rgAltRow
+    - Columns: File #, Ver., Agenda #, Name, Type, Status, Title, Action, Result, Action Details, Video
+    - File # links to LegislationDetail.aspx with ID parameter for potential attachment fetching
+
+    Args:
+        html: HTML content from MeetingDetail.aspx page
+        meeting_id: Meeting ID for generating item IDs
+        base_url: Base URL for building absolute URLs
+
+    Returns:
+        {
+            'participation': {},  # Legistar HTML doesn't have structured participation in detail page
+            'items': [
+                {
+                    'item_id': str,        # Legislation ID from File # link
+                    'title': str,          # Full title from Title column
+                    'sequence': int,       # Row number
+                    'item_type': str,      # Type column (Ordinance, Resolution, etc.)
+                    'status': str,         # Status column
+                    'file_number': str,    # File # text
+                    'attachments': []      # Empty for now, could fetch from LegislationDetail later
+                }
+            ]
+        }
+    """
+    from urllib.parse import urljoin
+
+    soup = BeautifulSoup(html, 'html.parser')
+    items = []
+
+    # Find the RadGrid master table
+    master_table = soup.find('table', class_='rgMasterTable')
+
+    if not master_table:
+        logger.debug("[HTMLParser:Legistar] No rgMasterTable found in HTML")
+        return {'participation': {}, 'items': []}
+
+    # Find all agenda item rows (rgRow and rgAltRow)
+    rows = master_table.find_all('tr', class_=['rgRow', 'rgAltRow'])
+
+    if not rows:
+        logger.debug("[HTMLParser:Legistar] No rgRow/rgAltRow rows found")
+        return {'participation': {}, 'items': []}
+
+    logger.debug(f"[HTMLParser:Legistar] Found {len(rows)} rows in RadGrid")
+
+    for sequence, row in enumerate(rows, 1):
+        try:
+            cells = row.find_all('td')
+
+            # Legistar RadGrid columns (0-indexed):
+            # 0: File # (with link to LegislationDetail)
+            # 1: Ver. (version)
+            # 2: Agenda # (item number - often empty)
+            # 3: Name (short name)
+            # 4: Type (Ordinance, Resolution, Hearing, etc.)
+            # 5: Status
+            # 6: Title (full detailed title)
+            # 7: Action
+            # 8: Result
+            # 9: Action Details
+            # 10: Video
+
+            if len(cells) < 7:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has only {len(cells)} cells, skipping")
+                continue
+
+            # Extract File # and legislation ID
+            file_cell = cells[0]
+            file_link = file_cell.find('a', href=lambda x: x and 'LegislationDetail.aspx' in x)
+
+            if not file_link:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no LegislationDetail link, skipping")
+                continue
+
+            file_number = file_link.get_text(strip=True)
+
+            # Extract legislation ID from URL (ID=7494673)
+            href = file_link.get('href', '')
+            legislation_id_match = re.search(r'ID=(\d+)', href)
+            legislation_id = legislation_id_match.group(1) if legislation_id_match else None
+
+            if not legislation_id:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no ID in link, skipping")
+                continue
+
+            # Extract other fields
+            version = cells[1].get_text(strip=True) if len(cells) > 1 else ''
+            agenda_number = cells[2].get_text(strip=True) if len(cells) > 2 else ''
+            name = cells[3].get_text(strip=True) if len(cells) > 3 else ''
+            item_type = cells[4].get_text(strip=True) if len(cells) > 4 else ''
+            status = cells[5].get_text(strip=True) if len(cells) > 5 else ''
+            title = cells[6].get_text(strip=True) if len(cells) > 6 else ''
+
+            # Use full title if available, otherwise fall back to name
+            item_title = title if title else name
+
+            if not item_title:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no title, skipping")
+                continue
+
+            # Build full legislation detail URL for potential future attachment fetching
+            legislation_url = urljoin(base_url, href) if href else None
+
+            item_data = {
+                'item_id': legislation_id,
+                'title': item_title,
+                'sequence': sequence,
+                'file_number': file_number,
+                'item_type': item_type,
+                'status': status,
+                'attachments': [],  # Could fetch from LegislationDetail.aspx later
+            }
+
+            # Optional fields
+            if version:
+                item_data['version'] = version
+            if agenda_number:
+                item_data['agenda_number'] = agenda_number
+            if legislation_url:
+                item_data['legislation_url'] = legislation_url
+
+            items.append(item_data)
+
+            logger.debug(
+                f"[HTMLParser:Legistar] Item {sequence}: File #{file_number} - '{item_title[:60]}...'"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"[HTMLParser:Legistar] Error parsing row {sequence}: {e}"
+            )
+            continue
+
+    logger.info(
+        f"[HTMLParser:Legistar] Extracted {len(items)} items from meeting {meeting_id}"
+    )
+
+    return {
+        'participation': {},
+        'items': items,
+    }
+
+
 # Confidence: 8/10
 # Works with PrimeGov's current HTML structure.
 # May need adjustments if they change class names or div IDs.
