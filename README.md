@@ -62,8 +62,9 @@ engagic/
 - Item-level vs monolithic processing paths
 
 **database/** - Single SQLite database
-- Cities, meetings, agenda_items, job_queue tables
-- Cache-first serving
+- Tables: cities, meetings, items, queue, cache, zipcodes
+- 827 cities, 5,344 meetings, 1,789 agenda items
+- Cache-first serving with deduplication
 
 **server/** - FastAPI public API
 - Zipcode search, cache-first serving
