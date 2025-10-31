@@ -396,8 +396,12 @@ sync_city() {
 
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    # Source API keys if available
-    [ -f ~/.llm_secrets ] && source ~/.llm_secrets
+    # Source and export API keys if available
+    if [ -f ~/.llm_secrets ]; then
+        set -a  # Auto-export all variables
+        source ~/.llm_secrets
+        set +a
+    fi
     uv run engagic-conductor --sync-city "$1"
 }
 
@@ -409,16 +413,24 @@ sync_and_process_city() {
     log "Syncing and processing $1..."
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    # Source API keys if available
-    [ -f ~/.llm_secrets ] && source ~/.llm_secrets
+    # Source and export API keys if available
+    if [ -f ~/.llm_secrets ]; then
+        set -a  # Auto-export all variables
+        source ~/.llm_secrets
+        set +a
+    fi
     uv run engagic-conductor --sync-and-process-city "$1"
 }
 
 process_unprocessed() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    # Source API keys if available
-    [ -f ~/.llm_secrets ] && source ~/.llm_secrets
+    # Source and export API keys if available
+    if [ -f ~/.llm_secrets ]; then
+        set -a  # Auto-export all variables
+        source ~/.llm_secrets
+        set +a
+    fi
     uv run engagic-conductor --full-sync
 }
 
