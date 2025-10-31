@@ -627,6 +627,19 @@ class LegistarAdapter(BaseAdapter):
             # Parse agenda items from detail page
             items = self._parse_html_agenda_items(soup, meeting_id, base_url)
 
+            # Fetch attachments for each item (3rd layer)
+            items_with_attachments = 0
+            for item in items:
+                attachments = self._fetch_item_attachments(item, base_url)
+                if attachments:
+                    item['attachments'] = attachments
+                    items_with_attachments += 1
+
+            if items_with_attachments > 0:
+                logger.info(
+                    f"[legistar:{self.slug}] Meeting {meeting_id}: {items_with_attachments}/{len(items)} items have attachments"
+                )
+
             # Look for agenda PDF link if not provided from calendar
             if not packet_url:
                 agenda_links = soup.find_all("a", href=lambda x: x and ".pdf" in x.lower() if x else False)
@@ -699,3 +712,92 @@ class LegistarAdapter(BaseAdapter):
         )
 
         return items
+
+    def _filter_leg_ver_attachments(self, attachments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Filter attachments to include at most one 'Leg Ver' attachment.
+        Prefer 'Leg Ver2' over 'Leg Ver1' if both exist.
+
+        Args:
+            attachments: List of attachment dictionaries
+
+        Returns:
+            Filtered list of attachments
+        """
+        leg_ver_attachments = []
+        other_attachments = []
+
+        for att in attachments:
+            name = att.get('name', '').lower()
+            if 'leg ver' in name:
+                leg_ver_attachments.append(att)
+            else:
+                other_attachments.append(att)
+
+        # Select best Leg Ver attachment
+        selected_leg_ver = None
+        if leg_ver_attachments:
+            # Prefer Leg Ver2, then Leg Ver1, then any Leg Ver
+            for att in leg_ver_attachments:
+                name = att.get('name', '').lower()
+                if 'leg ver2' in name or 'leg ver 2' in name:
+                    selected_leg_ver = att
+                    break
+
+            # If no Ver2, look for Ver1
+            if not selected_leg_ver:
+                for att in leg_ver_attachments:
+                    name = att.get('name', '').lower()
+                    if 'leg ver1' in name or 'leg ver 1' in name:
+                        selected_leg_ver = att
+                        break
+
+            # If no Ver1 or Ver2, just take the first one
+            if not selected_leg_ver:
+                selected_leg_ver = leg_ver_attachments[0]
+
+        # Combine: at most one Leg Ver + all other attachments
+        filtered = other_attachments
+        if selected_leg_ver:
+            filtered.insert(0, selected_leg_ver)
+
+        return filtered
+
+    def _fetch_item_attachments(
+        self, item: Dict[str, Any], base_url: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch attachments for a single item from its LegislationDetail page.
+
+        Args:
+            item: Item dictionary with legislation_url
+            base_url: Base URL for building absolute URLs
+
+        Returns:
+            List of attachment dictionaries
+        """
+        from vendors.adapters.html_agenda_parser import parse_legistar_legislation_attachments
+
+        legislation_url = item.get('legislation_url')
+        if not legislation_url:
+            return []
+
+        try:
+            soup = self._fetch_html(legislation_url)
+            html = str(soup)
+            attachments = parse_legistar_legislation_attachments(html, base_url)
+
+            # Filter to include at most one Leg Ver attachment
+            attachments = self._filter_leg_ver_attachments(attachments)
+
+            logger.debug(
+                f"[legistar:{self.slug}] Item {item.get('item_id')}: found {len(attachments)} attachments (after filtering)"
+            )
+
+            return attachments
+
+        except Exception as e:
+            logger.warning(
+                f"[legistar:{self.slug}] Failed to fetch attachments for item {item.get('item_id')}: {e}"
+            )
+            return []

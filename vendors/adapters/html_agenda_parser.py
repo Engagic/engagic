@@ -304,6 +304,72 @@ def parse_granicus_html_agenda(html: str) -> Dict[str, Any]:
     }
 
 
+def parse_legistar_legislation_attachments(html: str, base_url: str) -> List[Dict[str, Any]]:
+    """
+    Parse attachments from Legistar LegislationDetail.aspx page.
+
+    Args:
+        html: HTML content from LegislationDetail.aspx
+        base_url: Base URL for building absolute URLs
+
+    Returns:
+        List of attachment dictionaries: [{'name': str, 'url': str, 'type': str}]
+    """
+    from urllib.parse import urljoin
+
+    soup = BeautifulSoup(html, 'html.parser')
+    attachments = []
+
+    # Find the attachments table
+    attachments_table = soup.find('table', id='ctl00_ContentPlaceHolder1_tblAttachments')
+
+    if not attachments_table:
+        logger.debug("[HTMLParser:Legistar] No attachments table found")
+        return attachments
+
+    # Find the span containing attachment links
+    attachments_span = attachments_table.find('span', id='ctl00_ContentPlaceHolder1_lblAttachments2')
+
+    if not attachments_span:
+        logger.debug("[HTMLParser:Legistar] No attachments span found")
+        return attachments
+
+    # Find all links in the span
+    links = attachments_span.find_all('a', href=True)
+
+    for link in links:
+        href = link.get('href', '')
+        name = link.get_text(strip=True)
+
+        if not href or not name:
+            continue
+
+        # Build absolute URL
+        attachment_url = urljoin(base_url, href)
+
+        # Determine file type from URL or name
+        url_lower = attachment_url.lower()
+        name_lower = name.lower()
+
+        if '.pdf' in url_lower or 'pdf' in name_lower:
+            file_type = 'pdf'
+        elif '.doc' in url_lower or 'doc' in name_lower:
+            file_type = 'doc'
+        else:
+            # Default to PDF for View.ashx links (most are PDFs)
+            file_type = 'pdf'
+
+        attachments.append({
+            'name': name,
+            'url': attachment_url,
+            'type': file_type,
+        })
+
+    logger.debug(f"[HTMLParser:Legistar] Found {len(attachments)} attachments")
+
+    return attachments
+
+
 def parse_legistar_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, Any]:
     """
     Parse Legistar MeetingDetail HTML to extract items.
