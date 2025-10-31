@@ -267,6 +267,14 @@
 										No Agenda Posted
 									</div>
 								{/if}
+
+								{#if meeting.topics && meeting.topics.length > 0}
+									<div class="meeting-topics">
+										{#each meeting.topics as topic}
+											<span class="topic-tag">{topic}</span>
+										{/each}
+									</div>
+								{/if}
 							</a>
 						{/each}
 					</div>
@@ -333,6 +341,18 @@
 	@media (max-width: 640px) {
 		.container {
 			width: 100%;
+		}
+
+		.header {
+			margin-bottom: 1rem;
+		}
+
+		.tagline {
+			display: none;
+		}
+
+		.logo {
+			margin-bottom: 0;
 		}
 
 		.city-title {

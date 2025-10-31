@@ -14,9 +14,6 @@
 	let error = $state('');
 	let expandedAttachments = $state<Set<string>>(new Set());
 
-	onMount(async () => {
-		await loadMeetingData();
-	});
 
 	async function loadMeetingData() {
 		loading = true;
@@ -109,6 +106,37 @@
 		expandedAttachments = newSet;
 	}
 
+	function wrapThinkingSections() {
+		// Wrap thinking sections for easy hover styling
+		const summaries = document.querySelectorAll('.item-summary, .meeting-summary');
+		summaries.forEach(summary => {
+			const headings = summary.querySelectorAll('h2');
+			headings.forEach(h2 => {
+				if (h2.textContent?.trim() === 'Thinking') {
+					const wrapper = document.createElement('div');
+					wrapper.className = 'thinking-section';
+
+					// Insert wrapper before the h2
+					h2.parentNode?.insertBefore(wrapper, h2);
+					wrapper.appendChild(h2);
+
+					// Move all siblings until we hit another h2 or end
+					let next = wrapper.nextSibling;
+					while (next && next.nodeName !== 'H2') {
+						const current = next;
+						next = next.nextSibling;
+						wrapper.appendChild(current);
+					}
+				}
+			});
+		});
+	}
+
+	onMount(async () => {
+		await loadMeetingData();
+		// Wait for DOM to be ready, then wrap thinking sections
+		setTimeout(wrapThinkingSections, 100);
+	});
 
 </script>
 
@@ -124,35 +152,9 @@
 			<p class="tagline">civic engagement made simple</p>
 		</header>
 
-	<div class="city-header">
-		<a href="/{city_banana}" class="back-link">← Back to {searchResults && searchResults.success ? searchResults.city_name : 'city'} meetings</a>
-	</div>
-
-	{#if selectedMeeting?.agenda_url}
-		<div class="agenda-url-box">
-			<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="agenda-url-link">
-				View Full HTML Agenda →
-			</a>
+		<div class="breadcrumb">
+			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
 		</div>
-	{:else if selectedMeeting?.packet_url}
-		{@const urls = Array.isArray(selectedMeeting.packet_url)
-			? selectedMeeting.packet_url
-			: [selectedMeeting.packet_url]}
-		<div class="packet-url-box">
-			<div class="packet-url-content">
-				<span class="packet-url-label">
-					Summarized through Google's Gemini API from {urls.length > 1 ? `${urls.length} meeting packets` : 'the meeting packet'}:
-				</span>
-				<div class="multi-url-compact">
-					{#each urls as url, i}
-						<a href={url} target="_blank" rel="noopener noreferrer" class="compact-url-link">
-							{urls.length === 1 ? 'View Agenda Packet' : (i === 0 ? 'Main Agenda' : `Supplemental ${i}`)}
-						</a>{#if i < urls.length - 1}<span class="url-separator">•</span>{/if}
-					{/each}
-				</div>
-			</div>
-		</div>
-	{/if}
 
 	{#if selectedMeeting?.participation}
 		{@const p = selectedMeeting.participation}
@@ -217,31 +219,22 @@
 			{/if}
 
 			<div class="meeting-header">
-				<h1 class="meeting-title">{selectedMeeting.title}</h1>
-				{#if searchResults && searchResults.success}
-					<div class="meeting-location">
-						{searchResults.city_name}, {searchResults.state}
-					</div>
-				{/if}
+				<div class="meeting-title-row">
+					<h1 class="meeting-title">{selectedMeeting.title}</h1>
+					{#if selectedMeeting.agenda_url}
+						<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="inline-agenda-link">View Agenda →</a>
+					{:else if selectedMeeting.packet_url}
+						{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
+						<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="inline-agenda-link">View Packet →</a>
+					{/if}
+				</div>
 				<div class="meeting-date">
 					{formatMeetingDate(selectedMeeting.date)}
 				</div>
 			</div>
 
-			<div class="meeting-divider"></div>
-
 			{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
 				<!-- Item-based meeting display (58% of cities) -->
-				<div class="agenda-items-header">
-					<h2 class="agenda-title">Agenda Items ({selectedMeeting.items.length})</h2>
-					{#if selectedMeeting.topics && selectedMeeting.topics.length > 0}
-						<div class="meeting-topics">
-							{#each selectedMeeting.topics as topic}
-								<span class="topic-badge">{topic}</span>
-							{/each}
-						</div>
-					{/if}
-				</div>
 
 				<div class="agenda-items">
 					{#each selectedMeeting.items as item}
@@ -312,6 +305,24 @@
 <style>
 	.container {
 		width: var(--width-detail);
+	}
+
+	.breadcrumb {
+		margin: 0.5rem 0 1.5rem 0;
+	}
+
+	.back-link {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 500;
+		transition: color 0.2s;
+	}
+
+	.back-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
 	}
 
 	.agenda-url-box {
@@ -555,26 +566,41 @@
 	}
 
 	.meeting-header {
-		margin-bottom: 2rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.meeting-title-row {
+		display: flex;
+		align-items: baseline;
+		gap: 1rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.5rem;
 	}
 
 	.meeting-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.8rem;
 		color: var(--civic-dark);
-		margin: 0 0 0.5rem 0;
+		margin: 0;
 		font-weight: 600;
 		line-height: 1.3;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
 
-	.meeting-location {
+	.inline-agenda-link {
 		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
 		color: var(--civic-blue);
-		font-size: 1.1rem;
-		margin: 0.3rem 0;
+		text-decoration: none;
 		font-weight: 500;
+		white-space: nowrap;
+		transition: color 0.2s;
+	}
+
+	.inline-agenda-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
 	}
 
 	.meeting-date {
@@ -848,6 +874,20 @@
 		margin: 0.4rem 0;
 	}
 
+	/* Hide thinking trace by default, show on hover */
+	:global(.thinking-section) {
+		opacity: 0.25;
+		transition: opacity 0.3s ease;
+		margin-bottom: 1.5rem;
+		padding: 0.5rem;
+		border-left: 2px solid transparent;
+	}
+
+	:global(.thinking-section:hover) {
+		opacity: 1;
+		border-left-color: var(--civic-blue);
+	}
+
 	.item-attachments-container {
 		margin-top: 0.75rem;
 	}
@@ -913,16 +953,57 @@
 	@media (max-width: 640px) {
 		.container {
 			width: 100%;
+			padding: 1rem 0.75rem;
 		}
 
-		.meeting-title {
-			font-size: 1.4rem;
-			word-wrap: break-word;
-			overflow-wrap: break-word;
+		.header {
+			margin-bottom: 0.5rem;
+		}
+
+		.logo {
+			font-size: 1.5rem;
+			margin-bottom: 0;
+		}
+
+		.tagline {
+			display: none;
+		}
+
+		.breadcrumb {
+			margin: 0.25rem 0 1rem 0;
+		}
+
+		.back-link {
+			font-size: 0.75rem;
 		}
 
 		.meeting-detail {
 			padding: 1rem;
+		}
+
+		.meeting-header {
+			margin-bottom: 1rem;
+		}
+
+		.meeting-title-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.5rem;
+		}
+
+		.meeting-title {
+			font-size: 1.3rem;
+			word-wrap: break-word;
+			overflow-wrap: break-word;
+		}
+
+		.inline-agenda-link {
+			font-size: 0.75rem;
+		}
+
+		.meeting-date {
+			font-size: 0.85rem;
+			margin-top: 0.25rem;
 		}
 
 		.meeting-summary {
