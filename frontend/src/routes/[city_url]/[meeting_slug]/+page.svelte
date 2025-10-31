@@ -868,7 +868,7 @@
 		border-radius: 4px;
 		margin-bottom: 0.5rem;
 		opacity: 0.8;
-		transition: all 0.2s;
+		transition: all 0.2s ease;
 	}
 
 	:global(.thinking-section:hover::before) {
@@ -878,17 +878,26 @@
 	}
 
 	:global(.thinking-section > *) {
-		max-height: 0;
-		overflow: hidden;
-		transition: max-height 0.3s ease;
+		display: none;
+		opacity: 0;
+		transform: translateY(-10px);
 	}
 
 	:global(.thinking-section:hover > *) {
-		max-height: 2000px;
+		display: block;
+		animation: expandThinking 0.2s ease forwards;
 		padding: 0.5rem;
 		border-left: 2px solid var(--civic-blue);
 		background: #f8fafc;
 		margin-bottom: 0.5rem;
+		border-radius: 4px;
+	}
+
+	@keyframes expandThinking {
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	.item-attachments-container {
