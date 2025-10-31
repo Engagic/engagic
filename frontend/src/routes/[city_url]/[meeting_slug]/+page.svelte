@@ -311,7 +311,8 @@
 		margin: 0.5rem 0 1.5rem 0;
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		justify-content: space-between;
+		gap: 1rem;
 		flex-wrap: wrap;
 	}
 
@@ -332,8 +333,7 @@
 	}
 
 	.breadcrumb-separator {
-		color: var(--civic-gray);
-		font-size: 0.85rem;
+		display: none;
 	}
 
 	.agenda-url-box {
@@ -851,36 +851,44 @@
 
 	/* Collapse thinking trace by default, expand on hover */
 	:global(.thinking-section) {
-		max-height: 0;
-		overflow: hidden;
-		transition: max-height 0.3s ease;
-		margin-bottom: 0;
 		position: relative;
+		margin-bottom: 1rem;
+		cursor: pointer;
 	}
 
 	:global(.thinking-section::before) {
-		content: "💭 Thinking trace (hover to view)";
-		position: absolute;
-		top: 0;
-		left: 0;
+		content: "💭 Thinking trace (hover to expand)";
+		display: block;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
 		color: var(--civic-gray);
-		opacity: 0.6;
-		pointer-events: none;
-		white-space: nowrap;
-	}
-
-	:global(.thinking-section:hover) {
-		max-height: 2000px;
 		padding: 0.5rem;
-		margin-bottom: 1.5rem;
-		border-left: 2px solid var(--civic-blue);
 		background: #f8fafc;
+		border-left: 2px solid var(--civic-border);
+		border-radius: 4px;
+		margin-bottom: 0.5rem;
+		opacity: 0.8;
+		transition: all 0.2s;
 	}
 
 	:global(.thinking-section:hover::before) {
-		display: none;
+		opacity: 1;
+		border-left-color: var(--civic-blue);
+		color: var(--civic-blue);
+	}
+
+	:global(.thinking-section > *) {
+		max-height: 0;
+		overflow: hidden;
+		transition: max-height 0.3s ease;
+	}
+
+	:global(.thinking-section:hover > *) {
+		max-height: 2000px;
+		padding: 0.5rem;
+		border-left: 2px solid var(--civic-blue);
+		background: #f8fafc;
+		margin-bottom: 0.5rem;
 	}
 
 	.item-attachments-container {
@@ -966,27 +974,15 @@
 
 		.breadcrumb {
 			margin: 0.25rem 0 1rem 0;
-		}
-
-		.back-link {
-			font-size: 0.75rem;
+			gap: 0.5rem;
 		}
 
 		.meeting-detail {
 			padding: 1rem;
 		}
 
-		.breadcrumb {
-			margin: 0.25rem 0 1rem 0;
-			font-size: 0.75rem;
-		}
-
 		.back-link,
 		.agenda-link {
-			font-size: 0.75rem;
-		}
-
-		.breadcrumb-separator {
 			font-size: 0.75rem;
 		}
 
@@ -1021,10 +1017,6 @@
 		.compact-url-link {
 			font-size: 0.8rem;
 			padding: 0.2rem 0.4rem;
-		}
-
-		.back-link {
-			font-size: 1rem;
 		}
 
 		.meeting-summary {
