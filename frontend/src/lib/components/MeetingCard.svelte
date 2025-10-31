@@ -65,6 +65,14 @@
 				<span class="sr-only">Status:</span> No Agenda Posted
 			</div>
 		{/if}
+
+		{#if meeting.topics && meeting.topics.length > 0}
+			<div class="meeting-topics">
+				{#each meeting.topics as topic}
+					<span class="topic-tag">{topic}</span>
+				{/each}
+			</div>
+		{/if}
 	</div>
 </a>
 
@@ -122,5 +130,23 @@
 		clip: rect(0, 0, 0, 0);
 		white-space: nowrap;
 		border-width: 0;
+	}
+
+	.meeting-topics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
+	}
+
+	.topic-tag {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.7rem;
+		padding: 0.25rem 0.5rem;
+		background: var(--civic-light);
+		color: var(--civic-blue);
+		border: 1px solid var(--civic-border);
+		border-radius: 4px;
+		font-weight: 500;
 	}
 </style>
