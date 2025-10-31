@@ -430,6 +430,14 @@ class GranicusAdapter(BaseAdapter):
         html = response.text
         parsed = parse_granicus_html_agenda(html)
 
+        # Convert relative attachment URLs to absolute URLs
+        for item in parsed['items']:
+            for attachment in item.get('attachments', []):
+                url = attachment.get('url', '')
+                # If URL is relative, make it absolute using urljoin
+                if url and not url.startswith('http'):
+                    attachment['url'] = urljoin(self.base_url, url)
+
         logger.debug(
             f"[granicus:{self.slug}] Parsed HTML agenda: {len(parsed['items'])} items"
         )
