@@ -184,6 +184,11 @@ class GeminiSummarizer:
     ) -> List[Dict[str, Any]]:
         """Process multiple agenda items using Gemini Batch API for 50% cost savings
 
+        Uses chunked processing to respect rate limits:
+        - 15 items per chunk (respects 1k RPM flash quota with buffer)
+        - 90-second delays between chunks (allows quota refill)
+        - Exponential backoff on 429 errors
+
         Args:
             item_requests: List of dicts with structure:
                 [{
@@ -206,196 +211,276 @@ class GeminiSummarizer:
         if not item_requests:
             return []
 
+        total_items = len(item_requests)
         logger.info(
-            f"[Summarizer] Processing {len(item_requests)} items using Batch API (50% savings)"
+            f"[Summarizer] Processing {total_items} items using Batch API (50% savings)"
         )
 
-        try:
-            # Prepare inline requests
-            inline_requests = []
-            request_map = {}
+        # Chunk items to respect rate limits
+        chunk_size = 15  # Conservative: respects 1k RPM limit
+        chunks = [
+            item_requests[i : i + chunk_size]
+            for i in range(0, total_items, chunk_size)
+        ]
 
-            for i, req in enumerate(item_requests):
-                item_title = req["title"]
-                text = req["text"]
+        logger.info(
+            f"[Summarizer] Split into {len(chunks)} chunks of {chunk_size} items each"
+        )
 
-                # Use actual page count if available, otherwise estimate
-                page_count = req.get("page_count")
-                if page_count is None:
-                    page_count = self._estimate_page_count(text)
+        all_results = []
 
-                # Adaptive prompt selection based on size
-                prompt_type = "large" if page_count >= 100 else "standard"
+        for chunk_idx, chunk in enumerate(chunks):
+            chunk_num = chunk_idx + 1
+            logger.info(
+                f"[Summarizer] Processing chunk {chunk_num}/{len(chunks)} ({len(chunk)} items)"
+            )
 
-                # Build prompt and config
-                prompt = self._get_prompt(
-                    "item", prompt_type, title=item_title, text=text
+            # Process chunk with retry logic
+            chunk_results = self._process_batch_chunk(chunk, chunk_num)
+            all_results.extend(chunk_results)
+
+            # Delay between chunks (except after last chunk)
+            if chunk_idx < len(chunks) - 1:
+                delay = 90  # 90 seconds between chunks
+                logger.info(
+                    f"[Summarizer] Waiting {delay}s before next chunk (quota refill)..."
                 )
-                response_schema = self.prompts["item"][prompt_type].get("response_schema")
-                config = {
-                    "temperature": 0.3,
-                    "max_output_tokens": 2048,
-                    "response_mime_type": "application/json",
-                    "response_schema": response_schema
+                time.sleep(delay)
+
+        successful = sum(1 for r in all_results if r.get("success"))
+        logger.info(
+            f"[Summarizer] Batch complete: {successful}/{total_items} successful"
+        )
+
+        return all_results
+
+    def _process_batch_chunk(
+        self, chunk_requests: List[Dict[str, Any]], chunk_num: int
+    ) -> List[Dict[str, Any]]:
+        """Process a single chunk of batch requests with retry logic
+
+        Args:
+            chunk_requests: List of item requests for this chunk
+            chunk_num: Chunk number for logging
+
+        Returns:
+            List of results for this chunk
+        """
+        max_retries = 3
+        retry_delay = 60  # Start with 60s delay
+
+        for attempt in range(max_retries):
+            try:
+                # Prepare inline requests
+                inline_requests = []
+                request_map = {}
+
+                for i, req in enumerate(chunk_requests):
+                    item_title = req["title"]
+                    text = req["text"]
+
+                    # Use actual page count if available, otherwise estimate
+                    page_count = req.get("page_count")
+                    if page_count is None:
+                        page_count = self._estimate_page_count(text)
+
+                    # Adaptive prompt selection based on size
+                    prompt_type = "large" if page_count >= 100 else "standard"
+
+                    # Build prompt and config
+                    prompt = self._get_prompt(
+                        "item", prompt_type, title=item_title, text=text
+                    )
+                    response_schema = self.prompts["item"][prompt_type].get(
+                        "response_schema"
+                    )
+                    config = {
+                        "temperature": 0.3,
+                        "max_output_tokens": 2048,
+                        "response_mime_type": "application/json",
+                        "response_schema": response_schema,
+                    }
+
+                    inline_requests.append(
+                        {
+                            "contents": [{"parts": [{"text": prompt}], "role": "user"}],
+                            "config": config,
+                        }
+                    )
+
+                    request_map[i] = req
+
+                # Submit batch job
+                logger.info(
+                    f"[Summarizer] Submitting chunk {chunk_num} with {len(inline_requests)} items (attempt {attempt + 1}/{max_retries})"
+                )
+
+                batch_job = self.client.batches.create(
+                    model=self.flash_model_name,
+                    src=inline_requests,
+                    config={"display_name": f"chunk-{chunk_num}-{time.time()}"},
+                )
+
+                batch_name = batch_job.name
+                if not batch_name:
+                    raise ValueError("Batch job created but no name returned")
+
+                logger.info(f"[Summarizer] Submitted batch {batch_name}")
+
+                # Poll for completion
+                max_wait_time = 1800  # 30 minutes max
+                poll_interval = 10  # Check every 10 seconds
+                waited_time = 0
+
+                completed_states = {
+                    "JOB_STATE_SUCCEEDED",
+                    "JOB_STATE_FAILED",
+                    "JOB_STATE_CANCELLED",
+                    "JOB_STATE_EXPIRED",
                 }
 
-                inline_requests.append(
-                    {
-                        "contents": [{"parts": [{"text": prompt}], "role": "user"}],
-                        "config": config,
-                    }
-                )
+                while waited_time < max_wait_time:
+                    batch_job = self.client.batches.get(name=batch_name)
 
-                request_map[i] = req
-
-            # Submit batch job
-            logger.info(
-                f"[Summarizer] Submitting batch with {len(inline_requests)} items"
-            )
-
-            batch_job = self.client.batches.create(
-                model=self.flash_model_name,
-                src=inline_requests,
-                config={"display_name": f"item-batch-{time.time()}"},
-            )
-
-            batch_name = batch_job.name
-            if not batch_name:
-                raise ValueError("Batch job created but no name returned")
-
-            logger.info(f"[Summarizer] Submitted batch {batch_name}")
-
-            # Poll for completion
-            max_wait_time = 1800  # 30 minutes max
-            poll_interval = 10  # Check every 10 seconds
-            waited_time = 0
-
-            completed_states = {
-                "JOB_STATE_SUCCEEDED",
-                "JOB_STATE_FAILED",
-                "JOB_STATE_CANCELLED",
-                "JOB_STATE_EXPIRED",
-            }
-
-            while waited_time < max_wait_time:
-                batch_job = self.client.batches.get(name=batch_name)
-
-                if batch_job.state and batch_job.state.name in completed_states:
-                    logger.info(
-                        f"[Summarizer] Batch {batch_name} completed: {batch_job.state.name}"
-                    )
-                    break
-
-                state_name = batch_job.state.name if batch_job.state else "unknown"
-                if waited_time % 30 == 0:  # Log every 30s
-                    logger.info(
-                        f"[Summarizer] Batch processing... ({waited_time}s, state: {state_name})"
-                    )
-
-                time.sleep(poll_interval)
-                waited_time += poll_interval
-
-            if waited_time >= max_wait_time:
-                logger.error(f"[Summarizer] Batch timed out after {max_wait_time}s")
-                return [
-                    {
-                        "item_id": req["item_id"],
-                        "success": False,
-                        "error": "Batch timeout",
-                    }
-                    for req in item_requests
-                ]
-
-            if not batch_job.state or batch_job.state.name != "JOB_STATE_SUCCEEDED":
-                state_name = batch_job.state.name if batch_job.state else "unknown"
-                logger.error(f"[Summarizer] Batch failed: {state_name}")
-                return [
-                    {
-                        "item_id": req["item_id"],
-                        "success": False,
-                        "error": f"Batch failed: {state_name}",
-                    }
-                    for req in item_requests
-                ]
-
-            # Process results
-            results = []
-
-            if batch_job.dest and batch_job.dest.inlined_responses:
-                for i, inline_response in enumerate(batch_job.dest.inlined_responses):
-                    if i not in request_map:
-                        logger.warning(
-                            f"[Summarizer] No mapping found for response {i}"
+                    if batch_job.state and batch_job.state.name in completed_states:
+                        logger.info(
+                            f"[Summarizer] Batch {batch_name} completed: {batch_job.state.name}"
                         )
-                        continue
+                        break
 
-                    original_req = request_map[i]
+                    state_name = batch_job.state.name if batch_job.state else "unknown"
+                    if waited_time % 30 == 0:  # Log every 30s
+                        logger.info(
+                            f"[Summarizer] Batch processing... ({waited_time}s, state: {state_name})"
+                        )
 
-                    if inline_response.response:
-                        try:
-                            response_text = inline_response.response.text
-                            if not response_text:
-                                logger.warning(
-                                    f"[Summarizer] Empty response for {original_req['item_id']}"
+                    time.sleep(poll_interval)
+                    waited_time += poll_interval
+
+                if waited_time >= max_wait_time:
+                    raise TimeoutError(f"Batch timed out after {max_wait_time}s")
+
+                if (
+                    not batch_job.state
+                    or batch_job.state.name != "JOB_STATE_SUCCEEDED"
+                ):
+                    state_name = batch_job.state.name if batch_job.state else "unknown"
+                    raise RuntimeError(f"Batch failed: {state_name}")
+
+                # Process results
+                results = []
+
+                if batch_job.dest and batch_job.dest.inlined_responses:
+                    for i, inline_response in enumerate(
+                        batch_job.dest.inlined_responses
+                    ):
+                        if i not in request_map:
+                            logger.warning(
+                                f"[Summarizer] No mapping found for response {i}"
+                            )
+                            continue
+
+                        original_req = request_map[i]
+
+                        if inline_response.response:
+                            try:
+                                response_text = inline_response.response.text
+                                if not response_text:
+                                    logger.warning(
+                                        f"[Summarizer] Empty response for {original_req['item_id']}"
+                                    )
+                                    results.append(
+                                        {
+                                            "item_id": original_req["item_id"],
+                                            "success": False,
+                                            "error": "Empty response from Gemini",
+                                        }
+                                    )
+                                    continue
+
+                                # Parse response
+                                summary, topics = self._parse_item_response(
+                                    response_text
+                                )
+
+                                results.append(
+                                    {
+                                        "item_id": original_req["item_id"],
+                                        "success": True,
+                                        "summary": summary,
+                                        "topics": topics,
+                                    }
+                                )
+
+                            except Exception as e:
+                                logger.error(
+                                    f"[Summarizer] Error parsing response for {original_req['item_id']}: {e}"
                                 )
                                 results.append(
                                     {
                                         "item_id": original_req["item_id"],
                                         "success": False,
-                                        "error": "Empty response from Gemini",
+                                        "error": str(e),
                                     }
                                 )
-                                continue
 
-                            # Parse response
-                            summary, topics = self._parse_item_response(response_text)
-
-                            results.append(
-                                {
-                                    "item_id": original_req["item_id"],
-                                    "success": True,
-                                    "summary": summary,
-                                    "topics": topics,
-                                }
-                            )
-
-                        except Exception as e:
+                        elif inline_response.error:
+                            error_str = str(inline_response.error)
                             logger.error(
-                                f"[Summarizer] Error parsing response for {original_req['item_id']}: {e}"
+                                f"[Summarizer] Item {original_req['item_id']} failed: {error_str}"
                             )
+
+                            # Check for quota errors
+                            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                                raise RuntimeError(f"Quota exceeded: {error_str}")
+
                             results.append(
                                 {
                                     "item_id": original_req["item_id"],
                                     "success": False,
-                                    "error": str(e),
+                                    "error": error_str,
                                 }
                             )
 
-                    elif inline_response.error:
-                        logger.error(
-                            f"[Summarizer] Item {original_req['item_id']} failed: {inline_response.error}"
-                        )
-                        results.append(
-                            {
-                                "item_id": original_req["item_id"],
-                                "success": False,
-                                "error": str(inline_response.error),
-                            }
-                        )
+                successful = sum(1 for r in results if r.get("success"))
+                logger.info(
+                    f"[Summarizer] Chunk {chunk_num} complete: {successful}/{len(results)} successful"
+                )
 
-            successful = sum(1 for r in results if r["success"])
-            logger.info(
-                f"[Summarizer] Batch complete: {successful}/{len(results)} successful"
-            )
+                return results
 
-            return results
+            except Exception as e:
+                error_str = str(e)
+                is_quota_error = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
 
-        except Exception as e:
-            logger.error(f"[Summarizer] Batch processing failed: {e}")
-            return [
-                {"item_id": req["item_id"], "success": False, "error": str(e)}
-                for req in item_requests
-            ]
+                if is_quota_error and attempt < max_retries - 1:
+                    # Exponential backoff on quota errors
+                    backoff_delay = retry_delay * (2**attempt)
+                    logger.warning(
+                        f"[Summarizer] Chunk {chunk_num} hit quota limit (attempt {attempt + 1}/{max_retries}). "
+                        f"Retrying in {backoff_delay}s..."
+                    )
+                    time.sleep(backoff_delay)
+                    continue
+                else:
+                    # Final attempt failed or non-quota error
+                    logger.error(
+                        f"[Summarizer] Chunk {chunk_num} failed after {attempt + 1} attempts: {e}"
+                    )
+                    return [
+                        {"item_id": req["item_id"], "success": False, "error": error_str}
+                        for req in chunk_requests
+                    ]
+
+        # Should never reach here, but safety fallback
+        return [
+            {
+                "item_id": req["item_id"],
+                "success": False,
+                "error": "Max retries exceeded",
+            }
+            for req in chunk_requests
+        ]
 
     def _get_prompt(self, category: str, prompt_type: str, **variables) -> str:
         """Get prompt from JSON and format with variables
