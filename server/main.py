@@ -885,6 +885,62 @@ async def get_random_best_meeting():
         raise HTTPException(status_code=500, detail="Error retrieving meeting summary")
 
 
+@app.get("/api/random-meeting-with-items")
+async def get_random_meeting_with_items():
+    """Get a random meeting that has high-quality item-level summaries"""
+    try:
+        conn = db.conn
+        cursor = conn.cursor()
+
+        # Get meetings that have multiple items with summaries
+        cursor.execute("""
+            SELECT
+                m.id,
+                m.banana,
+                m.title,
+                m.date,
+                m.packet_url,
+                COUNT(i.id) as item_count,
+                AVG(LENGTH(i.summary)) as avg_summary_length
+            FROM meetings m
+            JOIN items i ON m.id = i.meeting_id
+            WHERE i.summary IS NOT NULL
+                AND LENGTH(i.summary) > 100
+            GROUP BY m.id
+            HAVING COUNT(i.id) >= 3
+            ORDER BY RANDOM()
+            LIMIT 1
+        """)
+
+        result = cursor.fetchone()
+
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="No meetings with item summaries available yet",
+            )
+
+        meeting_id, banana, title, date, packet_url, item_count, avg_summary_length = result
+
+        return {
+            "success": True,
+            "meeting": {
+                "id": meeting_id,
+                "banana": banana,
+                "title": title,
+                "date": date,
+                "packet_url": packet_url,
+                "item_count": item_count,
+                "avg_summary_length": round(avg_summary_length) if avg_summary_length else 0
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting random meeting with items: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving meeting")
+
+
 @app.get("/api/stats")
 async def get_stats():
     """Get system statistics"""
