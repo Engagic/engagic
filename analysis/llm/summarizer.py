@@ -579,6 +579,37 @@ class GeminiSummarizer:
             logger.error(f"[Summarizer] Error validating JSON response: {e}")
             raise
 
+    def _clean_summary(self, raw_summary: str) -> str:
+        """Remove LLM artifacts and document headers from summary text
+
+        Args:
+            raw_summary: Raw summary text from LLM
+
+        Returns:
+            Cleaned summary text ready for storage
+        """
+        import re
+
+        if not raw_summary:
+            return ""
+
+        cleaned = raw_summary
+        # Remove document section markers
+        cleaned = re.sub(r"=== DOCUMENT \d+ ===", "", cleaned)
+        cleaned = re.sub(r"--- SECTION \d+ SUMMARY ---", "", cleaned)
+
+        # Remove common LLM preambles
+        cleaned = re.sub(r"Here's a concise summary of the[^:]*:", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"Here's a summary of the[^:]*:", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"Here's the key points[^:]*:", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"Here's a structured analysis[^:]*:", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"Summary of the[^:]*:", "", cleaned, flags=re.IGNORECASE)
+
+        # Normalize excessive newlines
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+        return cleaned.strip()
+
     def _estimate_page_count(self, text: str) -> int:
         """Estimate page count from text
 

@@ -871,28 +871,19 @@ class Conductor:
                 # Cleanup: free batch memory immediately
                 del batch_requests
 
-        # Combine item summaries into meeting summary
+        # Aggregate topics from items (for meeting-level filtering)
+        # Frontend handles item display - no concatenation needed
         if processed_items and self.processor:
-            # Build combined summary directly (no wrapper function needed)
-            summary_parts = [f"Meeting: {meeting.title}\n"]
-            for item in processed_items:
-                title = item.get("title", "Untitled Item")
-                summary = item.get("summary", "No summary available")
-                summary_parts.append(f"\n{title}\n{summary}")
-            summary_parts.append(f"\n\n[Processed {len(processed_items)} items]")
-            combined_summary = "\n".join(summary_parts)
-
-            # Aggregate topics from all items
+            # Collect all topics from all items
             all_topics = []
             for item in processed_items:
                 all_topics.extend(item.get("topics", []))
 
-            # Count topic frequency and sort by frequency
+            # Count topic frequency and sort by frequency (most common first)
             topic_counts = {}
             for topic in all_topics:
                 topic_counts[topic] = topic_counts.get(topic, 0) + 1
 
-            # Keep topics sorted by frequency (most common first)
             meeting_topics = sorted(
                 topic_counts.keys(), key=lambda t: topic_counts[t], reverse=True
             )
@@ -902,11 +893,11 @@ class Conductor:
                 f"from {len(processed_items)} items: {meeting_topics}"
             )
 
-            # Update meeting with combined summary and aggregated topics
+            # Update meeting with metadata only (items have their own summaries)
             processing_time = time.time() - start_time
             self.db.update_meeting_summary(
                 meeting_id=meeting.id,
-                summary=combined_summary,
+                summary=None,  # No concatenated summary - frontend composes from items
                 processing_method=f"item_level_{len(processed_items)}_items",
                 processing_time=processing_time,
                 topics=meeting_topics,

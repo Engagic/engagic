@@ -23,18 +23,7 @@ logger = logging.getLogger("engagic")
 
 app = FastAPI(title="engagic API", description="EGMI")
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://engagic.org",
-        "http://localhost:5173",
-        "http://localhost:4173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS configured below after config import
 
 # Persistent rate limiter with SQLite
 rate_limiter = SQLiteRateLimiter(
@@ -442,7 +431,12 @@ async def search_meetings(request: SearchRequest):
 
 
 async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
-    """Handle zipcode search with cache-first approach"""
+    """Handle zipcode search with cache-first approach
+
+    Returns city data with banana field which serves as the city_url.
+    Example: "paloaltoCA" is both the city identifier and the URL path.
+    Frontend uses: /{banana} for routing.
+    """
     # Check database - CACHED ONLY
     city = db.get_city(zipcode=zipcode)
     if not city:
@@ -461,13 +455,26 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
         logger.info(
             f"Found {len(meetings)} cached meetings for {city.name}, {city.state}"
         )
+
+        # Include items for item-based meetings
+        meetings_with_items = []
+        for meeting in meetings:
+            meeting_dict = meeting.to_dict()
+            items = db.get_agenda_items(meeting.id)
+            if items:
+                meeting_dict["items"] = [item.to_dict() for item in items]
+                meeting_dict["has_items"] = True
+            else:
+                meeting_dict["has_items"] = False
+            meetings_with_items.append(meeting_dict)
+
         return {
             "success": True,
             "city_name": city.name,
             "state": city.state,
             "banana": city.banana,
             "vendor": city.vendor,
-            "meetings": [m.to_dict() for m in meetings],
+            "meetings": meetings_with_items,
             "cached": True,
             "query": zipcode,
             "type": "zipcode",
@@ -489,7 +496,12 @@ async def handle_zipcode_search(zipcode: str) -> Dict[str, Any]:
 
 
 async def handle_city_search(city_input: str) -> Dict[str, Any]:
-    """Handle city name search with cache-first approach and ambiguous city handling"""
+    """Handle city name search with cache-first approach and ambiguous city handling
+
+    Returns city data with banana field which serves as the city_url.
+    Example: "paloaltoCA" is both the city identifier and the URL path.
+    Frontend uses: /{banana} for routing.
+    """
     # Parse city, state
     city_name, state = parse_city_state_input(city_input)
 
@@ -513,16 +525,29 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
 
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
+
+        # Include items for item-based meetings
+        meetings_with_items = []
+        for meeting in meetings:
+            meeting_dict = meeting.to_dict()
+            items = db.get_agenda_items(meeting.id)
+            if items:
+                meeting_dict["items"] = [item.to_dict() for item in items]
+                meeting_dict["has_items"] = True
+            else:
+                meeting_dict["has_items"] = False
+            meetings_with_items.append(meeting_dict)
+
         return {
             "success": True,
             "city_name": city.name,
             "state": city.state,
             "banana": city.banana,
             "vendor": city.vendor,
-            "meetings": [m.to_dict() for m in meetings],
+            "meetings": meetings_with_items,
             "cached": True,
             "query": city_input,
-            "type": "city_name",
+            "type": "city",
         }
 
     # No cached meetings - return empty
@@ -535,7 +560,7 @@ async def handle_city_search(city_input: str) -> Dict[str, Any]:
         "meetings": [],
         "cached": True,
         "query": city_input,
-        "type": "city_name",
+        "type": "city",
         "message": f"No meetings cached yet for {city_name}, {state}, please check back soon!",
     }
 
@@ -661,12 +686,13 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
         option["summarized_meetings"] = city_stats["summarized_meetings"]
 
     return {
-        "success": False,  # False because we're not returning meetings directly
+        "success": True,  # Query succeeded - found cities in state
         "message": f"Found {len(city_options)} cities in {state_full} -- [<span style='color: #64748b'>total</span> | <span style='color: #4f46e5'>with packet</span> | <span style='color: #10b981'>summarized</span>]\n\nSelect a city to view its meetings:",
         "query": state_input,
         "type": "state",
-        "ambiguous": True,  # Reuse ambiguous city UI pattern
+        "ambiguous": True,  # Indicates city selection required (reuse ambiguous UI)
         "city_options": city_options,
+        "meetings": [],  # No meetings at state level, only city options
     }
 
 
@@ -683,7 +709,7 @@ async def handle_ambiguous_city_search(
             "success": False,
             "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') - your interest has been noted!",
             "query": original_input,
-            "type": "city_name",
+            "type": "city",
             "meetings": [],
             "ambiguous": False,
         }
@@ -699,16 +725,29 @@ async def handle_ambiguous_city_search(
             logger.info(
                 f"Found {len(meetings)} cached meetings for {city.name}, {city.state}"
             )
+
+            # Include items for item-based meetings
+            meetings_with_items = []
+            for meeting in meetings:
+                meeting_dict = meeting.to_dict()
+                items = db.get_agenda_items(meeting.id)
+                if items:
+                    meeting_dict["items"] = [item.to_dict() for item in items]
+                    meeting_dict["has_items"] = True
+                else:
+                    meeting_dict["has_items"] = False
+                meetings_with_items.append(meeting_dict)
+
             return {
                 "success": True,
                 "city_name": city.name,
                 "state": city.state,
                 "banana": city.banana,
                 "vendor": city.vendor,
-                "meetings": [m.to_dict() for m in meetings],
+                "meetings": meetings_with_items,
                 "cached": True,
                 "query": original_input,
-                "type": "city_name",
+                "type": "city",
                 "ambiguous": False,
             }
         else:
@@ -721,7 +760,7 @@ async def handle_ambiguous_city_search(
                 "meetings": [],
                 "cached": True,
                 "query": original_input,
-                "type": "city_name",
+                "type": "city",
                 "message": f"No meetings cached yet for {city.name}, {city.state}, please check back soon!",
                 "ambiguous": False,
             }
@@ -759,7 +798,7 @@ async def handle_ambiguous_city_search(
         "success": False,
         "message": f"Multiple cities named '{city_name}' found. Please specify which one:",
         "query": original_input,
-        "type": "city_name",
+        "type": "city",
         "ambiguous": True,
         "city_options": city_options,
         "meetings": [],
@@ -832,8 +871,8 @@ async def get_random_best_meeting():
             "meeting": {
                 "banana": random_meeting["banana"],
                 "city_url": f"/city/{random_meeting['banana']}",
-                "title": random_meeting["meeting_name"],
-                "date": random_meeting["meeting_date"],
+                "title": random_meeting["title"],
+                "date": random_meeting["date"],
                 "packet_url": random_meeting["packet_url"],
                 "summary": random_meeting["summary"],
                 "quality_score": random_meeting["quality_score"],

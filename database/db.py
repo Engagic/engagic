@@ -106,6 +106,11 @@ class Meeting:
             data["created_at"] = self.created_at.isoformat()
         if self.updated_at:
             data["updated_at"] = self.updated_at.isoformat()
+
+        # Map status → meeting_status for frontend compatibility
+        if "status" in data:
+            data["meeting_status"] = data.pop("status")
+
         return data
 
     @classmethod

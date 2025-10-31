@@ -6,7 +6,7 @@
 	import { parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 	import Footer from '$lib/components/Footer.svelte';
 
-	let city_url = $page.params.city_url;
+	let city_banana = $page.params.city_url;
 	let meeting_slug = $page.params.meeting_slug;
 	let searchResults: SearchResult | null = $state(null);
 	let selectedMeeting: Meeting | null = $state(null);
@@ -23,7 +23,7 @@
 
 		try {
 			// Parse the city URL
-			const parsed = parseCityUrl(city_url);
+			const parsed = parseCityUrl(city_banana);
 			if (!parsed) {
 				throw new Error('Invalid city URL format');
 			}
@@ -114,7 +114,7 @@
 		</header>
 
 	<div class="city-header">
-		<a href="/{city_url}" class="back-link">← Back to {searchResults && searchResults.success ? searchResults.city_name : 'city'} meetings</a>
+		<a href="/{city_banana}" class="back-link">← Back to {searchResults && searchResults.success ? searchResults.city_name : 'city'} meetings</a>
 	</div>
 
 	{#if selectedMeeting?.packet_url}
