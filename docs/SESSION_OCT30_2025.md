@@ -2,18 +2,23 @@
 
 ## Major Accomplishments
 
-### 1. Directory Restructure: `infra/` → `jobs/` ✅
+### 1. Directory Reorganization: Complete Architecture Refactor ✅
 
-**Completed:** Full migration from `infra` to `jobs` directory
+**Completed:** Full reorganization into 6 logical clusters (see `docs/REORGANIZATION_2025.md`)
 
-**Files Updated:**
-- `pyproject.toml` - Package includes, scripts, pyright config
-- `jobs/conductor.py` - Participation flow fixed
-- `infocore/adapters/granicus_adapter.py` - Participation passthrough added
-- `README.md` - 2 references updated
-- `docs/TOPIC_EXTRACTION.md` - 3 references updated
-- `docs/DEPLOYMENT.md` - 1 reference updated
-- `scripts/health_check.py` - Fixed hardcoded path bug
+**New Structure:**
+- `vendors/` - Fetch from civic tech vendors (adapters, factory, rate limiter)
+- `parsing/` - Extract structured text (PDF, participation, chunking)
+- `analysis/` - LLM intelligence (summarizer, prompts, topics)
+- `pipeline/` - Orchestrate data flow (conductor, processor)
+- `database/` - SQLite persistence (db.py)
+- `server/` - Public API (FastAPI app, rate limiter)
+
+**Benefits:**
+- Tab-autocomplete friendly (v, pa, a, d, s, pi)
+- Self-documenting imports (parsing.pdf, analysis.llm.summarizer)
+- ~487 lines deleted via dead code removal and extraction
+- Clearer mental model of system architecture
 
 **Systemd Services:** No changes needed (daemon uses pyproject.toml entry points)
 
@@ -89,7 +94,7 @@ Stored in database participation column ✅
 
 ### 5. Prompts V2 - Complete Rewrite ✅
 
-**Created:** `/root/engagic/infocore/processing/prompts_v2.json`
+**Created:** `/root/engagic/analysis/llm/prompts_v2.json`
 
 **Key Improvements:**
 
@@ -140,7 +145,7 @@ Stored in database participation column ✅
    - 4-5 sentences for complex items
    - Context-driven, not rigid
 
-**Updated:** `/root/engagic/infocore/processing/summarizer.py`
+**Updated:** `/root/engagic/analysis/llm/summarizer.py`
 - Auto-detects v2 vs v1 prompts
 - Uses Gemini JSON schema mode
 - Parses JSON into rich markdown
@@ -235,19 +240,21 @@ uv run jobs/conductor.py --process-all-unprocessed --batch-size 5 --max-meetings
 ## Files Changed This Session
 
 **New Files:**
-- `infocore/processing/prompts_v2.json` - Complete prompt rewrite
+- `analysis/llm/prompts_v2.json` - Complete prompt rewrite
 - `scripts/migrate_add_participation.py` - Participation migration
 - `docs/SESSION_OCT30_2025.md` - This document
+- `docs/REORGANIZATION_2025.md` - Architecture reorganization guide
 
 **Modified Files:**
-- `infocore/processing/summarizer.py` - V2 prompts + JSON parsing
-- `jobs/conductor.py` - Participation passthrough
-- `infocore/adapters/granicus_adapter.py` - Participation extraction
+- `analysis/llm/summarizer.py` - V2 prompts + JSON parsing
+- `pipeline/conductor.py` - Participation passthrough
+- `vendors/adapters/granicus_adapter.py` - Participation extraction
 - `scripts/health_check.py` - Fixed path bug
-- `pyproject.toml` - infra → jobs
-- `README.md` - infra → jobs
-- `docs/TOPIC_EXTRACTION.md` - infra → jobs
-- `docs/DEPLOYMENT.md` - infra → jobs
+- `pyproject.toml` - Updated for new structure
+- `README.md` - Updated to new architecture
+- `docs/TOPIC_EXTRACTION.md` - Updated paths
+- `docs/DEPLOYMENT.md` - Updated paths
+- `docs/CLAUDE.md` - Updated architecture documentation
 - `.claude/settings.local.json` - Production safety
 
 **Database Operations:**
