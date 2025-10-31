@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 
 class IQM2Adapter(BaseAdapter):
