@@ -686,7 +686,7 @@ async def handle_state_search(state_input: str) -> Dict[str, Any]:
         option["summarized_meetings"] = city_stats["summarized_meetings"]
 
     return {
-        "success": True,  # Query succeeded - found cities in state
+        "success": False,  # User needs to select a city (ambiguous result)
         "message": f"Found {len(city_options)} cities in {state_full} -- [<span style='color: #64748b'>total</span> | <span style='color: #4f46e5'>with packet</span> | <span style='color: #10b981'>summarized</span>]\n\nSelect a city to view its meetings:",
         "query": state_input,
         "type": "state",
