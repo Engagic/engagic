@@ -6,7 +6,6 @@ from infocore.adapters.granicus_adapter import GranicusAdapter
 from infocore.adapters.novusagenda_adapter import NovusAgendaAdapter
 from infocore.adapters.civicplus_adapter import CivicPlusAdapter
 from bs4 import BeautifulSoup
-import json
 
 def probe_civicclerk():
     """Test CivicClerk - Amarillo, TX"""

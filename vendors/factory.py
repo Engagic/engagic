@@ -1,7 +1,6 @@
 """Adapter factory - get the right adapter for each vendor"""
 
 import logging
-from typing import Optional
 
 from vendors.adapters.primegov_adapter import PrimeGovAdapter
 from vendors.adapters.civicclerk_adapter import CivicClerkAdapter

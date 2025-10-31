@@ -21,7 +21,6 @@ from config import config
 from parsing.pdf import PdfExtractor
 from parsing.participation import parse_participation_info
 from analysis.llm.summarizer import GeminiSummarizer
-from analysis.topics.normalizer import get_normalizer
 
 logger = logging.getLogger("engagic")
 

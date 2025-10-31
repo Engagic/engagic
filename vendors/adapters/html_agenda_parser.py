@@ -9,7 +9,7 @@ PrimeGov's Portal/Meeting pages have structured HTML with:
 
 import re
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger("engagic")
