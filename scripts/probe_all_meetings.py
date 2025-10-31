@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Probe all Palo Alto meetings - see what's actually available"""
 
-from infocore.adapters.primegov_adapter import PrimeGovAdapter
+from vendors.adapters.primegov_adapter import PrimeGovAdapter
 
 city_slug = "cityofpaloalto"
 

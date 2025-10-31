@@ -1085,8 +1085,8 @@ def stop_conductor():
         _conductor = None
 
 
-if __name__ == "__main__":
-    # CLI for testing
+def main():
+    """Entry point for engagic-conductor and engagic-daemon CLI"""
     import argparse
 
     parser = argparse.ArgumentParser(description="Background processor for engagic")
@@ -1130,3 +1130,7 @@ if __name__ == "__main__":
             processor.stop()
     else:
         parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

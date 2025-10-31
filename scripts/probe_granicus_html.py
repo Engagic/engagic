@@ -14,7 +14,7 @@ Example:
 
 import sys
 from bs4 import BeautifulSoup
-from infocore.adapters.granicus_adapter import GranicusAdapter
+from vendors.adapters.granicus_adapter import GranicusAdapter
 
 
 def probe_granicus_html(city_slug: str):

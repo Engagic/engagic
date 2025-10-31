@@ -20,7 +20,7 @@ import logging
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from infocore.config import config
+from config import config
 
 logging.basicConfig(
     level=logging.INFO,

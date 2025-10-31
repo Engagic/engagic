@@ -4,9 +4,7 @@ AI-powered civic engagement platform that discovers, processes, and summarizes l
 
 Live at **[engagic.org](https://engagic.org)**
 
-## Architecture (Post-Reorganization)
-
-**~6,900 lines Python backend** (reorganized October 2025)
+## Architecture
 
 ### Directory Structure
 
@@ -109,7 +107,7 @@ export ENGAGIC_ADMIN_TOKEN="secure-token"
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 # Run background daemon (separate terminal)
-python -m pipeline.daemon
+engagic-daemon --daemon
 ```
 
 ### Frontend
@@ -228,14 +226,11 @@ All code uses VPS paths as defaults (`/root/engagic/`).
 
 ## Roadmap
 
-See `docs/IMPROVEMENT_PLAN.md` for full technical roadmap.
+See `docs/VISION.md` for full roadmap and technical philosophy.
 
-**Immediate**: Full migration
-- Update all old `infocore.*` imports to new structure
-- Delete old directories
-- Deploy to VPS
+**Next**: User features (profiles, alerts, digests)
 
-**Q4 2025**: Intelligence layer (topic extraction ✅, tracked items, timeline view, alerts)
+**Q4 2025**: Intelligence layer (topic extraction, tracked items, timeline view, alerts)
 
 **Q1 2026**: Multi-tenancy (tenant API, coverage filtering, keyword matching, Redis rate limiting)
 
@@ -248,7 +243,3 @@ Python 3.13, FastAPI, SQLite, BeautifulSoup, PyMuPDF, Google Gemini, SvelteKit, 
 ## License
 
 Open source. See LICENSE file.
-
----
-
-**Last Updated:** 2025-10-30 (Post-Reorganization)

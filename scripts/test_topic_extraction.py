@@ -10,7 +10,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from infocore.processing.topic_normalizer import TopicNormalizer
+from analysis.topics.normalizer import TopicNormalizer
 
 
 def test_normalization():

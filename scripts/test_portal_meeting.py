@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Try the Portal/Meeting endpoint - the actual HTML agenda view"""
 
-from infocore.adapters.primegov_adapter import PrimeGovAdapter
+from vendors.adapters.primegov_adapter import PrimeGovAdapter
 from bs4 import BeautifulSoup
 
 city_slug = "cityofpaloalto"

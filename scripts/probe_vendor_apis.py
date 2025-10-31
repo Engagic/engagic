@@ -11,9 +11,9 @@ from pathlib import Path
 # Add parent directory to path so we can import infocore
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from infocore.adapters.primegov_adapter import PrimeGovAdapter
-from infocore.adapters.civicclerk_adapter import CivicClerkAdapter
-from infocore.adapters.legistar_adapter import LegistarAdapter
+from vendors.adapters.primegov_adapter import PrimeGovAdapter
+from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
+from vendors.adapters.legistar_adapter import LegistarAdapter
 
 
 def probe_primegov():

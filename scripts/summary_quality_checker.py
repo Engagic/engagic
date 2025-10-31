@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 try:
-    from infocore.config import Config
+    from config import Config
 
     config = Config()
     MEETINGS_DB_PATH = config.UNIFIED_DB_PATH

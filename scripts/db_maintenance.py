@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from infocore.database.database_manager import DatabaseManager
-from infocore.config import Config
+from database.db import DatabaseManager
+from config import Config
 
 
 class DatabaseMaintenance:

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Probe all vendors for HTML agenda capabilities"""
 
-from infocore.adapters.civicclerk_adapter import CivicClerkAdapter
-from infocore.adapters.granicus_adapter import GranicusAdapter
-from infocore.adapters.novusagenda_adapter import NovusAgendaAdapter
-from infocore.adapters.civicplus_adapter import CivicPlusAdapter
+from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
+from vendors.adapters.granicus_adapter import GranicusAdapter
+from vendors.adapters.novusagenda_adapter import NovusAgendaAdapter
+from vendors.adapters.civicplus_adapter import CivicPlusAdapter
 from bs4 import BeautifulSoup
 
 def probe_civicclerk():

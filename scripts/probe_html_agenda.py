@@ -9,7 +9,7 @@ Usage:
     python scripts/probe_html_agenda.py
 """
 
-from infocore.adapters.primegov_adapter import PrimeGovAdapter
+from vendors.adapters.primegov_adapter import PrimeGovAdapter
 
 def probe_primegov_html():
     """Probe PrimeGov HTML agenda structure for Palo Alto"""

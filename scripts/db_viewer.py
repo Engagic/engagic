@@ -9,8 +9,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from infocore.database.unified_db import UnifiedDatabase
-from infocore.config import Config
+from database.db import UnifiedDatabase
+from config import Config
 
 
 class DatabaseViewer:

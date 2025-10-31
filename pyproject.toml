@@ -2,9 +2,9 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-include = ["infocore*", "jobs*"]
-exclude = ["data*", "frontend*", "userland*"]
+[tool.setuptools]
+packages = ["vendors", "vendors.adapters", "parsing", "analysis", "analysis.llm", "analysis.topics", "pipeline", "database", "server"]
+py-modules = ["config"]
 
 [project]
 name = "engagic"
@@ -38,8 +38,8 @@ dependencies = [
 ]
 
 [project.scripts]
-engagic-daemon = "jobs.daemon:main"
-engagic-conductor = "jobs.conductor:main"
+engagic-daemon = "pipeline.conductor:main"
+engagic-conductor = "pipeline.conductor:main"
 
 [project.optional-dependencies]
 premium = [
@@ -47,8 +47,8 @@ premium = [
 ]
 
 [tool.pyright]
-include = ["infocore", "jobs"]
-exclude = ["**/__pycache__", ".venv", "venv"]
+include = ["vendors", "parsing", "analysis", "pipeline", "database", "server"]
+exclude = ["**/__pycache__", ".venv", "venv", "scripts", "docs"]
 typeCheckingMode = "basic"  # or "standard" or "strict"
 pythonVersion = "3.13"
 reportMissingImports = true
