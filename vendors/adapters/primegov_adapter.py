@@ -131,6 +131,14 @@ class PrimeGovAdapter(BaseAdapter):
         # Parse it
         parsed = parse_primegov_html_agenda(html)
 
+        # Convert relative attachment URLs to absolute URLs
+        for item in parsed['items']:
+            for attachment in item.get('attachments', []):
+                url = attachment.get('url', '')
+                # If URL is relative (starts with /), make it absolute
+                if url.startswith('/'):
+                    attachment['url'] = f"{self.base_url}{url}"
+
         logger.debug(
             f"[primegov:{self.slug}] Parsed HTML agenda: {len(parsed['items'])} items, "
             f"{len(parsed['participation'])} participation fields"
