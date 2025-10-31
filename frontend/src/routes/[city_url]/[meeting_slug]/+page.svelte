@@ -154,6 +154,14 @@
 
 		<div class="breadcrumb">
 			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
+			{#if selectedMeeting?.agenda_url}
+				<span class="breadcrumb-separator">•</span>
+				<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="agenda-link">View Agenda →</a>
+			{:else if selectedMeeting?.packet_url}
+				{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
+				<span class="breadcrumb-separator">•</span>
+				<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="agenda-link">View Packet →</a>
+			{/if}
 		</div>
 
 	{#if selectedMeeting?.participation}
@@ -219,15 +227,7 @@
 			{/if}
 
 			<div class="meeting-header">
-				<div class="meeting-title-row">
-					<h1 class="meeting-title">{selectedMeeting.title}</h1>
-					{#if selectedMeeting.agenda_url}
-						<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="inline-agenda-link">View Agenda →</a>
-					{:else if selectedMeeting.packet_url}
-						{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
-						<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="inline-agenda-link">View Packet →</a>
-					{/if}
-				</div>
+				<h1 class="meeting-title">{selectedMeeting.title}</h1>
 				<div class="meeting-date">
 					{formatMeetingDate(selectedMeeting.date)}
 				</div>
@@ -309,9 +309,14 @@
 
 	.breadcrumb {
 		margin: 0.5rem 0 1.5rem 0;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
 	}
 
-	.back-link {
+	.back-link,
+	.agenda-link {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 		color: var(--civic-blue);
@@ -320,9 +325,15 @@
 		transition: color 0.2s;
 	}
 
-	.back-link:hover {
+	.back-link:hover,
+	.agenda-link:hover {
 		color: var(--civic-accent);
 		text-decoration: underline;
+	}
+
+	.breadcrumb-separator {
+		color: var(--civic-gray);
+		font-size: 0.85rem;
 	}
 
 	.agenda-url-box {
@@ -494,19 +505,6 @@
 		margin-bottom: 1rem;
 	}
 
-	.back-link {
-		display: inline-block;
-		color: var(--civic-blue);
-		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
-		font-weight: 500;
-		font-size: 1rem;
-		padding: 0.5rem 0;
-	}
-
-	.back-link:hover {
-		text-decoration: underline;
-	}
 	.meeting-detail {
 		padding: 2rem;
 		background: var(--civic-white);
@@ -569,38 +567,15 @@
 		margin-bottom: 1.5rem;
 	}
 
-	.meeting-title-row {
-		display: flex;
-		align-items: baseline;
-		gap: 1rem;
-		flex-wrap: wrap;
-		margin-bottom: 0.5rem;
-	}
-
 	.meeting-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.8rem;
 		color: var(--civic-dark);
-		margin: 0;
+		margin: 0 0 0.5rem 0;
 		font-weight: 600;
 		line-height: 1.3;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
-	}
-
-	.inline-agenda-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-blue);
-		text-decoration: none;
-		font-weight: 500;
-		white-space: nowrap;
-		transition: color 0.2s;
-	}
-
-	.inline-agenda-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
 	}
 
 	.meeting-date {
@@ -874,18 +849,38 @@
 		margin: 0.4rem 0;
 	}
 
-	/* Hide thinking trace by default, show on hover */
+	/* Collapse thinking trace by default, expand on hover */
 	:global(.thinking-section) {
-		opacity: 0.25;
-		transition: opacity 0.3s ease;
-		margin-bottom: 1.5rem;
-		padding: 0.5rem;
-		border-left: 2px solid transparent;
+		max-height: 0;
+		overflow: hidden;
+		transition: max-height 0.3s ease;
+		margin-bottom: 0;
+		position: relative;
+	}
+
+	:global(.thinking-section::before) {
+		content: "💭 Thinking trace (hover to view)";
+		position: absolute;
+		top: 0;
+		left: 0;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.75rem;
+		color: var(--civic-gray);
+		opacity: 0.6;
+		pointer-events: none;
+		white-space: nowrap;
 	}
 
 	:global(.thinking-section:hover) {
-		opacity: 1;
-		border-left-color: var(--civic-blue);
+		max-height: 2000px;
+		padding: 0.5rem;
+		margin-bottom: 1.5rem;
+		border-left: 2px solid var(--civic-blue);
+		background: #f8fafc;
+	}
+
+	:global(.thinking-section:hover::before) {
+		display: none;
 	}
 
 	.item-attachments-container {
@@ -981,24 +976,28 @@
 			padding: 1rem;
 		}
 
-		.meeting-header {
-			margin-bottom: 1rem;
+		.breadcrumb {
+			margin: 0.25rem 0 1rem 0;
+			font-size: 0.75rem;
 		}
 
-		.meeting-title-row {
-			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.5rem;
+		.back-link,
+		.agenda-link {
+			font-size: 0.75rem;
+		}
+
+		.breadcrumb-separator {
+			font-size: 0.75rem;
+		}
+
+		.meeting-header {
+			margin-bottom: 1rem;
 		}
 
 		.meeting-title {
 			font-size: 1.3rem;
 			word-wrap: break-word;
 			overflow-wrap: break-word;
-		}
-
-		.inline-agenda-link {
-			font-size: 0.75rem;
 		}
 
 		.meeting-date {
