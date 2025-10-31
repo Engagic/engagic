@@ -438,7 +438,6 @@ class LegistarAdapter(BaseAdapter):
             Meeting dictionaries with meeting_id, title, start, items
         """
         from urllib.parse import urljoin
-        from bs4 import BeautifulSoup
 
         # Legistar HTML calendar URL pattern: https://{city}.legistar.com/Calendar.aspx
         # Note: slug might be different from city subdomain
