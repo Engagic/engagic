@@ -53,11 +53,22 @@ class GeminiSummarizer:
         self.flash_model_name = "gemini-2.5-flash"
         self.flash_lite_model_name = "gemini-2.5-flash-lite"
 
-        # Load prompts from JSON
+        # Load prompts from JSON (use v2 by default, fallback to v1)
         if prompts_path is None:
-            prompts_file = Path(__file__).parent / "prompts.json"
+            prompts_v2_file = Path(__file__).parent / "prompts_v2.json"
+            prompts_v1_file = Path(__file__).parent / "prompts.json"
+
+            if prompts_v2_file.exists():
+                prompts_file = prompts_v2_file
+                self.prompts_version = "v2"
+                logger.info("[Summarizer] Using prompts_v2.json (JSON structured output)")
+            else:
+                prompts_file = prompts_v1_file
+                self.prompts_version = "v1"
+                logger.info("[Summarizer] Using prompts.json (legacy text parsing)")
         else:
             prompts_file = Path(prompts_path)
+            self.prompts_version = "custom"
 
         with open(prompts_file, "r") as f:
             self.prompts = json.load(f)
@@ -119,7 +130,8 @@ class GeminiSummarizer:
             text: Combined text from all attachments
 
         Returns:
-            Tuple of (summary, topics_list)
+            Tuple of (summary, topics_list) for backwards compatibility
+            With v2 prompts, summary includes thinking trace and markdown formatting
         """
         text_size = len(text)
         page_count = self._estimate_page_count(text)
@@ -134,11 +146,22 @@ class GeminiSummarizer:
             f"[Summarizer] Summarizing item '{item_title[:50]}...' ({page_count} pages, {text_size} chars)"
         )
 
-        # Get prompt
+        # Get prompt and config
         prompt = self._get_prompt("item", "standard", title=item_title, text=text)
 
-        # Simple config for item-level processing
-        config = types.GenerateContentConfig(temperature=0.3, max_output_tokens=2048)
+        # Check if using v2 prompts with JSON schema
+        if self.prompts_version == "v2":
+            # Use JSON structured output with schema
+            response_schema = self.prompts["item"]["standard"].get("response_schema")
+            config = types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=2048,
+                response_mime_type="application/json",
+                response_schema=response_schema
+            )
+        else:
+            # Legacy text output
+            config = types.GenerateContentConfig(temperature=0.3, max_output_tokens=2048)
 
         try:
             response = self.client.models.generate_content(
@@ -148,7 +171,7 @@ class GeminiSummarizer:
             if not response.text:
                 raise ValueError("Gemini returned no text")
 
-            # Parse response
+            # Parse response based on version
             summary, topics = self._parse_item_response(response.text)
 
             return summary, topics
@@ -201,10 +224,22 @@ class GeminiSummarizer:
                     "item", "standard", title=item_title, text=text
                 )
 
+                # Build config based on version
+                if self.prompts_version == "v2":
+                    response_schema = self.prompts["item"]["standard"].get("response_schema")
+                    config = {
+                        "temperature": 0.3,
+                        "max_output_tokens": 2048,
+                        "response_mime_type": "application/json",
+                        "response_schema": response_schema
+                    }
+                else:
+                    config = {"temperature": 0.3, "max_output_tokens": 2048}
+
                 inline_requests.append(
                     {
                         "contents": [{"parts": [{"text": prompt}], "role": "user"}],
-                        "config": {"temperature": 0.3, "max_output_tokens": 2048},
+                        "config": config,
                     }
                 )
 
@@ -451,13 +486,58 @@ class GeminiSummarizer:
         """Parse item response into summary and topics
 
         Args:
-            response_text: Raw response from Gemini
+            response_text: Raw response from Gemini (JSON for v2, text for v1)
 
         Returns:
             Tuple of (summary, topics_list)
+
+        For v2 prompts with JSON:
+            summary = Combined markdown with thinking trace, summary, and citizen impact
+            topics = List of canonical topic strings
         """
         response_text = response_text.strip()
 
+        # v2: JSON structured output
+        if self.prompts_version == "v2":
+            try:
+                data = json.loads(response_text)
+
+                # Build comprehensive summary with all components
+                thinking = data.get("thinking", "")
+                summary_md = data.get("summary_markdown", "")
+                impact_md = data.get("citizen_impact_markdown", "")
+                confidence = data.get("confidence", "unknown")
+
+                # Combine into single markdown document
+                summary_parts = []
+
+                if thinking:
+                    summary_parts.append(f"## Thinking\n\n{thinking}\n")
+
+                if summary_md:
+                    summary_parts.append(f"## Summary\n\n{summary_md}\n")
+
+                if impact_md:
+                    summary_parts.append(f"## Citizen Impact\n\n{impact_md}\n")
+
+                if confidence:
+                    summary_parts.append(f"## Confidence\n\n{confidence}")
+
+                summary = "\n".join(summary_parts)
+                topics = data.get("topics", [])
+
+                logger.debug(
+                    f"[Summarizer] Parsed JSON response: {len(topics)} topics, confidence={confidence}"
+                )
+
+                return summary, topics
+
+            except json.JSONDecodeError as e:
+                logger.error(f"[Summarizer] Failed to parse JSON response: {e}")
+                logger.debug(f"[Summarizer] Response text: {response_text[:200]}...")
+                # Fallback to legacy parsing
+
+        # v1: Legacy text parsing
         summary = ""
         topics = []
 
@@ -473,7 +553,7 @@ class GeminiSummarizer:
         if not summary:
             summary = response_text[:500]
             logger.warning(
-                "[Summarizer] Failed to parse SUMMARY from response, using truncated text"
+                "[Summarizer] Failed to parse response, using truncated text"
             )
 
         if not topics:
