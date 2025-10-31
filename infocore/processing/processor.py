@@ -314,6 +314,7 @@ class AgendaProcessor:
             # Process attachments - handle both URL-based and text segment types
             all_text_parts = []
             processed_count = 0
+            total_page_count = 0
 
             for i, att in enumerate(attachments, 1):
                 att_type = att.get("type", "unknown")
@@ -348,8 +349,10 @@ class AgendaProcessor:
                             text = result["text"]
                             all_text_parts.append(f"=== {att_name} ===\n{text}")
                             processed_count += 1
+                            # Accumulate actual page count
+                            total_page_count += result.get("page_count", 0)
                             logger.info(
-                                f"[PyMuPDF] Extracted {len(text)} chars from {att_name}"
+                                f"[PyMuPDF] Extracted {len(text)} chars, {result.get('page_count', 0)} pages from {att_name}"
                             )
                         else:
                             logger.warning(f"[PyMuPDF] No text from {att_name}")
@@ -373,8 +376,12 @@ class AgendaProcessor:
             # Combine all attachment text
             combined_text = "\n\n".join(all_text_parts)
 
-            # Generate item summary with topic extraction (delegate to summarizer)
-            summary, topics = self.summarizer.summarize_item(item_title, combined_text)
+            # Generate item summary with topic extraction (pass actual page count if available)
+            summary, topics = self.summarizer.summarize_item(
+                item_title,
+                combined_text,
+                page_count=total_page_count if total_page_count > 0 else None
+            )
 
             processing_time = time.time() - start_time
             logger.info(
