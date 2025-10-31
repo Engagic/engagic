@@ -13,7 +13,7 @@ import os
 import json
 import hashlib
 from typing import Dict, Any, List, Optional, Iterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import parse_qs, urlparse, urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.adapters.html_agenda_parser import parse_granicus_html_agenda
@@ -106,12 +106,19 @@ class GranicusAdapter(BaseAdapter):
 
         raise RuntimeError(f"Could not discover view_id for {self.base_url}")
 
-    def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
+    def fetch_meetings(self, days_forward: int = 14, days_back: int = 7) -> Iterator[Dict[str, Any]]:
         """
         Scrape meetings from Granicus HTML.
 
         Modern approach: Find all AgendaViewer links on the page directly,
         rather than relying on specific table structures.
+
+        Date filtering: Only returns meetings within the date range to avoid
+        processing years of historical data.
+
+        Args:
+            days_forward: Days to look ahead (default 14 = 2 weeks)
+            days_back: Days to look back (default 7 = 1 week, for recent past meetings)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url, items
@@ -137,7 +144,7 @@ class GranicusAdapter(BaseAdapter):
                 agenda_viewer_links.append((link_text, full_url, link))
 
         logger.info(
-            f"[granicus:{self.slug}] Found {len(agenda_viewer_links)} agenda links"
+            f"[granicus:{self.slug}] Found {len(agenda_viewer_links)} total agenda links"
         )
 
         if not agenda_viewer_links:
@@ -146,10 +153,29 @@ class GranicusAdapter(BaseAdapter):
             )
             return
 
-        # Process each agenda link
+        # Calculate date range for filtering
+        today = datetime.now()
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
+
+        logger.info(
+            f"[granicus:{self.slug}] Filtering to meetings from "
+            f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+        )
+
+        # Process each agenda link with date filtering
         seen_meeting_ids = set()
+        meetings_yielded = 0
+        meetings_skipped_date = 0
+        SAFETY_LIMIT = 500  # Safety limit in case date parsing fails
 
         for link_text, agenda_url, link_element in agenda_viewer_links:
+            # Safety limit to prevent runaway processing
+            if meetings_yielded >= SAFETY_LIMIT:
+                logger.warning(
+                    f"[granicus:{self.slug}] Hit safety limit of {SAFETY_LIMIT} meetings, stopping"
+                )
+                break
             # Extract meeting_id from URL
             meeting_id = self._extract_meeting_id(agenda_url)
 
@@ -211,8 +237,25 @@ class GranicusAdapter(BaseAdapter):
                 meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
 
             # Determine packet URL
+            # For AgendaViewer links, follow redirect to get DocumentViewer PDF
             packet_url = None
-            if ".pdf" in agenda_url.lower() or "GeneratedAgenda" in agenda_url:
+            if "AgendaViewer.php" in agenda_url:
+                try:
+                    # AgendaViewer redirects to Google Doc Viewer with DocumentViewer.php PDF
+                    response = self.session.head(agenda_url, allow_redirects=True, timeout=10)
+                    if response.status_code == 200:
+                        # Extract PDF from Google Doc Viewer URL
+                        redirect_url = str(response.url)
+                        if "DocumentViewer.php" in redirect_url:
+                            # Extract the actual PDF URL from Google Doc Viewer
+                            import urllib.parse
+                            parsed = urllib.parse.urlparse(redirect_url)
+                            params = urllib.parse.parse_qs(parsed.query)
+                            if 'url' in params:
+                                packet_url = urllib.parse.unquote(params['url'][0])
+                except Exception as e:
+                    logger.debug(f"[granicus:{self.slug}] Failed to get PDF URL for {title[:30]}: {e}")
+            elif ".pdf" in agenda_url.lower() or "GeneratedAgenda" in agenda_url:
                 packet_url = agenda_url
 
             # Parse meeting status
@@ -329,7 +372,7 @@ class GranicusAdapter(BaseAdapter):
         html = response.text
         parsed = parse_granicus_html_agenda(html)
 
-        logger.info(
+        logger.debug(
             f"[granicus:{self.slug}] Parsed HTML agenda: {len(parsed['items'])} items"
         )
 

@@ -131,7 +131,7 @@ class PrimeGovAdapter(BaseAdapter):
         # Parse it
         parsed = parse_primegov_html_agenda(html)
 
-        logger.info(
+        logger.debug(
             f"[primegov:{self.slug}] Parsed HTML agenda: {len(parsed['items'])} items, "
             f"{len(parsed['participation'])} participation fields"
         )

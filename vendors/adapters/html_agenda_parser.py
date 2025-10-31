@@ -44,7 +44,7 @@ def parse_primegov_html_agenda(html: str) -> Dict[str, Any]:
     # Extract agenda items
     items = _extract_agenda_items(soup)
 
-    logger.info(
+    logger.debug(
         f"[HTMLParser] Extracted {len(items)} agenda items, "
         f"participation fields: {list(participation.keys())}"
     )
@@ -294,7 +294,7 @@ def parse_granicus_html_agenda(html: str) -> Dict[str, Any]:
             f"({len(attachments)} attachments)"
         )
 
-    logger.info(
+    logger.debug(
         f"[HTMLParser:Granicus] Extracted {len(items)} agenda items"
     )
 
