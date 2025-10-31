@@ -77,6 +77,9 @@ class GranicusAdapter(BaseAdapter):
         """
         Brute force discover view_id by testing 1-100.
 
+        Prioritizes pages with government meeting indicators like
+        "City Council", "Planning Commission", etc.
+
         Returns:
             Valid view_id
 
@@ -88,21 +91,65 @@ class GranicusAdapter(BaseAdapter):
 
         logger.info(f"[granicus:{self.slug}] Discovering view_id (testing 1-100)...")
 
-        # Try to find view_id with current year data
+        # Government meeting indicators (high priority)
+        gov_indicators = [
+            "city council",
+            "planning commission",
+            "board of supervisors",
+            "town council",
+            "village board",
+            "board of trustees",
+        ]
+
+        candidates = []
+
+        # Scan for candidates
         for i in range(1, 100):
             try:
                 response = self._get(f"{base_url}{i}", timeout=10)
-                if (
-                    "ViewPublisher" in response.text
-                    and ("Meeting" in response.text or "Agenda" in response.text)
-                    and current_year in response.text
-                ):
-                    logger.info(
-                        f"[granicus:{self.slug}] Found view_id {i} with {current_year} data"
-                    )
-                    return i
+                text = response.text
+                text_lower = text.lower()
+
+                # CRITICAL: Must have "upcoming" section for filtering
+                # Without it, we'd process all historical meetings
+                if "upcoming" not in text_lower:
+                    continue
+
+                # Must have basic meeting page indicators
+                if not ("ViewPublisher" in text and current_year in text):
+                    continue
+
+                # Score this candidate
+                score = 0
+
+                # Baseline: has required "upcoming" section
+                score += 5
+
+                # High priority: government body names
+                for indicator in gov_indicators:
+                    if indicator in text_lower:
+                        score += 10
+                        logger.debug(f"[granicus:{self.slug}] view_id {i} has '{indicator}' (+10)")
+
+                # Low priority: general meeting/agenda indicators
+                if "agenda" in text_lower or "meeting" in text_lower:
+                    score += 1
+
+                candidates.append((i, score))
+                logger.debug(f"[granicus:{self.slug}] view_id {i} score: {score}")
+
             except Exception:
                 continue
+
+        # Sort by score (descending) and return highest
+        if candidates:
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            best_id, best_score = candidates[0]
+            logger.info(
+                f"[granicus:{self.slug}] Found view_id {best_id} "
+                f"(score: {best_score}, {len(candidates)} candidates)"
+            )
+            return best_id
 
         raise RuntimeError(f"Could not discover view_id for {self.base_url}")
 
@@ -110,10 +157,7 @@ class GranicusAdapter(BaseAdapter):
         """
         Scrape meetings from Granicus HTML.
 
-        Modern approach: Find all AgendaViewer links on the page directly,
-        rather than relying on specific table structures.
-
-        Date filtering: Only returns meetings within the date range to avoid
+        Strategy: Target the "Upcoming Programs" section specifically to avoid
         processing years of historical data.
 
         Args:
@@ -125,8 +169,37 @@ class GranicusAdapter(BaseAdapter):
         """
         soup = self._fetch_html(self.list_url)
 
-        # Find all links that point to AgendaViewer or direct PDFs
-        all_links = soup.find_all("a", href=True)
+        # CRITICAL: Only look in the "Upcoming Programs" section
+        # This section is typically named "upcoming" or similar
+        upcoming_section = soup.find("div", {"id": "upcoming"})
+
+        if not upcoming_section:
+            # Fallback: try finding by heading text
+            upcoming_heading = soup.find("h3", string=lambda t: t and "upcoming" in t.lower())
+            if upcoming_heading:
+                upcoming_section = upcoming_heading.find_parent("div")
+
+        if not upcoming_section:
+            # Log what we're actually seeing for debugging
+            all_divs = soup.find_all("div", id=True)
+            div_ids = [d.get("id") for d in all_divs[:10]]
+
+            all_headings = soup.find_all(["h1", "h2", "h3", "h4"])
+            heading_texts = [h.get_text(strip=True)[:50] for h in all_headings[:10]]
+
+            logger.warning(
+                f"[granicus:{self.slug}] No 'Upcoming Programs' section found. "
+                f"Returning 0 meetings to avoid processing historical data. "
+                f"Found div IDs: {div_ids}. "
+                f"Found headings: {heading_texts}"
+            )
+            return  # Return empty generator - do NOT process historical data
+        else:
+            logger.info(f"[granicus:{self.slug}] Found 'Upcoming Programs' section")
+            search_scope = upcoming_section
+
+        # Find links within our target scope
+        all_links = search_scope.find_all("a", href=True)
 
         agenda_viewer_links = []
         for link in all_links:
@@ -144,38 +217,19 @@ class GranicusAdapter(BaseAdapter):
                 agenda_viewer_links.append((link_text, full_url, link))
 
         logger.info(
-            f"[granicus:{self.slug}] Found {len(agenda_viewer_links)} total agenda links"
+            f"[granicus:{self.slug}] Found {len(agenda_viewer_links)} upcoming agenda links"
         )
 
         if not agenda_viewer_links:
             logger.warning(
-                f"[granicus:{self.slug}] No agenda links found on ViewPublisher page"
+                f"[granicus:{self.slug}] No agenda links found in upcoming section"
             )
             return
 
-        # Calculate date range for filtering
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
-
-        logger.info(
-            f"[granicus:{self.slug}] Filtering to meetings from "
-            f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
-        )
-
-        # Process each agenda link with date filtering
+        # Process each agenda link (no date filtering needed - section is pre-filtered)
         seen_meeting_ids = set()
-        meetings_yielded = 0
-        meetings_skipped_date = 0
-        SAFETY_LIMIT = 500  # Safety limit in case date parsing fails
 
         for link_text, agenda_url, link_element in agenda_viewer_links:
-            # Safety limit to prevent runaway processing
-            if meetings_yielded >= SAFETY_LIMIT:
-                logger.warning(
-                    f"[granicus:{self.slug}] Hit safety limit of {SAFETY_LIMIT} meetings, stopping"
-                )
-                break
             # Extract meeting_id from URL
             meeting_id = self._extract_meeting_id(agenda_url)
 
