@@ -323,6 +323,10 @@ class Conductor:
                     f"Starting to process {len(all_meetings)} meetings for storage"
                 )
                 for i, meeting in enumerate(all_meetings):
+                    # Progress update every 100 meetings for large cities
+                    if (i + 1) % 100 == 0:
+                        logger.info(f"Progress: {i + 1}/{len(all_meetings)} meetings processed")
+
                     logger.debug(
                         f"Processing meeting {i + 1}/{len(all_meetings)}: "
                         f"{meeting.get('title')}"
