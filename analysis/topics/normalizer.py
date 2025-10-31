@@ -35,10 +35,10 @@ class TopicNormalizer:
         Initialize normalizer with taxonomy
 
         Args:
-            taxonomy_path: Path to topic_taxonomy.json (defaults to same directory)
+            taxonomy_path: Path to taxonomy.json (defaults to same directory)
         """
         if taxonomy_path is None:
-            taxonomy_path = Path(__file__).parent / "topic_taxonomy.json"
+            taxonomy_path = Path(__file__).parent / "taxonomy.json"
 
         with open(taxonomy_path, "r") as f:
             data = json.load(f)
