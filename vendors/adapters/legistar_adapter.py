@@ -148,14 +148,26 @@ class LegistarAdapter(BaseAdapter):
         if self.api_token:
             params["token"] = self.api_token
 
+        # Try JSON first, fallback to XML
+        event_items = []
         try:
             response = self._get(items_url, params=params)
             event_items = response.json()
-        except Exception as e:
-            logger.error(
-                f"[legistar:{self.slug}] Failed to fetch items for event {event_id}: {e}"
-            )
-            return []
+            logger.debug(f"[legistar:{self.slug}] Retrieved {len(event_items)} items (JSON)")
+        except Exception as json_error:
+            # Try XML parsing
+            try:
+                event_items = self._parse_xml_event_items(response.text)
+                logger.debug(f"[legistar:{self.slug}] Retrieved {len(event_items)} items (XML)")
+            except Exception as xml_error:
+                logger.error(
+                    f"[legistar:{self.slug}] Failed to parse items for event {event_id} as JSON or XML. "
+                    f"JSON error: {json_error}, XML error: {xml_error}"
+                )
+                logger.error(
+                    f"[legistar:{self.slug}] Response text (first 500 chars): {response.text[:500]}"
+                )
+                return []
 
         logger.debug(
             f"[legistar:{self.slug}] Fetched {len(event_items)} items for event {event_id}"
@@ -207,14 +219,21 @@ class LegistarAdapter(BaseAdapter):
         if self.api_token:
             params["token"] = self.api_token
 
+        # Try JSON first, fallback to XML
+        raw_attachments = []
         try:
             response = self._get(attachments_url, params=params)
             raw_attachments = response.json()
-        except Exception as e:
-            logger.warning(
-                f"[legistar:{self.slug}] Failed to fetch attachments for matter {matter_id}: {e}"
-            )
-            return []
+        except Exception as json_error:
+            # Try XML parsing
+            try:
+                raw_attachments = self._parse_xml_attachments(response.text)
+            except Exception as xml_error:
+                logger.warning(
+                    f"[legistar:{self.slug}] Failed to fetch attachments for matter {matter_id} as JSON or XML. "
+                    f"JSON error: {json_error}, XML error: {xml_error}"
+                )
+                return []
 
         attachments = []
 
@@ -291,4 +310,96 @@ class LegistarAdapter(BaseAdapter):
 
         except ET.ParseError as e:
             logger.error(f"[legistar:{self.slug}] XML parsing error: {e}")
+            raise
+
+    def _parse_xml_event_items(self, xml_text: str) -> List[Dict[str, Any]]:
+        """
+        Parse Legistar XML response for event items.
+
+        Args:
+            xml_text: Raw XML response text
+
+        Returns:
+            List of event item dictionaries
+        """
+        items = []
+
+        try:
+            root = ET.fromstring(xml_text)
+
+            # Handle namespace
+            ns = {'ns': 'http://schemas.datacontract.org/2004/07/LegistarWebAPI.Models.v1'}
+
+            # Find all GranicusEventItem elements
+            for item_elem in root.findall('.//ns:GranicusEventItem', ns):
+                item = {}
+
+                # Map XML fields to JSON field names
+                field_map = {
+                    'EventItemId': 'EventItemId',
+                    'EventItemTitle': 'EventItemTitle',
+                    'EventItemAgendaSequence': 'EventItemAgendaSequence',
+                    'EventItemMatterId': 'EventItemMatterId',
+                }
+
+                for xml_field, json_field in field_map.items():
+                    elem = item_elem.find(f'ns:{xml_field}', ns)
+                    if elem is not None and elem.text:
+                        # Convert numeric fields
+                        if xml_field in ('EventItemId', 'EventItemMatterId', 'EventItemAgendaSequence'):
+                            item[json_field] = int(elem.text)
+                        else:
+                            item[json_field] = elem.text
+
+                # Only add items that have at least an ID
+                if 'EventItemId' in item:
+                    items.append(item)
+
+            return items
+
+        except ET.ParseError as e:
+            logger.error(f"[legistar:{self.slug}] XML parsing error for event items: {e}")
+            raise
+
+    def _parse_xml_attachments(self, xml_text: str) -> List[Dict[str, Any]]:
+        """
+        Parse Legistar XML response for matter attachments.
+
+        Args:
+            xml_text: Raw XML response text
+
+        Returns:
+            List of attachment dictionaries
+        """
+        attachments = []
+
+        try:
+            root = ET.fromstring(xml_text)
+
+            # Handle namespace
+            ns = {'ns': 'http://schemas.datacontract.org/2004/07/LegistarWebAPI.Models.v1'}
+
+            # Find all GranicusMatterAttachment elements
+            for att_elem in root.findall('.//ns:GranicusMatterAttachment', ns):
+                attachment = {}
+
+                # Map XML fields to JSON field names
+                field_map = {
+                    'MatterAttachmentName': 'MatterAttachmentName',
+                    'MatterAttachmentHyperlink': 'MatterAttachmentHyperlink',
+                }
+
+                for xml_field, json_field in field_map.items():
+                    elem = att_elem.find(f'ns:{xml_field}', ns)
+                    if elem is not None and elem.text:
+                        attachment[json_field] = elem.text
+
+                # Only add attachments that have at least a hyperlink
+                if 'MatterAttachmentHyperlink' in attachment:
+                    attachments.append(attachment)
+
+            return attachments
+
+        except ET.ParseError as e:
+            logger.error(f"[legistar:{self.slug}] XML parsing error for attachments: {e}")
             raise

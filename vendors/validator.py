@@ -32,6 +32,7 @@ class MeetingValidator:
             "legistar.granicus.com",
             "legistar1.granicus.com",
             "legistar2.granicus.com",
+            "legistar3.granicus.com",  # Columbus uses legistar3
             f"{slug}.legistar1.com",
             f"{slug}.legistar.com",
             "docs.google.com",  # Some cities use Google Docs viewer

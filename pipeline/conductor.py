@@ -664,41 +664,41 @@ class Conductor:
 
 
     def _process_meeting_summary(self, meeting: Meeting):
-        """Process summary for a single meeting (with item-level processing if available)"""
-        if not meeting.packet_url:
-            return
-
+        """Process summary for a single meeting (agenda-first: items > packet)"""
         try:
-            logger.info(f"Processing summary for {meeting.packet_url}")
-
-            # Check if still unprocessed (avoid race conditions)
-            cached = self.db.get_cached_summary(meeting.packet_url)
-            if cached:
-                logger.debug(
-                    f"Meeting {meeting.packet_url} already processed, skipping"
-                )
-                return
-
-            if not self.processor:
-                logger.warning(
-                    f"Skipping {meeting.packet_url} - processor not available"
-                )
-                return
-
-            # Check if meeting has agenda items from adapter
+            # AGENDA-FIRST ARCHITECTURE: Check for items before packet_url
             agenda_items = self.db.get_agenda_items(meeting.id)
 
             if agenda_items:
-                # Item-level processing (HTML agenda path)
+                # Item-level processing (HTML agenda path) - PRIMARY PATH
                 logger.info(
                     f"[ItemProcessing] Found {len(agenda_items)} items for {meeting.title}"
                 )
+                if not self.processor:
+                    logger.warning("[ItemProcessing] Processor not available")
+                    return
                 self._process_meeting_with_items(meeting, agenda_items)
-            else:
-                # Monolithic processing (PDF packet path)
+
+            elif meeting.packet_url:
+                # Monolithic processing (PDF packet path) - FALLBACK PATH
                 logger.info(
                     f"[MonolithicProcessing] No items for {meeting.title}, processing packet as single unit"
                 )
+
+                # Check cache
+                cached = self.db.get_cached_summary(meeting.packet_url)
+                if cached:
+                    logger.debug(
+                        f"Meeting {meeting.packet_url} already processed, skipping"
+                    )
+                    return
+
+                if not self.processor:
+                    logger.warning(
+                        f"Skipping {meeting.packet_url} - processor not available"
+                    )
+                    return
+
                 meeting_data = {
                     "packet_url": meeting.packet_url,
                     "city_banana": meeting.banana,
@@ -779,19 +779,29 @@ class Conductor:
                     total_page_count = 0
 
                     for att in item.attachments:
-                        att_type = att.get("type", "unknown")
+                        # Handle both plain URL strings and structured attachment objects
+                        if isinstance(att, str):
+                            # Plain URL string (Legistar format)
+                            att_url = att
+                            att_name = "Attachment"
+                            att_type = "pdf"  # Assume PDF for URL strings
+                        elif isinstance(att, dict):
+                            # Structured attachment object
+                            att_type = att.get("type", "unknown")
+                            att_url = att.get("url")
+                            att_name = att.get("name", "Attachment")
+                        else:
+                            logger.warning(f"[ItemProcessing] Unknown attachment format: {type(att)}")
+                            continue
 
                         # Text segment (from detected items)
                         if att_type == "text_segment":
-                            text_content = att.get("content", "")
+                            text_content = att.get("content", "") if isinstance(att, dict) else ""
                             if text_content:
                                 all_text_parts.append(text_content)
 
-                        # PDF attachment (from Legistar)
-                        elif att_type == "pdf":
-                            att_url = att.get("url")
-                            att_name = att.get("name", "Attachment")
-
+                        # PDF/URL attachment (from Legistar or structured)
+                        elif att_type == "pdf" or isinstance(att, str):
                             if att_url:
                                 try:
                                     result = (
