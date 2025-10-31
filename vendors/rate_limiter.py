@@ -23,12 +23,15 @@ class RateLimiter:
             "granicus": 4.0,  # Granicus/Legistar cities
             "civicclerk": 3.0,  # CivicClerk cities
             "legistar": 3.0,  # Direct Legistar
-            "civicplus": 4.0,  # CivicPlus cities
+            "civicplus": 8.0,  # CivicPlus cities - aggressive blocking, need longer delays
             "novusagenda": 4.0,  # NovusAgenda cities
             "unknown": 5.0,  # Unknown vendors get longest delay
         }
 
         min_delay = delays.get(vendor, 5.0)
+
+        # CivicPlus gets extra random jitter to avoid pattern detection
+        jitter = random.uniform(0, 2) if vendor == "civicplus" else random.uniform(0, 1)
 
         with self.lock:
             now = time.time()
@@ -37,7 +40,7 @@ class RateLimiter:
             if last > 0:
                 elapsed = now - last
                 if elapsed < min_delay:
-                    sleep_time = min_delay - elapsed + random.uniform(0, 1)
+                    sleep_time = min_delay - elapsed + jitter
                     logger.info(f"Rate limiting {vendor}: sleeping {sleep_time:.1f}s")
                     time.sleep(sleep_time)
 

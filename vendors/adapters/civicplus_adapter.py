@@ -122,38 +122,30 @@ class CivicPlusAdapter(BaseAdapter):
             return
 
         try:
-            # Calculate date range: today to 2 weeks from now
-            today = datetime.now()
-            end_date = today + timedelta(weeks=2)
+            # Use regular AgendaCenter page (Search endpoint doesn't work reliably)
+            soup = self._fetch_html(agenda_url)
 
-            # Format dates as MM/DD/YYYY for CivicPlus
-            start_str = today.strftime("%m/%d/%Y")
-            end_str = end_date.strftime("%m/%d/%Y")
-
-            # Use Search endpoint with date filters if /AgendaCenter exists
-            if "/AgendaCenter" in agenda_url:
-                search_url = f"{self.base_url}/AgendaCenter/Search/?term=&CIDs=all&startDate={start_str}&endDate={end_str}"
-                logger.info(
-                    f"[civicplus:{self.slug}] Using date-filtered search: {start_str} to {end_str}"
-                )
-                soup = self._fetch_html(search_url)
-            else:
-                soup = self._fetch_html(agenda_url)
-
-            # Try to find meeting links
+            # Extract meeting links from the agenda page
             meeting_links = self._extract_meeting_links(soup, agenda_url)
 
             logger.info(
-                f"[civicplus:{self.slug}] Found {len(meeting_links)} potential meeting links"
+                f"[civicplus:{self.slug}] Found {len(meeting_links)} meeting links"
             )
 
             for link_data in meeting_links:
-                # Try to extract meeting info and PDFs
-                meeting = self._scrape_meeting_page(
-                    link_data["url"], link_data["title"]
-                )
-                if meeting:
-                    yield meeting
+                # For ViewFile links, we can yield directly without scraping
+                if '/ViewFile/Agenda/' in link_data['url']:
+                    # Extract meeting info from the link itself
+                    meeting = self._create_meeting_from_viewfile_link(link_data)
+                    if meeting:
+                        yield meeting
+                else:
+                    # For other links, scrape the page for PDFs
+                    meeting = self._scrape_meeting_page(
+                        link_data["url"], link_data["title"]
+                    )
+                    if meeting:
+                        yield meeting
 
         except Exception as e:
             logger.error(f"[civicplus:{self.slug}] Failed to fetch meetings: {e}")
@@ -171,19 +163,67 @@ class CivicPlusAdapter(BaseAdapter):
         Returns:
             List of dicts with 'url' and 'title'
         """
+        import re
         links = []
 
-        # Look for links with "agenda", "meeting", or specific date patterns
+        # Look for links that either:
+        # 1. Point to /ViewFile/Agenda/ (direct meeting links)
+        # 2. Have date patterns in text (e.g., "June 25, 2025" or "06/25/2025")
         for link in soup.find_all("a", href=True):
             text = link.get_text(strip=True)
             href = link["href"]
 
-            # Check if link looks like a meeting
-            if any(word in text.lower() for word in ["agenda", "meeting", "minutes"]):
+            # Skip navigation links
+            if text.startswith("◄") or text.startswith("Back to") or text == "Agendas & Minutes":
+                continue
+
+            # Check if it's a ViewFile link (direct meeting link)
+            is_viewfile = "/ViewFile/Agenda/" in href or "/ViewFile/Item/" in href
+
+            # Check if text has date patterns
+            has_date = bool(re.search(r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4}\b', text, re.I))
+            has_numeric_date = bool(re.search(r'\b\d{1,2}/\d{1,2}/\d{4}\b', text))
+
+            if is_viewfile or has_date or has_numeric_date:
                 absolute_url = urljoin(base_url, href)
                 links.append({"url": absolute_url, "title": text})
 
         return links
+
+    def _create_meeting_from_viewfile_link(self, link_data: Dict[str, str]) -> Optional[Dict[str, Any]]:
+        """
+        Create meeting dict directly from ViewFile link without scraping.
+
+        Args:
+            link_data: Dict with 'url' and 'title'
+
+        Returns:
+            Meeting dict or None
+        """
+        url = link_data["url"]
+        title = link_data["title"]
+
+        # Extract date from title
+        date_text = self._extract_date_from_title(title)
+        parsed_date = self._parse_date(date_text) if date_text else None
+
+        # Generate meeting ID from URL
+        meeting_id = self._extract_meeting_id(url)
+
+        # Parse meeting status from title
+        meeting_status = self._parse_meeting_status(title, date_text)
+
+        result = {
+            "meeting_id": meeting_id,
+            "title": title,
+            "start": parsed_date.isoformat() if parsed_date else None,
+            "packet_url": url,  # ViewFile URL is the packet
+        }
+
+        if meeting_status:
+            result["meeting_status"] = meeting_status
+
+        return result
 
     def _scrape_meeting_page(self, url: str, title: str) -> Optional[Dict[str, Any]]:
         """
@@ -225,7 +265,7 @@ class CivicPlusAdapter(BaseAdapter):
                 "meeting_id": meeting_id,
                 "title": title,
                 "start": parsed_date.isoformat() if parsed_date else None,
-                "packet_url": pdfs[0] if len(pdfs) == 1 else (pdfs if pdfs else None),
+                "packet_url": pdfs[0] if pdfs else None,
             }
 
             if meeting_status:
