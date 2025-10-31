@@ -37,11 +37,11 @@ def analyze_city_structure(slug, name):
                 if response.status_code == 200 and 'Meeting' in response.text:
                     view_id = i
                     break
-            except:
+            except Exception:
                 continue
 
         if not view_id:
-            print(f"✗ Could not discover view_id")
+            print("✗ Could not discover view_id")
             return None
 
         url = f"{base_url}/ViewPublisher.php?view_id={view_id}"
@@ -58,7 +58,7 @@ def analyze_city_structure(slug, name):
         if upcoming_by_id:
             patterns_found.append("div#upcoming")
             links = upcoming_by_id.find_all("a", href=True)
-            agenda_links = [l for l in links if "AgendaViewer" in l.get("href", "")]
+            agenda_links = [link for link in links if "AgendaViewer" in link.get("href", "")]
             print(f"✓ Found div#upcoming with {len(agenda_links)} agenda links")
 
         # Pattern 2: class="archive" id="upcoming"
@@ -87,7 +87,7 @@ def analyze_city_structure(slug, name):
         print(f"Total agenda links on page: {len(all_agenda_links)}")
 
         # Test our adapter
-        print(f"\nTesting adapter...")
+        print("\nTesting adapter...")
         adapter = GranicusAdapter(slug)
         meetings = list(adapter.fetch_meetings())
         print(f"✓ Adapter returned {len(meetings)} meetings")
@@ -103,7 +103,7 @@ def analyze_city_structure(slug, name):
         }
 
         if len(meetings) <= 20:
-            print(f"✓ SUCCESS: Reasonable meeting count")
+            print("✓ SUCCESS: Reasonable meeting count")
         else:
             print(f"✗ WARNING: Got {len(meetings)} meetings (might be processing history)")
 
@@ -137,7 +137,7 @@ def main():
         if r:
             all_patterns.update(r['patterns'])
 
-    print(f"\nPatterns found across cities:")
+    print("\nPatterns found across cities:")
     for pattern in sorted(all_patterns):
         cities_with_pattern = [r['name'] for r in results if r and pattern in r['patterns']]
         print(f"  {pattern}: {len(cities_with_pattern)} cities")

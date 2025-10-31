@@ -11,7 +11,6 @@ This adapter handles:
 import re
 from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import urlparse, urljoin
-from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from vendors.adapters.base_adapter import BaseAdapter, logger
 

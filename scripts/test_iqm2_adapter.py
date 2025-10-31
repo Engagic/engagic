@@ -30,13 +30,13 @@ def test_santa_monica():
 
     meetings = list(adapter.fetch_meetings(days_forward=14, days_back=7))
 
-    print(f"\n=== RESULTS ===")
+    print("\n=== RESULTS ===")
     print(f"Total meetings found: {len(meetings)}\n")
 
     # Show first meeting details
     if meetings:
         meeting = meetings[0]
-        print(f"First meeting:")
+        print("First meeting:")
         print(f"  ID: {meeting['meeting_id']}")
         print(f"  Title: {meeting['title']}")
         print(f"  Start: {meeting['start']}")
@@ -46,7 +46,7 @@ def test_santa_monica():
         # Show first few items
         items = meeting.get('items', [])
         if items:
-            print(f"\n  First 3 items:")
+            print("\n  First 3 items:")
             for i, item in enumerate(items[:3]):
                 print(f"\n  Item {i+1}:")
                 print(f"    Item ID: {item['item_id']}")
@@ -59,7 +59,7 @@ def test_santa_monica():
                 attachments = item.get('attachments', [])
                 if attachments:
                     att = attachments[0]
-                    print(f"      First attachment:")
+                    print("      First attachment:")
                     print(f"        Name: {att['name'][:50]}...")
                     print(f"        Type: {att['type']}")
 

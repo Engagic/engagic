@@ -16,7 +16,7 @@ Strategies:
 import requests
 import json
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
@@ -226,7 +226,7 @@ class GranicusAPIDiscovery:
                 for match in matches:
                     try:
                         data = json.loads(match)
-                        self.log(f"✓ Found embedded JSON data")
+                        self.log("✓ Found embedded JSON data")
                         self.discoveries['embedded_data']['meetings'] = data
                         self.discoveries['success'] = True
                     except json.JSONDecodeError:
@@ -335,7 +335,7 @@ class GranicusAPIDiscovery:
                 if response.status_code == 200:
                     # Check for JSON response
                     try:
-                        data = response.json()
+                        response.json()
                         self.log(f"✓ PARAMS RETURNED JSON: {params}")
                         self.discoveries['viewpublisher_params'] = params
                         self.discoveries['success'] = True
@@ -356,7 +356,7 @@ class GranicusAPIDiscovery:
                 response = self.session.get(url, timeout=5)
                 if response.status_code == 200 and 'Meeting' in response.text:
                     return i
-            except:
+            except Exception:
                 continue
         return None
 
@@ -370,10 +370,10 @@ class GranicusAPIDiscovery:
             self.log("🎉 SUCCESS! Found working data sources:\n")
 
             if self.discoveries['legistar_compatible']:
-                self.log(f"✓ LEGISTAR API COMPATIBLE")
+                self.log("✓ LEGISTAR API COMPATIBLE")
                 self.log(f"  Slug: {self.discoveries['legistar_slug']}")
                 self.log(f"  URL: https://webapi.legistar.com/v1/{self.discoveries['legistar_slug']}/events")
-                self.log(f"  RECOMMENDATION: Switch vendor to 'legistar'\n")
+                self.log("  RECOMMENDATION: Switch vendor to 'legistar'\n")
 
             if self.discoveries['api_endpoints']:
                 self.log(f"✓ API ENDPOINTS ({len(self.discoveries['api_endpoints'])})")
@@ -394,8 +394,8 @@ class GranicusAPIDiscovery:
                 self.log("")
 
             if self.discoveries['embedded_data']:
-                self.log(f"✓ EMBEDDED DATA")
-                self.log(f"  Found JavaScript data structures in page source")
+                self.log("✓ EMBEDDED DATA")
+                self.log("  Found JavaScript data structures in page source")
                 self.log("")
 
         else:

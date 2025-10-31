@@ -180,7 +180,7 @@ body {
 }
 
 .random-items {
-	background: var(--civic-purple);
+	background: var(--civic-accent);
 	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
 }
 
