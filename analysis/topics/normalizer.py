@@ -9,7 +9,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Optional
 
 logger = logging.getLogger("engagic")
 

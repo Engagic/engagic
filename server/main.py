@@ -981,6 +981,7 @@ async def search_by_topic(request: TopicSearchRequest):
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
+        from database.db import Meeting
         meetings = [Meeting.from_db_row(row) for row in rows]
 
         # For each meeting, get the items that match this topic

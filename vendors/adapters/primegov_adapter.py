@@ -4,7 +4,7 @@ PrimeGov Adapter - Thin wrapper for PrimeGov municipal calendar API
 Cities using PrimeGov: Palo Alto CA, Mountain View CA, Sunnyvale CA, and many others
 """
 
-from typing import Dict, Any, Iterator, List
+from typing import Dict, Any, Iterator
 from urllib.parse import urlencode
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.adapters.html_agenda_parser import parse_primegov_html_agenda
