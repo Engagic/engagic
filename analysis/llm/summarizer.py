@@ -521,7 +521,7 @@ class GeminiSummarizer:
                 raw_topics = []
 
             # Validate topics against canonical taxonomy
-            from infocore.processing.topic_normalizer import get_normalizer
+            from analysis.topics.normalizer import get_normalizer
             normalizer = get_normalizer()
             canonical_topics = normalizer.get_all_canonical_topics()
 

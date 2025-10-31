@@ -7,11 +7,11 @@ import time
 import uuid
 import re
 from datetime import datetime
-from infocore.processing.processor import AgendaProcessor
-from infocore.database import UnifiedDatabase
-from infocore.api.rate_limiter import SQLiteRateLimiter
+from pipeline.processor import AgendaProcessor
+from database.db import UnifiedDatabase
+from server.rate_limiter import SQLiteRateLimiter
 from uszipcode import SearchEngine
-from infocore.config import config
+from config import config
 
 # Configure structured logging
 logging.basicConfig(
@@ -902,7 +902,7 @@ async def get_queue_stats():
 async def get_all_topics():
     """Get all available canonical topics for browsing/filtering"""
     try:
-        from infocore.processing.topic_normalizer import get_normalizer
+        from analysis.topics.normalizer import get_normalizer
 
         normalizer = get_normalizer()
         all_topics = normalizer.get_all_canonical_topics()
@@ -942,7 +942,7 @@ class TopicSearchRequest(BaseModel):
 async def search_by_topic(request: TopicSearchRequest):
     """Search meetings by topic (Phase 1 - Topic Extraction)"""
     try:
-        from infocore.processing.topic_normalizer import get_normalizer
+        from analysis.topics.normalizer import get_normalizer
 
         # Normalize the search topic
         normalizer = get_normalizer()
@@ -996,7 +996,7 @@ async def search_by_topic(request: TopicSearchRequest):
             cursor.execute(items_query, (meeting.id, normalized_topic))
             item_rows = cursor.fetchall()
 
-            from infocore.database.unified_db import AgendaItem
+            from database.db import AgendaItem
             matching_items = [AgendaItem.from_db_row(row) for row in item_rows]
 
             results.append({
@@ -1044,7 +1044,7 @@ async def get_popular_topics():
 
         rows = cursor.fetchall()
 
-        from infocore.processing.topic_normalizer import get_normalizer
+        from analysis.topics.normalizer import get_normalizer
         normalizer = get_normalizer()
 
         popular_topics = [

@@ -6,7 +6,7 @@ Cities using NovusAgenda: Hagerstown MD, and others
 
 import re
 from typing import Dict, Any, Iterator
-from infocore.adapters.base_adapter import BaseAdapter, logger
+from vendors.adapters.base_adapter import BaseAdapter, logger
 
 
 class NovusAgendaAdapter(BaseAdapter):

@@ -5,7 +5,7 @@ Imports all city meeting adapters from their individual modules.
 This file serves as the public API for the adapters package.
 
 Usage:
-    from infocore.adapters.all_adapters import PrimeGovAdapter, CivicClerkAdapter
+    from vendors.adapters.all_adapters import PrimeGovAdapter, CivicClerkAdapter
 
 Adapter Categories:
     API-Based (Clean, ~70-80 lines):
@@ -19,14 +19,14 @@ Adapter Categories:
         - CivicPlusAdapter: Homepage scraping with external system detection
 """
 
-from infocore.adapters.base_adapter import BaseAdapter
-from infocore.adapters.primegov_adapter import PrimeGovAdapter
-from infocore.adapters.civicclerk_adapter import CivicClerkAdapter
-from infocore.adapters.granicus_adapter import GranicusAdapter
-from infocore.adapters.legistar_adapter import LegistarAdapter
-from infocore.adapters.novusagenda_adapter import NovusAgendaAdapter
-from infocore.adapters.civicplus_adapter import CivicPlusAdapter
-from infocore.adapters.escribe_adapter import EscribeAdapter
+from vendors.adapters.base_adapter import BaseAdapter
+from vendors.adapters.primegov_adapter import PrimeGovAdapter
+from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
+from vendors.adapters.granicus_adapter import GranicusAdapter
+from vendors.adapters.legistar_adapter import LegistarAdapter
+from vendors.adapters.novusagenda_adapter import NovusAgendaAdapter
+from vendors.adapters.civicplus_adapter import CivicPlusAdapter
+from vendors.adapters.escribe_adapter import EscribeAdapter
 
 __all__ = [
     "BaseAdapter",

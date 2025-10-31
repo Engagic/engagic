@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import urlparse, urljoin
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
-from infocore.adapters.base_adapter import BaseAdapter, logger
+from vendors.adapters.base_adapter import BaseAdapter, logger
 
 
 class CivicPlusAdapter(BaseAdapter):

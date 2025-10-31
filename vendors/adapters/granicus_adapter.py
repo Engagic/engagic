@@ -15,8 +15,8 @@ import hashlib
 from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse, urljoin
-from infocore.adapters.base_adapter import BaseAdapter, logger
-from infocore.adapters.html_agenda_parser import parse_granicus_html_agenda
+from vendors.adapters.base_adapter import BaseAdapter, logger
+from vendors.adapters.html_agenda_parser import parse_granicus_html_agenda
 
 
 class GranicusAdapter(BaseAdapter):

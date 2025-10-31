@@ -8,20 +8,13 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 from dataclasses import dataclass
 from enum import Enum
-from collections import defaultdict
 
-from infocore.database import UnifiedDatabase, City, Meeting
-from infocore.processing.processor import AgendaProcessor
-from infocore.processing.topic_normalizer import get_normalizer
-from infocore.adapters.all_adapters import (
-    PrimeGovAdapter,
-    CivicClerkAdapter,
-    LegistarAdapter,
-    GranicusAdapter,
-    NovusAgendaAdapter,
-    CivicPlusAdapter,
-)
-from infocore.config import config
+from database.db import UnifiedDatabase, City, Meeting
+from pipeline.processor import AgendaProcessor
+from analysis.topics.normalizer import get_normalizer
+from vendors.factory import get_adapter
+from vendors.rate_limiter import RateLimiter
+from config import config
 
 logger = logging.getLogger("engagic")
 
@@ -46,41 +39,6 @@ def log_memory_usage(context: str = ""):
         logger.info(f"[Memory] {context}: {mem_mb:.1f}MB RSS")
     except Exception as e:
         logger.debug(f"[Memory] Failed to log: {e}")
-
-
-class RateLimiter:
-    """Vendor-aware rate limiter to be respectful to city websites"""
-
-    def __init__(self):
-        self.last_request = defaultdict(float)
-        self.lock = threading.Lock()
-
-    def wait_if_needed(self, vendor: str):
-        """Enforce minimum delay between requests to same vendor"""
-        delays = {
-            "primegov": 3.0,  # PrimeGov cities
-            "granicus": 4.0,  # Granicus/Legistar cities
-            "civicclerk": 3.0,  # CivicClerk cities
-            "legistar": 3.0,  # Direct Legistar
-            "civicplus": 4.0,  # CivicPlus cities
-            "novusagenda": 4.0,  # NovusAgenda cities
-            "unknown": 5.0,  # Unknown vendors get longest delay
-        }
-
-        min_delay = delays.get(vendor, 5.0)
-
-        with self.lock:
-            now = time.time()
-            last = self.last_request[vendor]
-
-            if last > 0:
-                elapsed = now - last
-                if elapsed < min_delay:
-                    sleep_time = min_delay - elapsed + random.uniform(0, 1)
-                    logger.info(f"Rate limiting {vendor}: sleeping {sleep_time:.1f}s")
-                    time.sleep(sleep_time)
-
-            self.last_request[vendor] = time.time()
 
 
 class SyncStatus(Enum):
@@ -321,7 +279,12 @@ class Conductor:
         start_time = time.time()
 
         # Get adapter (slug is vendor-specific identifier)
-        adapter = self._get_adapter(city.vendor, city.slug)
+        # Pass NYC token if needed
+        kwargs = {}
+        if city.vendor == "legistar" and city.slug == "nyc":
+            kwargs["api_token"] = config.NYC_LEGISTAR_TOKEN
+
+        adapter = get_adapter(city.vendor, city.slug, **kwargs)
 
         if not adapter:
             result.status = SyncStatus.SKIPPED
@@ -371,7 +334,7 @@ class Conductor:
 
                     try:
                         # Parse date from adapter format
-                        from infocore.database.unified_db import Meeting
+                        from database.db import Meeting
                         from datetime import datetime
 
                         meeting_date = None
@@ -399,7 +362,7 @@ class Conductor:
                         )
 
                         # Validate meeting before storing (prevent corruption)
-                        from jobs.meeting_validator import MeetingValidator
+                        from vendors.validator import MeetingValidator
 
                         if not MeetingValidator.validate_and_store(
                             {
@@ -426,7 +389,7 @@ class Conductor:
 
                         # Store agenda items if present (Legistar provides this)
                         if meeting.get("items"):
-                            from infocore.database.unified_db import AgendaItem
+                            from database.db import AgendaItem
 
                             items = meeting["items"]
                             agenda_items = []
@@ -613,39 +576,6 @@ class Conductor:
 
         return sorted(cities, key=get_priority, reverse=True)
 
-    def _get_adapter(self, vendor: str, city_slug: str):
-        """Get appropriate adapter for vendor"""
-        # Only process cities with supported adapters
-        supported_vendors = {
-            "primegov",
-            "civicclerk",
-            "legistar",
-            "granicus",
-            "novusagenda",
-            "civicplus",
-        }
-
-        if vendor not in supported_vendors:
-            logger.debug(f"Skipping unsupported vendor: {vendor} for city {city_slug}")
-            return None
-
-        if vendor == "primegov":
-            return PrimeGovAdapter(city_slug)
-        elif vendor == "civicclerk":
-            return CivicClerkAdapter(city_slug)
-        elif vendor == "legistar":
-            # NYC requires API token
-            if city_slug == "nyc":
-                return LegistarAdapter(city_slug, api_token=config.NYC_LEGISTAR_TOKEN)
-            return LegistarAdapter(city_slug)
-        elif vendor == "granicus":
-            return GranicusAdapter(city_slug)
-        elif vendor == "novusagenda":
-            return NovusAgendaAdapter(city_slug)
-        elif vendor == "civicplus":
-            return CivicPlusAdapter(city_slug)
-        else:
-            return None
 
 
     def _process_queue(self):

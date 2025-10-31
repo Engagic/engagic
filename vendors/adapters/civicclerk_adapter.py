@@ -6,7 +6,7 @@ Cities using CivicClerk: Montpelier VT, Burlington VT, and others
 
 from typing import Dict, Any, Iterator
 from datetime import datetime
-from infocore.adapters.base_adapter import BaseAdapter, logger
+from vendors.adapters.base_adapter import BaseAdapter, logger
 
 
 class CivicClerkAdapter(BaseAdapter):

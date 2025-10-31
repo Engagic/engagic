@@ -1,6 +1,8 @@
 """
 Participation Parser - Extract contact info from meeting text
 
+Moved from: infocore/processing/participation_parser.py
+
 Parses text BEFORE AI summarization to extract structured contact info.
 """
 

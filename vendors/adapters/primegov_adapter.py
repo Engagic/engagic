@@ -6,8 +6,8 @@ Cities using PrimeGov: Palo Alto CA, Mountain View CA, Sunnyvale CA, and many ot
 
 from typing import Dict, Any, Iterator, List
 from urllib.parse import urlencode
-from infocore.adapters.base_adapter import BaseAdapter, logger
-from infocore.adapters.html_agenda_parser import parse_primegov_html_agenda
+from vendors.adapters.base_adapter import BaseAdapter, logger
+from vendors.adapters.html_agenda_parser import parse_primegov_html_agenda
 
 
 class PrimeGovAdapter(BaseAdapter):

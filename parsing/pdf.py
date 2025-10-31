@@ -1,4 +1,7 @@
-"""PDF extractor using PyMuPDF"""
+"""PDF extractor using PyMuPDF
+
+Moved from: infocore/processing/pdf_extractor.py
+"""
 
 import logging
 import time
