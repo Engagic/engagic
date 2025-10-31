@@ -48,7 +48,7 @@ class CivicPlusAdapter(BaseAdapter):
                 "primegov.com": "primegov",
                 "civicclerk.com": "civicclerk",
                 "novusagenda.com": "novusagenda",
-                "iqm2.com": "granicus",
+                "iqm2.com": "iqm2",
             }
 
             for link in soup.find_all("a", href=True):
