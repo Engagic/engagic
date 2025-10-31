@@ -11,13 +11,40 @@ export interface CityOption {
 	summarized_meetings: number;
 }
 
+export interface AgendaItem {
+	id: string;
+	meeting_id: string;
+	title: string;
+	sequence: number;
+	attachments: Array<{
+		url?: string;
+		pages?: string;
+		name?: string;
+		type?: string;
+	}>;
+	summary?: string;
+	topics?: string[];
+	created_at?: string;
+}
+
 export interface Meeting {
+	id?: string;
 	banana: string;
 	title: string;
 	date: string; // ISO format datetime
 	packet_url?: string | string[];
 	summary?: string;
-	meeting_status?: 'cancelled' | 'postponed' | 'revised' | 'rescheduled' | 'deferred';
+	meeting_status?: 'cancelled' | 'postponed' | 'revised' | 'rescheduled';
+	participation?: {
+		email?: string;
+		phone?: string;
+		virtual_url?: string;
+		physical_location?: string;
+	};
+	topics?: string[];
+	processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
+	has_items?: boolean; // True for item-based meetings, false for monolithic
+	items?: AgendaItem[]; // Present for item-based meetings (58% of cities)
 }
 
 export interface RandomMeetingResponse {
@@ -47,15 +74,17 @@ interface SearchSuccess {
 	meetings: Meeting[];
 	cached: boolean;
 	query: string;
-	type: 'city' | 'zipcode';
+	type: 'city' | 'zipcode' | 'state';
 }
 
 interface SearchAmbiguous {
-	success: false;
+	success: boolean;  // Can be true (state search found cities) or false (city not found)
 	ambiguous: true;
 	message: string;
 	city_options: CityOption[];
 	query: string;
+	type?: 'city' | 'state';
+	meetings?: Meeting[];
 }
 
 interface SearchError {

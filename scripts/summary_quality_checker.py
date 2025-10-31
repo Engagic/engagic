@@ -358,8 +358,8 @@ class SummaryQualityChecker:
                 {
                     "id": meeting_id,
                     "banana": banana,
-                    "meeting_name": title,
-                    "meeting_date": date,
+                    "title": title,
+                    "date": date,
                     "packet_url": packet_url,
                     "summary": summary,
                     "summary_length": len(summary),
@@ -551,9 +551,9 @@ Examples:
 
         print("Random High-Quality Meeting Summary")
         print("=" * 60)
-        print(f"City: {random_summary['city_banana']}")
-        print(f"Meeting: {random_summary['meeting_name']}")
-        print(f"Date: {random_summary['meeting_date']}")
+        print(f"City: {random_summary['banana']}")
+        print(f"Meeting: {random_summary['title']}")
+        print(f"Date: {random_summary['date']}")
         print(f"Quality Score: {random_summary['quality_score']:.1f}/10")
         print(f"Packet URL: {random_summary['packet_url']}")
         print("\n--- Summary ---\n")

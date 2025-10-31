@@ -8,7 +8,7 @@
 	import { formatMeetingDate, extractTime } from '$lib/utils/date-utils';
 	import Footer from '$lib/components/Footer.svelte';
 
-	let city_url = $page.params.city_url;
+	let city_banana = $page.params.city_url;
 	let searchResults: SearchResult | null = $state(null);
 	let loading = $state(true);
 	let error = $state('');
@@ -66,13 +66,13 @@
 		
 		try {
 			// Check if this is a static route that should not be handled as a city
-			if (city_url === 'about') {
+			if (city_banana === 'about') {
 				goto('/about');
 				return;
 			}
-			
+
 			// Parse the city URL to get city name and state
-			const parsed = parseCityUrl(city_url);
+			const parsed = parseCityUrl(city_banana);
 			if (!parsed) {
 				throw new Error('Invalid city URL format');
 			}
@@ -190,7 +190,7 @@
 								{@const monthDay = isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null}
 								{@const timeStr = extractTime(meeting.date)}
 								<a
-									href="/{city_url}/{generateMeetingSlug(meeting)}"
+									href="/{city_banana}/{generateMeetingSlug(meeting)}"
 									class="meeting-card past-meeting"
 									in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 									onintroend={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
@@ -230,7 +230,7 @@
 							{@const monthDay = isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null}
 							{@const timeStr = extractTime(meeting.date)}
 							<a
-								href="/{city_url}/{generateMeetingSlug(meeting)}"
+								href="/{city_banana}/{generateMeetingSlug(meeting)}"
 								class="meeting-card upcoming-meeting"
 								in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
 								onintroend={() => { if (index === upcomingMeetings.length - 1 && pastMeetings.length === 0) isInitialLoad = false; }}
