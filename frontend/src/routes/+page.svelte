@@ -209,7 +209,7 @@
 				onclick={handleRandomMeetingWithItems}
 				disabled={loading || loadingRandom || loadingRandomItems}
 			>
-				{loadingRandomItems ? 'Loading...' : '✨ Meeting with Items'}
+				{loadingRandomItems ? 'Loading...' : '🛸 Meeting with Items'}
 			</button>
 		</div>
 	</div>
