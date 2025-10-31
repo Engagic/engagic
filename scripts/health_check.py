@@ -5,13 +5,20 @@ Quick health check for all cities.
 Shows summary statistics and flags potential issues.
 """
 
+import os
+import sys
 import sqlite3
 from collections import defaultdict
 from typing import Dict, List, Tuple
 
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from infocore.config import config
+
 # Confidence: 9/10 - Simple SQL aggregation queries
 
-DB_PATH = "data/engagic.db"
+DB_PATH = config.UNIFIED_DB_PATH
 
 
 def get_city_stats(conn) -> Dict:

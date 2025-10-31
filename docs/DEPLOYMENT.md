@@ -441,7 +441,7 @@ curl http://localhost:8000/api/queue-stats
 # Check vendor rate limiting in logs
 journalctl -u engagic-daemon | grep "Rate limiting"
 
-# Adjust delays in infra/conductor.py if needed
+# Adjust delays in jobs/conductor.py if needed
 # Current: 3-5s between vendor requests (respectful)
 ```
 
