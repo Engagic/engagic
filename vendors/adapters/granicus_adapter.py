@@ -157,8 +157,8 @@ class GranicusAdapter(BaseAdapter):
         """
         Scrape meetings from Granicus HTML.
 
-        Strategy: Target the "Upcoming Programs" section specifically to avoid
-        processing years of historical data.
+        Strategy: Target the "Upcoming" section (Upcoming Events, Upcoming Programs, etc.)
+        to avoid processing years of historical data.
 
         Args:
             days_forward: Days to look ahead (default 14 = 2 weeks)
@@ -169,15 +169,19 @@ class GranicusAdapter(BaseAdapter):
         """
         soup = self._fetch_html(self.list_url)
 
-        # CRITICAL: Only look in the "Upcoming Programs" section
-        # This section is typically named "upcoming" or similar
+        # CRITICAL: Only look in the "Upcoming" section
+        # Variations: "Upcoming Events", "Upcoming Programs", "Upcoming Meetings", etc.
         upcoming_section = soup.find("div", {"id": "upcoming"})
 
         if not upcoming_section:
-            # Fallback: try finding by heading text
-            upcoming_heading = soup.find("h3", string=lambda t: t and "upcoming" in t.lower())
-            if upcoming_heading:
-                upcoming_section = upcoming_heading.find_parent("div")
+            # Fallback: try finding by heading text (check all heading levels)
+            for tag in ["h1", "h2", "h3", "h4", "h5"]:
+                upcoming_heading = soup.find(tag, string=lambda t: t and "upcoming" in t.lower())
+                if upcoming_heading:
+                    upcoming_section = upcoming_heading.find_parent("div")
+                    if upcoming_section:
+                        logger.info(f"[granicus:{self.slug}] Found upcoming section via {tag} heading")
+                        break
 
         if not upcoming_section:
             # Log what we're actually seeing for debugging
