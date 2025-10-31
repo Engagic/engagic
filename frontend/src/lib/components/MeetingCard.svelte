@@ -44,17 +44,25 @@
 			</div>
 		{/if}
 
-		{#if meeting.summary}
-			<div class="meeting-status status-ready" role="status">
-				<span class="sr-only">Status:</span> AI Summary Available
+		{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
+			<div class="meeting-status status-items" role="status">
+				<span class="sr-only">Status:</span> Item Summaries Available
+			</div>
+		{:else if meeting.summary}
+			<div class="meeting-status status-summary" role="status">
+				<span class="sr-only">Status:</span> Summary Available
+			</div>
+		{:else if meeting.agenda_url}
+			<div class="meeting-status status-agenda" role="status">
+				<span class="sr-only">Status:</span> Agenda Posted
 			</div>
 		{:else if meeting.packet_url}
 			<div class="meeting-status status-packet" role="status">
-				<span class="sr-only">Status:</span> Agenda Packet Available
+				<span class="sr-only">Status:</span> Packet Posted
 			</div>
 		{:else}
 			<div class="meeting-status status-none" role="status">
-				<span class="sr-only">Status:</span> No agenda posted yet
+				<span class="sr-only">Status:</span> No Agenda Posted
 			</div>
 		{/if}
 	</div>

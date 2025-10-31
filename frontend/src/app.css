@@ -12,6 +12,8 @@
 	--civic-border: #e2e8f0;
 	--civic-red: #ef4444;
 	--civic-accent: #8b5cf6;
+	--civic-yellow: #eab308;
+	--civic-orange: #f97316;
 
 	/* Progressive widths: search -> meetings -> detail */
 	--width-search: 600px;
@@ -293,12 +295,20 @@ body {
 	color: var(--civic-gray);
 }
 
-.status-ready {
+.status-items {
+	color: var(--civic-accent);
+}
+
+.status-summary {
 	color: var(--civic-green);
 }
 
+.status-agenda {
+	color: var(--civic-yellow);
+}
+
 .status-packet {
-	color: var(--civic-blue);
+	color: var(--civic-orange);
 }
 
 .status-none {

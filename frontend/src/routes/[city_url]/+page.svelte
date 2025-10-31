@@ -246,17 +246,25 @@
 									{/if}
 								</div>
 
-								{#if meeting.summary}
-									<div class="meeting-status status-ready">
+								{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
+									<div class="meeting-status status-items">
+										✓ Item Summaries
+									</div>
+								{:else if meeting.summary}
+									<div class="meeting-status status-summary">
 										✓ Summary Ready
+									</div>
+								{:else if meeting.agenda_url}
+									<div class="meeting-status status-agenda">
+										Agenda Posted
 									</div>
 								{:else if meeting.packet_url}
 									<div class="meeting-status status-packet">
-										Packet Available
+										Packet Posted
 									</div>
 								{:else}
 									<div class="meeting-status status-none">
-										No agenda posted
+										No Agenda Posted
 									</div>
 								{/if}
 							</a>
