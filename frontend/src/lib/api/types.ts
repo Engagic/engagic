@@ -32,7 +32,8 @@ export interface Meeting {
 	banana: string;
 	title: string;
 	date: string; // ISO format datetime
-	packet_url?: string | string[];
+	agenda_url?: string; // HTML/PDF agenda with extracted items (item-based, primary)
+	packet_url?: string | string[]; // Monolithic PDF fallback (no items extracted)
 	summary?: string;
 	meeting_status?: 'cancelled' | 'postponed' | 'revised' | 'rescheduled';
 	participation?: {

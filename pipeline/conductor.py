@@ -352,11 +352,13 @@ class Conductor:
                                 pass
 
                         # Create Meeting object
+                        # Use agenda_url XOR packet_url (never both)
                         meeting_obj = Meeting(
                             id=meeting.get("meeting_id", ""),
                             banana=city.banana,
                             title=meeting.get("title", ""),
                             date=meeting_date,
+                            agenda_url=meeting.get("agenda_url"),
                             packet_url=meeting.get("packet_url"),
                             summary=None,
                             participation=meeting.get("participation"),
@@ -420,11 +422,12 @@ class Conductor:
                                 )
 
                         # Enqueue for processing via THE ONE TRUE PATH
-                        # Two processing routes: PDF-based (monolithic) or item-based (batch)
+                        # Two processing routes: item-based (primary) or PDF-based (fallback)
                         has_items = bool(meeting.get("items"))
+                        agenda_url = meeting.get("agenda_url")
                         packet_url = meeting.get("packet_url")
 
-                        if packet_url or has_items:
+                        if agenda_url or packet_url or has_items:
                             # Calculate priority based on meeting date recency
                             if meeting_date:
                                 days_old = (datetime.now() - meeting_date).days
@@ -434,25 +437,32 @@ class Conductor:
                                 0, 100 - days_old
                             )  # Recent meetings get higher priority
 
-                            # Use packet URL if available, otherwise use item-based identifier
-                            # Processor will route based on URL scheme (https:// vs items://)
-                            queue_url = packet_url or f"items://{stored_meeting.id}"
+                            # Priority order: agenda_url > packet_url > items://
+                            # Processor routes based on URL scheme or items:// identifier
+                            if agenda_url:
+                                queue_url = agenda_url
+                                processing_type = "item-based"
+                            elif packet_url:
+                                queue_url = packet_url
+                                processing_type = "PDF"
+                            else:
+                                queue_url = f"items://{stored_meeting.id}"
+                                processing_type = "item-based-no-url"
 
                             self.db.enqueue_for_processing(
                                 packet_url=queue_url,
                                 meeting_id=stored_meeting.id,
                                 banana=city.banana,
                                 priority=priority,
-                                metadata={"has_items": has_items, "has_packet": bool(packet_url)}
+                                metadata={"has_items": has_items, "has_agenda": bool(agenda_url), "has_packet": bool(packet_url)}
                             )
 
-                            processing_type = "PDF" if packet_url else "item-based"
                             logger.debug(
                                 f"Enqueued {processing_type} processing for {stored_meeting.title} (priority {priority})"
                             )
                         else:
                             logger.debug(
-                                f"Meeting {stored_meeting.title} has no packet or items - stored for display only"
+                                f"Meeting {stored_meeting.title} has no agenda/packet/items - stored for display only"
                             )
 
                     except Exception as e:
