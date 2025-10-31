@@ -63,6 +63,19 @@ export interface RandomMeetingResponse {
 	};
 }
 
+export interface RandomMeetingWithItemsResponse {
+	success: boolean;
+	meeting: {
+		id: number;
+		banana: string;
+		title: string;
+		date: string;
+		packet_url: string;
+		item_count: number;
+		avg_summary_length: number;
+	};
+}
+
 // Discriminated union for search results
 export type SearchResult = 
 	| SearchSuccess

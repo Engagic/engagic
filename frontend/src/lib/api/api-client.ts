@@ -2,7 +2,8 @@ import { config, errorMessages } from './config';
 import type {
 	SearchResult,
 	AnalyticsData,
-	RandomMeetingResponse
+	RandomMeetingResponse,
+	RandomMeetingWithItemsResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -96,13 +97,21 @@ export const apiClient = {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/random-best-meeting`
 		);
-		
+
 		const result = await response.json();
-		
+
 		if (!result.meeting) {
 			throw new ApiError('No high-quality meetings available', 404, false);
 		}
-		
+
 		return result;
+	},
+
+	async getRandomMeetingWithItems(): Promise<RandomMeetingWithItemsResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/random-meeting-with-items`
+		);
+
+		return response.json();
 	}
 };

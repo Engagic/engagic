@@ -150,24 +150,44 @@ body {
 	padding: 0 0.5rem;
 }
 
-.random-button {
+.random-buttons {
+	display: flex;
+	gap: 1rem;
 	width: 100%;
+}
+
+.random-button {
+	flex: 1;
 	padding: 1rem;
 	font-size: 1rem;
 	font-family: 'IBM Plex Mono', monospace;
-	background: var(--civic-green);
 	color: var(--civic-white);
 	border: none;
 	border-radius: 12px;
 	cursor: pointer;
 	transition: all 0.3s ease;
+}
+
+.random-meeting {
+	background: var(--civic-green);
 	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
 }
 
-.random-button:hover {
+.random-meeting:hover {
 	background: #0ea570;
 	transform: translateY(-2px);
 	box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+}
+
+.random-items {
+	background: var(--civic-purple);
+	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
+}
+
+.random-items:hover {
+	background: #7c3aed;
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
 }
 
 .random-button:disabled {
@@ -175,6 +195,12 @@ body {
 	cursor: not-allowed;
 	transform: none;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 640px) {
+	.random-buttons {
+		flex-direction: column;
+	}
 }
 
 .results-section {

@@ -12,6 +12,7 @@
 	let searchResults: SearchResult | null = $state(null);
 	let loading = $state(false);
 	let loadingRandom = $state(false);
+	let loadingRandomItems = $state(false);
 	let error = $state('');
 
 	// Snapshot: Preserve search state during navigation
@@ -79,7 +80,7 @@
 	async function handleRandomMeeting() {
 		loadingRandom = true;
 		error = '';
-		
+
 		try {
 			const result = await apiClient.getRandomBestMeeting();
 			if (result.meeting) {
@@ -103,9 +104,9 @@
 					const meetingSlug = generateMeetingSlug(meeting);
 					logger.trackEvent('random_meeting_click', {
 						city: banana,
-						quality_score: result.meeting.quality_score 
+						quality_score: result.meeting.quality_score
 					});
-					
+
 					goto(`/${cityUrl}/${meetingSlug}`);
 				} else {
 					error = 'Invalid meeting data received';
@@ -116,6 +117,38 @@
 			error = 'Failed to load random meeting. Please try again.';
 		} finally {
 			loadingRandom = false;
+		}
+	}
+
+	async function handleRandomMeetingWithItems() {
+		loadingRandomItems = true;
+		error = '';
+
+		try {
+			const result = await apiClient.getRandomMeetingWithItems();
+			if (result.meeting) {
+				const banana = result.meeting.banana;
+
+				const meeting: Meeting = {
+					banana: banana,
+					title: result.meeting.title,
+					date: result.meeting.date,
+					packet_url: result.meeting.packet_url
+				};
+
+				const meetingSlug = generateMeetingSlug(meeting);
+				logger.trackEvent('random_meeting_with_items_click', {
+					city: banana,
+					item_count: result.meeting.item_count
+				});
+
+				goto(`/${banana}/${meetingSlug}`);
+			}
+		} catch (err) {
+			logger.error('Random meeting with items failed', err as Error);
+			error = 'Failed to load random meeting. Please try again.';
+		} finally {
+			loadingRandomItems = false;
 		}
 	}
 
@@ -150,25 +183,35 @@
 			aria-invalid={!!error}
 			aria-describedby={error ? "search-error" : undefined}
 		/>
-		<button 
-			class="search-button" 
+		<button
+			class="search-button"
 			onclick={handleSearch}
-			disabled={loading || loadingRandom || !searchQuery.trim()}
+			disabled={loading || loadingRandom || loadingRandomItems || !searchQuery.trim()}
 		>
 			{loading ? 'Searching...' : 'Search'}
 		</button>
-		
+
 		<div class="button-divider">
 			<span>or</span>
 		</div>
-		
-		<button 
-			class="random-button" 
-			onclick={handleRandomMeeting}
-			disabled={loading || loadingRandom}
-		>
-			{loadingRandom ? 'Loading...' : '🎲 Random Meeting'}
-		</button>
+
+		<div class="random-buttons">
+			<button
+				class="random-button random-meeting"
+				onclick={handleRandomMeeting}
+				disabled={loading || loadingRandom || loadingRandomItems}
+			>
+				{loadingRandom ? 'Loading...' : '🎲 Random Meeting'}
+			</button>
+
+			<button
+				class="random-button random-items"
+				onclick={handleRandomMeetingWithItems}
+				disabled={loading || loadingRandom || loadingRandomItems}
+			>
+				{loadingRandomItems ? 'Loading...' : '✨ Meeting with Items'}
+			</button>
+		</div>
 	</div>
 
 	{#if error}
