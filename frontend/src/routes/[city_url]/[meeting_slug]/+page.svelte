@@ -170,11 +170,62 @@
 
 			<div class="meeting-divider"></div>
 
-			{#if selectedMeeting.summary}
+			{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
+				<!-- Item-based meeting display (58% of cities) -->
+				<div class="agenda-items-header">
+					<h2 class="agenda-title">Agenda Items ({selectedMeeting.items.length})</h2>
+					{#if selectedMeeting.topics && selectedMeeting.topics.length > 0}
+						<div class="meeting-topics">
+							{#each selectedMeeting.topics as topic}
+								<span class="topic-badge">{topic}</span>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<div class="agenda-items">
+					{#each selectedMeeting.items as item}
+						<div class="agenda-item">
+							<div class="item-header">
+								<span class="item-number">{item.sequence}</span>
+								<h3 class="item-title">{item.title}</h3>
+							</div>
+
+							{#if item.topics && item.topics.length > 0}
+								<div class="item-topics">
+									{#each item.topics as topic}
+										<span class="item-topic-tag">{topic}</span>
+									{/each}
+								</div>
+							{/if}
+
+							{#if item.summary}
+								<div class="item-summary">
+									{@html marked(item.summary)}
+								</div>
+							{/if}
+
+							{#if item.attachments && item.attachments.length > 0}
+								<div class="item-attachments">
+									{#each item.attachments as attachment}
+										{#if attachment.url}
+											<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
+												View Packet{attachment.pages ? ` (${attachment.pages})` : ''}
+											</a>
+										{/if}
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{:else if selectedMeeting.summary}
+				<!-- Monolithic meeting display (42% of cities) -->
 				<div class="meeting-summary">
 					{@html marked(cleanSummary(selectedMeeting.summary))}
 				</div>
 			{:else}
+				<!-- Processing state -->
 				<div class="no-summary">
 					<p>Working on it, please wait!</p>
 					<p>We're processing this meeting in the background. Check back in a few minutes.</p>
@@ -488,6 +539,160 @@
 		margin: 0;
 	}
 
+	/* Item-based meeting styles */
+	.agenda-items-header {
+		margin-bottom: 2rem;
+	}
+
+	.agenda-title {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: var(--civic-gray);
+		margin: 0 0 1rem 0;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.meeting-topics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
+	}
+
+	.topic-badge {
+		display: inline-block;
+		padding: 0.25rem 0.75rem;
+		background: #f0f9ff;
+		color: #0369a1;
+		border-radius: 12px;
+		font-size: 0.8rem;
+		font-weight: 500;
+		font-family: 'IBM Plex Mono', monospace;
+	}
+
+	.agenda-items {
+		display: flex;
+		flex-direction: column;
+		gap: 2rem;
+	}
+
+	.agenda-item {
+		padding: 1.5rem;
+		background: #fafafa;
+		border-radius: 8px;
+		border: 1px solid #e5e7eb;
+	}
+
+	.item-header {
+		display: flex;
+		align-items: flex-start;
+		gap: 1rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.item-number {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		background: var(--civic-blue);
+		color: white;
+		border-radius: 50%;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 600;
+	}
+
+	.item-title {
+		flex: 1;
+		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-size: 1.15rem;
+		font-weight: 600;
+		color: var(--civic-dark);
+		margin: 0;
+		line-height: 1.4;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	.item-topics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.item-topic-tag {
+		display: inline-block;
+		padding: 0.2rem 0.6rem;
+		background: white;
+		color: #64748b;
+		border: 1px solid #e2e8f0;
+		border-radius: 8px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		font-family: 'IBM Plex Mono', monospace;
+	}
+
+	.item-summary {
+		font-family: Georgia, 'Times New Roman', Times, serif;
+		line-height: 1.7;
+		font-size: 1rem;
+		color: #374151;
+		margin-bottom: 0.75rem;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	.item-summary :global(p) {
+		margin: 0.75rem 0;
+	}
+
+	.item-summary :global(strong) {
+		font-weight: 600;
+		color: var(--civic-dark);
+	}
+
+	.item-summary :global(ul),
+	.item-summary :global(ol) {
+		margin: 0.75rem 0;
+		padding-left: 1.5rem;
+	}
+
+	.item-summary :global(li) {
+		margin: 0.4rem 0;
+	}
+
+	.item-attachments {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
+	}
+
+	.attachment-link {
+		display: inline-block;
+		padding: 0.4rem 0.75rem;
+		background: white;
+		color: var(--civic-blue);
+		border: 1px solid #bae6fd;
+		border-radius: 6px;
+		text-decoration: none;
+		font-size: 0.85rem;
+		font-weight: 500;
+		font-family: 'IBM Plex Mono', monospace;
+		transition: all 0.2s;
+	}
+
+	.attachment-link:hover {
+		background: #f0f9ff;
+		border-color: #7dd3fc;
+	}
+
 	@media (max-width: 640px) {
 		.container {
 			width: 100%;
@@ -538,6 +743,42 @@
 
 		.meeting-header {
 			margin-bottom: 1.5rem;
+		}
+
+		.agenda-item {
+			padding: 1rem;
+		}
+
+		.item-header {
+			gap: 0.75rem;
+		}
+
+		.item-number {
+			width: 28px;
+			height: 28px;
+			font-size: 0.85rem;
+		}
+
+		.item-title {
+			font-size: 1.05rem;
+		}
+
+		.item-summary {
+			font-size: 0.95rem;
+		}
+
+		.topic-badge {
+			font-size: 0.75rem;
+			padding: 0.2rem 0.6rem;
+		}
+
+		.item-topic-tag {
+			font-size: 0.7rem;
+		}
+
+		.attachment-link {
+			font-size: 0.8rem;
+			padding: 0.35rem 0.65rem;
 		}
 	}
 </style>
