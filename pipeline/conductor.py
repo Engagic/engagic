@@ -170,11 +170,11 @@ class Conductor:
         # Group cities by vendor for polite crawling (only supported vendors)
         supported_vendors = {
             "primegov",
-            "civicclerk",
+            # "civicclerk",
             "legistar",
             # "granicus",  # Temporarily disabled - VPS timeout issues
-            "novusagenda",
-            "civicplus",
+            # "novusagenda",
+            # "civicplus",
         }
 
         by_vendor = {}

@@ -6,6 +6,7 @@ Cities using Legistar: Seattle WA, NYC, Cambridge MA, and many others
 
 from typing import Dict, Any, Iterator, Optional, List
 from datetime import datetime, timedelta
+import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter import BaseAdapter, logger
 
 
@@ -60,9 +61,26 @@ class LegistarAdapter(BaseAdapter):
         # Fetch events
         api_url = f"{self.base_url}/events"
         response = self._get(api_url, params=params)
-        events = response.json()
 
-        logger.info(f"[legistar:{self.slug}] Retrieved {len(events)} events")
+        # Try JSON first, fallback to XML
+        events = []
+        try:
+            events = response.json()
+            logger.info(f"[legistar:{self.slug}] Retrieved {len(events)} events (JSON)")
+        except Exception as json_error:
+            # Try XML parsing
+            try:
+                events = self._parse_xml_events(response.text)
+                logger.info(f"[legistar:{self.slug}] Retrieved {len(events)} events (XML)")
+            except Exception as xml_error:
+                logger.error(
+                    f"[legistar:{self.slug}] Failed to parse as JSON or XML. "
+                    f"JSON error: {json_error}, XML error: {xml_error}"
+                )
+                logger.error(
+                    f"[legistar:{self.slug}] Response text (first 1000 chars): {response.text[:1000]}"
+                )
+                return
 
         for event in events:
             # Extract event data
@@ -220,3 +238,57 @@ class LegistarAdapter(BaseAdapter):
             attachments.append({"name": name, "url": url, "type": file_type})
 
         return attachments
+
+    def _parse_xml_events(self, xml_text: str) -> List[Dict[str, Any]]:
+        """
+        Parse Legistar XML response into event dictionaries.
+
+        Some cities return XML instead of JSON from the API.
+        This method normalizes the XML structure to match the JSON format.
+
+        Args:
+            xml_text: Raw XML response text
+
+        Returns:
+            List of event dictionaries with same structure as JSON API
+        """
+        events = []
+
+        try:
+            root = ET.fromstring(xml_text)
+
+            # Handle namespace
+            ns = {'ns': 'http://schemas.datacontract.org/2004/07/LegistarWebAPI.Models.v1'}
+
+            # Find all GranicusEvent elements
+            for event_elem in root.findall('.//ns:GranicusEvent', ns):
+                event = {}
+
+                # Map XML fields to JSON field names
+                field_map = {
+                    'EventId': 'EventId',
+                    'EventBodyName': 'EventBodyName',
+                    'EventDate': 'EventDate',
+                    'EventLocation': 'EventLocation',
+                    'EventAgendaStatusName': 'EventAgendaStatusName',
+                    'EventAgendaFile': 'EventAgendaFile',
+                }
+
+                for xml_field, json_field in field_map.items():
+                    elem = event_elem.find(f'ns:{xml_field}', ns)
+                    if elem is not None and elem.text:
+                        # Convert EventId to int
+                        if xml_field == 'EventId':
+                            event[json_field] = int(elem.text)
+                        else:
+                            event[json_field] = elem.text
+
+                # Only add events that have at least an ID
+                if 'EventId' in event:
+                    events.append(event)
+
+            return events
+
+        except ET.ParseError as e:
+            logger.error(f"[legistar:{self.slug}] XML parsing error: {e}")
+            raise

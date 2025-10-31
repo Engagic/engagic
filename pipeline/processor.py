@@ -221,8 +221,8 @@ class AgendaProcessor:
 
                 cursor.execute(
                     """
-                    UPDATE processing_cache
-                    SET hit_count = hit_count + 1,
+                    UPDATE cache
+                    SET cache_hit_count = cache_hit_count + 1,
                         last_accessed = CURRENT_TIMESTAMP
                     WHERE packet_url = ?
                 """,
@@ -246,9 +246,9 @@ class AgendaProcessor:
 
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO processing_cache
-                    (packet_url, summary, processing_time, created_at, last_accessed, hit_count)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                    INSERT OR REPLACE INTO cache
+                    (packet_url, content_hash, processing_method, processing_time, cache_hit_count, created_at, last_accessed)
+                    VALUES (?, ?, 'gemini', ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                     (lookup_url, summary, processing_time),
                 )
