@@ -260,7 +260,7 @@ def test_api():
         except requests.exceptions.ConnectionError:
             print("  ⚠ API not running (this is OK if not started)")
             print(
-                "  To test API, run: cd /root/engagic && uvicorn infocore.api.main:app --host 0.0.0.0 --port 8000"
+                "  To test API, run: cd /root/engagic && uvicorn server.main:app --host 0.0.0.0 --port 8000"
             )
             return True
 
