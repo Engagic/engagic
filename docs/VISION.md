@@ -83,7 +83,7 @@ Features (to build):
 ## Implementation (Current State)
 
 ### What Works
-- **7,618 lines Python backend**
+- **~6,900 lines Python backend** (down from 7,618, after reorganization + cleanup)
 - **500 cities, ~10K meetings** in production
 - **374+ cities with item-level processing (58% of platform, 50-80M people)**
   - Legistar: 110 cities (API-based)
@@ -93,13 +93,16 @@ Features (to build):
 - **6 vendor adapters** with 94% success rate
 - **Priority queue** - recent meetings processed first
 - **PyMuPDF + Gemini** - 80% PDF extraction success, 10-30s processing per meeting
+- **Clean architecture** - 6 logical clusters (vendors, parsing, analysis, pipeline, database, server)
 
 ### Recent Wins
+- **Directory reorganization (October 2025)**: Entire codebase restructured into logical clusters (-487 lines, cleaner imports)
 - **Granicus breakthrough (October 2025)**: 174 → 374+ cities with items (crossed majority threshold)
 - Database consolidation: 3 DBs → 1 unified SQLite (-1,549 lines)
 - Adapter refactor with BaseAdapter pattern (-339 lines)
 - Processor modularization: 1,797 → 415 lines (-77% reduction)
 - Priority job queue with SQLite backend
+- **Total:** -2,017 lines eliminated
 
 ### Honest Assessment
 

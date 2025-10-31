@@ -1,6 +1,6 @@
 # Engagic Deployment Guide
 
-**Last Updated:** 2025-01-29
+**Last Updated:** 2025-10-30 (Post-Reorganization)
 
 Operational guide for deploying and managing Engagic on a VPS.
 
@@ -108,7 +108,7 @@ Type=simple
 User=root
 WorkingDirectory=/root/engagic
 EnvironmentFile=/root/engagic/.env
-ExecStart=/root/engagic/.venv/bin/uvicorn infocore.api.main:app --host 0.0.0.0 --port 8000
+ExecStart=/root/engagic/.venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
@@ -130,7 +130,7 @@ Type=simple
 User=root
 WorkingDirectory=/root/engagic
 EnvironmentFile=/root/engagic/.env
-ExecStart=/root/engagic/.venv/bin/python -m infra.daemon
+ExecStart=/root/engagic/.venv/bin/python -m pipeline.daemon
 Restart=always
 RestartSec=10
 
@@ -441,7 +441,7 @@ curl http://localhost:8000/api/queue-stats
 # Check vendor rate limiting in logs
 journalctl -u engagic-daemon | grep "Rate limiting"
 
-# Adjust delays in jobs/conductor.py if needed
+# Adjust delays in vendors/rate_limiter.py if needed
 # Current: 3-5s between vendor requests (respectful)
 ```
 
