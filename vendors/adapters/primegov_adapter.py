@@ -81,11 +81,26 @@ class PrimeGovAdapter(BaseAdapter):
             }
 
             if packet_doc:
-                # HTML Agendas use Portal/Meeting endpoint, PDFs use CompiledDocument
+                # HTML Agendas → agenda_url (item-based, primary)
+                # PDFs → packet_url (monolithic, fallback)
                 if "HTML Agenda" in packet_doc.get("templateName", ""):
                     query = urlencode({"meetingTemplateId": packet_doc["templateId"]})
-                    result["packet_url"] = f"{self.base_url}/Portal/Meeting?{query}"
+                    html_url = f"{self.base_url}/Portal/Meeting?{query}"
+                    result["agenda_url"] = html_url
+
+                    # Fetch HTML agenda items (item-level granularity)
+                    try:
+                        items_data = self.fetch_html_agenda_items(html_url)
+                        if items_data["items"]:
+                            result["items"] = items_data["items"]
+                        if items_data["participation"]:
+                            result["participation"] = items_data["participation"]
+                    except Exception as e:
+                        logger.warning(
+                            f"[primegov:{self.slug}] Failed to fetch HTML agenda items for {title}: {e}"
+                        )
                 else:
+                    # PDF packet
                     result["packet_url"] = self._build_packet_url(packet_doc)
             else:
                 logger.debug(
@@ -95,19 +110,6 @@ class PrimeGovAdapter(BaseAdapter):
 
             if meeting_status:
                 result["meeting_status"] = meeting_status
-
-            # Fetch HTML agenda items if available (item-level granularity)
-            if packet_doc and "HTML Agenda" in packet_doc.get("templateName", ""):
-                try:
-                    items_data = self.fetch_html_agenda_items(result["packet_url"])
-                    if items_data["items"]:
-                        result["items"] = items_data["items"]
-                    if items_data["participation"]:
-                        result["participation"] = items_data["participation"]
-                except Exception as e:
-                    logger.warning(
-                        f"[primegov:{self.slug}] Failed to fetch HTML agenda items for {title}: {e}"
-                    )
 
             yield result
 

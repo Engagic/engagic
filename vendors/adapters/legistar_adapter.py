@@ -72,35 +72,38 @@ class LegistarAdapter(BaseAdapter):
             event_location = event.get("EventLocation")
             event_agenda_status = event.get("EventAgendaStatusName", "")
 
-            # Get packet URL (EventAgendaFile is the agenda packet PDF)
-            packet_url = event.get("EventAgendaFile")
+            # Get agenda PDF (EventAgendaFile is the canonical agenda document)
+            agenda_pdf = event.get("EventAgendaFile")
 
             # Parse meeting status from title and agenda status
             meeting_status = self._parse_meeting_status(event_name, event_agenda_status)
 
-            # Log if no packet (but still track the meeting)
-            if not packet_url:
-                logger.debug(
-                    f"[legistar:{self.slug}] No packet for: {event_name} on {event_date}"
-                )
+            # Fetch agenda items with attachments (Legistar provides via API)
+            items = self.fetch_event_items(event_id)
 
             result = {
                 "meeting_id": str(event_id),
                 "title": event_name,
                 "start": event_date,
-                "packet_url": packet_url,
             }
+
+            # Architecture: items extracted → agenda_url, no items → packet_url
+            # For Legistar, the agenda PDF is the canonical document
+            if items:
+                result["agenda_url"] = agenda_pdf  # PDF is the source document
+                result["items"] = items
+            elif agenda_pdf:
+                result["packet_url"] = agenda_pdf  # Fallback for monolithic processing
+            else:
+                logger.debug(
+                    f"[legistar:{self.slug}] No agenda for: {event_name} on {event_date}"
+                )
 
             if event_location:
                 result["location"] = event_location
 
             if meeting_status:
                 result["meeting_status"] = meeting_status
-
-            # Fetch agenda items with attachments (Legistar always has this structure)
-            items = self.fetch_event_items(event_id)
-            if items:
-                result["items"] = items
 
             yield result
 

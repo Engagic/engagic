@@ -294,28 +294,6 @@ class GranicusAdapter(BaseAdapter):
                 id_string = f"{title}_{start}_{agenda_url}"
                 meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
 
-            # Determine packet URL
-            # For AgendaViewer links, follow redirect to get DocumentViewer PDF
-            packet_url = None
-            if "AgendaViewer.php" in agenda_url:
-                try:
-                    # AgendaViewer redirects to Google Doc Viewer with DocumentViewer.php PDF
-                    response = self.session.head(agenda_url, allow_redirects=True, timeout=10)
-                    if response.status_code == 200:
-                        # Extract PDF from Google Doc Viewer URL
-                        redirect_url = str(response.url)
-                        if "DocumentViewer.php" in redirect_url:
-                            # Extract the actual PDF URL from Google Doc Viewer
-                            import urllib.parse
-                            parsed = urllib.parse.urlparse(redirect_url)
-                            params = urllib.parse.parse_qs(parsed.query)
-                            if 'url' in params:
-                                packet_url = urllib.parse.unquote(params['url'][0])
-                except Exception as e:
-                    logger.debug(f"[granicus:{self.slug}] Failed to get PDF URL for {title[:30]}: {e}")
-            elif ".pdf" in agenda_url.lower() or "GeneratedAgenda" in agenda_url:
-                packet_url = agenda_url
-
             # Parse meeting status
             meeting_status = self._parse_meeting_status(title, start)
 
@@ -323,21 +301,38 @@ class GranicusAdapter(BaseAdapter):
                 "meeting_id": meeting_id,
                 "title": title,
                 "start": start,
-                "packet_url": packet_url,
             }
 
             if meeting_status:
                 result["meeting_status"] = meeting_status
 
-            # Fetch HTML agenda items if this is an AgendaViewer page
+            # Architecture: items from HTML → agenda_url, PDF only → packet_url
             if "AgendaViewer.php" in agenda_url:
+                # Try to fetch HTML agenda items
                 try:
                     items_data = self.fetch_html_agenda_items(agenda_url)
                     if items_data["items"]:
+                        # HTML agenda with items → agenda_url (item-based)
+                        result["agenda_url"] = agenda_url
                         result["items"] = items_data["items"]
                         logger.info(
                             f"[granicus:{self.slug}] Meeting '{title[:40]}...' has {len(items_data['items'])} items"
                         )
+                    else:
+                        # AgendaViewer but no items → try to get PDF
+                        try:
+                            response = self.session.head(agenda_url, allow_redirects=True, timeout=10)
+                            if response.status_code == 200:
+                                redirect_url = str(response.url)
+                                if "DocumentViewer.php" in redirect_url:
+                                    import urllib.parse
+                                    parsed = urllib.parse.urlparse(redirect_url)
+                                    params = urllib.parse.parse_qs(parsed.query)
+                                    if 'url' in params:
+                                        result["packet_url"] = urllib.parse.unquote(params['url'][0])
+                        except Exception as e:
+                            logger.debug(f"[granicus:{self.slug}] Failed to get PDF URL for {title[:30]}: {e}")
+
                     if items_data.get("participation"):
                         result["participation"] = items_data["participation"]
                         logger.debug(
@@ -347,6 +342,9 @@ class GranicusAdapter(BaseAdapter):
                     logger.warning(
                         f"[granicus:{self.slug}] Failed to fetch HTML agenda items for {title}: {e}"
                     )
+            elif ".pdf" in agenda_url.lower() or "GeneratedAgenda" in agenda_url:
+                # Direct PDF link → packet_url (monolithic)
+                result["packet_url"] = agenda_url
 
             yield result
 

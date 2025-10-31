@@ -74,15 +74,21 @@ class City:
 
 @dataclass
 class Meeting:
-    """Meeting entity with optional summary"""
+    """Meeting entity with optional summary
+
+    URL Architecture (ONE OR THE OTHER):
+    - agenda_url: HTML page to view (item-based meetings with extracted items)
+    - packet_url: PDF file to download (monolithic meetings, fallback processing)
+    """
 
     id: str  # Unique meeting ID
     banana: str  # Foreign key to City
     title: str
     date: Optional[datetime]
+    agenda_url: Optional[str] = None  # HTML agenda page (item-based, primary)
     packet_url: Optional[
         str | List[str]
-    ]  # Single URL or list for multiple PDFs (main + supplemental)
+    ] = None  # PDF packet (monolithic, fallback)
     summary: Optional[str] = None
     participation: Optional[Dict[str, Any]] = None  # Contact info: email, phone, virtual_url, etc.
     status: Optional[str] = (
@@ -154,6 +160,7 @@ class Meeting:
             date=datetime.fromisoformat(row_dict["date"])
             if row_dict.get("date")
             else None,
+            agenda_url=row_dict.get("agenda_url"),
             packet_url=packet_url,
             summary=row_dict.get("summary"),
             participation=participation,
@@ -712,15 +719,16 @@ class UnifiedDatabase:
         cursor.execute(
             """
             INSERT OR REPLACE INTO meetings
-            (id, banana, title, date, packet_url, summary, participation, status, topics,
+            (id, banana, title, date, agenda_url, packet_url, summary, participation, status, topics,
              processing_status, processing_method, processing_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 meeting.id,
                 meeting.banana,
                 meeting.title,
                 meeting.date.isoformat() if meeting.date else None,
+                meeting.agenda_url,
                 meeting.packet_url,
                 meeting.summary,
                 participation_json,
