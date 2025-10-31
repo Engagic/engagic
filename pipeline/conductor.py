@@ -172,10 +172,11 @@ class Conductor:
             "primegov",
             "civicclerk",
             "legistar",
-            "granicus",
+            # "granicus",  # Temporarily disabled - VPS timeout issues
             "novusagenda",
             "civicplus",
         }
+
         by_vendor = {}
         skipped_count = 0
 

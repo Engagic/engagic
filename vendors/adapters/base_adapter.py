@@ -129,9 +129,22 @@ class BaseAdapter:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         try:
-            logger.debug(f"[{self.vendor}:{self.slug}] GET {url}")
+            logger.info(f"[{self.vendor}:{self.slug}] GET {url}")
             response = self.session.get(url, **kwargs)
             response.raise_for_status()
+
+            # Log full response for debugging
+            content_length = len(response.content)
+            content_type = response.headers.get('content-type', 'unknown')
+            logger.info(
+                f"[{self.vendor}:{self.slug}] Response: {response.status_code} "
+                f"({content_length} bytes, {content_type})"
+            )
+
+            # Log full response text for HTML/JSON responses
+            if 'text/html' in content_type or 'application/json' in content_type:
+                logger.debug(f"[{self.vendor}:{self.slug}] Full response text:\n{response.text}")
+
             return response
         except requests.Timeout:
             logger.error(f"[{self.vendor}:{self.slug}] Timeout fetching {url}")
@@ -150,9 +163,22 @@ class BaseAdapter:
         kwargs.setdefault("timeout", 30)
 
         try:
-            logger.debug(f"[{self.vendor}:{self.slug}] POST {url}")
+            logger.info(f"[{self.vendor}:{self.slug}] POST {url}")
             response = self.session.post(url, **kwargs)
             response.raise_for_status()
+
+            # Log full response for debugging
+            content_length = len(response.content)
+            content_type = response.headers.get('content-type', 'unknown')
+            logger.info(
+                f"[{self.vendor}:{self.slug}] Response: {response.status_code} "
+                f"({content_length} bytes, {content_type})"
+            )
+
+            # Log full response text for HTML/JSON responses
+            if 'text/html' in content_type or 'application/json' in content_type:
+                logger.debug(f"[{self.vendor}:{self.slug}] Full response text:\n{response.text}")
+
             return response
         except requests.RequestException as e:
             logger.error(f"[{self.vendor}:{self.slug}] POST failed for {url}: {e}")

@@ -716,6 +716,11 @@ class UnifiedDatabase:
         )
         topics_json = json.dumps(meeting.topics) if meeting.topics else None
 
+        # Serialize packet_url if it's a list
+        packet_url_value = meeting.packet_url
+        if isinstance(packet_url_value, list):
+            packet_url_value = json.dumps(packet_url_value)
+
         cursor.execute(
             """
             INSERT OR REPLACE INTO meetings
@@ -729,7 +734,7 @@ class UnifiedDatabase:
                 meeting.title,
                 meeting.date.isoformat() if meeting.date else None,
                 meeting.agenda_url,
-                meeting.packet_url,
+                packet_url_value,
                 meeting.summary,
                 participation_json,
                 meeting.status,
