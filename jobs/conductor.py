@@ -647,64 +647,6 @@ class Conductor:
         else:
             return None
 
-    def _process_unprocessed_meetings(self, limit=20):
-        """Process meetings that don't have summaries yet
-        (cleanup for any missed during sync)"""
-        logger.info("Checking for unprocessed meetings...")
-
-        # Get meetings without summaries
-        unprocessed = self.db.get_unprocessed_meetings(limit=limit)
-
-        if not unprocessed:
-            logger.debug("No unprocessed meetings found")
-            return
-
-        logger.info(f"Found {len(unprocessed)} unprocessed meetings")
-
-        # TODO(Phase 4): Implement batch processing via job queue for efficiency
-        # For now, process meetings individually
-        if self.processor:
-            logger.info(f"Processing {len(unprocessed)} meetings individually...")
-
-            success_count = 0
-            for meeting in unprocessed:
-                if not meeting.packet_url:
-                    continue
-
-                try:
-                    meeting_data = {
-                        "packet_url": meeting.packet_url,
-                        "city_banana": meeting.banana,
-                        "meeting_name": meeting.title,
-                        "meeting_date": meeting.date.isoformat()
-                        if meeting.date
-                        else None,
-                        "meeting_id": meeting.id,
-                    }
-
-                    if self.processor:
-                        result = self.processor.process_agenda_with_cache(meeting_data)
-
-                        if result.get("success"):
-                            success_count += 1
-                            logger.info(
-                                f"Processed {meeting.packet_url} in {result.get('processing_time', 0):.1f}s"
-                            )
-                        else:
-                            logger.error(
-                                f"Failed to process {meeting.packet_url}: {result.get('error')}"
-                            )
-                    else:
-                        logger.warning(
-                            f"Skipping {meeting.packet_url} - processor not available"
-                        )
-
-                except Exception as e:
-                    logger.error(f"Error processing {meeting.packet_url}: {e}")
-
-            logger.info(
-                f"Successfully processed {success_count}/{len(unprocessed)} meetings"
-            )
 
     def _process_queue(self):
         """Process jobs from the processing queue (Phase 4)"""
@@ -765,24 +707,6 @@ class Conductor:
                 # Sleep on error to avoid tight loop
                 time.sleep(10)
 
-    def _process_meetings_individually(self, meetings):
-        """Process meetings individually (fallback - should rarely be used)"""
-        with ThreadPoolExecutor(max_workers=1) as executor:  # Only 1 at a time
-            futures = []
-
-            for meeting in meetings:
-                if not self.is_running:
-                    break
-
-                future = executor.submit(self._process_meeting_summary, meeting)
-                futures.append(future)
-
-            # Wait for completion
-            for future in futures:
-                try:
-                    future.result(timeout=600)  # 10 minute timeout per meeting
-                except Exception as e:
-                    logger.error(f"Meeting processing future failed: {e}")
 
     def _process_meeting_summary(self, meeting: Meeting):
         """Process summary for a single meeting (with item-level processing if available)"""
@@ -806,158 +730,35 @@ class Conductor:
                 )
                 return
 
-            # Check if meeting has agenda items (item-level processing)
+            # Check if meeting has agenda items from adapter
             agenda_items = self.db.get_agenda_items(meeting.id)
 
             if agenda_items:
+                # Item-level processing (HTML agenda path)
                 logger.info(
                     f"[ItemProcessing] Found {len(agenda_items)} items for {meeting.title}"
                 )
                 self._process_meeting_with_items(meeting, agenda_items)
             else:
-                # Try to detect items from PDF structure
+                # Monolithic processing (PDF packet path)
                 logger.info(
-                    "[ItemDetection] No items in DB, attempting to detect from PDF"
+                    f"[MonolithicProcessing] No items for {meeting.title}, processing packet as single unit"
                 )
-                try:
-                    # Extract text from PDF (handle list or single URL)
-                    packet_url = (
-                        meeting.packet_url[0]
-                        if isinstance(meeting.packet_url, list)
-                        else meeting.packet_url
-                    )
-                    result = self.processor.pdf_extractor.extract_from_url(packet_url)
-                    if result.get("success") and result.get("text"):
-                        extracted_text = result["text"]
-
-                        # Check document size - skip item detection for small packets
-                        page_count = self.processor.summarizer._estimate_page_count(
-                            extracted_text
-                        )
-                        text_size = len(extracted_text)
-
-                        if page_count <= 10 or text_size < 30000:
-                            logger.info(
-                                f"[ItemDetection] Small packet ({page_count} pages, {text_size} chars) - processing monolithically"
-                            )
-                            # Fall back to monolithic processing
-                            meeting_data = {
-                                "packet_url": meeting.packet_url,
-                                "city_banana": meeting.banana,
-                                "meeting_name": meeting.title,
-                                "meeting_date": meeting.date.isoformat()
-                                if meeting.date
-                                else None,
-                                "meeting_id": meeting.id,
-                            }
-                            result = self.processor.process_agenda_with_cache(
-                                meeting_data
-                            )
-                            logger.info(
-                                f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s"
-                            )
-                            return
-
-                        # Detect items using pattern matching (for larger packets)
-                        # Try structural chunking first, fall back to pattern-based
-                        detected_items = self.processor.chunker.chunk_by_structure(
-                            extracted_text
-                        )
-                        if not detected_items:
-                            detected_items = self.processor.chunker.chunk_by_patterns(
-                                extracted_text
-                            )
-
-                        if detected_items:
-                            # Convert detected items to AgendaItem objects and store
-                            from infocore.database.unified_db import AgendaItem
-
-                            agenda_item_objects = []
-                            for item in detected_items:
-                                agenda_item = AgendaItem(
-                                    id=f"{meeting.id}_item_{item['sequence']}",
-                                    meeting_id=meeting.id,
-                                    title=item["title"],
-                                    sequence=item["sequence"],
-                                    attachments=[
-                                        {
-                                            "type": "text_segment",
-                                            "content": item["text"][
-                                                :5000
-                                            ],  # First 5000 chars
-                                            "start_page": item.get("start_page"),
-                                        }
-                                    ],
-                                    summary=None,
-                                    topics=None,
-                                )
-                                agenda_item_objects.append(agenda_item)
-
-                            # Store detected items
-                            count = self.db.store_agenda_items(
-                                meeting.id, agenda_item_objects
-                            )
-                            logger.info(
-                                f"[ItemDetection] Stored {count} detected items for {meeting.title}"
-                            )
-
-                            # Now process with items
-                            self._process_meeting_with_items(
-                                meeting, agenda_item_objects
-                            )
-                        else:
-                            # No clear item structure - fall back to monolithic
-                            logger.info(
-                                "[MonolithicProcessing] No item structure detected, processing as single unit"
-                            )
-                            meeting_data = {
-                                "packet_url": meeting.packet_url,
-                                "city_banana": meeting.banana,
-                                "meeting_name": meeting.title,
-                                "meeting_date": meeting.date.isoformat()
-                                if meeting.date
-                                else None,
-                                "meeting_id": meeting.id,
-                            }
-                            result = self.processor.process_agenda_with_cache(
-                                meeting_data
-                            )
-                            logger.info(
-                                f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s"
-                            )
-                    else:
-                        logger.warning(
-                            "[ItemDetection] PDF extraction failed, falling back to monolithic"
-                        )
-                        meeting_data = {
-                            "packet_url": meeting.packet_url,
-                            "city_banana": meeting.banana,
-                            "meeting_name": meeting.title,
-                            "meeting_date": meeting.date.isoformat()
-                            if meeting.date
-                            else None,
-                            "meeting_id": meeting.id,
-                        }
-                        result = self.processor.process_agenda_with_cache(meeting_data)
-                        logger.info(
-                            f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"[ItemDetection] Failed: {e}, falling back to monolithic processing"
-                    )
-                    meeting_data = {
-                        "packet_url": meeting.packet_url,
-                        "city_banana": meeting.banana,
-                        "meeting_name": meeting.title,
-                        "meeting_date": meeting.date.isoformat()
-                        if meeting.date
-                        else None,
-                        "meeting_id": meeting.id,
-                    }
-                    result = self.processor.process_agenda_with_cache(meeting_data)
+                meeting_data = {
+                    "packet_url": meeting.packet_url,
+                    "city_banana": meeting.banana,
+                    "meeting_name": meeting.title,
+                    "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                    "meeting_id": meeting.id,
+                }
+                result = self.processor.process_agenda_with_cache(meeting_data)
+                if result.get("success"):
                     logger.info(
                         f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s"
+                    )
+                else:
+                    logger.error(
+                        f"Failed to process {meeting.packet_url}: {result.get('error')}"
                     )
 
         except Exception as e:
@@ -1020,6 +821,7 @@ class Conductor:
                 try:
                     # Extract text from all attachments for this item
                     all_text_parts = []
+                    total_page_count = 0
 
                     for att in item.attachments:
                         att_type = att.get("type", "unknown")
@@ -1046,8 +848,10 @@ class Conductor:
                                         all_text_parts.append(
                                             f"=== {att_name} ===\n{result['text']}"
                                         )
+                                        # Accumulate actual page counts from PDFs
+                                        total_page_count += result.get("page_count", 0)
                                         logger.debug(
-                                            f"[ItemProcessing] Extracted {len(result['text'])} chars from {att_name}"
+                                            f"[ItemProcessing] Extracted {len(result['text'])} chars, {result.get('page_count', 0)} pages from {att_name}"
                                         )
                                     else:
                                         logger.warning(
@@ -1066,11 +870,12 @@ class Conductor:
                                 "title": item.title,
                                 "text": combined_text,
                                 "sequence": item.sequence,
+                                "page_count": total_page_count if total_page_count > 0 else None,
                             }
                         )
                         item_map[item.id] = item
                         logger.debug(
-                            f"[ItemProcessing] Prepared {item.title[:50]} ({len(combined_text)} chars)"
+                            f"[ItemProcessing] Prepared {item.title[:50]} ({len(combined_text)} chars, {total_page_count} pages)"
                         )
                     else:
                         logger.warning(
@@ -1323,66 +1128,6 @@ class Conductor:
             # Restore original is_running state
             self.is_running = old_is_running
 
-    def force_process_meeting(self, packet_url: str) -> bool:
-        """Force process a specific meeting"""
-        if not self.processor:
-            return False
-
-        try:
-            meeting = self.db.get_meeting_by_packet_url(packet_url)
-            if not meeting:
-                return False
-
-            self._process_meeting_summary(meeting)
-            return True
-
-        except Exception as e:
-            logger.error(f"Error force processing {packet_url}: {e}")
-            return False
-
-    def process_all_unprocessed_meetings(self, batch_size=20):
-        """Process ALL unprocessed meetings in batches"""
-        if not self.processor:
-            logger.error("LLM processor not available - cannot process summaries")
-            return
-
-        logger.info("Starting to process ALL unprocessed meetings...")
-        total_processed = 0
-        batch_count = 0
-
-        while True:
-            # Get next batch of unprocessed meetings
-            unprocessed = self.db.get_unprocessed_meetings(limit=batch_size)
-
-            if not unprocessed:
-                logger.info(
-                    f"No more unprocessed meetings found. Total processed: {total_processed}"
-                )
-                break
-
-            batch_count += 1
-            logger.info(f"Processing batch {batch_count}: {len(unprocessed)} meetings")
-
-            # Use the same batch processing logic as _process_unprocessed_meetings
-            self._process_unprocessed_meetings(limit=batch_size)
-
-            # Count how many were processed (check database)
-            remaining = self.db.get_unprocessed_meetings(limit=1)
-            batch_processed = (
-                batch_size if not remaining else batch_size - len(remaining)
-            )
-            total_processed += batch_processed
-
-            logger.info(f"Batch {batch_count} complete using batch API")
-
-            # Small delay between batches to avoid overwhelming the LLM API
-            if len(unprocessed) == batch_size:  # More batches to come
-                logger.info("Waiting 10 seconds before next batch...")
-                time.sleep(10)
-
-        logger.info(
-            f"Finished processing all unprocessed meetings. Total: {total_processed}"
-        )
 
 
 # Global instance
@@ -1421,21 +1166,7 @@ if __name__ == "__main__":
         "--sync-and-process-city",
         help="Sync city and immediately process all its meetings",
     )
-    parser.add_argument(
-        "--process-meeting", help="Process specific meeting by packet URL"
-    )
     parser.add_argument("--full-sync", action="store_true", help="Run full sync once")
-    parser.add_argument(
-        "--process-all-unprocessed",
-        action="store_true",
-        help="Process ALL unprocessed meetings",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=20,
-        help="Batch size for processing (default: 20)",
-    )
     parser.add_argument("--status", action="store_true", help="Show status")
     parser.add_argument("--daemon", action="store_true", help="Run as daemon")
 
@@ -1456,13 +1187,8 @@ if __name__ == "__main__":
     elif args.sync_and_process_city:
         result = processor.sync_and_process_city(args.sync_and_process_city)
         print(f"Sync and process result: {result}")
-    elif args.process_meeting:
-        success = processor.force_process_meeting(args.process_meeting)
-        print(f"Process result: {'Success' if success else 'Failed'}")
     elif args.full_sync:
         processor._run_full_sync()
-    elif args.process_all_unprocessed:
-        processor.process_all_unprocessed_meetings(batch_size=args.batch_size)
     elif args.status:
         status = processor.get_sync_status()
         print(f"Status: {status}")

@@ -7,10 +7,24 @@ Handles variations like "affordable housing" -> "housing", "rezoning" -> "zoning
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import List, Dict, Optional
 
 logger = logging.getLogger("engagic")
+
+# Set up dedicated logger for unknown topics (taxonomy improvement)
+unknown_topics_logger = logging.getLogger("engagic.unknown_topics")
+if not unknown_topics_logger.handlers:
+    log_dir = os.getenv("ENGAGIC_DB_DIR", "/root/engagic/data")
+    unknown_topics_file = os.path.join(log_dir, "unknown_topics.log")
+
+    # Create file handler
+    handler = logging.FileHandler(unknown_topics_file, mode='a')
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+    unknown_topics_logger.addHandler(handler)
+    unknown_topics_logger.setLevel(logging.INFO)
+    unknown_topics_logger.propagate = False  # Don't propagate to parent logger
 
 
 class TopicNormalizer:
@@ -78,25 +92,63 @@ class TopicNormalizer:
             if topic_lower in self._synonym_map:
                 canonical_topics.add(self._synonym_map[topic_lower])
             else:
-                # Partial match (e.g., "affordable housing plan" -> "housing")
+                # Word-boundary-aware partial match (e.g., "affordable housing plan" -> "housing")
+                # Only match if synonym is a complete word within topic
                 matched = False
                 for synonym, canonical in self._synonym_map.items():
-                    if synonym in topic_lower or topic_lower in synonym:
+                    # Check if synonym appears as a complete word/phrase in topic
+                    if self._contains_word(topic_lower, synonym):
                         canonical_topics.add(canonical)
                         matched = True
                         break
 
                 if not matched:
                     # No match - log for future taxonomy expansion
-                    logger.debug(
+                    logger.warning(
                         f"[TopicNormalizer] Unknown topic: '{topic}' - consider adding to taxonomy"
                     )
-                    # Keep original but normalized
-                    canonical_topics.add(topic_lower)
+                    # Track unknown topics for taxonomy improvement
+                    self._track_unknown_topic(topic_lower)
 
         result = sorted(list(canonical_topics))
         logger.debug(f"[TopicNormalizer] {topics} -> {result}")
         return result
+
+    def _contains_word(self, text: str, word: str) -> bool:
+        """
+        Check if word/phrase appears as complete word(s) in text
+
+        Prevents false positives like "park" matching "parking"
+
+        Args:
+            text: Text to search in (already lowercased)
+            word: Word/phrase to search for (already lowercased)
+
+        Returns:
+            True if word appears as complete word(s)
+        """
+        import re
+
+        # Escape special regex characters in the word
+        escaped_word = re.escape(word)
+
+        # Match word with word boundaries
+        # \b matches word boundaries (space, punctuation, start/end of string)
+        pattern = r'\b' + escaped_word + r'\b'
+
+        return bool(re.search(pattern, text))
+
+    def _track_unknown_topic(self, topic: str):
+        """
+        Track unknown topics for taxonomy improvement
+
+        Logs to dedicated file: /root/engagic/data/unknown_topics.log
+
+        Args:
+            topic: Unknown topic string (lowercased)
+        """
+        # Log to dedicated file for taxonomy analysis
+        unknown_topics_logger.info(topic)
 
     def normalize_single(self, topic: str) -> str:
         """
@@ -117,12 +169,13 @@ class TopicNormalizer:
         if topic_lower in self._synonym_map:
             return self._synonym_map[topic_lower]
 
-        # Partial match
+        # Word-boundary-aware partial match
         for synonym, canonical in self._synonym_map.items():
-            if synonym in topic_lower or topic_lower in synonym:
+            if self._contains_word(topic_lower, synonym):
                 return canonical
 
-        # No match - return normalized original
+        # No match - log and return normalized original
+        logger.debug(f"[TopicNormalizer] Unknown single topic: '{topic}'")
         return topic_lower
 
     def get_display_name(self, canonical_topic: str) -> str:

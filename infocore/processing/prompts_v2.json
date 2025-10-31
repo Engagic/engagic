@@ -1,5 +1,62 @@
 {
   "item": {
+    "large": {
+      "description": "For complex/lengthy agenda items (100+ pages) - JSON structured output with enhanced thinking and comprehensive analysis",
+      "variables": ["title", "text"],
+      "output_format": "json",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "thinking": {
+            "type": "string",
+            "description": "Your reasoning process - 5-10 bullet points analyzing the complex documents (plain text, use newlines for bullets)"
+          },
+          "summary_markdown": {
+            "type": "string",
+            "description": "Comprehensive summary in markdown format (5-10 sentences, use sections, bold, lists as needed)"
+          },
+          "citizen_impact_markdown": {
+            "type": "string",
+            "description": "2-3 sentences in markdown explaining how this affects residents (can use bold for emphasis)"
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "housing",
+                "zoning",
+                "transportation",
+                "budget",
+                "public_safety",
+                "environment",
+                "parks",
+                "utilities",
+                "economic_development",
+                "education",
+                "health",
+                "planning",
+                "permits",
+                "contracts",
+                "appointments",
+                "other"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "1-3 main topics from the canonical list only"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Confidence level based on document clarity and completeness"
+          }
+        },
+        "required": ["thinking", "summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
+      },
+      "system_instruction": "You are an expert at analyzing complex city council agenda items for residents. This is a lengthy, detailed item requiring thorough analysis. Think step-by-step, extract all concrete details, cross-reference documents, and explain impact comprehensively.",
+      "template": "Analyze this complex city council agenda item and extract key information for residents.\n\n# Item Title\n\"{title}\"\n\n# Your Task\n\nThis is a COMPLEX, LENGTHY item requiring thorough analysis. Provide a detailed structured JSON response.\n\n# Response Format\n\nReturn valid JSON with these fields:\n- **thinking**: Your reasoning process (plain text with newlines, 5-10 bullet points)\n- **summary_markdown**: Comprehensive summary (markdown, 5-10 sentences with sections)\n- **citizen_impact_markdown**: How this affects residents (markdown, 2-3 sentences)\n- **topics**: Array of 1-3 canonical topics\n- **confidence**: \"high\", \"medium\", or \"low\"\n\n# Guidelines for Complex Items\n\n## Thinking Process (5-10 bullet points)\nThis is a lengthy document - be thorough:\n- What type of item? (major development, infrastructure, large contract, etc.)\n- Extract ALL key facts: amounts, dates, locations, names, phases\n- Who/what is affected? Direct and indirect impacts\n- Cross-reference documents for consistency\n- Timeline and dependencies\n- Risks, concerns, or ambiguities\n- Financial breakdown if applicable\n\n## Summary (5-10 sentences, markdown)\nBe comprehensive for complex items:\n- Start with overview (what, where, who)\n- Break into sections if needed (## Financial, ## Timeline, ## Impact)\n- Include ALL dollar amounts with context\n- Include ALL addresses and locations\n- Include ALL dates and timelines\n- Include ordinance/resolution numbers\n- Use **bold** for key numbers\n- Use lists for multiple components\n- Plain language, but preserve technical details\n- If unclear/contradictory, explain the conflict\n\n## Topics (1-3 from canonical list)\nhousing, zoning, transportation, budget, public_safety, environment, parks, utilities, economic_development, education, health, planning, permits, contracts, appointments, other\n\n## Citizen Impact (2-3 sentences, markdown)\nFor complex items, explain both immediate and long-term impacts:\n- Direct costs and benefits\n- Service changes\n- Timeline of effects\n- Who is affected most\n\nUse **bold** to emphasize impact.\n\n## Confidence\n- **high**: Documents are clear, detailed, and consistent despite length\n- **medium**: Some ambiguity, missing context, or minor conflicts\n- **low**: Documents are unclear, contradictory, severely incomplete, or unreadable\n\n# Attached Documents\n\n{text}\n\n# Remember\n\n- This is a COMPLEX item - be thorough\n- Extract ALL concrete details\n- Cross-reference documents for consistency\n- Use sections and lists for clarity\n- Always use canonical topics from the list\n- Return valid JSON"
+    },
     "standard": {
       "description": "For individual agenda items - JSON structured output with markdown fields and thinking trace",
       "variables": ["title", "text"],
@@ -60,12 +117,12 @@
   },
   "meeting": {
     "short_agenda": {
-      "description": "LEGACY: For full meeting packets ≤30 pages (rarely used with item-level processing)",
+      "description": "FALLBACK: For full meeting packets ≤30 pages when item-level processing unavailable. Used when: (1) Vendor doesn't support item extraction, (2) HTML agenda parsing fails, (3) Manual override. Returns plain markdown text (no JSON, no topics). Most cities use item-level processing instead.",
       "variables": ["text"],
       "template": "This is a city council meeting agenda. Provide a clear, concise summary that covers:\n\n**Key Agenda Items:**\n- List the main topics/issues being discussed\n- Include any public hearings or votes\n- Note any budget or financial items\n\n**Important Details:**\n- Specific addresses, dollar amounts, ordinance numbers\n- Deadlines or implementation dates\n- Public participation opportunities\n\nKeep it brief but informative. Focus on what citizens need to know.\n\nFormat your response in clean, readable markdown using:\n- ## for section headings\n- Bold for emphasis\n- Bullet lists for items\n- Clear paragraph breaks for readability\n\nAgenda text:\n{text}"
     },
     "comprehensive": {
-      "description": "LEGACY: For large/complex agendas >30 pages (rarely used with item-level processing)",
+      "description": "FALLBACK: For large/complex agendas >30 pages when item-level processing unavailable. Same use cases as short_agenda but for complex meetings. Returns plain markdown text (no JSON, no topics). Item-level processing is strongly preferred when available.",
       "variables": ["text"],
       "template": "Analyze this city council meeting agenda and provide a comprehensive summary for residents.\n\n**Complete Agenda Items** (list every single one):\n- Item number and full title\n- Complete description of what's being proposed\n- Department or presenter\n- Action required (vote, discussion, information only)\n\n**Financial Details** (every dollar amount):\n- Budget items with exact amounts\n- Contract values and vendors\n- Grant amounts and sources\n- Fee changes or rate adjustments\n\n**Property and Development** (all locations):\n- Complete addresses for any property discussed\n- Zoning changes with current and proposed zoning\n- Development project names and descriptions\n- Square footage, units, or measurements\n\n**Public Participation**:\n- Public hearing items with times\n- Comment period details\n- How to participate (in person, online, written)\n- Deadlines for input\n\n**Key Details to Preserve**:\n- Exact dollar amounts (not \"several million\" but \"$3,456,789\")\n- Complete addresses (not \"downtown\" but \"123 Main Street\")\n- Full names and titles\n- Precise dates and times\n- Ordinance and resolution numbers\n\nBe thorough and detailed. Skip pure administrative items unless they have significant public impact.\n\nFormat your response in clean, readable markdown using:\n- ## for section headings\n- ### for subsections if needed\n- Bold for emphasis\n- Bullet lists for items\n- Clear paragraph breaks for readability\n\nAgenda text:\n{text}"
     }

@@ -53,22 +53,13 @@ class GeminiSummarizer:
         self.flash_model_name = "gemini-2.5-flash"
         self.flash_lite_model_name = "gemini-2.5-flash-lite"
 
-        # Load prompts from JSON (use v2 by default, fallback to v1)
+        # Load prompts from JSON (v2 only)
         if prompts_path is None:
-            prompts_v2_file = Path(__file__).parent / "prompts_v2.json"
-            prompts_v1_file = Path(__file__).parent / "prompts.json"
-
-            if prompts_v2_file.exists():
-                prompts_file = prompts_v2_file
-                self.prompts_version = "v2"
-                logger.info("[Summarizer] Using prompts_v2.json (JSON structured output)")
-            else:
-                prompts_file = prompts_v1_file
-                self.prompts_version = "v1"
-                logger.info("[Summarizer] Using prompts.json (legacy text parsing)")
+            prompts_file = Path(__file__).parent / "prompts_v2.json"
         else:
             prompts_file = Path(prompts_path)
-            self.prompts_version = "custom"
+
+        self.prompts_version = "v2"
 
         with open(prompts_file, "r") as f:
             self.prompts = json.load(f)
@@ -122,46 +113,54 @@ class GeminiSummarizer:
             logger.error(f"[Summarizer] Meeting summarization failed: {e}")
             raise
 
-    def summarize_item(self, item_title: str, text: str) -> Tuple[str, List[str]]:
-        """Summarize a single agenda item and extract topics
+    def summarize_item(self, item_title: str, text: str, page_count: Optional[int] = None) -> Tuple[str, List[str]]:
+        """Summarize a single agenda item and extract topics (adaptive based on size)
 
         Args:
             item_title: Title of the agenda item
             text: Combined text from all attachments
+            page_count: Actual page count from PDF extractor (optional, will estimate if not provided)
 
         Returns:
-            Tuple of (summary, topics_list) for backwards compatibility
-            With v2 prompts, summary includes thinking trace and markdown formatting
+            Tuple of (summary, topics_list)
+            summary = Combined markdown with thinking trace, summary, and citizen impact
+            topics = List of canonical topic strings
         """
         text_size = len(text)
-        page_count = self._estimate_page_count(text)
 
-        # Model selection
-        if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
-            model_name = self.flash_lite_model_name
-        else:
-            model_name = self.flash_model_name
+        # Use actual page count from PDF if available, otherwise estimate
+        if page_count is None:
+            page_count = self._estimate_page_count(text)
 
-        logger.info(
-            f"[Summarizer] Summarizing item '{item_title[:50]}...' ({page_count} pages, {text_size} chars)"
-        )
-
-        # Get prompt and config
-        prompt = self._get_prompt("item", "standard", title=item_title, text=text)
-
-        # Check if using v2 prompts with JSON schema
-        if self.prompts_version == "v2":
-            # Use JSON structured output with schema
-            response_schema = self.prompts["item"]["standard"].get("response_schema")
-            config = types.GenerateContentConfig(
-                temperature=0.3,
-                max_output_tokens=2048,
-                response_mime_type="application/json",
-                response_schema=response_schema
+        # Adaptive prompt selection based on document size
+        # Large items (100+ pages): comprehensive analysis with enhanced thinking
+        # Standard items: focused analysis
+        if page_count >= 100:
+            prompt_type = "large"
+            model_name = self.flash_model_name  # Always use flash for large items
+            logger.info(
+                f"[Summarizer] Large item '{item_title[:50]}...' ({page_count} pages, {text_size} chars) - using comprehensive prompt"
             )
         else:
-            # Legacy text output
-            config = types.GenerateContentConfig(temperature=0.3, max_output_tokens=2048)
+            prompt_type = "standard"
+            # Model selection for standard items
+            if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
+                model_name = self.flash_lite_model_name
+            else:
+                model_name = self.flash_model_name
+            logger.info(
+                f"[Summarizer] Standard item '{item_title[:50]}...' ({page_count} pages, {text_size} chars)"
+            )
+
+        # Get adaptive prompt and config
+        prompt = self._get_prompt("item", prompt_type, title=item_title, text=text)
+        response_schema = self.prompts["item"][prompt_type].get("response_schema")
+        config = types.GenerateContentConfig(
+            temperature=0.3,
+            max_output_tokens=2048,
+            response_mime_type="application/json",
+            response_schema=response_schema
+        )
 
         try:
             response = self.client.models.generate_content(
@@ -191,7 +190,8 @@ class GeminiSummarizer:
                     'item_id': str,
                     'title': str,
                     'text': str,  # Pre-extracted and concatenated text
-                    'sequence': int
+                    'sequence': int,
+                    'page_count': int or None  # Actual PDF page count if available
                 }, ...]
 
         Returns:
@@ -219,22 +219,25 @@ class GeminiSummarizer:
                 item_title = req["title"]
                 text = req["text"]
 
-                # Build prompt
-                prompt = self._get_prompt(
-                    "item", "standard", title=item_title, text=text
-                )
+                # Use actual page count if available, otherwise estimate
+                page_count = req.get("page_count")
+                if page_count is None:
+                    page_count = self._estimate_page_count(text)
 
-                # Build config based on version
-                if self.prompts_version == "v2":
-                    response_schema = self.prompts["item"]["standard"].get("response_schema")
-                    config = {
-                        "temperature": 0.3,
-                        "max_output_tokens": 2048,
-                        "response_mime_type": "application/json",
-                        "response_schema": response_schema
-                    }
-                else:
-                    config = {"temperature": 0.3, "max_output_tokens": 2048}
+                # Adaptive prompt selection based on size
+                prompt_type = "large" if page_count >= 100 else "standard"
+
+                # Build prompt and config
+                prompt = self._get_prompt(
+                    "item", prompt_type, title=item_title, text=text
+                )
+                response_schema = self.prompts["item"][prompt_type].get("response_schema")
+                config = {
+                    "temperature": 0.3,
+                    "max_output_tokens": 2048,
+                    "response_mime_type": "application/json",
+                    "response_schema": response_schema
+                }
 
                 inline_requests.append(
                     {
@@ -486,80 +489,95 @@ class GeminiSummarizer:
         """Parse item response into summary and topics
 
         Args:
-            response_text: Raw response from Gemini (JSON for v2, text for v1)
+            response_text: Raw JSON response from Gemini
 
         Returns:
             Tuple of (summary, topics_list)
-
-        For v2 prompts with JSON:
             summary = Combined markdown with thinking trace, summary, and citizen impact
-            topics = List of canonical topic strings
+            topics = List of canonical topic strings (validated against taxonomy)
         """
         response_text = response_text.strip()
 
-        # v2: JSON structured output
-        if self.prompts_version == "v2":
-            try:
-                data = json.loads(response_text)
+        try:
+            data = json.loads(response_text)
 
-                # Build comprehensive summary with all components
-                thinking = data.get("thinking", "")
-                summary_md = data.get("summary_markdown", "")
-                impact_md = data.get("citizen_impact_markdown", "")
-                confidence = data.get("confidence", "unknown")
+            # Validate JSON structure
+            required_fields = ["thinking", "summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
+            missing_fields = [f for f in required_fields if f not in data]
+            if missing_fields:
+                logger.error(f"[Summarizer] JSON missing required fields: {missing_fields}")
+                raise ValueError(f"Invalid JSON response: missing {missing_fields}")
 
-                # Combine into single markdown document
-                summary_parts = []
+            # Build comprehensive summary with all components
+            thinking = data.get("thinking", "")
+            summary_md = data.get("summary_markdown", "")
+            impact_md = data.get("citizen_impact_markdown", "")
+            confidence = data.get("confidence", "unknown")
 
-                if thinking:
-                    summary_parts.append(f"## Thinking\n\n{thinking}\n")
+            # Validate and normalize topics
+            raw_topics = data.get("topics", [])
+            if not isinstance(raw_topics, list):
+                logger.error(f"[Summarizer] Topics field is not a list: {type(raw_topics)}")
+                raw_topics = []
 
-                if summary_md:
-                    summary_parts.append(f"## Summary\n\n{summary_md}\n")
+            # Validate topics against canonical taxonomy
+            from infocore.processing.topic_normalizer import get_normalizer
+            normalizer = get_normalizer()
+            canonical_topics = normalizer.get_all_canonical_topics()
 
-                if impact_md:
-                    summary_parts.append(f"## Citizen Impact\n\n{impact_md}\n")
+            validated_topics = []
+            invalid_topics = []
 
-                if confidence:
-                    summary_parts.append(f"## Confidence\n\n{confidence}")
+            for topic in raw_topics:
+                if topic in canonical_topics:
+                    validated_topics.append(topic)
+                else:
+                    invalid_topics.append(topic)
+                    logger.warning(f"[Summarizer] LLM returned invalid topic: '{topic}' (not in taxonomy)")
 
-                summary = "\n".join(summary_parts)
-                topics = data.get("topics", [])
-
-                logger.debug(
-                    f"[Summarizer] Parsed JSON response: {len(topics)} topics, confidence={confidence}"
+            if invalid_topics:
+                logger.warning(
+                    f"[Summarizer] Rejected {len(invalid_topics)} invalid topics: {invalid_topics}. "
+                    f"Valid topics: {validated_topics}"
                 )
 
-                return summary, topics
+            # If all topics were invalid, use "other" as fallback
+            if not validated_topics and raw_topics:
+                logger.warning("[Summarizer] All topics invalid, using 'other' as fallback")
+                validated_topics = ["other"]
 
-            except json.JSONDecodeError as e:
-                logger.error(f"[Summarizer] Failed to parse JSON response: {e}")
-                logger.debug(f"[Summarizer] Response text: {response_text[:200]}...")
-                # Fallback to legacy parsing
+            topics = validated_topics
 
-        # v1: Legacy text parsing
-        summary = ""
-        topics = []
+            # Combine into single markdown document
+            summary_parts = []
 
-        for line in response_text.split("\n"):
-            line = line.strip()
-            if line.startswith("SUMMARY:"):
-                summary = line.replace("SUMMARY:", "").strip()
-            elif line.startswith("TOPICS:"):
-                topics_str = line.replace("TOPICS:", "").strip()
-                topics = [t.strip() for t in topics_str.split(",") if t.strip()]
+            if thinking:
+                summary_parts.append(f"## Thinking\n\n{thinking}\n")
 
-        # Fallback if parsing failed
-        if not summary:
-            summary = response_text[:500]
-            logger.warning(
-                "[Summarizer] Failed to parse response, using truncated text"
+            if summary_md:
+                summary_parts.append(f"## Summary\n\n{summary_md}\n")
+
+            if impact_md:
+                summary_parts.append(f"## Citizen Impact\n\n{impact_md}\n")
+
+            if confidence:
+                summary_parts.append(f"## Confidence\n\n{confidence}")
+
+            summary = "\n".join(summary_parts)
+
+            logger.debug(
+                f"[Summarizer] Parsed JSON response: {len(topics)} valid topics, confidence={confidence}"
             )
 
-        if not topics:
-            logger.debug("[Summarizer] No topics extracted from response")
+            return summary, topics
 
-        return summary, topics
+        except json.JSONDecodeError as e:
+            logger.error(f"[Summarizer] Failed to parse JSON response: {e}")
+            logger.debug(f"[Summarizer] Response text: {response_text[:200]}...")
+            raise
+        except Exception as e:
+            logger.error(f"[Summarizer] Error validating JSON response: {e}")
+            raise
 
     def _estimate_page_count(self, text: str) -> int:
         """Estimate page count from text
