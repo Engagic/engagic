@@ -419,8 +419,12 @@ class Conductor:
                                     f"Stored {count} agenda items for {stored_meeting.title}"
                                 )
 
-                        # Enqueue for processing if it has a packet URL
-                        if meeting.get("packet_url"):
+                        # Enqueue for processing via THE ONE TRUE PATH
+                        # Two processing routes: PDF-based (monolithic) or item-based (batch)
+                        has_items = bool(meeting.get("items"))
+                        packet_url = meeting.get("packet_url")
+
+                        if packet_url or has_items:
                             # Calculate priority based on meeting date recency
                             if meeting_date:
                                 days_old = (datetime.now() - meeting_date).days
@@ -430,18 +434,25 @@ class Conductor:
                                 0, 100 - days_old
                             )  # Recent meetings get higher priority
 
+                            # Use packet URL if available, otherwise use item-based identifier
+                            # Processor will route based on URL scheme (https:// vs items://)
+                            queue_url = packet_url or f"items://{stored_meeting.id}"
+
                             self.db.enqueue_for_processing(
-                                packet_url=meeting["packet_url"],
+                                packet_url=queue_url,
                                 meeting_id=stored_meeting.id,
                                 banana=city.banana,
                                 priority=priority,
+                                metadata={"has_items": has_items, "has_packet": bool(packet_url)}
                             )
+
+                            processing_type = "PDF" if packet_url else "item-based"
                             logger.debug(
-                                f"Enqueued {meeting['packet_url']} with priority {priority}"
+                                f"Enqueued {processing_type} processing for {stored_meeting.title} (priority {priority})"
                             )
                         else:
                             logger.debug(
-                                "Meeting has no packet - stored for display only"
+                                f"Meeting {stored_meeting.title} has no packet or items - stored for display only"
                             )
 
                     except Exception as e:
