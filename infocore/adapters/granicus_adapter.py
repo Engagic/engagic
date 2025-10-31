@@ -237,6 +237,11 @@ class GranicusAdapter(BaseAdapter):
                         logger.info(
                             f"[granicus:{self.slug}] Meeting '{title[:40]}...' has {len(items_data['items'])} items"
                         )
+                    if items_data.get("participation"):
+                        result["participation"] = items_data["participation"]
+                        logger.debug(
+                            f"[granicus:{self.slug}] Extracted participation info: {list(items_data['participation'].keys())}"
+                        )
                 except Exception as e:
                     logger.warning(
                         f"[granicus:{self.slug}] Failed to fetch HTML agenda items for {title}: {e}"

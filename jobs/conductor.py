@@ -393,6 +393,7 @@ class Conductor:
                             date=meeting_date,
                             packet_url=meeting.get("packet_url"),
                             summary=None,
+                            participation=meeting.get("participation"),
                             status=meeting.get("meeting_status"),
                             processing_status="pending",
                         )
