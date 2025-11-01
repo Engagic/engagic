@@ -878,13 +878,28 @@
 
 	:global(.thinking-section.expanded::before) {
 		content: "💭 Thinking trace (click to collapse)";
-	}
-
-	:global(.thinking-section:hover::before),
-	:global(.thinking-section.expanded::before) {
 		opacity: 1;
 		border-left-color: var(--civic-blue);
 		color: var(--civic-blue);
+	}
+
+	/* Only enable hover on devices that can actually hover (not touch screens) */
+	@media (hover: hover) {
+		:global(.thinking-section:hover::before) {
+			opacity: 1;
+			border-left-color: var(--civic-blue);
+			color: var(--civic-blue);
+		}
+
+		:global(.thinking-section:hover > *) {
+			display: block;
+			animation: expandThinking 0.2s ease forwards;
+			padding: 0.5rem;
+			border-left: 2px solid var(--civic-blue);
+			background: #f8fafc;
+			margin-bottom: 0.5rem;
+			border-radius: 4px;
+		}
 	}
 
 	:global(.thinking-section > *) {
@@ -893,7 +908,6 @@
 		transform: translateY(-10px);
 	}
 
-	:global(.thinking-section:hover > *),
 	:global(.thinking-section.expanded > *) {
 		display: block;
 		animation: expandThinking 0.2s ease forwards;
@@ -1055,34 +1069,32 @@
 		}
 
 		.agenda-item {
-			padding: 1rem;
+			padding: 0.75rem 0;
+			border: none;
+			background: transparent;
+			box-shadow: none;
+			border-bottom: 1px solid var(--civic-border);
+			border-radius: 0;
 		}
 
 		.item-header {
-			gap: 0.75rem;
+			gap: 0.5rem;
 		}
 
 		.item-number {
-			width: 28px;
-			height: 28px;
-			font-size: 0.85rem;
+			display: none;
 		}
 
 		.item-title {
-			font-size: 1.05rem;
-		}
-
-		.item-summary {
 			font-size: 0.95rem;
 		}
 
-		.topic-badge {
-			font-size: 0.75rem;
-			padding: 0.2rem 0.6rem;
+		.item-topics {
+			display: none;
 		}
 
-		.item-topic-tag {
-			font-size: 0.7rem;
+		.item-summary {
+			font-size: 0.9rem;
 		}
 
 		.agenda-url-link {
