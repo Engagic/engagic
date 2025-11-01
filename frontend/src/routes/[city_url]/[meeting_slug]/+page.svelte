@@ -328,13 +328,28 @@
 		color: var(--civic-blue);
 		text-decoration: none;
 		font-weight: 500;
-		transition: color 0.2s;
+		transition: all 0.2s;
 	}
 
 	.back-link:hover,
 	.agenda-link:hover {
 		color: var(--civic-accent);
 		text-decoration: underline;
+	}
+
+	.agenda-link {
+		padding: 0.4rem 0.75rem;
+		border: 1.5px solid var(--civic-blue);
+		border-radius: 6px;
+		background: white;
+	}
+
+	.agenda-link:hover {
+		background: var(--civic-blue);
+		color: white;
+		text-decoration: none;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
 	}
 
 	.breadcrumb-separator {

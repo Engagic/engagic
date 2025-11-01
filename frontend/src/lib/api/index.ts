@@ -6,3 +6,4 @@ export { config, errorMessages } from './config';
 import { apiClient } from './api-client';
 export const searchMeetings = apiClient.searchMeetings.bind(apiClient);
 export const getAnalytics = apiClient.getAnalytics.bind(apiClient);
+export const searchByTopic = apiClient.searchByTopic.bind(apiClient);

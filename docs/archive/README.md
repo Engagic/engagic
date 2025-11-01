@@ -2,7 +2,14 @@
 
 Historical documentation from completed work sessions.
 
-## Recently Added (2025-10-30)
+## Recently Added (2025-10-31)
+
+### Engineering Assessments & Session Notes
+- **ENGINEERING_ASSESSMENT_2025.md** - Comprehensive October 2025 codebase audit
+- **GRANICUS_FIXES_OCT31.md** - Granicus adapter bugfixes and improvements
+- **REFACTOR_TEST_RESULTS.md** - Test results from refactoring work
+
+## Previously Added (2025-10-30)
 
 ### Item-First Architecture Migration
 - **AUDIT_FRONTEND_BACKEND.md** - Initial audit findings (9 integration issues)
