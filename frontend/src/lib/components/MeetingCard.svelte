@@ -38,56 +38,81 @@
 	onintroend={onIntroEnd}
 >
 	<div class="meeting-card-header">
-		<div class="meeting-title">
-			{meeting.title}
-		</div>
-		{#if isValidDate}
-			<div class="meeting-date-time">
-				{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
+		<div class="left-column">
+			<div class="meeting-title">
+				{meeting.title}
 			</div>
-		{/if}
+		</div>
+		<div class="right-column">
+			{#if isValidDate}
+				<div class="meeting-date-time">
+					{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
+				</div>
+			{/if}
+		</div>
 	</div>
 
-	{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
-		<div class="meeting-status status-items">
-			✓ Item Summaries
+	<div class="meeting-card-body">
+		<div class="left-column">
+			{#if meeting.topics && meeting.topics.length > 0}
+				<div class="meeting-topics">
+					{#each meeting.topics as topic}
+						<span class="topic-tag">{topic}</span>
+					{/each}
+				</div>
+			{/if}
 		</div>
-	{:else if meeting.summary}
-		<div class="meeting-status {isPast ? 'status-ready' : 'status-summary'}">
-			✓ Summary Ready
-		</div>
-	{:else if meeting.agenda_url}
-		<div class="meeting-status status-agenda">
-			Agenda Posted
-		</div>
-	{:else if meeting.packet_url}
-		<div class="meeting-status status-packet">
-			{isPast ? 'Packet Available' : 'Packet Posted'}
-		</div>
-	{:else}
-		<div class="meeting-status status-none">
-			{isPast ? 'No agenda posted' : 'No Agenda Posted'}
-		</div>
-	{/if}
 
-	{#if meeting.topics && meeting.topics.length > 0}
-		<div class="meeting-topics">
-			{#each meeting.topics as topic}
-				<span class="topic-tag">{topic}</span>
-			{/each}
-		</div>
-	{/if}
+		<div class="right-column">
+			{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
+				<div class="meeting-status status-items">
+					✓ Item Summaries
+				</div>
+			{:else if meeting.summary}
+				<div class="meeting-status {isPast ? 'status-ready' : 'status-summary'}">
+					✓ Summary Ready
+				</div>
+			{:else if meeting.agenda_url}
+				<div class="meeting-status status-agenda">
+					Agenda Posted
+				</div>
+			{:else if meeting.packet_url}
+				<div class="meeting-status status-packet">
+					{isPast ? 'Packet Available' : 'Packet Posted'}
+				</div>
+			{:else}
+				<div class="meeting-status status-none">
+					{isPast ? 'No agenda posted' : 'No Agenda Posted'}
+				</div>
+			{/if}
 
-	{#if meeting.meeting_status}
-		<div class="meeting-alert">
-			This meeting has been {meeting.meeting_status}
+			{#if meeting.meeting_status}
+				<div class="meeting-alert">
+					This meeting has been {meeting.meeting_status}
+				</div>
+			{/if}
 		</div>
-	{/if}
+	</div>
 </a>
 
 <style>
 	.meeting-card.has-alert {
 		border-left: 3px solid #dc2626;
+	}
+
+	.meeting-card-body {
+		display: flex;
+		gap: 1rem;
+		margin-top: 0.5rem;
+	}
+
+	.left-column {
+		flex: 1;
+	}
+
+	.right-column {
+		flex-shrink: 0;
+		text-align: right;
 	}
 
 	.meeting-alert {
