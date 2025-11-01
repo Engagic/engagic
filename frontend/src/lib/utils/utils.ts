@@ -20,22 +20,22 @@ export function generateMeetingSlug(meeting: Meeting): string {
 	// Extract date from meeting date
 	const dateStr = meeting.date || '';
 	let dateSlug = '';
-	
+
 	if (dateStr) {
 		// Handle various date formats
 		let datePart = dateStr;
-		
+
 		// If date contains time separator, extract just the date part
 		if (dateStr.includes(' - ')) {
 			datePart = dateStr.split(' - ')[0].trim();
 		}
-		
+
 		// Also handle "on YYYY-MM-DD" format from title
 		const titleDateMatch = title.match(/on (\d{4}-\d{2}-\d{2})/);
 		if (titleDateMatch) {
 			datePart = titleDateMatch[1];
 		}
-		
+
 		// Try to parse date and format as YYYY_MM_DD
 		const date = new Date(datePart);
 		if (!isNaN(date.getTime())) {
@@ -45,7 +45,7 @@ export function generateMeetingSlug(meeting: Meeting): string {
 			dateSlug = `${year}_${month}_${day}`;
 		}
 	}
-	
+
 	// Clean title: remove date suffix if present, lowercase, remove special chars
 	let cleanTitle = title
 		.replace(/ on \d{4}-\d{2}-\d{2}.*$/, '') // Remove "on YYYY-MM-DD" suffix
@@ -53,16 +53,24 @@ export function generateMeetingSlug(meeting: Meeting): string {
 		.replace(/[^a-z0-9\s]/g, '')
 		.replace(/\s+/g, '_')
 		.substring(0, 50); // Limit length
-	
+
 	// Always include date in slug to avoid ambiguity
 	if (!dateSlug) {
 		// If we couldn't parse a date, use a fallback
 		console.warn('Could not parse date for meeting:', meeting);
 		dateSlug = 'undated';
 	}
-	
-	// Combine title and date
-	return `${cleanTitle}_${dateSlug}`;
+
+	// Combine title, date, and ID for direct lookup
+	return `${cleanTitle}_${dateSlug}_${meeting.id}`;
+}
+
+export function extractMeetingIdFromSlug(slug: string): number | null {
+	// Extract the ID from the end of the slug (format: title_date_id)
+	const parts = slug.split('_');
+	const lastPart = parts[parts.length - 1];
+	const id = parseInt(lastPart, 10);
+	return isNaN(id) ? null : id;
 }
 
 export function parseCityUrl(cityUrl: string): { cityName: string; state: string } | null {
