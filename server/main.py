@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, validator
 from typing import Optional, Dict, Any
 import logging
@@ -44,9 +45,9 @@ async def rate_limit_middleware(request: Request, call_next):
 
         if not is_allowed:
             logger.warning(f"Rate limit exceeded for {client_ip}")
-            raise HTTPException(
+            return JSONResponse(
                 status_code=429,
-                detail="Rate limit exceeded. Please try again later.",
+                content={"detail": "Rate limit exceeded. Please try again later."},
                 headers={"X-RateLimit-Remaining": "0"},
             )
 
@@ -828,6 +829,52 @@ async def handle_ambiguous_city_search(
 
 
 # Auto-creation functions removed - CACHED ONLY mode
+
+
+@app.get("/api/meeting/{meeting_id}")
+async def get_meeting(meeting_id: int):
+    """Get a single meeting by ID - optimized endpoint to avoid fetching all city meetings"""
+    try:
+        conn = db.conn
+        cursor = conn.cursor()
+
+        # Fetch the specific meeting
+        cursor.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
+        from database.db import Meeting
+        meeting = Meeting.from_db_row(row)
+
+        # Build response with meeting data
+        meeting_dict = meeting.to_dict()
+
+        # Include items if available
+        items = db.get_agenda_items(meeting.id)
+        if items:
+            meeting_dict["items"] = [item.to_dict() for item in items]
+            meeting_dict["has_items"] = True
+        else:
+            meeting_dict["has_items"] = False
+
+        # Get city info for context
+        city = db.get_city(banana=meeting.banana)
+
+        return {
+            "success": True,
+            "meeting": meeting_dict,
+            "city_name": city.name if city else None,
+            "state": city.state if city else None,
+            "banana": meeting.banana,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching meeting {meeting_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving meeting")
 
 
 @app.post("/api/process-agenda")

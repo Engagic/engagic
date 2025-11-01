@@ -2,8 +2,8 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
-	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
-	import { parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
+	import { getMeeting, searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
+	import { parseCityUrl, generateMeetingSlug, extractMeetingIdFromSlug } from '$lib/utils/utils';
 	import Footer from '$lib/components/Footer.svelte';
 
 	let city_banana = $page.params.city_url;
@@ -20,7 +20,30 @@
 		error = '';
 
 		try {
-			// Parse the city URL
+			// Try to extract meeting ID from slug first (new optimized method)
+			const meetingId = extractMeetingIdFromSlug(meeting_slug);
+
+			if (meetingId) {
+				// New optimized path: fetch single meeting by ID
+				const result = await getMeeting(meetingId);
+
+				if (result.success && result.meeting) {
+					selectedMeeting = result.meeting;
+					searchResults = {
+						success: true,
+						city_name: result.city_name,
+						state: result.state,
+						banana: result.banana,
+						meetings: [result.meeting],
+						cached: true,
+						query: city_banana,
+						type: 'city'
+					};
+					return;
+				}
+			}
+
+			// Fallback to old method (for backwards compatibility with old URLs)
 			const parsed = parseCityUrl(city_banana);
 			if (!parsed) {
 				throw new Error('Invalid city URL format');

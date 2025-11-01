@@ -127,5 +127,13 @@ export const apiClient = {
 		);
 
 		return response.json();
+	},
+
+	async getMeeting(meetingId: number): Promise<any> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/meeting/${meetingId}`
+		);
+
+		return response.json();
 	}
 };
