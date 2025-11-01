@@ -1,177 +1,100 @@
 <script lang="ts">
+	import { fly } from 'svelte/transition';
 	import type { Meeting } from '../api/types';
 	import { generateMeetingSlug } from '../utils/utils';
-	import { formatMeetingDate, extractTime } from '../utils/date-utils';
-	
+	import { extractTime } from '../utils/date-utils';
+
 	interface Props {
 		meeting: Meeting;
 		cityUrl: string;
 		isPast?: boolean;
+		animationDelay?: number;
+		animationDuration?: number;
+		onIntroEnd?: () => void;
 	}
-	
-	let { meeting, cityUrl, isPast = false }: Props = $props();
-	
+
+	let {
+		meeting,
+		cityUrl,
+		isPast = false,
+		animationDelay = 0,
+		animationDuration = 0,
+		onIntroEnd
+	}: Props = $props();
+
 	const meetingSlug = $derived(generateMeetingSlug(meeting));
-	const formattedDate = $derived(formatMeetingDate(meeting.date));
-	const time = $derived(extractTime(meeting.date));
+
+	const date = $derived(meeting.date ? new Date(meeting.date) : null);
+	const isValidDate = $derived(date && !isNaN(date.getTime()) && date.getTime() !== 0);
+	const dayOfWeek = $derived(isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null);
+	const monthDay = $derived(isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
+	const timeStr = $derived(extractTime(meeting.date));
 </script>
 
 <a
 	href="/{cityUrl}/{meetingSlug}"
 	class="meeting-card {isPast ? 'past-meeting' : 'upcoming-meeting'} {meeting.meeting_status ? 'has-alert' : ''}"
-	aria-label="{meeting.title} on {formattedDate} at {time}"
+	in:fly|global={{ y: 20, duration: animationDuration, delay: animationDelay }}
+	onintroend={onIntroEnd}
 >
-	{#if meeting.meeting_status}
-		<div class="status-flag" title="This meeting has been {meeting.meeting_status}">
-			<span class="flag-icon">!</span>
-		</div>
-	{/if}
-
-	<div class="meeting-content">
+	<div class="meeting-card-header">
 		<div class="meeting-title">
 			{meeting.title}
 		</div>
-
-		{#if meeting.meeting_status}
-			<div class="meeting-alert">
-				This meeting has been {meeting.meeting_status}
-			</div>
-		{/if}
-
-		{#if formattedDate !== 'Date TBD'}
-			<div class="meeting-date" aria-hidden="true">
-				{formattedDate}{#if time} · {time}{/if}
-			</div>
-		{/if}
-
-		{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
-			<div class="meeting-status status-items" role="status">
-				<span class="sr-only">Status:</span> Item Summaries Available
-			</div>
-		{:else if meeting.summary}
-			<div class="meeting-status status-summary" role="status">
-				<span class="sr-only">Status:</span> Summary Available
-			</div>
-		{:else if meeting.agenda_url}
-			<div class="meeting-status status-agenda" role="status">
-				<span class="sr-only">Status:</span> Agenda Posted
-			</div>
-		{:else if meeting.packet_url}
-			<div class="meeting-status status-packet" role="status">
-				<span class="sr-only">Status:</span> Packet Posted
-			</div>
-		{:else}
-			<div class="meeting-status status-none" role="status">
-				<span class="sr-only">Status:</span> No Agenda Posted
-			</div>
-		{/if}
-
-		{#if meeting.topics && meeting.topics.length > 0}
-			<div class="meeting-topics">
-				{#each meeting.topics as topic}
-					<button
-						class="topic-tag"
-						onclick={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							window.location.href = `/${cityUrl}?topic=${encodeURIComponent(topic)}`;
-						}}
-						type="button"
-						aria-label="Filter meetings by {topic}"
-					>
-						{topic}
-					</button>
-				{/each}
+		{#if isValidDate}
+			<div class="meeting-date-time">
+				{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
 			</div>
 		{/if}
 	</div>
+
+	{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
+		<div class="meeting-status status-items">
+			✓ Item Summaries
+		</div>
+	{:else if meeting.summary}
+		<div class="meeting-status {isPast ? 'status-ready' : 'status-summary'}">
+			✓ Summary Ready
+		</div>
+	{:else if meeting.agenda_url}
+		<div class="meeting-status status-agenda">
+			Agenda Posted
+		</div>
+	{:else if meeting.packet_url}
+		<div class="meeting-status status-packet">
+			{isPast ? 'Packet Available' : 'Packet Posted'}
+		</div>
+	{:else}
+		<div class="meeting-status status-none">
+			{isPast ? 'No agenda posted' : 'No Agenda Posted'}
+		</div>
+	{/if}
+
+	{#if meeting.topics && meeting.topics.length > 0}
+		<div class="meeting-topics">
+			{#each meeting.topics as topic}
+				<span class="topic-tag">{topic}</span>
+			{/each}
+		</div>
+	{/if}
+
+	{#if meeting.meeting_status}
+		<div class="meeting-alert">
+			This meeting has been {meeting.meeting_status}
+		</div>
+	{/if}
 </a>
 
 <style>
-	.meeting-card {
-		position: relative;
-		display: flex;
-		gap: 0.75rem;
-	}
-
 	.meeting-card.has-alert {
 		border-left: 3px solid #dc2626;
 	}
 
-	.status-flag {
-		flex-shrink: 0;
-		width: 24px;
-		height: 24px;
-		background: #dc2626;
-		color: white;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-weight: 700;
-		font-size: 0.9rem;
-		align-self: flex-start;
-		margin-top: 0.25rem;
-	}
-
-	.flag-icon {
-		line-height: 1;
-	}
-
-	.meeting-content {
-		flex: 1;
-		min-width: 0;
-	}
-
 	.meeting-alert {
-		color: #dc2626;
+		color: #ef4444;
 		font-weight: 600;
 		font-size: 0.85rem;
 		margin-top: 0.25rem;
 		text-transform: capitalize;
-	}
-
-	.sr-only {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		padding: 0;
-		margin: -1px;
-		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
-		white-space: nowrap;
-		border-width: 0;
-	}
-
-	.meeting-topics {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-top: 0.75rem;
-	}
-
-	.topic-tag {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		padding: 0.25rem 0.5rem;
-		background: var(--civic-light);
-		color: var(--civic-blue);
-		border: 1px solid var(--civic-border);
-		border-radius: 4px;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}
-
-	.topic-tag:hover {
-		background: var(--civic-blue);
-		color: white;
-		border-color: var(--civic-blue);
-		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
-	}
-
-	.topic-tag:active {
-		transform: translateY(0);
 	}
 </style>
