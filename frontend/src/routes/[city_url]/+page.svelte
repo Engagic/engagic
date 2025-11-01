@@ -305,7 +305,7 @@
 	.compact-logo {
 		position: absolute;
 		top: 0;
-		right: 0;
+		right: 1rem;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.1rem;
 		font-weight: 700;
@@ -447,6 +447,7 @@
 
 		.compact-logo {
 			font-size: 0.95rem;
+			right: 0.75rem;
 		}
 
 		.city-title {

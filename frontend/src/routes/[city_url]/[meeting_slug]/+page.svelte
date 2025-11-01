@@ -322,7 +322,7 @@
 	.compact-logo {
 		position: absolute;
 		top: 0;
-		right: 0;
+		right: 1rem;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.1rem;
 		font-weight: 700;
@@ -1071,6 +1071,7 @@
 
 		.compact-logo {
 			font-size: 0.95rem;
+			right: 0.75rem;
 		}
 
 		.breadcrumb {
@@ -1097,10 +1098,10 @@
 		}
 
 		.document-link {
-			width: 100%;
-			justify-content: center;
-			padding: 0.65rem 1rem;
-			font-size: 0.85rem;
+			width: auto;
+			padding: 0.5rem 0.85rem;
+			font-size: 0.8rem;
+			align-self: flex-end;
 		}
 
 		.meeting-title {
