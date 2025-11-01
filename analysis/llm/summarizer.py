@@ -301,6 +301,11 @@ class GeminiSummarizer:
                         "response_schema": response_schema,
                     }
 
+                    # Log input details for debugging
+                    logger.info(
+                        f"[Summarizer] Request {i}: '{item_title[:80]}...', {len(text)} chars, {page_count} pages, {prompt_type} prompt"
+                    )
+
                     inline_requests.append(
                         {
                             "contents": [{"parts": [{"text": prompt}], "role": "user"}],
@@ -422,6 +427,12 @@ class GeminiSummarizer:
                             except Exception as e:
                                 logger.error(
                                     f"[Summarizer] Error parsing response for {original_req['item_id']}: {e}"
+                                )
+                                logger.error(
+                                    f"[Summarizer] Input that caused failure - Title: {original_req['title'][:100]}"
+                                )
+                                logger.error(
+                                    f"[Summarizer] Input text length: {len(original_req['text'])} chars, first 500 chars: {original_req['text'][:500]}"
                                 )
                                 logger.error(
                                     f"[Summarizer] Raw response that failed: {response_text[:1000] if response_text else 'None'}"
