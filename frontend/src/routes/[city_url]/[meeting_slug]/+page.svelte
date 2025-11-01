@@ -107,7 +107,7 @@
 	}
 
 	function wrapThinkingSections() {
-		// Wrap thinking sections for easy hover styling
+		// Wrap thinking sections for easy hover/click styling
 		const summaries = document.querySelectorAll('.item-summary, .meeting-summary');
 		summaries.forEach(summary => {
 			const headings = summary.querySelectorAll('h2');
@@ -127,6 +127,11 @@
 						next = next.nextSibling;
 						wrapper.appendChild(current);
 					}
+
+					// Add click handler for mobile toggle
+					wrapper.addEventListener('click', () => {
+						wrapper.classList.toggle('expanded');
+					});
 				}
 			});
 		});
@@ -857,7 +862,7 @@
 	}
 
 	:global(.thinking-section::before) {
-		content: "💭 Thinking trace (hover to expand)";
+		content: "💭 Thinking trace (click to expand)";
 		display: block;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
@@ -871,7 +876,12 @@
 		transition: all 0.2s ease;
 	}
 
-	:global(.thinking-section:hover::before) {
+	:global(.thinking-section.expanded::before) {
+		content: "💭 Thinking trace (click to collapse)";
+	}
+
+	:global(.thinking-section:hover::before),
+	:global(.thinking-section.expanded::before) {
 		opacity: 1;
 		border-left-color: var(--civic-blue);
 		color: var(--civic-blue);
@@ -883,7 +893,8 @@
 		transform: translateY(-10px);
 	}
 
-	:global(.thinking-section:hover > *) {
+	:global(.thinking-section:hover > *),
+	:global(.thinking-section.expanded > *) {
 		display: block;
 		animation: expandThinking 0.2s ease forwards;
 		padding: 0.5rem;
