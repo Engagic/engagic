@@ -29,11 +29,24 @@
 	const dayOfWeek = $derived(isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null);
 	const monthDay = $derived(isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
 	const timeStr = $derived(extractTime(meeting.date));
+
+	function getStatusClass(meeting: Meeting): string {
+		if (meeting.items?.length > 0 && meeting.items.some(item => item.summary)) {
+			return 'status-border-ai';
+		} else if (meeting.summary) {
+			return 'status-border-ai';
+		} else if (meeting.agenda_url) {
+			return 'status-border-agenda';
+		} else if (meeting.packet_url) {
+			return 'status-border-packet';
+		}
+		return 'status-border-none';
+	}
 </script>
 
 <a
 	href="/{cityUrl}/{meetingSlug}"
-	class="meeting-card {isPast ? 'past-meeting' : 'upcoming-meeting'} {meeting.meeting_status ? 'has-alert' : ''}"
+	class="meeting-card {isPast ? 'past-meeting' : 'upcoming-meeting'} {meeting.meeting_status ? 'has-alert' : ''} {getStatusClass(meeting)}"
 	in:fly|global={{ y: 20, duration: animationDuration, delay: animationDelay }}
 	onintroend={onIntroEnd}
 >
@@ -99,7 +112,23 @@
 
 <style>
 	.meeting-card.has-alert {
-		border-left: 3px solid #dc2626;
+		border-left: 4px solid #dc2626;
+	}
+
+	.meeting-card.status-border-ai {
+		border-left: 4px solid var(--civic-green);
+	}
+
+	.meeting-card.status-border-agenda {
+		border-left: 4px solid var(--civic-yellow);
+	}
+
+	.meeting-card.status-border-packet {
+		border-left: 4px solid var(--civic-orange);
+	}
+
+	.meeting-card.status-border-none {
+		border-left: 4px solid var(--civic-border);
 	}
 
 	.meeting-card-body {
