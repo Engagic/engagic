@@ -125,18 +125,17 @@ Features (to build):
 **What Works (November 2025):**
 - ✅ 500+ cities, 374+ with item-level processing (58% coverage)
 - ✅ Item-based frontend (navigable, scannable agendas)
-- ✅ Topic extraction ready for deployment (16 canonical topics)
+- ✅ Topic extraction DEPLOYED (16 canonical topics, frontend displays topics)
+- ✅ Participation info DEPLOYED (email/phone/Zoom displayed on frontend)
 - ✅ Cache-first API (<100ms response times)
-- ✅ Backend participation info (email/phone/Zoom)
 - ✅ Priority queue, adaptive prompts, batch processing
 
 **What's Missing (User Features):**
-- ❌ Frontend participation info display (backend ready, quick win)
-- ❌ Frontend topic filtering/badges (backend ready)
 - ❌ User accounts/profiles
 - ❌ Email notifications/alerts
 - ❌ Weekly digest emails
 - ❌ Mobile PWA notifications
+- ❌ Topic-based search filters (backend ready)
 
 **Highly requested:**
 - "Email me when my city discusses zoning"
@@ -150,32 +149,28 @@ Features (to build):
 
 ## Roadmap (Growth Features)
 
-### Phase 0: Contact Info Parsing - BACKEND COMPLETE ✅
+### Phase 0: Contact Info Parsing - COMPLETE ✅
 **Goal:** Make participation easier with contact info
 
-**Status:** Backend complete, frontend implementation pending
+**Status:** DEPLOYED (October 2025)
 
-**Backend Implementation (COMPLETE):**
+**Implementation (COMPLETE):**
 - ✅ Parse email/phone/virtual_url/meeting_id from agenda text
 - ✅ Store in `meetings.participation` JSON column
 - ✅ Integrated into processing pipeline
 - ✅ Normalized phone numbers, virtual URLs, hybrid meeting detection
+- ✅ Frontend displays participation section on meeting pages
+- ✅ Clickable `mailto:city@council.gov` (opens email app)
+- ✅ Clickable `tel:+1-555-0100` (mobile-friendly phone calls)
+- ✅ Clickable Zoom/virtual URLs
+- ✅ Badge for "Hybrid Meeting" or "Virtual Only"
 
-**Frontend Implementation (TODO):**
-- Display participation section prominently on meeting detail pages
-- Clickable `mailto:city@council.gov` (opens email app)
-- Clickable `tel:+1-555-0100` (mobile-friendly phone calls)
-- Clickable Zoom/virtual URLs
-- Badge for "Hybrid Meeting" or "Virtual Only"
-- Pre-filled email with meeting context: `mailto:?subject=Re: [Meeting Title]&body=Dear Council...`
-- No sending on user's behalf (liability), just make it easy to participate
-
-**Impact:** Low-hanging fruit, high user value, enables civic action
+**Impact:** Enables civic action with one click
 
 ### Phase 1: Topic Extraction (Foundation) - COMPLETE ✅
 **Goal:** Automatically tag meetings and agenda items with topics
 
-**Status:** Implementation complete, ready for deployment
+**Status:** DEPLOYED (October 2025)
 
 **Implementation (COMPLETE):**
 - ✅ Per-item topic extraction using Gemini with JSON structured output
@@ -183,14 +178,14 @@ Features (to build):
 - ✅ Meeting-level aggregation (sorted by frequency)
 - ✅ Database storage (topics JSON column on items and meetings)
 - ✅ API endpoints: /api/topics, /api/search/by-topic, /api/topics/popular
-- ✅ Test suite passing (scripts/test_topic_extraction.py)
+- ✅ Frontend displays topic badges on agenda items
+- ✅ Search by topic functional
 
 **Next Steps:**
-- Deploy to VPS (pull, migrate, restart services)
-- Run backfill for existing meetings (optional)
-- Frontend integration for topic filtering
+- Topic-based filtering on frontend
+- User topic subscriptions (Phase 2)
 
-**Impact:** Unlocks search by topic, user subscriptions, smart filtering, and analytics. Foundation for all user-facing features.
+**Impact:** Foundation for user subscriptions, smart filtering, and analytics. Enables topic-based discovery.
 
 ### Phase 1.5: AI Thinking Traces (Transparency) - OPTIONAL
 **Goal:** Show users how AI analyzed the meeting - build trust through transparency
@@ -652,9 +647,9 @@ Automated civic analysis is powerful but dangerous. One hallucinated claim about
 ## The Path Forward
 
 **Immediate (November 2025):**
-1. ✅ Topic extraction complete (deploy to VPS)
-2. Frontend participation info display (quick win, backend ready)
-3. Frontend topic filtering/badges
+1. ✅ Topic extraction deployed and live
+2. ✅ Participation info deployed and live
+3. Frontend topic filtering (backend ready)
 4. Basic user profiles (email + city + topics)
 
 **Near-term (Q1 2026):**

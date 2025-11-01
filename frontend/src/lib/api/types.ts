@@ -111,6 +111,28 @@ interface SearchError {
 	query?: string;
 }
 
+// Topic search types
+export interface TopicSearchRequest {
+	topic: string;
+	banana?: string;
+	limit?: number;
+}
+
+export interface TopicSearchResult {
+	success: boolean;
+	query: string;
+	normalized_topic: string;
+	display_name?: string;
+	results: Array<{
+		meeting: Meeting;
+		matching_items?: AgendaItem[];
+	}>;
+	count: number;
+	banana?: string;
+	city_name?: string;
+	state?: string;
+}
+
 export interface AnalyticsData {
 	success: boolean;
 	timestamp: string;

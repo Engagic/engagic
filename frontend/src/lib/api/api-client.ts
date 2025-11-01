@@ -3,7 +3,8 @@ import type {
 	SearchResult,
 	AnalyticsData,
 	RandomMeetingResponse,
-	RandomMeetingWithItemsResponse
+	RandomMeetingWithItemsResponse,
+	TopicSearchResult
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -110,6 +111,19 @@ export const apiClient = {
 	async getRandomMeetingWithItems(): Promise<RandomMeetingWithItemsResponse> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/random-meeting-with-items`
+		);
+
+		return response.json();
+	},
+
+	async searchByTopic(topic: string, banana?: string, limit: number = 50): Promise<TopicSearchResult> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/search/by-topic`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ topic, banana, limit })
+			}
 		);
 
 		return response.json();

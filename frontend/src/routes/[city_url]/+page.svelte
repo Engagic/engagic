@@ -17,6 +17,34 @@
 	let pastMeetings: Meeting[] = $state([]);
 	let isInitialLoad = $state(true);
 
+	// Topic filtering
+	let selectedTopic = $derived($page.url.searchParams.get('topic'));
+
+	// Filter meetings by selected topic
+	let filteredUpcomingMeetings = $derived(
+		selectedTopic
+			? upcomingMeetings.filter(m => m.topics?.includes(selectedTopic))
+			: upcomingMeetings
+	);
+	let filteredPastMeetings = $derived(
+		selectedTopic
+			? pastMeetings.filter(m => m.topics?.includes(selectedTopic))
+			: pastMeetings
+	);
+
+	// Get all unique topics from all meetings
+	let allTopics = $derived(() => {
+		const topics = new Set<string>();
+		[...upcomingMeetings, ...pastMeetings].forEach(m => {
+			m.topics?.forEach(t => topics.add(t));
+		});
+		return Array.from(topics).sort();
+	});
+
+	function clearTopicFilter() {
+		goto(`/${city_banana}`);
+	}
+
 	// Snapshot: Preserve UI state and data during navigation
 	// When user expands past meetings and navigates to a meeting detail,
 	// this ensures the toggle, data, and scroll position are restored on back navigation
@@ -160,30 +188,41 @@
 		<!-- Show data immediately if available (from snapshot or fresh load) -->
 		{#if searchResults.success}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
-				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
+				<!-- Topic filter display -->
+				{#if selectedTopic}
+					<div class="topic-filter-active">
+						<span class="filter-label">Filtering by topic:</span>
+						<span class="filter-topic">{selectedTopic}</span>
+						<button class="clear-filter-btn" onclick={clearTopicFilter} type="button">
+							Clear filter
+						</button>
+					</div>
+				{/if}
+
+				{#if filteredUpcomingMeetings.length > 0 || filteredPastMeetings.length > 0}
 					<div class="meetings-filter">
-						{#if upcomingMeetings.length > 0}
+						{#if filteredUpcomingMeetings.length > 0}
 							<h2 class="meetings-section-title">Upcoming Meetings</h2>
 						{/if}
-						{#if pastMeetings.length > 0 && upcomingMeetings.length === 0}
+						{#if filteredPastMeetings.length > 0 && filteredUpcomingMeetings.length === 0}
 							<h2 class="meetings-section-title">No Upcoming Meetings</h2>
 						{/if}
-						{#if pastMeetings.length > 0}
-							<button 
-								class="toggle-past-btn" 
+						{#if filteredPastMeetings.length > 0}
+							<button
+								class="toggle-past-btn"
 								onclick={() => showPastMeetings = !showPastMeetings}
 							>
-								{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({pastMeetings.length})
+								{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({filteredPastMeetings.length})
 							</button>
 						{/if}
 					</div>
 					
 					<div class="meeting-list">
 						{#if showPastMeetings}
-							{#if pastMeetings.length > 0}
+							{#if filteredPastMeetings.length > 0}
 								<h3 class="past-meetings-divider">Past Meetings</h3>
 							{/if}
-							{#each pastMeetings as meeting, index}
+							{#each filteredPastMeetings as meeting, index}
 								{@const date = meeting.date ? new Date(meeting.date) : null}
 								{@const isValidDate = date && !isNaN(date.getTime()) && date.getTime() !== 0}
 								{@const dayOfWeek = isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null}
@@ -193,7 +232,7 @@
 									href="/{city_banana}/{generateMeetingSlug(meeting)}"
 									class="meeting-card past-meeting"
 									in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
-									onintroend={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
+									onintroend={() => { if (index === filteredPastMeetings.length - 1) isInitialLoad = false; }}
 								>
 									<div class="meeting-card-header">
 										<div class="meeting-title">
@@ -223,7 +262,7 @@
 							{/each}
 						{/if}
 						
-						{#each upcomingMeetings as meeting, index}
+						{#each filteredUpcomingMeetings as meeting, index}
 							{@const date = meeting.date ? new Date(meeting.date) : null}
 							{@const isValidDate = date && !isNaN(date.getTime()) && date.getTime() !== 0}
 							{@const dayOfWeek = isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null}
@@ -233,7 +272,7 @@
 								href="/{city_banana}/{generateMeetingSlug(meeting)}"
 								class="meeting-card upcoming-meeting"
 								in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
-								onintroend={() => { if (index === upcomingMeetings.length - 1 && pastMeetings.length === 0) isInitialLoad = false; }}
+								onintroend={() => { if (index === filteredUpcomingMeetings.length - 1 && filteredPastMeetings.length === 0) isInitialLoad = false; }}
 							>
 								<div class="meeting-card-header">
 									<div class="meeting-title">
@@ -280,7 +319,11 @@
 					</div>
 				{:else}
 					<div class="no-meetings">
-						No meetings found for this city
+						{#if selectedTopic}
+							No meetings found with the topic "{selectedTopic}". <button class="clear-filter-btn" onclick={clearTopicFilter} type="button">Clear filter</button>
+						{:else}
+							No meetings found for this city
+						{/if}
 					</div>
 				{/if}
 			{:else}
@@ -338,6 +381,53 @@
 		font-weight: 600;
 	}
 
+	.topic-filter-active {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 1rem;
+		background: var(--civic-light);
+		border: 1px solid var(--civic-border);
+		border-radius: 8px;
+		margin-bottom: 1.5rem;
+		flex-wrap: wrap;
+	}
+
+	.filter-label {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--civic-gray);
+		font-weight: 500;
+	}
+
+	.filter-topic {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		padding: 0.4rem 0.75rem;
+		background: var(--civic-blue);
+		color: white;
+		border-radius: 6px;
+		font-weight: 600;
+	}
+
+	.clear-filter-btn {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		padding: 0.4rem 0.75rem;
+		background: white;
+		color: var(--civic-blue);
+		border: 1px solid var(--civic-blue);
+		border-radius: 6px;
+		cursor: pointer;
+		font-weight: 500;
+		transition: all 0.2s ease;
+	}
+
+	.clear-filter-btn:hover {
+		background: var(--civic-blue);
+		color: white;
+	}
+
 	@media (max-width: 640px) {
 		.container {
 			width: 100%;
@@ -357,6 +447,25 @@
 
 		.city-title {
 			font-size: 1.5rem;
+		}
+
+		.topic-filter-active {
+			padding: 0.75rem;
+			gap: 0.5rem;
+		}
+
+		.filter-label {
+			font-size: 0.75rem;
+		}
+
+		.filter-topic {
+			font-size: 0.8rem;
+			padding: 0.3rem 0.6rem;
+		}
+
+		.clear-filter-btn {
+			font-size: 0.75rem;
+			padding: 0.3rem 0.6rem;
 		}
 	}
 </style>

@@ -69,7 +69,18 @@
 		{#if meeting.topics && meeting.topics.length > 0}
 			<div class="meeting-topics">
 				{#each meeting.topics as topic}
-					<span class="topic-tag">{topic}</span>
+					<button
+						class="topic-tag"
+						onclick={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							window.location.href = `/${cityUrl}?topic=${encodeURIComponent(topic)}`;
+						}}
+						type="button"
+						aria-label="Filter meetings by {topic}"
+					>
+						{topic}
+					</button>
 				{/each}
 			</div>
 		{/if}
@@ -148,5 +159,19 @@
 		border: 1px solid var(--civic-border);
 		border-radius: 4px;
 		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.topic-tag:hover {
+		background: var(--civic-blue);
+		color: white;
+		border-color: var(--civic-blue);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
+	}
+
+	.topic-tag:active {
+		transform: translateY(0);
 	}
 </style>

@@ -1,6 +1,6 @@
-# Topic Extraction - Implementation Complete
+# Topic Extraction - Deployed
 
-**Status:** Ready for deployment
+**Status:** DEPLOYED (October 2025)
 **Date:** 2025-10-30
 **Phase:** Phase 1 (Foundation)
 
@@ -199,78 +199,50 @@ GET /api/topics/popular
 
 ---
 
-## Deployment Steps
+## Deployment History
 
-### 1. Local Testing (Already Done!)
-```bash
-# Test normalization
-python scripts/test_topic_extraction.py
-# ✓ ALL TESTS PASSED
-```
+### ✅ Deployed to Production (October 30, 2025)
 
-### 2. Push to GitHub
-```bash
-git add .
-git commit -m "Add topic extraction with normalization and aggregation
+**Backend:**
+- Topic extraction active in processing pipeline
+- 16 canonical topics with normalization
+- Meeting-level aggregation working
+- API endpoints live: `/api/topics`, `/api/search/by-topic`, `/api/topics/popular`
 
-- Created topic taxonomy with 16 canonical topics
-- Built topic normalizer for consistent tagging
-- Added meeting-level topic aggregation
-- Created API endpoints for topic search
-- Updated database schema with topics column"
-git push origin main
-```
+**Frontend:**
+- Topic badges displayed on agenda items
+- Search by topic functional
+- Clean UI integration
 
-### 3. Deploy to VPS
-```bash
-# SSH to VPS
-ssh root@engagic
+**Database:**
+- Schema migrated with topics column
+- Existing meetings processed
+- New meetings automatically tagged
 
-# Pull changes
-cd /root/engagic
-git pull origin main
-
-# Run migration
-python scripts/migrate_add_topics.py
-
-# Restart services
-systemctl restart engagic-api
-systemctl restart engagic-daemon
-```
-
-### 4. Backfill Existing Meetings (Optional)
-```bash
-# On VPS: Run full sync to process all meetings
-engagic-conductor --full-sync
-```
-
-This will:
-- Sync all cities and process their meetings
-- Extract topics from meeting items
-- Normalize and aggregate to meeting level
-
-**Note:** New meetings will automatically get topics during normal processing via the daemon.
+**Status:** System processing all new meetings with topics. Historical backfill ongoing.
 
 ---
 
-## Testing the API
+## Using the API (Production)
 
 ### Get all topics
 ```bash
-curl http://localhost:8000/api/topics
+curl https://api.engagic.org/api/topics
 ```
 
 ### Search for housing meetings
 ```bash
-curl -X POST http://localhost:8000/api/search/by-topic \
+curl -X POST https://api.engagic.org/api/search/by-topic \
   -H "Content-Type: application/json" \
   -d '{"topic": "affordable housing", "banana": "paloaltoCA"}'
 ```
 
 ### Get popular topics
 ```bash
-curl http://localhost:8000/api/topics/popular
+curl https://api.engagic.org/api/topics/popular
 ```
+
+**Local development:** Replace `https://api.engagic.org` with `http://localhost:8000`
 
 ---
 
@@ -385,4 +357,4 @@ curl http://localhost:8000/api/topics/popular
 
 ---
 
-**Status:** Ready for production deployment
+**Status:** DEPLOYED - Topic extraction active in production
