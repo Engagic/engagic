@@ -152,10 +152,7 @@
 
 <div class="container">
 	<div class="main-content">
-		<header class="header">
-			<a href="/" class="logo">engagic</a>
-			<p class="tagline">civic engagement made simple</p>
-		</header>
+		<a href="/" class="compact-logo">engagic</a>
 
 		<div class="breadcrumb">
 			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
@@ -310,6 +307,23 @@
 <style>
 	.container {
 		width: var(--width-detail);
+		position: relative;
+	}
+
+	.compact-logo {
+		position: absolute;
+		top: 0;
+		right: 0;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--civic-blue);
+		text-decoration: none;
+		z-index: 10;
+	}
+
+	.compact-logo:hover {
+		opacity: 0.8;
 	}
 
 	.breadcrumb {
@@ -1008,17 +1022,8 @@
 			padding: 1rem 0.75rem;
 		}
 
-		.header {
-			margin-bottom: 0.5rem;
-		}
-
-		.logo {
-			font-size: 1.5rem;
-			margin-bottom: 0;
-		}
-
-		.tagline {
-			display: none;
+		.compact-logo {
+			font-size: 0.95rem;
 		}
 
 		.breadcrumb {

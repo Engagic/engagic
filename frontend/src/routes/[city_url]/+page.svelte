@@ -2,10 +2,9 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { fly } from 'svelte/transition';
 	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
-	import { generateMeetingSlug, parseCityUrl } from '$lib/utils/utils';
-	import { formatMeetingDate, extractTime } from '$lib/utils/date-utils';
+	import { parseCityUrl } from '$lib/utils/utils';
+	import MeetingCard from '$lib/components/MeetingCard.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 
 	let city_banana = $page.params.city_url;
@@ -41,8 +40,14 @@
 		return Array.from(topics).sort();
 	});
 
-	function clearTopicFilter() {
-		goto(`/${city_banana}`);
+	function toggleTopic(topic: string) {
+		if (selectedTopic === topic) {
+			// Click again to clear
+			goto(`/${city_banana}`);
+		} else {
+			// Activate filter
+			goto(`/${city_banana}?topic=${encodeURIComponent(topic)}`);
+		}
 	}
 
 	// Snapshot: Preserve UI state and data during navigation
@@ -165,18 +170,12 @@
 
 <div class="container">
 	<div class="main-content">
-		<header class="header">
-			<a href="/" class="logo">engagic</a>
-			<p class="tagline">civic engagement made simple</p>
-		</header>
+		<a href="/" class="compact-logo">engagic</a>
 
 	<div class="city-header">
 		<a href="/" class="back-link">← Back to search</a>
 		{#if searchResults && searchResults.success}
 			<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
-			{#if searchResults.cached}
-				<div class="processing-status">Cached results</div>
-			{/if}
 		{:else if loading}
 			<h1 class="city-title">Loading...</h1>
 		{:else}
@@ -188,14 +187,21 @@
 		<!-- Show data immediately if available (from snapshot or fresh load) -->
 		{#if searchResults.success}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
-				<!-- Topic filter display -->
-				{#if selectedTopic}
-					<div class="topic-filter-active">
-						<span class="filter-label">Filtering by topic:</span>
-						<span class="filter-topic">{selectedTopic}</span>
-						<button class="clear-filter-btn" onclick={clearTopicFilter} type="button">
-							Clear filter
-						</button>
+				<!-- Topic filter pills -->
+				{#if allTopics().length > 0}
+					<div class="topic-pills-container">
+						<span class="pills-label">Filter by topic:</span>
+						<div class="topic-pills">
+							{#each allTopics() as topic}
+								<button
+									class="topic-pill {selectedTopic === topic ? 'active' : ''}"
+									onclick={() => toggleTopic(topic)}
+									type="button"
+								>
+									{topic}
+								</button>
+							{/each}
+						</div>
 					</div>
 				{/if}
 
@@ -223,104 +229,32 @@
 								<h3 class="past-meetings-divider">Past Meetings</h3>
 							{/if}
 							{#each filteredPastMeetings as meeting, index}
-								{@const date = meeting.date ? new Date(meeting.date) : null}
-								{@const isValidDate = date && !isNaN(date.getTime()) && date.getTime() !== 0}
-								{@const dayOfWeek = isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null}
-								{@const monthDay = isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null}
-								{@const timeStr = extractTime(meeting.date)}
-								<a
-									href="/{city_banana}/{generateMeetingSlug(meeting)}"
-									class="meeting-card past-meeting"
-									in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
-									onintroend={() => { if (index === filteredPastMeetings.length - 1) isInitialLoad = false; }}
-								>
-									<div class="meeting-card-header">
-										<div class="meeting-title">
-											{meeting.title}
-										</div>
-										{#if isValidDate}
-											<div class="meeting-date-time">
-												{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
-											</div>
-										{/if}
-									</div>
-
-									{#if meeting.summary}
-										<div class="meeting-status status-ready">
-											✓ Summary Ready
-										</div>
-									{:else if meeting.packet_url}
-										<div class="meeting-status status-packet">
-											Packet Available
-										</div>
-									{:else}
-										<div class="meeting-status status-none">
-											No agenda posted
-										</div>
-									{/if}
-								</a>
+								<MeetingCard
+									{meeting}
+									cityUrl={city_banana}
+									isPast={true}
+									animationDuration={isInitialLoad ? 300 : 0}
+									animationDelay={isInitialLoad ? index * 50 : 0}
+									onIntroEnd={() => { if (index === filteredPastMeetings.length - 1) isInitialLoad = false; }}
+								/>
 							{/each}
 						{/if}
 						
 						{#each filteredUpcomingMeetings as meeting, index}
-							{@const date = meeting.date ? new Date(meeting.date) : null}
-							{@const isValidDate = date && !isNaN(date.getTime()) && date.getTime() !== 0}
-							{@const dayOfWeek = isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null}
-							{@const monthDay = isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null}
-							{@const timeStr = extractTime(meeting.date)}
-							<a
-								href="/{city_banana}/{generateMeetingSlug(meeting)}"
-								class="meeting-card upcoming-meeting"
-								in:fly|global={{ y: 20, duration: isInitialLoad ? 300 : 0, delay: isInitialLoad ? index * 50 : 0 }}
-								onintroend={() => { if (index === filteredUpcomingMeetings.length - 1 && filteredPastMeetings.length === 0) isInitialLoad = false; }}
-							>
-								<div class="meeting-card-header">
-									<div class="meeting-title">
-										{meeting.title}
-									</div>
-									{#if isValidDate}
-										<div class="meeting-date-time">
-											{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
-										</div>
-									{/if}
-								</div>
-
-								{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
-									<div class="meeting-status status-items">
-										✓ Item Summaries
-									</div>
-								{:else if meeting.summary}
-									<div class="meeting-status status-summary">
-										✓ Summary Ready
-									</div>
-								{:else if meeting.agenda_url}
-									<div class="meeting-status status-agenda">
-										Agenda Posted
-									</div>
-								{:else if meeting.packet_url}
-									<div class="meeting-status status-packet">
-										Packet Posted
-									</div>
-								{:else}
-									<div class="meeting-status status-none">
-										No Agenda Posted
-									</div>
-								{/if}
-
-								{#if meeting.topics && meeting.topics.length > 0}
-									<div class="meeting-topics">
-										{#each meeting.topics as topic}
-											<span class="topic-tag">{topic}</span>
-										{/each}
-									</div>
-								{/if}
-							</a>
+							<MeetingCard
+								{meeting}
+								cityUrl={city_banana}
+								isPast={false}
+								animationDuration={isInitialLoad ? 300 : 0}
+								animationDelay={isInitialLoad ? index * 50 : 0}
+								onIntroEnd={() => { if (index === filteredUpcomingMeetings.length - 1 && filteredPastMeetings.length === 0) isInitialLoad = false; }}
+							/>
 						{/each}
 					</div>
 				{:else}
 					<div class="no-meetings">
 						{#if selectedTopic}
-							No meetings found with the topic "{selectedTopic}". <button class="clear-filter-btn" onclick={clearTopicFilter} type="button">Clear filter</button>
+							No meetings found with the topic "{selectedTopic}". Click the pill again to clear filter.
 						{:else}
 							No meetings found for this city
 						{/if}
@@ -353,6 +287,23 @@
 <style>
 	.container {
 		width: var(--width-meetings);
+		position: relative;
+	}
+
+	.compact-logo {
+		position: absolute;
+		top: 0;
+		right: 0;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--civic-blue);
+		text-decoration: none;
+		z-index: 10;
+	}
+
+	.compact-logo:hover {
+		opacity: 0.8;
 	}
 
 	.city-header {
@@ -381,51 +332,54 @@
 		font-weight: 600;
 	}
 
-	.topic-filter-active {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 1rem;
-		background: var(--civic-light);
-		border: 1px solid var(--civic-border);
-		border-radius: 8px;
+	.topic-pills-container {
 		margin-bottom: 1.5rem;
-		flex-wrap: wrap;
 	}
 
-	.filter-label {
+	.pills-label {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 		color: var(--civic-gray);
 		font-weight: 500;
+		display: block;
+		margin-bottom: 0.75rem;
 	}
 
-	.filter-topic {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-		padding: 0.4rem 0.75rem;
-		background: var(--civic-blue);
-		color: white;
-		border-radius: 6px;
-		font-weight: 600;
+	.topic-pills {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 
-	.clear-filter-btn {
+	.topic-pill {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		padding: 0.4rem 0.75rem;
-		background: white;
+		font-size: 0.8rem;
+		padding: 0.5rem 0.85rem;
+		background: var(--civic-light);
 		color: var(--civic-blue);
-		border: 1px solid var(--civic-blue);
-		border-radius: 6px;
+		border: 1px solid var(--civic-border);
+		border-radius: 20px;
 		cursor: pointer;
 		font-weight: 500;
 		transition: all 0.2s ease;
 	}
 
-	.clear-filter-btn:hover {
+	.topic-pill:hover {
+		background: white;
+		border-color: var(--civic-blue);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+	}
+
+	.topic-pill.active {
 		background: var(--civic-blue);
 		color: white;
+		border-color: var(--civic-blue);
+	}
+
+	.topic-pill.active:hover {
+		background: var(--civic-blue);
+		opacity: 0.9;
 	}
 
 	@media (max-width: 640px) {
@@ -433,39 +387,21 @@
 			width: 100%;
 		}
 
-		.header {
-			margin-bottom: 1rem;
-		}
-
-		.tagline {
-			display: none;
-		}
-
-		.logo {
-			margin-bottom: 0;
+		.compact-logo {
+			font-size: 0.95rem;
 		}
 
 		.city-title {
 			font-size: 1.5rem;
 		}
 
-		.topic-filter-active {
-			padding: 0.75rem;
-			gap: 0.5rem;
-		}
-
-		.filter-label {
+		.pills-label {
 			font-size: 0.75rem;
 		}
 
-		.filter-topic {
-			font-size: 0.8rem;
-			padding: 0.3rem 0.6rem;
-		}
-
-		.clear-filter-btn {
+		.topic-pill {
 			font-size: 0.75rem;
-			padding: 0.3rem 0.6rem;
+			padding: 0.4rem 0.7rem;
 		}
 	}
 </style>
