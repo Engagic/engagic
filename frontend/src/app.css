@@ -5,7 +5,7 @@
 :root {
 	--civic-blue: #4f46e5;
 	--civic-green: #10b981;
-	--civic-gray: #64748b;
+	--civic-gray: #475569;
 	--civic-dark: #0f172a;
 	--civic-light: #f8fafc;
 	--civic-white: #ffffff;
@@ -38,6 +38,50 @@ body {
 	align-items: flex-start;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Accessibility: Focus indicators */
+*:focus {
+	outline: none;
+}
+
+*:focus-visible {
+	outline: 3px solid var(--civic-accent);
+	outline-offset: 3px;
+	border-radius: 2px;
+}
+
+/* Accessibility: Skip to main content link */
+.skip-to-main {
+	position: absolute;
+	top: -100px;
+	left: 0;
+	background: var(--civic-blue);
+	color: white;
+	padding: 0.75rem 1.5rem;
+	text-decoration: none;
+	font-family: 'IBM Plex Mono', monospace;
+	font-weight: 600;
+	z-index: 1000;
+	border-radius: 0 0 8px 0;
+}
+
+.skip-to-main:focus {
+	top: 0;
+	outline: 3px solid var(--civic-accent);
+	outline-offset: 3px;
+}
+
+/* Accessibility: Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
 }
 
 .container {
@@ -74,6 +118,40 @@ body {
 	font-family: 'IBM Plex Mono', monospace;
 	color: var(--civic-gray);
 	font-size: 0.9rem;
+	margin-bottom: 1rem;
+}
+
+.hero-stat {
+	font-family: 'IBM Plex Mono', monospace;
+	margin-top: 0.5rem;
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 0.5rem;
+	animation: fadeIn 0.6s ease-in;
+}
+
+.stat-value {
+	font-size: 1.4rem;
+	font-weight: 700;
+	color: var(--civic-blue);
+}
+
+.stat-label {
+	font-size: 0.85rem;
+	color: var(--civic-gray);
+	font-weight: 500;
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(-5px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 .search-section {
@@ -272,6 +350,7 @@ body {
 	letter-spacing: 0.026em;
 	flex: 1;
 	min-width: 0;
+	margin: 0;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
@@ -420,11 +499,30 @@ body {
 
 .no-meetings {
 	text-align: center;
-	padding: 3rem;
-	color: var(--civic-gray);
+	padding: 3rem 2rem;
 	background: var(--civic-white);
-	border-radius: 8px;
+	border-radius: 12px;
 	border: 1px solid var(--civic-border);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.empty-state-title {
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 1.2rem;
+	font-weight: 600;
+	color: var(--civic-dark);
+	margin-bottom: 0.75rem;
+}
+
+.empty-state-message {
+	font-family: Georgia, 'Times New Roman', Times, serif;
+	font-size: 1rem;
+	line-height: 1.6;
+	color: var(--civic-gray);
+	margin: 0;
+	max-width: 500px;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 .meeting-detail {
