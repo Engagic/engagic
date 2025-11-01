@@ -39,14 +39,16 @@
 >
 	<div class="meeting-card-header">
 		<div class="left-column">
-			<div class="meeting-title">
+			<h2 class="meeting-title">
 				{meeting.title}
-			</div>
+			</h2>
 		</div>
 		<div class="right-column">
 			{#if isValidDate}
 				<div class="meeting-date-time">
-					{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
+					<time datetime={meeting.date}>
+						{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
+					</time>
 				</div>
 			{/if}
 		</div>
@@ -66,23 +68,23 @@
 		<div class="right-column">
 			{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
 				<div class="meeting-status status-items">
-					✓ Item Summaries
+					<span class="status-icon">✓</span> AI Summary
 				</div>
 			{:else if meeting.summary}
 				<div class="meeting-status {isPast ? 'status-ready' : 'status-summary'}">
-					✓ Summary Ready
+					<span class="status-icon">✓</span> AI Summary
 				</div>
 			{:else if meeting.agenda_url}
 				<div class="meeting-status status-agenda">
-					Agenda Posted
+					<span class="status-icon">📄</span> Agenda Available
 				</div>
 			{:else if meeting.packet_url}
 				<div class="meeting-status status-packet">
-					{isPast ? 'Packet Available' : 'Packet Posted'}
+					<span class="status-icon">📋</span> Meeting Packet
 				</div>
 			{:else}
 				<div class="meeting-status status-none">
-					{isPast ? 'No agenda posted' : 'No Agenda Posted'}
+					<span class="status-icon">⏳</span> {isPast ? 'No Documents' : 'Coming Soon'}
 				</div>
 			{/if}
 
@@ -113,6 +115,12 @@
 	.right-column {
 		flex-shrink: 0;
 		text-align: right;
+	}
+
+	.status-icon {
+		display: inline-block;
+		margin-right: 0.25rem;
+		font-size: 0.9em;
 	}
 
 	.meeting-alert {

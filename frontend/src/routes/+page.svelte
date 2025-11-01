@@ -7,6 +7,8 @@
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
 	import Footer from '$lib/components/Footer.svelte';
+	import { getAnalytics, type AnalyticsData } from '$lib/api/index';
+	import { onMount } from 'svelte';
 
 	let searchQuery = $state('');
 	let searchResults: SearchResult | null = $state(null);
@@ -14,6 +16,31 @@
 	let loadingRandom = $state(false);
 	let loadingRandomItems = $state(false);
 	let error = $state('');
+	let analytics: AnalyticsData | null = $state(null);
+	let currentStatIndex = $state(0);
+
+	const stats = $derived(analytics ? [
+		{ label: 'cities tracked', value: analytics.real_metrics.cities_covered.toLocaleString() },
+		{ label: 'meetings summarized', value: analytics.real_metrics.agendas_summarized.toLocaleString() },
+		{ label: 'total meetings', value: analytics.real_metrics.meetings_tracked.toLocaleString() }
+	] : []);
+
+	onMount(async () => {
+		try {
+			analytics = await getAnalytics();
+		} catch (err) {
+			console.error('Failed to load analytics:', err);
+		}
+
+		// Rotate stats every 3 seconds
+		const interval = setInterval(() => {
+			if (stats.length > 0) {
+				currentStatIndex = (currentStatIndex + 1) % stats.length;
+			}
+		}, 3000);
+
+		return () => clearInterval(interval);
+	});
 
 	// Snapshot: Preserve search state during navigation
 	// When user searches for a city, gets ambiguous results, clicks one, and navigates back,
@@ -169,6 +196,14 @@
 		<header class="header">
 			<a href="/" class="logo">engagic</a>
 			<p class="tagline">civic engagement made simple</p>
+			{#if stats.length > 0}
+				{#key currentStatIndex}
+					<p class="hero-stat">
+						<span class="stat-value">{stats[currentStatIndex].value}</span>
+						<span class="stat-label">{stats[currentStatIndex].label}</span>
+					</p>
+				{/key}
+			{/if}
 		</header>
 
 		<div class="search-section">

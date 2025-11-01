@@ -156,14 +156,6 @@
 
 		<div class="breadcrumb">
 			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
-			{#if selectedMeeting?.agenda_url}
-				<span class="breadcrumb-separator">•</span>
-				<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="agenda-link">View Agenda →</a>
-			{:else if selectedMeeting?.packet_url}
-				{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
-				<span class="breadcrumb-separator">•</span>
-				<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="agenda-link">View Packet →</a>
-			{/if}
 		</div>
 
 	{#if selectedMeeting?.participation}
@@ -229,9 +221,25 @@
 			{/if}
 
 			<div class="meeting-header">
-				<h1 class="meeting-title">{selectedMeeting.title}</h1>
-				<div class="meeting-date">
-					{formatMeetingDate(selectedMeeting.date)}
+				<div class="meeting-header-top">
+					<div class="meeting-header-text">
+						<h1 class="meeting-title">{selectedMeeting.title}</h1>
+						<div class="meeting-date">
+							{formatMeetingDate(selectedMeeting.date)}
+						</div>
+					</div>
+					{#if selectedMeeting.agenda_url}
+						<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="document-link">
+							<span class="document-icon">📄</span>
+							<span>View Agenda</span>
+						</a>
+					{:else if selectedMeeting.packet_url}
+						{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
+						<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="document-link">
+							<span class="document-icon">📋</span>
+							<span>View Packet</span>
+						</a>
+					{/if}
 				</div>
 			</div>
 
@@ -293,8 +301,9 @@
 			{:else}
 				<!-- Processing state -->
 				<div class="no-summary">
-					<p>Working on it, please wait!</p>
-					<p>We're processing this meeting in the background. Check back in a few minutes.</p>
+					<p class="processing-title">AI Summary In Progress</p>
+					<p class="processing-message">We're analyzing this meeting agenda right now. This usually takes 2-5 minutes.</p>
+					<p class="processing-hint">Tip: Bookmark this page and check back shortly, or view the original document using the button above.</p>
 				</div>
 			{/if}
 		</div>
@@ -601,6 +610,17 @@
 		margin-bottom: 1.5rem;
 	}
 
+	.meeting-header-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 2rem;
+	}
+
+	.meeting-header-text {
+		flex: 1;
+	}
+
 	.meeting-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.8rem;
@@ -618,6 +638,34 @@
 		font-size: 1.05rem;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+	}
+
+	.document-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1.25rem;
+		background: var(--civic-blue);
+		color: white;
+		text-decoration: none;
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 600;
+		font-size: 0.9rem;
+		border-radius: 8px;
+		transition: all 0.2s;
+		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+		flex-shrink: 0;
+		align-self: flex-start;
+	}
+
+	.document-link:hover {
+		background: var(--civic-accent);
+		transform: translateY(-2px);
+		box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
+	}
+
+	.document-icon {
+		font-size: 1rem;
 	}
 
 	.meeting-divider {
@@ -733,26 +781,38 @@
 
 	.no-summary {
 		text-align: center;
-		padding: 3rem 2rem;
-		color: var(--civic-gray);
-		background: #f8fafc;
-		border-radius: 8px;
-		border: 1px solid #e2e8f0;
+		padding: 4rem 2rem;
+		background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+		border-radius: 12px;
+		border: 2px solid #bfdbfe;
+		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.08);
 	}
 
-	.no-summary p:first-child {
+	.processing-title {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.2rem;
+		font-size: 1.3rem;
 		font-weight: 600;
 		color: var(--civic-blue);
-		margin-bottom: 0.5rem;
+		margin-bottom: 1rem;
 	}
 
-	.no-summary p:last-child {
+	.processing-message {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 0.95rem;
+		font-size: 1.05rem;
+		line-height: 1.7;
+		color: var(--civic-dark);
+		margin: 0 auto 1rem;
+		max-width: 500px;
+	}
+
+	.processing-hint {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
 		line-height: 1.6;
-		margin: 0;
+		color: var(--civic-gray);
+		margin: 0 auto;
+		max-width: 500px;
+		font-style: italic;
 	}
 
 	/* Item-based meeting styles */
@@ -883,7 +943,7 @@
 		margin: 0.4rem 0;
 	}
 
-	/* Collapse thinking trace by default, expand on hover */
+	/* Collapse thinking trace by default, expand on click only */
 	:global(.thinking-section) {
 		position: relative;
 		margin-bottom: 1rem;
@@ -894,41 +954,28 @@
 		content: "💭 Thinking trace (click to expand)";
 		display: block;
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		color: var(--civic-gray);
-		padding: 0.5rem;
-		background: #f8fafc;
-		border-left: 2px solid var(--civic-border);
-		border-radius: 4px;
-		margin-bottom: 0.5rem;
-		opacity: 0.8;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--civic-blue);
+		padding: 0.75rem 1rem;
+		background: white;
+		border: 2px solid var(--civic-border);
+		border-radius: 8px;
+		margin-bottom: 0.75rem;
 		transition: all 0.2s ease;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	}
+
+	:global(.thinking-section:hover::before) {
+		border-color: var(--civic-blue);
+		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.15);
+		transform: translateY(-1px);
 	}
 
 	:global(.thinking-section.expanded::before) {
 		content: "💭 Thinking trace (click to collapse)";
-		opacity: 1;
-		border-left-color: var(--civic-blue);
-		color: var(--civic-blue);
-	}
-
-	/* Only enable hover on devices that can actually hover (not touch screens) */
-	@media (hover: hover) {
-		:global(.thinking-section:hover::before) {
-			opacity: 1;
-			border-left-color: var(--civic-blue);
-			color: var(--civic-blue);
-		}
-
-		:global(.thinking-section:hover > *) {
-			display: block;
-			animation: expandThinking 0.2s ease forwards;
-			padding: 0.5rem;
-			border-left: 2px solid var(--civic-blue);
-			background: #f8fafc;
-			margin-bottom: 0.5rem;
-			border-radius: 4px;
-		}
+		border-color: var(--civic-blue);
+		background: #eff6ff;
 	}
 
 	:global(.thinking-section > *) {
@@ -1042,6 +1089,18 @@
 
 		.meeting-header {
 			margin-bottom: 1rem;
+		}
+
+		.meeting-header-top {
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		.document-link {
+			width: 100%;
+			justify-content: center;
+			padding: 0.65rem 1rem;
+			font-size: 0.85rem;
 		}
 
 		.meeting-title {

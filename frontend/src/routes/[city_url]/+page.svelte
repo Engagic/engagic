@@ -187,43 +187,50 @@
 		<!-- Show data immediately if available (from snapshot or fresh load) -->
 		{#if searchResults.success}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
-				<!-- Topic filter pills -->
-				{#if allTopics().length > 0}
-					<div class="topic-pills-container">
-						<span class="pills-label">Filter by topic:</span>
-						<div class="topic-pills">
-							{#each allTopics() as topic}
-								<button
-									class="topic-pill {selectedTopic === topic ? 'active' : ''}"
-									onclick={() => toggleTopic(topic)}
-									type="button"
-								>
-									{topic}
-								</button>
-							{/each}
-						</div>
-					</div>
-				{/if}
+				<div class="content-layout">
+					<!-- Topic filter sidebar -->
+					{#if allTopics().length > 0}
+						<aside class="topic-sidebar" role="group" aria-label="Filter meetings by topic">
+							<div class="topic-sidebar-sticky">
+								<h3 class="sidebar-title" id="topic-filter-label">Filter by topic</h3>
+								<div class="topic-pills" role="toolbar" aria-labelledby="topic-filter-label">
+									{#each allTopics() as topic}
+										<button
+											class="topic-pill {selectedTopic === topic ? 'active' : ''}"
+											onclick={() => toggleTopic(topic)}
+											type="button"
+											aria-pressed={selectedTopic === topic}
+											aria-label="Filter by {topic}"
+										>
+											{topic}
+										</button>
+									{/each}
+								</div>
+							</div>
+						</aside>
+					{/if}
 
-				{#if filteredUpcomingMeetings.length > 0 || filteredPastMeetings.length > 0}
-					<div class="meetings-filter">
-						{#if filteredUpcomingMeetings.length > 0}
-							<h2 class="meetings-section-title">Upcoming Meetings</h2>
-						{/if}
-						{#if filteredPastMeetings.length > 0 && filteredUpcomingMeetings.length === 0}
-							<h2 class="meetings-section-title">No Upcoming Meetings</h2>
-						{/if}
-						{#if filteredPastMeetings.length > 0}
-							<button
-								class="toggle-past-btn"
-								onclick={() => showPastMeetings = !showPastMeetings}
-							>
-								{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({filteredPastMeetings.length})
-							</button>
-						{/if}
-					</div>
-					
-					<div class="meeting-list">
+					<!-- Main meeting list -->
+					<div class="meetings-main">
+						{#if filteredUpcomingMeetings.length > 0 || filteredPastMeetings.length > 0}
+							<div class="meetings-filter">
+								{#if filteredUpcomingMeetings.length > 0}
+									<h2 class="meetings-section-title">Upcoming Meetings</h2>
+								{/if}
+								{#if filteredPastMeetings.length > 0 && filteredUpcomingMeetings.length === 0}
+									<h2 class="meetings-section-title">No Upcoming Meetings</h2>
+								{/if}
+								{#if filteredPastMeetings.length > 0}
+									<button
+										class="toggle-past-btn"
+										onclick={() => showPastMeetings = !showPastMeetings}
+									>
+										{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({filteredPastMeetings.length})
+									</button>
+								{/if}
+							</div>
+
+							<div class="meeting-list">
 						{#if showPastMeetings}
 							{#if filteredPastMeetings.length > 0}
 								<h3 class="past-meetings-divider">Past Meetings</h3>
@@ -250,19 +257,24 @@
 								onIntroEnd={() => { if (index === filteredUpcomingMeetings.length - 1 && filteredPastMeetings.length === 0) isInitialLoad = false; }}
 							/>
 						{/each}
-					</div>
-				{:else}
-					<div class="no-meetings">
-						{#if selectedTopic}
-							No meetings found with the topic "{selectedTopic}". Click the pill again to clear filter.
+							</div>
 						{:else}
-							No meetings found for this city
+							<div class="no-meetings">
+								{#if selectedTopic}
+									<p class="empty-state-title">No meetings found</p>
+									<p class="empty-state-message">No meetings match the topic "{selectedTopic}". Click the topic pill again to see all meetings.</p>
+								{:else}
+									<p class="empty-state-title">No meetings found</p>
+									<p class="empty-state-message">This city might not have any upcoming meetings scheduled yet. Check back soon!</p>
+								{/if}
+							</div>
 						{/if}
 					</div>
-				{/if}
+				</div>
 			{:else}
 				<div class="no-meetings">
-					{'message' in searchResults ? searchResults.message : 'No meetings found for this city'}
+					<p class="empty-state-title">No meetings found</p>
+					<p class="empty-state-message">{'message' in searchResults ? searchResults.message : 'We could not find any meetings for this city. Agendas are typically posted 48 hours before meetings.'}</p>
 				</div>
 			{/if}
 		{:else}
@@ -332,54 +344,100 @@
 		font-weight: 600;
 	}
 
-	.topic-pills-container {
-		margin-bottom: 1.5rem;
+	.content-layout {
+		display: flex;
+		gap: 2rem;
+		align-items: flex-start;
 	}
 
-	.pills-label {
+	.topic-sidebar {
+		width: 200px;
+		flex-shrink: 0;
+	}
+
+	.topic-sidebar-sticky {
+		position: sticky;
+		top: 1rem;
+	}
+
+	.sidebar-title {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-gray);
-		font-weight: 500;
-		display: block;
-		margin-bottom: 0.75rem;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--civic-dark);
+		margin: 0 0 1rem 0;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.meetings-main {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.topic-pills {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
 		gap: 0.5rem;
 	}
 
 	.topic-pill {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
-		padding: 0.5rem 0.85rem;
-		background: var(--civic-light);
-		color: var(--civic-blue);
+		padding: 0.6rem 1rem;
+		background: white;
+		color: var(--civic-dark);
 		border: 1px solid var(--civic-border);
-		border-radius: 20px;
+		border-radius: 8px;
 		cursor: pointer;
 		font-weight: 500;
 		transition: all 0.2s ease;
+		text-align: left;
+		width: 100%;
 	}
 
 	.topic-pill:hover {
-		background: white;
+		background: var(--civic-light);
 		border-color: var(--civic-blue);
-		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+		transform: translateX(2px);
+		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
 	}
 
 	.topic-pill.active {
 		background: var(--civic-blue);
 		color: white;
 		border-color: var(--civic-blue);
+		font-weight: 600;
 	}
 
 	.topic-pill.active:hover {
-		background: var(--civic-blue);
-		opacity: 0.9;
+		background: var(--civic-accent);
+		opacity: 1;
+	}
+
+	@media (max-width: 768px) {
+		.content-layout {
+			flex-direction: column;
+			gap: 1.5rem;
+		}
+
+		.topic-sidebar {
+			width: 100%;
+		}
+
+		.topic-sidebar-sticky {
+			position: static;
+		}
+
+		.topic-pills {
+			flex-direction: row;
+			flex-wrap: wrap;
+		}
+
+		.topic-pill {
+			width: auto;
+			flex: 0 1 auto;
+		}
 	}
 
 	@media (max-width: 640px) {
@@ -395,8 +453,8 @@
 			font-size: 1.5rem;
 		}
 
-		.pills-label {
-			font-size: 0.75rem;
+		.sidebar-title {
+			font-size: 0.8rem;
 		}
 
 		.topic-pill {
