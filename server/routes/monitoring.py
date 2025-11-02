@@ -3,9 +3,12 @@ Monitoring and health check API routes
 """
 
 import logging
+import random
 from datetime import datetime
+from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
 from database.db import UnifiedDatabase
+from server.services.ticker import generate_ticker_item
 from config import config
 
 logger = logging.getLogger("engagic")
@@ -285,6 +288,42 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
 
     except Exception as e:
         logger.error(f"Analytics endpoint failed: {e}")
+        raise HTTPException(
+            status_code=500, detail="We humbly thank you for your patience"
+        )
+
+
+@router.get("/api/ticker")
+async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
+    """Get pre-generated ticker items for homepage news ticker"""
+    try:
+        ticker_items = []
+
+        # Fetch 15 random meetings, mixing item-based and general meetings
+        for i in range(15):
+            # Alternate between item-based and general meetings for variety
+            use_items = i % 2 == 0
+
+            if use_items:
+                # Get random meeting with items
+                meeting = db.get_random_meeting_with_items()
+            else:
+                # Get random high-quality meeting
+                meeting = db.get_random_best_meeting()
+
+            if meeting:
+                ticker_item = generate_ticker_item(meeting)
+                if ticker_item:
+                    ticker_items.append(ticker_item)
+
+        return {
+            "success": True,
+            "items": ticker_items,
+            "count": len(ticker_items)
+        }
+
+    except Exception as e:
+        logger.error(f"Ticker endpoint failed: {e}")
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
