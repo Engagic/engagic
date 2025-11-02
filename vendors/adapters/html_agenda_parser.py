@@ -182,6 +182,7 @@ def _extract_attachments(contents_div, item_id: str) -> List[Dict[str, Any]]:
                     'name': name,
                     'history_id': history_id,
                     'url': href,  # Store relative URL
+                    'type': 'pdf',  # PrimeGov attachments are PDFs
                 })
 
     return attachments

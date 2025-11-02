@@ -142,6 +142,7 @@ class PrimeGovAdapter(BaseAdapter):
         parsed = parse_primegov_html_agenda(html)
 
         # Convert relative attachment URLs to absolute URLs
+        # Also ensure type field is set (defense-in-depth)
         total_attachments = 0
         for item in parsed['items']:
             for attachment in item.get('attachments', []):
@@ -149,6 +150,9 @@ class PrimeGovAdapter(BaseAdapter):
                 # If URL is relative (starts with /), make it absolute
                 if url.startswith('/'):
                     attachment['url'] = f"{self.base_url}{url}"
+                # Ensure type field is set (PrimeGov attachments are PDFs)
+                if 'type' not in attachment:
+                    attachment['type'] = 'pdf'
                 total_attachments += 1
 
         logger.info(

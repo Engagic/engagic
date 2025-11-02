@@ -234,58 +234,39 @@ restart_fetcher() {
 
 # Background Process Management (Manual Commands Only)
 kill_background_processes() {
-    log "Checking for background conductor processes..."
+    log "Terminating ALL engagic background processes..."
 
     local was_running=false
+    # Broader pattern to catch ALL engagic processes:
+    # - engagic-daemon, engagic-conductor, engagic-*
+    # - pipeline.conductor, pipeline.processor, pipeline.fetcher, pipeline.analyzer
+    # - Any python running from /root/engagic
+    local PATTERN="engagic-|pipeline\.|/root/engagic.*python"
 
     # Check for ANY running processes
-    if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
+    if pgrep -f "$PATTERN" > /dev/null; then
         was_running=true
-        warn "Found running background processes:"
-        pgrep -fa "engagic-daemon|pipeline.conductor|engagic-conductor" | sed 's/^/  /'
+        warn "Found running engagic processes:"
+        pgrep -fa "$PATTERN" | sed 's/^/  /'
         echo ""
 
-        # Show recent logs to confirm activity
-        info "Recent log output (last 20 lines):"
-        if [ -f "/root/engagic/engagic.log" ]; then
-            tail -20 /root/engagic/engagic.log | sed 's/^/  /'
-        else
-            warn "  No persistent log file found (conductor logs to stdout when run via CLI)"
-        fi
-        echo ""
-
-        # Give processes a chance to log shutdown
-        warn "Sending graceful shutdown signal (SIGTERM)..."
-        pkill -TERM -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
-
-        # Wait up to 10 seconds for graceful shutdown
-        for i in {1..10}; do
-            if ! pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
-                log "Processes shut down gracefully"
-                break
-            fi
-            sleep 1
-        done
-    fi
-
-    # Force kill if still running
-    if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
-        warn "Processes still running after 10s, sending SIGKILL..."
-        pkill -KILL -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
+        # Immediate SIGKILL - no graceful shutdown, user wants immediate termination
+        warn "Sending SIGKILL (immediate termination)..."
+        pkill -KILL -f "$PATTERN" 2>/dev/null || true
         sleep 1
     fi
 
     # Final verification
-    if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
-        error "Failed to stop background processes:"
-        pgrep -fa "engagic-daemon|pipeline.conductor|engagic-conductor" | sed 's/^/  /'
+    if pgrep -f "$PATTERN" > /dev/null; then
+        error "Failed to stop some processes:"
+        pgrep -fa "$PATTERN" | sed 's/^/  /'
         echo ""
-        warn "Try: pkill -9 -f 'engagic-daemon|pipeline.conductor|engagic-conductor'"
+        warn "Retry with: pkill -9 -f 'engagic'"
     else
         if [ "$was_running" = true ]; then
-            log "Successfully stopped all background processes"
+            log "All engagic processes terminated"
         else
-            info "No background processes were running"
+            info "No engagic processes were running"
         fi
     fi
 }
