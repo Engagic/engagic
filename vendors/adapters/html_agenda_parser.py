@@ -11,6 +11,7 @@ import re
 import logging
 from typing import Dict, Any, List
 from bs4 import BeautifulSoup
+from parsing.participation import parse_participation_info
 
 logger = logging.getLogger("engagic")
 
@@ -39,7 +40,7 @@ def parse_primegov_html_agenda(html: str) -> Dict[str, Any]:
 
     # Extract participation info from page text (before agenda items)
     page_text = soup.get_text()
-    participation = _extract_participation_info(page_text)
+    participation = parse_participation_info(page_text) or {}
 
     # Extract agenda items
     items = _extract_agenda_items(soup)
@@ -53,63 +54,6 @@ def parse_primegov_html_agenda(html: str) -> Dict[str, Any]:
         'participation': participation,
         'items': items,
     }
-
-
-def _extract_participation_info(text: str) -> Dict[str, Any]:
-    """Extract participation info from page text using regex patterns"""
-    info = {}
-
-    # Email
-    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    emails = re.findall(email_pattern, text, re.IGNORECASE)
-    if emails:
-        valid = [e for e in emails if not any(skip in e.lower() for skip in ['example.com', 'test@', 'noreply'])]
-        if valid:
-            info['email'] = valid[0]
-
-    # Phone (look for "Phone:" prefix to avoid meeting IDs)
-    phone_patterns = [
-        r'[Pp]hone[:\s]+(\+?1?\s*\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})',  # "Phone: 1(669)900-6833"
-        r'\b1\s*\(\d{3}\)\s*\d{3}-\d{4}\b',  # 1(669)900-6833
-    ]
-    for pattern in phone_patterns:
-        matches = re.findall(pattern, text)
-        if matches:
-            # Extract first match (may be tuple from capture group)
-            phone_text = matches[0] if isinstance(matches[0], str) else matches[0]
-            phone = re.sub(r'[^\d]', '', phone_text)
-            if len(phone) == 10:
-                phone = f"+1{phone}"
-            elif len(phone) == 11 and phone.startswith('1'):
-                phone = f"+{phone}"
-            info['phone'] = phone
-            break
-
-    # Virtual meeting URLs (stop at closing paren/bracket)
-    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]\)\]]+'
-    urls = re.findall(url_pattern, text, re.IGNORECASE)
-    virtual_domains = ['zoom.us', 'meet.google.com', 'teams.microsoft.com', 'webex.com', 'gotomeeting.com']
-    for url in urls:
-        if any(domain in url.lower() for domain in virtual_domains):
-            info['virtual_url'] = url
-            break
-
-    # Zoom meeting ID
-    if 'zoom' in text.lower():
-        meeting_id_pattern = r'meeting\s*id[:\s]+(\d{3}[\s-]?\d{3,4}[\s-]?\d{4})'
-        meeting_ids = re.findall(meeting_id_pattern, text, re.IGNORECASE)
-        if meeting_ids:
-            info['meeting_id'] = meeting_ids[0].strip()
-
-    # Hybrid/virtual detection
-    text_lower = text.lower()
-    hybrid_keywords = ['hybrid', 'in-person and virtual', 'attend in person or', 'zoom or in person']
-    if any(kw in text_lower for kw in hybrid_keywords):
-        info['is_hybrid'] = True
-    elif info.get('virtual_url'):
-        info['is_virtual_only'] = True
-
-    return info
 
 
 def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:

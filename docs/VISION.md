@@ -47,7 +47,7 @@ Components (6 logical clusters):
 Architecture:
 - Item-level processing for 374+ cities (58% of platform, 50-80M people)
 - Two parallel pipelines: item-based (primary) and monolithic (fallback)
-- Cache-first API (never fetches live, background daemon syncs every 72 hours)
+- Cache-first API (never fetches live, background fetcher service syncs every 72 hours)
 - Priority queue (recent meetings first)
 
 ### Userland (Consumer Features)
@@ -123,7 +123,7 @@ Features (to build):
   - main.py: 98 lines (down from 1,473)
   - Clean separation: routes/ services/ utils/ middleware/ models/
   - Cache-first serving (never fetches live)
-  - Background daemon syncs every 72 hours
+  - Background fetcher service syncs every 72 hours (manual processing for cost control)
   - Rate limiting: 30 req/60s per IP
   - Endpoints: search, topics, meetings, admin, monitoring
 
