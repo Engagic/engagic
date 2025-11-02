@@ -4,7 +4,7 @@ Monitoring and health check API routes
 
 import logging
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from database.db import UnifiedDatabase
 from server.services.ticker import generate_ticker_item
 from config import config
@@ -14,9 +14,9 @@ logger = logging.getLogger("engagic")
 router = APIRouter()
 
 
-def get_db():
-    """Dependency to get database instance"""
-    return UnifiedDatabase(config.UNIFIED_DB_PATH)
+def get_db(request: Request) -> UnifiedDatabase:
+    """Dependency to get shared database instance from app state"""
+    return request.app.state.db
 
 
 def get_analyzer():

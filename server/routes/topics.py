@@ -3,7 +3,7 @@ Topic search API routes
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from server.models.requests import TopicSearchRequest
 from database.db import UnifiedDatabase
 
@@ -12,10 +12,9 @@ logger = logging.getLogger("engagic")
 router = APIRouter(prefix="/api")
 
 
-def get_db():
-    """Dependency to get database instance"""
-    from config import config
-    return UnifiedDatabase(config.UNIFIED_DB_PATH)
+def get_db(request: Request) -> UnifiedDatabase:
+    """Dependency to get shared database instance from app state"""
+    return request.app.state.db
 
 
 @router.get("/topics")
