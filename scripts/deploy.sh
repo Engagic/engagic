@@ -222,7 +222,13 @@ stop_fetcher() {
 }
 
 restart_fetcher() {
+    # Create service file if doesn't exist
+    if [ ! -f "$FETCHER_SERVICE_FILE" ]; then
+        create_fetcher_service
+    fi
+
     log "Restarting fetcher..."
+    systemctl enable "$FETCHER_SERVICE" 2>/dev/null || true
     systemctl restart "$FETCHER_SERVICE"
     sleep 2
     if systemctl is-active --quiet "$FETCHER_SERVICE"; then
