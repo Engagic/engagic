@@ -54,6 +54,9 @@ class MeetingValidator:
             f"{slug}.escribemeetings.com",
             "escribemeetings.com",
         ],
+        # Custom city adapters
+        "menlopark": lambda slug: ["menlopark.gov"],
+        "berkeley": lambda slug: ["berkeleyca.gov"],
     }
 
     @classmethod

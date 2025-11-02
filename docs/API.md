@@ -6,7 +6,7 @@ Complete reference for the Engagic public API.
 **Base URL (Local):** `http://localhost:8000`
 
 **Version:** v1
-**Last Updated:** October 31, 2025
+**Last Updated:** November 1, 2025 (Post-Server Refactor)
 
 ---
 

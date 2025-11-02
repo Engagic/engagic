@@ -1,6 +1,6 @@
 # Engagic Deployment Guide
 
-**Last Updated:** 2025-10-30 (Post-Reorganization)
+**Last Updated:** 2025-11-01 (Post-Server Refactor)
 
 Operational guide for deploying and managing Engagic on a VPS.
 

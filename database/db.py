@@ -1,257 +1,53 @@
 """
-Unified Database for Engagic - Phase 1 Refactor
+Unified Database for Engagic - Repository Pattern
 
 Consolidates locations.db, meetings.db, and analytics.db into a single database
-with clean, minimal interface.
+with clean repository-based architecture.
 
-Key improvements:
-- Single get_city() method with optional parameters (no more 4+ lookup methods)
-- Simplified meeting storage with normalized dates
-- Multi-tenancy tables ready for Phase 5
-- Clear separation of concerns
+This facade provides the same API as before but delegates to focused repositories:
+- CityRepository: City and zipcode operations
+- MeetingRepository: Meeting storage and retrieval
+- ItemRepository: Agenda item operations
+- QueueRepository: Processing queue management
+- SearchRepository: Search, topics, cache, and stats
 """
 
 import logging
 import sqlite3
-import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from dataclasses import dataclass, asdict
 from pathlib import Path
 
+from database.models import City, Meeting, AgendaItem, DatabaseConnectionError
+from database.repositories.cities import CityRepository
+from database.repositories.meetings import MeetingRepository
+from database.repositories.items import ItemRepository
+from database.repositories.queue import QueueRepository
+from database.repositories.search import SearchRepository
+
 logger = logging.getLogger("engagic")
-
-
-class DatabaseConnectionError(Exception):
-    """Raised when database connection is not established"""
-
-    pass
-
-
-@dataclass
-class City:
-    """City entity - single source of truth"""
-
-    banana: str  # Primary key: paloaltoCA (derived)
-    name: str  # Palo Alto
-    state: str  # CA
-    vendor: str  # primegov, legistar, granicus, etc.
-    slug: str  # cityofpaloalto (vendor-specific)
-    county: Optional[str] = None
-    status: str = "active"
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization"""
-        data = asdict(self)
-        if self.created_at:
-            data["created_at"] = self.created_at.isoformat()
-        if self.updated_at:
-            data["updated_at"] = self.updated_at.isoformat()
-        return data
-
-    @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> "City":
-        """Create City from database row"""
-        row_dict = dict(row)
-        return cls(
-            banana=row_dict["banana"],
-            name=row_dict["name"],
-            state=row_dict["state"],
-            vendor=row_dict["vendor"],
-            slug=row_dict["slug"],
-            county=row_dict.get("county"),
-            status=row_dict.get("status", "active"),
-            created_at=datetime.fromisoformat(row_dict["created_at"])
-            if row_dict.get("created_at")
-            else None,
-            updated_at=datetime.fromisoformat(row_dict["updated_at"])
-            if row_dict.get("updated_at")
-            else None,
-        )
-
-
-@dataclass
-class Meeting:
-    """Meeting entity with optional summary
-
-    URL Architecture (ONE OR THE OTHER):
-    - agenda_url: HTML page to view (item-based meetings with extracted items)
-    - packet_url: PDF file to download (monolithic meetings, fallback processing)
-    """
-
-    id: str  # Unique meeting ID
-    banana: str  # Foreign key to City
-    title: str
-    date: Optional[datetime]
-    agenda_url: Optional[str] = None  # HTML agenda page (item-based, primary)
-    packet_url: Optional[
-        str | List[str]
-    ] = None  # PDF packet (monolithic, fallback)
-    summary: Optional[str] = None
-    participation: Optional[Dict[str, Any]] = None  # Contact info: email, phone, virtual_url, etc.
-    status: Optional[str] = (
-        None  # cancelled, postponed, revised, rescheduled, or None for normal
-    )
-    topics: Optional[List[str]] = None  # Aggregated topics from agenda items
-    processing_status: str = "pending"  # pending, processing, completed, failed
-    processing_method: Optional[str] = (
-        None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
-    )
-    processing_time: Optional[float] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization"""
-        data = asdict(self)
-        if self.date:
-            data["date"] = self.date.isoformat()
-        if self.created_at:
-            data["created_at"] = self.created_at.isoformat()
-        if self.updated_at:
-            data["updated_at"] = self.updated_at.isoformat()
-
-        # Map status → meeting_status for frontend compatibility
-        if "status" in data:
-            data["meeting_status"] = data.pop("status")
-
-        return data
-
-    @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> "Meeting":
-        """Create Meeting from database row"""
-        row_dict = dict(row)
-
-        # Deserialize packet_url if it's a JSON list
-        packet_url = row_dict.get("packet_url")
-        if packet_url and packet_url.startswith("["):
-            try:
-                packet_url = json.loads(packet_url)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize packet_url JSON: {packet_url}")
-                pass  # Keep as string if JSON parsing fails
-
-        # Deserialize participation if it's JSON
-        participation = row_dict.get("participation")
-        if participation:
-            try:
-                participation = json.loads(participation)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize participation JSON: {participation}")
-                participation = None
-
-        # Deserialize topics if it's JSON
-        topics = row_dict.get("topics")
-        if topics:
-            try:
-                topics = json.loads(topics)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize topics JSON: {topics}")
-                topics = None
-        else:
-            topics = None
-
-        return cls(
-            id=row_dict["id"],
-            banana=row_dict["banana"],
-            title=row_dict["title"],
-            date=datetime.fromisoformat(row_dict["date"])
-            if row_dict.get("date")
-            else None,
-            agenda_url=row_dict.get("agenda_url"),
-            packet_url=packet_url,
-            summary=row_dict.get("summary"),
-            participation=participation,
-            status=row_dict.get("status"),
-            topics=topics,
-            processing_status=row_dict.get("processing_status", "pending"),
-            processing_method=row_dict.get("processing_method"),
-            processing_time=row_dict.get("processing_time"),
-            created_at=datetime.fromisoformat(row_dict["created_at"])
-            if row_dict.get("created_at")
-            else None,
-            updated_at=datetime.fromisoformat(row_dict["updated_at"])
-            if row_dict.get("updated_at")
-            else None,
-        )
-
-
-@dataclass
-class AgendaItem:
-    """Agenda item entity - individual items within a meeting"""
-
-    id: str  # Vendor-specific item ID
-    meeting_id: str  # Foreign key to Meeting
-    title: str
-    sequence: int  # Order in agenda
-    attachments: List[
-        Any
-    ]  # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
-    summary: Optional[str] = None
-    topics: Optional[List[str]] = None  # Extracted topics
-    created_at: Optional[datetime] = None
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization"""
-        data = asdict(self)
-        if self.created_at:
-            data["created_at"] = self.created_at.isoformat()
-        return data
-
-    @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> "AgendaItem":
-        """Create AgendaItem from database row"""
-        row_dict = dict(row)
-
-        # Deserialize JSON fields
-        attachments = row_dict.get("attachments")
-        if attachments:
-            try:
-                attachments = json.loads(attachments)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize attachments JSON: {attachments}")
-                attachments = []
-        else:
-            attachments = []
-
-        topics = row_dict.get("topics")
-        if topics:
-            try:
-                topics = json.loads(topics)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize topics JSON: {topics}")
-                topics = None
-        else:
-            topics = None
-
-        return cls(
-            id=row_dict["id"],
-            meeting_id=row_dict["meeting_id"],
-            title=row_dict["title"],
-            sequence=row_dict["sequence"],
-            attachments=attachments,
-            summary=row_dict.get("summary"),
-            topics=topics,
-            created_at=datetime.fromisoformat(row_dict["created_at"])
-            if row_dict.get("created_at")
-            else None,
-        )
 
 
 class UnifiedDatabase:
     """
     Single database interface for all Engagic data.
-    Key design: Prefer specific lookups over generic queries.
+    Delegates to focused repositories for cleaner separation of concerns.
     """
 
     def __init__(self, db_path: str):
-        """Initialize unified database connection"""
+        """Initialize unified database connection and repositories"""
         self.db_path = db_path
         self.conn = None
         self._connect()
         self._init_schema()
+
+        # Initialize repositories with shared connection
+        self.cities = CityRepository(self.conn)
+        self.meetings = MeetingRepository(self.conn)
+        self.items = ItemRepository(self.conn)
+        self.queue = QueueRepository(self.conn)
+        self.search = SearchRepository(self.conn)
+
         logger.info(f"Initialized unified database at {db_path}")
 
     def _connect(self):
@@ -303,6 +99,7 @@ class UnifiedDatabase:
             banana TEXT NOT NULL,
             title TEXT NOT NULL,
             date TIMESTAMP,
+            agenda_url TEXT,
             packet_url TEXT,
             summary TEXT,
             participation TEXT,
@@ -340,10 +137,10 @@ class UnifiedDatabase:
             last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- Processing queue: Decoupled PDF processing queue (Phase 4)
+        -- Processing queue: Decoupled processing queue (agenda-first, item-level)
         CREATE TABLE IF NOT EXISTS queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            packet_url TEXT NOT NULL UNIQUE,
+            source_url TEXT NOT NULL UNIQUE,
             meeting_id TEXT,
             banana TEXT,
             status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -435,7 +232,7 @@ class UnifiedDatabase:
         self.conn.executescript(schema)
         self.conn.commit()
 
-    # ========== City Operations ==========
+    # ========== City Operations (delegate to CityRepository) ==========
 
     def get_city(
         self,
@@ -445,58 +242,8 @@ class UnifiedDatabase:
         slug: Optional[str] = None,
         zipcode: Optional[str] = None,
     ) -> Optional[City]:
-        """
-        Unified city lookup - replaces 4+ separate methods.
-
-        Uses most specific parameter provided:
-        - banana: Direct primary key lookup (fastest)
-        - slug: Lookup by vendor-specific identifier
-        - zipcode: Lookup via zipcodes join
-        - name + state: Normalized name matching
-
-        Examples:
-            get_city(banana="paloaltoCA")
-            get_city(name="Palo Alto", state="CA")
-            get_city(slug="cityofpaloalto")
-            get_city(zipcode="94301")
-        """
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-        cursor = self.conn.cursor()
-
-        if banana:
-            # Direct primary key lookup
-            cursor.execute("SELECT * FROM cities WHERE banana = ?", (banana,))
-        elif slug:
-            # Lookup by vendor slug
-            cursor.execute("SELECT * FROM cities WHERE slug = ?", (slug,))
-        elif zipcode:
-            # Lookup via zipcode join
-            cursor.execute(
-                """
-                SELECT c.* FROM cities c
-                JOIN zipcodes cz ON c.banana = cz.banana
-                WHERE cz.zipcode = ?
-                LIMIT 1
-            """,
-                (zipcode,),
-            )
-        elif name and state:
-            # Normalized name matching (case-insensitive, space-normalized)
-            normalized_name = name.lower().replace(" ", "")
-            cursor.execute(
-                """
-                SELECT * FROM cities
-                WHERE LOWER(REPLACE(name, ' ', '')) = ?
-                AND UPPER(state) = ?
-            """,
-                (normalized_name, state.upper()),
-            )
-        else:
-            raise ValueError("Must provide at least one search parameter")
-
-        row = cursor.fetchone()
-        return City.from_db_row(row) if row else None
+        """Unified city lookup - delegates to CityRepository"""
+        return self.cities.get_city(banana, name, state, slug, zipcode)
 
     def get_cities(
         self,
@@ -506,76 +253,12 @@ class UnifiedDatabase:
         status: str = "active",
         limit: Optional[int] = None,
     ) -> List[City]:
-        """
-        Batch city lookup with filters.
-
-        Args:
-            state: Filter by state (e.g., "CA")
-            vendor: Filter by vendor (e.g., "primegov")
-            name: Filter by exact name match (for ambiguous city search)
-            status: Filter by status (default: "active")
-            limit: Maximum results to return
-        """
-        assert self.conn is not None, "Database connection not established"
-        conditions = ["status = ?"]
-        params = [status]
-
-        if state:
-            conditions.append("UPPER(state) = ?")
-            params.append(state.upper())
-
-        if vendor:
-            conditions.append("vendor = ?")
-            params.append(vendor)
-
-        if name:
-            conditions.append("LOWER(name) = ?")
-            params.append(name.lower())
-
-        query = f"""
-            SELECT * FROM cities
-            WHERE {" AND ".join(conditions)}
-            ORDER BY name
-        """
-
-        if limit:
-            query += f" LIMIT {limit}"
-
-        cursor = self.conn.cursor()
-        cursor.execute(query, params)
-
-        return [City.from_db_row(row) for row in cursor.fetchall()]
+        """Batch city lookup - delegates to CityRepository"""
+        return self.cities.get_cities(state, vendor, name, status, limit)
 
     def get_city_meeting_stats(self, bananas: List[str]) -> Dict[str, Dict[str, int]]:
-        """Get meeting statistics for multiple cities at once"""
-        if not bananas:
-            return {}
-
-        assert self.conn is not None, "Database connection not established"
-        placeholders = ",".join("?" * len(bananas))
-        cursor = self.conn.cursor()
-        cursor.execute(
-            f"""
-            SELECT
-                banana,
-                COUNT(*) as total_meetings,
-                SUM(CASE WHEN packet_url IS NOT NULL AND packet_url != '' THEN 1 ELSE 0 END) as meetings_with_packet,
-                SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as summarized_meetings
-            FROM meetings
-            WHERE banana IN ({placeholders})
-            GROUP BY banana
-        """,
-            bananas,
-        )
-
-        return {
-            row["banana"]: {
-                "total_meetings": row["total_meetings"],
-                "meetings_with_packet": row["meetings_with_packet"],
-                "summarized_meetings": row["summarized_meetings"],
-            }
-            for row in cursor.fetchall()
-        }
+        """Get meeting statistics for multiple cities - delegates to CityRepository"""
+        return self.cities.get_city_meeting_stats(bananas)
 
     def add_city(
         self,
@@ -587,68 +270,26 @@ class UnifiedDatabase:
         county: Optional[str] = None,
         zipcodes: Optional[List[str]] = None,
     ) -> City:
-        """Add a new city to the database"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO cities
-            (banana, name, state, vendor, slug, county)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """,
-            (banana, name, state, vendor, slug, county),
-        )
-
-        # Add zipcodes if provided
-        if zipcodes:
-            for i, zipcode in enumerate(zipcodes):
-                is_primary = i == 0
-                cursor.execute(
-                    """
-                    INSERT OR IGNORE INTO zipcodes
-                    (banana, zipcode, is_primary)
-                    VALUES (?, ?, ?)
-                """,
-                    (banana, zipcode, is_primary),
-                )
-
-        self.conn.commit()
-        logger.info(f"Added city: {banana} ({name}, {state})")
-
-        result = self.get_city(banana=banana)
-        if result is None:
-            raise DatabaseConnectionError(
-                f"Failed to retrieve newly added city: {banana}"
-            )
-        return result
+        """Add a new city - delegates to CityRepository"""
+        return self.cities.add_city(banana, name, state, vendor, slug, county, zipcodes)
 
     def get_city_zipcodes(self, banana: str) -> List[str]:
-        """Get all zipcodes for a city"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT zipcode FROM zipcodes
-            WHERE banana = ?
-            ORDER BY is_primary DESC, zipcode
-        """,
-            (banana,),
-        )
+        """Get all zipcodes for a city - delegates to CityRepository"""
+        return self.cities.get_city_zipcodes(banana)
 
-        return [row["zipcode"] for row in cursor.fetchall()]
+    def get_city_meeting_frequency(self, banana: str, days: int = 30) -> int:
+        """Get meeting count for city in last N days - delegates to CityRepository"""
+        return self.cities.get_city_meeting_frequency(banana, days)
 
-    # ========== Meeting Operations ==========
+    def get_city_last_sync(self, banana: str) -> Optional[datetime]:
+        """Get last sync time for city - delegates to CityRepository"""
+        return self.cities.get_city_last_sync(banana)
+
+    # ========== Meeting Operations (delegate to MeetingRepository) ==========
 
     def get_meeting(self, meeting_id: str) -> Optional[Meeting]:
-        """Get a single meeting by ID"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,))
-
-        row = cursor.fetchone()
-        return Meeting.from_db_row(row) if row else None
+        """Get a single meeting by ID - delegates to MeetingRepository"""
+        return self.meetings.get_meeting(meeting_id)
 
     def get_meetings(
         self,
@@ -658,661 +299,328 @@ class UnifiedDatabase:
         has_summary: Optional[bool] = None,
         limit: int = 50,
     ) -> List[Meeting]:
-        """
-        Get meetings with flexible filtering.
-
-        Args:
-            bananas: Filter by list of bananas
-            start_date: Filter by date >= start_date
-            end_date: Filter by date <= end_date
-            has_summary: Filter by whether summary exists
-            limit: Maximum results
-        """
-        assert self.conn is not None, "Database connection not established"
-        conditions = []
-        params = []
-
-        if bananas:
-            placeholders = ",".join("?" * len(bananas))
-            conditions.append(f"banana IN ({placeholders})")
-            params.extend(bananas)
-
-        if start_date:
-            conditions.append("date >= ?")
-            params.append(start_date.isoformat())
-
-        if end_date:
-            conditions.append("date <= ?")
-            params.append(end_date.isoformat())
-
-        if has_summary is not None:
-            if has_summary:
-                conditions.append("summary IS NOT NULL")
-            else:
-                conditions.append("summary IS NULL")
-
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
-        query = f"""
-            SELECT * FROM meetings
-            {where_clause}
-            ORDER BY date DESC, created_at DESC
-            LIMIT {limit}
-        """
-
-        cursor = self.conn.cursor()
-        cursor.execute(query, params)
-
-        return [Meeting.from_db_row(row) for row in cursor.fetchall()]
+        """Get meetings with filters - delegates to MeetingRepository"""
+        return self.meetings.get_meetings(bananas, start_date, end_date, has_summary, limit)
 
     def store_meeting(self, meeting: Meeting) -> Meeting:
-        """Store or update a meeting"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
+        """Store or update a meeting - delegates to MeetingRepository"""
+        return self.meetings.store_meeting(meeting)
 
-        # Serialize JSON fields
-        participation_json = (
-            json.dumps(meeting.participation) if meeting.participation else None
-        )
-        topics_json = json.dumps(meeting.topics) if meeting.topics else None
+    def store_meeting_from_sync(
+        self, meeting_dict: Dict[str, Any], city: City
+    ) -> Optional[Meeting]:
+        """
+        Transform vendor meeting dict → validate → store → enqueue for processing
 
-        # Serialize packet_url if it's a list
-        packet_url_value = meeting.packet_url
-        if isinstance(packet_url_value, list):
-            packet_url_value = json.dumps(packet_url_value)
+        This method orchestrates across multiple repositories:
+        1. Parses dates from vendor format
+        2. Creates Meeting and AgendaItem objects
+        3. Validates meeting data
+        4. Stores meeting and items in database
+        5. Enqueues for LLM processing
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO meetings
-            (id, banana, title, date, agenda_url, packet_url, summary, participation, status, topics,
-             processing_status, processing_method, processing_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                meeting.id,
-                meeting.banana,
-                meeting.title,
-                meeting.date.isoformat() if meeting.date else None,
-                meeting.agenda_url,
-                packet_url_value,
-                meeting.summary,
-                participation_json,
-                meeting.status,
-                topics_json,
-                meeting.processing_status,
-                meeting.processing_method,
-                meeting.processing_time,
-            ),
-        )
+        Args:
+            meeting_dict: Raw meeting dict from vendor adapter
+            city: City object for this meeting
 
-        self.conn.commit()
-        result = self.get_meeting(meeting.id)
-        assert result is not None, (
-            f"Failed to retrieve newly stored meeting: {meeting.id}"
-        )
-        return result
+        Returns:
+            Stored Meeting object (or None if validation failed)
+        """
+        from vendors.validator import MeetingValidator
+
+        try:
+            # Parse date from adapter format
+            meeting_date = None
+            if meeting_dict.get("start"):
+                try:
+                    # Try parsing ISO format first
+                    meeting_date = datetime.fromisoformat(
+                        meeting_dict["start"].replace("Z", "+00:00")
+                    )
+                except Exception:
+                    # If ISO parsing fails, leave as None
+                    pass
+
+            # Create Meeting object
+            meeting_obj = Meeting(
+                id=meeting_dict.get("meeting_id", ""),
+                banana=city.banana,
+                title=meeting_dict.get("title", ""),
+                date=meeting_date,
+                agenda_url=meeting_dict.get("agenda_url"),
+                packet_url=meeting_dict.get("packet_url"),
+                summary=None,
+                participation=meeting_dict.get("participation"),
+                status=meeting_dict.get("meeting_status"),
+                processing_status="pending",
+            )
+
+            # Preserve existing summary if already processed (don't overwrite on re-sync)
+            existing_meeting = self.get_meeting(meeting_obj.id)
+            if existing_meeting and existing_meeting.summary:
+                meeting_obj.summary = existing_meeting.summary
+                meeting_obj.processing_status = existing_meeting.processing_status
+                meeting_obj.processing_method = existing_meeting.processing_method
+                meeting_obj.processing_time = existing_meeting.processing_time
+                meeting_obj.topics = existing_meeting.topics
+                logger.debug(f"Preserved existing summary for {meeting_obj.title}")
+
+            # Validate meeting before storing
+            if not MeetingValidator.validate_and_store(
+                {
+                    "packet_url": meeting_obj.packet_url,
+                    "title": meeting_obj.title,
+                },
+                city.banana,
+                city.name,
+                city.vendor,
+                city.slug,
+            ):
+                logger.warning(f"Skipping corrupted meeting: {meeting_obj.title}")
+                return None
+
+            # Store meeting (upsert)
+            stored_meeting = self.store_meeting(meeting_obj)
+            logger.debug(f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})")
+
+            # Store agenda items if present (preserve existing summaries on re-sync)
+            if meeting_dict.get("items"):
+                items = meeting_dict["items"]
+                agenda_items = []
+
+                # Build map of existing items to preserve summaries
+                existing_items = self.get_agenda_items(stored_meeting.id)
+                existing_items_map = {item.id: item for item in existing_items}
+
+                for item_data in items:
+                    item_id = f"{stored_meeting.id}_{item_data['item_id']}"
+
+                    agenda_item = AgendaItem(
+                        id=item_id,
+                        meeting_id=stored_meeting.id,
+                        title=item_data.get("title", ""),
+                        sequence=item_data.get("sequence", 0),
+                        attachments=item_data.get("attachments", []),
+                        summary=None,
+                        topics=None,
+                    )
+
+                    # Preserve existing summary if already processed
+                    if item_id in existing_items_map:
+                        existing_item = existing_items_map[item_id]
+                        if existing_item.summary:
+                            agenda_item.summary = existing_item.summary
+                        if existing_item.topics:
+                            agenda_item.topics = existing_item.topics
+
+                    agenda_items.append(agenda_item)
+
+                if agenda_items:
+                    count = self.store_agenda_items(stored_meeting.id, agenda_items)
+                    items_with_summaries = sum(1 for item in agenda_items if item.summary)
+                    logger.debug(
+                        f"Stored {count} agenda items for {stored_meeting.title} "
+                        f"({items_with_summaries} with preserved summaries)"
+                    )
+
+            # Check if already processed before enqueuing (to avoid wasting credits)
+            # AGENDA-FIRST: Check item-level summaries (golden path) first
+            #
+            # TODO: Future enhancement - PDF content hash detection
+            # Calculate hash of packet_url content and compare against cache.content_hash
+            # to detect meaningful changes. Would require fetching PDF during sync (slower)
+            # but enables smart re-processing only when content actually changes.
+            # Trade-off: Sync latency vs credit efficiency for updated agendas.
+            has_items = bool(meeting_dict.get("items"))
+            agenda_url = meeting_dict.get("agenda_url")
+            packet_url = meeting_dict.get("packet_url")
+
+            skip_enqueue = False
+            skip_reason = None
+
+            # Priority 1: Check for item-level summaries (GOLDEN PATH)
+            if has_items and 'agenda_items' in locals():
+                items_with_summaries = [item for item in agenda_items if item.summary]
+                if items_with_summaries:
+                    skip_enqueue = True
+                    skip_reason = f"{len(items_with_summaries)}/{len(agenda_items)} items already have summaries"
+
+            # Priority 2: Check for monolithic summary (fallback path)
+            if not skip_enqueue and stored_meeting.summary:
+                skip_enqueue = True
+                skip_reason = "meeting already has summary (monolithic)"
+
+            if skip_enqueue:
+                logger.debug(
+                    f"Skipping enqueue for {stored_meeting.title} - {skip_reason}"
+                )
+            elif agenda_url or packet_url or has_items:
+                # Calculate priority based on meeting date recency
+                if meeting_date:
+                    days_old = (datetime.now() - meeting_date).days
+                else:
+                    days_old = 999
+                priority = max(0, 100 - days_old)
+
+                # Priority order: agenda_url > packet_url > items://
+                if agenda_url:
+                    queue_url = agenda_url
+                    processing_type = "item-based"
+                elif packet_url:
+                    queue_url = packet_url
+                    processing_type = "PDF"
+                else:
+                    queue_url = f"items://{stored_meeting.id}"
+                    processing_type = "item-based-no-url"
+
+                self.enqueue_for_processing(
+                    source_url=queue_url,
+                    meeting_id=stored_meeting.id,
+                    banana=city.banana,
+                    priority=priority,
+                    metadata={
+                        "has_items": has_items,
+                        "has_agenda": bool(agenda_url),
+                        "has_packet": bool(packet_url),
+                    },
+                )
+
+                logger.debug(
+                    f"Enqueued {processing_type} processing for {stored_meeting.title} (priority {priority})"
+                )
+            else:
+                logger.debug(
+                    f"Meeting {stored_meeting.title} has no agenda/packet/items - stored for display only"
+                )
+
+            return stored_meeting
+
+        except Exception as e:
+            logger.error(
+                f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
+            )
+            return None
 
     def update_meeting_summary(
         self,
         meeting_id: str,
-        summary: str,
+        summary: Optional[str],
         processing_method: str,
         processing_time: float,
         participation: Optional[Dict[str, Any]] = None,
         topics: Optional[List[str]] = None,
     ):
-        """Update meeting with processed summary, topics, and optional participation info"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-
-        participation_json = json.dumps(participation) if participation else None
-        topics_json = json.dumps(topics) if topics else None
-
-        cursor.execute(
-            """
-            UPDATE meetings
-            SET summary = ?,
-                participation = ?,
-                topics = ?,
-                processing_status = 'completed',
-                processing_method = ?,
-                processing_time = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """,
-            (summary, participation_json, topics_json, processing_method, processing_time, meeting_id),
-        )
-
-        self.conn.commit()
-        logger.info(
-            f"Updated summary for meeting {meeting_id} using {processing_method}"
+        """Update meeting with processed summary - delegates to MeetingRepository"""
+        return self.meetings.update_meeting_summary(
+            meeting_id, summary, processing_method, processing_time, participation, topics
         )
 
     def get_unprocessed_meetings(self, limit: int = 50) -> List[Meeting]:
-        """Get meetings that need summary processing"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM meetings
-            WHERE processing_status = 'pending'
-            AND packet_url IS NOT NULL
-            ORDER BY date DESC
-            LIMIT ?
-        """,
-            (limit,),
-        )
-
-        return [Meeting.from_db_row(row) for row in cursor.fetchall()]
-
-    def get_city_meeting_frequency(self, banana: str, days: int = 30) -> int:
-        """Get count of meetings for a city in the last N days"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*) as count
-            FROM meetings
-            WHERE banana = ?
-            AND date >= datetime('now', '-' || ? || ' days')
-        """,
-            (banana, days),
-        )
-
-        result = cursor.fetchone()
-        return result["count"] if result else 0
-
-    def get_city_last_sync(self, banana: str) -> Optional[datetime]:
-        """Get the last sync time for a city (most recent meeting created_at)"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT MAX(created_at) as last_sync
-            FROM meetings
-            WHERE banana = ?
-        """,
-            (banana,),
-        )
-
-        result = cursor.fetchone()
-        if result and result["last_sync"]:
-            return datetime.fromisoformat(result["last_sync"])
-        return None
+        """Get meetings needing processing - delegates to MeetingRepository"""
+        return self.meetings.get_unprocessed_meetings(limit)
 
     def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Meeting]:
-        """Get meeting by packet URL"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM meetings
-            WHERE packet_url = ?
-            LIMIT 1
-        """,
-            (packet_url,),
-        )
+        """Get meeting by packet URL - delegates to MeetingRepository"""
+        return self.meetings.get_meeting_by_packet_url(packet_url)
 
-        row = cursor.fetchone()
-        return Meeting.from_db_row(row) if row else None
-
-    # ========== Agenda Item Operations ==========
+    # ========== Agenda Item Operations (delegate to ItemRepository) ==========
 
     def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
-        """
-        Store agenda items for a meeting.
-
-        Args:
-            meeting_id: The meeting ID these items belong to
-            items: List of AgendaItem objects
-
-        Returns:
-            Number of items stored
-        """
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-
-        stored_count = 0
-
-        for item in items:
-            # Serialize JSON fields
-            attachments_json = (
-                json.dumps(item.attachments) if item.attachments else None
-            )
-            topics_json = json.dumps(item.topics) if item.topics else None
-
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO items
-                (id, meeting_id, title, sequence, attachments, summary, topics)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    item.id,
-                    meeting_id,
-                    item.title,
-                    item.sequence,
-                    attachments_json,
-                    item.summary,
-                    topics_json,
-                ),
-            )
-            stored_count += 1
-
-        self.conn.commit()
-        logger.debug(f"Stored {stored_count} agenda items for meeting {meeting_id}")
-        return stored_count
+        """Store agenda items - delegates to ItemRepository"""
+        return self.items.store_agenda_items(meeting_id, items)
 
     def get_agenda_items(self, meeting_id: str) -> List[AgendaItem]:
-        """
-        Get all agenda items for a meeting, ordered by sequence.
-
-        Args:
-            meeting_id: The meeting ID
-
-        Returns:
-            List of AgendaItem objects
-        """
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM items
-            WHERE meeting_id = ?
-            ORDER BY sequence ASC
-        """,
-            (meeting_id,),
-        )
-
-        rows = cursor.fetchall()
-        return [AgendaItem.from_db_row(row) for row in rows]
+        """Get agenda items for meeting - delegates to ItemRepository"""
+        return self.items.get_agenda_items(meeting_id)
 
     def update_agenda_item(self, item_id: str, summary: str, topics: List[str]) -> None:
-        """
-        Update an agenda item with processed summary and topics.
+        """Update agenda item with summary - delegates to ItemRepository"""
+        return self.items.update_agenda_item(item_id, summary, topics)
 
-        Args:
-            item_id: The agenda item ID
-            summary: The processed summary
-            topics: List of extracted topics
-        """
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-
-        topics_json = json.dumps(topics) if topics else None
-
-        cursor.execute(
-            """
-            UPDATE items
-            SET summary = ?,
-                topics = ?
-            WHERE id = ?
-        """,
-            (summary, topics_json, item_id),
-        )
-
-        self.conn.commit()
-        logger.debug(f"Updated agenda item {item_id} with summary and topics")
-
-    # ========== Processing Cache Operations ==========
-
-    def get_cached_summary(self, packet_url: str | List[str]) -> Optional[Meeting]:
-        """Get meeting by packet URL if it has been processed"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-        cursor = self.conn.cursor()
-
-        # Serialize URL if it's a list
-        lookup_url = (
-            json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
-        )
-
-        cursor.execute(
-            """
-            SELECT * FROM meetings
-            WHERE packet_url = ? AND summary IS NOT NULL
-            LIMIT 1
-        """,
-            (lookup_url,),
-        )
-
-        row = cursor.fetchone()
-        if row:
-            # Update cache hit count
-            cursor.execute(
-                """
-                UPDATE cache
-                SET cache_hit_count = cache_hit_count + 1,
-                    last_accessed = CURRENT_TIMESTAMP
-                WHERE packet_url = ?
-            """,
-                (lookup_url,),
-            )
-            self.conn.commit()
-
-            return Meeting.from_db_row(row)
-
-        return None
-
-    def store_processing_result(
-        self, packet_url: str, processing_method: str, processing_time: float
-    ):
-        """Store processing result in cache"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-
-        lookup_url = (
-            json.dumps(packet_url) if isinstance(packet_url, list) else packet_url
-        )
-
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO cache
-            (packet_url, processing_method, processing_time, cache_hit_count)
-            VALUES (?, ?, ?, 0)
-        """,
-            (lookup_url, processing_method, processing_time),
-        )
-
-        self.conn.commit()
-
-    # ========== Stats & Utilities ==========
-
-    def get_stats(self) -> Dict[str, Any]:
-        """Get database statistics"""
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-
-        cursor.execute("SELECT COUNT(*) as count FROM cities WHERE status = 'active'")
-        active_cities = cursor.fetchone()["count"]
-
-        cursor.execute("SELECT COUNT(*) as count FROM meetings")
-        total_meetings = cursor.fetchone()["count"]
-
-        cursor.execute(
-            "SELECT COUNT(*) as count FROM meetings WHERE summary IS NOT NULL"
-        )
-        summarized_meetings = cursor.fetchone()["count"]
-
-        cursor.execute(
-            "SELECT COUNT(*) as count FROM meetings WHERE processing_status = 'pending'"
-        )
-        pending_meetings = cursor.fetchone()["count"]
-
-        return {
-            "active_cities": active_cities,
-            "total_meetings": total_meetings,
-            "summarized_meetings": summarized_meetings,
-            "pending_meetings": pending_meetings,
-            "summary_rate": f"{summarized_meetings / total_meetings * 100:.1f}%"
-            if total_meetings > 0
-            else "0%",
-        }
-
-    # === Processing Queue Methods (Phase 4) ===
+    # ========== Processing Queue Operations (delegate to QueueRepository) ==========
 
     def enqueue_for_processing(
         self,
-        packet_url: str,
+        source_url: str,
         meeting_id: str,
         banana: str,
         priority: int = 0,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> int:
-        """Add a packet URL to the processing queue with priority"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
+        """Enqueue item for processing - delegates to QueueRepository
 
-        cursor = self.conn.cursor()
-        metadata_json = json.dumps(metadata) if metadata else None
-
-        try:
-            cursor.execute(
-                """
-                INSERT INTO queue
-                (packet_url, meeting_id, banana, priority, processing_metadata)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (packet_url, meeting_id, banana, priority, metadata_json),
-            )
-            self.conn.commit()
-            queue_id = cursor.lastrowid
-            if queue_id is None:
-                raise DatabaseConnectionError("Failed to get queue ID after insert")
-            logger.info(
-                f"Enqueued {packet_url} for processing with priority {priority}"
-            )
-            return queue_id
-        except sqlite3.IntegrityError as e:
-            if "UNIQUE constraint failed" in str(e):
-                logger.debug(f"Packet {packet_url} already in queue")
-                return -1
-            raise
+        Args:
+            source_url: agenda_url, packet_url, or items:// synthetic URL
+        """
+        return self.queue.enqueue_for_processing(source_url, meeting_id, banana, priority, metadata)
 
     def get_next_for_processing(
         self, banana: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """Get next item from processing queue based on priority and status"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
-        cursor = self.conn.cursor()
-
-        if banana:
-            cursor.execute(
-                """
-                SELECT * FROM queue
-                WHERE status = 'pending' AND banana = ?
-                ORDER BY priority DESC, created_at ASC
-                LIMIT 1
-                """,
-                (banana,),
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT * FROM queue
-                WHERE status = 'pending'
-                ORDER BY priority DESC, created_at ASC
-                LIMIT 1
-                """
-            )
-
-        row = cursor.fetchone()
-        if row:
-            # Mark as processing
-            cursor.execute(
-                """
-                UPDATE queue
-                SET status = 'processing', started_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (row["id"],),
-            )
-            self.conn.commit()
-
-            result = dict(row)
-            if result.get("processing_metadata"):
-                result["processing_metadata"] = json.loads(
-                    result["processing_metadata"]
-                )
-            return result
-        return None
+        """Get next item from queue - delegates to QueueRepository"""
+        return self.queue.get_next_for_processing(banana)
 
     def mark_processing_complete(self, queue_id: int) -> None:
-        """Mark a queue item as completed"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            UPDATE queue
-            SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (queue_id,),
-        )
-        self.conn.commit()
-        logger.info(f"Marked queue item {queue_id} as completed")
+        """Mark queue item as completed - delegates to QueueRepository"""
+        return self.queue.mark_processing_complete(queue_id)
 
     def mark_processing_failed(
         self, queue_id: int, error_message: str, increment_retry: bool = True
     ) -> None:
-        """Mark a queue item as failed with error message"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
-        cursor = self.conn.cursor()
-
-        if increment_retry:
-            cursor.execute(
-                """
-                UPDATE queue
-                SET status = 'failed',
-                    error_message = ?,
-                    retry_count = retry_count + 1,
-                    completed_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (error_message, queue_id),
-            )
-        else:
-            cursor.execute(
-                """
-                UPDATE queue
-                SET status = 'failed',
-                    error_message = ?,
-                    completed_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (error_message, queue_id),
-            )
-        self.conn.commit()
-        logger.warning(f"Marked queue item {queue_id} as failed: {error_message}")
+        """Mark queue item as failed - delegates to QueueRepository"""
+        return self.queue.mark_processing_failed(queue_id, error_message, increment_retry)
 
     def reset_failed_items(self, max_retries: int = 3) -> int:
-        """Reset failed items back to pending if under retry limit"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
+        """Reset failed items - delegates to QueueRepository"""
+        return self.queue.reset_failed_items(max_retries)
 
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            UPDATE queue
-            SET status = 'pending', error_message = NULL
-            WHERE status = 'failed' AND retry_count < ?
-            """,
-            (max_retries,),
-        )
-        reset_count = cursor.rowcount
-        self.conn.commit()
-        logger.info(f"Reset {reset_count} failed items back to pending")
-        return reset_count
+    def clear_queue(self) -> Dict[str, int]:
+        """Clear entire queue - delegates to QueueRepository"""
+        return self.queue.clear_queue()
 
     def get_queue_stats(self) -> Dict[str, Any]:
-        """Get processing queue statistics"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
-        cursor = self.conn.cursor()
-        stats = {}
-
-        # Count by status
-        cursor.execute(
-            """
-            SELECT status, COUNT(*) as count
-            FROM queue
-            GROUP BY status
-            """
-        )
-        for row in cursor.fetchall():
-            stats[f"{row['status']}_count"] = row["count"]
-
-        # Failed with high retry count
-        cursor.execute(
-            """
-            SELECT COUNT(*) as count
-            FROM queue
-            WHERE status = 'failed' AND retry_count >= 3
-            """
-        )
-        result = cursor.fetchone()
-        stats["permanently_failed"] = result["count"] if result else 0
-
-        # Average processing time
-        cursor.execute(
-            """
-            SELECT AVG(julianday(completed_at) - julianday(started_at)) * 86400 as avg_seconds
-            FROM queue
-            WHERE status = 'completed' AND completed_at IS NOT NULL AND started_at IS NOT NULL
-            """
-        )
-        result = cursor.fetchone()
-        avg_time = result["avg_seconds"] if result else None
-        stats["avg_processing_seconds"] = avg_time if avg_time else 0
-
-        return stats
+        """Get queue statistics - delegates to QueueRepository"""
+        return self.queue.get_queue_stats()
 
     def bulk_enqueue_unprocessed_meetings(self, limit: Optional[int] = None) -> int:
-        """Bulk enqueue all unprocessed meetings with packet URLs"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
+        """Bulk enqueue meetings - delegates to QueueRepository"""
+        return self.queue.bulk_enqueue_unprocessed_meetings(limit)
 
-        cursor = self.conn.cursor()
+    # ========== Search & Discovery Operations (delegate to SearchRepository) ==========
 
-        # Find all meetings with packet URLs but no summaries
-        query = """
-            SELECT m.packet_url, m.id, m.banana, m.date
-            FROM meetings m
-            LEFT JOIN queue pq ON m.packet_url = pq.packet_url
-            WHERE m.packet_url IS NOT NULL
-            AND m.summary IS NULL
-            AND pq.id IS NULL
-            ORDER BY m.date DESC
-        """
+    def get_random_meeting_with_items(self) -> Optional[Dict[str, Any]]:
+        """Get random meeting with items - delegates to SearchRepository"""
+        return self.search.get_random_meeting_with_items()
 
-        if limit:
-            query += f" LIMIT {limit}"
+    def search_meetings_by_topic(
+        self, topic: str, city_banana: Optional[str] = None, limit: int = 50
+    ) -> List[Meeting]:
+        """Search meetings by topic - delegates to SearchRepository"""
+        return self.search.search_meetings_by_topic(topic, city_banana, limit)
 
-        cursor.execute(query)
-        meetings = cursor.fetchall()
+    def get_items_by_topic(self, meeting_id: str, topic: str) -> List[AgendaItem]:
+        """Get items matching topic - delegates to SearchRepository"""
+        return self.search.get_items_by_topic(meeting_id, topic)
 
-        enqueued = 0
-        for meeting in meetings:
-            # Calculate priority based on meeting date recency
-            if meeting["date"]:
-                try:
-                    meeting_date = (
-                        datetime.fromisoformat(meeting["date"])
-                        if isinstance(meeting["date"], str)
-                        else meeting["date"]
-                    )
-                    days_old = (datetime.now() - meeting_date).days
-                except Exception:
-                    days_old = 999
-            else:
-                days_old = 999
+    def get_popular_topics(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get popular topics - delegates to SearchRepository"""
+        return self.search.get_popular_topics(limit)
 
-            priority = max(0, 100 - days_old)  # Recent meetings get higher priority
+    def get_cached_summary(self, packet_url: str | List[str]) -> Optional[Meeting]:
+        """Get cached meeting summary - delegates to SearchRepository"""
+        return self.search.get_cached_summary(packet_url)
 
-            try:
-                cursor.execute(
-                    """
-                    INSERT INTO queue
-                    (packet_url, meeting_id, banana, priority)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (meeting["packet_url"], meeting["id"], meeting["banana"], priority),
-                )
-                enqueued += 1
-            except sqlite3.IntegrityError:
-                logger.debug(f"Skipping already queued packet: {meeting['packet_url']}")
+    def store_processing_result(
+        self, packet_url: str, processing_method: str, processing_time: float
+    ):
+        """Store processing result in cache - delegates to SearchRepository"""
+        return self.search.store_processing_result(packet_url, processing_method, processing_time)
 
-        self.conn.commit()
-        logger.info(f"Bulk enqueued {enqueued} meetings for processing")
-        return enqueued
+    def get_stats(self) -> Dict[str, Any]:
+        """Get database statistics - delegates to SearchRepository"""
+        return self.search.get_stats()
+
+    # ========== Utilities ==========
 
     def close(self):
         """Close database connection"""

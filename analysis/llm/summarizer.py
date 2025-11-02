@@ -296,7 +296,7 @@ class GeminiSummarizer:
                     )
                     config = {
                         "temperature": 0.3,
-                        "max_output_tokens": 2048,
+                        "max_output_tokens": 8192,  # Match single-item processing (was 2048, caused truncation)
                         "response_mime_type": "application/json",
                         "response_schema": response_schema,
                     }
@@ -391,6 +391,18 @@ class GeminiSummarizer:
                             response_text = None  # Initialize for error logging
                             try:
                                 response_text = inline_response.response.text
+
+                                # Check finish_reason to detect truncation
+                                if inline_response.response.candidates:
+                                    finish_reason = inline_response.response.candidates[0].finish_reason
+                                    if finish_reason and finish_reason.name != "STOP":
+                                        logger.warning(
+                                            f"[Summarizer] Item {original_req['item_id']} had non-normal finish_reason: {finish_reason.name}"
+                                        )
+                                        if finish_reason.name == "MAX_TOKENS":
+                                            logger.error(
+                                                f"[Summarizer] Item {original_req['item_id']} hit MAX_TOKENS - response truncated!"
+                                            )
 
                                 # Log raw response for debugging failures
                                 logger.info(
@@ -678,6 +690,9 @@ class GeminiSummarizer:
             return summary, topics
 
         except json.JSONDecodeError as e:
+            # FIXED (Nov 2025): Was caused by max_output_tokens=2048 in batch API
+            # Increased to 8192 to match single-item processing
+            # Added finish_reason checking to detect future MAX_TOKENS issues
             logger.error(f"[Summarizer] Failed to parse JSON response: {e}")
             logger.error(f"[Summarizer] Full malformed JSON response:\n{response_text}")
             raise

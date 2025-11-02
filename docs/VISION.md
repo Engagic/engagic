@@ -1,6 +1,6 @@
 # Engagic Vision
 
-**Last Updated:** October 30, 2025
+**Last Updated:** November 2, 2025
 
 ---
 
@@ -38,9 +38,11 @@ Components (6 logical clusters):
 - **vendors/** - Adapters for 6 platforms (BaseAdapter pattern, 94% success rate)
 - **parsing/** - PDF text extraction (PyMuPDF) and participation info
 - **analysis/** - LLM intelligence (Gemini) and topic normalization (16 canonical topics)
-- **pipeline/** - Processing orchestration, priority queue, sync scheduling
-- **database/** - SQLite database (cities, meetings, agenda_items, job_queue)
-- **server/** - FastAPI public API with cache-first serving
+- **pipeline/** - Processing orchestration (4 modules: conductor, fetcher, processor, analyzer)
+- **database/** - SQLite with Repository Pattern (cities, meetings, agenda_items, job_queue)
+  - UnifiedDatabase facade delegates to 5 focused repositories
+  - Clean separation: cities, meetings, items, queue, search operations
+- **server/** - Modular FastAPI (main 98 lines, routes/services/utils in focused modules)
 
 Architecture:
 - Item-level processing for 374+ cities (58% of platform, 50-80M people)
@@ -104,21 +106,26 @@ Features (to build):
   - JSON structured output with schema validation
   - 16 canonical topics with normalization
 
-- **pipeline/** - Processing orchestration
+- **pipeline/** - Processing orchestration (modular refactor complete)
   - Priority queue (recent meetings first, SQLite-backed)
   - Item-level processing for 374+ cities (58% of platform)
   - Two parallel pipelines: item-based (primary) and monolithic (fallback)
   - Batch API for 50% cost savings
+  - 4 focused modules: conductor (orchestration), fetcher (sync), processor (queue), analyzer (LLM)
 
-- **database/** - Single unified SQLite
-  - Cities, meetings, agenda_items, job_queue tables
+- **database/** - SQLite with Repository Pattern
+  - UnifiedDatabase facade (519 lines) delegates to 5 repositories
+  - Repositories: cities (241), meetings (190), items (115), queue (273), search (202)
+  - Tables: cities, meetings, agenda_items, job_queue, cache
   - JSON columns for topics, participation, attachments
 
-- **server/** - FastAPI public API
+- **server/** - Modular FastAPI (refactor complete)
+  - main.py: 98 lines (down from 1,473)
+  - Clean separation: routes/ services/ utils/ middleware/ models/
   - Cache-first serving (never fetches live)
   - Background daemon syncs every 72 hours
   - Rate limiting: 30 req/60s per IP
-  - Zipcode search, topic search, popular topics endpoints
+  - Endpoints: search, topics, meetings, admin, monitoring
 
 ### Honest Assessment
 

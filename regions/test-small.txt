@@ -1,0 +1,3 @@
+# Small test set for quick validation
+paloaltoCA
+mountainviewCA
