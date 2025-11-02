@@ -216,8 +216,10 @@ class GeminiSummarizer:
             f"[Summarizer] Processing {total_items} items using Batch API (50% savings)"
         )
 
-        # Chunk items to respect rate limits
-        chunk_size = 15  # Conservative: respects 1k RPM limit
+        # Chunk items to respect TPM (tokens-per-minute) limits
+        # Gemini Flash: 1M TPM limit - large PDFs can use 50K+ tokens each
+        # Conservative chunk size prevents RESOURCE_EXHAUSTED errors
+        chunk_size = 5  # Reduced from 15 -> 8 -> 5 due to TPM quota exhaustion
         chunks = [
             item_requests[i : i + chunk_size]
             for i in range(0, total_items, chunk_size)
@@ -241,7 +243,7 @@ class GeminiSummarizer:
 
             # Delay between chunks (except after last chunk)
             if chunk_idx < len(chunks) - 1:
-                delay = 90  # 90 seconds between chunks
+                delay = 120  # 120 seconds between chunks (increased from 90s to prevent quota exhaustion)
                 logger.info(
                     f"[Summarizer] Waiting {delay}s before next chunk (quota refill)..."
                 )
@@ -459,13 +461,17 @@ class GeminiSummarizer:
 
                         elif inline_response.error:
                             error_str = str(inline_response.error)
-                            logger.error(
-                                f"[Summarizer] Item {original_req['item_id']} failed: {error_str}"
-                            )
 
-                            # Check for quota errors
+                            # Log quota errors but DON'T retry the whole chunk
+                            # Individual item failures should not cause chunk-level retries
                             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                                raise RuntimeError(f"Quota exceeded: {error_str}")
+                                logger.warning(
+                                    f"[Summarizer] Item {original_req['item_id']} hit quota limit (individual failure): {error_str}"
+                                )
+                            else:
+                                logger.error(
+                                    f"[Summarizer] Item {original_req['item_id']} failed: {error_str}"
+                                )
 
                             results.append(
                                 {

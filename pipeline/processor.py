@@ -35,11 +35,32 @@ PROCEDURAL_PATTERNS = [
     "adjournment",
 ]
 
+# Public comment attachment patterns (high token cost, low signal)
+# These attachments often contain hundreds of pages of form letters
+PUBLIC_COMMENT_PATTERNS = [
+    "public comment",
+    "public correspondence",
+    "comment letter",
+    "written comment",
+    "public hearing comment",
+    "citizen comment",
+    "correspondence received",
+    "public input",
+    "public testimony",
+    "letters received",
+]
+
 
 def is_procedural_item(title: str) -> bool:
     """Check if agenda item is procedural (skip to save API costs)"""
     title_lower = title.lower()
     return any(pattern in title_lower for pattern in PROCEDURAL_PATTERNS)
+
+
+def is_public_comment_attachment(name: str) -> bool:
+    """Check if attachment is public comments (high token cost, low signal)"""
+    name_lower = name.lower()
+    return any(pattern in name_lower for pattern in PUBLIC_COMMENT_PATTERNS)
 
 
 class Processor:
@@ -325,6 +346,8 @@ class Processor:
                     # Extract text from all attachments for this item
                     all_text_parts = []
                     total_page_count = 0
+                    filtered_attachments = 0
+                    processed_attachments = 0
 
                     for att in item.attachments:
                         # Handle both plain URL strings and structured attachment objects
@@ -354,26 +377,41 @@ class Processor:
                         # Treat unknown types as PDFs if they have a URL (defensive coding)
                         elif att_type in ("pdf", "unknown") or isinstance(att, str):
                             if att_url:
+                                # Filter public comment attachments (high token cost, low signal)
+                                if is_public_comment_attachment(att_name):
+                                    filtered_attachments += 1
+                                    logger.info(
+                                        f"[AttachmentFilter] Skipping public comments: '{att_name}' "
+                                        f"(item: {item.title[:50]})"
+                                    )
+                                    continue
+
                                 try:
                                     result = self.analyzer.pdf_extractor.extract_from_url(
                                         att_url
                                     )
                                     if result.get("success") and result.get("text"):
+                                        page_count = result.get("page_count", 0)
+                                        char_count = len(result["text"])
+
                                         all_text_parts.append(
                                             f"=== {att_name} ===\n{result['text']}"
                                         )
                                         # Accumulate actual page counts from PDFs
-                                        total_page_count += result.get("page_count", 0)
-                                        logger.debug(
-                                            f"[ItemProcessing] Extracted {len(result['text'])} chars, {result.get('page_count', 0)} pages from {att_name}"
+                                        total_page_count += page_count
+                                        processed_attachments += 1
+
+                                        logger.info(
+                                            f"[AttachmentExtract] '{att_name}': {page_count} pages, "
+                                            f"{char_count:,} chars (item: {item.title[:50]})"
                                         )
                                     else:
                                         logger.warning(
-                                            f"[ItemProcessing] No text from {att_name}"
+                                            f"[ItemProcessing] No text from '{att_name}'"
                                         )
                                 except Exception as e:
                                     logger.warning(
-                                        f"[ItemProcessing] Failed to extract from {att_name}: {e}"
+                                        f"[ItemProcessing] Failed to extract from '{att_name}': {e}"
                                     )
 
                     if all_text_parts:
@@ -389,6 +427,15 @@ class Processor:
                                 # Merge with existing participation data (later items override earlier)
                                 participation_data.update(item_participation)
 
+                        # Log attachment processing stats
+                        total_attachments = processed_attachments + filtered_attachments
+                        if filtered_attachments > 0:
+                            logger.info(
+                                f"[AttachmentStats] Item '{item.title[:50]}': "
+                                f"{processed_attachments}/{total_attachments} attachments processed "
+                                f"({filtered_attachments} public comment attachments filtered)"
+                            )
+
                         batch_requests.append(
                             {
                                 "item_id": item.id,
@@ -400,7 +447,7 @@ class Processor:
                         )
                         item_map[item.id] = item
                         logger.debug(
-                            f"[ItemProcessing] Prepared {item.title[:50]} ({len(combined_text)} chars, {total_page_count} pages)"
+                            f"[ItemProcessing] Prepared {item.title[:50]} ({len(combined_text):,} chars, {total_page_count} pages)"
                         )
                     else:
                         logger.warning(
