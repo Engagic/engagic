@@ -6,6 +6,8 @@ import re
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+from database.db import UnifiedDatabase
+
 
 def extract_excerpt(summary: str, prefer_middle: bool = True) -> str:
     """
@@ -88,24 +90,7 @@ def extract_excerpt(summary: str, prefer_middle: bool = True) -> str:
     return excerpt
 
 
-def format_city_name(banana: str) -> str:
-    """
-    Convert city_banana to readable city name.
-
-    Example: paloaltoCA -> Palo Alto
-    """
-    # Remove state code (last 2 chars)
-    city_part = banana[:-2]
-
-    # Insert spaces before capital letters and capitalize words
-    city_name = re.sub(r'([A-Z])', r' \1', city_part).strip()
-
-    # Capitalize first letter of each word
-    words = city_name.split()
-    return ' '.join(word.capitalize() for word in words)
-
-
-def generate_ticker_item(meeting: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Optional[Dict[str, str]]:
     """
     Generate a single ticker item from a meeting.
 
@@ -119,13 +104,13 @@ def generate_ticker_item(meeting: Dict[str, Any]) -> Optional[Dict[str, str]]:
     if not banana:
         return None
 
-    # Extract state code
-    state_match = re.search(r'([A-Z]{2})$', banana)
-    if not state_match:
+    # Look up actual city name from database
+    city = db.get_city(banana=banana)
+    if not city:
         return None
 
-    state = state_match.group(1)
-    city_name = format_city_name(banana)
+    city_name = city.name
+    state = city.state
 
     # Format date
     try:
@@ -157,16 +142,24 @@ def generate_ticker_item(meeting: Dict[str, Any]) -> Optional[Dict[str, str]]:
 
     # Generate meeting URL
     # Format: /{banana}/{meeting_slug}
-    # meeting_slug = date-title (simplified)
+    # meeting_slug must match frontend format: {title}_{date}_{id}
     try:
+        meeting_id = meeting.get('id')
+        if not meeting_id:
+            return None
+
         date_obj = datetime.fromisoformat(meeting['date'].replace('Z', '+00:00'))
-        date_slug = date_obj.strftime('%Y-%m-%d')
+        year = date_obj.year
+        month = str(date_obj.month).zfill(2)
+        day = str(date_obj.day).zfill(2)
+        date_slug = f"{year}_{month}_{day}"
 
-        # Simplified title slug (just lowercase alphanumeric)
+        # Clean title: lowercase, alphanumeric only, underscores
         title = meeting.get('title', 'meeting')
-        title_slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
+        title_slug = re.sub(r'[^a-z0-9]+', '_', title.lower()).strip('_')[:50]
 
-        meeting_slug = f"{date_slug}-{title_slug}"
+        # Format matches frontend generateMeetingSlug: {title}_{date}_{id}
+        meeting_slug = f"{title_slug}_{date_slug}_{meeting_id}"
         url = f"/{banana}/{meeting_slug}"
     except Exception:
         return None
