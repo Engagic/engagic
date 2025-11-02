@@ -317,8 +317,14 @@ class Fetcher:
                 # Fetch meetings using unified adapter interface
                 try:
                     all_meetings = list(adapter.fetch_meetings())
-                    meetings_with_packets = [
-                        m for m in all_meetings if m.get("packet_url")
+
+                    # Count different types of meeting data
+                    meetings_with_items = [m for m in all_meetings if m.get("items")]
+                    meetings_with_agenda_url = [m for m in all_meetings if m.get("agenda_url")]
+                    meetings_with_packet_url = [m for m in all_meetings if m.get("packet_url")]
+                    meetings_with_processable_content = [
+                        m for m in all_meetings
+                        if m.get("items") or m.get("agenda_url") or m.get("packet_url")
                     ]
 
                 except Exception as e:
@@ -328,9 +334,13 @@ class Fetcher:
                     return result
 
                 result.meetings_found = len(all_meetings)
+
+                # Log what we found with better detail
                 logger.info(
-                    f"Found {len(all_meetings)} total meetings for {city.banana}, "
-                    f"{len(meetings_with_packets)} have packets"
+                    f"Found {len(all_meetings)} meetings for {city.banana}: "
+                    f"{len(meetings_with_items)} with items, "
+                    f"{len(meetings_with_agenda_url)} with agenda_url, "
+                    f"{len(meetings_with_packet_url)} with packet_url"
                 )
 
                 # Store ALL meetings and enqueue for processing
@@ -365,7 +375,7 @@ class Fetcher:
 
                 logger.info(
                     f"Synced {city.banana}: {result.meetings_found} meetings found, "
-                    f"{len(meetings_with_packets)} have packets, {processed_count} processed"
+                    f"{len(meetings_with_processable_content)} processable, {processed_count} stored"
                 )
 
                 # Log memory after adapter cleanup

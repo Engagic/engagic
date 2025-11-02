@@ -1,12 +1,13 @@
 #!/bin/bash
-# engagic deployment script - API management and explicit data operations
-# NO DAEMON - explicit control only via sync-cities, process-cities commands
+# engagic deployment script - API and fetcher management
 set -e
 
 APP_DIR="/root/engagic"
 VENV_DIR="/root/engagic/.venv"
 API_SERVICE="engagic-api"
 API_SERVICE_FILE="/etc/systemd/system/${API_SERVICE}.service"
+FETCHER_SERVICE="engagic-fetcher"
+FETCHER_SERVICE_FILE="/etc/systemd/system/${FETCHER_SERVICE}.service"
 
 # Colors for output
 RED='\033[0;31m'
@@ -99,6 +100,45 @@ EOF
     log "API systemd service file created"
 }
 
+create_fetcher_service() {
+    log "Creating systemd service file for fetcher..."
+
+    cat > "$FETCHER_SERVICE_FILE" << EOF
+[Unit]
+Description=Engagic Fetcher (Auto City Sync)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=$APP_DIR
+ExecStart=$VENV_DIR/bin/python3 -m pipeline.conductor --fetcher
+Restart=always
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=PYTHONPATH=$APP_DIR
+EnvironmentFile=-$APP_DIR/.env
+
+# Resource limits
+LimitNOFILE=65536
+
+# Security
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    log "Fetcher systemd service file created"
+}
+
 
 # API Management
 start_api() {
@@ -146,9 +186,55 @@ restart_api() {
     fi
 }
 
+# Fetcher Management
+start_fetcher() {
+    if [ ! -f "$FETCHER_SERVICE_FILE" ]; then
+        create_fetcher_service
+    fi
+
+    log "Starting fetcher service..."
+    systemctl enable "$FETCHER_SERVICE"
+
+    if systemctl is-active --quiet "$FETCHER_SERVICE"; then
+        warn "Fetcher already running, restarting..."
+        systemctl restart "$FETCHER_SERVICE"
+    else
+        systemctl start "$FETCHER_SERVICE"
+    fi
+
+    sleep 2
+    if systemctl is-active --quiet "$FETCHER_SERVICE"; then
+        log "Fetcher started successfully"
+        log "Fetcher logs: journalctl -u $FETCHER_SERVICE -f"
+    else
+        error "Failed to start fetcher"
+    fi
+}
+
+stop_fetcher() {
+    if systemctl is-active --quiet "$FETCHER_SERVICE"; then
+        log "Stopping fetcher..."
+        systemctl stop "$FETCHER_SERVICE"
+        log "Fetcher stopped"
+    else
+        warn "Fetcher not running"
+    fi
+}
+
+restart_fetcher() {
+    log "Restarting fetcher..."
+    systemctl restart "$FETCHER_SERVICE"
+    sleep 2
+    if systemctl is-active --quiet "$FETCHER_SERVICE"; then
+        log "Fetcher restarted successfully"
+    else
+        error "Failed to restart fetcher"
+    fi
+}
+
 # Background Process Management (Manual Commands Only)
 kill_background_processes() {
-    log "Checking for background conductor/daemon processes..."
+    log "Checking for background conductor processes..."
 
     local was_running=false
 
@@ -161,28 +247,32 @@ kill_background_processes() {
 
         # Show recent logs to confirm activity
         info "Recent log output (last 20 lines):"
-        if [ -f "/var/log/engagic/conductor.log" ]; then
-            tail -20 /var/log/engagic/conductor.log | sed 's/^/  /'
+        if [ -f "/root/engagic/engagic.log" ]; then
+            tail -20 /root/engagic/engagic.log | sed 's/^/  /'
         else
-            warn "  Log file not found at /var/log/engagic/conductor.log"
+            warn "  No persistent log file found (conductor logs to stdout when run via CLI)"
         fi
         echo ""
+
+        # Give processes a chance to log shutdown
+        warn "Sending graceful shutdown signal (SIGTERM)..."
+        pkill -TERM -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
+
+        # Wait up to 10 seconds for graceful shutdown
+        for i in {1..10}; do
+            if ! pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
+                log "Processes shut down gracefully"
+                break
+            fi
+            sleep 1
+        done
     fi
 
-    # Kill all background processes
+    # Force kill if still running
     if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
-        warn "Killing background processes..."
-
-        # Send SIGTERM first (graceful)
-        pkill -TERM -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
-        sleep 3
-
-        # Check if still running
-        if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
-            warn "Processes still running, sending SIGKILL..."
-            pkill -KILL -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
-            sleep 1
-        fi
+        warn "Processes still running after 10s, sending SIGKILL..."
+        pkill -KILL -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
+        sleep 1
     fi
 
     # Final verification
@@ -203,15 +293,18 @@ kill_background_processes() {
 # Combined operations
 start_all() {
     start_api
+    start_fetcher
 }
 
 stop_all() {
     stop_api
+    stop_fetcher
     kill_background_processes
 }
 
 restart_all() {
     restart_api
+    restart_fetcher
 }
 
 status_all() {
@@ -231,8 +324,20 @@ status_all() {
 
     echo ""
 
+    # Fetcher status
+    echo -e "${BLUE}Fetcher Status:${NC}"
+    if systemctl is-active --quiet "$FETCHER_SERVICE"; then
+        echo -e "${GREEN}  Running${NC}"
+        echo "  Logs: journalctl -u $FETCHER_SERVICE -f"
+        systemctl status "$FETCHER_SERVICE" --no-pager | grep -E "Active:|Main PID:" | sed 's/^/  /'
+    else
+        echo -e "${YELLOW}  Not running${NC}"
+    fi
+
+    echo ""
+
     # Background processes (manual)
-    echo -e "${BLUE}Background Processes:${NC}"
+    echo -e "${BLUE}Manual Background Processes:${NC}"
     if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
         echo -e "${YELLOW}  Running (manual):${NC}"
         pgrep -fa "engagic-daemon|pipeline.conductor|engagic-conductor" | sed 's/^/    /'
@@ -292,13 +397,13 @@ test_services() {
         warn "✗ Search endpoint"
     fi
     
-    # Check daemon
-    if systemctl is-active --quiet "$DAEMON_SERVICE"; then
-        log "✓ Background processor"
+    # Check fetcher
+    if systemctl is-active --quiet "$FETCHER_SERVICE"; then
+        log "✓ Fetcher service"
     else
-        warn "✗ Background processor"
+        warn "✗ Fetcher service"
     fi
-    
+
     log "Service tests complete"
 }
 
@@ -462,17 +567,49 @@ extract_text() {
     eval $CMD
 }
 
+preview_items() {
+    if [ -z "$1" ]; then
+        error "Meeting ID required"
+    fi
+
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+
+    # Build command
+    CMD="uv run engagic-conductor --preview-items $1"
+
+    # Add extract flag if provided
+    if [ "$2" = "--extract" ]; then
+        CMD="$CMD --extract-item-text"
+
+        # Add output directory if provided
+        if [ -n "$3" ]; then
+            CMD="$CMD --output-dir $3"
+            log "Previewing items for $1 with text extraction to $3..."
+        else
+            log "Previewing items for $1 with text extraction..."
+        fi
+    else
+        log "Previewing items structure for $1..."
+    fi
+
+    eval $CMD
+}
+
 show_help() {
-    echo "Engagic Deployment Script"
+    echo "Engagic Deploy"
     echo ""
-    echo "Usage: $0 [command] [args]"
+    echo "Services:"
+    echo "  start, stop, restart      - All services"
+    echo "  status                    - Show status"
+    echo "  kill                      - Kill manual processes"
     echo ""
-    echo "Service Management:"
-    echo "  start                     - Start API service"
-    echo "  stop                      - Stop API and kill background processes"
-    echo "  restart                   - Restart API service"
-    echo "  status                    - Show system status"
-    echo "  logs-api                  - Show API logs"
+    echo "Individual:"
+    echo "  start-api, stop-api, restart-api"
+    echo "  start-fetch, stop-fetch, restart-fetch"
+    echo ""
+    echo "Logs:"
+    echo "  logs-api, logs-fetch, logs"
     echo ""
     echo "Deployment:"
     echo "  setup                     - Install dependencies"
@@ -496,16 +633,17 @@ show_help() {
     echo "    process-unprocessed            - Process all unprocessed meetings in queue"
     echo ""
     echo "  Preview & Inspection:"
-    echo "    preview-queue [CITY]           - Show queued jobs (no processing)"
-    echo "    extract-text MEETING_ID [FILE] - Extract PDF text (no LLM, manual review)"
-    echo "    kill-background                - Kill any running background processes"
+    echo "    preview-queue [CITY]                    - Show queued jobs (no processing)"
+    echo "    extract-text MEETING_ID [FILE]          - Extract PDF text (no LLM, manual review)"
+    echo "    preview-items MEETING_ID [--extract] [DIR] - Preview items structure (+ optional text extraction)"
     echo ""
     echo "Examples:"
     echo ""
     echo "  # System management"
     echo "  $0 deploy                                  # First time setup"
     echo "  $0 status                                  # Check what's running"
-    echo "  $0 kill-background                         # Stop any background jobs"
+    echo "  $0 kill                                    # Stop any background jobs"
+    echo "  $0 logs                                    # Watch conductor logs"
     echo ""
     echo "  # Single city workflow"
     echo "  $0 sync-city paloaltoCA                    # 1. Fetch meetings"
@@ -528,11 +666,17 @@ case "${1:-help}" in
     setup)     setup_env ;;
     
     # Service commands
-    start)          start_api ;;
+    start)          start_all ;;
     stop)           stop_all ;;
-    restart)        restart_api ;;
-    kill-background) kill_background_processes ;;
-    
+    restart)        restart_all ;;
+    start-api)      start_api ;;
+    stop-api)       stop_api ;;
+    restart-api)    restart_api ;;
+    start-fetch)    start_fetcher ;;
+    stop-fetch)     stop_fetcher ;;
+    restart-fetch)  restart_fetcher ;;
+    kill)           kill_background_processes ;;
+
     # Status and logs
     status)         status_all ;;
     logs-api)
@@ -545,6 +689,21 @@ case "${1:-help}" in
             else
                 error "No API logs found"
             fi
+        fi
+        ;;
+    logs-fetch)
+        if systemctl is-active --quiet "$FETCHER_SERVICE"; then
+            journalctl -u engagic-fetcher -f
+        else
+            warn "Fetcher not running via systemd"
+        fi
+        ;;
+    logs)
+        log "Showing all engagic logs..."
+        if [ -f "/root/engagic/engagic.log" ]; then
+            tail -f /root/engagic/engagic.log
+        else
+            warn "No log file found at /root/engagic/engagic.log"
         fi
         ;;
     
@@ -571,6 +730,7 @@ case "${1:-help}" in
     # Preview and inspection
     preview-queue)       preview_queue "$2" ;;
     extract-text)        extract_text "$2" "$3" ;;
+    preview-items)       preview_items "$2" "$3" "$4" ;;
 
     # Help
     help|*)              show_help ;;

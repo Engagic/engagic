@@ -18,8 +18,12 @@ class PdfExtractor:
     def __init__(self):
         pass
 
-    def extract_from_url(self, url: str) -> Dict[str, Any]:
-        """Extract text from PDF URL
+    def extract_from_url(self, url: str, extract_links: bool = False) -> Dict[str, Any]:
+        """Extract text and optionally links from PDF URL
+
+        Args:
+            url: PDF URL to extract from
+            extract_links: Whether to extract hyperlinks (default False for backward compatibility)
 
         Returns dict with extraction results:
         {
@@ -28,6 +32,7 @@ class PdfExtractor:
             'method': str,
             'page_count': int,
             'extraction_time': float,
+            'links': list (if extract_links=True),
             'error': str (if failed)
         }
         """
@@ -42,26 +47,48 @@ class PdfExtractor:
             # Extract with PyMuPDF
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text_parts = []
+            all_links = []
+
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 text_parts.append(f"--- PAGE {page_num + 1} ---\n{page.get_text()}")  # type: ignore[attr-defined]
+
+                # Extract links if requested
+                if extract_links:
+                    page_links = page.get_links()  # type: ignore[attr-defined]
+                    for link in page_links:
+                        # Only external links (URIs), skip internal page references
+                        if 'uri' in link and link['uri']:
+                            all_links.append({
+                                'page': page_num + 1,
+                                'url': link['uri'],
+                                'rect': link.get('from', None),  # Rectangle coordinates on page
+                            })
 
             full_text = "\n\n".join(text_parts)
             page_count = len(doc)
             doc.close()
 
             extraction_time = time.time() - start_time
-            logger.info(
-                f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars in {extraction_time:.2f}s"
-            )
 
-            return {
+            log_msg = f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars"
+            if extract_links:
+                log_msg += f", {len(all_links)} links"
+            log_msg += f" in {extraction_time:.2f}s"
+            logger.info(log_msg)
+
+            result = {
                 "success": True,
                 "text": full_text,
                 "method": "pymupdf",
                 "page_count": page_count,
                 "extraction_time": extraction_time,
             }
+
+            if extract_links:
+                result["links"] = all_links
+
+            return result
 
         except Exception as e:
             extraction_time = time.time() - start_time
