@@ -1,13 +1,12 @@
 #!/bin/bash
-# engagic deployment script - handles both API and daemon
+# engagic deployment script - API management and explicit data operations
+# NO DAEMON - explicit control only via sync-cities, process-cities commands
 set -e
 
 APP_DIR="/root/engagic"
 VENV_DIR="/root/engagic/.venv"
 API_SERVICE="engagic-api"
-DAEMON_SERVICE="engagic-daemon"
 API_SERVICE_FILE="/etc/systemd/system/${API_SERVICE}.service"
-DAEMON_SERVICE_FILE="/etc/systemd/system/${DAEMON_SERVICE}.service"
 
 # Colors for output
 RED='\033[0;31m'
@@ -100,33 +99,6 @@ EOF
     log "API systemd service file created"
 }
 
-create_daemon_service() {
-    log "Creating systemd service file for daemon..."
-
-    cat > "$DAEMON_SERVICE_FILE" << EOF
-[Unit]
-Description=Engagic Background Processing Daemon
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=$APP_DIR
-Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=-/root/.llm_secrets
-ExecStart=$VENV_DIR/bin/uv run engagic-daemon --daemon
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    log "Daemon systemd service file created"
-}
 
 # API Management
 start_api() {
@@ -174,94 +146,62 @@ restart_api() {
     fi
 }
 
-# Daemon Management
-start_daemon() {
-    if [ ! -f "$DAEMON_SERVICE_FILE" ]; then
-        create_daemon_service
+# Background Process Management (Manual Commands Only)
+kill_background_processes() {
+    log "Stopping all background conductor/daemon processes..."
+
+    local was_running=false
+
+    # Check for ANY running processes
+    if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
+        was_running=true
+        warn "Found running background processes:"
+        pgrep -fa "engagic-daemon|pipeline.conductor|engagic-conductor" | sed 's/^/  /'
     fi
 
-    log "Starting background processor daemon..."
-    systemctl enable "$DAEMON_SERVICE"
+    # Kill all background processes
+    if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
+        warn "Killing background processes..."
 
-    if systemctl is-active --quiet "$DAEMON_SERVICE"; then
-        warn "Daemon already running, restarting..."
-        systemctl restart "$DAEMON_SERVICE"
-    else
-        systemctl start "$DAEMON_SERVICE"
-    fi
+        # Send SIGTERM first (graceful)
+        pkill -TERM -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
+        sleep 3
 
-    sleep 2
-    if systemctl is-active --quiet "$DAEMON_SERVICE"; then
-        log "Daemon started successfully"
-        log "Daemon logs: journalctl -u $DAEMON_SERVICE -f"
-    else
-        error "Failed to start daemon"
-    fi
-}
-
-stop_daemon() {
-    log "Stopping daemon..."
-
-    # Disable first to prevent auto-restart
-    systemctl disable "$DAEMON_SERVICE" 2>/dev/null || true
-
-    if systemctl is-active --quiet "$DAEMON_SERVICE"; then
-        # Use timeout to prevent hanging on graceful shutdown
-        # Try stop first (proper way), but with 5 second timeout
-        log "Stopping daemon (5s timeout)..."
-        timeout 5 systemctl stop "$DAEMON_SERVICE" 2>/dev/null || {
-            # If timeout or stop fails, force kill
-            warn "Stop timed out, sending SIGKILL..."
-            systemctl kill --signal=SIGKILL "$DAEMON_SERVICE"
-            sleep 2
-        }
-    fi
-
-    # Kill any orphaned processes
-    if pgrep -f "engagic-daemon" > /dev/null; then
-        warn "Found orphaned daemon processes, killing..."
-        pkill -9 -f "engagic-daemon"
-        sleep 1
+        # Check if still running
+        if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
+            warn "Processes still running, sending SIGKILL..."
+            pkill -KILL -f "engagic-daemon|pipeline.conductor|engagic-conductor" 2>/dev/null || true
+            sleep 1
+        fi
     fi
 
     # Final verification
-    if systemctl is-active --quiet "$DAEMON_SERVICE" || pgrep -f "engagic-daemon" > /dev/null; then
-        error "Failed to stop daemon"
+    if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
+        error "Failed to stop background processes:"
+        pgrep -fa "engagic-daemon|pipeline.conductor|engagic-conductor" | sed 's/^/  /'
+        echo ""
+        warn "Try: pkill -9 -f 'engagic-daemon|pipeline.conductor|engagic-conductor'"
     else
-        log "Daemon stopped and disabled"
+        if [ "$was_running" = true ]; then
+            log "Stopped all background processes"
+        else
+            info "No background processes running"
+        fi
     fi
-}
-
-restart_daemon() {
-    log "Restarting daemon..."
-
-    # Clean stop first
-    stop_daemon
-
-    # Then start
-    start_daemon
 }
 
 # Combined operations
 start_all() {
-    info "Starting all services..."
     start_api
-    start_daemon
-    info "All services started"
 }
 
 stop_all() {
-    info "Stopping all services..."
     stop_api
-    stop_daemon
-    info "All services stopped"
+    kill_background_processes
 }
 
 restart_all() {
-    info "Restarting all services..."
     restart_api
-    restart_daemon
-    info "All services restarted"
 }
 
 status_all() {
@@ -281,14 +221,13 @@ status_all() {
 
     echo ""
 
-    # Daemon status
-    echo -e "${BLUE}Background Processor Status:${NC}"
-    if systemctl is-active --quiet "$DAEMON_SERVICE"; then
-        echo -e "${GREEN}  Running${NC}"
-        echo "  Logs: journalctl -u $DAEMON_SERVICE -f"
-        systemctl status "$DAEMON_SERVICE" --no-pager | grep -E "Active:|Main PID:" | sed 's/^/  /'
+    # Background processes (manual)
+    echo -e "${BLUE}Background Processes:${NC}"
+    if pgrep -f "engagic-daemon|pipeline.conductor|engagic-conductor" > /dev/null; then
+        echo -e "${YELLOW}  Running (manual):${NC}"
+        pgrep -fa "engagic-daemon|pipeline.conductor|engagic-conductor" | sed 's/^/    /'
     else
-        echo -e "${YELLOW}  Not running${NC}"
+        echo -e "${GREEN}  None${NC}"
     fi
 
     echo ""
@@ -422,6 +361,57 @@ sync_and_process_city() {
     uv run engagic-conductor --sync-and-process-city "$1"
 }
 
+sync_cities() {
+    if [ -z "$1" ]; then
+        error "Cities required (comma-separated bananas or @file path)"
+    fi
+
+    log "Syncing cities: $1"
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    # Source and export API keys if available
+    if [ -f ~/.llm_secrets ]; then
+        set -a  # Auto-export all variables
+        source ~/.llm_secrets
+        set +a
+    fi
+    uv run engagic-conductor --sync-cities "$1"
+}
+
+process_cities() {
+    if [ -z "$1" ]; then
+        error "Cities required (comma-separated bananas or @file path)"
+    fi
+
+    log "Processing queued jobs for cities: $1"
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    # Source and export API keys if available
+    if [ -f ~/.llm_secrets ]; then
+        set -a  # Auto-export all variables
+        source ~/.llm_secrets
+        set +a
+    fi
+    uv run engagic-conductor --process-cities "$1"
+}
+
+sync_and_process_cities() {
+    if [ -z "$1" ]; then
+        error "Cities required (comma-separated bananas or @file path)"
+    fi
+
+    log "Syncing and processing cities: $1"
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    # Source and export API keys if available
+    if [ -f ~/.llm_secrets ]; then
+        set -a  # Auto-export all variables
+        source ~/.llm_secrets
+        set +a
+    fi
+    uv run engagic-conductor --sync-and-process-cities "$1"
+}
+
 process_unprocessed() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
@@ -434,40 +424,92 @@ process_unprocessed() {
     uv run engagic-conductor --full-sync
 }
 
+preview_queue() {
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    uv run engagic-conductor --preview-queue "${1:-all}"
+}
+
+extract_text() {
+    if [ -z "$1" ]; then
+        error "Meeting ID required"
+    fi
+
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+
+    # Build command
+    CMD="uv run engagic-conductor --extract-text $1"
+
+    # Add output file if provided
+    if [ -n "$2" ]; then
+        CMD="$CMD --output-file $2"
+        log "Extracting text from meeting $1 to $2..."
+    else
+        log "Extracting text preview from meeting $1..."
+    fi
+
+    eval $CMD
+}
+
 show_help() {
     echo "Engagic Deployment Script"
     echo ""
     echo "Usage: $0 [command] [args]"
     echo ""
     echo "Service Management:"
-    echo "  start [api|daemon|all]    - Start services (default: all)"
-    echo "  stop [api|daemon|all]     - Stop services (default: all)"
-    echo "  restart [api|daemon|all]  - Restart services (default: all)"
-    echo "  status                    - Show status of all services"
+    echo "  start                     - Start API service"
+    echo "  stop                      - Stop API and kill background processes"
+    echo "  restart                   - Restart API service"
+    echo "  status                    - Show system status"
+    echo "  logs-api                  - Show API logs"
     echo ""
     echo "Deployment:"
     echo "  setup                     - Install dependencies"
     echo "  update                    - Quick update (git pull + restart)"
     echo "  deploy                    - Full deployment"
-    echo "  test                      - Test all services"
+    echo "  test                      - Test API endpoints"
     echo "  sync                      - Sync dependencies"
     echo ""
-    echo "API Commands:"
-    echo "  logs-api                  - Show API logs"
+    echo "Data Operations (Explicit Control Only):"
     echo ""
-    echo "Background Processor Commands:"
-    echo "  logs-daemon               - Show daemon logs"
-    echo "  daemon-status             - Show processing status"
-    echo "  sync-city CITY_BANANA     - Force sync specific city (enqueues only)"
-    echo "  sync-and-process CITY     - Sync city and immediately process all meetings"
-    echo "  process-unprocessed       - Process all unprocessed meetings"
+    echo "  Single City:"
+    echo "    sync-city CITY_BANANA          - Fetch meetings (enqueue for processing)"
+    echo "    sync-and-process CITY          - Fetch + process immediately"
+    echo ""
+    echo "  Multiple Cities:"
+    echo "    sync-cities CITIES             - Fetch multiple (comma-separated or @file)"
+    echo "    process-cities CITIES          - Process queued jobs for multiple cities"
+    echo "    sync-and-process-cities CITIES - Fetch + process multiple cities"
+    echo ""
+    echo "  Batch Operations:"
+    echo "    process-unprocessed            - Process all unprocessed meetings in queue"
+    echo ""
+    echo "  Preview & Inspection:"
+    echo "    preview-queue [CITY]           - Show queued jobs (no processing)"
+    echo "    extract-text MEETING_ID [FILE] - Extract PDF text (no LLM, manual review)"
+    echo "    kill-background                - Kill any running background processes"
     echo ""
     echo "Examples:"
-    echo "  $0 deploy                      # First time setup"
-    echo "  $0 update                      # Quick update from git"
-    echo "  $0 sync-city paloaltoCA        # Sync Palo Alto (just fetch + enqueue)"
-    echo "  $0 sync-and-process paloaltoCA # Sync + process immediately (test item detection)"
-    echo "  $0 status                      # Check everything"
+    echo ""
+    echo "  # System management"
+    echo "  $0 deploy                                  # First time setup"
+    echo "  $0 status                                  # Check what's running"
+    echo "  $0 kill-background                         # Stop any background jobs"
+    echo ""
+    echo "  # Single city workflow"
+    echo "  $0 sync-city paloaltoCA                    # 1. Fetch meetings"
+    echo "  $0 preview-queue paloaltoCA                # 2. Preview queue"
+    echo "  $0 extract-text MEETING_ID /tmp/check.txt  # 3. Review extraction quality"
+    echo "  $0 sync-and-process paloaltoCA             # 4. Process (costs API credits)"
+    echo ""
+    echo "  # Regional workflow (RECOMMENDED)"
+    echo "  $0 sync-cities @regions/bay-area.txt       # 1. Fetch region (free)"
+    echo "  $0 preview-queue                           # 2. Check queue"
+    echo "  $0 process-cities @regions/bay-area.txt    # 3. Process (costs ~\$0.50)"
+    echo ""
+    echo "  # Quick test"
+    echo "  $0 sync-and-process-cities @regions/test-small.txt  # 2 cities (~\$0.02)"
 }
 
 # Main command handling
@@ -475,37 +517,26 @@ case "${1:-help}" in
     # Setup
     setup)     setup_env ;;
     
-    # Start commands
-    start)
-        case "${2:-all}" in
-            api)    start_api ;;
-            daemon) start_daemon ;;
-            all|*)  start_all ;;
-        esac
-        ;;
-    
-    # Stop commands
-    stop)
-        case "${2:-all}" in
-            api)    stop_api ;;
-            daemon) stop_daemon ;;
-            all|*)  stop_all ;;
-        esac
-        ;;
-    
-    # Restart commands
-    restart)
-        case "${2:-all}" in
-            api)    restart_api ;;
-            daemon) restart_daemon ;;
-            all|*)  restart_all ;;
-        esac
-        ;;
+    # Service commands
+    start)          start_api ;;
+    stop)           stop_all ;;
+    restart)        restart_api ;;
+    kill-background) kill_background_processes ;;
     
     # Status and logs
     status)         status_all ;;
-    logs-api)       journalctl -u engagic-api -f ;;
-    logs-daemon)    journalctl -u "$DAEMON_SERVICE" -f ;;
+    logs-api)
+        if systemctl is-active --quiet "$API_SERVICE"; then
+            journalctl -u engagic-api -f
+        else
+            warn "API not running via systemd"
+            if [ -f "$APP_DIR/logs/api.log" ]; then
+                tail -f "$APP_DIR/logs/api.log"
+            else
+                error "No API logs found"
+            fi
+        fi
+        ;;
     
     # Testing
     test)           test_services ;;
@@ -515,12 +546,22 @@ case "${1:-help}" in
     deploy)         deploy_full ;;
     sync)           sync_deps ;;
 
-    # Daemon specific
-    daemon-status)  daemon_status ;;
-    sync-city)      sync_city "$2" ;;
-    sync-and-process) sync_and_process_city "$2" ;;
+    # Data operations - single city
+    sync-city)           sync_city "$2" ;;
+    sync-and-process)    sync_and_process_city "$2" ;;
+
+    # Data operations - multiple cities
+    sync-cities)         sync_cities "$2" ;;
+    process-cities)      process_cities "$2" ;;
+    sync-and-process-cities) sync_and_process_cities "$2" ;;
+
+    # Batch operations
     process-unprocessed) process_unprocessed ;;
 
+    # Preview and inspection
+    preview-queue)       preview_queue "$2" ;;
+    extract-text)        extract_text "$2" "$3" ;;
+
     # Help
-    help|*)         show_help ;;
+    help|*)              show_help ;;
 esac

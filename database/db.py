@@ -802,6 +802,16 @@ class UnifiedDatabase:
                 processing_status="pending",
             )
 
+            # Preserve existing summary if already processed (don't overwrite on re-sync)
+            existing_meeting = self.get_meeting(meeting_obj.id)
+            if existing_meeting and existing_meeting.summary:
+                meeting_obj.summary = existing_meeting.summary
+                meeting_obj.processing_status = existing_meeting.processing_status
+                meeting_obj.processing_method = existing_meeting.processing_method
+                meeting_obj.processing_time = existing_meeting.processing_time
+                meeting_obj.topics = existing_meeting.topics
+                logger.debug(f"Preserved existing summary for {meeting_obj.title}")
+
             # Validate meeting before storing
             if not MeetingValidator.validate_and_store(
                 {
@@ -820,14 +830,20 @@ class UnifiedDatabase:
             stored_meeting = self.store_meeting(meeting_obj)
             logger.debug(f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})")
 
-            # Store agenda items if present
+            # Store agenda items if present (preserve existing summaries on re-sync)
             if meeting_dict.get("items"):
                 items = meeting_dict["items"]
                 agenda_items = []
 
+                # Build map of existing items to preserve summaries
+                existing_items = self.get_agenda_items(stored_meeting.id)
+                existing_items_map = {item.id: item for item in existing_items}
+
                 for item_data in items:
+                    item_id = f"{stored_meeting.id}_{item_data['item_id']}"
+
                     agenda_item = AgendaItem(
-                        id=f"{stored_meeting.id}_{item_data['item_id']}",
+                        id=item_id,
                         meeting_id=stored_meeting.id,
                         title=item_data.get("title", ""),
                         sequence=item_data.get("sequence", 0),
@@ -835,20 +851,57 @@ class UnifiedDatabase:
                         summary=None,
                         topics=None,
                     )
+
+                    # Preserve existing summary if already processed
+                    if item_id in existing_items_map:
+                        existing_item = existing_items_map[item_id]
+                        if existing_item.summary:
+                            agenda_item.summary = existing_item.summary
+                        if existing_item.topics:
+                            agenda_item.topics = existing_item.topics
+
                     agenda_items.append(agenda_item)
 
                 if agenda_items:
                     count = self.store_agenda_items(stored_meeting.id, agenda_items)
+                    items_with_summaries = sum(1 for item in agenda_items if item.summary)
                     logger.debug(
-                        f"Stored {count} agenda items for {stored_meeting.title}"
+                        f"Stored {count} agenda items for {stored_meeting.title} "
+                        f"({items_with_summaries} with preserved summaries)"
                     )
 
-            # Enqueue for processing
+            # Check if already processed before enqueuing (to avoid wasting credits)
+            # AGENDA-FIRST: Check item-level summaries (golden path) first
+            #
+            # TODO: Future enhancement - PDF content hash detection
+            # Calculate hash of packet_url content and compare against cache.content_hash
+            # to detect meaningful changes. Would require fetching PDF during sync (slower)
+            # but enables smart re-processing only when content actually changes.
+            # Trade-off: Sync latency vs credit efficiency for updated agendas.
             has_items = bool(meeting_dict.get("items"))
             agenda_url = meeting_dict.get("agenda_url")
             packet_url = meeting_dict.get("packet_url")
 
-            if agenda_url or packet_url or has_items:
+            skip_enqueue = False
+            skip_reason = None
+
+            # Priority 1: Check for item-level summaries (GOLDEN PATH)
+            if has_items and 'agenda_items' in locals():
+                items_with_summaries = [item for item in agenda_items if item.summary]
+                if items_with_summaries:
+                    skip_enqueue = True
+                    skip_reason = f"{len(items_with_summaries)}/{len(agenda_items)} items already have summaries"
+
+            # Priority 2: Check for monolithic summary (fallback path)
+            if not skip_enqueue and stored_meeting.summary:
+                skip_enqueue = True
+                skip_reason = "meeting already has summary (monolithic)"
+
+            if skip_enqueue:
+                logger.debug(
+                    f"Skipping enqueue for {stored_meeting.title} - {skip_reason}"
+                )
+            elif agenda_url or packet_url or has_items:
                 # Calculate priority based on meeting date recency
                 if meeting_date:
                     days_old = (datetime.now() - meeting_date).days
