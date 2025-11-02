@@ -20,17 +20,16 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
     """Get appropriate adapter for vendor
 
     Args:
-        vendor: Vendor name (primegov, legistar, etc.) or custom adapter (custom_berkeley, custom_menlopark)
+        vendor: Vendor name (primegov, legistar, etc.) or custom city adapter (berkeley, menlopark)
         city_slug: Vendor-specific city identifier
         **kwargs: Additional adapter-specific arguments (e.g., api_token)
 
     Returns:
         Adapter instance or None if vendor not supported
 
-    Custom adapters:
-        - custom_berkeley: Berkeley City Council (Drupal CMS)
-        - custom_menlopark: Menlo Park City Council (simple table)
-        - Custom adapters are 1:1 with cities (high maintenance, high value)
+    Custom city adapters (1:1, high value):
+        - berkeley: Berkeley City Council (Drupal CMS)
+        - menlopark: Menlo Park City Council (simple table)
     """
     supported_vendors = {
         "civicclerk",
@@ -40,8 +39,8 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
         "legistar",
         "novusagenda",
         "primegov",
-        "custom_berkeley",
-        "custom_menlopark",
+        "berkeley",
+        "menlopark",
     }
 
     if vendor not in supported_vendors:
@@ -66,9 +65,9 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
         return NovusAgendaAdapter(city_slug)
     elif vendor == "primegov":
         return PrimeGovAdapter(city_slug)
-    elif vendor == "custom_berkeley":
+    elif vendor == "berkeley":
         return BerkeleyAdapter(city_slug)
-    elif vendor == "custom_menlopark":
+    elif vendor == "menlopark":
         return MenloParkAdapter(city_slug)
     else:
         return None

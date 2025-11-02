@@ -33,7 +33,7 @@ class BerkeleyAdapter(BaseAdapter):
     """Berkeley City Council - Custom Drupal CMS adapter"""
 
     def __init__(self, city_slug: str):
-        super().__init__(city_slug, "custom_berkeley")
+        super().__init__(city_slug, "berkeley")
         self.base_url = "https://berkeleyca.gov"
 
     def fetch_meetings(self, max_meetings: int = 10) -> Iterator[Dict[str, Any]]:
