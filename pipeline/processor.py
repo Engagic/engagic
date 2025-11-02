@@ -349,6 +349,16 @@ class Processor:
 
             for item in need_processing:
                 try:
+                    # Check if entire item is public comments (e.g., "Petitions and Communications")
+                    # If so, skip all its attachments
+                    item_is_public_comments = is_public_comment_attachment(item.title)
+
+                    if item_is_public_comments:
+                        logger.info(
+                            f"[ItemFilter] Skipping entire item (public comments): {item.title[:80]}"
+                        )
+                        continue
+
                     # Extract text from all attachments for this item
                     all_text_parts = []
                     total_page_count = 0
