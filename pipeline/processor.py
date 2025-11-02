@@ -317,7 +317,8 @@ class Processor:
                                 all_text_parts.append(text_content)
 
                         # PDF/URL attachment (from Legistar or structured)
-                        elif att_type == "pdf" or isinstance(att, str):
+                        # Treat unknown types as PDFs if they have a URL (defensive coding)
+                        elif att_type in ("pdf", "unknown") or isinstance(att, str):
                             if att_url:
                                 try:
                                     result = self.analyzer.pdf_extractor.extract_from_url(
