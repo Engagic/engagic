@@ -4,7 +4,8 @@ import type {
 	AnalyticsData,
 	RandomMeetingResponse,
 	RandomMeetingWithItemsResponse,
-	TopicSearchResult
+	TopicSearchResult,
+	TickerResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -132,6 +133,14 @@ export const apiClient = {
 	async getMeeting(meetingId: number): Promise<any> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/meeting/${meetingId}`
+		);
+
+		return response.json();
+	},
+
+	async getTicker(): Promise<TickerResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/ticker`
 		);
 
 		return response.json();
