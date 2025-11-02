@@ -40,7 +40,7 @@ class MenloParkAdapter(BaseAdapter):
     """Menlo Park City Council - Custom simple table website"""
 
     def __init__(self, city_slug: str):
-        super().__init__(city_slug, "custom_menlopark")
+        super().__init__(city_slug, "menlopark")
         self.base_url = "https://menlopark.gov"
 
     def fetch_meetings(self, max_meetings: int = 10) -> Iterator[Dict[str, Any]]:

@@ -56,7 +56,7 @@ class CityNameAdapter(BaseAdapter):
     """
 
     def __init__(self, city_slug: str):
-        super().__init__(city_slug, "custom_cityname")
+        super().__init__(city_slug, "cityname")
         self.base_url = "https://city.gov"
 
     def fetch_meetings(self, max_meetings: int = 10):
@@ -74,11 +74,11 @@ from vendors.adapters.custom.cityname_adapter import CityNameAdapter
 # Add to supported_vendors set
 supported_vendors = {
     ...
-    "custom_cityname",
+    "cityname",
 }
 
 # Add elif branch
-elif vendor == "custom_cityname":
+elif vendor == "cityname":
     return CityNameAdapter(city_slug)
 ```
 
@@ -94,7 +94,7 @@ __all__ = [..., "CityNameAdapter"]
 
 ```sql
 INSERT INTO cities (city_banana, name, state, vendor, city_slug, ...)
-VALUES ('citynameCA', 'City Name', 'CA', 'custom_cityname', 'cityname', ...);
+VALUES ('citynameCA', 'City Name', 'CA', 'cityname', 'cityname', ...);
 ```
 
 ## Common Patterns
