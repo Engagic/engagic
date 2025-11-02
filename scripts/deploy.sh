@@ -648,10 +648,18 @@ show_help() {
 }
 
 # Main command handling
-case "${1:-help}" in
+# Support both "restart-api" and "restart api" syntax
+COMMAND="${1:-help}"
+if [ -n "$2" ] && [[ "$1" =~ ^(start|stop|restart|logs)$ ]] && [[ "$2" =~ ^(api|fetch)$ ]]; then
+    COMMAND="$1-$2"
+    # Shift arguments so $2 becomes $1, $3 becomes $2, etc.
+    shift
+fi
+
+case "$COMMAND" in
     # Setup
     setup)     setup_env ;;
-    
+
     # Service commands
     start)          start_all ;;
     stop)           stop_all ;;
