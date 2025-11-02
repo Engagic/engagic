@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { apiClient } from '$lib/api/api-client';
-	import type { SearchResult, CityOption, Meeting } from '$lib/api/types';
+	import type { SearchResult, CityOption, Meeting, TickerItem } from '$lib/api/types';
 	import { isSearchSuccess, isSearchAmbiguous } from '$lib/api/types';
 	import { generateCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 	import { validateSearchQuery } from '$lib/utils/sanitize';
@@ -18,86 +18,13 @@
 	let error = $state('');
 	let analytics: AnalyticsData | null = $state(null);
 	let currentStatIndex = $state(0);
-	let tickerItems: Array<{city: string, date: string, excerpt: string, url: string}> = $state([]);
+	let tickerItems: TickerItem[] = $state([]);
 
 	const stats = $derived(analytics ? [
 		{ label: 'cities tracked', value: analytics.real_metrics.cities_covered.toLocaleString() },
 		{ label: 'meetings summarized', value: analytics.real_metrics.agendas_summarized.toLocaleString() },
 		{ label: 'total meetings', value: analytics.real_metrics.meetings_tracked.toLocaleString() }
 	] : []);
-
-	function extractExcerpt(summary: string, preferMiddle: boolean = true): string {
-		if (!summary) return '';
-
-		// Remove markdown headers, bold, and common boilerplate
-		let cleaned = summary
-			.replace(/#{1,6}\s+/g, '')
-			.replace(/\*\*/g, '')
-			.replace(/\*/g, '')
-			.replace(/Here's a summary[^:]*:/gi, '')
-			.replace(/Here is a summary[^:]*:/gi, '')
-			.replace(/This summary[^:]*:/gi, '')
-			.replace(/This is a summary[^:]*:/gi, '')
-			.replace(/Summary of[^:]*:/gi, '')
-			.replace(/Key Agenda Items/gi, '')
-			.replace(/Date:[^Time]*/gi, '')
-			.replace(/Time:[^Location]*/gi, '')
-			.replace(/Location:[^\n]*/gi, '')
-			.replace(/Meeting Summary[^-]*-[^-]*-[^T]*/gi, '')
-			.trim();
-
-		// Split into sentences
-		const sentences = cleaned.split(/[.!?]+/).filter(s => s.trim().length > 30);
-
-		if (sentences.length === 0) {
-			return cleaned.substring(0, 150);
-		}
-
-		// Score sentences to find the juiciest one
-		const scoredSentences = sentences.map((sentence, idx) => {
-			let score = 0;
-
-			// Prefer middle sentences (skip intro, skip outro)
-			if (idx > 0 && idx < sentences.length - 1) score += 10;
-
-			// Look for dollar amounts
-			if (/\$[\d,]+/.test(sentence)) score += 15;
-
-			// Look for action words
-			if (/(proposed|approved|amendment|ordinance|agreement|contract|budget|allocate|establish|require)/i.test(sentence)) score += 10;
-
-			// Look for numbers (percentages, counts)
-			if (/\d+%|\d+ (units|homes|acres|projects)/.test(sentence)) score += 8;
-
-			// Penalize very short sentences
-			if (sentence.length < 50) score -= 5;
-
-			// Prefer longer, detailed sentences
-			if (sentence.length > 100) score += 5;
-
-			return { sentence, score, idx };
-		});
-
-		// Get highest scoring sentence
-		scoredSentences.sort((a, b) => b.score - a.score);
-		const excerpt = scoredSentences[0].sentence.trim();
-
-		// Truncate if too long
-		return excerpt.length > 200 ? excerpt.substring(0, 197) + '...' : excerpt;
-	}
-
-	function formatCityName(banana: string): string {
-		// Remove state code (last 2 chars)
-		const cityPart = banana.substring(0, banana.length - 2);
-
-		// Insert spaces before capital letters and capitalize first letter of each word
-		return cityPart
-			.replace(/([A-Z])/g, ' $1')
-			.trim()
-			.split(' ')
-			.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-			.join(' ');
-	}
 
 	onMount(async () => {
 		try {
@@ -106,62 +33,12 @@
 			console.error('Failed to load analytics:', err);
 		}
 
-		// Fetch random meetings for ticker - mix both types for variety
+		// Fetch ticker items from single backend endpoint
 		try {
-			const items = [];
-			for (let i = 0; i < 15; i++) {
-				// Alternate between item-based and general meetings
-				const useItems = i % 2 === 0;
-				const result = useItems
-					? await apiClient.getRandomMeetingWithItems()
-					: await apiClient.getRandomBestMeeting();
-
-				if (result.meeting) {
-					const banana = result.meeting.banana;
-					const stateMatch = banana.match(/([A-Z]{2})$/);
-					if (stateMatch) {
-						const state = stateMatch[1];
-						const cityName = formatCityName(banana);
-
-						const date = new Date(result.meeting.date).toLocaleDateString('en-US', {
-							month: 'short',
-							day: 'numeric',
-							year: 'numeric'
-						});
-
-						let excerpt = '';
-
-						// Prefer item summaries (they're more specific and juicy)
-						if (result.meeting.items && result.meeting.items.length > 0) {
-							const itemsWithSummaries = result.meeting.items.filter(item => item.summary);
-							if (itemsWithSummaries.length > 0) {
-								// Pick a random item from this meeting
-								const randomItem = itemsWithSummaries[Math.floor(Math.random() * itemsWithSummaries.length)];
-								excerpt = extractExcerpt(randomItem.summary);
-							}
-						}
-
-						// Fall back to meeting summary if no items
-						if (!excerpt && result.meeting.summary) {
-							excerpt = extractExcerpt(result.meeting.summary);
-						}
-
-						// Generate meeting slug
-						const meetingSlug = generateMeetingSlug(result.meeting);
-						const url = `/${banana}/${meetingSlug}`;
-
-						if (excerpt && excerpt.length > 20) {
-							items.push({
-								city: `${cityName}, ${state}`,
-								date: date,
-								excerpt: excerpt,
-								url: url
-							});
-						}
-					}
-				}
+			const tickerResponse = await apiClient.getTicker();
+			if (tickerResponse.success && tickerResponse.items) {
+				tickerItems = tickerResponse.items;
 			}
-			tickerItems = items;
 		} catch (err) {
 			console.error('Failed to load ticker items:', err);
 		}
