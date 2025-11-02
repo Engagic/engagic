@@ -133,6 +133,7 @@
 
 					// Create a Meeting object for slug generation
 					const meeting: Meeting = {
+						id: result.meeting.id,
 						banana: result.meeting.banana,
 						title: result.meeting.title,
 						date: result.meeting.date,
@@ -168,6 +169,7 @@
 				const banana = result.meeting.banana;
 
 				const meeting: Meeting = {
+					id: result.meeting.id,
 					banana: banana,
 					title: result.meeting.title,
 					date: result.meeting.date,
