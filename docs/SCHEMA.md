@@ -4,7 +4,8 @@ Complete reference for the Engagic unified SQLite database.
 
 **Database:** SQLite 3.x with WAL mode
 **Location:** `/root/engagic/data/engagic.db` (production)
-**Last Updated:** November 1, 2025
+**Code:** Repository Pattern (database/db.py facade → 5 focused repositories)
+**Last Updated:** November 2, 2025
 
 ---
 
@@ -111,7 +112,8 @@ Meeting records with optional summaries and metadata.
 | `banana` | TEXT NOT NULL | City identifier (FK to cities) |
 | `title` | TEXT NOT NULL | Meeting title |
 | `date` | TIMESTAMP | Meeting date/time |
-| `packet_url` | TEXT | URL to full meeting packet PDF |
+| `agenda_url` | TEXT | URL to HTML agenda page (item-based, primary) |
+| `packet_url` | TEXT | URL to PDF packet (monolithic, fallback) |
 | `summary` | TEXT | LLM-generated meeting summary (markdown) |
 | `participation` | TEXT | JSON: email, phone, virtual_url, is_hybrid |
 | `status` | TEXT | Meeting status (scheduled, completed, etc.) |
