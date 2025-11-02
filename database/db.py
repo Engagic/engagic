@@ -19,10 +19,9 @@ from datetime import datetime
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-logger = logging.getLogger("engagic")
-
-# Import for validation
 from vendors.validator import MeetingValidator
+
+logger = logging.getLogger("engagic")
 
 
 class DatabaseConnectionError(Exception):
@@ -899,7 +898,7 @@ class UnifiedDatabase:
     def update_meeting_summary(
         self,
         meeting_id: str,
-        summary: str,
+        summary: Optional[str],
         processing_method: str,
         processing_time: float,
         participation: Optional[Dict[str, Any]] = None,

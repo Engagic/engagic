@@ -6,7 +6,6 @@ import logging
 import sys
 import os
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
 from server.models.requests import ProcessRequest
 from server.services.meeting import get_meeting_with_items
 from database.db import UnifiedDatabase
