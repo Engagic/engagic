@@ -81,15 +81,17 @@ class BaseAdapter:
         Retry strategy:
         - 3 total retries
         - Exponential backoff (1s, 2s, 4s)
-        - Retry on 429, 500, 502, 503, 504
+        - Retry on 500, 502, 503, 504 (server errors only)
+        - NOT 429: Rate limiting prevents this, if we hit it our delays are wrong
         """
         session = requests.Session()
         session.headers.update(DEFAULT_HEADERS)
 
+        # Retry only on server errors, not rate limits (we prevent those)
         retry_strategy = Retry(
             total=3,
             backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[500, 502, 503, 504],
             allowed_methods=["GET", "POST", "HEAD"],
         )
 

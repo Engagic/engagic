@@ -1,0 +1,18 @@
+# Bay Area Cities (San Francisco Peninsula + East Bay)
+# One city banana per line, comments start with #
+
+# Peninsula
+paloaltoCA
+mountainviewCA
+sunnyvaleCA
+santaclaraCA
+sanjoseCA
+redwoodcityCA
+menloparkCA
+
+# East Bay
+oaklandCA
+berkeleyCA
+fremontCA
+haywardCA
+alamedaCA

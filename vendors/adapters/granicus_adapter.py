@@ -429,12 +429,16 @@ class GranicusAdapter(BaseAdapter):
         parsed = parse_granicus_html_agenda(html)
 
         # Convert relative attachment URLs to absolute URLs
+        # Also ensure type field is set (defense-in-depth)
         for item in parsed['items']:
             for attachment in item.get('attachments', []):
                 url = attachment.get('url', '')
                 # If URL is relative, make it absolute using urljoin
                 if url and not url.startswith('http'):
                     attachment['url'] = urljoin(self.base_url, url)
+                # Ensure type field is set (Granicus MetaViewer links are PDFs)
+                if 'type' not in attachment:
+                    attachment['type'] = 'pdf'
 
         logger.debug(
             f"[granicus:{self.slug}] Parsed HTML agenda: {len(parsed['items'])} items"

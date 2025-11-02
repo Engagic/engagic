@@ -145,6 +145,19 @@ export interface AnalyticsData {
 	};
 }
 
+export interface TickerItem {
+	city: string;
+	date: string;
+	excerpt: string;
+	url: string;
+}
+
+export interface TickerResponse {
+	success: boolean;
+	items: TickerItem[];
+	count: number;
+}
+
 // Error types
 export class ApiError extends Error {
 	constructor(
