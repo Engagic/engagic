@@ -14,7 +14,7 @@ import logging
 import time
 import threading
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from database.db import UnifiedDatabase
 from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
@@ -248,6 +248,237 @@ class Conductor:
             self.is_running = old_is_running
             self.processor.is_running = old_is_running
 
+    def sync_cities(self, city_bananas: List[str]) -> List[Dict[str, Any]]:
+        """Sync multiple cities (fetches meetings, enqueues for processing)
+
+        Args:
+            city_bananas: List of city banana identifiers
+
+        Returns:
+            List of sync results
+        """
+        logger.info(f"[Conductor] Syncing {len(city_bananas)} cities...")
+        results = self.fetcher.sync_cities(city_bananas)
+
+        # Convert SyncResult objects to dicts
+        return [
+            {
+                "city_banana": r.city_banana,
+                "status": r.status.value,
+                "meetings_found": r.meetings_found,
+                "meetings_processed": r.meetings_processed,
+                "duration": r.duration_seconds,
+                "error": r.error_message,
+            }
+            for r in results
+        ]
+
+    def process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
+        """Process queued meetings for multiple cities (no sync, just process)
+
+        Args:
+            city_bananas: List of city banana identifiers
+
+        Returns:
+            Summary of processing results
+        """
+        logger.info(f"[Conductor] Processing queued jobs for {len(city_bananas)} cities...")
+
+        if not self.processor.analyzer:
+            logger.warning(
+                "[Conductor] Analyzer not available - cannot process meetings"
+            )
+            return {
+                "cities_count": len(city_bananas),
+                "processed_count": 0,
+                "error": "Analyzer not available",
+            }
+
+        # Temporarily enable processing
+        old_is_running = self.is_running
+        self.is_running = True
+        self.processor.is_running = True
+
+        total_processed = 0
+        total_failed = 0
+        city_results = []
+
+        try:
+            for banana in city_bananas:
+                if not self.is_running:
+                    break
+
+                logger.info(f"[Conductor] Processing jobs for {banana}...")
+                stats = self.processor.process_city_jobs(banana)
+
+                total_processed += stats["processed_count"]
+                total_failed += stats["failed_count"]
+
+                city_results.append({
+                    "city_banana": banana,
+                    "processed": stats["processed_count"],
+                    "failed": stats["failed_count"],
+                })
+
+            return {
+                "cities_count": len(city_bananas),
+                "processed_count": total_processed,
+                "failed_count": total_failed,
+                "city_results": city_results,
+            }
+
+        finally:
+            # Restore original is_running state
+            self.is_running = old_is_running
+            self.processor.is_running = old_is_running
+
+    def sync_and_process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
+        """Sync multiple cities and immediately process all their meetings
+
+        Args:
+            city_bananas: List of city banana identifiers
+
+        Returns:
+            Combined sync and processing results
+        """
+        logger.info(f"[Conductor] Sync and process {len(city_bananas)} cities...")
+
+        # Step 1: Sync all cities
+        sync_results = self.sync_cities(city_bananas)
+        total_meetings = sum(r["meetings_found"] for r in sync_results)
+
+        logger.info(f"[Conductor] Sync complete: {total_meetings} meetings found across {len(city_bananas)} cities")
+
+        # Step 2: Process all queued jobs for these cities
+        process_results = self.process_cities(city_bananas)
+
+        return {
+            "sync_results": sync_results,
+            "processing_results": process_results,
+            "total_meetings_found": total_meetings,
+            "total_processed": process_results["processed_count"],
+            "total_failed": process_results["failed_count"],
+        }
+
+    def preview_queue(self, city_banana: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
+        """Preview queued jobs without processing them
+
+        Args:
+            city_banana: Optional city filter
+            limit: Max jobs to show
+
+        Returns:
+            List of queued jobs with meeting info
+        """
+        logger.info(f"[Conductor] Previewing queue...")
+
+        # Get pending jobs from queue
+        jobs = []
+        if city_banana:
+            # Get jobs for specific city
+            job = self.db.get_next_for_processing(banana=city_banana)
+            if job:
+                jobs.append(job)
+        else:
+            # Get all pending jobs (need to implement this query)
+            # For now, just show stats
+            stats = self.db.get_queue_stats()
+            return stats
+
+        previews = []
+        for job in jobs[:limit]:
+            meeting = self.db.get_meeting(job["meeting_id"])
+            if meeting:
+                previews.append({
+                    "queue_id": job["id"],
+                    "meeting_id": meeting.id,
+                    "city_banana": job["banana"],
+                    "title": meeting.title,
+                    "date": meeting.date.isoformat() if meeting.date else None,
+                    "packet_url": job["packet_url"],
+                    "priority": job.get("priority", 0),
+                    "status": job["status"],
+                })
+
+        return {
+            "total_queued": len(jobs),
+            "previews": previews,
+        }
+
+    def extract_text_preview(self, meeting_id: str, output_file: Optional[str] = None) -> Dict[str, Any]:
+        """Extract text from meeting PDF without processing (for manual review)
+
+        Args:
+            meeting_id: Meeting identifier
+            output_file: Optional file path to save extracted text
+
+        Returns:
+            Dictionary with text preview and stats
+        """
+        logger.info(f"[Conductor] Extracting text preview for {meeting_id}...")
+
+        meeting = self.db.get_meeting(meeting_id)
+        if not meeting:
+            return {"error": "Meeting not found"}
+
+        if not meeting.packet_url:
+            return {"error": "No packet URL for this meeting"}
+
+        # Use processor's analyzer to extract text
+        if not self.processor.analyzer:
+            return {"error": "Analyzer not available"}
+
+        try:
+            # Extract text using PDF extractor
+            from parsing.pdf import PdfExtractor
+            extractor = PdfExtractor()
+
+            logger.info(f"[Conductor] Downloading PDF: {meeting.packet_url}")
+            extraction_result = extractor.extract_from_url(meeting.packet_url)
+
+            if not extraction_result["success"]:
+                return {
+                    "error": extraction_result.get("error", "Failed to extract text"),
+                    "meeting_id": meeting_id,
+                }
+
+            text = extraction_result["text"]
+            page_count = extraction_result.get("page_count", 0)
+            text_length = len(text)
+
+            # Optionally save to file
+            if output_file:
+                with open(output_file, "w") as f:
+                    f.write(f"Meeting: {meeting.title}\n")
+                    f.write(f"Date: {meeting.date}\n")
+                    f.write(f"URL: {meeting.packet_url}\n")
+                    f.write(f"Pages: {page_count}\n")
+                    f.write(f"Characters: {text_length}\n")
+                    f.write("=" * 80 + "\n\n")
+                    f.write(text)
+                logger.info(f"[Conductor] Saved text to {output_file}")
+
+            # Return preview (first 2000 chars)
+            preview_text = text[:2000] + ("..." if len(text) > 2000 else "")
+
+            return {
+                "success": True,
+                "meeting_id": meeting_id,
+                "title": meeting.title,
+                "date": meeting.date.isoformat() if meeting.date else None,
+                "page_count": page_count,
+                "text_length": text_length,
+                "preview": preview_text,
+                "saved_to": output_file,
+            }
+
+        except Exception as e:
+            logger.error(f"[Conductor] Failed to extract text: {e}")
+            return {
+                "error": str(e),
+                "meeting_id": meeting_id,
+            }
+
 
 # Global instance
 _conductor = None
@@ -278,16 +509,51 @@ def stop_conductor():
 def main():
     """Entry point for engagic-conductor and engagic-daemon CLI"""
     import argparse
+    import json
 
     parser = argparse.ArgumentParser(description="Background processor for engagic")
+
+    # Single city operations
     parser.add_argument("--sync-city", help="Sync specific city by city_banana")
     parser.add_argument(
         "--sync-and-process-city",
         help="Sync city and immediately process all its meetings",
     )
+
+    # Multi-city operations
+    parser.add_argument(
+        "--sync-cities",
+        help="Sync multiple cities (comma-separated bananas or @file path)",
+    )
+    parser.add_argument(
+        "--process-cities",
+        help="Process queued jobs for multiple cities (comma-separated bananas or @file path)",
+    )
+    parser.add_argument(
+        "--sync-and-process-cities",
+        help="Sync and process multiple cities (comma-separated bananas or @file path)",
+    )
+
+    # Batch operations
     parser.add_argument("--full-sync", action="store_true", help="Run full sync once")
     parser.add_argument("--status", action="store_true", help="Show status")
     parser.add_argument("--daemon", action="store_true", help="Run as daemon")
+
+    # Preview and inspection
+    parser.add_argument(
+        "--preview-queue",
+        nargs="?",
+        const="all",
+        help="Preview queued jobs (optionally specify city_banana)",
+    )
+    parser.add_argument(
+        "--extract-text",
+        help="Extract text from meeting PDF for manual review (meeting_id)",
+    )
+    parser.add_argument(
+        "--output-file",
+        help="Output file for extracted text (use with --extract-text)",
+    )
 
     args = parser.parse_args()
 
@@ -300,12 +566,43 @@ def main():
 
     conductor = Conductor()
 
+    # Helper to parse city list (supports comma-separated or @file)
+    def parse_city_list(arg: str) -> List[str]:
+        if arg.startswith("@"):
+            # Read from file
+            file_path = arg[1:]
+            with open(file_path, "r") as f:
+                return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        else:
+            # Comma-separated
+            return [c.strip() for c in arg.split(",") if c.strip()]
+
+    # Single city operations
     if args.sync_city:
         result = conductor.force_sync_city(args.sync_city)
         print(f"Sync result: {result}")
     elif args.sync_and_process_city:
         result = conductor.sync_and_process_city(args.sync_and_process_city)
-        print(f"Sync and process result: {result}")
+        print(json.dumps(result, indent=2))
+
+    # Multi-city operations
+    elif args.sync_cities:
+        cities = parse_city_list(args.sync_cities)
+        print(f"Syncing {len(cities)} cities: {', '.join(cities)}")
+        results = conductor.sync_cities(cities)
+        print(json.dumps(results, indent=2))
+    elif args.process_cities:
+        cities = parse_city_list(args.process_cities)
+        print(f"Processing queued jobs for {len(cities)} cities: {', '.join(cities)}")
+        results = conductor.process_cities(cities)
+        print(json.dumps(results, indent=2))
+    elif args.sync_and_process_cities:
+        cities = parse_city_list(args.sync_and_process_cities)
+        print(f"Syncing and processing {len(cities)} cities: {', '.join(cities)}")
+        results = conductor.sync_and_process_cities(cities)
+        print(json.dumps(results, indent=2))
+
+    # Batch operations
     elif args.full_sync:
         results = conductor.fetcher.sync_all()
         print(f"Full sync complete: {len(results)} cities processed")
@@ -319,6 +616,18 @@ def main():
                 time.sleep(1)
         except KeyboardInterrupt:
             conductor.stop()
+
+    # Preview and inspection
+    elif args.preview_queue:
+        city_banana = None if args.preview_queue == "all" else args.preview_queue
+        result = conductor.preview_queue(city_banana=city_banana)
+        print(json.dumps(result, indent=2))
+    elif args.extract_text:
+        meeting_id = args.extract_text
+        output_file = args.output_file
+        result = conductor.extract_text_preview(meeting_id, output_file=output_file)
+        print(json.dumps(result, indent=2))
+
     else:
         parser.print_help()
 
