@@ -1,0 +1,488 @@
+"""
+Pipeline Fetcher - City sync and vendor routing
+
+Handles:
+- Fetching meetings from vendor platforms
+- Storing meetings and agenda items in database
+- Vendor-aware rate limiting
+- Adaptive sync scheduling
+- Support for city lists, vendor lists, or full sync
+
+Moved from: pipeline/conductor.py (refactored)
+"""
+
+import logging
+import time
+import random
+import os
+from datetime import datetime
+from typing import List, Optional, Set, Dict, Any
+from dataclasses import dataclass
+from enum import Enum
+
+from database.db import UnifiedDatabase, City
+from vendors.factory import get_adapter
+from vendors.rate_limiter import RateLimiter
+from config import config
+
+logger = logging.getLogger("engagic")
+
+# Memory monitoring
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    logger.warning("psutil not available - memory monitoring disabled")
+
+
+def log_memory_usage(context: str = ""):
+    """Log current memory usage in MB"""
+    if not PSUTIL_AVAILABLE:
+        return
+    try:
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info()
+        mem_mb = mem_info.rss / 1024 / 1024
+        logger.info(f"[Memory] {context}: {mem_mb:.1f}MB RSS")
+    except Exception as e:
+        logger.debug(f"[Memory] Failed to log: {e}")
+
+
+class SyncStatus(Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+@dataclass
+class SyncResult:
+    city_banana: str
+    status: SyncStatus
+    meetings_found: int = 0
+    meetings_processed: int = 0
+    duration_seconds: float = 0.0
+    error_message: Optional[str] = None
+
+
+class Fetcher:
+    """City sync and meeting fetching orchestrator"""
+
+    def __init__(self, db: Optional[UnifiedDatabase] = None):
+        """Initialize the fetcher
+
+        Args:
+            db: Database instance (or creates new one)
+        """
+        self.db = db or UnifiedDatabase(config.UNIFIED_DB_PATH)
+        self.rate_limiter = RateLimiter()
+        self.failed_cities: Set[str] = set()
+        self.is_running = True  # Control flag for external stop
+
+    def sync_all(self) -> List[SyncResult]:
+        """Sync all active cities with vendor-aware rate limiting
+
+        Returns:
+            List of SyncResult objects for each city
+        """
+        start_time = time.time()
+        logger.info("Starting polite city sync...")
+
+        self.failed_cities.clear()
+        cities = self.db.get_cities(status="active")
+        logger.info(f"Syncing {len(cities)} cities with rate limiting...")
+
+        # Group cities by vendor for polite crawling (only supported vendors)
+        supported_vendors = {
+            "primegov",
+            "legistar",
+            # Temporarily disabled vendors
+            # "granicus",  # VPS timeout issues
+            # "civicclerk",
+            # "novusagenda",
+            # "civicplus",
+        }
+
+        by_vendor = {}
+        skipped_count = 0
+
+        for city in cities:
+            vendor = city.vendor
+            if vendor in supported_vendors:
+                by_vendor.setdefault(vendor, []).append(city)
+            else:
+                skipped_count += 1
+                logger.debug(
+                    f"Skipping city {city.name} with unsupported vendor: {vendor}"
+                )
+
+        total_supported = sum(len(vendor_cities) for vendor_cities in by_vendor.values())
+        logger.info(
+            f"Processing {total_supported} cities with supported adapters, "
+            f"skipping {skipped_count} unsupported"
+        )
+
+        results = []
+
+        # Process each vendor group sequentially with proper delays
+        for vendor, vendor_cities in by_vendor.items():
+            if not self.is_running:
+                break
+
+            # Sort cities by sync priority (high activity first)
+            sorted_cities = self._prioritize_cities(vendor_cities)
+            logger.info(
+                f"Syncing {len(sorted_cities)} {vendor} cities (prioritized by activity)"
+            )
+
+            for city in sorted_cities:
+                if not self.is_running:
+                    break
+
+                # Check if city needs syncing based on frequency
+                if not self._should_sync_city(city):
+                    logger.debug(f"Skipping {city.name} - doesn't need sync yet")
+                    results.append(
+                        SyncResult(
+                            city_banana=city.banana,
+                            status=SyncStatus.SKIPPED,
+                            error_message="Not due for sync based on frequency",
+                        )
+                    )
+                    continue
+
+                # Apply rate limiting before sync
+                self.rate_limiter.wait_if_needed(vendor)
+
+                # Sync with retry logic
+                result = self._sync_city_with_retry(city)
+                logger.info(f"Sync completed for {city.banana}: {result.status}")
+                results.append(result)
+
+                # Track failed cities
+                if result.status == SyncStatus.FAILED:
+                    self.failed_cities.add(city.banana)
+
+                # Log memory every 10 cities
+                if len(results) % 10 == 0:
+                    log_memory_usage(f"After {len(results)} cities")
+
+            # Break between vendor groups to be extra polite
+            if vendor_cities:
+                vendor_break = 30 + random.uniform(0, 10)  # 30-40 seconds
+                logger.info(
+                    f"Completed {vendor} cities, taking {vendor_break:.1f}s break..."
+                )
+                log_memory_usage(f"After {vendor} vendor group")
+                time.sleep(vendor_break)
+
+        # Log summary
+        total_meetings = sum(r.meetings_found for r in results)
+        total_processed = sum(r.meetings_processed for r in results)
+        failed_count = len(self.failed_cities)
+        duration = time.time() - start_time
+
+        logger.info(
+            f"Polite sync completed in {duration:.1f}s: {total_meetings} meetings found, "
+            f"{total_processed} processed, {failed_count} cities failed"
+        )
+        if self.failed_cities:
+            logger.warning(f"Failed cities: {', '.join(sorted(self.failed_cities))}")
+
+        return results
+
+    def sync_cities(self, city_bananas: List[str]) -> List[SyncResult]:
+        """Sync specific cities by city_banana
+
+        Args:
+            city_bananas: List of city_banana identifiers (e.g., ["paloaltoCA", "oaklandCA"])
+
+        Returns:
+            List of SyncResult objects
+        """
+        logger.info(f"Syncing {len(city_bananas)} specific cities...")
+        results = []
+
+        for banana in city_bananas:
+            city = self.db.get_city(banana=banana)
+            if not city:
+                logger.warning(f"City not found: {banana}")
+                results.append(
+                    SyncResult(
+                        city_banana=banana,
+                        status=SyncStatus.FAILED,
+                        error_message="City not found in database",
+                    )
+                )
+                continue
+
+            # Apply rate limiting
+            self.rate_limiter.wait_if_needed(city.vendor)
+
+            # Sync with retry
+            result = self._sync_city_with_retry(city)
+            results.append(result)
+
+            if result.status == SyncStatus.FAILED:
+                self.failed_cities.add(banana)
+
+        return results
+
+    def sync_vendors(self, vendor_names: List[str]) -> List[SyncResult]:
+        """Sync all cities for specific vendors
+
+        Args:
+            vendor_names: List of vendor names (e.g., ["legistar", "primegov"])
+
+        Returns:
+            List of SyncResult objects
+        """
+        logger.info(f"Syncing cities for vendors: {vendor_names}")
+        results = []
+
+        for vendor in vendor_names:
+            cities = self.db.get_cities(vendor=vendor, status="active")
+            logger.info(f"Found {len(cities)} cities for vendor {vendor}")
+
+            for city in cities:
+                if not self.is_running:
+                    break
+
+                # Apply rate limiting
+                self.rate_limiter.wait_if_needed(vendor)
+
+                # Sync with retry
+                result = self._sync_city_with_retry(city)
+                results.append(result)
+
+                if result.status == SyncStatus.FAILED:
+                    self.failed_cities.add(city.banana)
+
+        return results
+
+    def sync_city(self, city_banana: str) -> SyncResult:
+        """Sync a single city by city_banana
+
+        Args:
+            city_banana: City banana identifier
+
+        Returns:
+            SyncResult object
+        """
+        city = self.db.get_city(banana=city_banana)
+        if not city:
+            return SyncResult(
+                city_banana=city_banana,
+                status=SyncStatus.FAILED,
+                error_message="City not found",
+            )
+
+        return self._sync_city_with_retry(city)
+
+    def _sync_city(self, city: City) -> SyncResult:
+        """Sync a single city (internal method)
+
+        Fetches meetings from vendor, stores in database, enqueues for processing
+        """
+        result = SyncResult(city_banana=city.banana, status=SyncStatus.PENDING)
+
+        if not city.vendor:
+            result.status = SyncStatus.SKIPPED
+            result.error_message = "No vendor configured"
+            return result
+
+        start_time = time.time()
+
+        # Get adapter (slug is vendor-specific identifier)
+        kwargs = {}
+        if city.vendor == "legistar" and city.slug == "nyc":
+            kwargs["api_token"] = config.NYC_LEGISTAR_TOKEN
+
+        adapter = get_adapter(city.vendor, city.slug, **kwargs)
+
+        if not adapter:
+            result.status = SyncStatus.SKIPPED
+            result.error_message = f"Unsupported vendor: {city.vendor}"
+            logger.debug(f"Skipping {city.banana} - unsupported vendor: {city.vendor}")
+            return result
+
+        # Use context manager to ensure session cleanup
+        with adapter:
+            try:
+                logger.info(f"Syncing {city.banana} with {city.vendor}")
+                result.status = SyncStatus.IN_PROGRESS
+
+                # Fetch meetings using unified adapter interface
+                try:
+                    all_meetings = list(adapter.fetch_meetings())
+                    meetings_with_packets = [
+                        m for m in all_meetings if m.get("packet_url")
+                    ]
+
+                except Exception as e:
+                    logger.error(f"Error fetching meetings for {city.banana}: {e}")
+                    result.status = SyncStatus.FAILED
+                    result.error_message = str(e)
+                    return result
+
+                result.meetings_found = len(all_meetings)
+                logger.info(
+                    f"Found {len(all_meetings)} total meetings for {city.banana}, "
+                    f"{len(meetings_with_packets)} have packets"
+                )
+
+                # Store ALL meetings and enqueue for processing
+                processed_count = 0
+
+                logger.info(
+                    f"Starting to process {len(all_meetings)} meetings for storage"
+                )
+                for i, meeting_dict in enumerate(all_meetings):
+                    # Progress update every 100 meetings for large cities
+                    if (i + 1) % 100 == 0:
+                        logger.info(
+                            f"Progress: {i + 1}/{len(all_meetings)} meetings processed"
+                        )
+
+                    logger.debug(
+                        f"Processing meeting {i + 1}/{len(all_meetings)}: "
+                        f"{meeting_dict.get('title')}"
+                    )
+                    if not self.is_running:
+                        logger.warning("Processing stopped - is_running is False")
+                        break
+
+                    # Use database method to handle all transformation and storage
+                    stored_meeting = self.db.store_meeting_from_sync(meeting_dict, city)
+                    if stored_meeting:
+                        processed_count += 1
+
+                result.meetings_processed = processed_count
+                result.status = SyncStatus.COMPLETED
+                result.duration_seconds = time.time() - start_time
+
+                logger.info(
+                    f"Synced {city.banana}: {result.meetings_found} meetings found, "
+                    f"{len(meetings_with_packets)} have packets, {processed_count} processed"
+                )
+
+                # Log memory after adapter cleanup
+                log_memory_usage(f"After {city.banana}")
+
+            except Exception as e:
+                result.status = SyncStatus.FAILED
+                result.error_message = str(e)
+                result.duration_seconds = time.time() - start_time
+                logger.error(f"Failed to sync {city.banana}: {e}")
+
+                # Add small delay on error
+                time.sleep(2 + random.uniform(0, 1))
+
+            return result
+
+    def _sync_city_with_retry(self, city: City, max_retries: int = 1) -> SyncResult:
+        """Sync city with retry (5s, 20s delays)"""
+        city_name = city.name
+        city_banana = city.banana
+
+        wait_times = [5, 20]  # Fixed wait times for attempts
+
+        for attempt in range(max_retries):
+            try:
+                result = self._sync_city(city)
+
+                # If successful or skipped, return immediately
+                if result.status in [SyncStatus.COMPLETED, SyncStatus.SKIPPED]:
+                    return result
+
+                # If failed and we have retries left, wait and retry
+                if attempt < max_retries - 1:
+                    wait_time = wait_times[attempt] + random.uniform(0, 2)
+                    logger.warning(
+                        f"Sync failed for {city_name} (attempt {attempt + 1}/{max_retries}), "
+                        f"retrying in {wait_time:.1f}s: {result.error_message}"
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.error(
+                        f"Final sync failure for {city_name} after {max_retries} attempts: "
+                        f"{result.error_message}"
+                    )
+                    return result
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = wait_times[attempt] + random.uniform(0, 2)
+                    logger.warning(
+                        f"Exception syncing {city_name} (attempt {attempt + 1}/{max_retries}), "
+                        f"retrying in {wait_time:.1f}s: {e}"
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.error(
+                        f"Final exception for {city_name} after {max_retries} attempts: {e}"
+                    )
+                    return SyncResult(
+                        city_banana=city_banana,
+                        status=SyncStatus.FAILED,
+                        error_message=str(e),
+                    )
+
+        # Shouldn't reach here
+        return SyncResult(
+            city_banana=city_banana,
+            status=SyncStatus.FAILED,
+            error_message="Unknown retry error",
+        )
+
+    def _should_sync_city(self, city: City) -> bool:
+        """Determine if city needs syncing based on activity patterns"""
+        try:
+            # Check recent meeting frequency
+            recent_meetings = self.db.get_city_meeting_frequency(city.banana, days=30)
+            last_sync = self.db.get_city_last_sync(city.banana)
+
+            if not last_sync:
+                return True  # Never synced before
+
+            hours_since_sync = (datetime.now() - last_sync).total_seconds() / 3600
+
+            # Adaptive scheduling based on activity
+            if recent_meetings >= 8:  # High activity (2+ meetings/week)
+                return hours_since_sync >= 12  # Sync every 12 hours
+            elif recent_meetings >= 4:  # Medium activity (1+ meeting/week)
+                return hours_since_sync >= 24  # Sync daily
+            elif recent_meetings >= 1:  # Low activity (some meetings)
+                return hours_since_sync >= 168  # Sync every 7 days
+            else:  # Very low activity (no recent meetings)
+                return hours_since_sync >= 168  # Sync weekly
+
+        except Exception as e:
+            logger.warning(f"Error checking sync schedule for {city.banana}: {e}")
+            return True  # Sync on error to be safe
+
+    def _prioritize_cities(self, cities: List[City]) -> List[City]:
+        """Sort cities by sync priority (high activity first)"""
+
+        def get_priority(city: City) -> float:
+            try:
+                # Get recent activity
+                recent_meetings = self.db.get_city_meeting_frequency(
+                    city.banana, days=30
+                )
+                last_sync = self.db.get_city_last_sync(city.banana)
+
+                if not last_sync:
+                    return 1000  # Never synced gets highest priority
+
+                hours_since_sync = (datetime.now() - last_sync).total_seconds() / 3600
+
+                # Priority score: activity + time pressure
+                return recent_meetings * 10 + min(hours_since_sync / 24, 10)
+
+            except Exception:
+                return 100  # Medium priority on error
+
+        return sorted(cities, key=get_priority, reverse=True)

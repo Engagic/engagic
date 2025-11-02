@@ -21,6 +21,9 @@ from pathlib import Path
 
 logger = logging.getLogger("engagic")
 
+# Import for validation
+from vendors.validator import MeetingValidator
+
 
 class DatabaseConnectionError(Exception):
     """Raised when database connection is not established"""
@@ -752,6 +755,147 @@ class UnifiedDatabase:
         )
         return result
 
+    def store_meeting_from_sync(
+        self, meeting_dict: Dict[str, Any], city: City
+    ) -> Optional[Meeting]:
+        """
+        Transform vendor meeting dict → validate → store → enqueue for processing
+
+        This method handles all the data transformation logic needed when syncing
+        meetings from vendor APIs. It:
+        1. Parses dates from vendor format
+        2. Creates Meeting and AgendaItem objects
+        3. Validates meeting data
+        4. Stores meeting and items in database
+        5. Enqueues for LLM processing
+
+        Args:
+            meeting_dict: Raw meeting dict from vendor adapter
+            city: City object for this meeting
+
+        Returns:
+            Stored Meeting object (or None if validation failed)
+        """
+        try:
+            # Parse date from adapter format
+            meeting_date = None
+            if meeting_dict.get("start"):
+                try:
+                    # Try parsing ISO format first
+                    meeting_date = datetime.fromisoformat(
+                        meeting_dict["start"].replace("Z", "+00:00")
+                    )
+                except Exception:
+                    # If ISO parsing fails, leave as None
+                    pass
+
+            # Create Meeting object
+            meeting_obj = Meeting(
+                id=meeting_dict.get("meeting_id", ""),
+                banana=city.banana,
+                title=meeting_dict.get("title", ""),
+                date=meeting_date,
+                agenda_url=meeting_dict.get("agenda_url"),
+                packet_url=meeting_dict.get("packet_url"),
+                summary=None,
+                participation=meeting_dict.get("participation"),
+                status=meeting_dict.get("meeting_status"),
+                processing_status="pending",
+            )
+
+            # Validate meeting before storing
+            if not MeetingValidator.validate_and_store(
+                {
+                    "packet_url": meeting_obj.packet_url,
+                    "title": meeting_obj.title,
+                },
+                city.banana,
+                city.name,
+                city.vendor,
+                city.slug,
+            ):
+                logger.warning(f"Skipping corrupted meeting: {meeting_obj.title}")
+                return None
+
+            # Store meeting (upsert)
+            stored_meeting = self.store_meeting(meeting_obj)
+            logger.debug(f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})")
+
+            # Store agenda items if present
+            if meeting_dict.get("items"):
+                items = meeting_dict["items"]
+                agenda_items = []
+
+                for item_data in items:
+                    agenda_item = AgendaItem(
+                        id=f"{stored_meeting.id}_{item_data['item_id']}",
+                        meeting_id=stored_meeting.id,
+                        title=item_data.get("title", ""),
+                        sequence=item_data.get("sequence", 0),
+                        attachments=item_data.get("attachments", []),
+                        summary=None,
+                        topics=None,
+                    )
+                    agenda_items.append(agenda_item)
+
+                if agenda_items:
+                    count = self.store_agenda_items(stored_meeting.id, agenda_items)
+                    logger.debug(
+                        f"Stored {count} agenda items for {stored_meeting.title}"
+                    )
+
+            # Enqueue for processing
+            has_items = bool(meeting_dict.get("items"))
+            agenda_url = meeting_dict.get("agenda_url")
+            packet_url = meeting_dict.get("packet_url")
+
+            if agenda_url or packet_url or has_items:
+                # Calculate priority based on meeting date recency
+                if meeting_date:
+                    days_old = (datetime.now() - meeting_date).days
+                else:
+                    days_old = 999
+                priority = max(0, 100 - days_old)
+
+                # Priority order: agenda_url > packet_url > items://
+                if agenda_url:
+                    queue_url = agenda_url
+                    processing_type = "item-based"
+                elif packet_url:
+                    queue_url = packet_url
+                    processing_type = "PDF"
+                else:
+                    queue_url = f"items://{stored_meeting.id}"
+                    processing_type = "item-based-no-url"
+
+                self.enqueue_for_processing(
+                    packet_url=queue_url,
+                    meeting_id=stored_meeting.id,
+                    banana=city.banana,
+                    priority=priority,
+                    metadata={
+                        "has_items": has_items,
+                        "has_agenda": bool(agenda_url),
+                        "has_packet": bool(packet_url),
+                    },
+                )
+
+                logger.debug(
+                    f"Enqueued {processing_type} processing for {stored_meeting.title} (priority {priority})"
+                )
+            else:
+                logger.debug(
+                    f"Meeting {stored_meeting.title} has no agenda/packet/items - stored for display only"
+                )
+
+            return stored_meeting
+
+        except Exception as e:
+            logger.error(
+                f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
+            )
+            return None
+
     def update_meeting_summary(
         self,
         meeting_id: str,
@@ -1016,6 +1160,120 @@ class UnifiedDatabase:
         )
 
         self.conn.commit()
+
+    # ========== Search & Discovery Queries ==========
+
+    def get_random_meeting_with_items(self) -> Optional[Dict[str, Any]]:
+        """Get a random meeting that has multiple items with summaries"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT
+                m.id,
+                m.banana,
+                m.title,
+                m.date,
+                m.packet_url,
+                COUNT(i.id) as item_count,
+                AVG(LENGTH(i.summary)) as avg_summary_length
+            FROM meetings m
+            JOIN items i ON m.id = i.meeting_id
+            WHERE i.summary IS NOT NULL
+                AND LENGTH(i.summary) > 100
+            GROUP BY m.id
+            HAVING COUNT(i.id) >= 3
+            ORDER BY RANDOM()
+            LIMIT 1
+        """)
+
+        result = cursor.fetchone()
+        if not result:
+            return None
+
+        return {
+            "id": result["id"],
+            "banana": result["banana"],
+            "title": result["title"],
+            "date": result["date"],
+            "packet_url": result["packet_url"],
+            "item_count": result["item_count"],
+            "avg_summary_length": round(result["avg_summary_length"]) if result["avg_summary_length"] else 0
+        }
+
+    def search_meetings_by_topic(
+        self, topic: str, city_banana: Optional[str] = None, limit: int = 50
+    ) -> List[Meeting]:
+        """Search meetings by topic (uses normalized topic name)"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+
+        # Build query conditions
+        conditions = []
+        params = []
+
+        # Topic match using JSON
+        conditions.append("EXISTS (SELECT 1 FROM json_each(meetings.topics) WHERE value = ?)")
+        params.append(topic)
+
+        # City filter
+        if city_banana:
+            conditions.append("meetings.banana = ?")
+            params.append(city_banana)
+
+        # Only return meetings with topics
+        conditions.append("meetings.topics IS NOT NULL")
+
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT * FROM meetings
+            WHERE {where_clause}
+            ORDER BY date DESC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        return [Meeting.from_db_row(row) for row in rows]
+
+    def get_items_by_topic(self, meeting_id: str, topic: str) -> List[AgendaItem]:
+        """Get agenda items from a meeting that match a specific topic"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM items
+            WHERE meeting_id = ?
+            AND EXISTS (SELECT 1 FROM json_each(items.topics) WHERE value = ?)
+            ORDER BY sequence ASC
+        """, (meeting_id, topic))
+
+        rows = cursor.fetchall()
+        return [AgendaItem.from_db_row(row) for row in rows]
+
+    def get_popular_topics(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get most common topics across all meetings"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT value as topic, COUNT(*) as count
+            FROM meetings, json_each(meetings.topics)
+            WHERE meetings.topics IS NOT NULL
+            GROUP BY value
+            ORDER BY count DESC
+            LIMIT ?
+        """, (limit,))
+
+        rows = cursor.fetchall()
+        return [{"topic": row["topic"], "count": row["count"]} for row in rows]
 
     # ========== Stats & Utilities ==========
 

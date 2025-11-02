@@ -4,7 +4,7 @@ Complete reference for the Engagic unified SQLite database.
 
 **Database:** SQLite 3.x with WAL mode
 **Location:** `/root/engagic/data/engagic.db` (production)
-**Last Updated:** October 31, 2025
+**Last Updated:** November 1, 2025
 
 ---
 
