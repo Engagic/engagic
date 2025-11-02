@@ -11,6 +11,8 @@ Refactored: Extracted fetcher and processor logic into separate modules
 """
 
 import logging
+import signal
+import sys
 import time
 import threading
 from datetime import datetime
@@ -395,7 +397,7 @@ class Conductor:
                     "city_banana": job["banana"],
                     "title": meeting.title,
                     "date": meeting.date.isoformat() if meeting.date else None,
-                    "packet_url": job["packet_url"],
+                    "source_url": job["source_url"],
                     "priority": job.get("priority", 0),
                     "status": job["status"],
                 })
@@ -421,20 +423,18 @@ class Conductor:
         if not meeting:
             return {"error": "Meeting not found"}
 
-        if not meeting.packet_url:
-            return {"error": "No packet URL for this meeting"}
-
-        # Use processor's analyzer to extract text
-        if not self.processor.analyzer:
-            return {"error": "Analyzer not available"}
+        # Try agenda_url first (item-level), fallback to packet_url (monolithic)
+        source_url = meeting.agenda_url or meeting.packet_url
+        if not source_url:
+            return {"error": "No agenda or packet URL for this meeting"}
 
         try:
-            # Extract text using PDF extractor
+            # Extract text using PDF extractor (doesn't need LLM analyzer)
             from parsing.pdf import PdfExtractor
             extractor = PdfExtractor()
 
-            # Handle packet_url being either str or List[str]
-            url = meeting.packet_url[0] if isinstance(meeting.packet_url, list) else meeting.packet_url
+            # Handle URL being either str or List[str]
+            url = source_url[0] if isinstance(source_url, list) else source_url
 
             logger.info(f"[Conductor] Downloading PDF: {url}")
             extraction_result = extractor.extract_from_url(url)
@@ -454,7 +454,7 @@ class Conductor:
                 with open(output_file, "w") as f:
                     f.write(f"Meeting: {meeting.title}\n")
                     f.write(f"Date: {meeting.date}\n")
-                    f.write(f"URL: {meeting.packet_url}\n")
+                    f.write(f"URL: {source_url}\n")
                     f.write(f"Pages: {page_count}\n")
                     f.write(f"Characters: {text_length}\n")
                     f.write("=" * 80 + "\n\n")
@@ -481,6 +481,108 @@ class Conductor:
                 "error": str(e),
                 "meeting_id": meeting_id,
             }
+
+    def preview_items(self, meeting_id: str, extract_text: bool = False, output_dir: Optional[str] = None) -> Dict[str, Any]:
+        """Preview items and optionally extract text from their attachments
+
+        Args:
+            meeting_id: Meeting identifier
+            extract_text: Whether to extract text from item attachments (default False)
+            output_dir: Optional directory to save extracted texts
+
+        Returns:
+            Dictionary with items structure and optional text previews
+        """
+        logger.info(f"[Conductor] Previewing items for {meeting_id}...")
+
+        meeting = self.db.get_meeting(meeting_id)
+        if not meeting:
+            return {"error": "Meeting not found"}
+
+        # Get items from database
+        agenda_items = self.db.get_agenda_items(meeting_id)
+        if not agenda_items:
+            return {
+                "error": "No items found for this meeting",
+                "meeting_id": meeting_id,
+                "meeting_title": meeting.title,
+            }
+
+        items_preview = []
+
+        for item in agenda_items:
+            item_data = {
+                "item_id": item.id,  # AgendaItem uses 'id', not 'item_id'
+                "title": item.title,
+                "sequence": item.sequence,
+                "attachments": [
+                    {
+                        "name": att.get("name", "Unknown"),
+                        "url": att.get("url", ""),
+                        "type": att.get("type", "unknown"),
+                    }
+                    for att in (item.attachments or [])
+                ],
+                "has_summary": bool(item.summary),
+            }
+
+            # Optionally extract text from first attachment
+            if extract_text and item.attachments:
+                first_attachment = item.attachments[0]
+                att_url = first_attachment.get("url")
+
+                if att_url and att_url.endswith(".pdf"):
+                    try:
+                        from parsing.pdf import PdfExtractor
+                        extractor = PdfExtractor()
+
+                        logger.info(f"[Conductor] Extracting text from {item.item_id} attachment...")
+                        extraction_result = extractor.extract_from_url(att_url)
+
+                        if extraction_result["success"]:
+                            text = extraction_result["text"]
+                            page_count = extraction_result.get("page_count", 0)
+
+                            # Preview first 500 chars
+                            item_data["text_preview"] = text[:500] + ("..." if len(text) > 500 else "")
+                            item_data["page_count"] = page_count
+                            item_data["text_length"] = len(text)
+
+                            # Optionally save to file
+                            if output_dir:
+                                import os
+                                os.makedirs(output_dir, exist_ok=True)
+                                filename = f"{item.item_id}.txt"
+                                filepath = os.path.join(output_dir, filename)
+
+                                with open(filepath, "w") as f:
+                                    f.write(f"Item: {item.title}\n")
+                                    f.write(f"Attachment: {first_attachment.get('name')}\n")
+                                    f.write(f"URL: {att_url}\n")
+                                    f.write(f"Pages: {page_count}\n")
+                                    f.write(f"Characters: {len(text)}\n")
+                                    f.write("=" * 80 + "\n\n")
+                                    f.write(text)
+
+                                item_data["saved_to"] = filepath
+                                logger.info(f"[Conductor] Saved {item.item_id} text to {filepath}")
+                        else:
+                            item_data["text_error"] = extraction_result.get("error", "Failed to extract")
+
+                    except Exception as e:
+                        logger.warning(f"[Conductor] Failed to extract text for {item.item_id}: {e}")
+                        item_data["text_error"] = str(e)
+
+            items_preview.append(item_data)
+
+        return {
+            "success": True,
+            "meeting_id": meeting_id,
+            "meeting_title": meeting.title,
+            "meeting_date": meeting.date.isoformat() if meeting.date else None,
+            "total_items": len(agenda_items),
+            "items": items_preview,
+        }
 
 
 # Global instance
@@ -540,7 +642,7 @@ def main():
     # Batch operations
     parser.add_argument("--full-sync", action="store_true", help="Run full sync once")
     parser.add_argument("--status", action="store_true", help="Show status")
-    parser.add_argument("--daemon", action="store_true", help="Run as daemon")
+    parser.add_argument("--fetcher", action="store_true", help="Run as fetcher service (auto sync only, no processing)")
 
     # Preview and inspection
     parser.add_argument(
@@ -556,6 +658,19 @@ def main():
     parser.add_argument(
         "--output-file",
         help="Output file for extracted text (use with --extract-text)",
+    )
+    parser.add_argument(
+        "--preview-items",
+        help="Preview items for a meeting (meeting_id)",
+    )
+    parser.add_argument(
+        "--extract-item-text",
+        action="store_true",
+        help="Extract text from item attachments (use with --preview-items)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory for item texts (use with --preview-items --extract-item-text)",
     )
 
     args = parser.parse_args()
@@ -612,13 +727,52 @@ def main():
     elif args.status:
         status = conductor.get_sync_status()
         print(f"Status: {status}")
-    elif args.daemon:
-        conductor.start()
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            conductor.stop()
+    elif args.fetcher:
+        # Setup signal handlers for graceful shutdown
+        def signal_handler(signum, frame):
+            sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+            logger.info(f"[Fetcher] Received {sig_name}, initiating graceful shutdown...")
+            conductor.is_running = False
+            conductor.fetcher.is_running = False
+            logger.info("[Fetcher] Shutdown complete")
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+        logger.info("[Fetcher] Starting fetcher service (sync only, no processing)")
+        logger.info("[Fetcher] Sync interval: 72 hours")
+
+        # Enable running state for fetcher only
+        conductor.is_running = True
+        conductor.fetcher.is_running = True
+
+        # Run sync loop (same as _sync_loop but without starting processing thread)
+        while conductor.is_running:
+            try:
+                logger.info("[Fetcher] Starting city sync cycle...")
+                results = conductor.fetcher.sync_all()
+                conductor.last_full_sync = datetime.now()
+
+                succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
+                failed = len([r for r in results if r.status == SyncStatus.FAILED])
+                logger.info(f"[Fetcher] Sync cycle complete: {succeeded} succeeded, {failed} failed")
+
+                # Sleep for 72 hours (checking every second for shutdown signal)
+                logger.info("[Fetcher] Sleeping for 72 hours until next sync...")
+                for _ in range(72 * 60 * 60):
+                    if not conductor.is_running:
+                        break
+                    time.sleep(1)
+
+            except Exception as e:
+                logger.error(f"[Fetcher] Sync loop error: {e}")
+                # Sleep for 2 hours on error
+                logger.info("[Fetcher] Sleeping for 2 hours after error...")
+                for _ in range(2 * 60 * 60):
+                    if not conductor.is_running:
+                        break
+                    time.sleep(1)
 
     # Preview and inspection
     elif args.preview_queue:
@@ -629,6 +783,13 @@ def main():
         meeting_id = args.extract_text
         output_file = args.output_file
         result = conductor.extract_text_preview(meeting_id, output_file=output_file)
+        print(json.dumps(result, indent=2))
+
+    elif args.preview_items:
+        meeting_id = args.preview_items
+        extract_text = args.extract_item_text
+        output_dir = args.output_dir
+        result = conductor.preview_items(meeting_id, extract_text=extract_text, output_dir=output_dir)
         print(json.dumps(result, indent=2))
 
     else:

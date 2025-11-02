@@ -1,8 +1,8 @@
 """
-Menlo Park City Council Adapter - Custom table-based website
+Menlo Park City Council Adapter - Custom table-based website with PDF item extraction
 
 URL patterns:
-- Meetings list: https://menlopark.gov/Government/City-Council/Agendas-and-minutes (TODO: verify)
+- Meetings list: https://menlopark.gov/Agendas-and-minutes
 - PDF packet: https://menlopark.gov/files/sharedassets/public/v/1/agendas-and-minutes/...pdf
 
 HTML structure:
@@ -11,65 +11,72 @@ HTML structure:
 - Date format: "Nov. 4, 2025"
 - PDF link: <a href="/files/sharedassets/..." class="document ext-pdf">Agenda packet</a>
 
-Meeting structure (from PDF text):
-- Letter-based sections: H. (Presentations), I. (Consent), J. (Public Hearing), K. (Informational)
+PDF agenda structure:
+- Letter-based sections: H. (Presentations), I. (Appointments), J. (Consent), K. (Regular Business)
 - Items: H1., I1., J1., K1. format
+- Hyperlinked attachments: (Attachment), (Staff Report #XX-XXX-CC), (Presentation)
 - Example: "J1. Waive the second reading and adopt an ordinance... (Staff Report #25-167-CC)"
 
 Processing approach:
-- Fetch PDF packet only (no HTML agenda)
-- Mark as monolithic processing
-- Could potentially extract items from PDF text in future enhancement
+- Extract PDF text + hyperlinks using PyMuPDF
+- Parse items from text using regex patterns
+- Map hyperlinks to items based on page location
+- Return item-level structure (agenda_url + items)
 
-Confidence: 6/10 - Table parsing straightforward, but no item-level structure without PDF parsing
+Confidence: 8/10 - PDF parsing reliable, link mapping based on page proximity
 """
 
 import logging
 from typing import Dict, Any, Iterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter import BaseAdapter
+from parsing.pdf import PdfExtractor
+from parsing.menlopark_pdf import parse_menlopark_pdf_agenda
 
 logger = logging.getLogger("engagic")
 
 
 class MenloParkAdapter(BaseAdapter):
-    """Menlo Park City Council - Custom simple table website"""
+    """Menlo Park City Council - PDF agenda with item extraction"""
 
     def __init__(self, city_slug: str):
         super().__init__(city_slug, "menlopark")
         self.base_url = "https://menlopark.gov"
+        self.pdf_extractor = PdfExtractor()
 
     def fetch_meetings(self, max_meetings: int = 10) -> Iterator[Dict[str, Any]]:
         """
-        Fetch meetings from Menlo Park's table-based website.
+        Fetch meetings from Menlo Park's table-based website and extract items from PDFs.
+
+        Args:
+            max_meetings: Maximum number of meetings to fetch (default 10)
 
         Yields:
             {
                 'meeting_id': str,
                 'date': datetime,
                 'title': str,
-                'packet_url': str,  # PDF only, no HTML agenda
-                'agenda_url': None,  # Menlo Park doesn't have HTML agendas
+                'agenda_url': str,  # PDF URL (source document)
+                'items': [...]      # Extracted from PDF
             }
         """
-        # TODO: Verify actual meetings list URL
-        # Possible patterns:
-        # - /Government/City-Council/Agendas-and-minutes
-        # - /government/city-council/meetings
-        # - /city-council/agendas
-        meetings_url = f"{self.base_url}/Government/City-Council/Agendas-and-minutes"
+        # Date range: today to 2 weeks from now
+        today = datetime.now().date()
+        two_weeks_from_now = today + timedelta(days=14)
 
-        logger.info(f"[MenloPark] Fetching meetings from {meetings_url}")
+        meetings_url = f"{self.base_url}/Agendas-and-minutes"
+
+        logger.info(f"[menlopark:{self.slug}] Fetching meetings from {meetings_url}")
 
         try:
             response = self.session.get(meetings_url, timeout=30)
             response.raise_for_status()
         except Exception as e:
-            logger.error(f"[MenloPark] Failed to fetch meetings list: {e}")
+            logger.error(f"[menlopark:{self.slug}] Failed to fetch meetings list: {e}")
             return
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -94,7 +101,14 @@ class MenloParkAdapter(BaseAdapter):
             # Parse date
             meeting_date = self._parse_date(date_text)
             if not meeting_date:
-                logger.debug(f"[MenloPark] Could not parse date: {date_text}")
+                logger.debug(f"[menlopark:{self.slug}] Could not parse date: {date_text}")
+                continue
+
+            # Filter to meetings from date range (calculated at method start)
+            meeting_date_only = meeting_date.date()
+
+            if meeting_date_only < today or meeting_date_only > two_weeks_from_now:
+                logger.debug(f"[menlopark:{self.slug}] Skipping meeting {date_text} - outside 2-week window")
                 continue
 
             # Cell 1: Agenda packet PDF link
@@ -107,7 +121,7 @@ class MenloParkAdapter(BaseAdapter):
 
             # Skip if no PDF packet
             if not pdf_link:
-                logger.debug(f"[MenloPark] No PDF packet for {date_text}")
+                logger.debug(f"[menlopark:{self.slug}] No PDF packet for {date_text}")
                 continue
 
             # Generate meeting ID from date
@@ -116,15 +130,43 @@ class MenloParkAdapter(BaseAdapter):
             meeting_data = {
                 'meeting_id': meeting_id,
                 'date': meeting_date,
-                'title': "City Council Meeting",  # Menlo Park doesn't include titles in table
-                'packet_url': pdf_link,
-                'agenda_url': None,  # No HTML agenda available
+                'title': "City Council Meeting",
+                'agenda_url': pdf_link,  # PDF is the source document
             }
 
-            logger.info(
-                f"[MenloPark] Meeting {meeting_date.strftime('%Y-%m-%d')}: "
-                f"PDF packet only (monolithic processing)"
-            )
+            # Extract items from PDF
+            try:
+                logger.info(f"[menlopark:{self.slug}] Extracting items from PDF: {pdf_link}")
+                pdf_result = self.pdf_extractor.extract_from_url(pdf_link, extract_links=True)
+
+                if pdf_result['success']:
+                    parsed = parse_menlopark_pdf_agenda(
+                        pdf_result['text'],
+                        pdf_result.get('links', [])
+                    )
+
+                    if parsed['items']:
+                        meeting_data['items'] = parsed['items']
+                        item_count = len(parsed['items'])
+                        attachment_count = sum(len(item.get('attachments', [])) for item in parsed['items'])
+                        logger.info(
+                            f"[menlopark:{self.slug}] Extracted {item_count} items, "
+                            f"{attachment_count} attachments for {meeting_date.strftime('%Y-%m-%d')}"
+                        )
+                    else:
+                        logger.warning(
+                            f"[menlopark:{self.slug}] No items extracted from PDF for {meeting_id}"
+                        )
+                else:
+                    logger.error(
+                        f"[menlopark:{self.slug}] PDF extraction failed for {meeting_id}: "
+                        f"{pdf_result.get('error', 'unknown error')}"
+                    )
+                    # Continue anyway - we have basic meeting data
+
+            except Exception as e:
+                logger.warning(f"[menlopark:{self.slug}] Failed to parse PDF items for {meeting_id}: {e}")
+                # Continue anyway - we have basic meeting data
 
             yield meeting_data
             meetings_found += 1
@@ -149,22 +191,3 @@ class MenloParkAdapter(BaseAdapter):
                 continue
 
         return None
-
-
-# Enhancement opportunity: Parse PDF text to extract items
-# Structure in PDF:
-# - Sections: H. (Presentations), I. (Consent), J. (Public Hearing), K. (Informational)
-# - Items: H1., I1., J1., K1.
-# - Pattern: r'^([A-Z]\d+)\.\s+(.+?)(?:\(Staff Report #[\d-]+\))?$'
-#
-# Could implement _extract_items_from_pdf() in future if:
-# 1. High user demand for item-level Menlo Park data
-# 2. PDF text extraction proves reliable for this format
-# 3. Worth the maintenance burden vs monolithic processing
-#
-# For now: Monolithic processing is acceptable (42% of cities use this approach)
-
-# Confidence: 6/10
-# Table parsing is straightforward from provided HTML.
-# Monolithic processing limits value but reduces complexity.
-# Could enhance with PDF parsing if needed.

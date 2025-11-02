@@ -90,9 +90,14 @@ class PrimeGovAdapter(BaseAdapter):
 
                     # Fetch HTML agenda items (item-level granularity)
                     try:
+                        logger.info(f"[primegov:{self.slug}] GET {html_url}")
                         items_data = self.fetch_html_agenda_items(html_url)
                         if items_data["items"]:
                             result["items"] = items_data["items"]
+                            logger.info(
+                                f"[primegov:{self.slug}] Found {len(items_data['items'])} items "
+                                f"for '{title}'"
+                            )
                         if items_data["participation"]:
                             result["participation"] = items_data["participation"]
                     except Exception as e:
@@ -102,10 +107,13 @@ class PrimeGovAdapter(BaseAdapter):
                 else:
                     # PDF packet
                     result["packet_url"] = self._build_packet_url(packet_doc)
+                    logger.info(
+                        f"[primegov:{self.slug}] Found PDF packet for '{title}': {result['packet_url']}"
+                    )
             else:
-                logger.debug(
-                    f"[primegov:{self.slug}] No packet found for: {title} "
-                    f"on {meeting.get('date')}"
+                logger.warning(
+                    f"[primegov:{self.slug}] No agenda or packet found for: {title} "
+                    f"(documentList has {len(meeting.get('documentList', []))} docs)"
                 )
 
             if meeting_status:
@@ -134,16 +142,18 @@ class PrimeGovAdapter(BaseAdapter):
         parsed = parse_primegov_html_agenda(html)
 
         # Convert relative attachment URLs to absolute URLs
+        total_attachments = 0
         for item in parsed['items']:
             for attachment in item.get('attachments', []):
                 url = attachment.get('url', '')
                 # If URL is relative (starts with /), make it absolute
                 if url.startswith('/'):
                     attachment['url'] = f"{self.base_url}{url}"
+                total_attachments += 1
 
-        logger.debug(
+        logger.info(
             f"[primegov:{self.slug}] Parsed HTML agenda: {len(parsed['items'])} items, "
-            f"{len(parsed['participation'])} participation fields"
+            f"{total_attachments} total attachments"
         )
 
         return parsed
