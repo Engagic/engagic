@@ -34,6 +34,49 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-02] Critical Bug Fix: Missing 'type' Field in Attachments
+
+**The silent failure.** All PrimeGov and Granicus cities (524 cities, 63% of platform) were failing to generate summaries due to missing 'type' field in attachment objects.
+
+**The Bug:**
+- PrimeGov/Granicus adapters created attachments without 'type' field
+- Processor checked `if att_type == "pdf"` → failed (att_type was "unknown")
+- PDFs never extracted, items marked "complete" with 0 summaries
+- Silent failure - no errors raised, just empty results
+
+**Impact:**
+- 171 items in database with broken attachments (Los Angeles, Palo Alto)
+- Would have affected 524 cities (461 Granicus + 63 PrimeGov) when scaled
+- Caught before platform-wide rollout
+
+**Fixes:**
+- `vendors/adapters/html_agenda_parser.py:185` - Added 'type': 'pdf' to PrimeGov attachments
+- `vendors/adapters/html_agenda_parser.py:283` - Added 'type': 'pdf' to Granicus attachments
+- `vendors/adapters/primegov_adapter.py:154-155` - Defense-in-depth type field check
+- `vendors/adapters/granicus_adapter.py:440-441` - Defense-in-depth type field check
+- `pipeline/processor.py:321` - Handle "unknown" types defensively
+
+**Database Cleanup:** Deleted 171 broken items, re-synced affected cities with fixed code.
+
+---
+
+## [2025-11-02] Procedural Item Filter
+
+**Cost optimization.** Added filter to skip low-value procedural items before PDF extraction.
+
+**Items Skipped:**
+- Review/Approval of Minutes
+- Roll Call
+- Pledge of Allegiance
+- Invocation
+- Adjournment
+
+**Implementation:** `pipeline/processor.py:27-41` - Simple pattern matching on item titles
+
+**Impact:** Saves API costs by not summarizing administrative overhead items
+
+---
+
 ## [2025-11-02] Database Repository Refactor
 
 **The modularity unlock.** Refactored monolithic db.py into Repository Pattern.
