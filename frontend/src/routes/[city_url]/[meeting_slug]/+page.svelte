@@ -14,6 +14,8 @@
 	let error = $state('');
 	let expandedAttachments = $state<Set<string>>(new Set());
 	let expandedTitles = $state<Set<string>>(new Set());
+	let expandedItems = $state<Set<string>>(new Set());
+	let expandedThinking = $state<Set<string>>(new Set());
 
 
 	async function loadMeetingData() {
@@ -140,6 +142,64 @@
 		expandedTitles = newSet;
 	}
 
+	function toggleItem(itemId: string) {
+		const newSet = new Set(expandedItems);
+		if (newSet.has(itemId)) {
+			newSet.delete(itemId);
+		} else {
+			newSet.add(itemId);
+		}
+		expandedItems = newSet;
+	}
+
+	function toggleThinking(itemId: string) {
+		const newSet = new Set(expandedThinking);
+		if (newSet.has(itemId)) {
+			newSet.delete(itemId);
+		} else {
+			newSet.add(itemId);
+		}
+		expandedThinking = newSet;
+	}
+
+	function parseSummaryForThinking(summary: string): { thinking: string | null; summary: string } {
+		if (!summary) return { thinking: null, summary: '' };
+
+		// Simple split on "## Thinking"
+		const parts = summary.split(/^## Thinking\s*$/m);
+
+		if (parts.length < 2) {
+			// No thinking section found
+			return { thinking: null, summary };
+		}
+
+		// Everything before "## Thinking" (usually empty or intro text)
+		const before = parts[0].trim();
+
+		// Everything after "## Thinking"
+		const afterThinking = parts[1];
+
+		// Find the next section heading to split thinking from summary
+		const nextSectionMatch = afterThinking.match(/^##\s+/m);
+
+		if (nextSectionMatch) {
+			const thinkingEnd = nextSectionMatch.index!;
+			const thinkingContent = afterThinking.substring(0, thinkingEnd).trim();
+			const summaryContent = afterThinking.substring(thinkingEnd).trim();
+
+			return {
+				thinking: thinkingContent,
+				summary: (before ? before + '\n\n' : '') + summaryContent
+			};
+		}
+
+		// No next section - everything after "## Thinking" is thinking content
+		return {
+			thinking: afterThinking.trim(),
+			summary: before || ''
+		};
+	}
+
 	function truncateTitle(title: string, itemId: string): { main: string; remainder: string | null; isTruncated: boolean } {
 		const semicolonIndex = title.indexOf(';');
 		if (semicolonIndex !== -1 && semicolonIndex < title.length - 1) {
@@ -154,41 +214,8 @@
 		return { main: title, remainder: null, isTruncated: false };
 	}
 
-	function wrapThinkingSections() {
-		// Wrap thinking sections for easy hover/click styling
-		const summaries = document.querySelectorAll('.item-summary, .meeting-summary');
-		summaries.forEach(summary => {
-			const headings = summary.querySelectorAll('h2');
-			headings.forEach(h2 => {
-				if (h2.textContent?.trim() === 'Thinking') {
-					const wrapper = document.createElement('div');
-					wrapper.className = 'thinking-section';
-
-					// Insert wrapper before the h2
-					h2.parentNode?.insertBefore(wrapper, h2);
-					wrapper.appendChild(h2);
-
-					// Move all siblings until we hit another h2 or end
-					let next = wrapper.nextSibling;
-					while (next && next.nodeName !== 'H2') {
-						const current = next;
-						next = next.nextSibling;
-						wrapper.appendChild(current);
-					}
-
-					// Add click handler for mobile toggle
-					wrapper.addEventListener('click', () => {
-						wrapper.classList.toggle('expanded');
-					});
-				}
-			});
-		});
-	}
-
 	onMount(async () => {
 		await loadMeetingData();
-		// Wait for DOM to be ready, then wrap thinking sections
-		setTimeout(wrapThinkingSections, 100);
 	});
 
 </script>
@@ -297,49 +324,83 @@
 				<div class="agenda-items">
 					{#each selectedMeeting.items as item}
 						{@const titleParts = truncateTitle(item.title, item.id)}
-						<div class="agenda-item">
-							<div class="item-header" onclick={titleParts.isTruncated ? () => toggleTitle(item.id) : undefined}>
-								<h3 class="item-title" data-truncated={titleParts.isTruncated}>
-									<span class="item-number-inline">{item.sequence}.</span>
-									{titleParts.main}
-									{#if titleParts.remainder}
-										<span class="item-title-remainder">…</span>
-									{/if}
-								</h3>
+						{@const isExpanded = expandedItems.has(item.id)}
+						{@const hasSummary = !!item.summary}
+						<div class="agenda-item" data-expanded={isExpanded} data-has-summary={hasSummary}>
+							<div class="item-header-clickable" onclick={() => toggleItem(item.id)}>
+								<div class="item-header">
+									<div class="item-header-content">
+										<h3 class="item-title" data-truncated={titleParts.isTruncated}>
+											<span class="item-number">{item.sequence}.</span>
+											{titleParts.main}
+											{#if titleParts.remainder && !isExpanded}
+												<span class="item-title-remainder">…</span>
+											{:else if titleParts.remainder && isExpanded}
+												{titleParts.remainder}
+											{/if}
+										</h3>
+										<div class="item-indicators">
+											{#if item.topics && item.topics.length > 0}
+												<div class="item-topics-preview">
+													{#each item.topics.slice(0, 2) as topic}
+														<span class="item-topic-tag-small" data-topic={topic.toLowerCase()}>{topic}</span>
+													{/each}
+													{#if item.topics.length > 2}
+														<span class="topic-more">+{item.topics.length - 2} more</span>
+													{/if}
+												</div>
+											{/if}
+										</div>
+									</div>
+									<div class="item-header-right">
+										{#if item.attachments && item.attachments.length > 0}
+											<span class="attachment-badge">{item.attachments.length}</span>
+										{/if}
+										<button class="expand-icon" aria-label={isExpanded ? 'Collapse item' : 'Expand item'}>
+											{isExpanded ? '−' : '+'}
+										</button>
+									</div>
+								</div>
 							</div>
 
-							{#if item.topics && item.topics.length > 0}
-								<div class="item-topics">
-									{#each item.topics as topic}
-										<span class="item-topic-tag">{topic}</span>
-									{/each}
-								</div>
-							{/if}
+							{#if isExpanded}
+								<div class="item-expanded-content">
+									{#if item.summary}
+										{@const summaryParts = parseSummaryForThinking(item.summary)}
 
-							{#if item.summary}
-								<div class="item-summary">
-									{@html marked(item.summary)}
-								</div>
-							{/if}
-
-							{#if item.attachments && item.attachments.length > 0}
-								<div class="item-attachments-container">
-									<button
-										class="attachments-toggle"
-										onclick={() => toggleAttachments(item.id)}
-									>
-										<span class="toggle-icon">{expandedAttachments.has(item.id) ? '▼' : '▶'}</span>
-										<span class="attachments-count">{item.attachments.length} {item.attachments.length === 1 ? 'attachment' : 'attachments'}</span>
-									</button>
-									{#if expandedAttachments.has(item.id)}
-										<div class="item-attachments">
-											{#each item.attachments as attachment}
-												{#if attachment.url}
-													<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
-														{attachment.name || 'View Packet'}{attachment.pages ? ` (${attachment.pages})` : ''}
-													</a>
+										{#if summaryParts.thinking}
+											<div class="thinking-section" class:expanded={expandedThinking.has(item.id)}>
+												<button
+													class="thinking-toggle"
+													onclick={(e) => { e.stopPropagation(); toggleThinking(item.id); }}
+												>
+													💭 Thinking trace (click to {expandedThinking.has(item.id) ? 'collapse' : 'expand'})
+												</button>
+												{#if expandedThinking.has(item.id)}
+													<div class="thinking-content">
+														{@html marked(summaryParts.thinking)}
+													</div>
 												{/if}
-											{/each}
+											</div>
+										{/if}
+
+										<div class="item-summary">
+											{@html marked(summaryParts.summary)}
+										</div>
+									{/if}
+
+									{#if item.attachments && item.attachments.length > 0}
+										<div class="item-attachments-container">
+											<div class="attachments-label">Attachments:</div>
+											<div class="item-attachments">
+												{#each item.attachments as attachment}
+													{#if attachment.url}
+														<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link" onclick={(e) => e.stopPropagation()}>
+															{attachment.name || 'View Packet'}{attachment.pages ? ` (${attachment.pages})` : ''}
+														</a>
+													{/if}
+												{/each}
+											</div>
 										</div>
 									{/if}
 								</div>
@@ -517,10 +578,11 @@
 
 	.participation-box {
 		margin: 1.5rem 0;
-		padding: 1rem 1.25rem;
-		background: #f0fdf4;
-		border: 1px solid #86efac;
-		border-radius: 8px;
+		padding: 1.25rem 1.5rem;
+		background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+		border: 2px solid #22c55e;
+		border-radius: 12px;
+		box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
 	}
 
 	.participation-header {
@@ -603,10 +665,11 @@
 	}
 
 	.meeting-detail {
-		padding: 2rem;
+		padding: 2.5rem;
 		background: var(--civic-white);
-		border-radius: 8px;
+		border-radius: 16px;
 		border: 1px solid var(--civic-border);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 	}
 
 	.meeting-alert-banner {
@@ -677,19 +740,20 @@
 
 	.meeting-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.8rem;
+		font-size: 2rem;
 		color: var(--civic-dark);
-		margin: 0 0 0.5rem 0;
-		font-weight: 600;
+		margin: 0 0 0.75rem 0;
+		font-weight: 700;
 		line-height: 1.3;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
 
 	.meeting-date {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		color: var(--civic-gray);
+		font-family: 'IBM Plex Mono', monospace;
+		color: var(--civic-blue);
 		font-size: 1.05rem;
+		font-weight: 600;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
@@ -698,24 +762,27 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.75rem 1.25rem;
-		background: var(--civic-blue);
+		padding: 0.85rem 1.5rem;
+		background: linear-gradient(135deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
 		color: white;
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
-		font-weight: 600;
+		font-weight: 700;
 		font-size: 0.9rem;
-		border-radius: 8px;
-		transition: all 0.2s;
-		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+		border-radius: 10px;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 		flex-shrink: 0;
 		align-self: flex-start;
 	}
 
 	.document-link:hover {
-		background: var(--civic-accent);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
+		transform: translateY(-3px);
+		box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4);
+	}
+
+	.document-link:active {
+		transform: translateY(-1px);
 	}
 
 	.document-icon {
@@ -905,86 +972,326 @@
 	.agenda-items {
 		display: flex;
 		flex-direction: column;
-		gap: 2rem;
+		gap: 1rem;
+		margin-top: 2rem;
 	}
 
 	.agenda-item {
-		padding: 1.5rem;
-		background: #fafafa;
-		border-radius: 8px;
-		border: 1px solid #e5e7eb;
+		background: white;
+		border-radius: 12px;
+		border: 1px solid #e2e8f0;
+		border-left: 4px solid #cbd5e1;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+		transition: all 0.2s ease;
+		overflow: hidden;
+	}
+
+	.agenda-item[data-has-summary="true"] {
+		border-left-color: #93c5fd;
+	}
+
+	.agenda-item[data-expanded="true"] {
+		border-left-color: var(--civic-blue);
+	}
+
+	.agenda-item:hover {
+		border-left-color: var(--civic-accent);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+	}
+
+	.item-header-clickable {
+		padding: 1rem 1.25rem;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.item-header-clickable:hover {
+		background: #f8fafc;
 	}
 
 	.item-header {
 		display: flex;
 		align-items: flex-start;
-		gap: 1rem;
-		margin-bottom: 0.75rem;
+		gap: 0.75rem;
+		justify-content: space-between;
 	}
 
 	.item-number {
+		color: var(--civic-gray);
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+		font-size: 1.125rem;
+		font-weight: 500;
+		margin-right: 0.5rem;
+	}
+
+	.item-header-content {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.item-header-right {
 		flex-shrink: 0;
-		display: inline-flex;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	.attachment-badge {
+		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
-		height: 32px;
-		background: var(--civic-blue);
-		color: white;
-		border-radius: 50%;
+		min-width: 1.5rem;
+		height: 1.5rem;
+		padding: 0 0.35rem;
+		background: #f1f5f9;
+		color: var(--civic-gray);
+		border-radius: 12px;
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
+		font-size: 0.7rem;
 		font-weight: 600;
 	}
 
+	.expand-icon {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		background: transparent;
+		border: 1.5px solid #cbd5e1;
+		border-radius: 6px;
+		color: var(--civic-gray);
+		font-size: 1.1rem;
+		font-weight: 400;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.expand-icon:hover {
+		background: var(--civic-blue);
+		border-color: var(--civic-blue);
+		color: white;
+	}
+
 	.item-title {
-		flex: 1;
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.15rem;
-		font-weight: 600;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+		font-size: 1.125rem;
+		font-weight: 500;
 		color: var(--civic-dark);
-		margin: 0;
-		line-height: 1.4;
+		margin: 0 0 0.35rem 0;
+		line-height: 1.45;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
 
-	.item-topics {
+	.item-title-remainder {
+		color: var(--civic-gray);
+		font-weight: 400;
+	}
+
+	.item-indicators {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.item-topics-preview {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.4rem;
-		margin-bottom: 0.75rem;
+		align-items: center;
 	}
 
-	.item-topic-tag {
+	.item-topic-tag-small {
 		display: inline-block;
-		padding: 0.2rem 0.6rem;
-		background: white;
-		color: #64748b;
-		border: 1px solid #e2e8f0;
-		border-radius: 8px;
-		font-size: 0.75rem;
-		font-weight: 500;
+		padding: 0.25rem 0.65rem;
+		background: var(--topic-bg, #f1f5f9);
+		color: var(--topic-color, #475569);
+		border: 1.5px solid var(--topic-border, #cbd5e1);
+		border-radius: 12px;
+		font-size: 0.7rem;
+		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
+		text-transform: uppercase;
+		letter-spacing: 0.3px;
+	}
+
+	.topic-more {
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 500;
+	}
+
+	.attachment-indicator {
+		font-size: 0.75rem;
+		color: var(--civic-gray);
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 500;
+		padding: 0.25rem 0.65rem;
+		background: #f1f5f9;
+		border-radius: 12px;
+	}
+
+	.item-expanded-content {
+		padding: 0 1.25rem 1.25rem 1.25rem;
+		border-top: 1px solid #f1f5f9;
+		animation: slideDown 0.2s ease-out;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	/* Topic color system - meaningful, consistent colors */
+	.item-topic-tag-small[data-topic="housing"],
+	.item-topic-tag[data-topic="housing"] {
+		--topic-bg: #fef3c7;
+		--topic-color: #92400e;
+		--topic-border: #fbbf24;
+	}
+
+	.item-topic-tag-small[data-topic="zoning"],
+	.item-topic-tag[data-topic="zoning"] {
+		--topic-bg: #e0e7ff;
+		--topic-color: #3730a3;
+		--topic-border: #6366f1;
+	}
+
+	.item-topic-tag-small[data-topic="budget"],
+	.item-topic-tag[data-topic="budget"] {
+		--topic-bg: #d1fae5;
+		--topic-color: #065f46;
+		--topic-border: #10b981;
+	}
+
+	.item-topic-tag-small[data-topic="transportation"],
+	.item-topic-tag[data-topic="transportation"] {
+		--topic-bg: #dbeafe;
+		--topic-color: #1e40af;
+		--topic-border: #3b82f6;
+	}
+
+	.item-topic-tag-small[data-topic="environment"],
+	.item-topic-tag[data-topic="environment"] {
+		--topic-bg: #dcfce7;
+		--topic-color: #166534;
+		--topic-border: #22c55e;
+	}
+
+	.item-topic-tag-small[data-topic="public safety"],
+	.item-topic-tag[data-topic="public safety"] {
+		--topic-bg: #fee2e2;
+		--topic-color: #991b1b;
+		--topic-border: #ef4444;
+	}
+
+	.item-topic-tag-small[data-topic="development"],
+	.item-topic-tag[data-topic="development"] {
+		--topic-bg: #fae8ff;
+		--topic-color: #6b21a8;
+		--topic-border: #a855f7;
+	}
+
+	.item-topic-tag-small[data-topic="infrastructure"],
+	.item-topic-tag[data-topic="infrastructure"] {
+		--topic-bg: #f3f4f6;
+		--topic-color: #374151;
+		--topic-border: #6b7280;
+	}
+
+	.item-topic-tag-small[data-topic="parks"],
+	.item-topic-tag[data-topic="parks"] {
+		--topic-bg: #ecfdf5;
+		--topic-color: #14532d;
+		--topic-border: #059669;
+	}
+
+	.item-topic-tag-small[data-topic="governance"],
+	.item-topic-tag[data-topic="governance"] {
+		--topic-bg: #fef2f2;
+		--topic-color: #7f1d1d;
+		--topic-border: #dc2626;
+	}
+
+	.item-topic-tag-small[data-topic="health"],
+	.item-topic-tag[data-topic="health"] {
+		--topic-bg: #fff7ed;
+		--topic-color: #7c2d12;
+		--topic-border: #f97316;
+	}
+
+	.item-topic-tag-small[data-topic="education"],
+	.item-topic-tag[data-topic="education"] {
+		--topic-bg: #fef3c7;
+		--topic-color: #78350f;
+		--topic-border: #eab308;
+	}
+
+	.item-topic-tag-small[data-topic="economic development"],
+	.item-topic-tag[data-topic="economic development"] {
+		--topic-bg: #ede9fe;
+		--topic-color: #5b21b6;
+		--topic-border: #8b5cf6;
+	}
+
+	.item-topic-tag-small[data-topic="utilities"],
+	.item-topic-tag[data-topic="utilities"] {
+		--topic-bg: #e0f2fe;
+		--topic-color: #075985;
+		--topic-border: #0ea5e9;
 	}
 
 	.item-summary {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.7;
 		font-size: 1rem;
-		color: #374151;
-		margin-bottom: 0.75rem;
+		color: #1f2937;
+		margin-bottom: 1.5rem;
+		letter-spacing: 0.01em;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
 
+	.thinking-content {
+		font-family: Georgia, 'Times New Roman', Times, serif;
+		line-height: 1.7;
+		font-size: 1rem;
+		color: #1f2937;
+		letter-spacing: 0.01em;
+	}
+
 	.item-summary :global(p) {
-		margin: 0.75rem 0;
+		margin: 1rem 0;
+	}
+
+	.item-summary :global(p:first-child) {
+		margin-top: 0;
 	}
 
 	.item-summary :global(strong) {
+		font-weight: 700;
+		color: var(--civic-dark);
+	}
+
+	.item-summary :global(h2) {
+		font-size: 0.625rem;
 		font-weight: 600;
 		color: var(--civic-dark);
+		opacity: 0.4;
+		margin: 1.5rem 0 0.75rem 0;
+		text-transform: uppercase;
+		letter-spacing: 1px;
+		font-family: 'IBM Plex Mono', monospace;
 	}
 
 	.item-summary :global(ul),
@@ -997,16 +1304,15 @@
 		margin: 0.4rem 0;
 	}
 
-	/* Collapse thinking trace by default, expand on click only */
-	:global(.thinking-section) {
-		position: relative;
-		margin-bottom: 1rem;
-		cursor: pointer;
+	/* Thinking trace - reactive templating */
+	.thinking-section {
+		margin-bottom: 1.5rem;
 	}
 
-	:global(.thinking-section::before) {
-		content: "💭 Thinking trace (click to expand)";
+	.thinking-toggle {
 		display: block;
+		width: 100%;
+		text-align: left;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 600;
@@ -1015,40 +1321,68 @@
 		background: white;
 		border: 2px solid var(--civic-border);
 		border-radius: 8px;
-		margin-bottom: 0.75rem;
+		cursor: pointer;
 		transition: all 0.2s ease;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 	}
 
-	:global(.thinking-section:hover::before) {
+	.thinking-toggle:hover {
 		border-color: var(--civic-blue);
 		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.15);
 		transform: translateY(-1px);
 	}
 
-	:global(.thinking-section.expanded::before) {
-		content: "💭 Thinking trace (click to collapse)";
+	.thinking-section.expanded .thinking-toggle {
 		border-color: var(--civic-blue);
 		background: #eff6ff;
 	}
 
-	:global(.thinking-section > *) {
-		display: none;
-		opacity: 0;
-		transform: translateY(-10px);
+	.thinking-content {
+		margin-top: 0.75rem;
+		padding: 1rem;
+		border-left: 3px solid var(--civic-blue);
+		background: #f8fafc;
+		border-radius: 4px;
+		animation: expandThinking 0.2s ease forwards;
+		font-family: Georgia, 'Times New Roman', Times, serif;
+		line-height: 1.7;
+		font-size: 1rem;
+		color: #1f2937;
+		letter-spacing: 0.01em;
 	}
 
-	:global(.thinking-section.expanded > *) {
-		display: block;
-		animation: expandThinking 0.2s ease forwards;
-		padding: 0.5rem;
-		border-left: 2px solid var(--civic-blue);
-		background: #f8fafc;
-		margin-bottom: 0.5rem;
-		border-radius: 4px;
+	.thinking-content :global(h2) {
+		display: none;
+	}
+
+	.thinking-content :global(p) {
+		margin: 1rem 0;
+	}
+
+	.thinking-content :global(p:first-child) {
+		margin-top: 0;
+	}
+
+	.thinking-content :global(strong) {
+		font-weight: 700;
+		color: var(--civic-dark);
+	}
+
+	.thinking-content :global(ul),
+	.thinking-content :global(ol) {
+		margin: 0.75rem 0;
+		padding-left: 1.5rem;
+	}
+
+	.thinking-content :global(li) {
+		margin: 0.4rem 0;
 	}
 
 	@keyframes expandThinking {
+		from {
+			opacity: 0;
+			transform: translateY(-10px);
+		}
 		to {
 			opacity: 1;
 			transform: translateY(0);
@@ -1056,65 +1390,45 @@
 	}
 
 	.item-attachments-container {
-		margin-top: 0.75rem;
+		margin-top: 1rem;
 	}
 
-	.attachments-toggle {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 6px;
-		cursor: pointer;
+	.attachments-label {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
-		color: #64748b;
-		transition: all 0.2s;
-		width: fit-content;
-	}
-
-	.attachments-toggle:hover {
-		background: #f9fafb;
-		border-color: #d1d5db;
-	}
-
-	.toggle-icon {
-		font-size: 0.7rem;
-		color: #94a3b8;
-		transition: transform 0.2s;
-	}
-
-	.attachments-count {
-		font-weight: 500;
+		font-weight: 600;
+		color: var(--civic-gray);
+		margin-bottom: 0.5rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
 	}
 
 	.item-attachments {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		margin-top: 0.5rem;
-		padding-left: 0.25rem;
 	}
 
 	.attachment-link {
 		display: inline-block;
-		padding: 0.4rem 0.75rem;
+		padding: 0.5rem 1rem;
 		background: white;
 		color: var(--civic-blue);
-		border: 1px solid #bae6fd;
-		border-radius: 6px;
+		border: 1.5px solid #cbd5e1;
+		border-radius: 8px;
 		text-decoration: none;
 		font-size: 0.85rem;
-		font-weight: 500;
+		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
 		transition: all 0.2s;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 	}
 
 	.attachment-link:hover {
-		background: #f0f9ff;
-		border-color: #7dd3fc;
+		background: #eff6ff;
+		border-color: var(--civic-blue);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
 	}
 
 	@media (max-width: 640px) {
@@ -1134,7 +1448,7 @@
 		}
 
 		.meeting-detail {
-			padding: 1rem;
+			padding: 1.5rem;
 		}
 
 		.back-link,
@@ -1202,13 +1516,17 @@
 			margin-bottom: 1.5rem;
 		}
 
-		.agenda-item {
-			padding: 0.75rem 0;
-			border: none;
-			background: transparent;
-			box-shadow: none;
-			border-bottom: 1px solid var(--civic-border);
-			border-radius: 0;
+		.item-header-clickable {
+			padding: 0.75rem 1rem;
+		}
+
+		.item-expanded-content {
+			padding: 0 1rem 1rem 1rem;
+		}
+
+		.thinking-toggle {
+			font-size: 0.75rem;
+			padding: 0.65rem 0.85rem;
 		}
 
 		.item-header {
@@ -1216,15 +1534,33 @@
 		}
 
 		.item-number {
-			display: none;
+			font-size: 1rem;
+		}
+
+		.expand-icon {
+			width: 1.5rem;
+			height: 1.5rem;
+			font-size: 1rem;
+		}
+
+		.attachment-badge {
+			min-width: 1.25rem;
+			height: 1.25rem;
+			font-size: 0.65rem;
 		}
 
 		.item-title {
-			font-size: 0.95rem;
+			font-size: 1rem;
 		}
 
-		.item-topics {
-			display: none;
+		.item-topic-tag-small {
+			font-size: 0.65rem;
+			padding: 0.2rem 0.5rem;
+		}
+
+		.attachment-indicator {
+			font-size: 0.65rem;
+			padding: 0.2rem 0.5rem;
 		}
 
 		.item-summary {
