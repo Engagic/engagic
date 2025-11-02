@@ -104,7 +104,7 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
     if not banana:
         return None
 
-    # Look up actual city name from database
+    # Look up city from database (single source of truth)
     city = db.get_city(banana=banana)
     if not city:
         return None
