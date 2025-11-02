@@ -29,6 +29,7 @@ class SearchRepository(BaseRepository):
                 m.title,
                 m.date,
                 m.packet_url,
+                m.summary,
                 COUNT(i.id) as item_count,
                 AVG(LENGTH(i.summary)) as avg_summary_length
             FROM meetings m
@@ -44,12 +45,26 @@ class SearchRepository(BaseRepository):
         if not row:
             return None
 
+        meeting_id = row["id"]
+
+        # Fetch items for this meeting
+        items_rows = self._fetch_all("""
+            SELECT id, meeting_id, title, sequence, attachments, summary, topics, created_at
+            FROM items
+            WHERE meeting_id = ?
+            ORDER BY sequence
+        """, (meeting_id,))
+
+        items = [AgendaItem.from_db_row(item_row).to_dict() for item_row in items_rows]
+
         return {
             "id": row["id"],
             "banana": row["banana"],
             "title": row["title"],
             "date": row["date"],
             "packet_url": row["packet_url"],
+            "summary": row["summary"],
+            "items": items,
             "item_count": row["item_count"],
             "avg_summary_length": round(row["avg_summary_length"]) if row["avg_summary_length"] else 0
         }

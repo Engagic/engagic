@@ -109,6 +109,7 @@ async def get_random_best_meeting():
         return {
             "status": "success",
             "meeting": {
+                "id": random_meeting["id"],
                 "banana": random_meeting["banana"],
                 "city_url": f"/city/{random_meeting['banana']}",
                 "title": random_meeting["title"],
