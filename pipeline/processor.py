@@ -37,10 +37,12 @@ PROCEDURAL_PATTERNS = [
 
 # Public comment attachment patterns (high token cost, low signal)
 # These attachments often contain hundreds of pages of form letters
+# Built from cross-city analysis of SF, LA, Palo Alto, Santa Clara, Oakland
 PUBLIC_COMMENT_PATTERNS = [
     "public comment",
     "public correspondence",
     "comment letter",
+    "comment ltrs",  # SF abbreviation
     "written comment",
     "public hearing comment",
     "citizen comment",
@@ -48,6 +50,10 @@ PUBLIC_COMMENT_PATTERNS = [
     "public input",
     "public testimony",
     "letters received",
+    "petitions",  # SF uses "Petitions and Communications"
+    "communications",  # Often paired with "Petitions"
+    "pub corr",  # SF abbreviation for public correspondence
+    "pulbic corr",  # Common typo seen in SF data
 ]
 
 
