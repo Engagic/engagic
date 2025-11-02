@@ -137,10 +137,10 @@ class UnifiedDatabase:
             last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- Processing queue: Decoupled PDF processing queue (Phase 4)
+        -- Processing queue: Decoupled processing queue (agenda-first, item-level)
         CREATE TABLE IF NOT EXISTS queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            packet_url TEXT NOT NULL UNIQUE,
+            source_url TEXT NOT NULL UNIQUE,
             meeting_id TEXT,
             banana TEXT,
             status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -425,6 +425,12 @@ class UnifiedDatabase:
 
             # Check if already processed before enqueuing (to avoid wasting credits)
             # AGENDA-FIRST: Check item-level summaries (golden path) first
+            #
+            # TODO: Future enhancement - PDF content hash detection
+            # Calculate hash of packet_url content and compare against cache.content_hash
+            # to detect meaningful changes. Would require fetching PDF during sync (slower)
+            # but enables smart re-processing only when content actually changes.
+            # Trade-off: Sync latency vs credit efficiency for updated agendas.
             has_items = bool(meeting_dict.get("items"))
             agenda_url = meeting_dict.get("agenda_url")
             packet_url = meeting_dict.get("packet_url")
@@ -468,7 +474,7 @@ class UnifiedDatabase:
                     processing_type = "item-based-no-url"
 
                 self.enqueue_for_processing(
-                    packet_url=queue_url,
+                    source_url=queue_url,
                     meeting_id=stored_meeting.id,
                     banana=city.banana,
                     priority=priority,
@@ -535,14 +541,18 @@ class UnifiedDatabase:
 
     def enqueue_for_processing(
         self,
-        packet_url: str,
+        source_url: str,
         meeting_id: str,
         banana: str,
         priority: int = 0,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> int:
-        """Enqueue item for processing - delegates to QueueRepository"""
-        return self.queue.enqueue_for_processing(packet_url, meeting_id, banana, priority, metadata)
+        """Enqueue item for processing - delegates to QueueRepository
+
+        Args:
+            source_url: agenda_url, packet_url, or items:// synthetic URL
+        """
+        return self.queue.enqueue_for_processing(source_url, meeting_id, banana, priority, metadata)
 
     def get_next_for_processing(
         self, banana: Optional[str] = None
@@ -563,6 +573,10 @@ class UnifiedDatabase:
     def reset_failed_items(self, max_retries: int = 3) -> int:
         """Reset failed items - delegates to QueueRepository"""
         return self.queue.reset_failed_items(max_retries)
+
+    def clear_queue(self) -> Dict[str, int]:
+        """Clear entire queue - delegates to QueueRepository"""
+        return self.queue.clear_queue()
 
     def get_queue_stats(self) -> Dict[str, Any]:
         """Get queue statistics - delegates to QueueRepository"""
