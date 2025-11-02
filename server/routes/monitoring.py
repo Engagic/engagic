@@ -302,7 +302,7 @@ async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
             meeting = db.get_random_meeting_with_items()
 
             if meeting:
-                ticker_item = generate_ticker_item(meeting)
+                ticker_item = generate_ticker_item(meeting, db)
                 if ticker_item:
                     ticker_items.append(ticker_item)
 
