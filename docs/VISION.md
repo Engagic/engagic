@@ -89,124 +89,48 @@ Features (to build):
 
 ---
 
-## Implementation (Current Architecture - October 2025)
+## Current State (November 2025)
 
-### Core Components (6 Logical Clusters)
-- **vendors/** - 6 platform adapters with BaseAdapter pattern (Legistar, PrimeGov, Granicus, CivicClerk, NovusAgenda, CivicPlus)
-  - 94% success rate across 500+ cities
-  - Rate limiting: 3-5s between vendor requests
-  - Factory pattern for adapter dispatch
-
-- **parsing/** - Text extraction and participation info
-  - PyMuPDF with actual page counts
-  - Participation info extraction (Zoom, phone, email)
-
-- **analysis/** - LLM intelligence and topic normalization
-  - Gemini API with adaptive prompts (standard vs large items)
-  - JSON structured output with schema validation
-  - 16 canonical topics with normalization
-
-- **pipeline/** - Processing orchestration (modular refactor complete)
-  - Priority queue (recent meetings first, SQLite-backed)
-  - Item-level processing for 374+ cities (58% of platform)
-  - Two parallel pipelines: item-based (primary) and monolithic (fallback)
-  - Batch API for 50% cost savings
-  - 4 focused modules: conductor (orchestration), fetcher (sync), processor (queue), analyzer (LLM)
-
-- **database/** - SQLite with Repository Pattern
-  - UnifiedDatabase facade (519 lines) delegates to 5 repositories
-  - Repositories: cities (241), meetings (190), items (115), queue (273), search (202)
-  - Tables: cities, meetings, agenda_items, job_queue, cache
-  - JSON columns for topics, participation, attachments
-
-- **server/** - Modular FastAPI (refactor complete)
-  - main.py: 98 lines (down from 1,473)
-  - Clean separation: routes/ services/ utils/ middleware/ models/
-  - Cache-first serving (never fetches live)
-  - Background fetcher service syncs every 72 hours (manual processing for cost control)
-  - Rate limiting: 30 req/60s per IP
-  - Endpoints: search, topics, meetings, admin, monitoring
-
-### Honest Assessment
-
-**What Works (November 2025):**
+**What Works:**
 - ✅ 500+ cities, 374+ with item-level processing (58% coverage)
-- ✅ Item-based frontend (navigable, scannable agendas)
-- ✅ Topic extraction DEPLOYED (16 canonical topics, frontend displays topics)
-- ✅ Participation info DEPLOYED (email/phone/Zoom displayed on frontend)
+- ✅ Item-based frontend (navigable, scannable agendas, collapsible items)
+- ✅ Topic extraction (16 canonical topics, frontend displays)
+- ✅ Participation info (email/phone/Zoom, one-click civic action)
 - ✅ Cache-first API (<100ms response times)
-- ✅ Priority queue, adaptive prompts, batch processing
+- ✅ Modular architecture (6 logical clusters, Repository Pattern, clean separation)
 
-**What's Missing (User Features):**
+**What's Missing:**
 - ❌ User accounts/profiles
 - ❌ Email notifications/alerts
 - ❌ Weekly digest emails
 - ❌ Mobile PWA notifications
-- ❌ Topic-based search filters (backend ready)
 
-**Highly requested:**
-- "Email me when my city discusses zoning"
-- "Weekly digest of meetings in my city"
-- "Alert me about housing issues"
-- "Show me how to participate (Zoom link, email)"
+**Most Requested:**
+"Email me when my city discusses zoning/housing/budget"
 
-**Current users:** Civic hackers, researchers who can consume raw API data. Average citizens can browse but can't subscribe to alerts yet.
+**Current Users:** Civic hackers and researchers. Average citizens can browse but can't subscribe yet.
+
+See `CLAUDE.md` for detailed architecture and `CHANGELOG.md` for historical changes.
 
 ---
 
 ## Roadmap (Growth Features)
 
-### Phase 0: Contact Info Parsing - COMPLETE ✅
+### Phase 0: Contact Info Parsing - ✅ COMPLETE
 **Goal:** Make participation easier with contact info
-
 **Status:** DEPLOYED (October 2025)
+**Impact:** One-click civic action (mailto:, tel:, Zoom links)
 
-**Implementation (COMPLETE):**
-- ✅ Parse email/phone/virtual_url/meeting_id from agenda text
-- ✅ Store in `meetings.participation` JSON column
-- ✅ Integrated into processing pipeline
-- ✅ Normalized phone numbers, virtual URLs, hybrid meeting detection
-- ✅ Frontend displays participation section on meeting pages
-- ✅ Clickable `mailto:city@council.gov` (opens email app)
-- ✅ Clickable `tel:+1-555-0100` (mobile-friendly phone calls)
-- ✅ Clickable Zoom/virtual URLs
-- ✅ Badge for "Hybrid Meeting" or "Virtual Only"
-
-**Impact:** Enables civic action with one click
-
-### Phase 1: Topic Extraction (Foundation) - COMPLETE ✅
-**Goal:** Automatically tag meetings and agenda items with topics
-
+### Phase 1: Topic Extraction - ✅ COMPLETE
+**Goal:** Automatically tag meetings with topics
 **Status:** DEPLOYED (October 2025)
+**Impact:** Foundation for user subscriptions and smart filtering
 
-**Implementation (COMPLETE):**
-- ✅ Per-item topic extraction using Gemini with JSON structured output
-- ✅ Topic normalization to 16 canonical topics (analysis/topics/)
-- ✅ Meeting-level aggregation (sorted by frequency)
-- ✅ Database storage (topics JSON column on items and meetings)
-- ✅ API endpoints: /api/topics, /api/search/by-topic, /api/topics/popular
-- ✅ Frontend displays topic badges on agenda items
-- ✅ Search by topic functional
-
-**Next Steps:**
-- Topic-based filtering on frontend
-- User topic subscriptions (Phase 2)
-
-**Impact:** Foundation for user subscriptions, smart filtering, and analytics. Enables topic-based discovery.
-
-### Phase 1.5: AI Thinking Traces (Transparency) - OPTIONAL
-**Goal:** Show users how AI analyzed the meeting - build trust through transparency
-
-**Implementation:**
-- Test Gemini API for native thinking trace support (gemini-2.0-flash-thinking-exp)
-- If not native, use chain-of-thought prompting
-- Database schema: `thinking_trace TEXT` on meetings and agenda_items tables
-- Frontend: Collapsible section "Show AI reasoning"
-- Parse and store both thinking trace + summary
-
-**Cost consideration:** Adds 30-50% more tokens (~$5-10 for 10K meetings)
-
-**Why deferred:** Good for transparency, but not blocking. Topic extraction is the critical path.
+### Phase 1.5: AI Thinking Traces - ✅ COMPLETE
+**Goal:** Show how AI analyzed meetings (transparency)
+**Status:** DEPLOYED (November 2025)
+**Implementation:** Reactive Svelte templating, collapsible thinking sections
+**Impact:** Users can verify AI reasoning, builds trust
 
 ### Phase 2: User Profiles (Core Growth)
 **Goal:** Let civilians subscribe to cities and topics
