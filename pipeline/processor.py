@@ -13,11 +13,12 @@ Moved from: pipeline/conductor.py (refactored)
 
 import logging
 import time
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from database.db import UnifiedDatabase, Meeting
 from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
+from parsing.participation import parse_participation_info
 from config import config
 
 logger = logging.getLogger("engagic")
@@ -264,6 +265,14 @@ class Processor:
             logger.warning("[ItemProcessing] Analyzer not available")
             return
 
+        # Determine first and last item sequences for participation extraction
+        item_sequences = [item.sequence for item in agenda_items]
+        first_sequence = min(item_sequences) if item_sequences else None
+        last_sequence = max(item_sequences) if item_sequences else None
+
+        # Collect participation info from first/last items
+        participation_data: Dict[str, Any] = {}
+
         # Separate already-processed items from items that need processing
         already_processed = []
         need_processing = []
@@ -369,6 +378,17 @@ class Processor:
 
                     if all_text_parts:
                         combined_text = "\n\n".join(all_text_parts)
+
+                        # Extract participation info from first or last item
+                        if item.sequence == first_sequence or item.sequence == last_sequence:
+                            item_participation = parse_participation_info(combined_text)
+                            if item_participation:
+                                logger.debug(
+                                    f"[Participation] Found in item {item.sequence}: {list(item_participation.keys())}"
+                                )
+                                # Merge with existing participation data (later items override earlier)
+                                participation_data.update(item_participation)
+
                         batch_requests.append(
                             {
                                 "item_id": item.id,
@@ -467,6 +487,16 @@ class Processor:
                 f"from {len(processed_items)} items: {meeting_topics}"
             )
 
+            # Merge participation data from items with existing meeting participation
+            merged_participation = None
+            if participation_data or meeting.participation:
+                merged_participation = meeting.participation.copy() if meeting.participation else {}
+                if participation_data:
+                    merged_participation.update(participation_data)
+                    logger.info(
+                        f"[Participation] Updated meeting with info from items: {list(participation_data.keys())}"
+                    )
+
             # Update meeting with metadata only (items have their own summaries)
             processing_time = time.time() - start_time
             self.db.update_meeting_summary(
@@ -475,6 +505,7 @@ class Processor:
                 processing_method=f"item_level_{len(processed_items)}_items",
                 processing_time=processing_time,
                 topics=meeting_topics,
+                participation=merged_participation,
             )
 
             logger.info(
