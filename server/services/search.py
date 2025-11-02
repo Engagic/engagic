@@ -5,7 +5,7 @@ Business logic for handling different search types
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from difflib import get_close_matches
 from database.db import UnifiedDatabase
 from server.services.meeting import get_meetings_with_items

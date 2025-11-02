@@ -38,7 +38,7 @@ class TopicNormalizer:
             taxonomy_path: Path to taxonomy.json (defaults to same directory)
         """
         if taxonomy_path is None:
-            taxonomy_path = Path(__file__).parent / "taxonomy.json"
+            taxonomy_path = str(Path(__file__).parent / "taxonomy.json")
 
         with open(taxonomy_path, "r") as f:
             data = json.load(f)
