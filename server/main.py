@@ -9,6 +9,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import config
+from database.db import UnifiedDatabase
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.routes import search, meetings, topics, admin, monitoring
@@ -39,6 +40,13 @@ rate_limiter = SQLiteRateLimiter(
     requests_limit=config.RATE_LIMIT_REQUESTS,
     window_seconds=config.RATE_LIMIT_WINDOW,
 )
+
+# Initialize shared database instance (reused across all requests)
+db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+logger.info(f"Initialized shared database at {config.UNIFIED_DB_PATH}")
+
+# Store in app state for dependency injection
+app.state.db = db
 
 
 # Register middleware
