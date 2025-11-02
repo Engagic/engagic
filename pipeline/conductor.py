@@ -370,7 +370,7 @@ class Conductor:
         Returns:
             List of queued jobs with meeting info
         """
-        logger.info(f"[Conductor] Previewing queue...")
+        logger.info("[Conductor] Previewing queue...")
 
         # Get pending jobs from queue
         jobs = []
@@ -433,8 +433,11 @@ class Conductor:
             from parsing.pdf import PdfExtractor
             extractor = PdfExtractor()
 
-            logger.info(f"[Conductor] Downloading PDF: {meeting.packet_url}")
-            extraction_result = extractor.extract_from_url(meeting.packet_url)
+            # Handle packet_url being either str or List[str]
+            url = meeting.packet_url[0] if isinstance(meeting.packet_url, list) else meeting.packet_url
+
+            logger.info(f"[Conductor] Downloading PDF: {url}")
+            extraction_result = extractor.extract_from_url(url)
 
             if not extraction_result["success"]:
                 return {
