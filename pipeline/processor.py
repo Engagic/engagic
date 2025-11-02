@@ -22,6 +22,24 @@ from config import config
 
 logger = logging.getLogger("engagic")
 
+# Procedural items to skip (low informational value)
+# Focus on substantive policy, not administrative overhead
+PROCEDURAL_PATTERNS = [
+    "review of minutes",
+    "approval of minutes",
+    "adopt minutes",
+    "roll call",
+    "pledge of allegiance",
+    "invocation",
+    "adjournment",
+]
+
+
+def is_procedural_item(title: str) -> bool:
+    """Check if agenda item is procedural (skip to save API costs)"""
+    title_lower = title.lower()
+    return any(pattern in title_lower for pattern in PROCEDURAL_PATTERNS)
+
 
 class Processor:
     """Queue processing and item assembly orchestrator"""
@@ -251,6 +269,13 @@ class Processor:
         need_processing = []
 
         for item in agenda_items:
+            # Skip procedural items (low informational value)
+            if is_procedural_item(item.title):
+                logger.debug(
+                    f"[ItemProcessing] Skipping procedural item: {item.title[:50]}"
+                )
+                continue
+
             if not item.attachments:
                 logger.debug(
                     f"[ItemProcessing] Skipping item without attachments: {item.title[:50]}"
