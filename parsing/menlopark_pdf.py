@@ -12,7 +12,7 @@ Confidence: 8/10 - Pattern is consistent across meetings
 """
 
 import re
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 
 
 def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -85,7 +85,7 @@ def migrate():
         logger.info("MIGRATION COMPLETE")
         logger.info("="*60)
         logger.info(f"Total queue items: {total_after}")
-        logger.info(f"Column renamed: packet_url → source_url")
+        logger.info("Column renamed: packet_url → source_url")
         logger.info("="*60)
 
         return True

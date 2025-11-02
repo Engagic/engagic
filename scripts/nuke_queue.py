@@ -25,7 +25,7 @@ def nuke_queue():
 
     # Get current stats
     stats = db.get_queue_stats()
-    print(f"\nCurrent queue status:")
+    print("\nCurrent queue status:")
     print(f"  Pending:    {stats.get('pending_count', 0)}")
     print(f"  Processing: {stats.get('processing_count', 0)}")
     print(f"  Completed:  {stats.get('completed_count', 0)}")

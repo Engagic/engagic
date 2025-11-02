@@ -536,7 +536,7 @@ class Conductor:
                         from parsing.pdf import PdfExtractor
                         extractor = PdfExtractor()
 
-                        logger.info(f"[Conductor] Extracting text from {item.item_id} attachment...")
+                        logger.info(f"[Conductor] Extracting text from {item.id} attachment...")
                         extraction_result = extractor.extract_from_url(att_url)
 
                         if extraction_result["success"]:
@@ -552,7 +552,7 @@ class Conductor:
                             if output_dir:
                                 import os
                                 os.makedirs(output_dir, exist_ok=True)
-                                filename = f"{item.item_id}.txt"
+                                filename = f"{item.id}.txt"
                                 filepath = os.path.join(output_dir, filename)
 
                                 with open(filepath, "w") as f:
@@ -565,12 +565,12 @@ class Conductor:
                                     f.write(text)
 
                                 item_data["saved_to"] = filepath
-                                logger.info(f"[Conductor] Saved {item.item_id} text to {filepath}")
+                                logger.info(f"[Conductor] Saved {item.id} text to {filepath}")
                         else:
                             item_data["text_error"] = extraction_result.get("error", "Failed to extract")
 
                     except Exception as e:
-                        logger.warning(f"[Conductor] Failed to extract text for {item.item_id}: {e}")
+                        logger.warning(f"[Conductor] Failed to extract text for {item.id}: {e}")
                         item_data["text_error"] = str(e)
 
             items_preview.append(item_data)
