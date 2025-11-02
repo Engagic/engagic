@@ -13,6 +13,7 @@
 	let loading = $state(true);
 	let error = $state('');
 	let expandedAttachments = $state<Set<string>>(new Set());
+	let expandedTitles = $state<Set<string>>(new Set());
 
 
 	async function loadMeetingData() {
@@ -127,6 +128,30 @@
 			newSet.add(itemId);
 		}
 		expandedAttachments = newSet;
+	}
+
+	function toggleTitle(itemId: string) {
+		const newSet = new Set(expandedTitles);
+		if (newSet.has(itemId)) {
+			newSet.delete(itemId);
+		} else {
+			newSet.add(itemId);
+		}
+		expandedTitles = newSet;
+	}
+
+	function truncateTitle(title: string, itemId: string): { main: string; remainder: string | null; isTruncated: boolean } {
+		const semicolonIndex = title.indexOf(';');
+		if (semicolonIndex !== -1 && semicolonIndex < title.length - 1) {
+			const isExpanded = expandedTitles.has(itemId);
+			if (isExpanded) {
+				return { main: title, remainder: null, isTruncated: false };
+			}
+			const main = title.substring(0, semicolonIndex);
+			const remainder = title.substring(semicolonIndex);
+			return { main, remainder, isTruncated: true };
+		}
+		return { main: title, remainder: null, isTruncated: false };
 	}
 
 	function wrapThinkingSections() {
@@ -271,10 +296,16 @@
 
 				<div class="agenda-items">
 					{#each selectedMeeting.items as item}
+						{@const titleParts = truncateTitle(item.title, item.id)}
 						<div class="agenda-item">
-							<div class="item-header">
-								<span class="item-number">{item.sequence}</span>
-								<h3 class="item-title">{item.title}</h3>
+							<div class="item-header" onclick={titleParts.isTruncated ? () => toggleTitle(item.id) : undefined}>
+								<h3 class="item-title" data-truncated={titleParts.isTruncated}>
+									<span class="item-number-inline">{item.sequence}.</span>
+									{titleParts.main}
+									{#if titleParts.remainder}
+										<span class="item-title-remainder">…</span>
+									{/if}
+								</h3>
 							</div>
 
 							{#if item.topics && item.topics.length > 0}
