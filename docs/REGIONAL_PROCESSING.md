@@ -55,7 +55,7 @@ cat /tmp/preview.txt | head -100  # Inspect first 100 lines
 Sync Cities
 ├─> Fetch meeting metadata from vendor APIs
 ├─> Store in meetings table (title, date, packet_url)
-└─> Enqueue packet_url in queue table (status=pending)
+└─> Enqueue source_url in queue table (status=pending)
         │
         ▼
 Preview Queue (OPTIONAL - Manual Review)

@@ -148,7 +148,7 @@ restart_api() {
 
 # Background Process Management (Manual Commands Only)
 kill_background_processes() {
-    log "Stopping all background conductor/daemon processes..."
+    log "Checking for background conductor/daemon processes..."
 
     local was_running=false
 
@@ -157,6 +157,16 @@ kill_background_processes() {
         was_running=true
         warn "Found running background processes:"
         pgrep -fa "engagic-daemon|pipeline.conductor|engagic-conductor" | sed 's/^/  /'
+        echo ""
+
+        # Show recent logs to confirm activity
+        info "Recent log output (last 20 lines):"
+        if [ -f "/var/log/engagic/conductor.log" ]; then
+            tail -20 /var/log/engagic/conductor.log | sed 's/^/  /'
+        else
+            warn "  Log file not found at /var/log/engagic/conductor.log"
+        fi
+        echo ""
     fi
 
     # Kill all background processes
@@ -183,9 +193,9 @@ kill_background_processes() {
         warn "Try: pkill -9 -f 'engagic-daemon|pipeline.conductor|engagic-conductor'"
     else
         if [ "$was_running" = true ]; then
-            log "Stopped all background processes"
+            log "Successfully stopped all background processes"
         else
-            info "No background processes running"
+            info "No background processes were running"
         fi
     fi
 }

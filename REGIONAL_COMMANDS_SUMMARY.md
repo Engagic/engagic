@@ -97,7 +97,7 @@ berkeleyCA
     │ - Loop through city list       │
     │ - Call vendor adapters         │
     │ - Store meetings in DB         │
-    │ - Enqueue packet_url (pending) │
+    │ - Enqueue source_url (pending) │
     └───────────────┬────────────────┘
                     │
     ┌───────────────▼────────────────┐

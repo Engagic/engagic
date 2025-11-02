@@ -68,10 +68,10 @@ class Processor:
                     continue
 
                 queue_id = job["id"]
-                packet_url = job["packet_url"]
+                source_url = job["source_url"]
                 meeting_id = job["meeting_id"]
 
-                logger.info(f"[Processor] Processing queue job {queue_id}: {packet_url}")
+                logger.info(f"[Processor] Processing queue job {queue_id}: {source_url}")
 
                 try:
                     # Get meeting from database
@@ -138,9 +138,9 @@ class Processor:
 
             queue_id = job["id"]
             meeting_id = job["meeting_id"]
-            packet_url = job["packet_url"]
+            source_url = job["source_url"]
 
-            logger.info(f"[Processor] Processing job {queue_id}: {packet_url}")
+            logger.info(f"[Processor] Processing job {queue_id}: {source_url}")
 
             try:
                 meeting = self.db.get_meeting(meeting_id)
@@ -153,13 +153,13 @@ class Processor:
                 self.process_meeting(meeting)
                 self.db.mark_processing_complete(queue_id)
                 processed_count += 1
-                logger.info(f"[Processor] Processed {packet_url}")
+                logger.info(f"[Processor] Processed {source_url}")
 
             except Exception as e:
                 error_msg = str(e)
                 self.db.mark_processing_failed(queue_id, error_msg)
                 failed_count += 1
-                logger.error(f"[Processor] Failed to process {packet_url}: {e}")
+                logger.error(f"[Processor] Failed to process {source_url}: {e}")
 
         logger.info(
             f"[Processor] Processing complete for {city_banana}: "

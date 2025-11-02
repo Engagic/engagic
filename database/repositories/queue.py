@@ -22,39 +22,46 @@ class QueueRepository(BaseRepository):
 
     def enqueue_for_processing(
         self,
-        packet_url: str,
+        source_url: str,
         meeting_id: str,
         banana: str,
         priority: int = 0,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> int:
-        """Add a packet URL to the processing queue with priority"""
+        """Add source URL to processing queue with priority
+
+        Args:
+            source_url: agenda_url, packet_url, or items:// synthetic URL
+            meeting_id: Meeting ID
+            banana: City banana
+            priority: Queue priority (higher = processed first)
+            metadata: Optional processing metadata
+        """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
         metadata_json = json.dumps(metadata) if metadata else None
 
         try:
-            self._execute(
+            cursor = self._execute(
                 """
                 INSERT INTO queue
-                (packet_url, meeting_id, banana, priority, processing_metadata)
+                (source_url, meeting_id, banana, priority, processing_metadata)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (packet_url, meeting_id, banana, priority, metadata_json),
+                (source_url, meeting_id, banana, priority, metadata_json),
             )
             self._commit()
-            cursor = self.conn.cursor()
             queue_id = cursor.lastrowid
             if queue_id is None:
                 raise DatabaseConnectionError("Failed to get queue ID after insert")
             logger.info(
-                f"Enqueued {packet_url} for processing with priority {priority}"
+                f"Enqueued {source_url} for processing with priority {priority}"
             )
             return queue_id
         except sqlite3.IntegrityError as e:
             if "UNIQUE constraint failed" in str(e):
-                logger.debug(f"Packet {packet_url} already in queue")
+                logger.debug(f"Source {source_url} already in queue")
                 return -1
             raise
 
@@ -172,6 +179,29 @@ class QueueRepository(BaseRepository):
         logger.info(f"Reset {reset_count} failed items back to pending")
         return reset_count
 
+    def clear_queue(self) -> Dict[str, int]:
+        """Clear all items from the queue (nuclear option)
+
+        Returns:
+            Dictionary with counts of items cleared by status
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        # Get counts before clearing
+        stats = self.get_queue_stats()
+
+        self._execute("DELETE FROM queue")
+        self._commit()
+
+        logger.warning("Cleared entire processing queue")
+        return {
+            "pending": stats.get("pending_count", 0),
+            "processing": stats.get("processing_count", 0),
+            "completed": stats.get("completed_count", 0),
+            "failed": stats.get("failed_count", 0),
+        }
+
     def get_queue_stats(self) -> Dict[str, Any]:
         """Get processing queue statistics"""
         if self.conn is None:
@@ -222,7 +252,7 @@ class QueueRepository(BaseRepository):
         query = """
             SELECT m.packet_url, m.id, m.banana, m.date
             FROM meetings m
-            LEFT JOIN queue pq ON m.packet_url = pq.packet_url
+            LEFT JOIN queue pq ON m.packet_url = pq.source_url
             WHERE m.packet_url IS NOT NULL
             AND m.summary IS NULL
             AND pq.id IS NULL
@@ -256,14 +286,14 @@ class QueueRepository(BaseRepository):
                 self._execute(
                     """
                     INSERT INTO queue
-                    (packet_url, meeting_id, banana, priority)
+                    (source_url, meeting_id, banana, priority)
                     VALUES (?, ?, ?, ?)
                     """,
                     (meeting["packet_url"], meeting["id"], meeting["banana"], priority),
                 )
                 enqueued += 1
             except sqlite3.IntegrityError:
-                logger.debug(f"Skipping already queued packet: {meeting['packet_url']}")
+                logger.debug(f"Skipping already queued source: {meeting['packet_url']}")
 
         self._commit()
         logger.info(f"Bulk enqueued {enqueued} meetings for processing")
