@@ -52,7 +52,11 @@
 
 	<div class="city-header">
 		<a href="/" class="back-link">← Back to search</a>
-		<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
+		{#if searchResults && 'city_name' in searchResults}
+			<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
+		{:else}
+			<h1 class="city-title">Loading...</h1>
+		{/if}
 	</div>
 
 	{#if searchResults && searchResults.success}

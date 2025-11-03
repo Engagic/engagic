@@ -269,7 +269,7 @@ Before deploying to production:
 ## Deployment Notes
 
 ### Environment
-- Static adapter (Cloudflare Pages)
+- Static adapter (Cloudflare Workers)
 - Client-side load functions (correct for static deployment)
 - No server-side rendering required
 

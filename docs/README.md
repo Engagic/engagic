@@ -127,7 +127,7 @@ engagic/
 ├── pipeline/       # Processing orchestration
 ├── database/       # SQLite persistence layer
 ├── server/         # FastAPI public API
-└── frontend/       # SvelteKit (Cloudflare Pages)
+└── frontend/       # SvelteKit (Cloudflare Workers)
 ```
 
 ### Key Concepts

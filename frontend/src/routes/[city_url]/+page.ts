@@ -21,11 +21,14 @@ export const load: PageLoad = async ({ params, url, setHeaders }) => {
 
 	// Check if we came from homepage search with fresh data
 	// This eliminates the double-fetch when user searches and navigates
-	if (typeof window !== 'undefined' && url.searchParams.get('from') === 'search') {
-		const navigationState = window.history.state?.searchResults as SearchResult | undefined;
-		if (navigationState?.success && navigationState.city_name && navigationState.meetings) {
-			// Use fresh data from homepage, skip redundant API call
-			return processMeetingsData(navigationState);
+	if (url.searchParams.get('from') === 'search') {
+		// Only access window in browser context
+		if (typeof window !== 'undefined') {
+			const navigationState = window.history.state?.searchResults as SearchResult | undefined;
+			if (navigationState?.success && navigationState.city_name && navigationState.meetings) {
+				// Use fresh data from homepage, skip redundant API call
+				return processMeetingsData(navigationState);
+			}
 		}
 	}
 

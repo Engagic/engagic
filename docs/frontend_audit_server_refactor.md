@@ -342,7 +342,7 @@ if (response.status >= 500 && retries > 0) {
 ## Deployment Considerations
 
 ### Frontend Deployment
-- **Platform**: Cloudflare Pages
+- **Platform**: Cloudflare Workers
 - **Build**: `npm run build` (SvelteKit static adapter)
 - **Environment**: Set `VITE_API_BASE_URL` if needed
 
