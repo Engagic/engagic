@@ -211,46 +211,49 @@
 			{/if}
 
 			<div class="meeting-header">
-				<div class="meeting-header-top">
-					<div class="meeting-header-text">
-						<h1 class="meeting-title">{selectedMeeting.title}</h1>
-						<div class="meeting-meta">
-							{#if selectedMeeting.date}
-								{@const date = new Date(selectedMeeting.date)}
-								{@const isValidDate = !isNaN(date.getTime()) && date.getTime() !== 0}
-								{#if isValidDate}
-									{@const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' })}
-									{@const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-									{@const timeStr = extractTime(selectedMeeting.date)}
-									<div class="meeting-date">
-										{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
-									</div>
-								{:else}
-									<div class="meeting-date">Date TBD</div>
-								{/if}
-							{:else}
-								<div class="meeting-date">Date TBD</div>
-							{/if}
-							{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
-								<div class="meeting-helper">
-									<span class="helper-dot"></span>
-									<span class="helper-text-inline">Blue border = AI summary available</span>
-								</div>
-							{/if}
-						</div>
-					</div>
-					{#if selectedMeeting.agenda_url}
-						<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="document-link">
-							<span class="document-icon">📄</span>
-							<span>View Agenda</span>
-						</a>
-					{:else if selectedMeeting.packet_url}
-						{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
-						<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="document-link">
-							<span class="document-icon">📋</span>
-							<span>View Packet</span>
-						</a>
+				<div class="meeting-header-row">
+					<h1 class="meeting-title">{selectedMeeting.title}</h1>
+					{#if selectedMeeting.date}
+						{@const date = new Date(selectedMeeting.date)}
+						{@const isValidDate = !isNaN(date.getTime()) && date.getTime() !== 0}
+						{#if isValidDate}
+							{@const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' })}
+							{@const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+							{@const timeStr = extractTime(selectedMeeting.date)}
+							<div class="meeting-date">
+								{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
+							</div>
+						{:else}
+							<div class="meeting-date">Date TBD</div>
+						{/if}
+					{:else}
+						<div class="meeting-date">Date TBD</div>
 					{/if}
+				</div>
+
+				<div class="meeting-meta-row">
+					<div class="meeting-meta-left">
+						{#if selectedMeeting.agenda_url}
+							<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="document-link">
+								<span class="document-icon">📄</span>
+								<span>View Agenda</span>
+							</a>
+						{:else if selectedMeeting.packet_url}
+							{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
+							<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="document-link">
+								<span class="document-icon">📋</span>
+								<span>View Packet</span>
+							</a>
+						{/if}
+					</div>
+					<div class="meeting-meta-right">
+						{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
+							<div class="meeting-helper">
+								<span class="helper-dot"></span>
+								<span class="helper-text-inline">Blue border = AI summary available</span>
+							</div>
+						{/if}
+					</div>
 				</div>
 			</div>
 
@@ -701,36 +704,27 @@
 	}
 
 	.meeting-header {
-		margin-bottom: 1.5rem;
+		margin-bottom: 2rem;
 	}
 
-	.meeting-header-top {
+	.meeting-header-row {
 		display: flex;
 		justify-content: space-between;
-		align-items: flex-start;
+		align-items: baseline;
 		gap: 2rem;
-	}
-
-	.meeting-header-text {
-		flex: 1;
+		margin-bottom: 0.75rem;
 	}
 
 	.meeting-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 2rem;
 		color: var(--civic-dark);
-		margin: 0 0 0.75rem 0;
+		margin: 0;
 		font-weight: 700;
 		line-height: 1.3;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
-	}
-
-	.meeting-meta {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		flex-wrap: wrap;
+		flex: 1;
 	}
 
 	.meeting-date {
@@ -740,6 +734,25 @@
 		font-weight: 600;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+		flex-shrink: 0;
+		text-align: right;
+	}
+
+	.meeting-meta-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.meeting-meta-left {
+		flex-shrink: 0;
+	}
+
+	.meeting-meta-right {
+		flex: 1;
+		display: flex;
+		justify-content: flex-end;
 	}
 
 	.meeting-helper {
@@ -1588,19 +1601,14 @@
 		}
 
 		.meeting-header {
-			margin-bottom: 1rem;
+			margin-bottom: 1.5rem;
 		}
 
-		.meeting-header-top {
+		.meeting-header-row {
 			flex-direction: column;
-			gap: 1rem;
-		}
-
-		.document-link {
-			width: auto;
-			padding: 0.4rem 0.7rem;
-			font-size: 0.75rem;
-			align-self: flex-end;
+			align-items: flex-start;
+			gap: 0.5rem;
+			margin-bottom: 0.75rem;
 		}
 
 		.meeting-title {
@@ -1609,12 +1617,25 @@
 			overflow-wrap: break-word;
 		}
 
-		.meeting-meta {
-			gap: 0.5rem;
-		}
-
 		.meeting-date {
 			font-size: 0.85rem;
+			text-align: left;
+		}
+
+		.meeting-meta-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.75rem;
+		}
+
+		.meeting-meta-right {
+			justify-content: flex-start;
+		}
+
+		.document-link {
+			width: auto;
+			padding: 0.4rem 0.7rem;
+			font-size: 0.75rem;
 		}
 
 		.meeting-helper {
