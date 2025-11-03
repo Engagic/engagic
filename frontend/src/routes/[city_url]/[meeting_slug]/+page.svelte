@@ -1024,11 +1024,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		margin-bottom: 1.5rem;
-		padding: 0.75rem 1rem;
-		background: #f8fafc;
-		border-radius: 8px;
-		border: 1px solid #e2e8f0;
+		margin-bottom: 1rem;
+		padding: 0.5rem 0.75rem;
+		background: transparent;
+		border-radius: 6px;
+		border: none;
 	}
 
 	.items-summary {
@@ -1044,21 +1044,21 @@
 
 	.toggle-procedural-btn {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--civic-gray);
 		background: white;
-		border: 1.5px solid var(--civic-border);
-		border-radius: 6px;
-		padding: 0.5rem 1rem;
+		border: 1px solid #e2e8f0;
+		border-radius: 5px;
+		padding: 0.25rem 0.75rem;
 		cursor: pointer;
 		transition: all 0.2s ease;
 	}
 
 	.toggle-procedural-btn:hover {
-		background: #eff6ff;
-		border-color: var(--civic-blue);
-		transform: translateY(-1px);
+		background: #f8fafc;
+		border-color: var(--civic-gray);
+		color: var(--civic-dark);
 	}
 
 	.agenda-items-header {
@@ -1627,14 +1627,14 @@
 		.items-controls {
 			flex-direction: column;
 			align-items: flex-start;
-			gap: 0.75rem;
-			padding: 0.65rem 0.85rem;
+			gap: 0.5rem;
+			padding: 0.4rem 0.5rem;
 		}
 
 		.toggle-procedural-btn {
 			width: 100%;
-			font-size: 0.8rem;
-			padding: 0.45rem 0.85rem;
+			font-size: 0.7rem;
+			padding: 0.2rem 0.6rem;
 		}
 
 		.items-count {

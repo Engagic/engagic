@@ -307,7 +307,7 @@ class Processor:
 
                 # Handle PDF agendas (Legistar, etc.)
                 if agenda_url_lower.endswith('.pdf') or '.ashx' in agenda_url_lower:
-                    logger.debug(f"[Participation] Extracting text from agenda_url PDF for participation info")
+                    logger.debug("[Participation] Extracting text from agenda_url PDF for participation info")
                     agenda_result = self.analyzer.pdf_extractor.extract_from_url(meeting.agenda_url)
                     if agenda_result.get("success") and agenda_result.get("text"):
                         # Parse only first 5000 chars (participation info is at the top)
