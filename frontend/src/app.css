@@ -363,6 +363,117 @@ body {
 	margin-top: 3rem;
 }
 
+.ambiguous-cities {
+	background: var(--civic-white);
+	border-radius: 12px;
+	border: 1px solid var(--civic-border);
+	padding: 2rem;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ambiguous-message {
+	font-family: Georgia, 'Times New Roman', Times, serif;
+	font-size: 1.05rem;
+	color: var(--civic-dark);
+	margin-bottom: 1.5rem;
+	line-height: 1.6;
+}
+
+.city-options {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.city-option-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 1rem;
+	background: var(--civic-light);
+	border-radius: 8px;
+	transition: all 0.2s ease;
+	border: 1px solid var(--civic-border);
+}
+
+.city-option-row:hover {
+	background: #eff6ff;
+	border-color: var(--civic-blue);
+}
+
+.city-option {
+	flex: 1;
+	text-align: left;
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--civic-blue);
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+	transition: color 0.2s ease;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.city-option:hover {
+	color: var(--civic-accent);
+}
+
+.city-stats {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 0.85rem;
+	color: var(--civic-gray);
+	flex-shrink: 0;
+}
+
+.stat-total {
+	font-weight: 600;
+	color: var(--civic-dark);
+}
+
+.stat-packets {
+	color: var(--civic-orange);
+}
+
+.stat-summaries {
+	color: var(--civic-green);
+	font-weight: 600;
+}
+
+.stat-separator {
+	color: var(--civic-border);
+}
+
+@media (max-width: 640px) {
+	.ambiguous-cities {
+		padding: 1.5rem;
+	}
+
+	.city-option-row {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	.city-option {
+		white-space: normal;
+		word-break: break-word;
+	}
+
+	.city-stats {
+		width: 100%;
+		justify-content: flex-start;
+	}
+}
+
 .city-info {
 	text-align: center;
 	margin-bottom: 2rem;
