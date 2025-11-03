@@ -30,9 +30,9 @@ class IQM2Adapter(BaseAdapter):
 
         # Try multiple calendar URL patterns (IQM2 sites vary)
         self.calendar_url_patterns = [
-            f"{self.base_url}/Citizen",
-            f"{self.base_url}/Citizen/Calendar.aspx",
-            f"{self.base_url}/Citizen/Default.aspx",
+            f"{self.base_url}/Citizens",
+            f"{self.base_url}/Citizens/Calendar.aspx",
+            f"{self.base_url}/Citizens/Default.aspx",
             f"{self.base_url}/Citizens/Calendar.aspx",  # Legacy pattern
         ]
 
