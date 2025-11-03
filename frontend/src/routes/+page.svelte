@@ -212,7 +212,10 @@
 <div class="container">
 	<div class="main-content">
 		<header class="header">
-			<a href="/" class="logo">engagic</a>
+			<div class="logo-container">
+				<img src="/icon-192.png" alt="" class="logo-icon" />
+				<a href="/" class="logo">engagic</a>
+			</div>
 			<p class="tagline">civic engagement made simple</p>
 			{#if stats.length > 0}
 				{#key currentStatIndex}
@@ -315,3 +318,28 @@
 
 	<Footer />
 </div>
+
+<style>
+	.logo-container {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.logo-icon {
+		width: 64px;
+		height: 64px;
+		border-radius: 16px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	}
+
+	@media (max-width: 640px) {
+		.logo-icon {
+			width: 48px;
+			height: 48px;
+			border-radius: 12px;
+		}
+	}
+</style>

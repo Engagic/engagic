@@ -6,16 +6,16 @@
 	<div class="footer-links">
 		<a href="/about" class="about-link" aria-label="About engagic">About</a>
 		<span class="divider" aria-hidden="true">•</span>
-		<a 
-			href="https://github.com/Engagic/engagic" 
-			class="github-link" 
-			target="_blank" 
+		<a
+			href="https://github.com/Engagic/engagic"
+			class="github-link"
+			target="_blank"
 			rel="noopener"
 			aria-label="View source code on GitHub"
 		>
-			<svg 
-				class="github-icon" 
-				viewBox="0 0 24 24" 
+			<svg
+				class="github-icon"
+				viewBox="0 0 24 24"
 				xmlns="http://www.w3.org/2000/svg"
 				aria-hidden="true"
 				focusable="false"
