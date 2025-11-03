@@ -178,7 +178,7 @@ body {
 
 .ticker-content {
 	display: flex;
-	animation: scroll 60s linear infinite;
+	animation: scroll 48s linear infinite;
 	white-space: nowrap;
 }
 
@@ -229,6 +229,15 @@ body {
 }
 
 @keyframes scroll {
+	0% {
+		transform: translateX(0);
+	}
+	100% {
+		transform: translateX(-50%);
+	}
+}
+
+@keyframes scrollMobile {
 	0% {
 		transform: translateX(0);
 	}
@@ -363,6 +372,10 @@ body {
 @media (max-width: 640px) {
 	body {
 		padding-top: 2rem;
+	}
+
+	.ticker-content {
+		animation: scrollMobile 36s linear infinite;
 	}
 
 	.container {
@@ -653,6 +666,13 @@ body {
 	border: 1px solid var(--civic-border);
 	border-radius: 4px;
 	font-weight: 500;
+}
+
+.topic-tag.topic-more {
+	background: var(--civic-border);
+	color: var(--civic-gray);
+	border-color: var(--civic-border);
+	font-weight: 600;
 }
 
 .meetings-filter {
