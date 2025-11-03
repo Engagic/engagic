@@ -6,6 +6,193 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-03] Enhancement: NovusAgenda Now Prioritizes Parsable HTML Agendas
+
+**The fix.** NovusAgenda sites have multiple agenda link types. Updated adapter to prioritize parsable HTML agendas ("HTML Agenda", "Online Agenda") over summaries.
+
+**Changes:**
+- `vendors/adapters/novusagenda_adapter.py` lines 56-113
+- Score agenda links by quality:
+  - Score 3: "HTML Agenda", "Online Agenda" (parsable, structured items)
+  - Score 2: Generic "View Agenda" or "Agenda" (if not summary)
+  - Score 0: "Agenda Summary" (skip - not parsable)
+- Select highest-scoring HTML agenda link
+- Fall back to packet PDF if no good HTML agenda
+
+**Impact:**
+- Prioritizes structured item-level agendas over non-parsable summaries
+- Falls back to packet PDF when HTML agenda isn't useful
+- Better item extraction quality for NovusAgenda cities
+
+**Status:** Deployed
+
+---
+
+## [2025-11-03] Enhancement: IQM2 Adapter Enabled in Production
+
+**The change.** Enabled IQM2 adapter in production fetcher after testing showed successful item-level processing.
+
+**Changes:**
+- `pipeline/fetcher.py` line 102: Added "iqm2" to supported_vendors set
+- IQM2 now included in automated sync cycles
+- Multi-URL pattern support ensures compatibility across IQM2 implementations
+
+**Impact:**
+- IQM2 cities (Atlanta, Santa Monica, etc.) now sync automatically
+- Item-level processing for IQM2 meetings with structured agendas
+- Expands platform coverage
+
+**Status:** Deployed
+
+---
+
+## [2025-11-03] Enhancement: IQM2 Adapter Now Tries Multiple Calendar URL Patterns
+
+**The fix.** IQM2 sites use different URL structures for their calendar pages. Updated adapter to try multiple patterns until one works.
+
+**Changes:**
+- `vendors/adapters/iqm2_adapter.py` lines 32-37, 56-93
+- Try URLs in order: `/Citizen`, `/Citizen/Calendar.aspx`, `/Citizen/Default.aspx`, `/Citizens/Calendar.aspx`
+- Use first URL pattern that returns valid meeting data
+- Log which pattern worked for debugging
+- Graceful failure if none work
+
+**Impact:**
+- Better compatibility across IQM2 implementations
+- More resilient to site structure changes
+- Clear logging for troubleshooting
+
+**Status:** Deployed
+
+---
+
+## [2025-11-03] Implemented: NovusAgenda Item-Level Processing
+
+**The implementation.** Added HTML agenda parsing for NovusAgenda platform, unlocking item-level processing for 68 cities including Houston TX, Bakersfield CA, and Plano TX.
+
+**Changes:**
+1. **HTML Parser** (`vendors/adapters/html_agenda_parser.py` lines 318-414)
+   - Created `parse_novusagenda_html_agenda()` function
+   - Extracts items from MeetingView.aspx HTML pages
+   - Pattern: Searches for `CoverSheet.aspx?ItemID=` links (note capitalization: both C and S capitalized)
+   - Returns items array with item_id, title, sequence, attachments
+
+2. **Adapter Update** (`vendors/adapters/novusagenda_adapter.py` lines 56-137)
+   - Extract HTML agenda URL from JavaScript onClick handlers
+   - Fetch MeetingView.aspx pages for each meeting
+   - Parse HTML to extract items using new parser
+   - Return meetings with items array (same as Legistar/PrimeGov)
+
+3. **Enabled in Fetcher** (`pipeline/fetcher.py` line 101)
+   - Added "novusagenda" to supported_vendors set
+   - Enables item-level processing for all NovusAgenda cities
+
+**Test Results (Houston TX):**
+- 27 total meetings found
+- 12 meetings with items (44% coverage)
+- First meeting: 54 items extracted from HTML agenda
+- Items include item_id, title, sequence from CoverSheet links
+
+**Impact:**
+- Adds 68 cities to item-level processing pipeline
+- Platform coverage: 374 → 442 cities (~53% of 832 total)
+- Major cities now with structured agendas: Houston, Bakersfield, Plano, Mobile
+- Consistent item-level UX across more vendors
+
+**Technical Notes:**
+- NovusAgenda uses "CoverSheet" (capital C and S) not "Coversheet" in HTML
+- Must use case-insensitive regex to match links
+- Items extracted from MeetingView.aspx page, not agendapublic listing
+- Some meetings have packet_url but no HTML agenda (fallback to monolithic)
+
+**Status:** Deployed, ready for production sync
+
+---
+
+## [2025-11-03] Discovery: NovusAgenda Supports Item-Level Processing
+
+**The coverage opportunity.** NovusAgenda (68 cities including Houston, Bakersfield, Plano) can be transitioned to item-level processing using HTML agenda parsing.
+
+**Current State:**
+- NovusAgenda adapter only fetches PDF packet URLs (monolithic processing)
+- 68 cities using NovusAgenda vendor
+- Includes major cities: Houston TX, Bakersfield CA, Plano TX, Mobile AL
+
+**Opportunity:**
+- NovusAgenda meeting pages have HTML agendas with structured item tables
+- Can parse HTML similar to PrimeGov/Granicus pattern
+- Would add 68 cities to item-level coverage (374 → 442 cities, ~53% of platform)
+
+**Implementation Path:**
+1. Add `parse_novusagenda_html_agenda()` to `vendors/adapters/html_agenda_parser.py`
+2. Update `NovusAgendaAdapter.fetch_meetings()` to fetch HTML agenda page
+3. Extract items, attachments, and participation info from HTML structure
+4. Return items array in meeting dict (same as Legistar/PrimeGov/Granicus)
+
+**Impact:**
+- Item-level summaries for 68 additional cities
+- Better search granularity for major cities like Houston
+- Consistent UX across more vendors
+- No new infrastructure required (same batch processing pipeline)
+
+**Status:** Documented for future implementation
+
+---
+
+## [2025-11-03] Critical Bug Fix: Backwards Enqueuing Logic (agenda_url Should Never Be Enqueued)
+
+**The architectural violation.** The enqueuing logic in `store_meeting_from_sync()` was completely backwards - prioritizing `agenda_url` for processing when it should NEVER be enqueued.
+
+**The Bug:**
+- Line 457 condition: `elif agenda_url or packet_url or has_items:`
+- Line 466-474 priority: `if agenda_url: enqueue(agenda_url) elif packet_url: enqueue(packet_url) else: enqueue(items://)`
+- This meant meetings with items AND agenda_url would enqueue the agenda PDF for processing
+- Example: Charlotte meeting had 9 items extracted from HTML, but system enqueued the agenda PDF instead of `items://1917`
+
+**Why This Is Wrong:**
+- `agenda_url` is the HTML source that's ALREADY been processed during fetch
+- Items are extracted FROM the agenda_url HTML during adapter `fetch_meetings()`
+- Participation info is parsed FROM the agenda_url HTML
+- The agenda_url has already served its purpose - it should never be sent to the LLM
+- Only the item-level attachment PDFs should be processed (via `items://meeting_id`)
+
+**Correct Architecture:**
+```
+agenda_url (HTML) → Adapter extracts items + participation → Store in DB
+                                                               ↓
+                                                    Enqueue items:// for batch processing
+                                                               ↓
+                                              Process item attachment PDFs with LLM
+```
+
+**What Was Happening Instead:**
+```
+agenda_url (HTML) → Adapter extracts items + participation → Store in DB
+                                                               ↓
+                                                    Enqueue agenda_url PDF (WRONG!)
+                                                               ↓
+                                              Process already-parsed PDF, ignore item attachments
+```
+
+**Fix:**
+- Changed condition: `elif has_items or packet_url:` (removed `agenda_url`)
+- Changed priority: `if has_items: enqueue(items://meeting_id) else: enqueue(packet_url)`
+- Added clarifying comment: "agenda_url is NOT enqueued - it's already processed to extract items"
+
+**Files Modified:**
+- `database/db.py:457,465-476` - Fixed enqueuing logic to never enqueue agenda_url
+
+**Impact:**
+- Item-level-first architecture now works correctly
+- Charlotte and other cities with HTML agendas will batch process item attachments
+- agenda_url PDFs never sent to LLM (saves credits, matches architecture)
+- Monolithic packet_url fallback still works for cities without items
+
+**The Insanity:**
+This bug would have broken the entire item-level-first pipeline. Cities with perfectly good item-level data would waste credits processing the wrapper PDF instead of the substantive attachments.
+
+---
+
 ## [2025-11-03] New: Motioncount Intelligence Layer (Grounding-Enabled Analysis)
 
 **Using free grounding capacity that was going to waste.** Built complete intelligence layer that uses Gemini 2.0 Flash + Google Search grounding to detect housing law violations.
