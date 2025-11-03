@@ -144,12 +144,11 @@
 
 <div class="container">
 	<div class="main-content">
-		<a href="/" class="compact-logo" aria-label="Return to engagic homepage">
-			<img src="/icon-64.png" alt="engagic" class="logo-icon" />
-		</a>
-
-		<div class="breadcrumb">
+		<div class="top-nav">
 			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
+			<a href="/" class="compact-logo" aria-label="Return to engagic homepage">
+				<img src="/icon-64.png" alt="engagic" class="logo-icon" />
+			</a>
 		</div>
 
 	{#if selectedMeeting?.participation}
@@ -253,30 +252,20 @@
 								<span>View Packet</span>
 							</a>
 						{/if}
+						{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0 && proceduralItems.length > 0}
+							<button
+								class="toggle-procedural-btn"
+								onclick={() => showProceduralItems = !showProceduralItems}
+							>
+								{showProceduralItems ? 'Hide' : 'Show'} {proceduralItems.length} Procedural
+							</button>
+						{/if}
 					</div>
 				</div>
 			</div>
 
 			{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
 				<!-- Item-based meeting display (58% of cities) -->
-
-				<div class="items-controls">
-					<div class="items-summary">
-						{#if summarizedItems.length > 0 && proceduralItems.length > 0}
-							<span class="items-count">
-								Showing {displayedItems.length} of {selectedMeeting.items.length} items
-							</span>
-						{/if}
-					</div>
-					{#if proceduralItems.length > 0}
-						<button
-							class="toggle-procedural-btn"
-							onclick={() => showProceduralItems = !showProceduralItems}
-						>
-							{showProceduralItems ? 'Hide' : 'Show'} {proceduralItems.length} Procedural Item{proceduralItems.length === 1 ? '' : 's'}
-						</button>
-					{/if}
-				</div>
 
 				<div class="agenda-items">
 					{#each displayedItems as item}
@@ -411,11 +400,28 @@
 		position: relative;
 	}
 
+	.top-nav {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+	}
+
+	.back-link {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 500;
+		transition: all 0.2s;
+	}
+
+	.back-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
 	.compact-logo {
-		position: absolute;
-		top: 0;
-		right: 1rem;
-		z-index: 10;
 		transition: transform 0.2s ease;
 	}
 
@@ -430,49 +436,6 @@
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 
-	.breadcrumb {
-		margin: 0.5rem 0 1.5rem 0;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.back-link,
-	.agenda-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-blue);
-		text-decoration: none;
-		font-weight: 500;
-		transition: all 0.2s;
-	}
-
-	.back-link:hover,
-	.agenda-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
-	}
-
-	.agenda-link {
-		padding: 0.4rem 0.75rem;
-		border: 1.5px solid var(--civic-blue);
-		border-radius: 6px;
-		background: white;
-	}
-
-	.agenda-link:hover {
-		background: var(--civic-blue);
-		color: white;
-		text-decoration: none;
-		transform: translateY(-1px);
-		box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
-	}
-
-	.breadcrumb-separator {
-		display: none;
-	}
 
 	.agenda-url-box {
 		margin: 1.5rem 0;
@@ -645,7 +608,7 @@
 	}
 
 	.meeting-detail {
-		padding: 2.5rem;
+		padding: 2rem;
 		background: var(--civic-white);
 		border-radius: 16px;
 		border: 1px solid var(--civic-border);
@@ -704,7 +667,7 @@
 	}
 
 	.meeting-header {
-		margin-bottom: 2rem;
+		margin-bottom: 1.5rem;
 	}
 
 	.meeting-header-row {
@@ -750,6 +713,9 @@
 
 	.meeting-meta-right {
 		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
 	}
 
 	.meeting-helper {
@@ -956,27 +922,6 @@
 	}
 
 	/* Item-based meeting styles */
-	.items-controls {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 1rem;
-		padding: 0.5rem 0.75rem;
-		background: transparent;
-		border-radius: 6px;
-		border: none;
-	}
-
-	.items-summary {
-		flex: 1;
-	}
-
-	.items-count {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-gray);
-		font-weight: 500;
-	}
 
 	.toggle-procedural-btn {
 		font-family: 'IBM Plex Mono', monospace;
@@ -1555,26 +1500,9 @@
 			border-radius: 10px;
 		}
 
-		.breadcrumb {
-			margin: 0.25rem 0 1rem 0;
-			gap: 0.5rem;
-		}
-
-		.items-controls {
-			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.5rem;
-			padding: 0.4rem 0.5rem;
-		}
-
 		.toggle-procedural-btn {
-			width: 100%;
 			font-size: 0.7rem;
 			padding: 0.2rem 0.6rem;
-		}
-
-		.items-count {
-			font-size: 0.8rem;
 		}
 
 		.procedural-badge {
@@ -1592,9 +1520,12 @@
 			padding: 1.5rem;
 		}
 
-		.back-link,
-		.agenda-link {
+		.back-link {
 			font-size: 0.75rem;
+		}
+
+		.top-nav {
+			margin-bottom: 0.75rem;
 		}
 
 		.meeting-header {
@@ -1622,6 +1553,10 @@
 			flex-direction: column;
 			align-items: flex-start;
 			gap: 0.75rem;
+		}
+
+		.meeting-meta-right {
+			flex-wrap: wrap;
 		}
 
 		.document-link {
