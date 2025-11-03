@@ -87,7 +87,7 @@
 				const cityUrl = generateCityUrl(result.city_name, result.state);
 				logger.trackEvent('search_success', { query: searchQuery, city: result.city_name });
 				// Pass search results to city page to avoid redundant API call
-				goto(`/${cityUrl}`, { state: { searchResults: result } });
+				goto(`/${cityUrl}?from=search`, { state: { searchResults: result } });
 			} else if (isSearchAmbiguous(result)) {
 				logger.trackEvent('search_ambiguous', { query: searchQuery });
 			}

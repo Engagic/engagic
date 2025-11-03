@@ -24,28 +24,13 @@
 	export const snapshot = {
 		capture: () => ({
 			showPastMeetings,
-			searchResults,
-			upcomingMeetings,
-			pastMeetings,
-			loading,
-			error,
 			scrollY: typeof window !== 'undefined' ? window.scrollY : 0
 		}),
 		restore: (values: {
 			showPastMeetings: boolean;
-			searchResults: SearchResult | null;
-			upcomingMeetings: Meeting[];
-			pastMeetings: Meeting[];
-			loading: boolean;
-			error: string;
 			scrollY: number;
 		}) => {
 			showPastMeetings = values.showPastMeetings;
-			searchResults = values.searchResults;
-			upcomingMeetings = values.upcomingMeetings;
-			pastMeetings = values.pastMeetings;
-			loading = values.loading;
-			error = values.error;
 			isInitialLoad = false; // Skip animations when restoring from snapshot
 			// Restore scroll position after DOM has updated
 			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
