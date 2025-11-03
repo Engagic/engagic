@@ -200,7 +200,9 @@
 
 <div class="container">
 	<div class="main-content">
-		<a href="/" class="compact-logo">engagic</a>
+		<a href="/" class="compact-logo" aria-label="Return to engagic homepage">
+			<img src="/icon-64.png" alt="engagic" class="logo-icon" />
+		</a>
 
 		<div class="breadcrumb">
 			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
@@ -434,16 +436,19 @@
 		position: absolute;
 		top: 0;
 		right: 1rem;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.1rem;
-		font-weight: 700;
-		color: var(--civic-blue);
-		text-decoration: none;
 		z-index: 10;
+		transition: transform 0.2s ease;
 	}
 
 	.compact-logo:hover {
-		opacity: 0.8;
+		transform: scale(1.05);
+	}
+
+	.logo-icon {
+		width: 48px;
+		height: 48px;
+		border-radius: 12px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 
 	.breadcrumb {
@@ -1475,8 +1480,13 @@
 		}
 
 		.compact-logo {
-			font-size: 0.95rem;
 			right: 0.75rem;
+		}
+
+		.logo-icon {
+			width: 40px;
+			height: 40px;
+			border-radius: 10px;
 		}
 
 		.breadcrumb {
