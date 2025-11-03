@@ -27,20 +27,22 @@
 	] : []);
 
 	onMount(async () => {
-		try {
-			analytics = await getAnalytics();
-		} catch (err) {
-			console.error('Failed to load analytics:', err);
+		// Fetch analytics and ticker in parallel for faster page load
+		const [analyticsResult, tickerResult] = await Promise.allSettled([
+			getAnalytics(),
+			apiClient.getTicker()
+		]);
+
+		if (analyticsResult.status === 'fulfilled') {
+			analytics = analyticsResult.value;
+		} else {
+			console.error('Failed to load analytics:', analyticsResult.reason);
 		}
 
-		// Fetch ticker items from single backend endpoint
-		try {
-			const tickerResponse = await apiClient.getTicker();
-			if (tickerResponse.success && tickerResponse.items) {
-				tickerItems = tickerResponse.items;
-			}
-		} catch (err) {
-			console.error('Failed to load ticker items:', err);
+		if (tickerResult.status === 'fulfilled' && tickerResult.value.success && tickerResult.value.items) {
+			tickerItems = tickerResult.value.items;
+		} else if (tickerResult.status === 'rejected') {
+			console.error('Failed to load ticker items:', tickerResult.reason);
 		}
 
 		// Rotate stats every 3 seconds

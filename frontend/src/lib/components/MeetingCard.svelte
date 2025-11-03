@@ -70,10 +70,16 @@
 	<div class="meeting-card-body">
 		<div class="left-column">
 			{#if meeting.topics && meeting.topics.length > 0}
+				{@const maxTopics = typeof window !== 'undefined' && window.innerWidth <= 640 ? 3 : 5}
+				{@const displayTopics = meeting.topics.slice(0, maxTopics)}
+				{@const remainingCount = meeting.topics.length - maxTopics}
 				<div class="meeting-topics">
-					{#each meeting.topics as topic}
+					{#each displayTopics as topic}
 						<span class="topic-tag">{topic}</span>
 					{/each}
+					{#if remainingCount > 0}
+						<span class="topic-tag topic-more">+{remainingCount} more</span>
+					{/if}
 				</div>
 			{/if}
 		</div>
