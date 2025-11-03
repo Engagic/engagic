@@ -177,6 +177,31 @@ body {
 	min-height: 46px;
 }
 
+/* Navigation loading indicator */
+.navigation-loading {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: rgba(255, 255, 255, 0.9);
+	z-index: 9999;
+	animation: navigation-progress 1s ease-in-out;
+	transform-origin: left;
+}
+
+@keyframes navigation-progress {
+	0% {
+		transform: scaleX(0);
+	}
+	50% {
+		transform: scaleX(0.7);
+	}
+	100% {
+		transform: scaleX(0.95);
+	}
+}
+
 .ticker-content {
 	display: flex;
 	animation: scroll 48s linear infinite;
