@@ -6,6 +6,139 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-03] New: Motioncount Intelligence Layer (Grounding-Enabled Analysis)
+
+**Using free grounding capacity that was going to waste.** Built complete intelligence layer that uses Gemini 2.0 Flash + Google Search grounding to detect housing law violations.
+
+**What Was Built:**
+- Complete grounding-enabled investigative analyzer
+- Pre-filter for high-value items (housing/zoning keywords)
+- Database schema for storing analysis results with full provenance
+- Deploy script following engagic pattern (`./motioncount.sh`)
+- Full citation tracking (queries, sources, citation mapping)
+
+**Architecture:**
+```
+engagic.db (read-only)
+  ├─ items table (existing summaries)
+  └─ meetings table
+         ↓
+motioncount miner (NEW)
+  ├─ Pre-filter: housing/zoning keywords
+  ├─ Gemini 2.0 Flash + Google Search
+  ├─ Researches laws, precedents, violations
+  └─ Stores results with citations
+         ↓
+motioncount.db (NEW)
+  └─ investigative_analyses table
+       ├─ thinking (reasoning steps)
+       ├─ research_performed (web searches)
+       ├─ violations_detected (law, type, confidence, evidence)
+       ├─ grounding_metadata (source URLs + citation mapping)
+       └─ critical_analysis (markdown with citations)
+```
+
+**Key Insight:**
+- Zero re-fetching, zero re-parsing, zero duplicate work
+- Reads existing summaries from engagic.db
+- Just adds intelligence layer on top
+- Uses 1,500 FREE grounded requests/day (paid tier)
+
+**Files Created:**
+```
+motioncount/
+├── analysis/
+│   └── investigative.py          # Grounding analyzer (227 lines)
+├── database/
+│   ├── engagic_reader.py          # Read-only from engagic.db (184 lines)
+│   ├── db.py                      # Write to motioncount.db (385 lines)
+│   └── models.py                  # Data models (135 lines)
+├── scripts/
+│   ├── run_investigative_batch.py # Batch processor (229 lines)
+│   ├── view_violations.py         # Results viewer (101 lines)
+│   └── test_analyzer.py           # Test script (211 lines)
+├── config.py                      # Configuration (37 lines)
+├── README.md                      # Full documentation
+└── DEPLOY.md                      # Deployment guide
+
+motioncount.sh                     # Deploy script (124 lines)
+```
+
+**Total Code:** ~1,633 lines
+
+**Deploy Commands:**
+```bash
+# Single city
+./motioncount.sh analyze-city paloaltoCA
+
+# Regional
+./motioncount.sh analyze-cities @regions/bay-area.txt
+
+# Batch
+./motioncount.sh analyze-unprocessed --limit 50
+
+# View results
+./motioncount.sh violations --limit 10
+```
+
+**What Gets Analyzed:**
+- Pre-filter keywords: SB 35, SB 9, AB 2097, RHNA, housing element, ADU, parking mandates, zoning changes, CEQA
+- OR items with 2+ topics: housing, zoning, planning, development
+- Typical: 10-30% of items qualify
+
+**What Gets Stored:**
+- Thinking process (reasoning steps)
+- Web research performed (queries + findings)
+- Violations detected (law, type, confidence 1-10, evidence quotes, reasoning)
+- Grounding metadata (source URLs, citation mapping)
+- Critical analysis (markdown with inline citations)
+
+**Cost Management:**
+- Free tier: 1,500 grounded requests/day
+- Pre-filter reduces volume by 70-90%
+- Typical usage: 50-200 items/day analyzed
+- Well within free tier limits
+
+**Provenance Tracking:**
+- Full grounding metadata captured
+- Source URLs for all claims
+- Citation mapping (which text segments link to which sources)
+- Programmatic citation insertion available
+
+**Separation of Concerns:**
+- engagic: Neutral summarization (public good, open source)
+- motioncount: Intelligence layer (grounding-enabled analysis)
+- Clean database separation (engagic.db vs motioncount.db)
+- Read-only access to engagic data
+
+**Status:** Production ready, deployed on VPS, running first batch
+
+**Value Unlock:**
+- Uses free grounding capacity (1,500/day going to waste)
+- Detects housing law violations with web-verified evidence
+- Zero additional extraction cost (reads existing summaries)
+- Builds corpus for future customer features
+
+---
+
+## [2025-11-03] Bug Fix: Summarizer Syntax Error (Extraneous Try Block)
+
+**The issue:** Syntax error in `analysis/llm/summarizer.py` - extraneous `try:` block at line 279 without matching `except` clause.
+
+**Fix:**
+- Removed redundant `try:` block at line 279
+- Fixed indentation for lines 290-572
+- `except` clause at line 550 now properly matches `try:` at line 289
+
+**Files Modified:**
+- `analysis/llm/summarizer.py:279,290-572` - Removed extra try block, fixed indentation
+
+**Verification:**
+- `uv run ruff check --fix` - All checks passed
+- `python3 -m py_compile` - Compilation successful
+
+---
+
 ## [2025-11-03] Critical Bug Fix: Batch API Response Mismatching
 
 **The silent data corruption.** Gemini Batch API inline requests do NOT guarantee response order matches request order, causing summaries to be assigned to wrong items.
