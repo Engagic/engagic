@@ -3,7 +3,7 @@
 **Last Updated:** 2025-11-02
 **Framework:** SvelteKit 2.0 + Svelte 5
 **Total Lines:** ~3,932 lines (2,950 Svelte + 982 TypeScript)
-**Deployment:** Cloudflare Pages (Static Adapter)
+**Deployment:** Cloudflare Workers
 
 ---
 
@@ -50,9 +50,9 @@ The frontend is a modern, server-side rendered (SSR) web application built with 
 - **Vite 6** - Build tool and dev server
 
 ### Deployment
-- **Cloudflare Pages** - Static site hosting + global CDN
+- **Cloudflare Workers** - Edge computing platform with global CDN
 - **@sveltejs/adapter-cloudflare** - Cloudflare-optimized build adapter
-- **Client-side rendering** - No Node server, pure static HTML/JS
+- **Client-side rendering** - No Node server, runs on Cloudflare edge
 
 ### Dependencies (Minimal)
 ```json
@@ -149,9 +149,9 @@ User Navigation → Load Function Runs → Data Fetched → Page Renders
 ```
 
 **Why client-side only?**
-- Deployed to Cloudflare Pages (static hosting, no Node server)
+- Deployed to Cloudflare Workers (edge platform, optimized for static sites)
 - API is separate service (api.engagic.org)
-- Simplified deployment (just static files)
+- Simplified deployment (static files on Cloudflare edge)
 - Better for our use case (dynamic data, no SEO benefit from SSR)
 
 ### 2. Data Loading Pattern

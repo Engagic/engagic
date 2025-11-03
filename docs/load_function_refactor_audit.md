@@ -208,7 +208,7 @@ const pastMeetings: Meeting[] = [];
 - Server load = SEO benefits, faster perceived load
 - Client load = simpler deployment (no Node server needed)
 
-**Recommendation:** Since you're on Cloudflare Pages (static adapter), client-side is correct. Document this decision.
+**Recommendation:** Since you're on Cloudflare Workers (static adapter), client-side is correct. Document this decision.
 
 ### 13. Preloading Strategy
 **Opportunity:** SvelteKit can preload data on link hover

@@ -193,8 +193,8 @@
 	<meta name="description" content="Find your local government meetings and agendas" />
 </svelte:head>
 
-<div class="news-ticker">
-	{#if tickerItems.length > 0}
+{#if tickerItems.length > 0}
+	<div class="news-ticker">
 		<div class="ticker-content">
 			{#each [...tickerItems, ...tickerItems] as item}
 				<a href={item.url} class="ticker-item">
@@ -206,8 +206,8 @@
 				</a>
 			{/each}
 		</div>
-	{/if}
-</div>
+	</div>
+{/if}
 
 <div class="container">
 	<div class="main-content">
