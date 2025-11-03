@@ -27,6 +27,11 @@
 	box-sizing: border-box;
 }
 
+html {
+	overflow-x: hidden;
+	width: 100%;
+}
+
 body {
 	font-family: Georgia, 'Times New Roman', Times, serif;
 	background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
@@ -39,6 +44,8 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	padding-top: 3rem;
+	overflow-x: hidden;
+	width: 100%;
 }
 
 /* Accessibility: Focus indicators */
@@ -156,7 +163,7 @@ body {
 }
 
 .news-ticker {
-	width: 100vw;
+	width: 100%;
 	position: fixed;
 	top: 0;
 	left: 0;
@@ -354,8 +361,57 @@ body {
 }
 
 @media (max-width: 640px) {
+	body {
+		padding-top: 2rem;
+	}
+
+	.container {
+		width: 100%;
+		max-width: 100%;
+		padding: 2rem 1rem;
+	}
+
+	.header {
+		margin-bottom: 1.5rem;
+	}
+
+	.logo {
+		font-size: 1.8rem;
+	}
+
+	.tagline {
+		font-size: 0.85rem;
+	}
+
+	.hero-stat {
+		gap: 0.4rem;
+	}
+
+	.stat-value {
+		font-size: 1.2rem;
+	}
+
+	.stat-label {
+		font-size: 0.8rem;
+	}
+
+	.search-input {
+		padding: 1rem;
+		font-size: 1rem;
+	}
+
+	.search-button {
+		padding: 0.85rem;
+		font-size: 0.95rem;
+	}
+
 	.random-buttons {
 		flex-direction: column;
+	}
+
+	.random-button {
+		padding: 0.85rem;
+		font-size: 0.95rem;
 	}
 }
 
