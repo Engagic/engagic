@@ -4,6 +4,7 @@
 	import { marked } from 'marked';
 	import { getMeeting, searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
 	import { parseCityUrl, generateMeetingSlug, extractMeetingIdFromSlug } from '$lib/utils/utils';
+	import { extractTime } from '$lib/utils/date-utils';
 	import Footer from '$lib/components/Footer.svelte';
 
 	let city_banana = $page.params.city_url;
@@ -83,27 +84,6 @@
 			const generatedSlug = generateMeetingSlug(meeting);
 			return generatedSlug === slug;
 		}) || null;
-	}
-
-	function formatMeetingDate(dateString: string): string {
-		// Handle date strings with time like "2025-09-09 9:30 AM"
-		// Extract just the date part
-		const datePart = dateString.split(' ')[0];
-		
-		// Parse the date components manually to avoid timezone issues
-		const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
-		
-		if (isNaN(year) || isNaN(month) || isNaN(day)) {
-			// Fallback for unparseable dates
-			return dateString;
-		}
-		
-		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-		const monthName = months[month - 1]; // month is 1-based in the date string
-		const suffix = day === 1 || day === 21 || day === 31 ? 'st' : 
-					  day === 2 || day === 22 ? 'nd' : 
-					  day === 3 || day === 23 ? 'rd' : 'th';
-		return `${monthName} ${day}${suffix}, ${year}`;
 	}
 
 	function cleanSummary(rawSummary: string): string {
@@ -299,8 +279,29 @@
 				<div class="meeting-header-top">
 					<div class="meeting-header-text">
 						<h1 class="meeting-title">{selectedMeeting.title}</h1>
-						<div class="meeting-date">
-							{formatMeetingDate(selectedMeeting.date)}
+						<div class="meeting-meta">
+							{#if selectedMeeting.date}
+								{@const date = new Date(selectedMeeting.date)}
+								{@const isValidDate = !isNaN(date.getTime()) && date.getTime() !== 0}
+								{#if isValidDate}
+									{@const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' })}
+									{@const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+									{@const timeStr = extractTime(selectedMeeting.date)}
+									<div class="meeting-date">
+										{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
+									</div>
+								{:else}
+									<div class="meeting-date">Date TBD</div>
+								{/if}
+							{:else}
+								<div class="meeting-date">Date TBD</div>
+							{/if}
+							{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
+								<div class="meeting-helper">
+									<span class="helper-dot"></span>
+									<span class="helper-text-inline">Blue border = AI summary available</span>
+								</div>
+							{/if}
 						</div>
 					</div>
 					{#if selectedMeeting.agenda_url}
@@ -751,6 +752,13 @@
 		-moz-osx-font-smoothing: grayscale;
 	}
 
+	.meeting-meta {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
 	.meeting-date {
 		font-family: 'IBM Plex Mono', monospace;
 		color: var(--civic-blue);
@@ -758,6 +766,31 @@
 		font-weight: 600;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+	}
+
+	.meeting-helper {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.75rem;
+		background: #eff6ff;
+		border: 1px solid #93c5fd;
+		border-radius: 6px;
+	}
+
+	.helper-dot {
+		width: 8px;
+		height: 8px;
+		background: #3b82f6;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.helper-text-inline {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.75rem;
+		color: #1e40af;
+		font-weight: 500;
 	}
 
 	.document-link {
@@ -1489,9 +1522,25 @@
 			overflow-wrap: break-word;
 		}
 
+		.meeting-meta {
+			gap: 0.5rem;
+		}
+
 		.meeting-date {
 			font-size: 0.85rem;
-			margin-top: 0.25rem;
+		}
+
+		.meeting-helper {
+			padding: 0.3rem 0.6rem;
+		}
+
+		.helper-dot {
+			width: 6px;
+			height: 6px;
+		}
+
+		.helper-text-inline {
+			font-size: 0.7rem;
 		}
 
 		.meeting-summary {
