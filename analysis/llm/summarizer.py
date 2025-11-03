@@ -274,11 +274,14 @@ class GeminiSummarizer:
         for attempt in range(max_retries):
             try:
                 # Prepare inline requests
+                # CRITICAL: Use metadata keys to match responses to requests
+                # Gemini Batch API does NOT guarantee response order matches request order!
                 inline_requests = []
-                request_map = {}
+                request_map = {}  # Maps item_id (from metadata) -> original request
 
                 for i, req in enumerate(chunk_requests):
                     item_title = req["title"]
+                    item_id = req["item_id"]
                     text = req["text"]
 
                     # Use actual page count if available, otherwise estimate
@@ -312,10 +315,11 @@ class GeminiSummarizer:
                         {
                             "contents": [{"parts": [{"text": prompt}], "role": "user"}],
                             "config": config,
+                            "metadata": {"item_id": item_id},  # Key for matching response to request
                         }
                     )
 
-                    request_map[i] = req
+                    request_map[item_id] = req  # Map by item_id instead of index
 
                 # Submit batch job
                 logger.info(
@@ -378,16 +382,46 @@ class GeminiSummarizer:
                 results = []
 
                 if batch_job.dest and batch_job.dest.inlined_responses:
+                    # Debug: Check if we got metadata back
+                    logger.info(
+                        f"[Summarizer] Processing {len(batch_job.dest.inlined_responses)} responses"
+                    )
+
                     for i, inline_response in enumerate(
                         batch_job.dest.inlined_responses
                     ):
-                        if i not in request_map:
-                            logger.warning(
-                                f"[Summarizer] No mapping found for response {i}"
+                        # Extract item_id from response metadata
+                        # CRITICAL: Match by metadata key, NOT by index position!
+                        item_id = None
+
+                        # Try to extract metadata (SDK might not support this for inline requests)
+                        if hasattr(inline_response, 'metadata') and inline_response.metadata:
+                            item_id = inline_response.metadata.get("item_id")
+                            logger.debug(f"[Summarizer] Response {i} has metadata item_id: {item_id}")
+                        else:
+                            # FALLBACK: If metadata not supported, we have a problem
+                            # Log this critical issue
+                            logger.error(
+                                f"[Summarizer] Response {i} has no metadata! "
+                                "Inline requests may not support metadata in Python SDK. "
+                                "Need to switch to JSONL file method for guaranteed ordering."
+                            )
+                            # For now, skip this response to avoid data corruption
+                            continue
+
+                        if not item_id:
+                            logger.error(
+                                f"[Summarizer] Response {i} missing metadata item_id - cannot match to request!"
                             )
                             continue
 
-                        original_req = request_map[i]
+                        if item_id not in request_map:
+                            logger.warning(
+                                f"[Summarizer] No mapping found for item_id {item_id} in request_map keys: {list(request_map.keys())}"
+                            )
+                            continue
+
+                        original_req = request_map[item_id]
 
                         if inline_response.response:
                             response_text = None  # Initialize for error logging
