@@ -1,19 +1,18 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
-	import { getMeeting, searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
-	import { parseCityUrl, generateMeetingSlug, extractMeetingIdFromSlug } from '$lib/utils/utils';
+	import type { SearchResult, Meeting } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
 	import Footer from '$lib/components/Footer.svelte';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
 
 	let city_banana = $page.params.city_url;
-	let meeting_slug = $page.params.meeting_slug;
-	let searchResults: SearchResult | null = $state(null);
-	let selectedMeeting: Meeting | null = $state(null);
-	let loading = $state(true);
-	let error = $state('');
+	let searchResults: SearchResult | null = $state(data.searchResults || null);
+	let selectedMeeting: Meeting | null = $state(data.selectedMeeting || null);
+	let error = $state(data.error || '');
 	let showProceduralItems = $state(false);
 	let expandedAttachments = new SvelteSet<string>();
 	let expandedTitles = new SvelteSet<string>();
@@ -34,72 +33,6 @@
 	);
 
 
-	async function loadMeetingData() {
-		loading = true;
-		error = '';
-
-		try {
-			// Try to extract meeting ID from slug first (new optimized method)
-			const meetingId = extractMeetingIdFromSlug(meeting_slug);
-
-			if (meetingId) {
-				// New optimized path: fetch single meeting by ID
-				const result = await getMeeting(meetingId);
-
-				if (result.success && result.meeting) {
-					selectedMeeting = result.meeting;
-					searchResults = {
-						success: true,
-						city_name: result.city_name,
-						state: result.state,
-						banana: result.banana,
-						meetings: [result.meeting],
-						cached: true,
-						query: city_banana,
-						type: 'city'
-					};
-					return;
-				}
-			}
-
-			// Fallback to old method (for backwards compatibility with old URLs)
-			const parsed = parseCityUrl(city_banana);
-			if (!parsed) {
-				throw new Error('Invalid city URL format');
-			}
-
-			// Search by city name and state to get meetings
-			const searchQuery = `${parsed.cityName}, ${parsed.state}`;
-			const result = await searchMeetings(searchQuery);
-			searchResults = result;
-
-			if (result.success && result.meetings) {
-				// Find the meeting that matches our slug
-				const meeting = findMeetingBySlug(result.meetings, meeting_slug);
-				if (meeting) {
-					selectedMeeting = meeting;
-				} else {
-					error = 'Meeting not found';
-				}
-			} else {
-				error = 'message' in result ? result.message : 'Failed to load city meetings';
-			}
-		} catch (err) {
-			console.error('Failed to load meeting:', err);
-			error = 'Unable to load meeting data. The agenda packet may not be posted yet, or there may be a temporary issue accessing city records. Please try again later.';
-		} finally {
-			loading = false;
-		}
-	}
-
-
-	function findMeetingBySlug(meetings: Meeting[], slug: string): Meeting | null {
-		// Find meeting where generated slug matches the URL slug
-		return meetings.find(meeting => {
-			const generatedSlug = generateMeetingSlug(meeting);
-			return generatedSlug === slug;
-		}) || null;
-	}
 
 	function cleanSummary(rawSummary: string): string {
 		if (!rawSummary) return '';
@@ -201,9 +134,6 @@
 		return { main: title, remainder: null, isTruncated: false };
 	}
 
-	onMount(async () => {
-		await loadMeetingData();
-	});
 
 </script>
 
@@ -265,11 +195,7 @@
 		</div>
 	{/if}
 
-	{#if loading}
-		<div class="loading">
-			Loading meeting...
-		</div>
-	{:else if error}
+	{#if error}
 		<div class="error-message">
 			{error}
 		</div>
@@ -844,32 +770,32 @@
 	.document-link {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.85rem 1.5rem;
-		background: linear-gradient(135deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
+		gap: 0.35rem;
+		padding: 0.5rem 0.85rem;
+		background: var(--civic-blue);
 		color: white;
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
-		font-weight: 700;
-		font-size: 0.9rem;
-		border-radius: 10px;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+		font-weight: 600;
+		font-size: 0.8rem;
+		border-radius: 6px;
+		transition: all 0.2s ease;
+		box-shadow: 0 1px 3px rgba(79, 70, 229, 0.2);
 		flex-shrink: 0;
 		align-self: flex-start;
 	}
 
 	.document-link:hover {
-		transform: translateY(-3px);
-		box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4);
+		background: var(--civic-accent);
+		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
 	}
 
 	.document-link:active {
-		transform: translateY(-1px);
+		transform: scale(0.98);
 	}
 
 	.document-icon {
-		font-size: 1rem;
+		font-size: 0.85rem;
 	}
 
 	.meeting-divider {
@@ -1672,8 +1598,8 @@
 
 		.document-link {
 			width: auto;
-			padding: 0.5rem 0.85rem;
-			font-size: 0.8rem;
+			padding: 0.4rem 0.7rem;
+			font-size: 0.75rem;
 			align-self: flex-end;
 		}
 
