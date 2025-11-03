@@ -27,7 +27,14 @@ class IQM2Adapter(BaseAdapter):
         """
         super().__init__(city_slug, vendor="iqm2")
         self.base_url = f"https://{self.slug}.iqm2.com"
-        self.calendar_url = f"{self.base_url}/Citizens/Calendar.aspx"
+
+        # Try multiple calendar URL patterns (IQM2 sites vary)
+        self.calendar_url_patterns = [
+            f"{self.base_url}/Citizen",
+            f"{self.base_url}/Citizen/Calendar.aspx",
+            f"{self.base_url}/Citizen/Default.aspx",
+            f"{self.base_url}/Citizens/Calendar.aspx",  # Legacy pattern
+        ]
 
         logger.info(f"[iqm2:{self.slug}] Initialized IQM2 adapter")
 
@@ -46,20 +53,44 @@ class IQM2Adapter(BaseAdapter):
         Yields:
             Meeting dictionaries with meeting_id, title, start, items
         """
-        logger.info(f"[iqm2:{self.slug}] Fetching calendar from {self.calendar_url}")
+        # Try each calendar URL pattern until one works
+        soup = None
+        working_url = None
+        meeting_rows = []
 
-        soup = self._fetch_html(self.calendar_url)
+        for calendar_url in self.calendar_url_patterns:
+            try:
+                logger.info(f"[iqm2:{self.slug}] Trying calendar URL: {calendar_url}")
+                soup = self._fetch_html(calendar_url)
+
+                # Check if we got a valid calendar page with meetings
+                meeting_rows = soup.find_all("div", class_="MeetingRow")
+                if meeting_rows:
+                    working_url = calendar_url
+                    logger.info(
+                        f"[iqm2:{self.slug}] Success with {calendar_url} - found {len(meeting_rows)} total meetings"
+                    )
+                    break
+                else:
+                    logger.debug(
+                        f"[iqm2:{self.slug}] No meetings found at {calendar_url}, trying next pattern"
+                    )
+            except Exception as e:
+                logger.debug(
+                    f"[iqm2:{self.slug}] Failed to fetch {calendar_url}: {e}"
+                )
+                continue
+
+        if not soup or not working_url or not meeting_rows:
+            logger.error(
+                f"[iqm2:{self.slug}] Could not find working calendar URL. Tried: {self.calendar_url_patterns}"
+            )
+            return
 
         # Date range filter
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
-
-        # Find all meeting rows
-        meeting_rows = soup.find_all("div", class_="MeetingRow")
-        logger.info(
-            f"[iqm2:{self.slug}] Found {len(meeting_rows)} total meetings on calendar"
-        )
 
         meetings_yielded = 0
 

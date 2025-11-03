@@ -98,10 +98,11 @@ class Fetcher:
         supported_vendors = {
             "primegov",
             "legistar",
+            "novusagenda",  # Item-level processing enabled
+            "iqm2",  # Item-level processing enabled
             # Temporarily disabled vendors
             # "granicus",  # VPS timeout issues
             # "civicclerk",
-            # "novusagenda",
             # "civicplus",
         }
 

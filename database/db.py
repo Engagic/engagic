@@ -454,7 +454,7 @@ class UnifiedDatabase:
                 logger.debug(
                     f"Skipping enqueue for {stored_meeting.title} - {skip_reason}"
                 )
-            elif agenda_url or packet_url or has_items:
+            elif has_items or packet_url:
                 # Calculate priority based on meeting date recency
                 if meeting_date:
                     days_old = (datetime.now() - meeting_date).days
@@ -462,16 +462,14 @@ class UnifiedDatabase:
                     days_old = 999
                 priority = max(0, 100 - days_old)
 
-                # Priority order: agenda_url > packet_url > items://
-                if agenda_url:
-                    queue_url = agenda_url
-                    processing_type = "item-based"
-                elif packet_url:
-                    queue_url = packet_url
-                    processing_type = "PDF"
-                else:
+                # Priority order: items:// (item-level) > packet_url (monolithic)
+                # Note: agenda_url is NOT enqueued - it's already processed to extract items
+                if has_items:
                     queue_url = f"items://{stored_meeting.id}"
-                    processing_type = "item-based-no-url"
+                    processing_type = "item-level-batch"
+                else:
+                    queue_url = packet_url
+                    processing_type = "monolithic-packet"
 
                 self.enqueue_for_processing(
                     source_url=queue_url,
