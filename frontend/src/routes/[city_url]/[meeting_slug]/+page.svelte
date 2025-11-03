@@ -14,10 +14,24 @@
 	let selectedMeeting: Meeting | null = $state(null);
 	let loading = $state(true);
 	let error = $state('');
+	let showProceduralItems = $state(false);
 	let expandedAttachments = new SvelteSet<string>();
 	let expandedTitles = new SvelteSet<string>();
 	let expandedItems = new SvelteSet<string>();
 	let expandedThinking = new SvelteSet<string>();
+
+	// Filter items by whether they have summaries
+	const summarizedItems = $derived(
+		selectedMeeting?.items?.filter(item => item.summary) || []
+	);
+	const proceduralItems = $derived(
+		selectedMeeting?.items?.filter(item => !item.summary) || []
+	);
+	const displayedItems = $derived(
+		showProceduralItems
+			? selectedMeeting?.items || []
+			: summarizedItems
+	);
 
 
 	async function loadMeetingData() {
@@ -317,8 +331,26 @@
 			{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
 				<!-- Item-based meeting display (58% of cities) -->
 
+				<div class="items-controls">
+					<div class="items-summary">
+						{#if summarizedItems.length > 0 && proceduralItems.length > 0}
+							<span class="items-count">
+								Showing {displayedItems.length} of {selectedMeeting.items.length} items
+							</span>
+						{/if}
+					</div>
+					{#if proceduralItems.length > 0}
+						<button
+							class="toggle-procedural-btn"
+							onclick={() => showProceduralItems = !showProceduralItems}
+						>
+							{showProceduralItems ? 'Hide' : 'Show'} {proceduralItems.length} Procedural Item{proceduralItems.length === 1 ? '' : 's'}
+						</button>
+					{/if}
+				</div>
+
 				<div class="agenda-items">
-					{#each selectedMeeting.items as item}
+					{#each displayedItems as item}
 						{@const titleParts = truncateTitle(item.title, item.id)}
 						{@const isExpanded = expandedItems.has(item.id)}
 						{@const hasSummary = !!item.summary}
@@ -336,6 +368,9 @@
 													{titleParts.remainder}
 												{/if}
 											</h3>
+											{#if !hasSummary}
+												<span class="procedural-badge">Unprocessed</span>
+											{/if}
 										</div>
 										<div class="item-indicators">
 											{#if item.topics && item.topics.length > 0}
@@ -349,6 +384,21 @@
 												</div>
 											{/if}
 										</div>
+										{#if !isExpanded && hasSummary}
+											{@const summaryParts = parseSummaryForThinking(item.summary)}
+											{@const cleanText = summaryParts.summary
+												.replace(/^#+\s*Summary\s*$/mi, '')
+												.replace(/^Summary:?\s*/mi, '')
+												.replace(/\*\*Summary\*\*:?\s*/gi, '')
+												.replace(/[#*\[\]]/g, '')
+												.trim()}
+											{@const sentences = cleanText.split(/\.\s+(?=[A-Z])/)}
+											{@const secondSentence = sentences.length > 1 ? sentences[1] : sentences[0]}
+											{@const preview = secondSentence.substring(0, 150)}
+											<div class="item-summary-preview">
+												{preview}{preview.length >= 150 ? '...' : ''}
+											</div>
+										{/if}
 									</div>
 									<div class="item-header-right">
 										{#if item.attachments && item.attachments.length > 0}
@@ -970,6 +1020,47 @@
 	}
 
 	/* Item-based meeting styles */
+	.items-controls {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 1.5rem;
+		padding: 0.75rem 1rem;
+		background: #f8fafc;
+		border-radius: 8px;
+		border: 1px solid #e2e8f0;
+	}
+
+	.items-summary {
+		flex: 1;
+	}
+
+	.items-count {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--civic-gray);
+		font-weight: 500;
+	}
+
+	.toggle-procedural-btn {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--civic-blue);
+		background: white;
+		border: 1.5px solid var(--civic-border);
+		border-radius: 6px;
+		padding: 0.5rem 1rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.toggle-procedural-btn:hover {
+		background: #eff6ff;
+		border-color: var(--civic-blue);
+		transform: translateY(-1px);
+	}
+
 	.agenda-items-header {
 		margin-bottom: 2rem;
 	}
@@ -1023,8 +1114,18 @@
 		border-left-color: #93c5fd;
 	}
 
+	.agenda-item[data-has-summary="false"] {
+		border-left-color: #e2e8f0;
+		background: #f8fafc;
+		opacity: 0.75;
+	}
+
 	.agenda-item[data-expanded="true"] {
 		border-left-color: var(--civic-blue);
+	}
+
+	.agenda-item[data-has-summary="false"][data-expanded="true"] {
+		opacity: 1;
 	}
 
 	.agenda-item:hover {
@@ -1054,6 +1155,35 @@
 		align-items: baseline;
 		gap: 0.5rem;
 		margin-bottom: 0.35rem;
+		flex-wrap: wrap;
+	}
+
+	.procedural-badge {
+		display: inline-block;
+		padding: 0.15rem 0.5rem;
+		background: #fef3c7;
+		color: #92400e;
+		border: 1px solid #fbbf24;
+		border-radius: 10px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		font-family: 'IBM Plex Mono', monospace;
+		text-transform: uppercase;
+		letter-spacing: 0.3px;
+		margin-left: 0.5rem;
+	}
+
+	.item-summary-preview {
+		margin-top: 0.5rem;
+		padding: 0.75rem;
+		background: #f8fafc;
+		border-left: 2px solid #cbd5e1;
+		border-radius: 4px;
+		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-size: 0.9rem;
+		line-height: 1.6;
+		color: #475569;
+		font-style: italic;
 	}
 
 	.item-number {
@@ -1492,6 +1622,34 @@
 		.breadcrumb {
 			margin: 0.25rem 0 1rem 0;
 			gap: 0.5rem;
+		}
+
+		.items-controls {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.75rem;
+			padding: 0.65rem 0.85rem;
+		}
+
+		.toggle-procedural-btn {
+			width: 100%;
+			font-size: 0.8rem;
+			padding: 0.45rem 0.85rem;
+		}
+
+		.items-count {
+			font-size: 0.8rem;
+		}
+
+		.procedural-badge {
+			font-size: 0.6rem;
+			padding: 0.12rem 0.4rem;
+		}
+
+		.item-summary-preview {
+			font-size: 0.85rem;
+			padding: 0.6rem;
+			margin-top: 0.4rem;
 		}
 
 		.meeting-detail {
