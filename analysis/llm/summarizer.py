@@ -259,7 +259,7 @@ class GeminiSummarizer:
     def _process_batch_chunk(
         self, chunk_requests: List[Dict[str, Any]], chunk_num: int
     ) -> List[Dict[str, Any]]:
-        """Process a single chunk of batch requests with retry logic
+        """Process a single chunk of batch requests with retry logic using JSONL file method
 
         Args:
             chunk_requests: List of item requests for this chunk
@@ -268,69 +268,93 @@ class GeminiSummarizer:
         Returns:
             List of results for this chunk
         """
+        import json
+        import tempfile
+        import os
+
         max_retries = 3
         retry_delay = 60  # Start with 60s delay
 
         for attempt in range(max_retries):
             try:
-                # Prepare inline requests
-                # CRITICAL: Use metadata keys to match responses to requests
-                # Gemini Batch API does NOT guarantee response order matches request order!
-                inline_requests = []
-                request_map = {}  # Maps item_id (from metadata) -> original request
+                # JSONL file method with explicit key-based matching
+                # This is the ONLY way to guarantee request/response matching
+                request_map = {}  # Maps key (item_id) -> original request
 
-                for i, req in enumerate(chunk_requests):
-                    item_title = req["title"]
-                    item_id = req["item_id"]
-                    text = req["text"]
+                # Create temp JSONL file
+                temp_file = tempfile.NamedTemporaryFile(
+                    mode='w', suffix='.jsonl', delete=False
+                )
+                temp_path = temp_file.name
 
-                    # Use actual page count if available, otherwise estimate
-                    page_count = req.get("page_count")
-                    if page_count is None:
-                        page_count = self._estimate_page_count(text)
+                try:
+                    for i, req in enumerate(chunk_requests):
+                        item_title = req["title"]
+                        item_id = req["item_id"]
+                        text = req["text"]
 
-                    # Adaptive prompt selection based on size
-                    prompt_type = "large" if page_count >= 100 else "standard"
+                        # Use actual page count if available, otherwise estimate
+                        page_count = req.get("page_count")
+                        if page_count is None:
+                            page_count = self._estimate_page_count(text)
 
-                    # Build prompt and config
-                    prompt = self._get_prompt(
-                        "item", prompt_type, title=item_title, text=text
-                    )
-                    response_schema = self.prompts["item"][prompt_type].get(
-                        "response_schema"
-                    )
-                    config = {
-                        "temperature": 0.3,
-                        "max_output_tokens": 8192,  # Match single-item processing (was 2048, caused truncation)
-                        "response_mime_type": "application/json",
-                        "response_schema": response_schema,
-                    }
+                        # Adaptive prompt selection based on size
+                        prompt_type = "large" if page_count >= 100 else "standard"
 
-                    # Log input details for debugging
-                    logger.info(
-                        f"[Summarizer] Request {i}: '{item_title[:80]}...', {len(text)} chars, {page_count} pages, {prompt_type} prompt"
-                    )
-
-                    inline_requests.append(
-                        {
-                            "contents": [{"parts": [{"text": prompt}], "role": "user"}],
-                            "config": config,
-                            "metadata": {"item_id": item_id},  # Key for matching response to request
+                        # Build prompt and config
+                        prompt = self._get_prompt(
+                            "item", prompt_type, title=item_title, text=text
+                        )
+                        response_schema = self.prompts["item"][prompt_type].get(
+                            "response_schema"
+                        )
+                        generation_config = {
+                            "temperature": 0.3,
+                            "max_output_tokens": 8192,
+                            "response_mime_type": "application/json",
+                            "response_schema": response_schema,
                         }
+
+                        # Log input details for debugging
+                        logger.info(
+                            f"[Summarizer] Request {i}: '{item_title[:80]}...', {len(text)} chars, {page_count} pages, {prompt_type} prompt"
+                        )
+
+                        # Write JSONL line with key for matching
+                        jsonl_line = {
+                            "key": item_id,  # CRITICAL: This key matches response to request
+                            "request": {
+                                "contents": [{"parts": [{"text": prompt}], "role": "user"}],
+                                "generation_config": generation_config,
+                            }
+                        }
+                        temp_file.write(json.dumps(jsonl_line) + '\n')
+                        request_map[item_id] = req
+
+                    temp_file.close()
+
+                    # Upload JSONL file
+                    logger.info(
+                        f"[Summarizer] Uploading JSONL file with {len(chunk_requests)} items (attempt {attempt + 1}/{max_retries})"
                     )
 
-                    request_map[item_id] = req  # Map by item_id instead of index
+                    uploaded_file = self.client.files.upload(
+                        file=temp_path,
+                        config={"display_name": f"batch-chunk-{chunk_num}-{time.time()}"}
+                    )
 
-                # Submit batch job
-                logger.info(
-                    f"[Summarizer] Submitting chunk {chunk_num} with {len(inline_requests)} items (attempt {attempt + 1}/{max_retries})"
-                )
+                    logger.info(f"[Summarizer] Uploaded file: {uploaded_file.name}")
 
-                batch_job = self.client.batches.create(
-                    model=self.flash_model_name,
-                    src=inline_requests,
-                    config={"display_name": f"chunk-{chunk_num}-{time.time()}"},
-                )
+                    # Submit batch job with uploaded file
+                    logger.info(
+                        f"[Summarizer] Submitting chunk {chunk_num} batch job"
+                    )
+
+                    batch_job = self.client.batches.create(
+                        model=self.flash_model_name,
+                        src=uploaded_file.name,
+                        config={"display_name": f"chunk-{chunk_num}-{time.time()}"},
+                    )
 
                 batch_name = batch_job.name
                 if not batch_name:
@@ -378,142 +402,144 @@ class GeminiSummarizer:
                     state_name = batch_job.state.name if batch_job.state else "unknown"
                     raise RuntimeError(f"Batch failed: {state_name}")
 
-                # Process results
+                # Process results from JSONL response file
                 results = []
 
-                if batch_job.dest and batch_job.dest.inlined_responses:
-                    # Debug: Check if we got metadata back
-                    logger.info(
-                        f"[Summarizer] Processing {len(batch_job.dest.inlined_responses)} responses"
-                    )
+                if batch_job.dest and batch_job.dest.file_name:
+                    # Download response JSONL file
+                    response_file_name = batch_job.dest.file_name
+                    logger.info(f"[Summarizer] Downloading response file: {response_file_name}")
 
-                    for i, inline_response in enumerate(
-                        batch_job.dest.inlined_responses
-                    ):
-                        # Extract item_id from response metadata
-                        # CRITICAL: Match by metadata key, NOT by index position!
-                        item_id = None
+                    response_content = self.client.files.download(file=response_file_name)
+                    response_text = response_content.decode('utf-8')
 
-                        # Try to extract metadata (SDK might not support this for inline requests)
-                        if hasattr(inline_response, 'metadata') and inline_response.metadata:
-                            item_id = inline_response.metadata.get("item_id")
-                            logger.debug(f"[Summarizer] Response {i} has metadata item_id: {item_id}")
-                        else:
-                            # FALLBACK: If metadata not supported, we have a problem
-                            # Log this critical issue
-                            logger.error(
-                                f"[Summarizer] Response {i} has no metadata! "
-                                "Inline requests may not support metadata in Python SDK. "
-                                "Need to switch to JSONL file method for guaranteed ordering."
-                            )
-                            # For now, skip this response to avoid data corruption
+                    # Parse JSONL responses
+                    for line_num, line in enumerate(response_text.strip().split('\n')):
+                        if not line.strip():
                             continue
 
-                        if not item_id:
-                            logger.error(
-                                f"[Summarizer] Response {i} missing metadata item_id - cannot match to request!"
-                            )
-                            continue
+                        try:
+                            response_obj = json.loads(line)
 
-                        if item_id not in request_map:
-                            logger.warning(
-                                f"[Summarizer] No mapping found for item_id {item_id} in request_map keys: {list(request_map.keys())}"
-                            )
-                            continue
+                            # Extract key from response
+                            key = response_obj.get('key')
+                            if not key:
+                                logger.error(f"[Summarizer] Response line {line_num} missing 'key' field")
+                                continue
 
-                        original_req = request_map[item_id]
-
-                        if inline_response.response:
-                            response_text = None  # Initialize for error logging
-                            try:
-                                response_text = inline_response.response.text
-
-                                # Check finish_reason to detect truncation
-                                if inline_response.response.candidates:
-                                    finish_reason = inline_response.response.candidates[0].finish_reason
-                                    if finish_reason and finish_reason.name != "STOP":
-                                        logger.warning(
-                                            f"[Summarizer] Item {original_req['item_id']} had non-normal finish_reason: {finish_reason.name}"
-                                        )
-                                        if finish_reason.name == "MAX_TOKENS":
-                                            logger.error(
-                                                f"[Summarizer] Item {original_req['item_id']} hit MAX_TOKENS - response truncated!"
-                                            )
-
-                                # Log raw response for debugging failures
-                                logger.info(
-                                    f"[Summarizer] Response for {original_req['item_id']}: {len(response_text) if response_text else 0} chars"
+                            if key not in request_map:
+                                logger.warning(
+                                    f"[Summarizer] No mapping found for key {key} in request_map keys: {list(request_map.keys())[:5]}"
                                 )
+                                continue
 
-                                if not response_text:
-                                    logger.warning(
-                                        f"[Summarizer] Empty response for {original_req['item_id']}"
+                            original_req = request_map[key]
+
+                            # Check if response or error
+                            if 'response' in response_obj:
+                                response_data = response_obj['response']
+                                response_text = None
+
+                                try:
+                                    # Extract text from response
+                                    if 'text' in response_data:
+                                        response_text = response_data['text']
+                                    elif 'candidates' in response_data and response_data['candidates']:
+                                        # Extract from candidates structure
+                                        candidate = response_data['candidates'][0]
+                                        if 'content' in candidate and 'parts' in candidate['content']:
+                                            parts = candidate['content']['parts']
+                                            if parts and 'text' in parts[0]:
+                                                response_text = parts[0]['text']
+
+                                    # Check finish_reason
+                                    if 'candidates' in response_data and response_data['candidates']:
+                                        finish_reason = response_data['candidates'][0].get('finish_reason')
+                                        if finish_reason and finish_reason != "STOP":
+                                            logger.warning(
+                                                f"[Summarizer] Item {key} had non-normal finish_reason: {finish_reason}"
+                                            )
+                                            if finish_reason == "MAX_TOKENS":
+                                                logger.error(
+                                                    f"[Summarizer] Item {key} hit MAX_TOKENS - response truncated!"
+                                                )
+
+                                    # Log response
+                                    logger.info(
+                                        f"[Summarizer] Response for {key}: {len(response_text) if response_text else 0} chars"
                                     )
-                                    results.append(
-                                        {
+
+                                    if not response_text:
+                                        logger.warning(f"[Summarizer] Empty response for {key}")
+                                        results.append({
                                             "item_id": original_req["item_id"],
                                             "success": False,
                                             "error": "Empty response from Gemini",
-                                        }
-                                    )
-                                    continue
+                                        })
+                                        continue
 
-                                # Parse response
-                                summary, topics = self._parse_item_response(
-                                    response_text
-                                )
+                                    # Parse response
+                                    summary, topics = self._parse_item_response(response_text)
 
-                                results.append(
-                                    {
+                                    results.append({
                                         "item_id": original_req["item_id"],
                                         "success": True,
                                         "summary": summary,
                                         "topics": topics,
-                                    }
-                                )
+                                    })
 
-                            except Exception as e:
-                                logger.error(
-                                    f"[Summarizer] Error parsing response for {original_req['item_id']}: {e}"
-                                )
-                                logger.error(
-                                    f"[Summarizer] Input that caused failure - Title: {original_req['title'][:100]}"
-                                )
-                                logger.error(
-                                    f"[Summarizer] Input text length: {len(original_req['text'])} chars, first 500 chars: {original_req['text'][:500]}"
-                                )
-                                logger.error(
-                                    f"[Summarizer] Raw response that failed: {response_text[:1000] if response_text else 'None'}"
-                                )
-                                results.append(
-                                    {
+                                except Exception as e:
+                                    logger.error(
+                                        f"[Summarizer] Error parsing response for {key}: {e}"
+                                    )
+                                    logger.error(
+                                        f"[Summarizer] Input that caused failure - Title: {original_req['title'][:100]}"
+                                    )
+                                    logger.error(
+                                        f"[Summarizer] Input text length: {len(original_req['text'])} chars"
+                                    )
+                                    logger.error(
+                                        f"[Summarizer] Raw response that failed: {str(response_text)[:1000] if response_text else 'None'}"
+                                    )
+                                    results.append({
                                         "item_id": original_req["item_id"],
                                         "success": False,
                                         "error": str(e),
-                                    }
-                                )
+                                    })
 
-                        elif inline_response.error:
-                            error_str = str(inline_response.error)
+                            elif 'error' in response_obj:
+                                error_data = response_obj['error']
+                                error_str = str(error_data)
 
-                            # Log quota errors but DON'T retry the whole chunk
-                            # Individual item failures should not cause chunk-level retries
-                            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                                logger.warning(
-                                    f"[Summarizer] Item {original_req['item_id']} hit quota limit (individual failure): {error_str}"
-                                )
-                            else:
+                                # Log quota errors but DON'T retry the whole chunk
+                                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                                    logger.warning(
+                                        f"[Summarizer] Item {key} hit quota limit (individual failure): {error_str}"
+                                    )
                                 logger.error(
-                                    f"[Summarizer] Item {original_req['item_id']} failed: {error_str}"
+                                    f"[Summarizer] Item {key} failed: {error_str}"
                                 )
-
-                            results.append(
-                                {
+                                results.append({
                                     "item_id": original_req["item_id"],
                                     "success": False,
                                     "error": error_str,
-                                }
-                            )
+                                })
+
+                        except json.JSONDecodeError as e:
+                            logger.error(f"[Summarizer] Failed to parse JSONL line {line_num}: {e}")
+                            continue
+
+                else:
+                    logger.error("[Summarizer] Batch job completed but no response file available")
+                    raise RuntimeError("No response file in batch job result")
+
+                # Cleanup: Delete temp file
+                try:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                        logger.debug(f"[Summarizer] Cleaned up temp file: {temp_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"[Summarizer] Failed to cleanup temp file: {cleanup_error}")
 
                 successful = sum(1 for r in results if r.get("success"))
                 logger.info(
