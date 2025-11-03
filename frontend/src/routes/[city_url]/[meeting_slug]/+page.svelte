@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
 	import { getMeeting, searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
 	import { parseCityUrl, generateMeetingSlug, extractMeetingIdFromSlug } from '$lib/utils/utils';
@@ -13,10 +14,10 @@
 	let selectedMeeting: Meeting | null = $state(null);
 	let loading = $state(true);
 	let error = $state('');
-	let expandedAttachments = $state<Set<string>>(new Set());
-	let expandedTitles = $state<Set<string>>(new Set());
-	let expandedItems = $state<Set<string>>(new Set());
-	let expandedThinking = $state<Set<string>>(new Set());
+	let expandedAttachments = new SvelteSet<string>();
+	let expandedTitles = new SvelteSet<string>();
+	let expandedItems = new SvelteSet<string>();
+	let expandedThinking = new SvelteSet<string>();
 
 
 	async function loadMeetingData() {
@@ -103,43 +104,35 @@
 	}
 
 	function toggleAttachments(itemId: string) {
-		const newSet = new Set(expandedAttachments);
-		if (newSet.has(itemId)) {
-			newSet.delete(itemId);
+		if (expandedAttachments.has(itemId)) {
+			expandedAttachments.delete(itemId);
 		} else {
-			newSet.add(itemId);
+			expandedAttachments.add(itemId);
 		}
-		expandedAttachments = newSet;
 	}
 
 	function toggleTitle(itemId: string) {
-		const newSet = new Set(expandedTitles);
-		if (newSet.has(itemId)) {
-			newSet.delete(itemId);
+		if (expandedTitles.has(itemId)) {
+			expandedTitles.delete(itemId);
 		} else {
-			newSet.add(itemId);
+			expandedTitles.add(itemId);
 		}
-		expandedTitles = newSet;
 	}
 
 	function toggleItem(itemId: string) {
-		const newSet = new Set(expandedItems);
-		if (newSet.has(itemId)) {
-			newSet.delete(itemId);
+		if (expandedItems.has(itemId)) {
+			expandedItems.delete(itemId);
 		} else {
-			newSet.add(itemId);
+			expandedItems.add(itemId);
 		}
-		expandedItems = newSet;
 	}
 
 	function toggleThinking(itemId: string) {
-		const newSet = new Set(expandedThinking);
-		if (newSet.has(itemId)) {
-			newSet.delete(itemId);
+		if (expandedThinking.has(itemId)) {
+			expandedThinking.delete(itemId);
 		} else {
-			newSet.add(itemId);
+			expandedThinking.add(itemId);
 		}
-		expandedThinking = newSet;
 	}
 
 	function parseSummaryForThinking(summary: string): { thinking: string | null; summary: string } {
