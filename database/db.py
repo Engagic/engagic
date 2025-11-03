@@ -455,12 +455,19 @@ class UnifiedDatabase:
                     f"Skipping enqueue for {stored_meeting.title} - {skip_reason}"
                 )
             elif has_items or packet_url:
-                # Calculate priority based on meeting date recency
+                # Calculate priority based on meeting date proximity
+                # Recent past + near future = HIGH priority
+                # Far past + far future = LOW priority
                 if meeting_date:
-                    days_old = (datetime.now() - meeting_date).days
+                    days_from_now = (meeting_date - datetime.now()).days
+                    # Use absolute value: closer to today = higher priority
+                    days_distance = abs(days_from_now)
                 else:
-                    days_old = 999
-                priority = max(0, 100 - days_old)
+                    days_distance = 999
+
+                # Priority decreases as distance from today increases
+                # Today: 150, Yesterday/Tomorrow: 149, 2 days: 148, etc.
+                priority = max(0, 150 - days_distance)
 
                 # Priority order: items:// (item-level) > packet_url (monolithic)
                 # Note: agenda_url is NOT enqueued - it's already processed to extract items

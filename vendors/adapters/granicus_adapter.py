@@ -200,14 +200,14 @@ class GranicusAdapter(BaseAdapter):
             heading_texts = [h.get_text(strip=True)[:50] for h in all_headings[:10]]
 
             logger.warning(
-                f"[granicus:{self.slug}] No 'Upcoming Programs' section found. "
+                f"[granicus:{self.slug}] No 'Upcoming' section found (tried div#upcoming, headings, table headers). "
                 f"Returning 0 meetings to avoid processing historical data. "
                 f"Found div IDs: {div_ids}. "
                 f"Found headings: {heading_texts}"
             )
             return  # Return empty generator - do NOT process historical data
         else:
-            logger.info(f"[granicus:{self.slug}] Found 'Upcoming Programs' section")
+            logger.info(f"[granicus:{self.slug}] Found 'Upcoming' section")
             search_scope = upcoming_section
 
         # Find links within our target scope

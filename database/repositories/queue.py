@@ -266,7 +266,9 @@ class QueueRepository(BaseRepository):
 
         enqueued = 0
         for meeting in meetings:
-            # Calculate priority based on meeting date recency
+            # Calculate priority based on meeting date proximity
+            # Recent past + near future = HIGH priority
+            # Far past + far future = LOW priority
             if meeting["date"]:
                 try:
                     meeting_date = (
@@ -274,13 +276,16 @@ class QueueRepository(BaseRepository):
                         if isinstance(meeting["date"], str)
                         else meeting["date"]
                     )
-                    days_old = (datetime.now() - meeting_date).days
+                    days_from_now = (meeting_date - datetime.now()).days
+                    days_distance = abs(days_from_now)
                 except Exception:
-                    days_old = 999
+                    days_distance = 999
             else:
-                days_old = 999
+                days_distance = 999
 
-            priority = max(0, 100 - days_old)
+            # Priority decreases as distance from today increases
+            # Today: 150, Yesterday/Tomorrow: 149, 2 days: 148, etc.
+            priority = max(0, 150 - days_distance)
 
             try:
                 self._execute(

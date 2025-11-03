@@ -5,6 +5,7 @@ Cities using NovusAgenda: Hagerstown MD, Houston TX, and others
 """
 
 import re
+from datetime import datetime, timedelta
 from typing import Dict, Any, Iterator
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.adapters.html_agenda_parser import parse_novusagenda_html_agenda
@@ -23,15 +24,24 @@ class NovusAgendaAdapter(BaseAdapter):
         super().__init__(city_slug, vendor="novusagenda")
         self.base_url = f"https://{self.slug}.novusagenda.com"
 
-    def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
+    def fetch_meetings(self, days_forward: int = 60, days_back: int = 7) -> Iterator[Dict[str, Any]]:
         """
-        Scrape meetings from NovusAgenda /agendapublic page.
+        Scrape meetings from NovusAgenda /agendapublic page with date filtering.
+
+        Args:
+            days_forward: Days to look ahead (default 60)
+            days_back: Days to look back (default 7)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url, items (if available)
         """
         # Fetch agendapublic page
         soup = self._fetch_html(f"{self.base_url}/agendapublic")
+
+        # Date range filter
+        today = datetime.now()
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
 
         # Find meeting rows (rgRow and rgAltRow classes)
         meeting_rows = soup.find_all("tr", class_=["rgRow", "rgAltRow"])
@@ -43,9 +53,21 @@ class NovusAgendaAdapter(BaseAdapter):
                 continue
 
             # Extract meeting data
-            date = cells[0].get_text(strip=True)
+            date_str = cells[0].get_text(strip=True)
             meeting_type = cells[1].get_text(strip=True)
             # location = cells[2].get_text(strip=True)  # Available if needed
+
+            # Parse and filter by date (format: MM/DD/YY)
+            try:
+                meeting_date = datetime.strptime(date_str, "%m/%d/%y")
+                # Skip meetings outside date range
+                if meeting_date < start_date or meeting_date > end_date:
+                    logger.debug(f"[novusagenda:{self.slug}] Skipping {meeting_type} on {date_str} (outside date range)")
+                    continue
+            except ValueError:
+                # If date parsing fails, skip this meeting
+                logger.warning(f"[novusagenda:{self.slug}] Could not parse date '{date_str}' for {meeting_type}")
+                continue
 
             # Time is often in cell 3 or 4 depending on layout
             time_field = cells[3].get_text(strip=True) if len(cells) > 3 else ""
@@ -76,7 +98,15 @@ class NovusAgendaAdapter(BaseAdapter):
             best_score = 0
 
             for link in all_agenda_links:
+                # Check both link text and image alt attributes (Houston uses image-only links)
                 link_text = link.get_text(strip=True).lower()
+
+                # Also check for img alt text within the link
+                img = link.find("img")
+                if img:
+                    alt_text = img.get("alt", "").lower()
+                    link_text = f"{link_text} {alt_text}".strip()
+
                 score = 0
 
                 # High priority: parsable HTML agendas
@@ -116,12 +146,12 @@ class NovusAgendaAdapter(BaseAdapter):
             if not meeting_id:
                 import hashlib
 
-                id_string = f"{meeting_type}_{date}"
+                id_string = f"{meeting_type}_{date_str}"
                 meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
 
             if not packet_url and not agenda_url:
                 logger.debug(
-                    f"[novusagenda:{self.slug}] No packet or agenda for: {meeting_type} on {date}"
+                    f"[novusagenda:{self.slug}] No packet or agenda for: {meeting_type} on {date_str}"
                 )
 
             # Try to fetch and parse HTML agenda for items
@@ -149,7 +179,7 @@ class NovusAgendaAdapter(BaseAdapter):
             result = {
                 "meeting_id": meeting_id,
                 "title": meeting_type,
-                "start": date,
+                "start": date_str,
                 "packet_url": packet_url,
             }
 
