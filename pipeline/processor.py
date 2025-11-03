@@ -297,8 +297,41 @@ class Processor:
         first_sequence = min(item_sequences) if item_sequences else None
         last_sequence = max(item_sequences) if item_sequences else None
 
-        # Collect participation info from first/last items
+        # Collect participation info from agenda_url (if it's a PDF) and first/last items
         participation_data: Dict[str, Any] = {}
+
+        # STEP 0: Extract participation from agenda_url (PDF or HTML)
+        if meeting.agenda_url:
+            try:
+                agenda_url_lower = meeting.agenda_url.lower()
+
+                # Handle PDF agendas (Legistar, etc.)
+                if agenda_url_lower.endswith('.pdf') or '.ashx' in agenda_url_lower:
+                    logger.debug(f"[Participation] Extracting text from agenda_url PDF for participation info")
+                    agenda_result = self.analyzer.pdf_extractor.extract_from_url(meeting.agenda_url)
+                    if agenda_result.get("success") and agenda_result.get("text"):
+                        # Parse only first 5000 chars (participation info is at the top)
+                        agenda_text = agenda_result["text"][:5000]
+                        agenda_participation = parse_participation_info(agenda_text)
+                        if agenda_participation:
+                            participation_data.update(agenda_participation)
+                            logger.info(
+                                f"[Participation] Found info in agenda_url PDF: {list(agenda_participation.keys())}"
+                            )
+                        # Free memory immediately
+                        del agenda_result
+                        del agenda_text
+
+                # Handle HTML agendas (PrimeGov, Granicus, etc.) - already parsed by adapter
+                # If meeting.participation already exists from adapter, use it
+                elif meeting.participation:
+                    participation_data.update(meeting.participation)
+                    logger.debug(
+                        f"[Participation] Using existing participation from adapter: {list(meeting.participation.keys())}"
+                    )
+
+            except Exception as e:
+                logger.warning(f"[Participation] Failed to extract from agenda_url: {e}")
 
         # Separate already-processed items from items that need processing
         already_processed = []
