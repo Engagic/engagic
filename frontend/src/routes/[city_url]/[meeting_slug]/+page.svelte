@@ -330,15 +330,17 @@
 							<div class="item-header-clickable" onclick={() => toggleItem(item.id)}>
 								<div class="item-header">
 									<div class="item-header-content">
-										<h3 class="item-title" data-truncated={titleParts.isTruncated}>
+										<div class="item-title-container">
 											<span class="item-number">{item.sequence}.</span>
-											{titleParts.main}
-											{#if titleParts.remainder && !isExpanded}
-												<span class="item-title-remainder">…</span>
-											{:else if titleParts.remainder && isExpanded}
-												{titleParts.remainder}
-											{/if}
-										</h3>
+											<h3 class="item-title" data-truncated={titleParts.isTruncated}>
+												{titleParts.main}
+												{#if titleParts.remainder && !isExpanded}
+													<span class="item-title-remainder">…</span>
+												{:else if titleParts.remainder && isExpanded}
+													{titleParts.remainder}
+												{/if}
+											</h3>
+										</div>
 										<div class="item-indicators">
 											{#if item.topics && item.topics.length > 0}
 												<div class="item-topics-preview">
@@ -1016,12 +1018,19 @@
 		justify-content: space-between;
 	}
 
+	.item-title-container {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		margin-bottom: 0.35rem;
+	}
+
 	.item-number {
 		color: var(--civic-gray);
 		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 1.125rem;
 		font-weight: 500;
-		margin-right: 0.5rem;
+		flex-shrink: 0;
 	}
 
 	.item-header-content {
@@ -1079,10 +1088,12 @@
 		font-size: 1.125rem;
 		font-weight: 500;
 		color: var(--civic-dark);
-		margin: 0 0 0.35rem 0;
+		margin: 0;
 		line-height: 1.45;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+		flex: 1;
+		min-width: 0;
 	}
 
 	.item-title-remainder {
