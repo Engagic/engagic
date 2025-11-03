@@ -182,6 +182,14 @@ class GranicusAdapter(BaseAdapter):
                     if upcoming_section:
                         logger.info(f"[granicus:{self.slug}] Found upcoming section via {tag} heading")
                         break
+        if not upcoming_section:
+            # Check for table-based layout
+            header_cell = soup.find("td", class_="listHeader", string=lambda t: t and "upcoming" in t.lower())
+            if header_cell:
+                # Get parent table or containing structure
+                upcoming_section = header_cell.find_parent("table")
+                if upcoming_section:
+                    logger.info(f"[granicus:{self.slug}] Found upcoming section via table header")
 
         if not upcoming_section:
             # Log what we're actually seeing for debugging
