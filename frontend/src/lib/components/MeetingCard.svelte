@@ -60,7 +60,7 @@
 <a
 	href="/{cityUrl}/{meetingSlug}"
 	class="meeting-card {isPast ? 'past-meeting' : 'upcoming-meeting'} {meeting.meeting_status ? 'has-alert' : ''} {getStatusClass(meeting)}"
-	in:fly|global={{ y: 20, duration: animationDuration, delay: animationDelay }}
+	in:fly={{ y: 20, duration: animationDuration, delay: animationDelay }}
 	onintroend={onIntroEnd}
 >
 	<div class="meeting-card-header">
