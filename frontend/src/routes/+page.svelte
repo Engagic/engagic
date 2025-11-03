@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { apiClient } from '$lib/api/api-client';
-	import type { SearchResult, CityOption, Meeting, TickerItem } from '$lib/api/types';
+	import type { SearchResult, CityOption, Meeting } from '$lib/api/types';
 	import { isSearchSuccess, isSearchAmbiguous } from '$lib/api/types';
 	import { generateCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
 	import Footer from '$lib/components/Footer.svelte';
-	import { getAnalytics, type AnalyticsData } from '$lib/api/index';
-	import { onMount } from 'svelte';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
 
 	let searchQuery = $state('');
 	let searchResults: SearchResult | null = $state(null);
@@ -16,9 +18,11 @@
 	let loadingRandom = $state(false);
 	let loadingRandomItems = $state(false);
 	let error = $state('');
-	let analytics: AnalyticsData | null = $state(null);
 	let currentStatIndex = $state(0);
-	let tickerItems: TickerItem[] = $state([]);
+
+	// Data now comes from load function - already available on mount
+	let analytics = $state(data.analytics);
+	let tickerItems = $state(data.tickerItems || []);
 
 	const stats = $derived(analytics ? [
 		{ label: 'cities tracked', value: analytics.real_metrics.cities_covered.toLocaleString() },
@@ -26,25 +30,7 @@
 		{ label: 'total meetings', value: analytics.real_metrics.meetings_tracked.toLocaleString() }
 	] : []);
 
-	onMount(async () => {
-		// Fetch analytics and ticker in parallel for faster page load
-		const [analyticsResult, tickerResult] = await Promise.allSettled([
-			getAnalytics(),
-			apiClient.getTicker()
-		]);
-
-		if (analyticsResult.status === 'fulfilled') {
-			analytics = analyticsResult.value;
-		} else {
-			console.error('Failed to load analytics:', analyticsResult.reason);
-		}
-
-		if (tickerResult.status === 'fulfilled' && tickerResult.value.success && tickerResult.value.items) {
-			tickerItems = tickerResult.value.items;
-		} else if (tickerResult.status === 'rejected') {
-			console.error('Failed to load ticker items:', tickerResult.reason);
-		}
-
+	onMount(() => {
 		// Rotate stats every 3 seconds
 		const interval = setInterval(() => {
 			if (stats.length > 0) {
@@ -207,8 +193,8 @@
 	<meta name="description" content="Find your local government meetings and agendas" />
 </svelte:head>
 
-{#if tickerItems.length > 0}
-	<div class="news-ticker">
+<div class="news-ticker">
+	{#if tickerItems.length > 0}
 		<div class="ticker-content">
 			{#each [...tickerItems, ...tickerItems] as item}
 				<a href={item.url} class="ticker-item">
@@ -220,8 +206,8 @@
 				</a>
 			{/each}
 		</div>
-	</div>
-{/if}
+	{/if}
+</div>
 
 <div class="container">
 	<div class="main-content">

@@ -1,20 +1,21 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
-	import { searchMeetings, type SearchResult, type Meeting } from '$lib/api/index';
-	import { parseCityUrl } from '$lib/utils/utils';
+	import type { Meeting } from '$lib/api/index';
 	import MeetingCard from '$lib/components/MeetingCard.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
 
 	let city_banana = $page.params.city_url;
-	let searchResults: SearchResult | null = $state(null);
-	let loading = $state(true);
-	let error = $state('');
 	let showPastMeetings = $state(false);
-	let upcomingMeetings: Meeting[] = $state([]);
-	let pastMeetings: Meeting[] = $state([]);
 	let isInitialLoad = $state(true);
+
+	// Data comes from load function - already available
+	let searchResults = $state(data.searchResults);
+	let upcomingMeetings: Meeting[] = $state(data.upcomingMeetings || []);
+	let pastMeetings: Meeting[] = $state(data.pastMeetings || []);
 
 
 	// Snapshot: Preserve UI state and data during navigation
@@ -53,117 +54,6 @@
 		}
 	};
 
-	onMount(async () => {
-		// Check if we received search results from navigation state (coming from homepage search)
-		const navigationState = window.history.state;
-		if (navigationState?.searchResults) {
-			// Use the data passed from homepage search to avoid redundant API call
-			searchResults = navigationState.searchResults;
-			if (searchResults.success && searchResults.meetings) {
-				searchResults.meetings.sort((a: Meeting, b: Meeting) => {
-					const dateA = a.date ? new Date(a.date) : new Date(9999, 11, 31);
-					const dateB = b.date ? new Date(b.date) : new Date(9999, 11, 31);
-					return dateA.getTime() - dateB.getTime();
-				});
-
-				const now = new Date();
-				upcomingMeetings = [];
-				pastMeetings = [];
-
-				for (const meeting of searchResults.meetings) {
-					if (!meeting.date || meeting.date === 'null' || meeting.date === '') {
-						upcomingMeetings.push(meeting);
-						continue;
-					}
-
-					const meetingDate = new Date(meeting.date);
-					if (isNaN(meetingDate.getTime()) || meetingDate.getTime() === 0) {
-						upcomingMeetings.push(meeting);
-						continue;
-					}
-
-					if (meetingDate >= now) {
-						upcomingMeetings.push(meeting);
-					} else {
-						pastMeetings.push(meeting);
-					}
-				}
-			}
-			loading = false;
-		} else if (!searchResults) {
-			// Only fetch if we don't already have data from snapshot
-			await loadCityMeetings();
-		}
-	});
-
-	async function loadCityMeetings() {
-		loading = true;
-		error = '';
-		
-		try {
-			// Check if this is a static route that should not be handled as a city
-			if (city_banana === 'about') {
-				goto('/about');
-				return;
-			}
-
-			// Parse the city URL to get city name and state
-			const parsed = parseCityUrl(city_banana);
-			if (!parsed) {
-				throw new Error('Invalid city URL format');
-			}
-			
-			// Search by city name and state
-			const searchQuery = `${parsed.cityName}, ${parsed.state}`;
-			const result = await searchMeetings(searchQuery);
-			
-			// Sort meetings by date (soonest first) using standardized dates
-			if (result.success && result.meetings) {
-				result.meetings.sort((a: Meeting, b: Meeting) => {
-					// Handle null dates by treating them as far future
-					const dateA = a.date ? new Date(a.date) : new Date(9999, 11, 31);
-					const dateB = b.date ? new Date(b.date) : new Date(9999, 11, 31);
-
-					// Return comparison (ascending order - soonest first)
-					return dateA.getTime() - dateB.getTime();
-				});
-
-				// Split meetings into upcoming and past using standardized dates
-				const now = new Date();
-				upcomingMeetings = [];
-				pastMeetings = [];
-
-				for (const meeting of result.meetings) {
-					if (!meeting.date || meeting.date === 'null' || meeting.date === '') {
-						// Meetings with no date go to upcoming
-						upcomingMeetings.push(meeting);
-						continue;
-					}
-
-					const meetingDate = new Date(meeting.date);
-
-					// Skip invalid dates (epoch 0)
-					if (isNaN(meetingDate.getTime()) || meetingDate.getTime() === 0) {
-						upcomingMeetings.push(meeting);
-						continue;
-					}
-
-					if (meetingDate >= now) {
-						upcomingMeetings.push(meeting);
-					} else {
-						pastMeetings.push(meeting);
-					}
-				}
-			}
-			
-			searchResults = result;
-		} catch (err) {
-			console.error('Failed to load meetings:', err);
-			error = err instanceof Error ? err.message : 'No agendas posted yet, please come back later! Packets are typically posted within 48 hours of the meeting date';
-		} finally {
-			loading = false;
-		}
-	}
 </script>
 
 <svelte:head>
@@ -177,19 +67,11 @@
 
 	<div class="city-header">
 		<a href="/" class="back-link">← Back to search</a>
-		{#if searchResults && searchResults.success}
-			<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
-		{:else if loading}
-			<h1 class="city-title">Loading...</h1>
-		{:else}
-			<h1 class="city-title">City Not Found</h1>
-		{/if}
+		<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
 	</div>
 
-	{#if searchResults}
-		<!-- Show data immediately if available (from snapshot or fresh load) -->
-		{#if searchResults.success}
-			{#if searchResults.meetings && searchResults.meetings.length > 0}
+	{#if searchResults && searchResults.success}
+		{#if searchResults.meetings && searchResults.meetings.length > 0}
 				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
 					<div class="meetings-filter">
 						{#if upcomingMeetings.length > 0}
@@ -248,19 +130,6 @@
 					<p class="empty-state-message">{'message' in searchResults ? searchResults.message : 'We could not find any meetings for this city. Agendas are typically posted 48 hours before meetings.'}</p>
 				</div>
 			{/if}
-		{:else}
-			<div class="error-message">
-				{searchResults.message || 'Failed to load city meetings'}
-			</div>
-		{/if}
-	{:else if error}
-		<div class="error-message">
-			{error}
-		</div>
-	{:else if loading}
-		<div class="loading">
-			Loading meetings...
-		</div>
 	{/if}
 	</div>
 
