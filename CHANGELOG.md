@@ -6,6 +6,43 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-03] Critical Bug Fix: Batch API Response Mismatching
+
+**The silent data corruption.** Gemini Batch API inline requests do NOT guarantee response order matches request order, causing summaries to be assigned to wrong items.
+
+**The Bug:**
+- Used index-based matching: `response[i]` assumed to match `request[i]`
+- Gemini Batch API processes requests asynchronously - responses can return out of order
+- Item 1 got Item 2's summary, Item 2 got Item 17's summary, etc.
+- Affected ALL batch-processed meetings (374+ cities, thousands of meetings)
+
+**Root Cause:**
+- Google's own documentation shows JSONL file method uses explicit `key` fields for matching
+- But inline requests examples don't show metadata - we assumed index order was preserved
+- Asynchronous batch processing means responses can complete in any order
+
+**Fix:**
+- Added `metadata: {"item_id": item_id}` to each inline request
+- Match responses by metadata item_id instead of array index
+- Defensive logging if metadata not supported by SDK
+- Fallback plan: Switch to JSONL file method if metadata not available
+
+**Files Modified:**
+- `analysis/llm/summarizer.py:280-424` - Added metadata to requests, match by key in responses
+
+**Testing:**
+- Created `scripts/test_batch_metadata.py` to verify SDK metadata support
+- Will re-process affected meetings if fix works, or implement JSONL method if not
+
+**Impact:**
+- Data integrity: Summaries will correctly match their agenda items
+- User trust: No more confusing mismatched summaries
+- System reliability: Guaranteed request/response matching
+
+**Database Cleanup Required:** All batch-processed meetings need reprocessing with correct matching logic.
+
+---
+
 ## [2025-11-02] Frontend Meeting Detail Page Redesign
 
 **The legibility unlock.** Complete visual redesign of meeting detail page with focus on information hierarchy and readability.
