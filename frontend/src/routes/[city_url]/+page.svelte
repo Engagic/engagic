@@ -54,8 +54,44 @@
 	};
 
 	onMount(async () => {
-		// Only fetch if we don't already have data from snapshot
-		if (!searchResults) {
+		// Check if we received search results from navigation state (coming from homepage search)
+		const navigationState = window.history.state;
+		if (navigationState?.searchResults) {
+			// Use the data passed from homepage search to avoid redundant API call
+			searchResults = navigationState.searchResults;
+			if (searchResults.success && searchResults.meetings) {
+				searchResults.meetings.sort((a: Meeting, b: Meeting) => {
+					const dateA = a.date ? new Date(a.date) : new Date(9999, 11, 31);
+					const dateB = b.date ? new Date(b.date) : new Date(9999, 11, 31);
+					return dateA.getTime() - dateB.getTime();
+				});
+
+				const now = new Date();
+				upcomingMeetings = [];
+				pastMeetings = [];
+
+				for (const meeting of searchResults.meetings) {
+					if (!meeting.date || meeting.date === 'null' || meeting.date === '') {
+						upcomingMeetings.push(meeting);
+						continue;
+					}
+
+					const meetingDate = new Date(meeting.date);
+					if (isNaN(meetingDate.getTime()) || meetingDate.getTime() === 0) {
+						upcomingMeetings.push(meeting);
+						continue;
+					}
+
+					if (meetingDate >= now) {
+						upcomingMeetings.push(meeting);
+					} else {
+						pastMeetings.push(meeting);
+					}
+				}
+			}
+			loading = false;
+		} else if (!searchResults) {
+			// Only fetch if we don't already have data from snapshot
 			await loadCityMeetings();
 		}
 	});
