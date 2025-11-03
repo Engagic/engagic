@@ -276,85 +276,84 @@ class GeminiSummarizer:
         retry_delay = 60  # Start with 60s delay
 
         for attempt in range(max_retries):
+            # JSONL file method with explicit key-based matching
+            # This is the ONLY way to guarantee request/response matching
+            request_map = {}  # Maps key (item_id) -> original request
+
+            # Create temp JSONL file
+            temp_file = tempfile.NamedTemporaryFile(
+                mode='w', suffix='.jsonl', delete=False
+            )
+            temp_path = temp_file.name
+
             try:
-                # JSONL file method with explicit key-based matching
-                # This is the ONLY way to guarantee request/response matching
-                request_map = {}  # Maps key (item_id) -> original request
+                for i, req in enumerate(chunk_requests):
+                    item_title = req["title"]
+                    item_id = req["item_id"]
+                    text = req["text"]
 
-                # Create temp JSONL file
-                temp_file = tempfile.NamedTemporaryFile(
-                    mode='w', suffix='.jsonl', delete=False
+                    # Use actual page count if available, otherwise estimate
+                    page_count = req.get("page_count")
+                    if page_count is None:
+                        page_count = self._estimate_page_count(text)
+
+                    # Adaptive prompt selection based on size
+                    prompt_type = "large" if page_count >= 100 else "standard"
+
+                    # Build prompt and config
+                    prompt = self._get_prompt(
+                        "item", prompt_type, title=item_title, text=text
+                    )
+                    response_schema = self.prompts["item"][prompt_type].get(
+                        "response_schema"
+                    )
+                    generation_config = {
+                        "temperature": 0.3,
+                        "max_output_tokens": 8192,
+                        "response_mime_type": "application/json",
+                        "response_schema": response_schema,
+                    }
+
+                    # Log input details for debugging
+                    logger.info(
+                        f"[Summarizer] Request {i}: '{item_title[:80]}...', {len(text)} chars, {page_count} pages, {prompt_type} prompt"
+                    )
+
+                    # Write JSONL line with key for matching
+                    jsonl_line = {
+                        "key": item_id,  # CRITICAL: This key matches response to request
+                        "request": {
+                            "contents": [{"parts": [{"text": prompt}], "role": "user"}],
+                            "generation_config": generation_config,
+                        }
+                    }
+                    temp_file.write(json.dumps(jsonl_line) + '\n')
+                    request_map[item_id] = req
+
+                temp_file.close()
+
+                # Upload JSONL file
+                logger.info(
+                    f"[Summarizer] Uploading JSONL file with {len(chunk_requests)} items (attempt {attempt + 1}/{max_retries})"
                 )
-                temp_path = temp_file.name
 
-                try:
-                    for i, req in enumerate(chunk_requests):
-                        item_title = req["title"]
-                        item_id = req["item_id"]
-                        text = req["text"]
+                uploaded_file = self.client.files.upload(
+                    file=temp_path,
+                    config={"display_name": f"batch-chunk-{chunk_num}-{time.time()}"}
+                )
 
-                        # Use actual page count if available, otherwise estimate
-                        page_count = req.get("page_count")
-                        if page_count is None:
-                            page_count = self._estimate_page_count(text)
+                logger.info(f"[Summarizer] Uploaded file: {uploaded_file.name}")
 
-                        # Adaptive prompt selection based on size
-                        prompt_type = "large" if page_count >= 100 else "standard"
+                # Submit batch job with uploaded file
+                logger.info(
+                    f"[Summarizer] Submitting chunk {chunk_num} batch job"
+                )
 
-                        # Build prompt and config
-                        prompt = self._get_prompt(
-                            "item", prompt_type, title=item_title, text=text
-                        )
-                        response_schema = self.prompts["item"][prompt_type].get(
-                            "response_schema"
-                        )
-                        generation_config = {
-                            "temperature": 0.3,
-                            "max_output_tokens": 8192,
-                            "response_mime_type": "application/json",
-                            "response_schema": response_schema,
-                        }
-
-                        # Log input details for debugging
-                        logger.info(
-                            f"[Summarizer] Request {i}: '{item_title[:80]}...', {len(text)} chars, {page_count} pages, {prompt_type} prompt"
-                        )
-
-                        # Write JSONL line with key for matching
-                        jsonl_line = {
-                            "key": item_id,  # CRITICAL: This key matches response to request
-                            "request": {
-                                "contents": [{"parts": [{"text": prompt}], "role": "user"}],
-                                "generation_config": generation_config,
-                            }
-                        }
-                        temp_file.write(json.dumps(jsonl_line) + '\n')
-                        request_map[item_id] = req
-
-                    temp_file.close()
-
-                    # Upload JSONL file
-                    logger.info(
-                        f"[Summarizer] Uploading JSONL file with {len(chunk_requests)} items (attempt {attempt + 1}/{max_retries})"
-                    )
-
-                    uploaded_file = self.client.files.upload(
-                        file=temp_path,
-                        config={"display_name": f"batch-chunk-{chunk_num}-{time.time()}"}
-                    )
-
-                    logger.info(f"[Summarizer] Uploaded file: {uploaded_file.name}")
-
-                    # Submit batch job with uploaded file
-                    logger.info(
-                        f"[Summarizer] Submitting chunk {chunk_num} batch job"
-                    )
-
-                    batch_job = self.client.batches.create(
-                        model=self.flash_model_name,
-                        src=uploaded_file.name,
-                        config={"display_name": f"chunk-{chunk_num}-{time.time()}"},
-                    )
+                batch_job = self.client.batches.create(
+                    model=self.flash_model_name,
+                    src=uploaded_file.name,
+                    config={"display_name": f"chunk-{chunk_num}-{time.time()}"},
+                )
 
                 batch_name = batch_job.name
                 if not batch_name:
