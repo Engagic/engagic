@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
+	import { onMount } from 'svelte';
 	import type { Meeting } from '../api/types';
 	import { generateMeetingSlug } from '../utils/utils';
 	import { extractTime } from '../utils/date-utils';
@@ -29,6 +30,18 @@
 	const dayOfWeek = $derived(isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null);
 	const monthDay = $derived(isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
 	const timeStr = $derived(extractTime(meeting.date));
+
+	// Track mobile state for topic limiting (performance: check once, not on every render)
+	let isMobile = $state(false);
+
+	onMount(() => {
+		isMobile = window.innerWidth <= 640;
+		const handleResize = () => {
+			isMobile = window.innerWidth <= 640;
+		};
+		window.addEventListener('resize', handleResize);
+		return () => window.removeEventListener('resize', handleResize);
+	});
 
 	function getStatusClass(meeting: Meeting): string {
 		if (meeting.items?.length > 0 && meeting.items.some(item => item.summary)) {
@@ -70,7 +83,7 @@
 	<div class="meeting-card-body">
 		<div class="left-column">
 			{#if meeting.topics && meeting.topics.length > 0}
-				{@const maxTopics = typeof window !== 'undefined' && window.innerWidth <= 640 ? 3 : 5}
+				{@const maxTopics = isMobile ? 3 : 5}
 				{@const displayTopics = meeting.topics.slice(0, maxTopics)}
 				{@const remainingCount = meeting.topics.length - maxTopics}
 				<div class="meeting-topics">
