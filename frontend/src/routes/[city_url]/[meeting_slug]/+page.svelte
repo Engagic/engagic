@@ -415,16 +415,6 @@
 									{#if item.summary}
 										{@const summaryParts = parseSummaryForThinking(item.summary)}
 
-										<!-- Flyer generator button - moved to top for mobile accessibility -->
-										<div class="item-action-bar item-action-bar-top">
-											<button
-												class="generate-flyer-btn"
-												onclick={(e) => { e.stopPropagation(); openFlyerModal(item.id); }}
-											>
-												📄 Generate Action Flyer
-											</button>
-										</div>
-
 										{#if summaryParts.thinking}
 											<div class="thinking-section" class:expanded={expandedThinking.has(item.id)}>
 												<button
@@ -443,6 +433,16 @@
 
 										<div class="item-summary">
 											{@html marked(summaryParts.summary)}
+										</div>
+
+										<!-- Flyer generator button -->
+										<div class="item-action-bar">
+											<button
+												class="generate-flyer-btn"
+												onclick={(e) => { e.stopPropagation(); openFlyerModal(item.id); }}
+											>
+												📄 Generate Action Flyer
+											</button>
 										</div>
 									{/if}
 
@@ -1874,12 +1874,11 @@
 		.modal-overlay {
 			padding: 0;
 			align-items: flex-end;
-			backdrop-filter: none;
-			-webkit-backdrop-filter: none;
+			z-index: 9999;
 		}
 
 		.modal-content {
-			max-height: 92vh;
+			max-height: 90vh;
 			border-bottom-left-radius: 0;
 			border-bottom-right-radius: 0;
 			border-top-left-radius: 20px;
@@ -1917,8 +1916,9 @@
 
 		.modal-body {
 			padding: 1rem;
-			max-height: calc(92vh - 180px);
+			max-height: calc(90vh - 180px);
 			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
 		}
 
 		.form-group {
@@ -1972,16 +1972,6 @@
 			font-size: 0.9rem;
 			width: 100%;
 		}
-
-		.item-action-bar-top {
-			position: sticky;
-			top: 0;
-			background: white;
-			z-index: 10;
-			padding: 1rem;
-			margin: -1rem -1rem 1rem -1rem;
-			border-bottom: 2px solid #f1f5f9;
-		}
 	}
 
 	/* Flyer Generator Styles */
@@ -1992,15 +1982,6 @@
 		border-top: 1px solid #f1f5f9;
 		display: flex;
 		gap: 0.75rem;
-	}
-
-	.item-action-bar-top {
-		margin-top: 0;
-		margin-bottom: 1.5rem;
-		padding-top: 0;
-		padding-bottom: 1rem;
-		border-top: none;
-		border-bottom: 1px solid #f1f5f9;
 	}
 
 	.generate-flyer-btn {
