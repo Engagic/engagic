@@ -145,12 +145,56 @@
 	}
 
 	function openFlyerModal(itemId: string | null) {
-		flyerItemId = itemId;
-		flyerPosition = 'support';
-		flyerMessage = '';
-		flyerName = '';
-		showFlyerModal = true;
-		console.log('Modal opened:', { showFlyerModal, itemId });
+		// On mobile, skip modal and generate directly with defaults
+		const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640;
+
+		if (isMobile) {
+			// Generate flyer directly with default "support" position
+			generateFlyerDirect(itemId, 'support', null, null);
+		} else {
+			// Desktop: show modal
+			flyerItemId = itemId;
+			flyerPosition = 'support';
+			flyerMessage = '';
+			flyerName = '';
+			showFlyerModal = true;
+		}
+	}
+
+	async function generateFlyerDirect(itemId: string | null, position: string, message: string | null, name: string | null) {
+		if (!selectedMeeting) return;
+
+		try {
+			const response = await fetch(`${config.apiBaseUrl}/api/flyer/generate`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					meeting_id: selectedMeeting.id,
+					item_id: itemId,
+					position: position,
+					custom_message: message,
+					user_name: name,
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to generate flyer');
+			}
+
+			const html = await response.text();
+
+			// Open flyer in new tab
+			const flyerWindow = window.open('', '_blank');
+			if (flyerWindow) {
+				flyerWindow.document.write(html);
+				flyerWindow.document.close();
+			}
+		} catch (err) {
+			console.error('Error generating flyer:', err);
+			alert('Failed to generate flyer. Please try again.');
+		}
 	}
 
 	// Enforce backend constraints on client side
@@ -220,13 +264,6 @@
 
 <div class="container">
 	<div class="main-content">
-		<!-- Debug indicator -->
-		{#if showFlyerModal}
-			<div style="position: fixed; top: 0; left: 0; right: 0; background: red; color: white; padding: 1rem; z-index: 99999; text-align: center;">
-				MODAL STATE IS TRUE - Modal should be visible
-			</div>
-		{/if}
-
 		<div class="top-nav">
 			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
 			<a href="/" class="compact-logo" aria-label="Return to engagic homepage">
@@ -449,15 +486,6 @@
 												class="generate-flyer-btn"
 												onclick={(e) => {
 													e.stopPropagation();
-													e.preventDefault();
-													openFlyerModal(item.id);
-												}}
-												ontouchstart={(e) => {
-													e.stopPropagation();
-												}}
-												ontouchend={(e) => {
-													e.stopPropagation();
-													e.preventDefault();
 													openFlyerModal(item.id);
 												}}
 											>
