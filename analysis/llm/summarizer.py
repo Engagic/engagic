@@ -180,7 +180,10 @@ class GeminiSummarizer:
             raise
 
     def summarize_batch(
-        self, item_requests: List[Dict[str, Any]]
+        self,
+        item_requests: List[Dict[str, Any]],
+        shared_context: Optional[str] = None,
+        meeting_id: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """Process multiple agenda items using Gemini Batch API for 50% cost savings
 
@@ -194,10 +197,12 @@ class GeminiSummarizer:
                 [{
                     'item_id': str,
                     'title': str,
-                    'text': str,  # Pre-extracted and concatenated text
+                    'text': str,  # Item-specific text only (shared docs excluded)
                     'sequence': int,
                     'page_count': int or None  # Actual PDF page count if available
                 }, ...]
+            shared_context: Optional meeting-level shared document context (for caching)
+            meeting_id: Optional meeting ID (for cache naming)
 
         Returns:
             List of results: [{
@@ -216,6 +221,43 @@ class GeminiSummarizer:
             f"[Summarizer] Processing {total_items} items using Batch API (50% savings)"
         )
 
+        # Create Gemini cache for shared context if available and meets minimum threshold
+        cache_name = None
+        if shared_context:
+            # Estimate token count (rough: 1 token = 4 chars)
+            token_count = len(shared_context) // 4
+            min_tokens = 1024  # Minimum for Flash caching
+
+            if token_count >= min_tokens:
+                try:
+                    logger.info(
+                        f"[Summarizer] Creating Gemini cache for shared context (~{token_count:,} tokens)"
+                    )
+                    cache = self.client.caches.create(
+                        model=self.flash_model_name,
+                        config=types.CreateCachedContentConfig(
+                            display_name=f"meeting-{meeting_id}-shared-docs",
+                            contents=[{"parts": [{"text": shared_context}]}],
+                            ttl="3600s"  # 1 hour TTL (sufficient for batch processing)
+                        )
+                    )
+                    cache_name = cache.name
+                    logger.info(
+                        f"[Summarizer] Cache created: {cache_name} "
+                        f"(~{token_count:,} tokens, 1h TTL)"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[Summarizer] Failed to create cache: {e}. "
+                        "Proceeding without caching."
+                    )
+                    cache_name = None
+            else:
+                logger.info(
+                    f"[Summarizer] Shared context too small for caching "
+                    f"({token_count} tokens < {min_tokens} minimum)"
+                )
+
         # Chunk items to respect TPM (tokens-per-minute) limits
         # Gemini Flash: 1M TPM limit - large PDFs can use 50K+ tokens each
         # Conservative chunk size prevents RESOURCE_EXHAUSTED errors
@@ -231,23 +273,34 @@ class GeminiSummarizer:
 
         all_results = []
 
-        for chunk_idx, chunk in enumerate(chunks):
-            chunk_num = chunk_idx + 1
-            logger.info(
-                f"[Summarizer] Processing chunk {chunk_num}/{len(chunks)} ({len(chunk)} items)"
-            )
-
-            # Process chunk with retry logic
-            chunk_results = self._process_batch_chunk(chunk, chunk_num)
-            all_results.extend(chunk_results)
-
-            # Delay between chunks (except after last chunk)
-            if chunk_idx < len(chunks) - 1:
-                delay = 120  # 120 seconds between chunks (increased from 90s to prevent quota exhaustion)
+        try:
+            for chunk_idx, chunk in enumerate(chunks):
+                chunk_num = chunk_idx + 1
                 logger.info(
-                    f"[Summarizer] Waiting {delay}s before next chunk (quota refill)..."
+                    f"[Summarizer] Processing chunk {chunk_num}/{len(chunks)} ({len(chunk)} items)"
                 )
-                time.sleep(delay)
+
+                # Process chunk with retry logic (pass cache_name if available)
+                chunk_results = self._process_batch_chunk(chunk, chunk_num, cache_name)
+                all_results.extend(chunk_results)
+
+                # Delay between chunks (except after last chunk)
+                if chunk_idx < len(chunks) - 1:
+                    delay = 120  # 120 seconds between chunks (increased from 90s to prevent quota exhaustion)
+                    logger.info(
+                        f"[Summarizer] Waiting {delay}s before next chunk (quota refill)..."
+                    )
+                    time.sleep(delay)
+
+        finally:
+            # Cleanup: Delete cache after all chunks processed
+            if cache_name:
+                try:
+                    logger.info(f"[Summarizer] Cleaning up cache: {cache_name}")
+                    self.client.caches.delete(name=cache_name)
+                    logger.info("[Summarizer] Cache deleted successfully")
+                except Exception as e:
+                    logger.warning(f"[Summarizer] Failed to delete cache: {e}")
 
         successful = sum(1 for r in all_results if r.get("success"))
         logger.info(
@@ -257,13 +310,17 @@ class GeminiSummarizer:
         return all_results
 
     def _process_batch_chunk(
-        self, chunk_requests: List[Dict[str, Any]], chunk_num: int
+        self,
+        chunk_requests: List[Dict[str, Any]],
+        chunk_num: int,
+        cache_name: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Process a single chunk of batch requests with retry logic using JSONL file method
 
         Args:
             chunk_requests: List of item requests for this chunk
             chunk_num: Chunk number for logging
+            cache_name: Optional Gemini cache name for shared context
 
         Returns:
             List of results for this chunk
@@ -282,7 +339,7 @@ class GeminiSummarizer:
 
             # Create temp JSONL file
             temp_file = tempfile.NamedTemporaryFile(
-                mode='w', suffix='.jsonl', delete=False
+                mode='w', suffix='.json', delete=False
             )
             temp_path = temp_file.name
 
@@ -304,14 +361,12 @@ class GeminiSummarizer:
                     prompt = self._get_prompt(
                         "item", prompt_type, title=item_title, text=text
                     )
-                    response_schema = self.prompts["item"][prompt_type].get(
-                        "response_schema"
-                    )
+                    # NOTE: Batch API might not support responseSchema
+                    # Use responseMimeType only, rely on prompt for structure
                     generation_config = {
                         "temperature": 0.3,
-                        "max_output_tokens": 8192,
-                        "response_mime_type": "application/json",
-                        "response_schema": response_schema,
+                        "maxOutputTokens": 8192,
+                        "responseMimeType": "application/json",
                     }
 
                     # Log input details for debugging
@@ -320,17 +375,45 @@ class GeminiSummarizer:
                     )
 
                     # Write JSONL line with key for matching
+                    # NOTE: Batch API expects camelCase for ALL field names in JSON
                     jsonl_line = {
                         "key": item_id,  # CRITICAL: This key matches response to request
                         "request": {
-                            "contents": [{"parts": [{"text": prompt}], "role": "user"}],
-                            "generation_config": generation_config,
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "generationConfig": generation_config,  # camelCase!
                         }
                     }
+
+                    # Include cached context if available
+                    if cache_name:
+                        jsonl_line["request"]["cachedContent"] = cache_name
+
                     temp_file.write(json.dumps(jsonl_line) + '\n')
                     request_map[item_id] = req
 
                 temp_file.close()
+
+                # DEBUG: Show first JSONL line to verify format
+                with open(temp_path, 'r') as debug_file:
+                    first_line = debug_file.readline()
+                    try:
+                        parsed = json.loads(first_line)
+                        logger.info(f"[Summarizer] DEBUG JSONL structure:")
+                        logger.info(f"  - key: {parsed.get('key')}")
+                        logger.info(f"  - request.contents: {type(parsed.get('request', {}).get('contents'))}")
+                        gen_config = parsed.get('request', {}).get('generationConfig', {})
+                        if gen_config:
+                            logger.info(f"  - request.generationConfig keys: {list(gen_config.keys())}")
+                            # Show responseSchema structure
+                            if 'responseSchema' in gen_config:
+                                schema = gen_config['responseSchema']
+                                logger.info(f"  - responseSchema type: {schema.get('type')}")
+                                logger.info(f"  - responseSchema properties count: {len(schema.get('properties', {}))}")
+                        if 'cachedContent' in parsed.get('request', {}):
+                            logger.info(f"  - request.cachedContent: {parsed['request']['cachedContent']}")
+                        logger.info(f"  - Full first line (truncated): {first_line[:800]}")
+                    except Exception as e:
+                        logger.error(f"[Summarizer] DEBUG Failed to parse JSONL: {e}")
 
                 # Upload JSONL file
                 logger.info(

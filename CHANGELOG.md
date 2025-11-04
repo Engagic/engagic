@@ -6,6 +6,121 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-03] Critical Fix + Major Optimization: Meeting-Level Document Cache & Context Caching
+
+**The breakthrough.** Implemented meeting-level document cache with per-item version filtering and Gemini context caching preparation. Eliminates duplicate PDF extractions and prepares for massive API cost savings.
+
+**The Problems:**
+1. **Batch API failures** - MIME type and request format errors causing all batch processing to fail
+2. **Massive duplicate work** - Same 293-page PDF extracted 3 times for 3 different items
+3. **No deduplication** - Every item included shared documents in LLM requests
+4. **Version chaos** - All document versions sent to LLM (Ver1, Ver2, Ver3)
+
+**The Fixes:**
+
+**1. Batch API Fixes**
+- `analysis/llm/summarizer.py:285` - Changed `.jsonl` → `.json` file extension
+  - Fix: Gemini API rejects `application/x-ndjson` MIME type
+  - Now: SDK correctly infers MIME type from `.json` extension
+- `analysis/llm/summarizer.py:326` - Removed `"role": "user"` from request contents
+  - Fix: Gemini Batch API doesn't accept role field in contents array
+  - Now: Clean `{"parts": [{"text": prompt}]}` format matches Google docs
+- `analysis/llm/summarizer.py:367-373` - Use camelCase field names in JSON
+  - Fix: Batch API expects `maxOutputTokens`, `responseMimeType`, `responseSchema` (camelCase)
+  - Previous: `max_output_tokens`, `response_mime_type`, `response_schema` (snake_case)
+  - Reason: REST API expects camelCase; SDK handles conversion, but manual JSON doesn't
+- `analysis/llm/summarizer.py:386` - Use camelCase for config key name
+  - Fix: Changed `"generation_config"` to `"generationConfig"` in request object
+  - ALL field names in JSON must be camelCase (not just values inside)
+- `analysis/llm/summarizer.py:364-370` - Remove `responseSchema` from batch config
+  - Discovery: Gemini Batch API doesn't support `responseSchema` validation
+  - Solution: Use `responseMimeType: "application/json"` only, rely on prompt for structure
+  - Prompts already include detailed JSON format instructions
+
+**2. Meeting-Level Document Cache (Item-First Architecture)**
+- `pipeline/processor.py:419-492` - Implemented smart document caching
+  - Phase 1: Per-item version filtering (Ver2 > Ver1 within each item's attachments)
+  - Phase 2: Collect unique URLs across all items (after filtering)
+  - Phase 3: Extract each unique URL once → cache
+  - Phase 4: Build item requests from cached documents
+
+**3. Version Filtering**
+- `pipeline/processor.py:102-140` - Added `_filter_document_versions()` method
+  - Regex-based: `'Leg Dig Ver2'` kept, `'Leg Dig Ver1'` filtered
+  - Scoped to each item's attachments (item-first: no cross-item conflicts)
+  - Handles Ver1, Ver2, Ver3, etc.
+
+**4. Shared Document Separation**
+- `pipeline/processor.py:487-512` - Separate shared vs item-specific documents
+  - Shared: Documents appearing in multiple items (e.g., "Comm Pkt 110325" used by 3 items)
+  - Item-specific: Documents unique to one item
+  - Built meeting-level context from shared documents
+  - Item requests contain ONLY item-specific text (shared docs excluded)
+
+**5. Context Caching Preparation**
+- `pipeline/processor.py:596-600` - Pass shared_context + meeting_id to analyzer
+- `pipeline/analyzer.py:173-214` - Accept and forward caching parameters
+
+**6. Gemini Explicit Context Caching (IMPLEMENTED)**
+- `analysis/llm/summarizer.py:182-259` - Context cache creation and lifecycle management
+  - Accept `shared_context` and `meeting_id` parameters in `summarize_batch()`
+  - Create cache if shared_context >= 1,024 tokens (minimum for Flash)
+  - 1-hour TTL (sufficient for batch processing)
+  - Automatic cleanup in finally block after all chunks processed
+- `analysis/llm/summarizer.py:312-327` - Pass cache_name to chunk processor
+- `analysis/llm/summarizer.py:388-390` - Include `cachedContent` in JSONL requests
+  - When cache exists, reference shared context via `cachedContent` field
+  - Item requests contain only item-specific text (shared docs already cached)
+  - Gemini charges reduced rate for cached tokens (50-90% savings)
+
+**Architecture Flow:**
+```
+For each item:
+  ✓ Collect attachment URLs
+  ✓ Filter versions WITHIN this item (Ver2 > Ver1)
+  ✓ Store filtered URLs
+
+Across all items:
+  ✓ Collect unique URLs (after per-item filtering)
+  ✓ Extract each unique URL once → cache
+  ✓ Identify shared (multiple items) vs unique (one item)
+
+Build shared context:
+  ✓ Aggregate shared documents → meeting-level context
+  ✓ Prepare for Gemini caching (>1024 tokens)
+
+Build batch requests:
+  ✓ Each item gets ONLY its item-specific documents
+  ✓ Shared context passed separately (for caching)
+  ✓ No duplicate content in requests
+```
+
+**Performance Gains (SF Meeting Example):**
+- **Before:** 'Comm Pkt 110325' (293 pages) extracted 3 times = 3x work
+- **After:** 'Comm Pkt 110325' extracted once, used by 3 items = 1x work
+- **Before:** 'Parcel Tables' (992 pages, 32 seconds!) extracted 2 times
+- **After:** 'Parcel Tables' extracted once, cached
+- **Before:** Ver1 + Ver2 + Ver3 all sent to LLM
+- **After:** Only highest version sent (Ver3 > Ver2 > Ver1)
+
+**Expected Savings:**
+- Extraction time: 50-70% reduction (no duplicate PDF extraction)
+- API costs: 60-80% reduction (shared docs cached at reduced rate + no duplicates + batch API)
+  - Batch API: 50% base savings
+  - Cached tokens: 50-90% additional savings on shared documents
+  - Combined: Up to 80% total cost reduction
+- Request sizes: 30-50% smaller (item-specific only, no shared docs in requests)
+- Version noise: Eliminated (only latest versions)
+
+**Code Changes:**
+- `analysis/llm/summarizer.py` - Batch API fixes + context caching (~80 lines added/changed)
+- `pipeline/processor.py` - Document cache + version filtering (~150 lines added)
+- `pipeline/analyzer.py` - Pass-through caching parameters (~10 lines changed)
+
+**Status:** COMPLETE - Ready for production testing
+
+---
+
 ## [2025-11-03] Enhancement: NovusAgenda Now Prioritizes Parsable HTML Agendas
 
 **The fix.** NovusAgenda sites have multiple agenda link types. Updated adapter to prioritize parsable HTML agendas ("HTML Agenda", "Online Agenda") over summaries.

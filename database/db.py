@@ -332,14 +332,25 @@ class UnifiedDatabase:
             # Parse date from adapter format
             meeting_date = None
             if meeting_dict.get("start"):
-                try:
-                    # Try parsing ISO format first
-                    meeting_date = datetime.fromisoformat(
-                        meeting_dict["start"].replace("Z", "+00:00")
-                    )
-                except Exception:
-                    # If ISO parsing fails, leave as None
-                    pass
+                date_str = meeting_dict["start"]
+                # Try multiple date formats
+                for fmt in [
+                    None,  # ISO format via fromisoformat
+                    "%m/%d/%y",  # NovusAgenda: "11/05/25"
+                    "%Y-%m-%d",  # Standard: "2025-11-05"
+                    "%m/%d/%Y",  # US format: "11/05/2025"
+                ]:
+                    try:
+                        if fmt is None:
+                            # Try ISO format
+                            meeting_date = datetime.fromisoformat(
+                                date_str.replace("Z", "+00:00")
+                            )
+                        else:
+                            meeting_date = datetime.strptime(date_str, fmt)
+                        break  # Successfully parsed
+                    except Exception:
+                        continue
 
             # Create Meeting object
             meeting_obj = Meeting(

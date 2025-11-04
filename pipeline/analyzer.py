@@ -171,9 +171,12 @@ class Analyzer:
         )
 
     def process_batch_items(
-        self, item_requests: List[Dict[str, Any]]
+        self,
+        item_requests: List[Dict[str, Any]],
+        shared_context: Optional[str] = None,
+        meeting_id: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """Process multiple agenda items using Gemini Batch API
+        """Process multiple agenda items using Gemini Batch API with context caching
 
         Delegates to summarizer.summarize_batch() for actual batch processing.
 
@@ -182,10 +185,12 @@ class Analyzer:
                 [{
                     'item_id': str,
                     'title': str,
-                    'text': str,
+                    'text': str,  # Item-specific text only (shared docs excluded)
                     'sequence': int,
                     'page_count': int or None
                 }, ...]
+            shared_context: Optional meeting-level shared document context (for caching)
+            meeting_id: Optional meeting ID (for cache naming)
 
         Returns:
             List of results: [{
@@ -202,4 +207,8 @@ class Analyzer:
         logger.info(
             f"[Processor] Delegating {len(item_requests)} items to batch summarizer"
         )
-        return self.summarizer.summarize_batch(item_requests)
+        return self.summarizer.summarize_batch(
+            item_requests,
+            shared_context=shared_context,
+            meeting_id=meeting_id
+        )
