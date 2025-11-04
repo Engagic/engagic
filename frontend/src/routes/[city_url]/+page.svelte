@@ -82,6 +82,17 @@
 					</div>
 
 					<div class="meeting-list">
+				{#each upcomingMeetings as meeting, index}
+					<MeetingCard
+						{meeting}
+						cityUrl={city_banana}
+						isPast={false}
+						animationDuration={isInitialLoad ? 300 : 0}
+						animationDelay={isInitialLoad ? index * 50 : 0}
+						onIntroEnd={() => { if (index === upcomingMeetings.length - 1 && !showPastMeetings) isInitialLoad = false; }}
+					/>
+				{/each}
+
 				{#if showPastMeetings}
 					{#if pastMeetings.length > 0}
 						<h3 class="past-meetings-divider">Past Meetings</h3>
@@ -97,17 +108,6 @@
 						/>
 					{/each}
 				{/if}
-
-				{#each upcomingMeetings as meeting, index}
-					<MeetingCard
-						{meeting}
-						cityUrl={city_banana}
-						isPast={false}
-						animationDuration={isInitialLoad ? 300 : 0}
-						animationDelay={isInitialLoad ? index * 50 : 0}
-						onIntroEnd={() => { if (index === upcomingMeetings.length - 1 && pastMeetings.length === 0) isInitialLoad = false; }}
-					/>
-				{/each}
 					</div>
 				{:else}
 					<div class="no-meetings">
