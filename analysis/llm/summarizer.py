@@ -791,10 +791,18 @@ class GeminiSummarizer:
                 raise ValueError(f"Invalid JSON response: missing {missing_fields}")
 
             # Build comprehensive summary with all components
-            thinking = data.get("thinking", "")
+            thinking_raw = data.get("thinking", "")
             summary_md = data.get("summary_markdown", "")
             impact_md = data.get("citizen_impact_markdown", "")
             confidence = data.get("confidence", "unknown")
+
+            # Handle thinking as either string or array (LLM sometimes ignores schema)
+            if isinstance(thinking_raw, list):
+                # Convert array to bullet-point string
+                thinking = "\n".join(f"- {bullet}" for bullet in thinking_raw if bullet)
+                logger.debug(f"[Summarizer] Converted thinking array ({len(thinking_raw)} items) to markdown bullets")
+            else:
+                thinking = thinking_raw
 
             # Validate and normalize topics
             raw_topics = data.get("topics", [])

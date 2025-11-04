@@ -15,20 +15,44 @@ from database.db import UnifiedDatabase, Meeting, AgendaItem
 
 
 def _clean_summary_for_flyer(summary: str) -> str:
-    """Clean summary for flyer display - matches frontend cleanSummary + parseSummaryForThinking"""
+    """Clean summary for flyer display
+
+    Extracts only the main summary and citizen impact sections.
+    Removes thinking, confidence, and LLM artifacts for concise print output.
+    """
     if not summary:
         return "No summary available"
 
-    # Remove thinking section (everything before "## Summary")
+    # Step 1: Remove thinking section entirely (before "## Summary")
     parts = re.split(r'^## Thinking\s*$', summary, flags=re.MULTILINE)
     if len(parts) > 1:
-        # Take everything after thinking section
-        summary = parts[1]
+        summary = parts[1]  # Everything after thinking
 
-    # Remove section headers but keep content
-    summary = re.sub(r'^##\s+(Summary|Citizen Impact|Confidence).*$', '', summary, flags=re.MULTILINE)
+    # Step 2: Extract only Summary and Citizen Impact sections
+    # Split into sections by ## headers
+    sections = re.split(r'^##\s+(\w+.*?)$', summary, flags=re.MULTILINE)
 
-    # Remove LLM preamble (matches frontend cleanSummary)
+    keep_sections = []
+    i = 0
+    while i < len(sections):
+        if i + 1 < len(sections):
+            section_name = sections[i + 1].strip().lower()
+            section_content = sections[i + 2] if i + 2 < len(sections) else ""
+
+            # Keep only Summary and Citizen Impact
+            if 'summary' in section_name or 'citizen impact' in section_name or 'impact' in section_name:
+                keep_sections.append(section_content.strip())
+
+            i += 2
+        else:
+            # Remaining content without header
+            if sections[i].strip():
+                keep_sections.append(sections[i].strip())
+            i += 1
+
+    summary = "\n\n".join(keep_sections)
+
+    # Step 3: Remove LLM preamble patterns
     summary = re.sub(r'=== DOCUMENT \d+ ===', '', summary)
     summary = re.sub(r'--- SECTION \d+ SUMMARY ---', '', summary)
     summary = re.sub(r"Here's a concise summary of the[^:]*:", '', summary, flags=re.IGNORECASE)
@@ -36,14 +60,14 @@ def _clean_summary_for_flyer(summary: str) -> str:
     summary = re.sub(r"Here's the key points[^:]*:", '', summary, flags=re.IGNORECASE)
     summary = re.sub(r"Summary of the[^:]*:", '', summary, flags=re.IGNORECASE)
 
-    # Clean up markdown for print
-    summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', summary)  # Bold
-    summary = re.sub(r'^[\*\-]\s+', '• ', summary, flags=re.MULTILINE)  # Bullets
-    summary = re.sub(r'\n{3,}', '\n\n', summary)  # Extra newlines
+    # Step 4: Clean up markdown for print (keep bullets, remove bold)
+    summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', summary)  # Remove bold markdown
+    summary = re.sub(r'^[\*\-]\s+', '• ', summary, flags=re.MULTILINE)  # Standardize bullets
+    summary = re.sub(r'\n{3,}', '\n\n', summary)  # Collapse extra newlines
 
     summary = summary.strip()
 
-    # Convert to simple HTML
+    # Step 5: Convert to simple HTML
     summary = summary.replace('\n\n', '</p><p>')
     summary = summary.replace('\n', '<br>')
 
@@ -136,22 +160,23 @@ def generate_meeting_flyer(
     }
     position_label = position_labels.get(position, "POSITION UNKNOWN")
 
-    # Custom message section
+    # Custom message section (only if provided)
     message_section = ""
-    if custom_message:
-        escaped_message = _escape_html(custom_message[:500])  # Max 500 chars
+    if custom_message and custom_message.strip():
+        escaped_message = _escape_html(custom_message[:500].strip())
         message_section = f"""
         <div class="custom-message">
             <p>"{escaped_message}"</p>
         </div>
         """
 
-    # Signature section
+    # Signature section (only if provided)
     signature_section = ""
-    if user_name:
+    if user_name and user_name.strip():
+        escaped_name = _escape_html(user_name[:100].strip())
         signature_section = f"""
         <div class="signature">
-            <p>— {_escape_html(user_name)} —</p>
+            <p>— {escaped_name} —</p>
         </div>
         """
 
