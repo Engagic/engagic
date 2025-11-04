@@ -177,18 +177,17 @@ def generate_meeting_flyer(
     else:
         meeting_date = "Date TBD"
 
-    # Render template with data
-    html = template.format(
-        city_name=_escape_html(city_name),
-        city_display=_escape_html(city_display),
-        meeting_date=meeting_date,
-        agenda_section=agenda_section,
-        position_label=position_label,
-        message_section=message_section,
-        signature_section=signature_section,
-        participation_html=participation_html,
-        qr_data_url=qr_data_url,
-    )
+    # Render template with data (use replace to avoid CSS curly brace conflicts)
+    html = template
+    html = html.replace('{city_name}', _escape_html(city_name))
+    html = html.replace('{city_display}', _escape_html(city_display))
+    html = html.replace('{meeting_date}', meeting_date)
+    html = html.replace('{agenda_section}', agenda_section)
+    html = html.replace('{position_label}', position_label)
+    html = html.replace('{message_section}', message_section)
+    html = html.replace('{signature_section}', signature_section)
+    html = html.replace('{participation_html}', participation_html)
+    html = html.replace('{qr_data_url}', qr_data_url)
 
     return html
 
