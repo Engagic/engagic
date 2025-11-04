@@ -172,6 +172,26 @@
 		const cityName = searchResults && 'city_name' in searchResults ? searchResults.city_name : 'Your City';
 		const state = searchResults && 'state' in searchResults ? searchResults.state : '';
 
+		// Truncate title intelligently for flyer display
+		let displayTitle = item.title;
+
+		// Step 1: If there's a semicolon, take only the first part
+		const semicolonIndex = displayTitle.indexOf(';');
+		if (semicolonIndex !== -1 && semicolonIndex < displayTitle.length - 1) {
+			displayTitle = displayTitle.substring(0, semicolonIndex);
+		}
+
+		// Step 2: If there's a period in the first 150 chars, take just the first sentence
+		const periodIndex = displayTitle.indexOf('.');
+		if (periodIndex !== -1 && periodIndex < 150) {
+			displayTitle = displayTitle.substring(0, periodIndex + 1);
+		}
+
+		// Step 3: Hard cap at 150 characters with ellipsis
+		if (displayTitle.length > 150) {
+			displayTitle = displayTitle.substring(0, 147) + '...';
+		}
+
 		// Format date
 		let dateStr = 'Date TBD';
 		if (selectedMeeting.date) {
@@ -302,7 +322,7 @@
 </head>
 <body>
 	<div class="header">SAY ${position === 'yes' ? 'YES' : 'NO'} TO</div>
-	<div class="title">${item.title}</div>
+	<div class="title">${displayTitle}</div>
 	<div class="city">${cityName}${state ? ', ' + state : ''}</div>
 	<div class="date">${dateStr}</div>
 	<div class="participate">YOU CAN PARTICIPATE BY:</div>
