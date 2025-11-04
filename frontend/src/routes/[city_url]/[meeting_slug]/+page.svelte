@@ -3,6 +3,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
 	import type { SearchResult, Meeting } from '$lib/api/index';
+	import { config } from '$lib/api/config';
 	import { extractTime } from '$lib/utils/date-utils';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -161,7 +162,7 @@
 		flyerGenerating = true;
 
 		try {
-			const response = await fetch('https://api.engagic.com/api/flyer/generate', {
+			const response = await fetch(`${config.apiBaseUrl}/api/flyer/generate`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
