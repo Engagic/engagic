@@ -417,7 +417,7 @@ class Processor:
             )
 
             # STEP 1: Build meeting-level document cache (item-first architecture)
-            logger.info(f"[DocumentCache] Building meeting-level document cache...")
+            logger.info("[DocumentCache] Building meeting-level document cache...")
             document_cache = {}  # url -> {text, page_count, name}
             item_attachments = {}  # item_id -> list of URLs (after version filtering)
 
