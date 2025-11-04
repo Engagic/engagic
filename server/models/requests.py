@@ -87,7 +87,7 @@ class TopicSearchRequest(BaseModel):
 
 class FlyerRequest(BaseModel):
     meeting_id: int
-    item_id: Optional[int] = None
+    item_id: Optional[str] = None
     position: str
     custom_message: Optional[str] = None
     user_name: Optional[str] = None
