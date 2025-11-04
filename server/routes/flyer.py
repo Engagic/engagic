@@ -75,5 +75,7 @@ async def generate_flyer(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         logger.error(f"Error generating flyer: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Error generating flyer")

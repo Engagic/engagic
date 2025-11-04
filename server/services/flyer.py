@@ -109,7 +109,10 @@ def generate_meeting_flyer(
     participation_html = "\n".join(participation_lines) if participation_lines else "<p>Contact your city for participation details</p>"
 
     # Format date
-    meeting_date = meeting.date or "Date TBD"
+    if meeting.date:
+        meeting_date = meeting.date.strftime("%B %d, %Y at %I:%M %p")
+    else:
+        meeting_date = "Date TBD"
 
     # Build complete HTML
     html = f"""<!DOCTYPE html>
