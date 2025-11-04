@@ -220,6 +220,13 @@
 
 <div class="container">
 	<div class="main-content">
+		<!-- Debug indicator -->
+		{#if showFlyerModal}
+			<div style="position: fixed; top: 0; left: 0; right: 0; background: red; color: white; padding: 1rem; z-index: 99999; text-align: center;">
+				MODAL STATE IS TRUE - Modal should be visible
+			</div>
+		{/if}
+
 		<div class="top-nav">
 			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
 			<a href="/" class="compact-logo" aria-label="Return to engagic homepage">
@@ -491,15 +498,12 @@
 			aria-modal="true"
 			aria-labelledby="flyer-modal-title"
 			tabindex="-1"
-			onclick={closeFlyerModal}
 			onkeydown={(e) => { if (e.key === 'Escape') closeFlyerModal(); }}
 		>
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<div
 				class="modal-content"
 				role="document"
-				onclick={(e) => e.stopPropagation()}
-				onkeydown={(e) => e.stopPropagation()}
 			>
 				<div class="modal-header">
 					<h2 id="flyer-modal-title">Generate Civic Action Flyer</h2>
