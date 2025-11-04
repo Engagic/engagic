@@ -6,9 +6,63 @@ Converts passive browsing into active participation.
 """
 
 import base64
+import re
 from io import BytesIO
 from typing import Dict, Any, Optional
 from database.db import UnifiedDatabase, Meeting, AgendaItem
+
+
+def _clean_summary_for_flyer(summary: str) -> str:
+    """Clean summary for flyer display - matches frontend cleanSummary + parseSummaryForThinking"""
+    if not summary:
+        return "No summary available"
+
+    # Remove thinking section (everything before "## Summary")
+    parts = re.split(r'^## Thinking\s*$', summary, flags=re.MULTILINE)
+    if len(parts) > 1:
+        # Take everything after thinking section
+        summary = parts[1]
+
+    # Remove section headers but keep content
+    summary = re.sub(r'^##\s+(Summary|Citizen Impact|Confidence).*$', '', summary, flags=re.MULTILINE)
+
+    # Remove LLM preamble (matches frontend cleanSummary)
+    summary = re.sub(r'=== DOCUMENT \d+ ===', '', summary)
+    summary = re.sub(r'--- SECTION \d+ SUMMARY ---', '', summary)
+    summary = re.sub(r"Here's a concise summary of the[^:]*:", '', summary, flags=re.IGNORECASE)
+    summary = re.sub(r"Here's a summary of the[^:]*:", '', summary, flags=re.IGNORECASE)
+    summary = re.sub(r"Here's the key points[^:]*:", '', summary, flags=re.IGNORECASE)
+    summary = re.sub(r"Summary of the[^:]*:", '', summary, flags=re.IGNORECASE)
+
+    # Clean up markdown for print
+    summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', summary)  # Bold
+    summary = re.sub(r'^[\*\-]\s+', '• ', summary, flags=re.MULTILINE)  # Bullets
+    summary = re.sub(r'\n{3,}', '\n\n', summary)  # Extra newlines
+
+    summary = summary.strip()
+
+    # Convert to simple HTML
+    summary = summary.replace('\n\n', '</p><p>')
+    summary = summary.replace('\n', '<br>')
+
+    return f"<p>{summary}</p>"
+
+
+def _generate_meeting_slug(meeting: Meeting) -> str:
+    """Generate meeting slug matching frontend format: {title}_{date}_{id}"""
+    title = meeting.title or "meeting"
+
+    # Format date as YYYY_MM_DD
+    date_slug = "undated"
+    if meeting.date:
+        date_slug = meeting.date.strftime("%Y_%m_%d")
+
+    # Clean title: lowercase, alphanumeric only, underscores
+    clean_title = re.sub(r'[^a-z0-9\s]', '', title.lower())
+    clean_title = re.sub(r'\s+', '_', clean_title)[:50]
+
+    # Format: {title}_{date}_{id}
+    return f"{clean_title}_{date_slug}_{meeting.id}"
 
 
 def generate_meeting_flyer(
@@ -37,8 +91,9 @@ def generate_meeting_flyer(
     city_name = city.name if city else "Unknown City"
     state = city.state if city else ""
 
-    # Build meeting URL for QR code
-    meeting_url = f"https://engagic.com/meetings/{meeting.id}"
+    # Build meeting URL for QR code (matches frontend routing)
+    meeting_slug = _generate_meeting_slug(meeting)
+    meeting_url = f"https://engagic.org/{meeting.banana}/{meeting_slug}"
 
     # Generate QR code as data URL
     qr_data_url = _generate_qr_code(meeting_url)
@@ -47,12 +102,12 @@ def generate_meeting_flyer(
     if item:
         # Item-specific flyer
         item_title = item.title or "Agenda Item"
-        item_summary = item.summary or "No summary available"
+        item_summary_html = _clean_summary_for_flyer(item.summary or "")
         agenda_section = f"""
         <div class="agenda-item">
             <h2>Agenda Item</h2>
             <h3>{_escape_html(item_title)}</h3>
-            <p class="summary">{_escape_html(item_summary)}</p>
+            <div class="summary">{item_summary_html}</div>
         </div>
         """
     else:
