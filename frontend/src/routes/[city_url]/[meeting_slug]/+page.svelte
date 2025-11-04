@@ -415,6 +415,16 @@
 									{#if item.summary}
 										{@const summaryParts = parseSummaryForThinking(item.summary)}
 
+										<!-- Flyer generator button - moved to top for mobile accessibility -->
+										<div class="item-action-bar item-action-bar-top">
+											<button
+												class="generate-flyer-btn"
+												onclick={(e) => { e.stopPropagation(); openFlyerModal(item.id); }}
+											>
+												📄 Generate Action Flyer
+											</button>
+										</div>
+
 										{#if summaryParts.thinking}
 											<div class="thinking-section" class:expanded={expandedThinking.has(item.id)}>
 												<button
@@ -433,16 +443,6 @@
 
 										<div class="item-summary">
 											{@html marked(summaryParts.summary)}
-										</div>
-
-										<!-- Flyer generator button -->
-										<div class="item-action-bar">
-											<button
-												class="generate-flyer-btn"
-												onclick={(e) => { e.stopPropagation(); openFlyerModal(item.id); }}
-											>
-												📄 Generate Action Flyer
-											</button>
 										</div>
 									{/if}
 
@@ -1872,32 +1872,53 @@
 
 		/* Flyer Modal Mobile Optimization */
 		.modal-overlay {
-			padding: 0.5rem;
+			padding: 0;
 			align-items: flex-end;
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
 		}
 
 		.modal-content {
-			max-height: 95vh;
+			max-height: 92vh;
 			border-bottom-left-radius: 0;
 			border-bottom-right-radius: 0;
+			border-top-left-radius: 20px;
+			border-top-right-radius: 20px;
+			box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
 		}
 
 		.modal-header {
-			padding: 1rem;
+			padding: 1.25rem 1rem 1rem 1rem;
+			position: relative;
+		}
+
+		.modal-header::before {
+			content: '';
+			position: absolute;
+			top: 0.5rem;
+			left: 50%;
+			transform: translateX(-50%);
+			width: 40px;
+			height: 4px;
+			background: #cbd5e1;
+			border-radius: 2px;
 		}
 
 		.modal-header h2 {
-			font-size: 0.95rem;
+			font-size: 1rem;
+			margin-top: 0.5rem;
 		}
 
 		.modal-close {
-			width: 1.75rem;
-			height: 1.75rem;
+			width: 2rem;
+			height: 2rem;
 			font-size: 1.5rem;
 		}
 
 		.modal-body {
 			padding: 1rem;
+			max-height: calc(92vh - 180px);
+			overflow-y: auto;
 		}
 
 		.form-group {
@@ -1905,7 +1926,7 @@
 		}
 
 		.form-label {
-			font-size: 0.8rem;
+			font-size: 0.85rem;
 		}
 
 		.radio-group {
@@ -1913,40 +1934,53 @@
 		}
 
 		.radio-label {
-			padding: 0.6rem 0.75rem;
-			font-size: 0.85rem;
+			padding: 0.7rem 0.85rem;
+			font-size: 0.9rem;
 		}
 
 		.form-group textarea {
-			font-size: 0.9rem;
-			padding: 0.65rem;
+			font-size: 1rem;
+			padding: 0.75rem;
+			min-height: 100px;
 		}
 
 		.form-group input[type="text"] {
-			font-size: 0.85rem;
-			padding: 0.65rem;
+			font-size: 1rem;
+			padding: 0.75rem;
 		}
 
 		.char-count {
-			font-size: 0.7rem;
+			font-size: 0.75rem;
 		}
 
 		.modal-footer {
 			padding: 1rem;
-			flex-direction: column;
-			gap: 0.5rem;
+			flex-direction: column-reverse;
+			gap: 0.75rem;
+			border-top: 1px solid #e2e8f0;
 		}
 
 		.btn-primary,
 		.btn-secondary {
 			width: 100%;
-			padding: 0.65rem 1rem;
-			font-size: 0.8rem;
+			padding: 0.875rem 1rem;
+			font-size: 0.9rem;
 		}
 
 		.generate-flyer-btn {
-			padding: 0.6rem 1rem;
-			font-size: 0.8rem;
+			padding: 0.75rem 1.25rem;
+			font-size: 0.9rem;
+			width: 100%;
+		}
+
+		.item-action-bar-top {
+			position: sticky;
+			top: 0;
+			background: white;
+			z-index: 10;
+			padding: 1rem;
+			margin: -1rem -1rem 1rem -1rem;
+			border-bottom: 2px solid #f1f5f9;
 		}
 	}
 
@@ -1958,6 +1992,15 @@
 		border-top: 1px solid #f1f5f9;
 		display: flex;
 		gap: 0.75rem;
+	}
+
+	.item-action-bar-top {
+		margin-top: 0;
+		margin-bottom: 1.5rem;
+		padding-top: 0;
+		padding-bottom: 1rem;
+		border-top: none;
+		border-bottom: 1px solid #f1f5f9;
 	}
 
 	.generate-flyer-btn {
