@@ -447,7 +447,19 @@
 										<div class="item-action-bar">
 											<button
 												class="generate-flyer-btn"
-												onclick={(e) => { e.stopPropagation(); openFlyerModal(item.id); }}
+												onclick={(e) => {
+													e.stopPropagation();
+													e.preventDefault();
+													openFlyerModal(item.id);
+												}}
+												ontouchstart={(e) => {
+													e.stopPropagation();
+												}}
+												ontouchend={(e) => {
+													e.stopPropagation();
+													e.preventDefault();
+													openFlyerModal(item.id);
+												}}
 											>
 												📄 Generate Action Flyer
 											</button>
@@ -1881,6 +1893,12 @@
 			align-items: flex-end !important;
 			display: flex !important;
 			position: fixed !important;
+			top: 0 !important;
+			left: 0 !important;
+			right: 0 !important;
+			bottom: 0 !important;
+			z-index: 9999 !important;
+			background: rgba(0, 0, 0, 0.7) !important;
 		}
 
 		.modal-content {
@@ -1892,6 +1910,8 @@
 			box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
 			width: 100% !important;
 			max-width: 100% !important;
+			background: white !important;
+			z-index: 10000 !important;
 		}
 
 		.modal-header {
