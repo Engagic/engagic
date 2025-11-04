@@ -519,6 +519,13 @@ class LegistarAdapter(BaseAdapter):
 
                 meeting_id = meeting_id_match.group(1)
 
+                # Skip video clip IDs (if somehow they got through)
+                if meeting_id.startswith('clip_'):
+                    logger.debug(
+                        f"[legistar:{self.slug}] Skipping video clip ID: {meeting_id}"
+                    )
+                    continue
+
                 # Extract title - try multiple strategies for flexibility
                 title = None
 
@@ -539,6 +546,14 @@ class LegistarAdapter(BaseAdapter):
 
                 if not title or title == "Details":
                     title = "Meeting"
+
+                # Skip video clip durations (Nashville scraping issue)
+                # Pattern: "01h 49m", "03h 26m", etc.
+                if re.match(r'^\d+h\s+\d+m\s*$', title):
+                    logger.debug(
+                        f"[legistar:{self.slug}] Skipping video duration: {title}"
+                    )
+                    continue
 
                 # Extract date - look for cells with date pattern or rgSorted class
                 meeting_dt = None
