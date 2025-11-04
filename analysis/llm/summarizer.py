@@ -237,7 +237,7 @@ class GeminiSummarizer:
                         model=self.flash_model_name,
                         config=types.CreateCachedContentConfig(
                             display_name=f"meeting-{meeting_id}-shared-docs",
-                            contents=[{"parts": [{"text": shared_context}]}],
+                            contents=[types.Content(parts=[types.Part(text=shared_context)])],
                             ttl="3600s"  # 1 hour TTL (sufficient for batch processing)
                         )
                     )
@@ -398,7 +398,7 @@ class GeminiSummarizer:
                     first_line = debug_file.readline()
                     try:
                         parsed = json.loads(first_line)
-                        logger.info(f"[Summarizer] DEBUG JSONL structure:")
+                        logger.info("[Summarizer] DEBUG JSONL structure:")
                         logger.info(f"  - key: {parsed.get('key')}")
                         logger.info(f"  - request.contents: {type(parsed.get('request', {}).get('contents'))}")
                         gen_config = parsed.get('request', {}).get('generationConfig', {})
