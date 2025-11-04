@@ -184,12 +184,15 @@ class GeminiSummarizer:
         item_requests: List[Dict[str, Any]],
         shared_context: Optional[str] = None,
         meeting_id: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """Process multiple agenda items using Gemini Batch API for 50% cost savings
+    ):
+        """Process multiple agenda items using Gemini Batch API, yielding results per chunk
+
+        Generator that yields chunk results immediately after each chunk completes.
+        This enables incremental saving to prevent data loss on crashes.
 
         Uses chunked processing to respect rate limits:
-        - 15 items per chunk (respects 1k RPM flash quota with buffer)
-        - 90-second delays between chunks (allows quota refill)
+        - 5 items per chunk (respects TPM quota)
+        - 120-second delays between chunks (allows quota refill)
         - Exponential backoff on 429 errors
 
         Args:
@@ -204,8 +207,8 @@ class GeminiSummarizer:
             shared_context: Optional meeting-level shared document context (for caching)
             meeting_id: Optional meeting ID (for cache naming)
 
-        Returns:
-            List of results: [{
+        Yields:
+            List of results per chunk: [{
                 'item_id': str,
                 'success': bool,
                 'summary': str,
@@ -214,7 +217,7 @@ class GeminiSummarizer:
             }, ...]
         """
         if not item_requests:
-            return []
+            return
 
         total_items = len(item_requests)
         logger.info(
@@ -271,7 +274,8 @@ class GeminiSummarizer:
             f"[Summarizer] Split into {len(chunks)} chunks of {chunk_size} items each"
         )
 
-        all_results = []
+        total_successful = 0
+        total_processed = 0
 
         try:
             for chunk_idx, chunk in enumerate(chunks):
@@ -282,7 +286,19 @@ class GeminiSummarizer:
 
                 # Process chunk with retry logic (pass cache_name if available)
                 chunk_results = self._process_batch_chunk(chunk, chunk_num, cache_name)
-                all_results.extend(chunk_results)
+
+                # Track stats
+                chunk_successful = sum(1 for r in chunk_results if r.get("success"))
+                total_successful += chunk_successful
+                total_processed += len(chunk_results)
+
+                logger.info(
+                    f"[Summarizer] Chunk {chunk_num} complete: {chunk_successful}/{len(chunk_results)} successful "
+                    f"(total: {total_successful}/{total_processed})"
+                )
+
+                # Yield results immediately for incremental saving
+                yield chunk_results
 
                 # Delay between chunks (except after last chunk)
                 if chunk_idx < len(chunks) - 1:
@@ -302,12 +318,9 @@ class GeminiSummarizer:
                 except Exception as e:
                     logger.warning(f"[Summarizer] Failed to delete cache: {e}")
 
-        successful = sum(1 for r in all_results if r.get("success"))
-        logger.info(
-            f"[Summarizer] Batch complete: {successful}/{total_items} successful"
-        )
-
-        return all_results
+            logger.info(
+                f"[Summarizer] Batch complete: {total_successful}/{total_processed} successful"
+            )
 
     def _process_batch_chunk(
         self,
