@@ -2,9 +2,8 @@
 	import { page } from '$app/stores';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
-	import type { SearchResult, Meeting, FlyerPosition } from '$lib/api/index';
+	import type { SearchResult, Meeting } from '$lib/api/index';
 	import { config } from '$lib/api/config';
-	import { FLYER_CONSTRAINTS } from '$lib/api/types';
 	import { extractTime } from '$lib/utils/date-utils';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -21,12 +20,7 @@
 	let expandedItems = new SvelteSet<string>();
 	let expandedThinking = new SvelteSet<string>();
 
-	// Flyer generation state (typed to match backend)
-	let showFlyerModal = $state(false);
-	let flyerItemId: string | null = $state(null);
-	let flyerPosition = $state<FlyerPosition>('support');
-	let flyerMessage = $state('');
-	let flyerName = $state('');
+	// Flyer generation state - simplified
 	let flyerGenerating = $state(false);
 
 	// Filter items by whether they have summaries
@@ -144,78 +138,141 @@
 		return { main: title, remainder: null, isTruncated: false };
 	}
 
-	function openFlyerModal(itemId: string | null) {
-		flyerItemId = itemId;
-		flyerPosition = 'support';
-		flyerMessage = '';
-		flyerName = '';
-		showFlyerModal = true;
-	}
-
-	// Enforce backend constraints on client side
-	$effect(() => {
-		if (flyerMessage.length > FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH) {
-			flyerMessage = flyerMessage.slice(0, FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH);
-		}
-		if (flyerName.length > FLYER_CONSTRAINTS.MAX_NAME_LENGTH) {
-			flyerName = flyerName.slice(0, FLYER_CONSTRAINTS.MAX_NAME_LENGTH);
-		}
-	});
-
-	function closeFlyerModal() {
-		showFlyerModal = false;
-		flyerItemId = null;
-	}
-
-	async function generateFlyer() {
+	function generateSimpleFlyer(item: any, position: 'yes' | 'no') {
 		if (!selectedMeeting) return;
 
-		flyerGenerating = true;
+		// Get city info
+		const cityName = searchResults && 'city_name' in searchResults ? searchResults.city_name : 'Your City';
+		const state = searchResults && 'state' in searchResults ? searchResults.state : '';
 
-		// CRITICAL: Open window IMMEDIATELY before async operation to avoid popup blocker
-		const flyerWindow = window.open('', '_blank');
-		if (!flyerWindow) {
-			alert('Please allow pop-ups to generate flyer');
-			flyerGenerating = false;
-			return;
+		// Format date
+		let dateStr = 'Date TBD';
+		if (selectedMeeting.date) {
+			const date = new Date(selectedMeeting.date);
+			if (!isNaN(date.getTime())) {
+				const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'long' });
+				const monthDay = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+				const time = extractTime(selectedMeeting.date);
+				dateStr = `${dayOfWeek}, ${monthDay}${time ? ' at ' + time : ''}`;
+			}
 		}
 
-		// Show loading state in new window
-		flyerWindow.document.write('<html><body style="font-family: sans-serif; padding: 2rem; text-align: center;"><h2>Generating your flyer...</h2></body></html>');
+		// Participation methods
+		const participation = selectedMeeting.participation || {};
+		const methods = [];
+		if (participation.email) methods.push(`EMAILING ${participation.email}`);
+		if (participation.phone) methods.push(`CALLING ${participation.phone}`);
+		if (participation.zoom_url || participation.virtual_url) {
+			const url = participation.zoom_url || participation.virtual_url;
+			methods.push(`ZOOMING AT ${url}`);
+		}
+		const participationText = methods.length > 0 ? methods.join('\n') : 'CONTACTING YOUR CITY COUNCIL';
 
-		try {
-			const response = await fetch(`${config.apiBaseUrl}/api/flyer/generate`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					meeting_id: selectedMeeting.id,
-					item_id: flyerItemId,
-					position: flyerPosition,
-					custom_message: flyerMessage || null,
-					user_name: flyerName || null,
-				}),
-			});
+		// Generate HTML
+		const html = `<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>${position === 'yes' ? 'Say Yes' : 'Say No'} - ${cityName}</title>
+	<style>
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+			background: white;
+			padding: 2rem;
+			max-width: 800px;
+			margin: 0 auto;
+			line-height: 1.6;
+		}
+		.header {
+			font-size: 3rem;
+			font-weight: 900;
+			text-align: center;
+			margin-bottom: 2rem;
+			color: ${position === 'yes' ? '#16a34a' : '#dc2626'};
+			text-transform: uppercase;
+			letter-spacing: 2px;
+		}
+		.city {
+			font-size: 1.5rem;
+			font-weight: 700;
+			text-align: center;
+			margin-bottom: 1rem;
+			color: #1f2937;
+		}
+		.date {
+			font-size: 1.25rem;
+			font-weight: 600;
+			text-align: center;
+			margin-bottom: 3rem;
+			color: #4b5563;
+		}
+		.title {
+			font-size: 1.75rem;
+			font-weight: 700;
+			text-align: center;
+			margin-bottom: 3rem;
+			padding: 2rem;
+			background: #f3f4f6;
+			border-radius: 12px;
+			color: #1f2937;
+			line-height: 1.4;
+		}
+		.participate {
+			font-size: 1.5rem;
+			font-weight: 700;
+			margin-bottom: 1.5rem;
+			color: #1f2937;
+		}
+		.methods {
+			font-size: 1.25rem;
+			white-space: pre-line;
+			padding: 1.5rem;
+			background: #f9fafb;
+			border-radius: 8px;
+			border: 2px solid #e5e7eb;
+			color: #374151;
+			line-height: 1.8;
+		}
+		.footer {
+			margin-top: 3rem;
+			text-align: center;
+			font-size: 0.875rem;
+			color: #9ca3af;
+		}
+		@media print {
+			body { padding: 0; }
+		}
+		@media (max-width: 640px) {
+			body { padding: 1rem; }
+			.header { font-size: 2rem; }
+			.city { font-size: 1.25rem; }
+			.date { font-size: 1rem; }
+			.title { font-size: 1.25rem; padding: 1.5rem; }
+			.participate { font-size: 1.25rem; }
+			.methods { font-size: 1rem; padding: 1rem; }
+		}
+	</style>
+</head>
+<body>
+	<div class="header">SAY ${position === 'yes' ? 'YES' : 'NO'} TO</div>
+	<div class="city">${cityName}${state ? ', ' + state : ''}</div>
+	<div class="date">${dateStr}</div>
+	<div class="title">${item.title}</div>
+	<div class="participate">YOU CAN PARTICIPATE BY:</div>
+	<div class="methods">${participationText}</div>
+	<div class="footer">Generated by engagic.org</div>
+</body>
+</html>`;
 
-			if (!response.ok) {
-				throw new Error('Failed to generate flyer');
-			}
-
-			const html = await response.text();
-
-			// Replace loading state with actual flyer
-			flyerWindow.document.open();
+		// Open in new window
+		const flyerWindow = window.open('', '_blank');
+		if (flyerWindow) {
 			flyerWindow.document.write(html);
 			flyerWindow.document.close();
-
-			closeFlyerModal();
-		} catch (err) {
-			console.error('Error generating flyer:', err);
-			flyerWindow.document.write('<html><body style="font-family: sans-serif; padding: 2rem; text-align: center;"><h2 style="color: red;">Error generating flyer</h2><p>Please try again or contact support.</p></body></html>');
-			alert('Failed to generate flyer. Please try again.');
-		} finally {
-			flyerGenerating = false;
+		} else {
+			alert('Please allow pop-ups to view flyer');
 		}
 	}
 
@@ -445,16 +502,25 @@
 											{@html marked(summaryParts.summary)}
 										</div>
 
-										<!-- Flyer generator button -->
+										<!-- Flyer generator buttons -->
 										<div class="item-action-bar">
 											<button
-												class="generate-flyer-btn"
+												class="flyer-btn flyer-btn-yes"
 												onclick={(e) => {
 													e.stopPropagation();
-													openFlyerModal(item.id);
+													generateSimpleFlyer(item, 'yes');
 												}}
 											>
-												📄 Generate Action Flyer
+												✓ Say Yes
+											</button>
+											<button
+												class="flyer-btn flyer-btn-no"
+												onclick={(e) => {
+													e.stopPropagation();
+													generateSimpleFlyer(item, 'no');
+												}}
+											>
+												✗ Say No
 											</button>
 										</div>
 									{/if}
@@ -494,83 +560,6 @@
 		</div>
 	{/if}
 	</div>
-
-	<!-- Flyer Generator Modal -->
-	{#if showFlyerModal}
-		<div
-			class="modal-overlay"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="flyer-modal-title"
-			tabindex="-1"
-			onkeydown={(e) => { if (e.key === 'Escape') closeFlyerModal(); }}
-		>
-			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-			<div
-				class="modal-content"
-				role="document"
-			>
-				<div class="modal-header">
-					<h2 id="flyer-modal-title">Generate Civic Action Flyer</h2>
-					<button class="modal-close" onclick={closeFlyerModal}>×</button>
-				</div>
-
-				<div class="modal-body">
-					<div class="form-group">
-						<fieldset>
-							<legend class="form-label">Your Position</legend>
-							<div class="radio-group">
-							<label class="radio-label">
-								<input type="radio" bind:group={flyerPosition} value="support" />
-								<span>✓ Support</span>
-							</label>
-							<label class="radio-label">
-								<input type="radio" bind:group={flyerPosition} value="oppose" />
-								<span>✗ Oppose</span>
-							</label>
-							<label class="radio-label">
-								<input type="radio" bind:group={flyerPosition} value="more_info" />
-								<span>? Request More Info</span>
-							</label>
-							</div>
-						</fieldset>
-					</div>
-
-					<div class="form-group">
-						<label class="form-label" for="flyerMessage">Your Message (optional, max {FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH} chars)</label>
-						<textarea
-							id="flyerMessage"
-							bind:value={flyerMessage}
-							placeholder="Explain why you have this position..."
-							maxlength={FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH}
-							rows="4"
-						></textarea>
-						<div class="char-count">{flyerMessage.length}/{FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH}</div>
-					</div>
-
-					<div class="form-group">
-						<label class="form-label" for="flyerName">Your Name (optional, max {FLYER_CONSTRAINTS.MAX_NAME_LENGTH} chars)</label>
-						<input
-							id="flyerName"
-							type="text"
-							bind:value={flyerName}
-							placeholder="Your name for signature line"
-							maxlength={FLYER_CONSTRAINTS.MAX_NAME_LENGTH}
-						/>
-					</div>
-				</div>
-
-				<div class="modal-footer">
-					<button class="btn-secondary" onclick={closeFlyerModal} disabled={flyerGenerating}>
-						Cancel
-					</button>
-					<button class="btn-primary" onclick={generateFlyer} disabled={flyerGenerating}>
-						{flyerGenerating ? 'Generating...' : 'Generate Flyer'}
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
 
 	<Footer />
 </div>
@@ -1880,118 +1869,9 @@
 			padding: 0.15rem 0.5rem;
 		}
 
-		/* Flyer Modal Mobile Optimization */
-		.modal-overlay {
-			padding: 0 !important;
-			align-items: flex-end !important;
-			display: flex !important;
-			position: fixed !important;
-			top: 0 !important;
-			left: 0 !important;
-			right: 0 !important;
-			bottom: 0 !important;
-			z-index: 9999 !important;
-			background: rgba(0, 0, 0, 0.7) !important;
-		}
-
-		.modal-content {
-			max-height: 90vh !important;
-			border-bottom-left-radius: 0 !important;
-			border-bottom-right-radius: 0 !important;
-			border-top-left-radius: 20px;
-			border-top-right-radius: 20px;
-			box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-			width: 100% !important;
-			max-width: 100% !important;
-			background: white !important;
-			z-index: 10000 !important;
-		}
-
-		.modal-header {
-			padding: 1.25rem 1rem 1rem 1rem;
-			position: relative;
-		}
-
-		.modal-header::before {
-			content: '';
-			position: absolute;
-			top: 0.5rem;
-			left: 50%;
-			transform: translateX(-50%);
-			width: 40px;
-			height: 4px;
-			background: #cbd5e1;
-			border-radius: 2px;
-		}
-
-		.modal-header h2 {
-			font-size: 1rem;
-			margin-top: 0.5rem;
-		}
-
-		.modal-close {
-			width: 2rem;
-			height: 2rem;
-			font-size: 1.5rem;
-		}
-
-		.modal-body {
-			padding: 1rem;
-			max-height: calc(90vh - 180px);
-			overflow-y: auto;
-			-webkit-overflow-scrolling: touch;
-		}
-
-		.form-group {
-			margin-bottom: 1.25rem;
-		}
-
-		.form-label {
+		.flyer-btn {
 			font-size: 0.85rem;
-		}
-
-		.radio-group {
-			gap: 0.5rem;
-		}
-
-		.radio-label {
-			padding: 0.7rem 0.85rem;
-			font-size: 0.9rem;
-		}
-
-		.form-group textarea {
-			font-size: 1rem;
-			padding: 0.75rem;
-			min-height: 100px;
-		}
-
-		.form-group input[type="text"] {
-			font-size: 1rem;
-			padding: 0.75rem;
-		}
-
-		.char-count {
-			font-size: 0.75rem;
-		}
-
-		.modal-footer {
-			padding: 1rem;
-			flex-direction: column-reverse;
-			gap: 0.75rem;
-			border-top: 1px solid #e2e8f0;
-		}
-
-		.btn-primary,
-		.btn-secondary {
-			width: 100%;
-			padding: 0.875rem 1rem;
-			font-size: 0.9rem;
-		}
-
-		.generate-flyer-btn {
 			padding: 0.75rem 1.25rem;
-			font-size: 0.9rem;
-			width: 100%;
 		}
 	}
 
@@ -2003,248 +1883,49 @@
 		border-top: 1px solid #f1f5f9;
 		display: flex;
 		gap: 0.75rem;
+		flex-wrap: wrap;
 	}
 
-	.generate-flyer-btn {
-		padding: 0.75rem 1.25rem;
-		background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-		color: white;
+	.flyer-btn {
+		flex: 1;
+		min-width: 140px;
+		padding: 0.875rem 1.5rem;
 		border: none;
 		border-radius: 8px;
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
+		font-size: 0.9rem;
+		font-weight: 700;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		box-shadow: 0 2px 6px rgba(34, 197, 94, 0.2);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
 	}
 
-	.generate-flyer-btn:hover {
-		background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-		box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
-		transform: translateY(-1px);
-	}
-
-	.generate-flyer-btn:active {
-		transform: translateY(0);
-	}
-
-	.modal-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 9999;
-		padding: 1rem;
-		backdrop-filter: blur(4px);
-	}
-
-	.modal-content {
-		background: white;
-		border-radius: 16px;
-		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-		max-width: 500px;
-		width: 100%;
-		max-height: 90vh;
-		overflow-y: auto;
-		-webkit-overflow-scrolling: touch;
-		position: relative;
-		z-index: 10000;
-	}
-
-	.modal-header {
-		padding: 1.5rem;
-		border-bottom: 1px solid #e2e8f0;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.modal-header h2 {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.1rem;
-		font-weight: 600;
-		color: var(--civic-dark);
-		margin: 0;
-	}
-
-	.modal-close {
-		background: none;
-		border: none;
-		font-size: 2rem;
-		line-height: 1;
-		color: var(--civic-gray);
-		cursor: pointer;
-		padding: 0;
-		width: 2rem;
-		height: 2rem;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 4px;
-		transition: all 0.2s;
-	}
-
-	.modal-close:hover {
-		background: #f1f5f9;
-		color: var(--civic-dark);
-	}
-
-	.modal-body {
-		padding: 1.5rem;
-	}
-
-	.form-group {
-		margin-bottom: 1.5rem;
-	}
-
-	.form-group fieldset {
-		border: none;
-		padding: 0;
-		margin: 0;
-	}
-
-	.form-group legend {
-		padding: 0;
-	}
-
-	.form-label {
-		display: block;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--civic-dark);
-		margin-bottom: 0.5rem;
-	}
-
-	.radio-group {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.radio-label {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.75rem 1rem;
-		border: 2px solid #e2e8f0;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-	}
-
-	.radio-label:hover {
-		border-color: var(--civic-blue);
-		background: #f8fafc;
-	}
-
-	.radio-label input[type="radio"]:checked + span {
-		font-weight: 600;
-		color: var(--civic-blue);
-	}
-
-	.radio-label:has(input:checked) {
-		border-color: var(--civic-blue);
-		background: #eff6ff;
-	}
-
-	.form-group textarea {
-		width: 100%;
-		padding: 0.75rem;
-		border: 2px solid #e2e8f0;
-		border-radius: 8px;
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 0.95rem;
-		line-height: 1.6;
-		resize: vertical;
-		transition: border-color 0.2s;
-	}
-
-	.form-group textarea:focus {
-		outline: none;
-		border-color: var(--civic-blue);
-	}
-
-	.form-group input[type="text"] {
-		width: 100%;
-		padding: 0.75rem;
-		border: 2px solid #e2e8f0;
-		border-radius: 8px;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-		transition: border-color 0.2s;
-	}
-
-	.form-group input[type="text"]:focus {
-		outline: none;
-		border-color: var(--civic-blue);
-	}
-
-	.char-count {
-		text-align: right;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		color: var(--civic-gray);
-		margin-top: 0.25rem;
-	}
-
-	.modal-footer {
-		padding: 1.5rem;
-		border-top: 1px solid #e2e8f0;
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.75rem;
-	}
-
-	.btn-secondary {
-		padding: 0.75rem 1.5rem;
-		background: white;
-		color: var(--civic-dark);
-		border: 2px solid #e2e8f0;
-		border-radius: 8px;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.btn-secondary:hover:not(:disabled) {
-		background: #f8fafc;
-		border-color: var(--civic-gray);
-	}
-
-	.btn-primary {
-		padding: 0.75rem 1.5rem;
+	.flyer-btn-yes {
 		background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
 		color: white;
-		border: none;
-		border-radius: 8px;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-		box-shadow: 0 2px 6px rgba(34, 197, 94, 0.2);
+		box-shadow: 0 2px 6px rgba(34, 197, 94, 0.3);
 	}
 
-	.btn-primary:hover:not(:disabled) {
+	.flyer-btn-yes:hover {
 		background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-		box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+		box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
 		transform: translateY(-1px);
 	}
 
-	.btn-primary:disabled,
-	.btn-secondary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+	.flyer-btn-no {
+		background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+		color: white;
+		box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+	}
+
+	.flyer-btn-no:hover {
+		background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+		box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+		transform: translateY(-1px);
+	}
+
+	.flyer-btn:active {
+		transform: translateY(0);
 	}
 </style>
