@@ -56,6 +56,14 @@ class PrimeGovAdapter(BaseAdapter):
         logger.info(f"[primegov:{self.slug}] Retrieved {len(meetings)} meetings")
 
         for meeting in meetings:
+            title = meeting.get("title", "")
+
+            # Skip SAP (Spanish Audio/Video) broadcast duplicates
+            # These are just video links for the same meeting, no agenda content
+            if " - SAP" in title:
+                logger.debug(f"[primegov:{self.slug}] Skipping SAP broadcast: {title}")
+                continue
+
             # Find packet document (prefer "Packet", fall back to "Agenda" if not HTML)
             packet_doc = next(
                 (
@@ -68,7 +76,6 @@ class PrimeGovAdapter(BaseAdapter):
                 None,
             )
 
-            title = meeting.get("title", "")
             date_time = meeting.get("dateTime", "")
 
             # Parse meeting status from title and datetime
