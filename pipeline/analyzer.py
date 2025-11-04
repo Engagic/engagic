@@ -174,7 +174,7 @@ class Analyzer:
         self,
         item_requests: List[Dict[str, Any]],
         shared_context: Optional[str] = None,
-        meeting_id: Optional[int] = None
+        meeting_id: Optional[str] = None
     ):
         """Process multiple agenda items using Gemini Batch API, yielding chunk results
 
