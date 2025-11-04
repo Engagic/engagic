@@ -99,6 +99,46 @@ class Processor:
                 )
                 self.analyzer = None
 
+    def _filter_document_versions(self, urls: List[str]) -> List[str]:
+        """Filter document URLs to keep only latest versions (Ver2 > Ver1, etc.)
+
+        Args:
+            urls: List of document URLs
+
+        Returns:
+            Filtered list with only latest versions
+        """
+        import re
+
+        # Group URLs by base name (without version suffix)
+        url_groups = {}  # base_name -> {version_num: url}
+        non_versioned = []  # URLs without version numbers
+
+        version_pattern = re.compile(r'(.+?)\s+Ver(\d+)', re.IGNORECASE)
+
+        for url in urls:
+            # Extract filename from URL
+            filename = url.split('/')[-1] if url else ""
+
+            match = version_pattern.search(filename)
+            if match:
+                base_name = match.group(1).strip()
+                version_num = int(match.group(2))
+
+                if base_name not in url_groups:
+                    url_groups[base_name] = {}
+                url_groups[base_name][version_num] = url
+            else:
+                non_versioned.append(url)
+
+        # Keep only the highest version for each base name
+        filtered = non_versioned.copy()
+        for base_name, versions in url_groups.items():
+            max_version = max(versions.keys())
+            filtered.append(versions[max_version])
+
+        return filtered
+
     def process_queue(self):
         """Process jobs from the processing queue continuously"""
         logger.info("[Processor] Starting queue processor...")
@@ -376,7 +416,102 @@ class Processor:
                 f"[ItemProcessing] Extracting text from {len(need_processing)} items for batch processing"
             )
 
-            # STEP 1: Extract text from all items (pre-batch)
+            # STEP 1: Build meeting-level document cache (item-first architecture)
+            logger.info(f"[DocumentCache] Building meeting-level document cache...")
+            document_cache = {}  # url -> {text, page_count, name}
+            item_attachments = {}  # item_id -> list of URLs (after version filtering)
+
+            # First pass: Per-item version filtering, then collect unique URLs
+            all_urls = set()
+            url_to_items = {}  # url -> list of item IDs that reference this URL
+
+            for item in need_processing:
+                # Collect this item's attachment URLs
+                item_urls = []
+                for att in item.attachments:
+                    if isinstance(att, str):
+                        att_url = att
+                        att_type = "pdf"
+                    elif isinstance(att, dict):
+                        att_url = att.get("url")
+                        att_type = att.get("type", "unknown")
+                    else:
+                        continue
+
+                    # Only process PDF/unknown types (not text segments)
+                    if att_type in ("pdf", "unknown") or isinstance(att, str):
+                        if att_url:
+                            item_urls.append(att_url)
+
+                # Apply version filtering WITHIN this item's attachments
+                filtered_item_urls = self._filter_document_versions(item_urls)
+                item_attachments[item.id] = filtered_item_urls
+
+                # Track which items use which URLs (after filtering)
+                for url in filtered_item_urls:
+                    all_urls.add(url)
+                    if url not in url_to_items:
+                        url_to_items[url] = []
+                    url_to_items[url].append(item.id)
+
+            logger.info(f"[DocumentCache] Collected {len(all_urls)} unique URLs across {len(need_processing)} items")
+
+            # Second pass: Extract each unique URL once
+            for att_url in all_urls:
+                # Skip public comment attachments
+                url_path = att_url.split('/')[-1] if att_url else ""
+                if is_public_comment_attachment(url_path):
+                    logger.debug(f"[DocumentCache] Skipping public comments: {url_path}")
+                    continue
+
+                try:
+                    result = self.analyzer.pdf_extractor.extract_from_url(att_url)
+                    if result.get("success") and result.get("text"):
+                        document_cache[att_url] = {
+                            "text": result["text"],
+                            "page_count": result.get("page_count", 0),
+                            "name": url_path
+                        }
+
+                        item_count = len(url_to_items[att_url])
+                        cache_status = "shared" if item_count > 1 else "unique"
+                        logger.info(
+                            f"[DocumentCache] Extracted '{url_path}': "
+                            f"{result.get('page_count', 0)} pages, "
+                            f"{len(result['text']):,} chars "
+                            f"({cache_status}, {item_count} items)"
+                        )
+                except Exception as e:
+                    logger.warning(f"[DocumentCache] Failed to extract {url_path}: {e}")
+
+            # Separate shared vs item-specific documents
+            shared_urls = {url for url, items in url_to_items.items() if len(items) > 1 and url in document_cache}
+            shared_count = len(shared_urls)
+            unique_count = len([url for url in all_urls if url not in shared_urls and url in document_cache])
+
+            logger.info(
+                f"[DocumentCache] Cached {len(document_cache)} documents: "
+                f"{shared_count} shared, {unique_count} item-specific"
+            )
+
+            # Build shared context for caching (if any shared documents exist)
+            shared_context = None
+            shared_token_count = 0
+            if shared_urls:
+                shared_parts = []
+                for url in sorted(shared_urls):  # Sort for consistency
+                    doc = document_cache[url]
+                    shared_parts.append(f"=== {doc['name']} ===\n{doc['text']}")
+                    shared_token_count += len(doc['text']) // 4  # Rough token estimate
+
+                shared_context = "\n\n".join(shared_parts)
+                logger.info(
+                    f"[SharedContext] Built meeting-level context: "
+                    f"{len(shared_context):,} chars (~{shared_token_count:,} tokens) "
+                    f"from {len(shared_urls)} shared documents"
+                )
+
+            # STEP 2: Build batch requests using cached documents
             batch_requests = []
             item_map = {}
 
@@ -392,79 +527,31 @@ class Processor:
                         )
                         continue
 
-                    # Extract text from all attachments for this item
-                    all_text_parts = []
+                    # Build item-specific text (exclude shared documents)
+                    item_specific_parts = []
                     total_page_count = 0
-                    filtered_attachments = 0
-                    processed_attachments = 0
 
-                    for att in item.attachments:
-                        # Handle both plain URL strings and structured attachment objects
-                        if isinstance(att, str):
-                            # Plain URL string (Legistar format)
-                            att_url = att
-                            att_name = "Attachment"
-                            att_type = "pdf"
-                        elif isinstance(att, dict):
-                            # Structured attachment object
-                            att_type = att.get("type", "unknown")
-                            att_url = att.get("url")
-                            att_name = att.get("name", "Attachment")
-                        else:
-                            logger.warning(
-                                f"[ItemProcessing] Unknown attachment format: {type(att)}"
-                            )
+                    # Use filtered URLs for this item (after version filtering)
+                    for att_url in item_attachments.get(item.id, []):
+                        # Skip shared documents (they're in meeting context)
+                        if att_url in shared_urls:
                             continue
 
-                        # Text segment (from detected items)
-                        if att_type == "text_segment":
-                            text_content = att.get("content", "") if isinstance(att, dict) else ""
+                        # Include item-specific documents only
+                        if att_url in document_cache:
+                            doc = document_cache[att_url]
+                            item_specific_parts.append(f"=== {doc['name']} ===\n{doc['text']}")
+                            total_page_count += doc['page_count']
+
+                    # Also include text segments from item.attachments
+                    for att in item.attachments:
+                        if isinstance(att, dict) and att.get("type") == "text_segment":
+                            text_content = att.get("content", "")
                             if text_content:
-                                all_text_parts.append(text_content)
+                                item_specific_parts.append(text_content)
 
-                        # PDF/URL attachment (from Legistar or structured)
-                        # Treat unknown types as PDFs if they have a URL (defensive coding)
-                        elif att_type in ("pdf", "unknown") or isinstance(att, str):
-                            if att_url:
-                                # Filter public comment attachments (high token cost, low signal)
-                                if is_public_comment_attachment(att_name):
-                                    filtered_attachments += 1
-                                    logger.info(
-                                        f"[AttachmentFilter] Skipping public comments: '{att_name}' "
-                                        f"(item: {item.title[:50]})"
-                                    )
-                                    continue
-
-                                try:
-                                    result = self.analyzer.pdf_extractor.extract_from_url(
-                                        att_url
-                                    )
-                                    if result.get("success") and result.get("text"):
-                                        page_count = result.get("page_count", 0)
-                                        char_count = len(result["text"])
-
-                                        all_text_parts.append(
-                                            f"=== {att_name} ===\n{result['text']}"
-                                        )
-                                        # Accumulate actual page counts from PDFs
-                                        total_page_count += page_count
-                                        processed_attachments += 1
-
-                                        logger.info(
-                                            f"[AttachmentExtract] '{att_name}': {page_count} pages, "
-                                            f"{char_count:,} chars (item: {item.title[:50]})"
-                                        )
-                                    else:
-                                        logger.warning(
-                                            f"[ItemProcessing] No text from '{att_name}'"
-                                        )
-                                except Exception as e:
-                                    logger.warning(
-                                        f"[ItemProcessing] Failed to extract from '{att_name}': {e}"
-                                    )
-
-                    if all_text_parts:
-                        combined_text = "\n\n".join(all_text_parts)
+                    if item_specific_parts:
+                        combined_text = "\n\n".join(item_specific_parts)
 
                         # Extract participation info from first or last item
                         if item.sequence == first_sequence or item.sequence == last_sequence:
@@ -475,15 +562,6 @@ class Processor:
                                 )
                                 # Merge with existing participation data (later items override earlier)
                                 participation_data.update(item_participation)
-
-                        # Log attachment processing stats
-                        total_attachments = processed_attachments + filtered_attachments
-                        if filtered_attachments > 0:
-                            logger.info(
-                                f"[AttachmentStats] Item '{item.title[:50]}': "
-                                f"{processed_attachments}/{total_attachments} attachments processed "
-                                f"({filtered_attachments} public comment attachments filtered)"
-                            )
 
                         batch_requests.append(
                             {
@@ -510,12 +588,16 @@ class Processor:
                     )
                     failed_items.append(item.title)
 
-            # STEP 2: Batch process all items at once (50% cost savings)
+            # STEP 2: Batch process all items at once (50% cost savings + context caching)
             if batch_requests:
                 logger.info(
                     f"[ItemProcessing] Submitting batch with {len(batch_requests)} items to Gemini"
                 )
-                batch_results = self.analyzer.process_batch_items(batch_requests)
+                batch_results = self.analyzer.process_batch_items(
+                    batch_requests,
+                    shared_context=shared_context,
+                    meeting_id=meeting.id
+                )
 
                 # STEP 3: Store all results
                 for result in batch_results:
