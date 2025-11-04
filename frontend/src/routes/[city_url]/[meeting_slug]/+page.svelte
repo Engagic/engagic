@@ -145,56 +145,11 @@
 	}
 
 	function openFlyerModal(itemId: string | null) {
-		// On mobile, skip modal and generate directly with defaults
-		const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640;
-
-		if (isMobile) {
-			// Generate flyer directly with default "support" position
-			generateFlyerDirect(itemId, 'support', null, null);
-		} else {
-			// Desktop: show modal
-			flyerItemId = itemId;
-			flyerPosition = 'support';
-			flyerMessage = '';
-			flyerName = '';
-			showFlyerModal = true;
-		}
-	}
-
-	async function generateFlyerDirect(itemId: string | null, position: string, message: string | null, name: string | null) {
-		if (!selectedMeeting) return;
-
-		try {
-			const response = await fetch(`${config.apiBaseUrl}/api/flyer/generate`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					meeting_id: selectedMeeting.id,
-					item_id: itemId,
-					position: position,
-					custom_message: message,
-					user_name: name,
-				}),
-			});
-
-			if (!response.ok) {
-				throw new Error('Failed to generate flyer');
-			}
-
-			const html = await response.text();
-
-			// Open flyer in new tab
-			const flyerWindow = window.open('', '_blank');
-			if (flyerWindow) {
-				flyerWindow.document.write(html);
-				flyerWindow.document.close();
-			}
-		} catch (err) {
-			console.error('Error generating flyer:', err);
-			alert('Failed to generate flyer. Please try again.');
-		}
+		flyerItemId = itemId;
+		flyerPosition = 'support';
+		flyerMessage = '';
+		flyerName = '';
+		showFlyerModal = true;
 	}
 
 	// Enforce backend constraints on client side
@@ -217,6 +172,17 @@
 
 		flyerGenerating = true;
 
+		// CRITICAL: Open window IMMEDIATELY before async operation to avoid popup blocker
+		const flyerWindow = window.open('', '_blank');
+		if (!flyerWindow) {
+			alert('Please allow pop-ups to generate flyer');
+			flyerGenerating = false;
+			return;
+		}
+
+		// Show loading state in new window
+		flyerWindow.document.write('<html><body style="font-family: sans-serif; padding: 2rem; text-align: center;"><h2>Generating your flyer...</h2></body></html>');
+
 		try {
 			const response = await fetch(`${config.apiBaseUrl}/api/flyer/generate`, {
 				method: 'POST',
@@ -238,16 +204,15 @@
 
 			const html = await response.text();
 
-			// Open flyer in new tab
-			const flyerWindow = window.open('', '_blank');
-			if (flyerWindow) {
-				flyerWindow.document.write(html);
-				flyerWindow.document.close();
-			}
+			// Replace loading state with actual flyer
+			flyerWindow.document.open();
+			flyerWindow.document.write(html);
+			flyerWindow.document.close();
 
 			closeFlyerModal();
 		} catch (err) {
 			console.error('Error generating flyer:', err);
+			flyerWindow.document.write('<html><body style="font-family: sans-serif; padding: 2rem; text-align: center;"><h2 style="color: red;">Error generating flyer</h2><p>Please try again or contact support.</p></body></html>');
 			alert('Failed to generate flyer. Please try again.');
 		} finally {
 			flyerGenerating = false;
