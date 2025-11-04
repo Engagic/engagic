@@ -99,10 +99,34 @@ class MeetingRepository(BaseRepository):
 
         self._execute(
             """
-            INSERT OR REPLACE INTO meetings
-            (id, banana, title, date, agenda_url, packet_url, summary, participation, status, topics,
+            INSERT INTO meetings (id, banana, title, date, agenda_url, packet_url, summary, participation, status, topics,
              processing_status, processing_method, processing_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                date = excluded.date,
+                agenda_url = excluded.agenda_url,
+                packet_url = excluded.packet_url,
+                participation = excluded.participation,
+                status = excluded.status,
+                -- PRESERVE existing summary/topics/processing data if new values are NULL
+                summary = CASE
+                    WHEN excluded.summary IS NOT NULL THEN excluded.summary
+                    ELSE meetings.summary
+                END,
+                topics = CASE
+                    WHEN excluded.topics IS NOT NULL THEN excluded.topics
+                    ELSE meetings.topics
+                END,
+                processing_status = excluded.processing_status,
+                processing_method = CASE
+                    WHEN excluded.processing_method IS NOT NULL THEN excluded.processing_method
+                    ELSE meetings.processing_method
+                END,
+                processing_time = CASE
+                    WHEN excluded.processing_time IS NOT NULL THEN excluded.processing_time
+                    ELSE meetings.processing_time
+                END
         """,
             (
                 meeting.id,

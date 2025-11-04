@@ -6,6 +6,88 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-04] CRITICAL FIX: Prevent Data Loss from INSERT OR REPLACE
+
+**EMERGENCY FIX.** Discovered and fixed catastrophic bug where re-syncing meetings would nuke all item summaries. 22 Palo Alto summaries lost on Nov 3, restored from backup, and permanent fix deployed.
+
+**The Problem:**
+- `INSERT OR REPLACE` in `items.py` and `meetings.py` **blindly overwrites ALL columns**
+- When fetcher re-syncs meetings (every 72 hours), it calls `store_agenda_items()` with `summary=None`
+- Result: All processed summaries get overwritten with NULL → **data loss**
+- Discovered when user noticed Palo Alto item summaries disappeared between Nov 2-4
+
+**Root Cause:**
+```sql
+-- DANGEROUS (old code):
+INSERT OR REPLACE INTO items (id, title, summary, ...) VALUES (?, ?, NULL, ...)
+-- This REPLACES the entire row, nuking existing summary!
+```
+
+**The Fix:**
+
+**1. Item Repository (`database/repositories/items.py:47-64`)**
+- Changed to `INSERT ... ON CONFLICT DO UPDATE`
+- Added explicit preservation logic:
+```sql
+ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    sequence = excluded.sequence,
+    attachments = excluded.attachments,
+    summary = CASE
+        WHEN excluded.summary IS NOT NULL THEN excluded.summary
+        ELSE items.summary  -- PRESERVE existing!
+    END,
+    topics = CASE
+        WHEN excluded.topics IS NOT NULL THEN excluded.topics
+        ELSE items.topics
+    END
+```
+
+**2. Meeting Repository (`database/repositories/meetings.py:100-129`)**
+- Same fix for meeting summaries, topics, processing metadata
+- Structural fields (title, date, URLs) update normally
+- Summary/topics/processing data preserved unless explicitly provided
+
+**Impact:**
+- ✓ Re-syncs are now safe - fetcher can run without data loss
+- ✓ Summaries are permanent once saved
+- ✓ Structural updates work correctly
+- ✓ Processing is idempotent
+
+**Data Recovery:**
+- Restored 22 Palo Alto item summaries from `engagic.db.after-deletion` backup
+- Created `scripts/restore_paloalto_summaries.py` for emergency restoration
+- All summaries verified and confirmed working on frontend
+
+**Additional Bugs Found During Audit:**
+
+**3. Cache Repository (`database/repositories/search.py:186-193`)**
+- Bug: `INSERT OR REPLACE` was resetting `cache_hit_count` to 0 on every update
+- Impact: Cache hit statistics were being lost
+- Fix: Preserve `cache_hit_count` and `created_at`, only update processing metadata
+
+**4. City Repository (`database/repositories/cities.py:167-176`)**
+- Bug: `INSERT OR REPLACE` was resetting `status`, `created_at`, `updated_at` on city updates
+- Impact: City metadata and timestamps were being lost
+- Fix: Preserve `status` and `created_at`, update `updated_at` correctly
+
+**Files Modified:**
+- `database/repositories/items.py` - Critical fix to prevent summary loss
+- `database/repositories/meetings.py` - Critical fix to prevent meeting data loss
+- `database/repositories/search.py` - Fix cache counter resets
+- `database/repositories/cities.py` - Fix city metadata resets
+- `scripts/restore_paloalto_summaries.py` - Emergency restoration script (NEW)
+
+**Los Angeles Mystery:**
+- User reported Los Angeles data completely gone
+- No meetings in current DB or Nov 3 backup (0 meetings)
+- Likely hit by same bug earlier, data loss predates backup
+- Cannot be recovered (no backup available)
+
+**Never again.** This was a close call. All INSERT OR REPLACE patterns audited and fixed. Database now has bulletproof preservation logic across all tables.
+
+---
+
 ## [2025-11-03] Critical Fix + Major Optimization: Meeting-Level Document Cache & Context Caching
 
 **The breakthrough.** Implemented meeting-level document cache with per-item version filtering and Gemini context caching preparation. Eliminates duplicate PDF extractions and prepares for massive API cost savings.

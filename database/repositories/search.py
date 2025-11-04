@@ -183,9 +183,13 @@ class SearchRepository(BaseRepository):
 
         self._execute(
             """
-            INSERT OR REPLACE INTO cache
-            (packet_url, processing_method, processing_time, cache_hit_count)
+            INSERT INTO cache (packet_url, processing_method, processing_time, cache_hit_count)
             VALUES (?, ?, ?, 0)
+            ON CONFLICT(packet_url) DO UPDATE SET
+                processing_method = excluded.processing_method,
+                processing_time = excluded.processing_time,
+                -- PRESERVE cache_hit_count, created_at (don't reset counters!)
+                last_accessed = CURRENT_TIMESTAMP
         """,
             (lookup_url, processing_method, processing_time),
         )
