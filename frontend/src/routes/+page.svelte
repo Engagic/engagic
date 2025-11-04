@@ -81,13 +81,12 @@
 		try {
 			const result = await apiClient.searchMeetings(searchQuery.trim());
 			searchResults = result;
-			
+
 			// If successful and has city info, navigate to city page
 			if (isSearchSuccess(result)) {
 				const cityUrl = generateCityUrl(result.city_name, result.state);
 				logger.trackEvent('search_success', { query: searchQuery, city: result.city_name });
-				// Pass search results to city page to avoid redundant API call
-				goto(`/${cityUrl}?from=search`, { state: { searchResults: result } });
+				goto(`/${cityUrl}`);
 			} else if (isSearchAmbiguous(result)) {
 				logger.trackEvent('search_ambiguous', { query: searchQuery });
 			}
