@@ -183,7 +183,7 @@ class GeminiSummarizer:
         self,
         item_requests: List[Dict[str, Any]],
         shared_context: Optional[str] = None,
-        meeting_id: Optional[int] = None
+        meeting_id: Optional[str] = None
     ):
         """Process multiple agenda items using Gemini Batch API, yielding results per chunk
 
@@ -441,6 +441,9 @@ class GeminiSummarizer:
                 logger.info(f"[Summarizer] Uploaded file: {uploaded_file.name}")
 
                 # Submit batch job with uploaded file
+                if not uploaded_file.name:
+                    raise ValueError("File uploaded but no name returned")
+
                 logger.info(
                     f"[Summarizer] Submitting chunk {chunk_num} batch job"
                 )

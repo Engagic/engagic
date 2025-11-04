@@ -83,3 +83,36 @@ class TopicSearchRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("Topic cannot be empty")
         return sanitize_string(v)
+
+
+class FlyerRequest(BaseModel):
+    meeting_id: int
+    item_id: Optional[int] = None
+    position: str
+    custom_message: Optional[str] = None
+    user_name: Optional[str] = None
+
+    @validator("position")
+    def validate_position(cls, v):
+        allowed = ["support", "oppose", "more_info"]
+        if v not in allowed:
+            raise ValueError(f"Position must be one of: {', '.join(allowed)}")
+        return v
+
+    @validator("custom_message")
+    def validate_custom_message(cls, v):
+        if v is None:
+            return None
+        sanitized = sanitize_string(v)
+        if len(sanitized) > 500:
+            raise ValueError("Custom message too long (max 500 characters)")
+        return sanitized
+
+    @validator("user_name")
+    def validate_user_name(cls, v):
+        if v is None:
+            return None
+        sanitized = sanitize_string(v)
+        if len(sanitized) > 100:
+            raise ValueError("User name too long (max 100 characters)")
+        return sanitized

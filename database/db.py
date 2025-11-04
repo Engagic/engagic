@@ -485,21 +485,28 @@ class UnifiedDatabase:
                 if has_items:
                     queue_url = f"items://{stored_meeting.id}"
                     processing_type = "item-level-batch"
-                else:
+                elif packet_url:
                     queue_url = packet_url
                     processing_type = "monolithic-packet"
+                else:
+                    # No items and no packet - nothing to process
+                    logger.warning(
+                        f"[DB] Meeting {stored_meeting.id} has no items or packet URL - skipping queue"
+                    )
+                    queue_url = None
 
-                self.enqueue_for_processing(
-                    source_url=queue_url,
-                    meeting_id=stored_meeting.id,
-                    banana=city.banana,
-                    priority=priority,
-                    metadata={
-                        "has_items": has_items,
-                        "has_agenda": bool(agenda_url),
-                        "has_packet": bool(packet_url),
-                    },
-                )
+                if queue_url:
+                    self.enqueue_for_processing(
+                        source_url=queue_url,
+                        meeting_id=stored_meeting.id,
+                        banana=city.banana,
+                        priority=priority,
+                        metadata={
+                            "has_items": has_items,
+                            "has_agenda": bool(agenda_url),
+                            "has_packet": bool(packet_url),
+                        },
+                    )
 
                 logger.debug(
                     f"Enqueued {processing_type} processing for {stored_meeting.title} (priority {priority})"

@@ -27,6 +27,7 @@ dependencies = [
     "pymupdf>=1.26.4",
     "pypdf2>=3.0.1",
     "python-dateutil>=2.8.2",
+    "qrcode>=8.0",
     "requests",
     "sqlalchemy<2.0",
     "sqlalchemy-mate<2.0",
