@@ -150,6 +150,7 @@
 		flyerMessage = '';
 		flyerName = '';
 		showFlyerModal = true;
+		console.log('Modal opened:', { showFlyerModal, itemId });
 	}
 
 	// Enforce backend constraints on client side
@@ -1872,18 +1873,21 @@
 
 		/* Flyer Modal Mobile Optimization */
 		.modal-overlay {
-			padding: 0;
-			align-items: flex-end;
-			z-index: 9999;
+			padding: 0 !important;
+			align-items: flex-end !important;
+			display: flex !important;
+			position: fixed !important;
 		}
 
 		.modal-content {
-			max-height: 90vh;
-			border-bottom-left-radius: 0;
-			border-bottom-right-radius: 0;
+			max-height: 90vh !important;
+			border-bottom-left-radius: 0 !important;
+			border-bottom-right-radius: 0 !important;
 			border-top-left-radius: 20px;
 			border-top-right-radius: 20px;
 			box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+			width: 100% !important;
+			max-width: 100% !important;
 		}
 
 		.modal-header {
@@ -2018,7 +2022,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1000;
+		z-index: 9999;
 		padding: 1rem;
 		backdrop-filter: blur(4px);
 	}
@@ -2032,6 +2036,8 @@
 		max-height: 90vh;
 		overflow-y: auto;
 		-webkit-overflow-scrolling: touch;
+		position: relative;
+		z-index: 10000;
 	}
 
 	.modal-header {
