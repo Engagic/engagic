@@ -50,8 +50,8 @@ async def generate_flyer(
         # Fetch item if specified
         item = None
         if request.item_id:
-            items = db.get_agenda_items(request.meeting_id)
-            item = next((i for i in items if i.id == request.item_id), None)
+            items = db.get_agenda_items(str(request.meeting_id))
+            item = next((i for i in items if i.id == str(request.item_id)), None)
             if not item:
                 raise HTTPException(status_code=404, detail="Agenda item not found")
 
