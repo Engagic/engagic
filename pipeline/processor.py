@@ -588,57 +588,62 @@ class Processor:
                     )
                     failed_items.append(item.title)
 
-            # STEP 2: Batch process all items at once (50% cost savings + context caching)
+            # STEP 2: Batch process all items, saving incrementally after each chunk
             if batch_requests:
                 logger.info(
                     f"[ItemProcessing] Submitting batch with {len(batch_requests)} items to Gemini"
                 )
-                batch_results = self.analyzer.process_batch_items(
+
+                # Process batch as generator - yields chunk results as they complete
+                for chunk_results in self.analyzer.process_batch_items(
                     batch_requests,
                     shared_context=shared_context,
                     meeting_id=meeting.id
-                )
+                ):
+                    # STEP 3: Save chunk results immediately (incremental saving)
+                    logger.info(
+                        f"[ItemProcessing] Saving {len(chunk_results)} results from completed chunk"
+                    )
 
-                # STEP 3: Store all results
-                for result in batch_results:
-                    item_id = result["item_id"]
-                    item = item_map.get(item_id)
+                    for result in chunk_results:
+                        item_id = result["item_id"]
+                        item = item_map.get(item_id)
 
-                    if not item:
-                        logger.warning(f"[ItemProcessing] No item mapping for {item_id}")
-                        continue
+                        if not item:
+                            logger.warning(f"[ItemProcessing] No item mapping for {item_id}")
+                            continue
 
-                    if result["success"]:
-                        # Normalize topics before storing
-                        raw_topics = result.get("topics", [])
-                        normalized_topics = get_normalizer().normalize(raw_topics)
+                        if result["success"]:
+                            # Normalize topics before storing
+                            raw_topics = result.get("topics", [])
+                            normalized_topics = get_normalizer().normalize(raw_topics)
 
-                        logger.debug(
-                            f"[TopicNormalization] {raw_topics} -> {normalized_topics}"
-                        )
+                            logger.debug(
+                                f"[TopicNormalization] {raw_topics} -> {normalized_topics}"
+                            )
 
-                        # Update item in database with normalized topics
-                        self.db.update_agenda_item(
-                            item_id=item_id,
-                            summary=result["summary"],
-                            topics=normalized_topics,
-                        )
+                            # Update item in database IMMEDIATELY with normalized topics
+                            self.db.update_agenda_item(
+                                item_id=item_id,
+                                summary=result["summary"],
+                                topics=normalized_topics,
+                            )
 
-                        processed_items.append(
-                            {
-                                "sequence": item.sequence,
-                                "title": item.title,
-                                "summary": result["summary"],
-                                "topics": normalized_topics,
-                            }
-                        )
+                            processed_items.append(
+                                {
+                                    "sequence": item.sequence,
+                                    "title": item.title,
+                                    "summary": result["summary"],
+                                    "topics": normalized_topics,
+                                }
+                            )
 
-                        logger.info(f"[ItemProcessing] {item.title[:60]}")
-                    else:
-                        failed_items.append(item.title)
-                        logger.warning(
-                            f"[ItemProcessing] FAILED {item.title[:60]}: {result.get('error')}"
-                        )
+                            logger.info(f"[ItemProcessing] SAVED {item.title[:60]}")
+                        else:
+                            failed_items.append(item.title)
+                            logger.warning(
+                                f"[ItemProcessing] FAILED {item.title[:60]}: {result.get('error')}"
+                            )
 
                 # Cleanup: free batch memory immediately
                 del batch_requests

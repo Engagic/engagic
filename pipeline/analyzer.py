@@ -175,10 +175,11 @@ class Analyzer:
         item_requests: List[Dict[str, Any]],
         shared_context: Optional[str] = None,
         meeting_id: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """Process multiple agenda items using Gemini Batch API with context caching
+    ):
+        """Process multiple agenda items using Gemini Batch API, yielding chunk results
 
-        Delegates to summarizer.summarize_batch() for actual batch processing.
+        Generator that yields chunk results immediately as they complete.
+        Enables incremental saving to prevent data loss on crashes.
 
         Args:
             item_requests: List of dicts with structure:
@@ -192,8 +193,8 @@ class Analyzer:
             shared_context: Optional meeting-level shared document context (for caching)
             meeting_id: Optional meeting ID (for cache naming)
 
-        Returns:
-            List of results: [{
+        Yields:
+            List of results per chunk: [{
                 'item_id': str,
                 'success': bool,
                 'summary': str,
@@ -202,12 +203,14 @@ class Analyzer:
             }, ...]
         """
         if not item_requests:
-            return []
+            return
 
         logger.info(
-            f"[Processor] Delegating {len(item_requests)} items to batch summarizer"
+            f"[Analyzer] Delegating {len(item_requests)} items to batch summarizer"
         )
-        return self.summarizer.summarize_batch(
+
+        # Yield from the summarizer's generator
+        yield from self.summarizer.summarize_batch(
             item_requests,
             shared_context=shared_context,
             meeting_id=meeting_id
