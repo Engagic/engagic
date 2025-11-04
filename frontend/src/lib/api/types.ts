@@ -158,6 +158,29 @@ export interface TickerResponse {
 	count: number;
 }
 
+// Flyer generation types (mirrors backend Pydantic models)
+export type FlyerPosition = 'support' | 'oppose' | 'more_info';
+
+export interface FlyerRequest {
+	meeting_id: number;
+	item_id: string | null;
+	position: FlyerPosition;
+	custom_message: string | null;
+	user_name: string | null;
+}
+
+export interface FlyerConstraints {
+	readonly MAX_MESSAGE_LENGTH: 500;
+	readonly MAX_NAME_LENGTH: 100;
+	readonly POSITIONS: readonly FlyerPosition[];
+}
+
+export const FLYER_CONSTRAINTS: FlyerConstraints = {
+	MAX_MESSAGE_LENGTH: 500,
+	MAX_NAME_LENGTH: 100,
+	POSITIONS: ['support', 'oppose', 'more_info'] as const,
+} as const;
+
 // Error types
 export class ApiError extends Error {
 	constructor(

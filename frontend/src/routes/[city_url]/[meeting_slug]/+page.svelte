@@ -2,8 +2,9 @@
 	import { page } from '$app/stores';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
-	import type { SearchResult, Meeting } from '$lib/api/index';
+	import type { SearchResult, Meeting, FlyerPosition } from '$lib/api/index';
 	import { config } from '$lib/api/config';
+	import { FLYER_CONSTRAINTS } from '$lib/api/types';
 	import { extractTime } from '$lib/utils/date-utils';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -20,10 +21,10 @@
 	let expandedItems = new SvelteSet<string>();
 	let expandedThinking = new SvelteSet<string>();
 
-	// Flyer generation state
+	// Flyer generation state (typed to match backend)
 	let showFlyerModal = $state(false);
 	let flyerItemId: string | null = $state(null);
-	let flyerPosition = $state('support');
+	let flyerPosition = $state<FlyerPosition>('support');
 	let flyerMessage = $state('');
 	let flyerName = $state('');
 	let flyerGenerating = $state(false);
@@ -150,6 +151,16 @@
 		flyerName = '';
 		showFlyerModal = true;
 	}
+
+	// Enforce backend constraints on client side
+	$effect(() => {
+		if (flyerMessage.length > FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH) {
+			flyerMessage = flyerMessage.slice(0, FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH);
+		}
+		if (flyerName.length > FLYER_CONSTRAINTS.MAX_NAME_LENGTH) {
+			flyerName = flyerName.slice(0, FLYER_CONSTRAINTS.MAX_NAME_LENGTH);
+		}
+	});
 
 	function closeFlyerModal() {
 		showFlyerModal = false;
@@ -494,25 +505,25 @@
 					</div>
 
 					<div class="form-group">
-						<label class="form-label" for="flyerMessage">Your Message (optional, max 500 chars)</label>
+						<label class="form-label" for="flyerMessage">Your Message (optional, max {FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH} chars)</label>
 						<textarea
 							id="flyerMessage"
 							bind:value={flyerMessage}
 							placeholder="Explain why you have this position..."
-							maxlength="500"
+							maxlength={FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH}
 							rows="4"
 						></textarea>
-						<div class="char-count">{flyerMessage.length}/500</div>
+						<div class="char-count">{flyerMessage.length}/{FLYER_CONSTRAINTS.MAX_MESSAGE_LENGTH}</div>
 					</div>
 
 					<div class="form-group">
-						<label class="form-label" for="flyerName">Your Name (optional)</label>
+						<label class="form-label" for="flyerName">Your Name (optional, max {FLYER_CONSTRAINTS.MAX_NAME_LENGTH} chars)</label>
 						<input
 							id="flyerName"
 							type="text"
 							bind:value={flyerName}
 							placeholder="Your name for signature line"
-							maxlength="100"
+							maxlength={FLYER_CONSTRAINTS.MAX_NAME_LENGTH}
 						/>
 					</div>
 				</div>

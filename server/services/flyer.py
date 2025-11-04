@@ -6,8 +6,10 @@ Converts passive browsing into active participation.
 """
 
 import base64
+import os
 import re
 from io import BytesIO
+from pathlib import Path
 from typing import Dict, Any, Optional
 from database.db import UnifiedDatabase, Meeting, AgendaItem
 
@@ -86,10 +88,16 @@ def generate_meeting_flyer(
     Returns:
         HTML string ready for printing
     """
+    # Load template
+    template_path = Path(__file__).parent / "flyer_template.html"
+    with open(template_path, 'r', encoding='utf-8') as f:
+        template = f.read()
+
     # Get city info
     city = db.get_city(banana=meeting.banana)
     city_name = city.name if city else "Unknown City"
     state = city.state if city else ""
+    city_display = f"{city_name}{', ' + state if state else ''}"
 
     # Build meeting URL for QR code (matches frontend routing)
     meeting_slug = _generate_meeting_slug(meeting)
@@ -165,227 +173,22 @@ def generate_meeting_flyer(
 
     # Format date
     if meeting.date:
-        meeting_date = meeting.date.strftime("%B %d, %Y at %I:%M %p")
+        meeting_date = _escape_html(meeting.date.strftime("%B %d, %Y at %I:%M %p"))
     else:
         meeting_date = "Date TBD"
 
-    # Build complete HTML
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Civic Action Flyer - {city_name}</title>
-    <style>
-        @page {{
-            size: letter;
-            margin: 0.5in;
-        }}
-
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-            color: #000;
-            background: #fff;
-            max-width: 8.5in;
-            margin: 0 auto;
-            padding: 0.5in;
-        }}
-
-        .flyer {{
-            border: 3px solid #000;
-            padding: 1.5rem;
-        }}
-
-        .header {{
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 1rem;
-            margin-bottom: 1rem;
-        }}
-
-        .header h1 {{
-            font-size: 24pt;
-            font-weight: 700;
-            letter-spacing: 2px;
-            margin-bottom: 0.5rem;
-        }}
-
-        .meeting-info {{
-            margin-bottom: 1.5rem;
-        }}
-
-        .meeting-info h2 {{
-            font-size: 14pt;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }}
-
-        .meeting-info p {{
-            font-size: 11pt;
-            margin-bottom: 0.25rem;
-        }}
-
-        .agenda-item {{
-            margin-bottom: 1.5rem;
-            padding: 1rem;
-            background: #f5f5f5;
-            border-left: 4px solid #000;
-        }}
-
-        .agenda-item h2 {{
-            font-size: 10pt;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 0.5rem;
-            color: #666;
-        }}
-
-        .agenda-item h3 {{
-            font-size: 14pt;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }}
-
-        .agenda-item .summary {{
-            font-size: 10pt;
-            line-height: 1.5;
-        }}
-
-        .position {{
-            margin-bottom: 1.5rem;
-            padding: 1rem;
-            background: #000;
-            color: #fff;
-            text-align: center;
-        }}
-
-        .position h2 {{
-            font-size: 18pt;
-            font-weight: 700;
-            letter-spacing: 2px;
-        }}
-
-        .custom-message {{
-            margin-bottom: 1.5rem;
-            padding: 1rem;
-            border: 2px solid #ccc;
-            font-style: italic;
-            font-size: 11pt;
-        }}
-
-        .signature {{
-            text-align: center;
-            margin-bottom: 1.5rem;
-            font-size: 12pt;
-            font-weight: 500;
-        }}
-
-        .participation {{
-            margin-bottom: 1.5rem;
-            padding: 1rem;
-            background: #fffacd;
-            border: 2px solid #ffd700;
-        }}
-
-        .participation h2 {{
-            font-size: 12pt;
-            font-weight: 700;
-            margin-bottom: 0.75rem;
-            text-transform: uppercase;
-        }}
-
-        .participation p {{
-            font-size: 10pt;
-            margin-bottom: 0.5rem;
-        }}
-
-        .participation a {{
-            color: #000;
-            text-decoration: underline;
-            word-break: break-all;
-        }}
-
-        .footer {{
-            border-top: 2px solid #000;
-            padding-top: 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }}
-
-        .footer .qr-code {{
-            width: 80px;
-            height: 80px;
-        }}
-
-        .footer .branding {{
-            text-align: right;
-            font-size: 10pt;
-        }}
-
-        .footer .branding p {{
-            margin-bottom: 0.25rem;
-        }}
-
-        .footer .branding .url {{
-            font-weight: 700;
-            font-size: 12pt;
-        }}
-
-        @media print {{
-            body {{
-                padding: 0;
-            }}
-
-            .flyer {{
-                border: 3px solid #000;
-            }}
-        }}
-    </style>
-</head>
-<body>
-    <div class="flyer">
-        <div class="header">
-            <h1>CIVIC ACTION FLYER</h1>
-        </div>
-
-        <div class="meeting-info">
-            <h2>{_escape_html(city_name)}{', ' + state if state else ''}</h2>
-            <p><strong>Date:</strong> {_escape_html(meeting_date)}</p>
-        </div>
-
-        {agenda_section}
-
-        <div class="position">
-            <h2>MY POSITION: {position_label}</h2>
-        </div>
-
-        {message_section}
-
-        {signature_section}
-
-        <div class="participation">
-            <h2>How to Participate</h2>
-            {participation_html}
-        </div>
-
-        <div class="footer">
-            <img src="{qr_data_url}" alt="QR Code to Meeting" class="qr-code">
-            <div class="branding">
-                <p>Scan QR code to view full agenda</p>
-                <p class="url">engagic.com</p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>"""
+    # Render template with data
+    html = template.format(
+        city_name=_escape_html(city_name),
+        city_display=_escape_html(city_display),
+        meeting_date=meeting_date,
+        agenda_section=agenda_section,
+        position_label=position_label,
+        message_section=message_section,
+        signature_section=signature_section,
+        participation_html=participation_html,
+        qr_data_url=qr_data_url,
+    )
 
     return html
 
