@@ -22,6 +22,9 @@ class ItemRepository(BaseRepository):
         """
         Store agenda items for a meeting.
 
+        CRITICAL: Preserves existing summaries/topics on conflict.
+        Only updates structural fields (title, sequence, attachments).
+
         Args:
             meeting_id: The meeting ID these items belong to
             items: List of AgendaItem objects
@@ -43,9 +46,21 @@ class ItemRepository(BaseRepository):
 
             self._execute(
                 """
-                INSERT OR REPLACE INTO items
-                (id, meeting_id, title, sequence, attachments, summary, topics)
+                INSERT INTO items (id, meeting_id, title, sequence, attachments, summary, topics)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    sequence = excluded.sequence,
+                    attachments = excluded.attachments,
+                    -- PRESERVE existing summary/topics if new values are NULL
+                    summary = CASE
+                        WHEN excluded.summary IS NOT NULL THEN excluded.summary
+                        ELSE items.summary
+                    END,
+                    topics = CASE
+                        WHEN excluded.topics IS NOT NULL THEN excluded.topics
+                        ELSE items.topics
+                    END
             """,
                 (
                     item.id,

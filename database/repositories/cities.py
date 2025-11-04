@@ -164,9 +164,16 @@ class CityRepository(BaseRepository):
         """Add a new city to the database"""
         self._execute(
             """
-            INSERT OR REPLACE INTO cities
-            (banana, name, state, vendor, slug, county)
+            INSERT INTO cities (banana, name, state, vendor, slug, county)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(banana) DO UPDATE SET
+                name = excluded.name,
+                state = excluded.state,
+                vendor = excluded.vendor,
+                slug = excluded.slug,
+                county = excluded.county,
+                updated_at = CURRENT_TIMESTAMP
+                -- PRESERVE status, created_at (don't reset on re-sync!)
         """,
             (banana, name, state, vendor, slug, county),
         )
