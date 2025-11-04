@@ -10,25 +10,30 @@ import os
 import re
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from database.db import UnifiedDatabase, Meeting, AgendaItem
 
 
-def _clean_summary_for_flyer(summary: str) -> str:
+def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:
     """Clean summary for flyer display
 
-    Extracts only the main summary and citizen impact sections.
-    Removes thinking, confidence, and LLM artifacts for concise print output.
+    Extracts summary, citizen impact, and confidence rating.
+    Removes thinking and LLM artifacts for concise print output.
+
+    Returns:
+        Tuple of (cleaned_summary, confidence_rating)
     """
     if not summary:
-        return "No summary available"
+        return "No summary available", ""
+
+    confidence = ""
 
     # Step 1: Remove thinking section entirely (before "## Summary")
     parts = re.split(r'^## Thinking\s*$', summary, flags=re.MULTILINE)
     if len(parts) > 1:
         summary = parts[1]  # Everything after thinking
 
-    # Step 2: Extract only Summary and Citizen Impact sections
+    # Step 2: Extract Summary, Citizen Impact, and Confidence sections
     # Split into sections by ## headers
     sections = re.split(r'^##\s+(\w+.*?)$', summary, flags=re.MULTILINE)
 
@@ -39,15 +44,22 @@ def _clean_summary_for_flyer(summary: str) -> str:
             section_name = sections[i + 1].strip().lower()
             section_content = sections[i + 2] if i + 2 < len(sections) else ""
 
-            # Keep only Summary and Citizen Impact
-            if 'summary' in section_name or 'citizen impact' in section_name or 'impact' in section_name:
+            # Extract confidence separately
+            if 'confidence' in section_name:
+                confidence = section_content.strip()
+            # Keep Summary and Citizen Impact
+            elif 'summary' in section_name or 'citizen impact' in section_name or 'impact' in section_name:
                 keep_sections.append(section_content.strip())
 
             i += 2
         else:
             # Remaining content without header
-            if sections[i].strip():
-                keep_sections.append(sections[i].strip())
+            remaining = sections[i].strip()
+            # Check if it's a standalone confidence value
+            if remaining and re.match(r'^(high|medium|low)$', remaining, re.IGNORECASE):
+                confidence = remaining
+            elif remaining:
+                keep_sections.append(remaining)
             i += 1
 
     summary = "\n\n".join(keep_sections)
@@ -71,7 +83,7 @@ def _clean_summary_for_flyer(summary: str) -> str:
     summary = summary.replace('\n\n', '</p><p>')
     summary = summary.replace('\n', '<br>')
 
-    return f"<p>{summary}</p>"
+    return f"<p>{summary}</p>", confidence.capitalize()
 
 
 def _generate_meeting_slug(meeting: Meeting) -> str:
@@ -131,24 +143,31 @@ def generate_meeting_flyer(
     qr_data_url = _generate_qr_code(meeting_url)
 
     # Build flyer content
+    confidence_display = ""
     if item:
         # Item-specific flyer
         item_title = item.title or "Agenda Item"
-        item_summary_html = _clean_summary_for_flyer(item.summary or "")
+        item_summary_html, confidence = _clean_summary_for_flyer(item.summary or "")
+        if confidence:
+            confidence_display = f'<div class="confidence-badge">{confidence} Confidence</div>'
         agenda_section = f"""
-        <div class="agenda-item">
-            <h2>Agenda Item</h2>
-            <h3>{_escape_html(item_title)}</h3>
+        <div class="agenda-content">
+            <h2 class="agenda-title">{_escape_html(item_title)}</h2>
             <div class="summary">{item_summary_html}</div>
+            {confidence_display}
         </div>
         """
     else:
         # Whole meeting flyer
         meeting_title = meeting.title or "City Council Meeting"
+        meeting_summary_html, confidence = _clean_summary_for_flyer(meeting.summary or "")
+        if confidence:
+            confidence_display = f'<div class="confidence-badge">{confidence} Confidence</div>'
         agenda_section = f"""
-        <div class="agenda-item">
-            <h2>Meeting</h2>
-            <h3>{_escape_html(meeting_title)}</h3>
+        <div class="agenda-content">
+            <h2 class="agenda-title">{_escape_html(meeting_title)}</h2>
+            <div class="summary">{meeting_summary_html}</div>
+            {confidence_display}
         </div>
         """
 

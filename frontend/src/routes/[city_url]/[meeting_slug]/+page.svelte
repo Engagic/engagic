@@ -348,7 +348,13 @@
 						{@const isExpanded = expandedItems.has(item.id)}
 						{@const hasSummary = !!item.summary}
 						<div class="agenda-item" data-expanded={isExpanded} data-has-summary={hasSummary}>
-							<div class="item-header-clickable" onclick={() => toggleItem(item.id)}>
+							<div
+								class="item-header-clickable"
+								role="button"
+								tabindex="0"
+								onclick={() => toggleItem(item.id)}
+								onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleItem(item.id); } }}
+							>
 								<div class="item-header">
 									<div class="item-header-content">
 										<div class="item-title-container">
@@ -478,17 +484,32 @@
 
 	<!-- Flyer Generator Modal -->
 	{#if showFlyerModal}
-		<div class="modal-overlay" onclick={closeFlyerModal}>
-			<div class="modal-content" onclick={(e) => e.stopPropagation()}>
+		<div
+			class="modal-overlay"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="flyer-modal-title"
+			tabindex="-1"
+			onclick={closeFlyerModal}
+			onkeydown={(e) => { if (e.key === 'Escape') closeFlyerModal(); }}
+		>
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<div
+				class="modal-content"
+				role="document"
+				onclick={(e) => e.stopPropagation()}
+				onkeydown={(e) => e.stopPropagation()}
+			>
 				<div class="modal-header">
-					<h2>Generate Civic Action Flyer</h2>
+					<h2 id="flyer-modal-title">Generate Civic Action Flyer</h2>
 					<button class="modal-close" onclick={closeFlyerModal}>×</button>
 				</div>
 
 				<div class="modal-body">
 					<div class="form-group">
-						<label class="form-label">Your Position</label>
-						<div class="radio-group">
+						<fieldset>
+							<legend class="form-label">Your Position</legend>
+							<div class="radio-group">
 							<label class="radio-label">
 								<input type="radio" bind:group={flyerPosition} value="support" />
 								<span>✓ Support</span>
@@ -501,7 +522,8 @@
 								<input type="radio" bind:group={flyerPosition} value="more_info" />
 								<span>? Request More Info</span>
 							</label>
-						</div>
+							</div>
+						</fieldset>
 					</div>
 
 					<div class="form-group">
@@ -1847,6 +1869,85 @@
 			font-size: 0.7rem;
 			padding: 0.15rem 0.5rem;
 		}
+
+		/* Flyer Modal Mobile Optimization */
+		.modal-overlay {
+			padding: 0.5rem;
+			align-items: flex-end;
+		}
+
+		.modal-content {
+			max-height: 95vh;
+			border-bottom-left-radius: 0;
+			border-bottom-right-radius: 0;
+		}
+
+		.modal-header {
+			padding: 1rem;
+		}
+
+		.modal-header h2 {
+			font-size: 0.95rem;
+		}
+
+		.modal-close {
+			width: 1.75rem;
+			height: 1.75rem;
+			font-size: 1.5rem;
+		}
+
+		.modal-body {
+			padding: 1rem;
+		}
+
+		.form-group {
+			margin-bottom: 1.25rem;
+		}
+
+		.form-label {
+			font-size: 0.8rem;
+		}
+
+		.radio-group {
+			gap: 0.5rem;
+		}
+
+		.radio-label {
+			padding: 0.6rem 0.75rem;
+			font-size: 0.85rem;
+		}
+
+		.form-group textarea {
+			font-size: 0.9rem;
+			padding: 0.65rem;
+		}
+
+		.form-group input[type="text"] {
+			font-size: 0.85rem;
+			padding: 0.65rem;
+		}
+
+		.char-count {
+			font-size: 0.7rem;
+		}
+
+		.modal-footer {
+			padding: 1rem;
+			flex-direction: column;
+			gap: 0.5rem;
+		}
+
+		.btn-primary,
+		.btn-secondary {
+			width: 100%;
+			padding: 0.65rem 1rem;
+			font-size: 0.8rem;
+		}
+
+		.generate-flyer-btn {
+			padding: 0.6rem 1rem;
+			font-size: 0.8rem;
+		}
 	}
 
 	/* Flyer Generator Styles */
@@ -1906,6 +2007,7 @@
 		width: 100%;
 		max-height: 90vh;
 		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.modal-header {
@@ -1952,6 +2054,16 @@
 
 	.form-group {
 		margin-bottom: 1.5rem;
+	}
+
+	.form-group fieldset {
+		border: none;
+		padding: 0;
+		margin: 0;
+	}
+
+	.form-group legend {
+		padding: 0;
 	}
 
 	.form-label {
