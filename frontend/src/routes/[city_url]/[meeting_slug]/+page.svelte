@@ -22,7 +22,7 @@
 
 	// Flyer generation state
 	let showFlyerModal = $state(false);
-	let flyerItemId: number | null = $state(null);
+	let flyerItemId: string | null = $state(null);
 	let flyerPosition = $state('support');
 	let flyerMessage = $state('');
 	let flyerName = $state('');
@@ -143,7 +143,7 @@
 		return { main: title, remainder: null, isTruncated: false };
 	}
 
-	function openFlyerModal(itemId: number | null) {
+	function openFlyerModal(itemId: string | null) {
 		flyerItemId = itemId;
 		flyerPosition = 'support';
 		flyerMessage = '';
