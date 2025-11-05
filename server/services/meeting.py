@@ -13,12 +13,19 @@ def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, A
 
     This pattern is used in 5+ places throughout the API,
     consolidating into a single service function.
+
+    Only sets has_items=True if items have summaries, allowing
+    meetings with unsummarized items to fall back to monolithic summary.
     """
     meeting_dict = meeting.to_dict()
     items = db.get_agenda_items(meeting.id)
     if items:
-        meeting_dict["items"] = [item.to_dict() for item in items]
-        meeting_dict["has_items"] = True
+        items_with_summaries = [item for item in items if item.summary]
+        if items_with_summaries:
+            meeting_dict["items"] = [item.to_dict() for item in items]
+            meeting_dict["has_items"] = True
+        else:
+            meeting_dict["has_items"] = False
     else:
         meeting_dict["has_items"] = False
     return meeting_dict
