@@ -39,8 +39,9 @@
 					const element = document.getElementById(`item-${itemId}`);
 					if (element) {
 						element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-						// Add a subtle highlight effect
-						element.style.backgroundColor = '#fef3c7';
+						// Add a subtle highlight effect using civic blue
+						const isDark = document.documentElement.classList.contains('dark');
+						element.style.backgroundColor = isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(14, 165, 233, 0.1)';
 						setTimeout(() => {
 							element.style.backgroundColor = '';
 							element.style.transition = 'background-color 1s ease';
