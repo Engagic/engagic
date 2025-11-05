@@ -171,13 +171,20 @@
 	async function generateSimpleFlyer(item: any, position: 'yes' | 'no') {
 		if (!selectedMeeting) return;
 
-		// Map frontend position names to backend API values
-		const apiPosition = position === 'yes' ? 'support' : 'oppose';
+		// Prevent double-clicks
+		if (flyerGenerating) return;
 
-		// Detect current theme
-		const isDarkMode = document.documentElement.classList.contains('dark');
+		flyerGenerating = true;
 
 		try {
+			// Map frontend position names to backend API values
+			const apiPosition = position === 'yes' ? 'support' : 'oppose';
+
+			// Detect current theme
+			const isDarkMode = document.documentElement.classList.contains('dark');
+
+			console.log('Generating flyer for item:', item.id, 'position:', apiPosition);
+
 			// Call backend API to generate flyer HTML
 			const html = await generateFlyer({
 				meeting_id: selectedMeeting.id,
@@ -186,17 +193,25 @@
 				dark_mode: isDarkMode
 			});
 
+			console.log('Flyer HTML received, length:', html.length);
+
 			// Use data URL (more reliable on mobile than blob URLs)
 			const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
 			const newWindow = window.open(dataUrl, '_blank');
 
 			if (!newWindow) {
+				console.log('Popup blocked, trying fallback navigation');
 				// Fallback: try to navigate in same tab if popup blocked
 				window.location.href = dataUrl;
+			} else {
+				console.log('Flyer opened in new window');
 			}
 		} catch (error) {
 			console.error('Failed to generate flyer:', error);
-			alert('Failed to generate flyer. Please try again.');
+			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+			alert(`Failed to generate flyer: ${errorMsg}\n\nPlease try again or contact support.`);
+		} finally {
+			flyerGenerating = false;
 		}
 	}
 
@@ -499,21 +514,23 @@
 										<div class="item-action-bar">
 											<button
 												class="flyer-btn flyer-btn-yes"
+												disabled={flyerGenerating}
 												onclick={(e) => {
 													e.stopPropagation();
 													generateSimpleFlyer(item, 'yes');
 												}}
 											>
-												✓ Say Yes
+												{flyerGenerating ? '⏳ Generating...' : '✓ Say Yes'}
 											</button>
 											<button
 												class="flyer-btn flyer-btn-no"
+												disabled={flyerGenerating}
 												onclick={(e) => {
 													e.stopPropagation();
 													generateSimpleFlyer(item, 'no');
 												}}
 											>
-												✗ Say No
+												{flyerGenerating ? '⏳ Generating...' : '✗ Say No'}
 											</button>
 										</div>
 									{/if}
@@ -2206,5 +2223,16 @@
 
 	.flyer-btn:active {
 		transform: translateY(0);
+	}
+
+	.flyer-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+		transform: none;
+	}
+
+	.flyer-btn:disabled:hover {
+		transform: none;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 	}
 </style>
