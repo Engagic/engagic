@@ -1,5 +1,5 @@
 """
-Search utilities for finding companies/people in meeting summaries.
+Search utilities for finding text in meeting and item summaries.
 """
 
 import os
@@ -42,14 +42,14 @@ def build_engagic_url(banana: str, meeting_title: str, meeting_date: str, meetin
     date_part = format_date(meeting_date)
     return f"https://engagic.org/{banana}/{slug}_{date_part}_{meeting_id}"
 
-def search_by_company_name(
+def search_summaries(
     search_term: str,
     city_banana: Optional[str] = None,
     case_sensitive: bool = False,
     db_path: Optional[str] = None
 ) -> List[Dict]:
     """
-    Search for a company/person name in meeting and item summaries.
+    Search for text in meeting and item summaries.
     
     Args:
         search_term: String to search for (e.g., "Beazer Homes", "Uber")

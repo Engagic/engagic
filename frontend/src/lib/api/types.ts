@@ -38,9 +38,18 @@ export interface Meeting {
 	meeting_status?: 'cancelled' | 'postponed' | 'revised' | 'rescheduled';
 	participation?: {
 		email?: string;
+		emails?: Array<{
+			address: string;
+			purpose: string;
+		}>;
 		phone?: string;
 		virtual_url?: string;
 		meeting_id?: string;
+		streaming_urls?: Array<{
+			url?: string;
+			platform: string;
+			channel?: string;
+		}>;
 		is_hybrid?: boolean;
 		is_virtual_only?: boolean;
 		physical_location?: string;

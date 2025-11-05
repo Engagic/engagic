@@ -400,6 +400,24 @@
 						</a>
 					</div>
 				{/if}
+				{#if p.streaming_urls && p.streaming_urls.length > 0}
+					<div class="participation-item">
+						<span class="participation-icon">📺</span>
+						<div class="streaming-links">
+							{#each p.streaming_urls as stream}
+								{#if stream.url}
+									<a href={stream.url} target="_blank" rel="noopener noreferrer" class="participation-link">
+										Watch on {stream.platform}
+									</a>
+								{:else if stream.channel}
+									<span class="participation-text">
+										{stream.platform} Channel {stream.channel}
+									</span>
+								{/if}
+							{/each}
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -839,6 +857,19 @@
 		font-size: 0.8rem;
 		font-family: 'IBM Plex Mono', monospace;
 		margin-left: 0.5rem;
+	}
+
+	.streaming-links {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.participation-text {
+		color: #15803d;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 500;
 	}
 
 	.city-header {
