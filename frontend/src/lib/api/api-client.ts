@@ -144,5 +144,24 @@ export const apiClient = {
 		);
 
 		return response.json();
+	},
+
+	async generateFlyer(params: {
+		meeting_id: number;
+		item_id?: string;
+		position: 'support' | 'oppose' | 'more_info';
+		custom_message?: string;
+		user_name?: string;
+	}): Promise<string> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/flyer/generate`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(params)
+			}
+		);
+
+		return response.text();
 	}
 };

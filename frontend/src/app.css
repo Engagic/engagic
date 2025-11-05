@@ -3,6 +3,13 @@
 @import '@fontsource/ibm-plex-mono/600.css';
 
 :root {
+	/* Progressive widths: search -> meetings -> detail */
+	--width-search: 600px;
+	--width-meetings: 800px;
+	--width-detail: 1000px;
+}
+
+:root.light {
 	--civic-blue: #4f46e5;
 	--civic-green: #10b981;
 	--civic-gray: #475569;
@@ -15,10 +22,51 @@
 	--civic-yellow: #eab308;
 	--civic-orange: #f97316;
 
-	/* Progressive widths: search -> meetings -> detail */
-	--width-search: 600px;
-	--width-meetings: 800px;
-	--width-detail: 1000px;
+	--bg-gradient-start: #f8fafc;
+	--bg-gradient-end: #e2e8f0;
+	--text-primary: #0f172a;
+	--text-secondary: #475569;
+	--text-link: #4f46e5;
+	--surface-primary: #ffffff;
+	--surface-secondary: #f8fafc;
+	--surface-hover: #eff6ff;
+	--border-primary: #e2e8f0;
+	--border-hover: #4f46e5;
+	--shadow-sm: rgba(0, 0, 0, 0.04);
+	--shadow-md: rgba(0, 0, 0, 0.1);
+	--shadow-lg: rgba(79, 70, 229, 0.12);
+	--ticker-bg: #4f46e5;
+	--ticker-text: #ffffff;
+}
+
+:root.dark {
+	--civic-blue: #a78bfa;
+	--civic-green: #34d399;
+	--civic-gray: #94a3b8;
+	--civic-dark: #f8fafc;
+	--civic-light: #1e293b;
+	--civic-white: #0f172a;
+	--civic-border: #334155;
+	--civic-red: #f87171;
+	--civic-accent: #c4b5fd;
+	--civic-yellow: #fbbf24;
+	--civic-orange: #fb923c;
+
+	--bg-gradient-start: #0f172a;
+	--bg-gradient-end: #1e293b;
+	--text-primary: #f8fafc;
+	--text-secondary: #cbd5e1;
+	--text-link: #fb923c;
+	--surface-primary: #1e293b;
+	--surface-secondary: #334155;
+	--surface-hover: #1e3a5f;
+	--border-primary: #334155;
+	--border-hover: #fb923c;
+	--shadow-sm: rgba(0, 0, 0, 0.3);
+	--shadow-md: rgba(0, 0, 0, 0.5);
+	--shadow-lg: rgba(251, 146, 60, 0.25);
+	--ticker-bg: #1e293b;
+	--ticker-text: #f8fafc;
 }
 
 * {
@@ -34,8 +82,8 @@ html {
 
 body {
 	font-family: Georgia, 'Times New Roman', Times, serif;
-	background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-	color: var(--civic-dark);
+	background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+	color: var(--text-primary);
 	line-height: 1.7;
 	min-height: 100vh;
 	display: flex;
@@ -46,6 +94,7 @@ body {
 	padding-top: 3rem;
 	overflow-x: hidden;
 	width: 100%;
+	transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* Accessibility: Focus indicators */
@@ -169,12 +218,13 @@ body {
 	left: 0;
 	right: 0;
 	overflow: hidden;
-	background: var(--civic-blue);
+	background: var(--ticker-bg);
 	padding: 0.75rem 0;
 	border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 	z-index: 1000;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 2px 8px var(--shadow-md);
 	min-height: 46px;
+	transition: background 0.3s ease;
 }
 
 /* Navigation loading indicator */
@@ -219,7 +269,7 @@ body {
 	padding: 0 3rem;
 	font-family: 'IBM Plex Mono', monospace;
 	font-size: 0.85rem;
-	color: white;
+	color: var(--ticker-text);
 	text-decoration: none;
 	transition: opacity 0.2s ease;
 	cursor: pointer;
@@ -235,7 +285,7 @@ body {
 
 .ticker-city {
 	font-weight: 600;
-	color: white;
+	color: var(--ticker-text);
 }
 
 .ticker-separator {
@@ -281,11 +331,12 @@ body {
 	padding: 1.4rem;
 	font-size: 1.1rem;
 	font-family: Georgia, 'Times New Roman', Times, serif;
-	border: 2px solid var(--civic-border);
+	border: 2px solid var(--border-primary);
 	border-radius: 12px;
-	background: var(--civic-white);
+	background: var(--surface-primary);
+	color: var(--text-primary);
 	transition: all 0.3s ease;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+	box-shadow: 0 2px 8px var(--shadow-sm);
 	resize: vertical;
 	min-height: 60px;
 }
@@ -459,17 +510,18 @@ body {
 }
 
 .ambiguous-cities {
-	background: var(--civic-white);
+	background: var(--surface-primary);
 	border-radius: 12px;
-	border: 1px solid var(--civic-border);
+	border: 1px solid var(--border-primary);
 	padding: 2rem;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+	box-shadow: 0 2px 8px var(--shadow-sm);
+	transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .ambiguous-message {
 	font-family: Georgia, 'Times New Roman', Times, serif;
 	font-size: 1.05rem;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 	margin-bottom: 1.5rem;
 	line-height: 1.6;
 }
@@ -486,15 +538,15 @@ body {
 	justify-content: space-between;
 	gap: 1rem;
 	padding: 1rem;
-	background: var(--civic-light);
+	background: var(--surface-secondary);
 	border-radius: 8px;
 	transition: all 0.2s ease;
-	border: 1px solid var(--civic-border);
+	border: 1px solid var(--border-primary);
 }
 
 .city-option-row:hover {
-	background: #eff6ff;
-	border-color: var(--civic-blue);
+	background: var(--surface-hover);
+	border-color: var(--border-hover);
 }
 
 .city-option {
@@ -503,7 +555,7 @@ body {
 	font-family: 'IBM Plex Mono', monospace;
 	font-size: 1rem;
 	font-weight: 600;
-	color: var(--civic-blue);
+	color: var(--text-link);
 	background: none;
 	border: none;
 	cursor: pointer;
@@ -531,7 +583,7 @@ body {
 
 .stat-total {
 	font-weight: 600;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 }
 
 .stat-packets {
@@ -573,16 +625,17 @@ body {
 	text-align: center;
 	margin-bottom: 2rem;
 	padding: 1.5rem;
-	background: var(--civic-white);
+	background: var(--surface-primary);
 	border-radius: 12px;
-	border: 1px solid var(--civic-border);
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+	border: 1px solid var(--border-primary);
+	box-shadow: 0 2px 8px var(--shadow-sm);
+	transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .city-name {
 	font-size: 1.2rem;
 	font-weight: 600;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 }
 
 .meeting-list {
@@ -598,21 +651,21 @@ body {
 	width: 100%;
 	max-width: none;
 	box-sizing: border-box;
-	background: var(--civic-white);
-	border: 1px solid var(--civic-border);
+	background: var(--surface-primary);
+	border: 1px solid var(--border-primary);
 	border-radius: 12px;
 	padding: 1.5rem;
 	cursor: pointer;
 	transition: all 0.3s ease;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+	box-shadow: 0 2px 8px var(--shadow-sm);
 	text-decoration: none;
 	color: inherit;
 }
 
 .meeting-card:hover {
-	border-color: var(--civic-blue);
+	border-color: var(--border-hover);
 	transform: translateY(-4px);
-	box-shadow: 0 8px 24px rgba(79, 70, 229, 0.12);
+	box-shadow: 0 8px 24px var(--shadow-lg);
 }
 
 .meeting-card-header {
@@ -627,7 +680,7 @@ body {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 	font-size: 1.1rem;
 	font-weight: 700;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 	line-height: 1.4;
 	letter-spacing: 0.026em;
 	flex: 1;
@@ -687,11 +740,12 @@ body {
 	font-family: 'IBM Plex Mono', monospace;
 	font-size: 0.7rem;
 	padding: 0.25rem 0.5rem;
-	background: var(--civic-light);
+	background: var(--surface-secondary);
 	color: var(--civic-blue);
-	border: 1px solid var(--civic-border);
+	border: 1px solid var(--border-primary);
 	border-radius: 4px;
 	font-weight: 500;
+	transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .topic-tag.topic-more {
@@ -715,13 +769,13 @@ body {
 	font-family: 'IBM Plex Mono', monospace;
 	font-size: 1.3rem;
 	font-weight: 600;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 	margin: 0;
 }
 
 .toggle-past-btn {
 	padding: 0.5rem 1rem;
-	background: var(--civic-white);
+	background: var(--surface-primary);
 	color: var(--civic-blue);
 	border: 2px solid var(--civic-blue);
 	border-radius: 6px;
@@ -733,21 +787,21 @@ body {
 
 .toggle-past-btn:hover {
 	background: var(--civic-blue);
-	color: var(--civic-white);
+	color: var(--surface-primary);
 }
 
 .past-meetings-divider {
 	margin: 2rem 0 1rem 0;
 	padding-bottom: 0.5rem;
-	border-bottom: 2px solid var(--civic-border);
-	color: var(--civic-gray);
+	border-bottom: 2px solid var(--border-primary);
+	color: var(--text-secondary);
 	font-size: 1.1rem;
 	font-weight: 500;
 }
 
 .past-meeting {
 	opacity: 0.8;
-	border-color: var(--civic-border);
+	border-color: var(--border-primary);
 }
 
 .past-meeting:hover {
@@ -789,17 +843,18 @@ body {
 .no-meetings {
 	text-align: center;
 	padding: 3rem 2rem;
-	background: var(--civic-white);
+	background: var(--surface-primary);
 	border-radius: 12px;
-	border: 1px solid var(--civic-border);
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+	border: 1px solid var(--border-primary);
+	box-shadow: 0 2px 4px var(--shadow-sm);
+	transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .empty-state-title {
 	font-family: 'IBM Plex Mono', monospace;
 	font-size: 1.2rem;
 	font-weight: 600;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 	margin-bottom: 0.75rem;
 }
 
@@ -817,14 +872,15 @@ body {
 .meeting-detail {
 	margin-top: 2rem;
 	padding: 2rem;
-	background: var(--civic-white);
+	background: var(--surface-primary);
 	border-radius: 8px;
-	border: 1px solid var(--civic-border);
+	border: 1px solid var(--border-primary);
+	transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .meeting-detail h3 {
 	margin-bottom: 1rem;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 }
 
 .meeting-summary {
@@ -836,7 +892,7 @@ body {
 	line-height: 1.8;
 	white-space: pre-wrap;
 	font-size: 1.05rem;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
@@ -849,7 +905,7 @@ body {
 	margin-top: 1.5rem;
 	margin-bottom: 0.75rem;
 	padding-bottom: 0.5rem;
-	border-bottom: 2px solid var(--civic-border);
+	border-bottom: 2px solid var(--border-primary);
 }
 
 .summary-header:first-child {
@@ -861,7 +917,7 @@ body {
 	line-height: 1.8;
 	white-space: pre-wrap;
 	font-size: 1.05rem;
-	color: var(--civic-dark);
+	color: var(--text-primary);
 	margin-bottom: 1rem;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
@@ -886,7 +942,7 @@ body {
 	margin-top: 4rem;
 	padding: 2rem 0;
 	text-align: center;
-	border-top: 1px solid var(--civic-border);
+	border-top: 1px solid var(--border-primary);
 }
 
 .footer-links {
@@ -899,7 +955,7 @@ body {
 
 .about-link,
 .github-link {
-	color: var(--civic-blue);
+	color: var(--text-link);
 	text-decoration: none;
 	font-size: 0.95rem;
 	font-weight: 500;

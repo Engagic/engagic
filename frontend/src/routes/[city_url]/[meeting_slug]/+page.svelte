@@ -4,6 +4,7 @@
 	import { marked } from 'marked';
 	import type { SearchResult, Meeting } from '$lib/api/index';
 	import { config } from '$lib/api/config';
+	import { generateFlyer } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -165,182 +166,31 @@
 		return { main: title, remainder: null, isTruncated: false };
 	}
 
-	function generateSimpleFlyer(item: any, position: 'yes' | 'no') {
+	async function generateSimpleFlyer(item: any, position: 'yes' | 'no') {
 		if (!selectedMeeting) return;
 
-		// Get city info
-		const cityName = searchResults && 'city_name' in searchResults ? searchResults.city_name : 'Your City';
-		const state = searchResults && 'state' in searchResults ? searchResults.state : '';
+		// Map frontend position names to backend API values
+		const apiPosition = position === 'yes' ? 'support' : 'oppose';
 
-		// Truncate title intelligently for flyer display
-		let displayTitle = item.title;
+		try {
+			// Call backend API to generate flyer HTML
+			const html = await generateFlyer({
+				meeting_id: selectedMeeting.id,
+				item_id: item.id,
+				position: apiPosition
+			});
 
-		// Step 1: If there's a semicolon, take only the first part
-		const semicolonIndex = displayTitle.indexOf(';');
-		if (semicolonIndex !== -1 && semicolonIndex < displayTitle.length - 1) {
-			displayTitle = displayTitle.substring(0, semicolonIndex);
-		}
-
-		// Step 2: If there's a period in the first 150 chars, take just the first sentence
-		const periodIndex = displayTitle.indexOf('.');
-		if (periodIndex !== -1 && periodIndex < 150) {
-			displayTitle = displayTitle.substring(0, periodIndex + 1);
-		}
-
-		// Step 3: Hard cap at 150 characters with ellipsis
-		if (displayTitle.length > 150) {
-			displayTitle = displayTitle.substring(0, 147) + '...';
-		}
-
-		// Format date
-		let dateStr = 'Date TBD';
-		if (selectedMeeting.date) {
-			const date = new Date(selectedMeeting.date);
-			if (!isNaN(date.getTime())) {
-				const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'long' });
-				const monthDay = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-				const time = extractTime(selectedMeeting.date);
-				dateStr = `${dayOfWeek}, ${monthDay}${time ? ' at ' + time : ''}`;
+			// Open in new window
+			const flyerWindow = window.open('', '_blank');
+			if (flyerWindow) {
+				flyerWindow.document.write(html);
+				flyerWindow.document.close();
+			} else {
+				alert('Please allow pop-ups to view flyer');
 			}
-		}
-
-		// Participation methods
-		const participation = selectedMeeting.participation || {};
-		const methods = [];
-		if (participation.email) methods.push(`EMAILING ${participation.email}`);
-		if (participation.phone) methods.push(`CALLING ${participation.phone}`);
-		if (participation.zoom_url || participation.virtual_url) {
-			const url = participation.zoom_url || participation.virtual_url;
-			methods.push(`ZOOMING AT ${url}`);
-		}
-		const participationText = methods.length > 0 ? methods.join('\n') : 'CONTACTING YOUR CITY COUNCIL';
-
-		// Generate item-specific URL with hash for deep linking
-		const meeting_slug = `${selectedMeeting.title?.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 50)}_${selectedMeeting.date ? new Date(selectedMeeting.date).toISOString().split('T')[0].replace(/-/g, '_') : 'undated'}_${selectedMeeting.id}`;
-		const itemUrl = `https://engagic.org/${city_banana}/${meeting_slug}#item-${item.id}`;
-
-		// Generate QR code URL using qrserver.com (public API, no Google)
-		const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(itemUrl)}`;
-
-		// Generate HTML
-		const html = `<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>${position === 'yes' ? 'Say Yes' : 'Say No'} - ${cityName}</title>
-	<style>
-		* { margin: 0; padding: 0; box-sizing: border-box; }
-		body {
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-			background: white;
-			padding: 2rem;
-			max-width: 800px;
-			margin: 0 auto;
-			line-height: 1.6;
-		}
-		.header {
-			font-size: 3rem;
-			font-weight: 900;
-			text-align: center;
-			margin-bottom: 2rem;
-			color: ${position === 'yes' ? '#16a34a' : '#dc2626'};
-			text-transform: uppercase;
-			letter-spacing: 2px;
-		}
-		.title {
-			font-size: 1.75rem;
-			font-weight: 700;
-			text-align: center;
-			margin-bottom: 2rem;
-			padding: 2rem;
-			background: #f3f4f6;
-			border-radius: 12px;
-			color: #1f2937;
-			line-height: 1.4;
-		}
-		.city {
-			font-size: 1.25rem;
-			font-weight: 600;
-			text-align: center;
-			margin-bottom: 0.5rem;
-			color: #4b5563;
-		}
-		.date {
-			font-size: 1.1rem;
-			font-weight: 600;
-			text-align: center;
-			margin-bottom: 3rem;
-			color: #6b7280;
-		}
-		.participate {
-			font-size: 1.5rem;
-			font-weight: 700;
-			margin-bottom: 1.5rem;
-			color: #1f2937;
-		}
-		.methods {
-			font-size: 1.25rem;
-			white-space: pre-line;
-			padding: 1.5rem;
-			background: #f9fafb;
-			border-radius: 8px;
-			border: 2px solid #e5e7eb;
-			color: #374151;
-			line-height: 1.8;
-		}
-		.footer {
-			margin-top: 3rem;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			gap: 1rem;
-			flex-direction: column;
-		}
-		.qr-code {
-			width: 100px;
-			height: 100px;
-		}
-		.footer-text {
-			font-size: 0.875rem;
-			color: #9ca3af;
-		}
-		@media print {
-			body { padding: 0; }
-		}
-		@media (max-width: 640px) {
-			body { padding: 1rem; }
-			.header { font-size: 2rem; }
-			.title { font-size: 1.25rem; padding: 1.5rem; }
-			.city { font-size: 1.1rem; }
-			.date { font-size: 0.95rem; }
-			.participate { font-size: 1.25rem; }
-			.methods { font-size: 1rem; padding: 1rem; }
-			.qr-code { width: 80px; height: 80px; }
-		}
-	</style>
-</head>
-<body>
-	<div class="header">SAY ${position === 'yes' ? 'YES' : 'NO'} TO</div>
-	<div class="title">${displayTitle}</div>
-	<div class="city">${cityName}${state ? ', ' + state : ''}</div>
-	<div class="date">${dateStr}</div>
-	<div class="participate">YOU CAN PARTICIPATE BY:</div>
-	<div class="methods">${participationText}</div>
-	<div class="footer">
-		<img src="${qrCodeUrl}" alt="QR Code to Meeting" class="qr-code" />
-		<div class="footer-text">Scan to view full agenda at engagic.org</div>
-	</div>
-</body>
-</html>`;
-
-		// Open in new window
-		const flyerWindow = window.open('', '_blank');
-		if (flyerWindow) {
-			flyerWindow.document.write(html);
-			flyerWindow.document.close();
-		} else {
-			alert('Please allow pop-ups to view flyer');
+		} catch (error) {
+			console.error('Failed to generate flyer:', error);
+			alert('Failed to generate flyer. Please try again.');
 		}
 	}
 
@@ -363,63 +213,78 @@
 
 	{#if selectedMeeting?.participation}
 		{@const p = selectedMeeting.participation}
-		<div class="participation-box">
-			<div class="participation-header">
-				<span class="participation-label">How to Participate</span>
-				{#if p.is_hybrid}
-					<span class="participation-badge badge-hybrid">Hybrid Meeting</span>
-				{:else if p.is_virtual_only}
-					<span class="participation-badge badge-virtual">Virtual Only</span>
-				{/if}
-			</div>
-			<div class="participation-content">
-				{#if p.virtual_url}
-					<div class="participation-item">
-						<span class="participation-icon">📹</span>
-						<a href={p.virtual_url} target="_blank" rel="noopener noreferrer" class="participation-link">
-							Join Virtual Meeting
-						</a>
-						{#if p.meeting_id}
-							<span class="meeting-id">Meeting ID: {p.meeting_id}</span>
-						{/if}
-					</div>
-				{/if}
-				{#if p.email}
-					<div class="participation-item">
-						<span class="participation-icon">✉️</span>
-						<a href="mailto:{p.email}" class="participation-link">
-							{p.email}
-						</a>
-					</div>
-				{/if}
-				{#if p.phone}
-					<div class="participation-item">
-						<span class="participation-icon">📞</span>
-						<a href="tel:{p.phone}" class="participation-link">
-							{p.phone}
-						</a>
-					</div>
-				{/if}
-				{#if p.streaming_urls && p.streaming_urls.length > 0}
-					<div class="participation-item">
-						<span class="participation-icon">📺</span>
-						<div class="streaming-links">
-							{#each p.streaming_urls as stream}
-								{#if stream.url}
-									<a href={stream.url} target="_blank" rel="noopener noreferrer" class="participation-link">
-										Watch on {stream.platform}
+		{@const hasParticipation = p.virtual_url || p.email || p.phone}
+		{@const hasStreaming = p.streaming_urls && p.streaming_urls.length > 0}
+
+		{#if hasParticipation || hasStreaming}
+			<div class="info-row">
+				{#if hasParticipation}
+					<div class="participation-box">
+						<div class="participation-header">
+							<span class="participation-label">How to Participate</span>
+							{#if p.is_hybrid}
+								<span class="participation-badge badge-hybrid">Hybrid Meeting</span>
+							{:else if p.is_virtual_only}
+								<span class="participation-badge badge-virtual">Virtual Only</span>
+							{/if}
+						</div>
+						<div class="participation-content">
+							{#if p.virtual_url}
+								<div class="participation-item">
+									<span class="participation-icon">📹</span>
+									<a href={p.virtual_url} target="_blank" rel="noopener noreferrer" class="participation-link">
+										Join Virtual Meeting
 									</a>
-								{:else if stream.channel}
-									<span class="participation-text">
-										{stream.platform} Channel {stream.channel}
-									</span>
-								{/if}
+									{#if p.meeting_id}
+										<span class="meeting-id">Meeting ID: {p.meeting_id}</span>
+									{/if}
+								</div>
+							{/if}
+							{#if p.email}
+								<div class="participation-item">
+									<span class="participation-icon">✉️</span>
+									<a href="mailto:{p.email}" class="participation-link">
+										{p.email}
+									</a>
+								</div>
+							{/if}
+							{#if p.phone}
+								<div class="participation-item">
+									<span class="participation-icon">📞</span>
+									<a href="tel:{p.phone}" class="participation-link">
+										{p.phone}
+									</a>
+								</div>
+							{/if}
+						</div>
+					</div>
+				{/if}
+
+				{#if hasStreaming}
+					<div class="viewing-box">
+						<div class="viewing-header">
+							<span class="viewing-label">Watch Live</span>
+						</div>
+						<div class="viewing-content">
+							{#each p.streaming_urls as stream}
+								<div class="streaming-item">
+									<span class="viewing-icon">📺</span>
+									{#if stream.url}
+										<a href={stream.url} target="_blank" rel="noopener noreferrer" class="viewing-link">
+											Watch on {stream.platform}
+										</a>
+									{:else if stream.channel}
+										<span class="viewing-text">
+											{stream.platform} Channel {stream.channel}
+										</span>
+									{/if}
+								</div>
 							{/each}
 						</div>
 					</div>
 				{/if}
 			</div>
-		</div>
+		{/if}
 	{/if}
 
 	{#if error}
@@ -775,13 +640,154 @@
 		font-size: 0.9rem;
 	}
 
-	.participation-box {
+	.info-row {
+		display: flex;
+		gap: 0;
 		margin: 1.5rem 0;
+		align-items: stretch;
+		border-radius: 6px;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	}
+
+	.participation-box {
+		flex: 1;
 		padding: 1.25rem 1.5rem;
 		background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
 		border: 2px solid #22c55e;
-		border-radius: 12px;
-		box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
+		border-right: 1px solid #22c55e;
+		border-radius: 6px 0 0 6px;
+		box-shadow: none;
+		transition: all 0.3s ease;
+	}
+
+	:global(.dark) .participation-box {
+		background: linear-gradient(135deg, #3b0764 0%, #581c87 100%);
+		border: 2px solid #c084fc;
+		border-right: 1px solid #c084fc;
+		box-shadow: none;
+	}
+
+	.viewing-box {
+		flex: 1;
+		padding: 0.85rem 1.25rem;
+		background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+		border: 2px solid #93c5fd;
+		border-left: 1px solid #93c5fd;
+		border-radius: 0 6px 6px 0;
+		box-shadow: none;
+		transition: all 0.3s ease;
+	}
+
+	:global(.dark) .viewing-box {
+		background: linear-gradient(135deg, #3b0764 0%, #581c87 100%);
+		border: 2px solid #c084fc;
+		border-left: 1px solid #c084fc;
+		box-shadow: none;
+	}
+
+	.viewing-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.viewing-label {
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 600;
+		color: #1e40af;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		transition: color 0.3s ease;
+	}
+
+	:global(.dark) .viewing-label {
+		color: #e9d5ff;
+	}
+
+	.viewing-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.streaming-item {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.viewing-link {
+		color: #1e40af;
+		text-decoration: none;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		font-weight: 500;
+		transition: color 0.2s;
+	}
+
+	:global(.dark) .viewing-link {
+		color: #f5d0fe;
+	}
+
+	.viewing-link:hover {
+		color: #1e3a8a;
+		text-decoration: underline;
+	}
+
+	:global(.dark) .viewing-link:hover {
+		color: #fae8ff;
+	}
+
+	.viewing-text {
+		color: #1e40af;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		font-weight: 500;
+		transition: color 0.3s ease;
+	}
+
+	:global(.dark) .viewing-text {
+		color: #f5d0fe;
+	}
+
+	.viewing-icon {
+		font-size: 0.9rem;
+		flex-shrink: 0;
+	}
+
+	@media (max-width: 768px) {
+		.info-row {
+			flex-direction: column;
+			gap: 1rem;
+			border-radius: 0;
+			overflow: visible;
+			box-shadow: none;
+		}
+
+		.participation-box {
+			border: 2px solid #22c55e;
+			border-radius: 6px;
+			box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
+		}
+
+		:global(.dark) .participation-box {
+			border: 2px solid #c084fc;
+			box-shadow: 0 4px 12px rgba(192, 132, 252, 0.3);
+		}
+
+		.viewing-box {
+			border: 2px solid #93c5fd;
+			border-radius: 6px;
+			box-shadow: 0 4px 12px rgba(147, 197, 253, 0.15);
+		}
+
+		:global(.dark) .viewing-box {
+			border: 2px solid #c084fc;
+			box-shadow: 0 4px 12px rgba(192, 132, 252, 0.3);
+		}
 	}
 
 	.participation-header {
@@ -798,6 +804,11 @@
 		font-size: 0.85rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
+		transition: color 0.3s ease;
+	}
+
+	:global(.dark) .participation-label {
+		color: #e9d5ff;
 	}
 
 	.participation-badge {
@@ -847,9 +858,17 @@
 		transition: color 0.2s;
 	}
 
+	:global(.dark) .participation-link {
+		color: #f5d0fe;
+	}
+
 	.participation-link:hover {
 		color: #166534;
 		text-decoration: underline;
+	}
+
+	:global(.dark) .participation-link:hover {
+		color: #fae8ff;
 	}
 
 	.meeting-id {
@@ -857,6 +876,11 @@
 		font-size: 0.8rem;
 		font-family: 'IBM Plex Mono', monospace;
 		margin-left: 0.5rem;
+		transition: color 0.3s ease;
+	}
+
+	:global(.dark) .meeting-id {
+		color: #e9d5ff;
 	}
 
 	.streaming-links {
@@ -870,6 +894,11 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 500;
+		transition: color 0.3s ease;
+	}
+
+	:global(.dark) .participation-text {
+		color: #f5d0fe;
 	}
 
 	.city-header {
@@ -878,10 +907,11 @@
 
 	.meeting-detail {
 		padding: 2rem;
-		background: var(--civic-white);
+		background: var(--surface-primary);
 		border-radius: 16px;
-		border: 1px solid var(--civic-border);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+		border: 1px solid var(--border-primary);
+		box-shadow: 0 4px 16px var(--shadow-sm);
+		transition: background 0.3s ease, border-color 0.3s ease;
 	}
 
 	.meeting-alert-banner {
@@ -950,7 +980,7 @@
 	.meeting-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 2rem;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 		margin: 0;
 		font-weight: 700;
 		line-height: 1.3;
@@ -1053,7 +1083,7 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.8;
 		font-size: 1.05rem;
-		color: #1f2937;
+		color: var(--text-primary);
 		padding: 0 2rem;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
@@ -1066,7 +1096,7 @@
 	.meeting-summary :global(h5),
 	.meeting-summary :global(h6) {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 		margin-top: 2.5rem;
 		margin-bottom: 1rem;
 		line-height: 1.3;
@@ -1102,15 +1132,16 @@
 	.meeting-summary :global(blockquote) {
 		margin: 2rem 0;
 		padding-left: 1.5rem;
-		border-left: 4px solid #333;
-		color: #333;
+		border-left: 4px solid var(--text-secondary);
+		color: var(--text-secondary);
 		font-style: italic;
 	}
 
 	.meeting-summary :global(code) {
 		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
 		font-size: 0.9em;
-		background: #f5f5f5;
+		background: var(--surface-secondary);
+		color: var(--text-primary);
 		padding: 0.2rem 0.4rem;
 		border-radius: 3px;
 	}
@@ -1118,7 +1149,8 @@
 	.meeting-summary :global(pre) {
 		margin: 2rem 0;
 		padding: 1.5rem;
-		background: #f5f5f5;
+		background: var(--surface-secondary);
+		color: var(--text-primary);
 		overflow-x: auto;
 		line-height: 1.5;
 		border-radius: 6px;
@@ -1145,7 +1177,7 @@
 	.meeting-summary :global(hr) {
 		margin: 3rem 0;
 		border: none;
-		border-top: 1px solid #ddd;
+		border-top: 1px solid var(--border-primary);
 	}
 
 	.meeting-summary :global(img) {
@@ -1175,7 +1207,7 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.05rem;
 		line-height: 1.7;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 		margin: 0 auto 1rem;
 		max-width: 500px;
 	}
@@ -1197,8 +1229,8 @@
 		font-size: 0.75rem;
 		font-weight: 500;
 		color: var(--civic-gray);
-		background: white;
-		border: 1px solid #e2e8f0;
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
 		border-radius: 5px;
 		padding: 0.25rem 0.75rem;
 		cursor: pointer;
@@ -1206,9 +1238,9 @@
 	}
 
 	.toggle-procedural-btn:hover {
-		background: #f8fafc;
+		background: var(--surface-secondary);
 		border-color: var(--civic-gray);
-		color: var(--civic-dark);
+		color: var(--text-primary);
 	}
 
 	.agenda-items-header {
@@ -1251,11 +1283,11 @@
 	}
 
 	.agenda-item {
-		background: white;
+		background: var(--surface-primary);
 		border-radius: 12px;
-		border: 1px solid #e2e8f0;
-		border-left: 4px solid #cbd5e1;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+		border: 1px solid var(--border-primary);
+		border-left: 4px solid var(--border-primary);
+		box-shadow: 0 1px 3px var(--shadow-sm);
 		transition: all 0.2s ease;
 		overflow: hidden;
 	}
@@ -1265,8 +1297,8 @@
 	}
 
 	.agenda-item[data-has-summary="false"] {
-		border-left-color: #e2e8f0;
-		background: #f8fafc;
+		border-left-color: var(--border-primary);
+		background: var(--surface-secondary);
 		opacity: 0.75;
 	}
 
@@ -1290,7 +1322,7 @@
 	}
 
 	.item-header-clickable:hover {
-		background: #f8fafc;
+		background: var(--surface-hover);
 	}
 
 	.item-header {
@@ -1326,13 +1358,13 @@
 	.item-summary-preview {
 		margin-top: 0.5rem;
 		padding: 0.75rem;
-		background: #f8fafc;
-		border-left: 2px solid #cbd5e1;
+		background: var(--surface-secondary);
+		border-left: 2px solid var(--border-primary);
 		border-radius: 4px;
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 0.9rem;
 		line-height: 1.6;
-		color: #475569;
+		color: var(--text-secondary);
 		font-style: italic;
 	}
 
@@ -1363,7 +1395,7 @@
 		min-width: 1.5rem;
 		height: 1.5rem;
 		padding: 0 0.35rem;
-		background: #f1f5f9;
+		background: var(--surface-secondary);
 		color: var(--civic-gray);
 		border-radius: 12px;
 		font-family: 'IBM Plex Mono', monospace;
@@ -1379,7 +1411,7 @@
 		width: 1.75rem;
 		height: 1.75rem;
 		background: transparent;
-		border: 1.5px solid #cbd5e1;
+		border: 1.5px solid var(--border-primary);
 		border-radius: 6px;
 		color: var(--civic-gray);
 		font-size: 1.1rem;
@@ -1398,7 +1430,7 @@
 		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 		font-size: 1.125rem;
 		font-weight: 500;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 		margin: 0;
 		line-height: 1.45;
 		-webkit-font-smoothing: antialiased;
@@ -1429,9 +1461,9 @@
 	.item-topic-tag-small {
 		display: inline-block;
 		padding: 0.25rem 0.65rem;
-		background: var(--topic-bg, #f1f5f9);
-		color: var(--topic-color, #475569);
-		border: 1.5px solid var(--topic-border, #cbd5e1);
+		background: var(--topic-bg, var(--surface-secondary));
+		color: var(--topic-color, var(--text-secondary));
+		border: 1.5px solid var(--topic-border, var(--border-primary));
 		border-radius: 12px;
 		font-size: 0.7rem;
 		font-weight: 600;
@@ -1453,13 +1485,13 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 500;
 		padding: 0.25rem 0.65rem;
-		background: #f1f5f9;
+		background: var(--surface-secondary);
 		border-radius: 12px;
 	}
 
 	.item-expanded-content {
 		padding: 0 1.25rem 1.25rem 1.25rem;
-		border-top: 1px solid #f1f5f9;
+		border-top: 1px solid var(--border-primary);
 		animation: slideDown 0.2s ease-out;
 	}
 
@@ -1577,7 +1609,7 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.7;
 		font-size: 1rem;
-		color: #1f2937;
+		color: var(--text-primary);
 		margin-bottom: 1.5rem;
 		letter-spacing: 0.01em;
 		-webkit-font-smoothing: antialiased;
@@ -1588,7 +1620,7 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.7;
 		font-size: 1rem;
-		color: #1f2937;
+		color: var(--text-primary);
 		letter-spacing: 0.01em;
 	}
 
@@ -1602,13 +1634,13 @@
 
 	.item-summary :global(strong) {
 		font-weight: 700;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 	}
 
 	.item-summary :global(h2) {
 		font-size: 0.625rem;
 		font-weight: 600;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 		opacity: 0.4;
 		margin: 1.5rem 0 0.75rem 0;
 		text-transform: uppercase;
@@ -1640,36 +1672,36 @@
 		font-weight: 600;
 		color: var(--civic-blue);
 		padding: 0.75rem 1rem;
-		background: white;
-		border: 2px solid var(--civic-border);
+		background: var(--surface-primary);
+		border: 2px solid var(--border-primary);
 		border-radius: 8px;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+		box-shadow: 0 1px 3px var(--shadow-sm);
 	}
 
 	.thinking-toggle:hover {
 		border-color: var(--civic-blue);
-		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.15);
+		box-shadow: 0 2px 6px var(--shadow-md);
 		transform: translateY(-1px);
 	}
 
 	.thinking-section.expanded .thinking-toggle {
 		border-color: var(--civic-blue);
-		background: #eff6ff;
+		background: var(--surface-hover);
 	}
 
 	.thinking-content {
 		margin-top: 0.75rem;
 		padding: 1rem;
 		border-left: 3px solid var(--civic-blue);
-		background: #f8fafc;
+		background: var(--surface-secondary);
 		border-radius: 4px;
 		animation: expandThinking 0.2s ease forwards;
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		line-height: 1.7;
 		font-size: 1rem;
-		color: #1f2937;
+		color: var(--text-primary);
 		letter-spacing: 0.01em;
 	}
 
@@ -1687,7 +1719,7 @@
 
 	.thinking-content :global(strong) {
 		font-weight: 700;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 	}
 
 	.thinking-content :global(ul),
@@ -1734,23 +1766,23 @@
 	.attachment-link {
 		display: inline-block;
 		padding: 0.5rem 1rem;
-		background: white;
+		background: var(--surface-primary);
 		color: var(--civic-blue);
-		border: 1.5px solid #cbd5e1;
+		border: 1.5px solid var(--border-primary);
 		border-radius: 8px;
 		text-decoration: none;
 		font-size: 0.85rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
 		transition: all 0.2s;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+		box-shadow: 0 1px 2px var(--shadow-sm);
 	}
 
 	.attachment-link:hover {
-		background: #eff6ff;
+		background: var(--surface-hover);
 		border-color: var(--civic-blue);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
+		box-shadow: 0 2px 6px var(--shadow-md);
 	}
 
 	@media (max-width: 640px) {
@@ -1979,7 +2011,7 @@
 	.item-action-bar {
 		margin-top: 1.5rem;
 		padding-top: 1rem;
-		border-top: 1px solid #f1f5f9;
+		border-top: 1px solid var(--border-primary);
 		display: flex;
 		gap: 0.75rem;
 		flex-wrap: wrap;
