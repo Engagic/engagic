@@ -204,3 +204,8 @@ meetings.db
 /logs/
 __pycache__/
 .venv/*.tar.gz
+
+# MCP (Model Context Protocol)
+#  MCP server configurations for AI coding assistants like Claude Code
+#  These are local tooling configs and should not be committed
+.mcp.json
