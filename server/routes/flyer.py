@@ -63,6 +63,7 @@ async def generate_flyer(
             custom_message=request.custom_message,
             user_name=request.user_name,
             db=db,
+            dark_mode=request.dark_mode,
         )
 
         logger.info(

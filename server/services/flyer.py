@@ -110,6 +110,7 @@ def generate_meeting_flyer(
     custom_message: Optional[str],
     user_name: Optional[str],
     db: UnifiedDatabase,
+    dark_mode: bool = False,
 ) -> str:
     """Generate print-ready HTML flyer
 
@@ -120,6 +121,7 @@ def generate_meeting_flyer(
         custom_message: User's custom message (max 500 chars)
         user_name: User's name for signature line
         db: Database instance
+        dark_mode: Generate dark mode flyer (default: False)
 
     Returns:
         HTML string ready for printing
@@ -143,8 +145,9 @@ def generate_meeting_flyer(
     if item:
         meeting_url += f"#item-{item.id}"
 
-    # Generate QR code as data URL
+    # Generate QR code and logo as data URLs
     qr_data_url = _generate_qr_code(meeting_url)
+    logo_data_url = _generate_logo_data_url()
 
     # Build flyer content
     confidence_display = ""
@@ -175,13 +178,16 @@ def generate_meeting_flyer(
         </div>
         """
 
-    # Position label
+    # Position label and class
     position_labels = {
         "support": "✓ SUPPORT",
         "oppose": "✗ OPPOSE",
         "more_info": "? REQUEST MORE INFORMATION"
     }
     position_label = position_labels.get(position, "POSITION UNKNOWN")
+
+    # Position CSS class for colored backgrounds
+    position_class = position if position in ["support", "oppose"] else ""
 
     # Custom message section (only if provided)
     message_section = ""
@@ -227,17 +233,59 @@ def generate_meeting_flyer(
 
     # Render template with data (use replace to avoid CSS curly brace conflicts)
     html = template
+    html = html.replace('{body_class}', 'dark-mode' if dark_mode else '')
+    html = html.replace('{logo_data_url}', logo_data_url)
     html = html.replace('{city_name}', _escape_html(city_name))
     html = html.replace('{city_display}', _escape_html(city_display))
     html = html.replace('{meeting_date}', meeting_date)
     html = html.replace('{agenda_section}', agenda_section)
     html = html.replace('{position_label}', position_label)
+    html = html.replace('{position_class}', position_class)
     html = html.replace('{message_section}', message_section)
     html = html.replace('{signature_section}', signature_section)
     html = html.replace('{participation_html}', participation_html)
     html = html.replace('{qr_data_url}', qr_data_url)
 
     return html
+
+
+def _generate_logo_data_url() -> str:
+    """Generate logo as data URL
+
+    Loads icon-192.png from static directory and converts to base64 data URL.
+    Falls back to SVG placeholder if file not found.
+    """
+    try:
+        # Look for logo in common locations
+        possible_paths = [
+            Path(__file__).parent.parent.parent / "frontend" / "static" / "icon-192.png",
+            Path(__file__).parent.parent.parent / "static" / "icon-192.png",
+            Path("/root/engagic/frontend/static/icon-192.png"),
+        ]
+
+        for logo_path in possible_paths:
+            if logo_path.exists():
+                with open(logo_path, 'rb') as f:
+                    logo_bytes = f.read()
+                    logo_base64 = base64.b64encode(logo_bytes).decode()
+                    return f"data:image/png;base64,{logo_base64}"
+
+        # If logo not found, create a simple SVG placeholder
+        svg = '''<svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
+            <rect width="48" height="48" rx="12" fill="#0ea5e9"/>
+            <text x="24" y="32" text-anchor="middle" fill="white" font-size="24" font-weight="bold">e</text>
+        </svg>'''
+        svg_base64 = base64.b64encode(svg.encode()).decode()
+        return f"data:image/svg+xml;base64,{svg_base64}"
+
+    except Exception:
+        # Fallback to simple SVG
+        svg = '''<svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
+            <rect width="48" height="48" rx="12" fill="#0ea5e9"/>
+            <text x="24" y="32" text-anchor="middle" fill="white" font-size="24" font-weight="bold">e</text>
+        </svg>'''
+        svg_base64 = base64.b64encode(svg.encode()).decode()
+        return f"data:image/svg+xml;base64,{svg_base64}"
 
 
 def _generate_qr_code(url: str) -> str:

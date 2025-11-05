@@ -42,30 +42,76 @@
 
         .header {
             text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 1rem;
-            margin-bottom: 1rem;
+            border-bottom: 3px solid #0ea5e9;
+            padding-bottom: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
         }
 
         body.dark-mode .header {
-            border-bottom: 2px solid #fff;
+            border-bottom: 3px solid #38bdf8;
+        }
+
+        .header .logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+        }
+
+        .header .title-group {
+            text-align: left;
         }
 
         .header h1 {
-            font-size: 24pt;
+            font-size: 26pt;
             font-weight: 700;
-            letter-spacing: 2px;
-            margin-bottom: 0.5rem;
+            letter-spacing: 1px;
+            margin: 0;
+            color: #0ea5e9;
+        }
+
+        body.dark-mode .header h1 {
+            color: #38bdf8;
+        }
+
+        .header .subtitle {
+            font-size: 10pt;
+            color: #6b7280;
+            margin-top: 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        body.dark-mode .header .subtitle {
+            color: #9ca3af;
         }
 
         .meeting-info {
             margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: #eff6ff;
+            border-left: 4px solid #0ea5e9;
+            border-radius: 4px;
+        }
+
+        body.dark-mode .meeting-info {
+            background: #1e293b;
+            border-left: 4px solid #38bdf8;
         }
 
         .meeting-info h2 {
             font-size: 14pt;
-            font-weight: 600;
+            font-weight: 700;
             margin-bottom: 0.5rem;
+            color: #0ea5e9;
+        }
+
+        body.dark-mode .meeting-info h2 {
+            color: #38bdf8;
         }
 
         .meeting-info p {
@@ -123,21 +169,34 @@
 
         .position {
             margin-bottom: 1.5rem;
-            padding: 1rem;
+            padding: 1.25rem;
             background: #000;
             color: #fff;
             text-align: center;
+            border-radius: 8px;
         }
 
-        body.dark-mode .position {
-            background: #fff;
-            color: #000;
+        .position.support {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        }
+
+        body.dark-mode .position.support {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+        }
+
+        .position.oppose {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        body.dark-mode .position.oppose {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
         }
 
         .position h2 {
-            font-size: 18pt;
+            font-size: 20pt;
             font-weight: 700;
             letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .custom-message {
@@ -161,23 +220,30 @@
 
         .participation {
             margin-bottom: 1.5rem;
-            padding: 1rem;
-            background: #fffacd;
-            border: 2px solid #ffd700;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border: 3px solid #22c55e;
             color: #000;
+            border-radius: 8px;
         }
 
         body.dark-mode .participation {
-            background: #3b3416;
-            border: 2px solid #b8860b;
+            background: linear-gradient(135deg, #14532d 0%, #166534 100%);
+            border: 3px solid #22c55e;
             color: #fff;
         }
 
         .participation h2 {
-            font-size: 12pt;
+            font-size: 13pt;
             font-weight: 700;
             margin-bottom: 0.75rem;
             text-transform: uppercase;
+            color: #15803d;
+            letter-spacing: 1px;
+        }
+
+        body.dark-mode .participation h2 {
+            color: #86efac;
         }
 
         .participation p {
@@ -186,30 +252,40 @@
         }
 
         .participation a {
-            color: #000;
+            color: #15803d;
             text-decoration: underline;
             word-break: break-all;
+            font-weight: 600;
         }
 
         body.dark-mode .participation a {
-            color: #ffd700;
+            color: #86efac;
         }
 
         .footer {
-            border-top: 2px solid #000;
-            padding-top: 1rem;
+            border-top: 3px solid #0ea5e9;
+            padding-top: 1.25rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         body.dark-mode .footer {
-            border-top: 2px solid #fff;
+            border-top: 3px solid #38bdf8;
         }
 
         .footer .qr-code {
-            width: 80px;
-            height: 80px;
+            width: 90px;
+            height: 90px;
+            border: 2px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 4px;
+            background: #fff;
+        }
+
+        body.dark-mode .footer .qr-code {
+            filter: invert(1);
+            border-color: #38bdf8;
         }
 
         .footer .branding {
@@ -219,11 +295,21 @@
 
         .footer .branding p {
             margin-bottom: 0.25rem;
+            color: #6b7280;
+        }
+
+        body.dark-mode .footer .branding p {
+            color: #9ca3af;
         }
 
         .footer .branding .url {
             font-weight: 700;
-            font-size: 12pt;
+            font-size: 14pt;
+            color: #0ea5e9;
+        }
+
+        body.dark-mode .footer .branding .url {
+            color: #38bdf8;
         }
 
         @media print {
@@ -234,13 +320,21 @@
             .flyer {
                 border: 3px solid #000;
             }
+
+            body.dark-mode .flyer {
+                border: 3px solid #fff;
+            }
         }
     </style>
 </head>
-<body>
+<body class="{body_class}">
     <div class="flyer">
         <div class="header">
-            <h1>CIVIC ACTION FLYER</h1>
+            <img src="{logo_data_url}" alt="engagic logo" class="logo">
+            <div class="title-group">
+                <h1>engagic</h1>
+                <div class="subtitle">Civic Action Flyer</div>
+            </div>
         </div>
 
         <div class="meeting-info">
@@ -250,7 +344,7 @@
 
         {agenda_section}
 
-        <div class="position">
+        <div class="position {position_class}">
             <h2>MY POSITION: {position_label}</h2>
         </div>
 

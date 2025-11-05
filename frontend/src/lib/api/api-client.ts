@@ -152,6 +152,7 @@ export const apiClient = {
 		position: 'support' | 'oppose' | 'more_info';
 		custom_message?: string;
 		user_name?: string;
+		dark_mode?: boolean;
 	}): Promise<string> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/flyer/generate`,
