@@ -20,6 +20,7 @@
 	let expandedTitles = new SvelteSet<string>();
 	let expandedItems = new SvelteSet<string>();
 	let expandedThinking = new SvelteSet<string>();
+	let showStreamingOnMobile = $state(false);
 
 	// Flyer generation state - simplified
 	let flyerGenerating = $state(false);
@@ -226,11 +227,22 @@
 				{#if hasParticipation}
 					<div class="participation-box">
 						<div class="participation-header">
-							<span class="participation-label">How to Participate</span>
-							{#if p.is_hybrid}
-								<span class="participation-badge badge-hybrid">Hybrid Meeting</span>
-							{:else if p.is_virtual_only}
-								<span class="participation-badge badge-virtual">Virtual Only</span>
+							<div class="participation-header-left">
+								<span class="participation-label">How to Participate</span>
+								{#if p.is_hybrid}
+									<span class="participation-badge badge-hybrid">Hybrid Meeting</span>
+								{:else if p.is_virtual_only}
+									<span class="participation-badge badge-virtual">Virtual Only</span>
+								{/if}
+							</div>
+							{#if hasStreaming}
+								<button
+									class="streaming-toggle-mobile"
+									onclick={() => showStreamingOnMobile = !showStreamingOnMobile}
+									aria-label="Toggle streaming links"
+								>
+									{showStreamingOnMobile ? '−' : '+'}
+								</button>
 							{/if}
 						</div>
 						<div class="participation-content">
@@ -262,11 +274,36 @@
 								</div>
 							{/if}
 						</div>
+
+						{#if hasStreaming && showStreamingOnMobile}
+							<div class="streaming-section-mobile">
+								<div class="streaming-divider"></div>
+								<div class="streaming-header-mobile">
+									<span class="streaming-label-mobile">Watch Live</span>
+								</div>
+								<div class="streaming-content-mobile">
+									{#each p.streaming_urls as stream}
+										<div class="streaming-item">
+											<span class="viewing-icon">📺</span>
+											{#if stream.url}
+												<a href={stream.url} target="_blank" rel="noopener noreferrer" class="participation-link">
+													Watch on {stream.platform}
+												</a>
+											{:else if stream.channel}
+												<span class="participation-text">
+													{stream.platform} Channel {stream.channel}
+												</span>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
 				{#if hasStreaming}
-					<div class="viewing-box">
+					<div class="viewing-box viewing-box-desktop">
 						<div class="viewing-header">
 							<span class="viewing-label">Watch Live</span>
 						</div>
@@ -783,23 +820,34 @@
 			box-shadow: 0 4px 12px rgba(192, 132, 252, 0.3);
 		}
 
-		.viewing-box {
-			border: 2px solid #93c5fd;
-			border-radius: 6px;
-			box-shadow: 0 4px 12px rgba(147, 197, 253, 0.15);
+		.streaming-toggle-mobile {
+			display: flex;
+			align-items: center;
+			justify-content: center;
 		}
 
-		:global(.dark) .viewing-box {
-			border: 2px solid #c084fc;
-			box-shadow: 0 4px 12px rgba(192, 132, 252, 0.3);
+		.streaming-section-mobile {
+			display: block;
+		}
+
+		.viewing-box-desktop {
+			display: none;
 		}
 	}
 
 	.participation-header {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 0.75rem;
 		margin-bottom: 0.75rem;
+	}
+
+	.participation-header-left {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
 	}
 
 	.participation-label {
@@ -814,6 +862,77 @@
 
 	:global(.dark) .participation-label {
 		color: #e9d5ff;
+	}
+
+	.streaming-toggle-mobile {
+		display: none;
+		flex-shrink: 0;
+		width: 1.75rem;
+		height: 1.75rem;
+		background: transparent;
+		border: 1.5px solid #15803d;
+		border-radius: 6px;
+		color: #15803d;
+		font-size: 1.1rem;
+		font-weight: 400;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	:global(.dark) .streaming-toggle-mobile {
+		border-color: #86efac;
+		color: #86efac;
+	}
+
+	.streaming-toggle-mobile:hover {
+		background: #15803d;
+		color: white;
+	}
+
+	:global(.dark) .streaming-toggle-mobile:hover {
+		background: #86efac;
+		color: #000;
+	}
+
+	.streaming-section-mobile {
+		display: none;
+		margin-top: 1rem;
+		padding-top: 1rem;
+	}
+
+	.streaming-divider {
+		height: 1px;
+		background: #86efac;
+		margin-bottom: 0.75rem;
+		opacity: 0.3;
+	}
+
+	.streaming-header-mobile {
+		margin-bottom: 0.5rem;
+	}
+
+	.streaming-label-mobile {
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 600;
+		color: #15803d;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	:global(.dark) .streaming-label-mobile {
+		color: #86efac;
+	}
+
+	.streaming-content-mobile {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.viewing-box-desktop {
+		display: flex;
+		flex-direction: column;
 	}
 
 	.participation-badge {
