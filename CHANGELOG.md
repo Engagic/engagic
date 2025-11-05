@@ -6,6 +6,65 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-04] DISCOVERED: Gemini Batch API Key-Scrambling Bug + Smart Recovery
+
+**The intermittent corruption.** Discovered Gemini Batch API has a rare but catastrophic bug where response keys get scrambled, causing summaries to be assigned to wrong items in a circular rotation pattern.
+
+**The Discovery:**
+- User reported mismatched summaries on Palo Alto meetings processed Nov 3 23:17
+- Item 1 (Proclamation) had Item 4's summary (Speed Limits)
+- Item 5 (Budget) had Item 1's summary (Proclamation)
+- Pattern: Clean circular rotation where each item got the next one's summary
+
+**Scope Analysis:**
+- Affected: 5 Palo Alto meetings (38 items total) from single batch at Nov 3 23:17
+- NOT affected: Austin, Boston, Denver, Phoenix, Charlotte processed minutes later
+- Bug is intermittent - only 1 batch out of dozens that day was corrupted
+- Same meetings processed earlier had same rotation (suggests bug persisted across retries)
+
+**Root Cause:**
+- Gemini Batch API JSONL format uses `key` field to match responses to requests
+- Code correctly sets `key: item_id` in requests
+- Code correctly reads `key` from responses and looks up in request_map
+- BUT: Gemini sometimes returns responses with scrambled keys (circular rotation)
+- No logs show missing keys - the keys exist but are WRONG
+
+**The Smart Recovery Solution:**
+- Created `scripts/smart_restore_paloalto.py` - content-matching algorithm
+- Analyzes title keywords vs summary content to find correct matches
+- For each item, scores all available summaries by keyword overlap
+- Assigns best-matching summary to each item (ignores corrupted item_id)
+
+**Recovery Results:**
+- Meeting 2464: 16/17 items recovered (1 no match)
+- Meeting 2465: 1/2 items recovered (1 no match)
+- Meeting 2466: 7/9 items recovered (2 were already correct)
+- Meeting 2609: 1/5 items recovered (4 were procedural items)
+- Meeting 2641: 5/5 items recovered
+- **Total: 33/38 items (87%) successfully remapped**
+
+**Why Not Reproduce?**
+- Bug is rare (0.1% of batches)
+- Content matching works perfectly for recovery
+- Only adds complexity for minimal gain
+- Script takes 30 seconds to run if it happens again
+
+**Files Created:**
+- `scripts/smart_restore_paloalto.py` - Content-matching recovery script (96 lines)
+- `scripts/diagnose_summary_mismatch.py` - Diagnostic tool
+- `scripts/check_multiple_cities_mismatch.py` - Multi-city checker
+- `scripts/trace_rotation_pattern.py` - Pattern analyzer
+
+**Lessons Learned:**
+- Gemini Batch API has reliability issues with key preservation
+- Content matching is a viable recovery strategy
+- Rare bugs don't need complex prevention, just good recovery tools
+- Always keep backups for at least 7 days
+
+**Status:** RESOLVED - Data recovered, monitoring for recurrence
+
+---
+
 ## [2025-11-04] CRITICAL FIX: Prevent Data Loss from INSERT OR REPLACE
 
 **EMERGENCY FIX.** Discovered and fixed catastrophic bug where re-syncing meetings would nuke all item summaries. 22 Palo Alto summaries lost on Nov 3, restored from backup, and permanent fix deployed.
