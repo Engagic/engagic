@@ -40,6 +40,8 @@ def build_engagic_url(banana: str, meeting_title: str, meeting_date: str, meetin
     """
     slug = slugify(meeting_title)
     date_part = format_date(meeting_date)
+    if not meeting_id:
+        meeting_id = "null"
     return f"https://engagic.org/{banana}/{slug}_{date_part}_{meeting_id}"
 
 def search_summaries(
@@ -194,7 +196,7 @@ def search_summaries(
         
         url = build_engagic_url(banana, meeting_title, meeting_date, meeting_id)
         # Add item anchor for item-level deep linking
-        url += f"#item-{item_id}"
+        url = f"{url}#item-{item_id}"
 
         results.append({
             'type': 'item',
