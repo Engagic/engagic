@@ -2001,6 +2001,45 @@
 
 		.meeting-summary {
 			padding: 0 0.5rem;
+			font-size: 1rem;
+			line-height: 1.7;
+			overflow-wrap: break-word;
+			word-wrap: break-word;
+		}
+
+		.meeting-summary :global(h1) {
+			font-size: 1.4rem;
+			margin-top: 1.5rem;
+		}
+		.meeting-summary :global(h2) {
+			font-size: 1.25rem;
+			margin-top: 1.5rem;
+		}
+		.meeting-summary :global(h3) {
+			font-size: 1.1rem;
+			margin-top: 1.25rem;
+		}
+
+		.meeting-summary :global(p) {
+			margin: 1rem 0;
+		}
+
+		.meeting-summary :global(ul),
+		.meeting-summary :global(ol) {
+			padding-left: 1rem;
+			margin: 1rem 0;
+		}
+
+		.meeting-summary :global(blockquote) {
+			margin: 1rem 0;
+			padding-left: 1rem;
+		}
+
+		.meeting-summary :global(pre) {
+			margin: 1rem 0;
+			padding: 0.75rem;
+			overflow-x: auto;
+			font-size: 0.85rem;
 		}
 
 		.packet-url-box {
@@ -2016,17 +2055,6 @@
 			font-size: 0.8rem;
 			padding: 0.2rem 0.4rem;
 		}
-
-		.meeting-summary {
-			font-size: 1rem;
-			line-height: 1.7;
-			overflow-wrap: break-word;
-			word-wrap: break-word;
-		}
-
-		.meeting-summary :global(h1) { font-size: 1.4rem; }
-		.meeting-summary :global(h2) { font-size: 1.25rem; }
-		.meeting-summary :global(h3) { font-size: 1.1rem; }
 
 		.meeting-header {
 			margin-bottom: 1.5rem;
