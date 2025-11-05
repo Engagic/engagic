@@ -91,6 +91,7 @@ class FlyerRequest(BaseModel):
     position: str
     custom_message: Optional[str] = None
     user_name: Optional[str] = None
+    dark_mode: bool = False
 
     @validator("position")
     def validate_position(cls, v):
