@@ -25,6 +25,12 @@ class ThemeState {
 
 	constructor() {
 		if (browser) {
+			// Debug: log theme state on load
+			console.log('Theme initialized:', {
+				stored: localStorage.getItem('theme'),
+				system: getSystemTheme(),
+				effective: this.effectiveTheme
+			});
 			this.applyTheme();
 			this.watchSystemTheme();
 		}
@@ -49,8 +55,29 @@ class ThemeState {
 
 	private watchSystemTheme() {
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-		mediaQuery.addEventListener('change', () => {
+
+		// Modern API
+		mediaQuery.addEventListener('change', (e) => {
+			console.log('System theme changed:', e.matches ? 'dark' : 'light');
 			if (this.theme === 'system') {
+				this.applyTheme();
+			}
+		});
+
+		// Legacy fallback for older mobile browsers
+		if (mediaQuery.addListener) {
+			mediaQuery.addListener((e) => {
+				console.log('System theme changed (legacy):', e.matches ? 'dark' : 'light');
+				if (this.theme === 'system') {
+					this.applyTheme();
+				}
+			});
+		}
+
+		// Also watch for page visibility changes (mobile switches apps)
+		document.addEventListener('visibilitychange', () => {
+			if (!document.hidden && this.theme === 'system') {
+				console.log('Page visible, reapplying theme');
 				this.applyTheme();
 			}
 		});

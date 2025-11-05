@@ -192,15 +192,15 @@
 			// Map frontend position names to backend API values
 			const apiPosition = position === 'yes' ? 'support' : 'oppose';
 
-			// Detect current theme
-			const isDarkMode = document.documentElement.classList.contains('dark');
+			// Detect theme: respect system preference, default to light
+			const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
 			// Call backend API to generate flyer HTML
 			const html = await generateFlyer({
 				meeting_id: selectedMeeting.id,
 				item_id: item.id,
 				position: apiPosition,
-				dark_mode: isDarkMode
+				dark_mode: isDarkMode || false
 			});
 
 			// Replace loading message with actual flyer
