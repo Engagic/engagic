@@ -50,13 +50,8 @@ premium = [
 
 [tool.pyright]
 include = ["vendors", "parsing", "analysis", "pipeline", "database", "server"]
-exclude = ["**/__pycache__", ".venv", "venv", "scripts", "docs"]
+exclude = ["**/__pycache__", ".venv", "venv", "scripts", "docs", "motioncount"]
 typeCheckingMode = "basic"  # or "standard" or "strict"
 pythonVersion = "3.13"
 reportMissingImports = true
 reportMissingTypeStubs = false
-
-[tool.uv.workspace]
-members = [
-    "motioncount",
-]
