@@ -176,14 +176,24 @@
 
 		flyerGenerating = true;
 
+		// CRITICAL: Open window BEFORE async call (mobile requirement)
+		const flyerWindow = window.open('', '_blank');
+
+		if (!flyerWindow) {
+			flyerGenerating = false;
+			alert('Please allow pop-ups for this site to view flyers');
+			return;
+		}
+
+		// Show loading in the new window
+		flyerWindow.document.write('<html><body style="font-family: system-ui; padding: 2rem; text-align: center;">Loading flyer...</body></html>');
+
 		try {
 			// Map frontend position names to backend API values
 			const apiPosition = position === 'yes' ? 'support' : 'oppose';
 
 			// Detect current theme
 			const isDarkMode = document.documentElement.classList.contains('dark');
-
-			console.log('Generating flyer for item:', item.id, 'position:', apiPosition);
 
 			// Call backend API to generate flyer HTML
 			const html = await generateFlyer({
@@ -193,23 +203,26 @@
 				dark_mode: isDarkMode
 			});
 
-			console.log('Flyer HTML received, length:', html.length);
-
-			// Use data URL (more reliable on mobile than blob URLs)
-			const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
-			const newWindow = window.open(dataUrl, '_blank');
-
-			if (!newWindow) {
-				console.log('Popup blocked, trying fallback navigation');
-				// Fallback: try to navigate in same tab if popup blocked
-				window.location.href = dataUrl;
-			} else {
-				console.log('Flyer opened in new window');
-			}
+			// Replace loading message with actual flyer
+			flyerWindow.document.open();
+			flyerWindow.document.write(html);
+			flyerWindow.document.close();
 		} catch (error) {
 			console.error('Failed to generate flyer:', error);
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-			alert(`Failed to generate flyer: ${errorMsg}\n\nPlease try again or contact support.`);
+
+			// Show error in the opened window
+			flyerWindow.document.open();
+			flyerWindow.document.write(`
+				<html>
+				<body style="font-family: system-ui; padding: 2rem; text-align: center;">
+					<h2>Failed to generate flyer</h2>
+					<p>${errorMsg}</p>
+					<p><button onclick="window.close()">Close</button></p>
+				</body>
+				</html>
+			`);
+			flyerWindow.document.close();
 		} finally {
 			flyerGenerating = false;
 		}
