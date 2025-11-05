@@ -26,9 +26,18 @@
             padding: 0.5in;
         }
 
+        body.dark-mode {
+            color: #fff;
+            background: #1a1a1a;
+        }
+
         .flyer {
             border: 3px solid #000;
             padding: 1.5rem;
+        }
+
+        body.dark-mode .flyer {
+            border: 3px solid #fff;
         }
 
         .header {
@@ -36,6 +45,10 @@
             border-bottom: 2px solid #000;
             padding-bottom: 1rem;
             margin-bottom: 1rem;
+        }
+
+        body.dark-mode .header {
+            border-bottom: 2px solid #fff;
         }
 
         .header h1 {
@@ -71,6 +84,10 @@
             color: #000;
         }
 
+        body.dark-mode .agenda-title {
+            color: #fff;
+        }
+
         .agenda-content .summary {
             font-size: 10pt;
             line-height: 1.6;
@@ -94,6 +111,12 @@
             letter-spacing: 0.5px;
         }
 
+        body.dark-mode .confidence-badge {
+            background: #374151;
+            border: 1px solid #4b5563;
+            color: #d1d5db;
+        }
+
         .agenda-item .summary p {
             margin-bottom: 0.75rem;
         }
@@ -104,6 +127,11 @@
             background: #000;
             color: #fff;
             text-align: center;
+        }
+
+        body.dark-mode .position {
+            background: #fff;
+            color: #000;
         }
 
         .position h2 {
@@ -120,6 +148,10 @@
             font-size: 11pt;
         }
 
+        body.dark-mode .custom-message {
+            border: 2px solid #666;
+        }
+
         .signature {
             text-align: center;
             margin-bottom: 1.5rem;
@@ -132,6 +164,13 @@
             padding: 1rem;
             background: #fffacd;
             border: 2px solid #ffd700;
+            color: #000;
+        }
+
+        body.dark-mode .participation {
+            background: #3b3416;
+            border: 2px solid #b8860b;
+            color: #fff;
         }
 
         .participation h2 {
@@ -152,12 +191,20 @@
             word-break: break-all;
         }
 
+        body.dark-mode .participation a {
+            color: #ffd700;
+        }
+
         .footer {
             border-top: 2px solid #000;
             padding-top: 1rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        body.dark-mode .footer {
+            border-top: 2px solid #fff;
         }
 
         .footer .qr-code {

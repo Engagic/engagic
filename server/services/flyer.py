@@ -139,6 +139,10 @@ def generate_meeting_flyer(
     meeting_slug = _generate_meeting_slug(meeting)
     meeting_url = f"https://engagic.org/{meeting.banana}/{meeting_slug}"
 
+    # Add item anchor for deep linking (when item-specific flyer)
+    if item:
+        meeting_url += f"#item-{item.id}"
+
     # Generate QR code as data URL
     qr_data_url = _generate_qr_code(meeting_url)
 

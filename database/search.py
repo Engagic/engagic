@@ -45,18 +45,20 @@ def build_engagic_url(banana: str, meeting_title: str, meeting_date: str, meetin
 def search_summaries(
     search_term: str,
     city_banana: Optional[str] = None,
+    state: Optional[str] = None,
     case_sensitive: bool = False,
     db_path: Optional[str] = None
 ) -> List[Dict]:
     """
     Search for text in meeting and item summaries.
-    
+
     Args:
         search_term: String to search for (e.g., "Beazer Homes", "Uber")
         city_banana: Optional city filter (e.g., 'nashvilleTN')
+        state: Optional state filter (e.g., 'CA', 'TN')
         case_sensitive: Whether search should be case-sensitive
         db_path: Optional database path (defaults to env var)
-        
+
     Returns:
         List of dicts with keys:
             - type: 'meeting' or 'item'
@@ -72,19 +74,28 @@ def search_summaries(
     """
     if db_path is None:
         db_path = os.getenv('ENGAGIC_UNIFIED_DB', '/root/engagic/data/engagic.db')
-    
+
     db = UnifiedDatabase(db_path)
     conn = db.conn
-    
+
     results = []
     like_pattern = f'%{search_term}%'
-    
-    # Build city filter clause
-    city_filter = ""
+
+    # Build filter clauses
+    filters = []
     city_params = [like_pattern]
+
     if city_banana:
-        city_filter = " AND m.banana = ?"
+        filters.append("m.banana = ?")
         city_params.append(city_banana)
+
+    if state:
+        filters.append("c.state = ?")
+        city_params.append(state.upper())
+
+    city_filter = ""
+    if filters:
+        city_filter = " AND " + " AND ".join(filters)
     
     # Search in meeting summaries
     query = f'''
@@ -182,7 +193,9 @@ def search_summaries(
             context = summary[:300]
         
         url = build_engagic_url(banana, meeting_title, meeting_date, meeting_id)
-        
+        # Add item anchor for item-level deep linking
+        url += f"#item-{item_id}"
+
         results.append({
             'type': 'item',
             'url': url,
