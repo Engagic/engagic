@@ -55,3 +55,8 @@ typeCheckingMode = "basic"  # or "standard" or "strict"
 pythonVersion = "3.13"
 reportMissingImports = true
 reportMissingTypeStubs = false
+
+[tool.uv.workspace]
+members = [
+    "motioncount",
+]

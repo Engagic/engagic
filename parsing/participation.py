@@ -30,26 +30,48 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
     text_lower = text.lower()
     info = {}
 
-    # Extract email addresses (word@domain.tld)
+    # Extract ALL email addresses with context
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    emails = re.findall(email_pattern, text, re.IGNORECASE)
-    if emails:
+    all_emails = re.findall(email_pattern, text, re.IGNORECASE)
+
+    if all_emails:
         # Filter spam/placeholders
-        valid = [e for e in emails if not any(skip in e.lower() for skip in ['example.com', 'test@', 'noreply'])]
+        valid = [e for e in all_emails if not any(skip in e.lower() for skip in ['example.com', 'test@', 'noreply'])]
+
         if valid:
+            # Primary email (first one)
             info['email'] = valid[0]
 
+            # Store all unique emails with context
+            emails_with_context = []
+            seen = set()
+            for email in valid:
+                if email.lower() in seen:
+                    continue
+                seen.add(email.lower())
+
+                # Try to infer purpose from surrounding text
+                purpose = _infer_email_purpose(text, email)
+                emails_with_context.append({
+                    'address': email,
+                    'purpose': purpose
+                })
+
+            if len(emails_with_context) > 1:
+                info['emails'] = emails_with_context
+
     # Extract phone numbers
-    # Patterns: (123) 456-7890, 123-456-7890, +1-123-456-7890
+    # Patterns: (123) 456-7890, 123-456-7890, +1-123-456-7890, Phone: 1-669-900-6833
     phone_patterns = [
+        r'phone[:\s]+\+?1?[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}',  # "Phone: 1-669-900-6833"
         r'\+?1?\s*\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}',
         r'\b\d{3}-\d{3}-\d{4}\b',
     ]
 
     for pattern in phone_patterns:
-        phones = re.findall(pattern, text)
+        phones = re.findall(pattern, text, re.IGNORECASE)
         if phones:
-            # Normalize: keep only digits
+            # Normalize: keep only digits from first match
             phone = re.sub(r'[^\d]', '', phones[0])
             if len(phone) == 10:
                 phone = f"+1{phone}"
@@ -63,17 +85,58 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
     urls = re.findall(url_pattern, text, re.IGNORECASE)
 
     virtual_domains = ['zoom.us', 'meet.google.com', 'teams.microsoft.com', 'webex.com', 'gotomeeting.com']
-    for url in urls:
-        parsed = urlparse(url)
-        if any(domain in parsed.netloc for domain in virtual_domains):
-            info['virtual_url'] = url
-            break
+    streaming_platforms = {
+        'youtube.com': 'YouTube',
+        'youtu.be': 'YouTube',
+        'facebook.com': 'Facebook Live',
+        'granicus.com': 'Granicus',
+        'midpenmedia.org': 'Midpen Media',
+        'vimeo.com': 'Vimeo'
+    }
 
-    # Extract Zoom meeting ID (if zoom URL or "zoom" mentioned)
-    if 'zoom' in text_lower:
-        meeting_id_pattern = r'meeting\s*id[:\s]+(\d{3}[\s-]?\d{3,4}[\s-]?\d{4})'
+    streaming_urls = []
+
+    for url in urls:
+        # Clean trailing punctuation (common in agendas)
+        url = url.rstrip('.,;:)')
+
+        parsed = urlparse(url)
+
+        # Check for virtual meeting platforms
+        if any(domain in parsed.netloc for domain in virtual_domains):
+            if 'virtual_url' not in info:
+                info['virtual_url'] = url
+
+        # Check for streaming platforms
+        for domain, platform_name in streaming_platforms.items():
+            if domain in parsed.netloc:
+                streaming_urls.append({
+                    'url': url,
+                    'platform': platform_name
+                })
+                break
+
+    if streaming_urls:
+        info['streaming_urls'] = streaming_urls
+
+    # Extract Cable TV channel
+    cable_pattern = r'cable\s+tv\s+channel\s+(\d+)'
+    cable_matches = re.findall(cable_pattern, text, re.IGNORECASE)
+    if cable_matches:
+        if 'streaming_urls' not in info:
+            info['streaming_urls'] = []
+        info['streaming_urls'].append({
+            'channel': cable_matches[0],
+            'platform': 'Cable TV'
+        })
+
+    # Extract Zoom meeting ID (handle spaces and dashes)
+    if 'zoom' in text_lower or info.get('virtual_url'):
+        # More flexible pattern: "Meeting ID: 362 027 238" or "362-027-238"
+        meeting_id_pattern = r'meeting\s*id[:\s]+(\d{3}[\s-]?\d{3}[\s-]?\d{3,4})'
         meeting_ids = re.findall(meeting_id_pattern, text, re.IGNORECASE)
         if meeting_ids:
+            # Keep spaces/dashes as found
             info['meeting_id'] = meeting_ids[0].strip()
 
     # Detect hybrid (in-person + virtual)
@@ -87,8 +150,43 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
     return info if info else None
 
 
-# Confidence: 7/10
+def _infer_email_purpose(text: str, email: str) -> str:
+    """
+    Infer the purpose of an email address from surrounding context.
+
+    Confidence: 6/10 - Heuristic-based, may miss nuanced contexts
+    """
+    # Find text around the email (100 chars before and after)
+    email_index = text.lower().find(email.lower())
+    if email_index == -1:
+        return "general contact"
+
+    context_start = max(0, email_index - 100)
+    context_end = min(len(text), email_index + len(email) + 100)
+    context = text[context_start:context_end].lower()
+
+    # Check for purpose keywords
+    if any(kw in context for kw in ['written comment', 'public comment', 'submit comment']):
+        return "written comments"
+    elif any(kw in context for kw in ['powerpoint', 'video', 'media', 'presentation']):
+        return "media submissions"
+    elif any(kw in context for kw in ['clerk', 'city clerk']):
+        return "city clerk"
+    elif any(kw in context for kw in ['council', 'city council']):
+        return "city council"
+
+    return "general contact"
+
+
+# Confidence: 8/10
+# Enhancements:
+# - Captures multiple emails with inferred purpose
+# - Detects streaming alternatives (YouTube, cable, etc.)
+# - Handles meeting IDs with spaces/dashes
+# - Strips trailing punctuation from URLs
+#
 # Limitations:
+# - Email purpose inference is heuristic (may misclassify)
 # - May miss international phone formats
-# - Physical address extraction complex (not implemented)
-# - Custom meeting platforms not in virtual_domains list
+# - Physical address extraction not implemented
+# - Custom streaming platforms not in dictionary
