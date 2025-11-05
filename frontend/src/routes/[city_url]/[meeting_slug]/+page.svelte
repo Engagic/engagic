@@ -186,13 +186,14 @@
 				dark_mode: isDarkMode
 			});
 
-			// Create a blob URL and open it in a new tab (works better on mobile)
-			const blob = new Blob([html], { type: 'text/html' });
-			const url = URL.createObjectURL(blob);
-			window.open(url, '_blank');
+			// Use data URL (more reliable on mobile than blob URLs)
+			const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+			const newWindow = window.open(dataUrl, '_blank');
 
-			// Clean up the blob URL after a short delay
-			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			if (!newWindow) {
+				// Fallback: try to navigate in same tab if popup blocked
+				window.location.href = dataUrl;
+			}
 		} catch (error) {
 			console.error('Failed to generate flyer:', error);
 			alert('Failed to generate flyer. Please try again.');
@@ -823,10 +824,6 @@
 			display: flex;
 			align-items: center;
 			justify-content: center;
-		}
-
-		.streaming-section-mobile {
-			display: block;
 		}
 
 		.viewing-box-desktop {
