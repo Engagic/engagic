@@ -8,6 +8,43 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from database.db import UnifiedDatabase
 
+def strip_markdown(text: str) -> str:
+    """
+    Remove markdown formatting for cleaner search and display.
+
+    Handles:
+    - Bold/italic (**text**, *text*, __text__, _text_)
+    - Headers (# Header)
+    - Links ([text](url))
+    - List markers (-, *, 1.)
+
+    Args:
+        text: Raw markdown text
+
+    Returns:
+        Plain text without markdown syntax
+    """
+    if not text:
+        return text
+
+    # Headers (must come before bold/italic to avoid leaving orphaned #)
+    text = re.sub(r'#{1,6}\s+', '', text)
+
+    # Bold/italic (nested patterns: **bold**, __bold__, *italic*, _italic_)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # **bold**
+    text = re.sub(r'__(.+?)__', r'\1', text)      # __bold__
+    text = re.sub(r'\*(.+?)\*', r'\1', text)      # *italic*
+    text = re.sub(r'_(.+?)_', r'\1', text)        # _italic_
+
+    # Links [text](url) -> text
+    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
+
+    # List markers at start of line
+    text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+
+    return text
+
 def slugify(text: str) -> str:
     """Convert text to URL-friendly slug"""
     text = text.lower()
@@ -120,23 +157,26 @@ def search_summaries(
         meeting_date = row[3]
         summary = row[4]
         city = f"{row[5]}, {row[6]}"
-        
-        # Find context around the match
+
+        # Strip markdown for clean search and context display
+        clean_summary = strip_markdown(summary)
+
+        # Find context around the match in clean text
         if case_sensitive:
-            match_pos = summary.find(search_term)
+            match_pos = clean_summary.find(search_term)
         else:
-            match_pos = summary.lower().find(search_term.lower())
-        
+            match_pos = clean_summary.lower().find(search_term.lower())
+
         if match_pos != -1:
             start = max(0, match_pos - 150)
-            end = min(len(summary), match_pos + len(search_term) + 150)
-            context = summary[start:end]
+            end = min(len(clean_summary), match_pos + len(search_term) + 150)
+            context = clean_summary[start:end]
             if start > 0:
                 context = "..." + context
-            if end < len(summary):
+            if end < len(clean_summary):
                 context = context + "..."
         else:
-            context = summary[:300]
+            context = clean_summary[:300]
         
         url = build_engagic_url(banana, meeting_title, meeting_date, meeting_id)
         
@@ -176,23 +216,26 @@ def search_summaries(
         meeting_date = row[5]
         banana = row[6]
         city = f"{row[7]}, {row[8]}"
-        
-        # Find context around the match
+
+        # Strip markdown for clean search and context display
+        clean_summary = strip_markdown(summary)
+
+        # Find context around the match in clean text
         if case_sensitive:
-            match_pos = summary.find(search_term)
+            match_pos = clean_summary.find(search_term)
         else:
-            match_pos = summary.lower().find(search_term.lower())
-        
+            match_pos = clean_summary.lower().find(search_term.lower())
+
         if match_pos != -1:
             start = max(0, match_pos - 150)
-            end = min(len(summary), match_pos + len(search_term) + 150)
-            context = summary[start:end]
+            end = min(len(clean_summary), match_pos + len(search_term) + 150)
+            context = clean_summary[start:end]
             if start > 0:
                 context = "..." + context
-            if end < len(summary):
+            if end < len(clean_summary):
                 context = context + "..."
         else:
-            context = summary[:300]
+            context = clean_summary[:300]
         
         url = build_engagic_url(banana, meeting_title, meeting_date, meeting_id)
         # Add item anchor for item-level deep linking
