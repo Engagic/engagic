@@ -450,11 +450,13 @@ class UnifiedDatabase:
             skip_reason = None
 
             # Priority 1: Check for item-level summaries (GOLDEN PATH)
+            # Only skip if ALL items have summaries - processor handles partial completion granularly
             if has_items and 'agenda_items' in locals():
                 items_with_summaries = [item for item in agenda_items if item.summary]
-                if items_with_summaries:
+                # Skip only if 100% complete (processor will filter procedural/public comments)
+                if items_with_summaries and len(items_with_summaries) == len(agenda_items):
                     skip_enqueue = True
-                    skip_reason = f"{len(items_with_summaries)}/{len(agenda_items)} items already have summaries"
+                    skip_reason = f"all {len(agenda_items)} items already have summaries"
 
             # Priority 2: Check for monolithic summary (fallback path)
             if not skip_enqueue and stored_meeting.summary:
