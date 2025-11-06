@@ -2,6 +2,7 @@
 # One city banana per line, comments start with #
 
 # Peninsula
+sanfranciscoCA
 paloaltoCA
 mountainviewCA
 sunnyvaleCA
