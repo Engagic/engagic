@@ -21,11 +21,11 @@ def get_db(request: Request) -> UnifiedDatabase:
 
 
 @router.get("/meeting/{meeting_id}")
-async def get_meeting(meeting_id: int, db: UnifiedDatabase = Depends(get_db)):
+async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
     """Get a single meeting by ID - optimized endpoint to avoid fetching all city meetings"""
     try:
         # Fetch the specific meeting using db method
-        meeting = db.get_meeting(str(meeting_id))
+        meeting = db.get_meeting(meeting_id)
 
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
