@@ -363,11 +363,11 @@ class GranicusAdapter(BaseAdapter):
 
         # Try clip_id first (event details)
         if "clip_id" in params:
-            return f"clip_{params['clip_id'][0]}"
+            return params['clip_id'][0]
 
         # Try event_id (agenda viewer)
         if "event_id" in params:
-            return f"event_{params['event_id'][0]}"
+            return params['event_id'][0]
 
         return None
 
