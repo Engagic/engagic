@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database.db import UnifiedDatabase
+from database.search import search_summaries
 from config import Config
 
 
@@ -540,6 +541,75 @@ class DatabaseViewer:
         except Exception as e:
             print(f"Error resetting items: {e}")
 
+    def search_meeting_summaries(self):
+        """Search within meeting and item summaries"""
+        print("\n=== SEARCH SUMMARIES ===")
+
+        try:
+            search_term = input("Search term: ").strip()
+            if not search_term:
+                print("Search term required")
+                return
+        except (KeyboardInterrupt, EOFError):
+            print("\nSearch cancelled")
+            return
+
+        print(f"\nSearching for '{search_term}'...\n")
+
+        try:
+            results = search_summaries(
+                search_term=search_term,
+                city_banana=None,
+                state=None,
+                case_sensitive=False
+            )
+
+            if not results:
+                print("No results found")
+                return
+
+            print(f"Found {len(results)} results\n")
+            print("=" * 100)
+
+            for i, result in enumerate(results, 1):
+                print(f"\n[Result {i}]")
+                print(f"Type: {result['type']}")
+                print(f"City: {result['city']}")
+                print(f"Date: {result.get('date', 'N/A')}")
+                print(f"Meeting: {result.get('meeting_title', 'N/A')}")
+
+                if result['type'] == 'item':
+                    print(f"Item: {result.get('item_title', 'N/A')}")
+
+                if result.get('agenda_url'):
+                    print(f"Agenda URL: {result['agenda_url']}")
+
+                if result.get('packet_url'):
+                    print(f"Packet URL: {result['packet_url']}")
+
+                if result.get('topics'):
+                    print(f"Topics: {', '.join(result['topics'])}")
+
+                print(f"\nContext snippet:")
+                print(result.get('context', 'N/A'))
+
+                print(f"\nFull summary:")
+                print(result.get('summary', 'N/A'))
+
+                if result.get('thinking'):
+                    print(f"\nThinking:")
+                    print(result['thinking'])
+
+                if result.get('attachments'):
+                    print(f"\nAttachments: {len(result['attachments'])}")
+
+                print("\n" + "=" * 100)
+
+        except Exception as e:
+            print(f"Error searching summaries: {e}")
+            import traceback
+            traceback.print_exc()
+
 
 def main():
     viewer = DatabaseViewer()
@@ -558,7 +628,9 @@ def main():
         print("\nEdit Data:")
         print("  7. Add city")
         print("  8. Update city")
-        print("  9. Search database")
+        print("\nSearch & Analysis:")
+        print("  9. Search database (cities, meetings, zipcodes)")
+        print("  12. Search summaries (full-text summary search)")
         print("\nQueue Management:")
         print("  10. Enqueue unprocessed meetings")
         print("  11. Reset failed queue items")
@@ -612,6 +684,9 @@ def main():
 
         elif choice == "11":
             viewer.reset_failed_queue_items()
+
+        elif choice == "12":
+            viewer.search_meeting_summaries()
 
         elif choice == "0":
             print("Goodbye!")
