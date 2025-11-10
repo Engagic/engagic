@@ -81,6 +81,59 @@ def build_engagic_url(banana: str, meeting_title: str, meeting_date: str, meetin
         meeting_id = "null"
     return f"https://engagic.org/{banana}/{slug}_{date_part}_{meeting_id}"
 
+def parse_summary_sections(summary: str) -> Dict[str, Optional[str]]:
+    """
+    Parse summary markdown to extract Thinking and Summary sections.
+
+    Mirrors logic from engagic frontend (parseSummaryForThinking).
+
+    Args:
+        summary: Full summary markdown (may contain "## Thinking" section)
+
+    Returns:
+        dict with keys:
+            - thinking: Content of Thinking section (if present)
+            - summary: Content of Summary section (without Thinking)
+    """
+    if not summary:
+        return {'thinking': None, 'summary': ''}
+
+    # Split on "## Thinking" heading
+    parts = re.split(r'^## Thinking\s*$', summary, flags=re.MULTILINE)
+
+    if len(parts) < 2:
+        # No thinking section found
+        return {'thinking': None, 'summary': summary}
+
+    # Everything before "## Thinking"
+    before = parts[0].strip()
+
+    # Everything after "## Thinking"
+    after_thinking = parts[1]
+
+    # Find next section heading to split thinking from summary
+    next_section = re.search(r'^##\s+', after_thinking, flags=re.MULTILINE)
+
+    if next_section:
+        thinking_end = next_section.start()
+        thinking_content = after_thinking[:thinking_end].strip()
+        summary_content = after_thinking[thinking_end:].strip()
+
+        # Combine before + summary sections
+        full_summary = (before + '\n\n' + summary_content).strip() if before else summary_content
+
+        return {
+            'thinking': thinking_content,
+            'summary': full_summary
+        }
+
+    # No next section - everything after "## Thinking" is thinking content
+    return {
+        'thinking': after_thinking.strip(),
+        'summary': before if before else ''
+    }
+
+
 def search_summaries(
     search_term: str,
     city_banana: Optional[str] = None,
@@ -90,6 +143,9 @@ def search_summaries(
 ) -> List[Dict]:
     """
     Search for text in meeting and item summaries.
+
+    Returns complete meeting/item objects with all display data needed
+    for motioncount frontend (attachments, agenda URLs, full summaries, etc).
 
     Args:
         search_term: String to search for (e.g., "Beazer Homes", "Uber")
@@ -101,13 +157,20 @@ def search_summaries(
     Returns:
         List of dicts with keys:
             - type: 'meeting' or 'item'
-            - url: Full Engagic URL
+            - url: Full Engagic URL (for reference only)
             - city: City name with state
-            - date: Meeting date
+            - date: Meeting date (ISO string)
             - meeting_title: Meeting title
             - item_title: Item title (only for items)
-            - context: Text snippet around the match
-            - meeting_id: Meeting ID
+            - context: Text snippet around match (from Summary section)
+            - summary: Full summary markdown (Thinking section removed)
+            - thinking: Thinking section markdown (if present)
+            - agenda_url: HTML agenda URL (if available)
+            - packet_url: PDF packet URL (if available)
+            - attachments: Item attachments (only for items)
+            - topics: Extracted topics
+            - participation: Meeting participation info
+            - meeting_id: Meeting ID (integer)
             - item_id: Item ID (only for items)
             - banana: City banana
     """
@@ -135,11 +198,10 @@ def search_summaries(
     city_filter = ""
     if filters:
         city_filter = " AND " + " AND ".join(filters)
-    
+
     # Search in meeting summaries
     query = f'''
-        SELECT m.id, m.banana, m.title, m.date, m.summary,
-               c.name as city_name, c.state
+        SELECT m.id, m.banana, c.name as city_name, c.state
         FROM meetings m
         JOIN cities c ON m.banana = c.banana
         WHERE m.summary IS NOT NULL
@@ -147,21 +209,28 @@ def search_summaries(
           {city_filter}
         ORDER BY m.date DESC
     '''
-    
+
     cursor = conn.execute(query, city_params)
-    
+
     for row in cursor.fetchall():
         meeting_id = row[0]
         banana = row[1]
-        meeting_title = row[2]
-        meeting_date = row[3]
-        summary = row[4]
-        city = f"{row[5]}, {row[6]}"
+        city = f"{row[2]}, {row[3]}"
 
-        # Strip markdown for clean search and context display
-        clean_summary = strip_markdown(summary)
+        # Fetch complete meeting object
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            continue
 
-        # Find context around the match in clean text
+        # Parse summary sections
+        sections = parse_summary_sections(meeting.summary or '')
+        summary_only = sections['summary']
+        thinking = sections['thinking']
+
+        # Strip markdown for context search
+        clean_summary = strip_markdown(summary_only)
+
+        # Find context around the match in Summary section (not Thinking)
         if case_sensitive:
             match_pos = clean_summary.find(search_term)
         else:
@@ -177,24 +246,30 @@ def search_summaries(
                 context = context + "..."
         else:
             context = clean_summary[:300]
-        
-        url = build_engagic_url(banana, meeting_title, meeting_date, meeting_id)
-        
+
+        url = build_engagic_url(banana, meeting.title, meeting.date.isoformat() if meeting.date else None, meeting.id)
+
         results.append({
             'type': 'meeting',
             'url': url,
             'city': city,
-            'date': meeting_date,
-            'meeting_title': meeting_title,
+            'date': meeting.date.isoformat() if meeting.date else None,
+            'meeting_title': meeting.title,
             'context': context,
-            'meeting_id': meeting_id,
+            'summary': summary_only,
+            'thinking': thinking,
+            'agenda_url': meeting.agenda_url,
+            'packet_url': meeting.packet_url,
+            'topics': meeting.topics,
+            'participation': meeting.participation,
+            'meeting_status': meeting.status,
+            'meeting_id': meeting.id,
             'banana': banana
         })
-    
+
     # Search in item summaries
     query = f'''
-        SELECT i.id, i.meeting_id, i.title as item_title, i.summary,
-               m.title as meeting_title, m.date, m.banana,
+        SELECT i.id, i.meeting_id, m.banana,
                c.name as city_name, c.state
         FROM items i
         JOIN meetings m ON i.meeting_id = m.id
@@ -204,23 +279,35 @@ def search_summaries(
           {city_filter}
         ORDER BY m.date DESC
     '''
-    
+
     cursor = conn.execute(query, city_params)
-    
+
     for row in cursor.fetchall():
         item_id = row[0]
         meeting_id = row[1]
-        item_title = row[2]
-        summary = row[3]
-        meeting_title = row[4]
-        meeting_date = row[5]
-        banana = row[6]
-        city = f"{row[7]}, {row[8]}"
+        banana = row[2]
+        city = f"{row[3]}, {row[4]}"
 
-        # Strip markdown for clean search and context display
-        clean_summary = strip_markdown(summary)
+        # Fetch complete meeting object
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            continue
 
-        # Find context around the match in clean text
+        # Fetch complete item object
+        items = db.get_agenda_items(meeting_id)
+        item = next((i for i in items if i.id == item_id), None)
+        if not item:
+            continue
+
+        # Parse summary sections (items can also have Thinking sections)
+        sections = parse_summary_sections(item.summary or '')
+        summary_only = sections['summary']
+        thinking = sections['thinking']
+
+        # Strip markdown for context search
+        clean_summary = strip_markdown(summary_only)
+
+        # Find context around the match in Summary section (not Thinking)
         if case_sensitive:
             match_pos = clean_summary.find(search_term)
         else:
@@ -236,8 +323,8 @@ def search_summaries(
                 context = context + "..."
         else:
             context = clean_summary[:300]
-        
-        url = build_engagic_url(banana, meeting_title, meeting_date, meeting_id)
+
+        url = build_engagic_url(banana, meeting.title, meeting.date.isoformat() if meeting.date else None, meeting.id)
         # Add item anchor for item-level deep linking
         url = f"{url}#item-{item_id}"
 
@@ -245,13 +332,20 @@ def search_summaries(
             'type': 'item',
             'url': url,
             'city': city,
-            'date': meeting_date,
-            'meeting_title': meeting_title,
-            'item_title': item_title,
+            'date': meeting.date.isoformat() if meeting.date else None,
+            'meeting_title': meeting.title,
+            'item_title': item.title,
             'context': context,
-            'meeting_id': meeting_id,
-            'item_id': item_id,
+            'summary': summary_only,
+            'thinking': thinking,
+            'agenda_url': meeting.agenda_url,
+            'packet_url': meeting.packet_url,
+            'attachments': item.attachments,
+            'topics': item.topics,
+            'item_sequence': item.sequence,
+            'meeting_id': meeting.id,
+            'item_id': item.id,
             'banana': banana
         })
-    
+
     return results
