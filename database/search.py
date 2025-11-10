@@ -85,10 +85,13 @@ def parse_summary_sections(summary: str) -> Dict[str, Optional[str]]:
     """
     Parse summary markdown to extract Thinking and Summary sections.
 
-    Mirrors logic from engagic frontend (parseSummaryForThinking).
+    Handles multiple formats:
+    - ## Thinking (heading format from engagic frontend)
+    - **Thinking** (bold inline format)
+    - Thinking (bare text at start)
 
     Args:
-        summary: Full summary markdown (may contain "## Thinking" section)
+        summary: Full summary markdown (may contain Thinking section)
 
     Returns:
         dict with keys:
@@ -98,40 +101,57 @@ def parse_summary_sections(summary: str) -> Dict[str, Optional[str]]:
     if not summary:
         return {'thinking': None, 'summary': ''}
 
-    # Split on "## Thinking" heading
+    # Check for "## Thinking" heading format first
     parts = re.split(r'^## Thinking\s*$', summary, flags=re.MULTILINE)
+    if len(parts) >= 2:
+        before = parts[0].strip()
+        after_thinking = parts[1]
 
-    if len(parts) < 2:
-        # No thinking section found
-        return {'thinking': None, 'summary': summary}
+        # Find next section heading to split thinking from summary
+        next_section = re.search(r'^##\s+', after_thinking, flags=re.MULTILINE)
 
-    # Everything before "## Thinking"
-    before = parts[0].strip()
+        if next_section:
+            thinking_end = next_section.start()
+            thinking_content = after_thinking[:thinking_end].strip()
+            summary_content = after_thinking[thinking_end:].strip()
+            full_summary = (before + '\n\n' + summary_content).strip() if before else summary_content
+            return {
+                'thinking': thinking_content,
+                'summary': full_summary
+            }
 
-    # Everything after "## Thinking"
-    after_thinking = parts[1]
-
-    # Find next section heading to split thinking from summary
-    next_section = re.search(r'^##\s+', after_thinking, flags=re.MULTILINE)
-
-    if next_section:
-        thinking_end = next_section.start()
-        thinking_content = after_thinking[:thinking_end].strip()
-        summary_content = after_thinking[thinking_end:].strip()
-
-        # Combine before + summary sections
-        full_summary = (before + '\n\n' + summary_content).strip() if before else summary_content
-
+        # No next section - everything after is thinking
         return {
-            'thinking': thinking_content,
-            'summary': full_summary
+            'thinking': after_thinking.strip(),
+            'summary': before if before else ''
         }
 
-    # No next section - everything after "## Thinking" is thinking content
-    return {
-        'thinking': after_thinking.strip(),
-        'summary': before if before else ''
-    }
+    # Check for inline "Thinking ... Summary:" format
+    # Look for "Summary:" marker which indicates where actual summary starts
+    summary_marker = re.search(r'\b(?:##\s*)?Summary\s*:?\s*', summary, flags=re.IGNORECASE)
+
+    if summary_marker:
+        # Everything before "Summary:" is thinking (if it mentions "Thinking")
+        before_summary = summary[:summary_marker.start()].strip()
+        after_summary = summary[summary_marker.end():].strip()
+
+        # Check if the before part contains "Thinking"
+        if re.search(r'\bThinking\b', before_summary, flags=re.IGNORECASE):
+            # Strip "Thinking" or "**Thinking**" prefix from thinking content
+            thinking_clean = re.sub(r'^(?:\*\*)?Thinking(?:\*\*)?\s*', '', before_summary, flags=re.IGNORECASE).strip()
+            return {
+                'thinking': thinking_clean,
+                'summary': after_summary
+            }
+        else:
+            # No thinking, but found Summary: marker
+            return {
+                'thinking': None,
+                'summary': after_summary
+            }
+
+    # No clear markers - return full summary
+    return {'thinking': None, 'summary': summary}
 
 
 def search_summaries(
