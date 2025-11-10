@@ -1,22 +1,50 @@
-"""PDF extractor using PyMuPDF
+"""PDF extractor using PyMuPDF with OCR fallback
 
 Moved from: infocore/processing/pdf_extractor.py
 """
 
+import io
 import logging
 import time
 import requests
 from typing import Dict, Any
 import fitz  # PyMuPDF
+import pytesseract
+from PIL import Image
 
 logger = logging.getLogger("engagic")
 
 
 class PdfExtractor:
-    """PDF extractor using PyMuPDF"""
+    """PDF extractor using PyMuPDF with OCR fallback"""
 
-    def __init__(self):
-        pass
+    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 300):
+        """Initialize PDF extractor
+
+        Args:
+            ocr_threshold: Minimum characters per page before triggering OCR fallback
+            ocr_dpi: DPI for image rendering when using OCR (higher = better quality, slower)
+        """
+        self.ocr_threshold = ocr_threshold
+        self.ocr_dpi = ocr_dpi
+
+    def _ocr_page(self, page) -> str:
+        """Extract text from page using OCR
+
+        Args:
+            page: PyMuPDF page object
+
+        Returns:
+            Extracted text from OCR
+        """
+        # Render page to high-DPI image
+        pix = page.get_pixmap(dpi=self.ocr_dpi)
+        img_bytes = pix.tobytes("png")
+        img = Image.open(io.BytesIO(img_bytes))
+
+        # Run Tesseract OCR
+        text = pytesseract.image_to_string(img)
+        return text
 
     def extract_from_url(self, url: str, extract_links: bool = False) -> Dict[str, Any]:
         """Extract text and optionally links from PDF URL
@@ -44,14 +72,22 @@ class PdfExtractor:
             response.raise_for_status()
             pdf_bytes = response.content
 
-            # Extract with PyMuPDF
+            # Extract with PyMuPDF (with OCR fallback for scanned pages)
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text_parts = []
             all_links = []
+            ocr_pages = 0
 
             for page_num in range(len(doc)):
                 page = doc[page_num]
-                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page.get_text()}")  # type: ignore[attr-defined]
+                page_text = page.get_text()  # type: ignore[attr-defined]
+
+                # If page has minimal text, assume scanned/image-based PDF
+                if len(page_text.strip()) < self.ocr_threshold:
+                    page_text = self._ocr_page(page)
+                    ocr_pages += 1
+
+                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
 
                 # Extract links if requested
                 if extract_links:
@@ -71,7 +107,12 @@ class PdfExtractor:
 
             extraction_time = time.time() - start_time
 
+            # Determine extraction method
+            method = "pymupdf+ocr" if ocr_pages > 0 else "pymupdf"
+
             log_msg = f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars"
+            if ocr_pages > 0:
+                log_msg += f" (OCR: {ocr_pages} pages)"
             if extract_links:
                 log_msg += f", {len(all_links)} links"
             log_msg += f" in {extraction_time:.2f}s"
@@ -80,9 +121,10 @@ class PdfExtractor:
             result = {
                 "success": True,
                 "text": full_text,
-                "method": "pymupdf",
+                "method": method,
                 "page_count": page_count,
                 "extraction_time": extraction_time,
+                "ocr_pages": ocr_pages,
             }
 
             if extract_links:
@@ -107,28 +149,44 @@ class PdfExtractor:
         start_time = time.time()
 
         try:
-            # Extract with PyMuPDF
+            # Extract with PyMuPDF (with OCR fallback for scanned pages)
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text_parts = []
+            ocr_pages = 0
+
             for page_num in range(len(doc)):
                 page = doc[page_num]
-                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page.get_text()}")  # type: ignore[attr-defined]
+                page_text = page.get_text()  # type: ignore[attr-defined]
+
+                # If page has minimal text, assume scanned/image-based PDF
+                if len(page_text.strip()) < self.ocr_threshold:
+                    page_text = self._ocr_page(page)
+                    ocr_pages += 1
+
+                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
 
             full_text = "\n\n".join(text_parts)
             page_count = len(doc)
             doc.close()
 
             extraction_time = time.time() - start_time
-            logger.info(
-                f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars in {extraction_time:.2f}s"
-            )
+
+            # Determine extraction method
+            method = "pymupdf+ocr" if ocr_pages > 0 else "pymupdf"
+
+            log_msg = f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars"
+            if ocr_pages > 0:
+                log_msg += f" (OCR: {ocr_pages} pages)"
+            log_msg += f" in {extraction_time:.2f}s"
+            logger.info(log_msg)
 
             return {
                 "success": True,
                 "text": full_text,
-                "method": "pymupdf",
+                "method": method,
                 "page_count": page_count,
                 "extraction_time": extraction_time,
+                "ocr_pages": ocr_pages,
             }
 
         except Exception as e:
