@@ -252,16 +252,31 @@ async def get_state_matters(
                 except (json.JSONDecodeError, TypeError, KeyError):
                     pass
 
-        # Get cities count in this state
-        cities_count = db.conn.execute(
-            "SELECT COUNT(*) FROM cities WHERE state = ?",
+        # Get cities in this state
+        cities = db.conn.execute(
+            """
+            SELECT banana, name, vendor
+            FROM cities
+            WHERE state = ?
+            ORDER BY name ASC
+            """,
             (state_code,)
-        ).fetchone()[0]
+        ).fetchall()
+
+        cities_list = [
+            {
+                "banana": city["banana"],
+                "name": city["name"],
+                "vendor": city["vendor"]
+            }
+            for city in cities
+        ]
 
         return {
             "success": True,
             "state": state_code,
-            "cities_count": cities_count,
+            "cities_count": len(cities_list),
+            "cities": cities_list,
             "matters": matters_list,
             "total_matters": len(matters_list),
             "topic_distribution": topic_aggregation,

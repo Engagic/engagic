@@ -217,6 +217,11 @@ export const apiClient = {
 		success: boolean;
 		state: string;
 		cities_count: number;
+		cities: Array<{
+			banana: string;
+			name: string;
+			vendor: string;
+		}>;
 		matters: Array<any>;
 		total_matters: number;
 		topic_distribution: Record<string, number>;
