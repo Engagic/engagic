@@ -59,7 +59,7 @@ def format_date(date_str: Optional[str]) -> str:
     try:
         dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
         return dt.strftime('%Y_%m_%d')
-    except:
+    except (ValueError, AttributeError):
         return "unknown_date"
 
 def build_engagic_url(banana: str, meeting_title: str, meeting_date: str, meeting_id: str) -> str:
