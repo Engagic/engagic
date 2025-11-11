@@ -1,0 +1,156 @@
+"""
+Pipeline Job Models - Type-safe queue job definitions
+
+Defines all job types that can be enqueued for processing.
+Each job type has a specific payload with required fields.
+"""
+
+from dataclasses import dataclass, asdict
+from typing import Literal, Union, List, Dict, Any, Optional
+import json
+
+
+@dataclass
+class MeetingJob:
+    """Process a meeting (monolithic or item-level)
+
+    This handles both architectures:
+    - Item-level: Meeting has items, process each item
+    - Monolithic: Meeting has packet_url only, process as single document
+    """
+    meeting_id: str
+    source_url: str  # agenda_url or packet_url
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MeetingJob":
+        return cls(
+            meeting_id=data["meeting_id"],
+            source_url=data["source_url"]
+        )
+
+
+@dataclass
+class MatterJob:
+    """Process a matter across all its appearances (matters-first)
+
+    When a matter appears in multiple meetings, this job:
+    1. Checks if attachments changed (hash comparison)
+    2. If unchanged, reuses canonical_summary
+    3. If changed, re-processes and updates canonical_summary
+    """
+    matter_id: str  # Composite ID: {banana}_{matter_key}
+    meeting_id: str  # Representative meeting where matter appears
+    item_ids: List[str]  # All agenda item IDs for this matter
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MatterJob":
+        return cls(
+            matter_id=data["matter_id"],
+            meeting_id=data["meeting_id"],
+            item_ids=data["item_ids"]
+        )
+
+
+JobPayload = Union[MeetingJob, MatterJob]
+JobType = Literal["meeting", "matter"]
+
+
+@dataclass
+class QueueJob:
+    """Typed queue job with discriminated union payload
+
+    The job_type field determines which payload type is present.
+    This enables exhaustive type checking and safe dispatch.
+    """
+    id: int
+    job_type: JobType
+    payload: JobPayload
+    banana: str
+    priority: int
+    status: str
+    retry_count: int = 0
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for database storage"""
+        data = asdict(self)
+        # payload is already a dict via asdict
+        return data
+
+    @classmethod
+    def from_db_row(cls, row: Dict[str, Any]) -> "QueueJob":
+        """Deserialize from database row
+
+        Database stores:
+        - job_type: "meeting" | "matter"
+        - payload: JSON string of payload data
+        """
+        job_type = row["job_type"]
+        payload_json = row["payload"]
+
+        # Parse payload JSON
+        payload_data = json.loads(payload_json) if isinstance(payload_json, str) else payload_json
+
+        # Deserialize to correct payload type
+        if job_type == "meeting":
+            payload = MeetingJob.from_dict(payload_data)
+        elif job_type == "matter":
+            payload = MatterJob.from_dict(payload_data)
+        else:
+            raise ValueError(f"Unknown job_type: {job_type}")
+
+        return cls(
+            id=row["id"],
+            job_type=job_type,
+            payload=payload,
+            banana=row["banana"],
+            priority=row["priority"],
+            status=row["status"],
+            retry_count=row.get("retry_count", 0),
+            error_message=row.get("error_message"),
+            created_at=row.get("created_at"),
+            started_at=row.get("started_at"),
+            completed_at=row.get("completed_at")
+        )
+
+
+def serialize_payload(payload: JobPayload) -> str:
+    """Serialize payload to JSON string for database storage"""
+    return json.dumps(payload.to_dict())
+
+
+def create_meeting_job(meeting_id: str, source_url: str, banana: str, priority: int = 0) -> Dict[str, Any]:
+    """Helper to create meeting job data for enqueueing"""
+    payload = MeetingJob(meeting_id=meeting_id, source_url=source_url)
+    return {
+        "job_type": "meeting",
+        "payload": serialize_payload(payload),
+        "banana": banana,
+        "priority": priority
+    }
+
+
+def create_matter_job(
+    matter_id: str,
+    meeting_id: str,
+    item_ids: List[str],
+    banana: str,
+    priority: int = 0
+) -> Dict[str, Any]:
+    """Helper to create matter job data for enqueueing"""
+    payload = MatterJob(matter_id=matter_id, meeting_id=meeting_id, item_ids=item_ids)
+    return {
+        "job_type": "matter",
+        "payload": serialize_payload(payload),
+        "banana": banana,
+        "priority": priority
+    }

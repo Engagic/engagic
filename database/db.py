@@ -20,7 +20,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
 
-from database.models import City, Meeting, AgendaItem, Matter, DatabaseConnectionError
+from database.models import City, Meeting, AgendaItem, Matter
+from exceptions import DatabaseConnectionError
 from database.repositories.cities import CityRepository
 from database.repositories.meetings import MeetingRepository
 from database.repositories.items import ItemRepository
@@ -148,12 +149,13 @@ class UnifiedDatabase:
             source_url TEXT NOT NULL UNIQUE,
             meeting_id TEXT,
             banana TEXT,
-            status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+            status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'dead_letter')),
             priority INTEGER DEFAULT 0,
             retry_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             started_at TIMESTAMP,
             completed_at TIMESTAMP,
+            failed_at TIMESTAMP,
             error_message TEXT,
             processing_metadata TEXT,
             FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
@@ -615,15 +617,22 @@ class UnifiedDatabase:
                 logger.debug(f"[Matters] Skipping procedural: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
                 continue
 
-            # Build matter ID (prefer matter_file for Legistar, fallback to matter_id for PrimeGov)
-            matter_key = agenda_item.matter_file or agenda_item.matter_id
-            matter_composite_id = f"{meeting.banana}_{matter_key}"
+            # Build matter ID using deterministic hashing
+            from database.id_generation import generate_matter_id
+            matter_composite_id = generate_matter_id(
+                banana=meeting.banana,
+                matter_file=agenda_item.matter_file,
+                matter_id=agenda_item.matter_id
+            )
 
             try:
                 # Check if matter exists
                 existing_matter = self.get_matter(matter_composite_id)
 
                 # Compute attachment hash for deduplication
+                # Uses fast URL-only mode by default
+                # For better change detection (at cost of latency), use:
+                # attachment_hash = hash_attachments(agenda_item.attachments, include_metadata=True)
                 attachment_hash = hash_attachments(agenda_item.attachments)
 
                 if existing_matter:
@@ -647,7 +656,7 @@ class UnifiedDatabase:
                         ),
                     )
                     stats['duplicate'] += 1
-                    logger.info(f"[Matters] Duplicate: {matter_key} ({matter_type})")
+                    logger.info(f"[Matters] Duplicate: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
                 else:
                     # Create new Matter object
                     matter_obj = Matter(
@@ -685,7 +694,7 @@ class UnifiedDatabase:
                     )
 
                     stats['tracked'] += 1
-                    logger.info(f"[Matters] New: {matter_key} ({matter_type}) - {len(sponsors)} sponsors")
+                    logger.info(f"[Matters] New: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type}) - {len(sponsors)} sponsors")
 
                 # Create matter_appearance record
                 committee = meeting.title.split("-")[0].strip() if meeting.title else None
@@ -930,6 +939,44 @@ class UnifiedDatabase:
         """Update matter canonical summary - delegates to MatterRepository"""
         return self.matters.update_matter_summary(matter_id, canonical_summary, canonical_topics, attachment_hash)
 
+    @staticmethod
+    def generate_matter_id(
+        banana: str,
+        matter_file: Optional[str] = None,
+        matter_id: Optional[str] = None
+    ) -> str:
+        """Generate deterministic matter ID from identifiers
+
+        Convenience method for ID generation. Uses SHA256 hashing for determinism.
+
+        Args:
+            banana: City identifier
+            matter_file: Public matter file (25-1234, BL2025-1098)
+            matter_id: Backend matter ID (UUID, numeric)
+
+        Returns:
+            Composite ID: {banana}_{hash}
+
+        Example:
+            >>> UnifiedDatabase.generate_matter_id("nashvilleTN", matter_file="BL2025-1098")
+            'nashvilleTN_7a8f3b2c1d9e4f5a'
+        """
+        from database.id_generation import generate_matter_id
+        return generate_matter_id(banana, matter_file, matter_id)
+
+    @staticmethod
+    def validate_matter_id(matter_id: str) -> bool:
+        """Validate matter ID format
+
+        Args:
+            matter_id: Matter ID to validate
+
+        Returns:
+            True if valid format, False otherwise
+        """
+        from database.id_generation import validate_matter_id
+        return validate_matter_id(matter_id)
+
     # ========== Processing Queue Operations (delegate to QueueRepository) ==========
 
     def enqueue_for_processing(
@@ -947,10 +994,35 @@ class UnifiedDatabase:
         """
         return self.queue.enqueue_for_processing(source_url, meeting_id, banana, priority, metadata)
 
+    def enqueue_meeting_job(
+        self,
+        meeting_id: str,
+        source_url: str,
+        banana: str,
+        priority: int = 0,
+    ) -> int:
+        """Enqueue typed meeting job - delegates to QueueRepository"""
+        return self.queue.enqueue_meeting_job(meeting_id, source_url, banana, priority)
+
+    def enqueue_matter_job(
+        self,
+        matter_id: str,
+        meeting_id: str,
+        item_ids: List[str],
+        banana: str,
+        priority: int = 0,
+    ) -> int:
+        """Enqueue typed matter job - delegates to QueueRepository"""
+        return self.queue.enqueue_matter_job(matter_id, meeting_id, item_ids, banana, priority)
+
     def get_next_for_processing(
         self, banana: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
-        """Get next item from queue - delegates to QueueRepository"""
+    ):
+        """Get next typed job from queue - delegates to QueueRepository
+
+        Returns:
+            QueueJob with typed payload, or None if queue empty
+        """
         return self.queue.get_next_for_processing(banana)
 
     def mark_processing_complete(self, queue_id: int) -> None:
@@ -974,6 +1046,10 @@ class UnifiedDatabase:
     def get_queue_stats(self) -> Dict[str, Any]:
         """Get queue statistics - delegates to QueueRepository"""
         return self.queue.get_queue_stats()
+
+    def get_dead_letter_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get dead letter queue jobs - delegates to QueueRepository"""
+        return self.queue.get_dead_letter_jobs(limit)
 
     def bulk_enqueue_unprocessed_meetings(self, limit: Optional[int] = None) -> int:
         """Bulk enqueue meetings - delegates to QueueRepository"""

@@ -14,12 +14,6 @@ from dataclasses import dataclass, asdict
 logger = logging.getLogger("engagic")
 
 
-class DatabaseConnectionError(Exception):
-    """Raised when database connection is not established"""
-
-    pass
-
-
 @dataclass
 class City:
     """City entity - single source of truth"""
