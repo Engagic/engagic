@@ -194,7 +194,7 @@
 					<h4 class="panel-title">Longest Tracked</h4>
 					<div class="intel-list">
 						{#each longestTrackedMatters() as matter}
-							<div class="intel-item">
+							<a href="/matter/{matter.id}" class="intel-item">
 								<div class="intel-item-header">
 									{#if matter.matter_file}
 										<span class="intel-badge">{matter.matter_file}</span>
@@ -203,7 +203,7 @@
 								</div>
 								<div class="intel-title">{matter.title}</div>
 								<div class="intel-meta">{matter.city_name}</div>
-							</div>
+							</a>
 						{/each}
 					</div>
 				</div>
@@ -251,7 +251,7 @@
 					<h4 class="panel-title">Recent Activity</h4>
 					<div class="recent-matters">
 						{#each recentMatters() as matter}
-							<div class="recent-matter">
+							<a href="/matter/{matter.id}" class="recent-matter">
 								<div class="matter-header">
 									<div class="matter-meta">
 										{#if matter.matter_file}
@@ -275,7 +275,7 @@
 										</div>
 									{/if}
 								{/if}
-							</div>
+							</a>
 						{/each}
 					</div>
 				</div>
@@ -516,17 +516,20 @@
 	}
 
 	.recent-matter {
+		display: block;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
 		border-radius: 8px;
 		padding: 1rem 1.25rem;
 		transition: all 0.2s ease;
+		text-decoration: none;
+		cursor: pointer;
 	}
 
 	.recent-matter:hover {
 		border-left-color: var(--civic-accent);
-		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
+		box-shadow: 0 2px 8px var(--shadow-md);
 		transform: translateX(2px);
 	}
 
@@ -648,8 +651,19 @@
 	}
 
 	.intel-item {
+		display: block;
 		padding-bottom: 1rem;
 		border-bottom: 1px solid var(--border-primary);
+		text-decoration: none;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.intel-item:hover {
+		background: var(--surface-hover);
+		padding-left: 0.5rem;
+		margin-left: -0.5rem;
+		border-radius: 4px;
 	}
 
 	.intel-item:last-child {

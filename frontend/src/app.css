@@ -49,6 +49,11 @@
 	--badge-info-bg: #eff6ff;
 	--badge-info-border: #bfdbfe;
 	--badge-info-text: #1e40af;
+
+	/* Committee type colors */
+	--committee-color: #8b5cf6;
+	--council-color: #10b981;
+	--board-color: #f59e0b;
 }
 
 :root.dark {
@@ -90,6 +95,11 @@
 	--badge-info-bg: #1e3a5f;
 	--badge-info-border: #3b82f6;
 	--badge-info-text: #93c5fd;
+
+	/* Committee type colors */
+	--committee-color: #c4b5fd;
+	--council-color: #34d399;
+	--board-color: #fbbf24;
 }
 
 * {
