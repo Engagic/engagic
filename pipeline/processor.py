@@ -11,7 +11,6 @@ Handles:
 Moved from: pipeline/conductor.py (refactored)
 """
 
-import logging
 import time
 from typing import List, Optional, Dict, Any
 
@@ -19,9 +18,9 @@ from database.db import UnifiedDatabase, Meeting
 from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
-from config import config
+from config import config, get_logger
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="processor")
 
 # Procedural items to skip (low informational value)
 # Focus on substantive policy, not administrative overhead
@@ -92,10 +91,11 @@ class Processor:
         else:
             try:
                 self.analyzer = Analyzer(api_key=config.get_api_key())
-                logger.info("[Processor] Initialized with LLM analyzer")
+                logger.info("initialized with llm analyzer", has_analyzer=True)
             except ValueError:
                 logger.warning(
-                    "[Processor] LLM analyzer not available - summaries will be skipped"
+                    "llm analyzer not available, summaries will be skipped",
+                    has_analyzer=False
                 )
                 self.analyzer = None
 
@@ -153,29 +153,41 @@ class Processor:
                     time.sleep(5)
                     continue
 
-                queue_id = job["id"]
-                source_url = job["source_url"]
-                meeting_id = job["meeting_id"]
+                queue_id = job.id
+                job_type = job.job_type
 
-                logger.info(f"[Processor] Processing queue job {queue_id}: {source_url}")
+                logger.info(f"[Processor] Processing queue job {queue_id} (type: {job_type})")
 
                 try:
-                    # Route based on source URL type
+                    # Type-safe dispatch based on job payload
                     if self.analyzer:
                         try:
-                            if source_url.startswith("matters://"):
+                            if job_type == "matter":
                                 # MATTERS-FIRST: Process matter across all appearances
-                                matter_id = source_url.replace("matters://", "")
-                                self.process_matter(matter_id, meeting_id, job.get("processing_metadata"))
-                            else:
-                                # ITEM-LEVEL or MONOLITH: Traditional meeting processing
-                                meeting = self.db.get_meeting(meeting_id)
-                                if not meeting:
-                                    self.db.mark_processing_failed(
-                                        queue_id, "Meeting not found in database"
+                                from pipeline.models import MatterJob
+                                if isinstance(job.payload, MatterJob):
+                                    self.process_matter(
+                                        job.payload.matter_id,
+                                        job.payload.meeting_id,
+                                        {"item_ids": job.payload.item_ids}
                                     )
-                                    continue
-                                self.process_meeting(meeting)
+                                else:
+                                    raise ValueError(f"Invalid payload type for matter job: {type(job.payload)}")
+                            elif job_type == "meeting":
+                                # ITEM-LEVEL or MONOLITH: Traditional meeting processing
+                                from pipeline.models import MeetingJob
+                                if isinstance(job.payload, MeetingJob):
+                                    meeting = self.db.get_meeting(job.payload.meeting_id)
+                                    if not meeting:
+                                        self.db.mark_processing_failed(
+                                            queue_id, "Meeting not found in database"
+                                        )
+                                        continue
+                                    self.process_meeting(meeting)
+                                else:
+                                    raise ValueError(f"Invalid payload type for meeting job: {type(job.payload)}")
+                            else:
+                                raise ValueError(f"Unknown job type: {job_type}")
 
                             self.db.mark_processing_complete(queue_id)
                             logger.info(
@@ -227,30 +239,49 @@ class Processor:
             if not job:
                 break  # No more jobs for this city
 
-            queue_id = job["id"]
-            meeting_id = job["meeting_id"]
-            source_url = job["source_url"]
+            queue_id = job.id
+            job_type = job.job_type
 
-            logger.info(f"[Processor] Processing job {queue_id}: {source_url}")
+            logger.info(f"[Processor] Processing job {queue_id} (type: {job_type})")
 
             try:
-                meeting = self.db.get_meeting(meeting_id)
-                if not meeting:
-                    self.db.mark_processing_failed(queue_id, "Meeting not found")
-                    failed_count += 1
-                    continue
-
-                # Process the meeting (item-aware)
-                self.process_meeting(meeting)
-                self.db.mark_processing_complete(queue_id)
-                processed_count += 1
-                logger.info(f"[Processor] Processed {source_url}")
+                # Type-safe dispatch
+                if job_type == "meeting":
+                    from pipeline.models import MeetingJob
+                    if isinstance(job.payload, MeetingJob):
+                        meeting = self.db.get_meeting(job.payload.meeting_id)
+                        if not meeting:
+                            self.db.mark_processing_failed(queue_id, "Meeting not found")
+                            failed_count += 1
+                            continue
+                        # Process the meeting (item-aware)
+                        self.process_meeting(meeting)
+                        self.db.mark_processing_complete(queue_id)
+                        processed_count += 1
+                        logger.info(f"[Processor] Processed meeting {job.payload.meeting_id}")
+                    else:
+                        raise ValueError("Invalid payload type for meeting job")
+                elif job_type == "matter":
+                    from pipeline.models import MatterJob
+                    if isinstance(job.payload, MatterJob):
+                        self.process_matter(
+                            job.payload.matter_id,
+                            job.payload.meeting_id,
+                            {"item_ids": job.payload.item_ids}
+                        )
+                        self.db.mark_processing_complete(queue_id)
+                        processed_count += 1
+                        logger.info(f"[Processor] Processed matter {job.payload.matter_id}")
+                    else:
+                        raise ValueError("Invalid payload type for matter job")
+                else:
+                    raise ValueError(f"Unknown job type: {job_type}")
 
             except Exception as e:
                 error_msg = str(e)
                 self.db.mark_processing_failed(queue_id, error_msg)
                 failed_count += 1
-                logger.error(f"[Processor] Failed to process {source_url}: {e}")
+                logger.error(f"[Processor] Failed to process job {queue_id}: {e}")
 
         logger.info(
             f"[Processor] Processing complete for {city_banana}: "

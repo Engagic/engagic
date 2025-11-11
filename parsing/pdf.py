@@ -12,6 +12,7 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
+
 logger = logging.getLogger("engagic")
 
 

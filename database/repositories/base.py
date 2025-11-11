@@ -7,6 +7,8 @@ Provides shared connection and common utilities for all repositories.
 import sqlite3
 from typing import Optional
 
+from exceptions import DatabaseConnectionError, DatabaseError
+
 
 class BaseRepository:
     """Base class for all repositories with shared connection"""
@@ -30,11 +32,20 @@ class BaseRepository:
 
         Returns:
             Cursor with results
+
+        Raises:
+            DatabaseConnectionError: If connection not established
+            DatabaseError: If query execution fails
         """
-        assert self.conn is not None, "Database connection not established"
-        cursor = self.conn.cursor()
-        cursor.execute(query, params)
-        return cursor
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, params)
+            return cursor
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Query execution failed: {e}", context={'query': query[:100]})
 
     def _fetch_one(self, query: str, params: tuple = ()) -> Optional[sqlite3.Row]:
         """
@@ -65,6 +76,16 @@ class BaseRepository:
         return cursor.fetchall()
 
     def _commit(self):
-        """Commit current transaction"""
-        assert self.conn is not None, "Database connection not established"
-        self.conn.commit()
+        """Commit current transaction
+
+        Raises:
+            DatabaseConnectionError: If connection not established
+            DatabaseError: If commit fails
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        try:
+            self.conn.commit()
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Transaction commit failed: {e}")

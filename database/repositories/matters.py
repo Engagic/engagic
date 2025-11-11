@@ -10,7 +10,9 @@ import json
 from typing import List, Optional
 
 from database.repositories.base import BaseRepository
-from database.models import Matter, DatabaseConnectionError
+from database.models import Matter
+from exceptions import DatabaseConnectionError
+from database.id_generation import generate_matter_id
 
 logger = logging.getLogger("engagic")
 
@@ -136,7 +138,10 @@ class MatterRepository(BaseRepository):
         self, banana: str, matter_file: Optional[str] = None, matter_id: Optional[str] = None
     ) -> Optional[Matter]:
         """
-        Get a matter by matter_file or matter_id.
+        Get a matter by matter_file or matter_id using deterministic ID generation.
+
+        This is the preferred lookup method as it uses the same hashing
+        logic as matter creation, ensuring consistent lookups.
 
         Args:
             banana: City identifier
@@ -152,25 +157,13 @@ class MatterRepository(BaseRepository):
         if not matter_file and not matter_id:
             return None
 
-        # Prefer matter_file over matter_id
-        if matter_file:
-            row = self._fetch_one(
-                """
-                SELECT * FROM city_matters
-                WHERE banana = ? AND matter_file = ?
-            """,
-                (banana, matter_file),
-            )
-        else:
-            row = self._fetch_one(
-                """
-                SELECT * FROM city_matters
-                WHERE banana = ? AND matter_id = ?
-            """,
-                (banana, matter_id),
-            )
-
-        return Matter.from_db_row(row) if row else None
+        # Generate deterministic ID and lookup by composite ID
+        try:
+            composite_id = generate_matter_id(banana, matter_file, matter_id)
+            return self.get_matter(composite_id)
+        except ValueError as e:
+            logger.error(f"Failed to generate matter ID: {e}")
+            return None
 
     def update_matter_summary(
         self, matter_id: str, canonical_summary: str, canonical_topics: List[str], attachment_hash: str
