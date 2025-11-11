@@ -186,10 +186,10 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.1rem;
 		font-weight: 700;
-		color: #1e40af;
+		color: var(--badge-blue-text);
 		padding: 0.35rem 0.75rem;
-		background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-		border: 2px solid #3b82f6;
+		background: var(--badge-blue-bg);
+		border: 2px solid var(--badge-blue-border);
 		border-radius: 8px;
 	}
 
@@ -256,15 +256,15 @@
 	}
 
 	.step-card.committee {
-		border-left-color: #8b5cf6;
+		border-left-color: var(--committee-color);
 	}
 
 	.step-card.council {
-		border-left-color: #10b981;
+		border-left-color: var(--council-color);
 	}
 
 	.step-card.board {
-		border-left-color: #f59e0b;
+		border-left-color: var(--board-color);
 	}
 
 	.step-card.has-summary {
@@ -284,22 +284,22 @@
 		align-items: center;
 		justify-content: center;
 		background: var(--civic-blue);
-		color: white;
+		color: var(--civic-white);
 		border-radius: 50%;
 		font-weight: 700;
 		font-size: 0.9rem;
 	}
 
 	.step-card.committee .step-number {
-		background: #8b5cf6;
+		background: var(--committee-color);
 	}
 
 	.step-card.council .step-number {
-		background: #10b981;
+		background: var(--council-color);
 	}
 
 	.step-card.board .step-number {
-		background: #f59e0b;
+		background: var(--board-color);
 	}
 
 	.step-content {
@@ -331,11 +331,11 @@
 	}
 
 	.step-card.committee .step-status {
-		background: #8b5cf6;
+		background: var(--committee-color);
 	}
 
 	.step-card.council .step-status {
-		background: #10b981;
+		background: var(--council-color);
 	}
 
 	.step-date {
@@ -383,7 +383,7 @@
 	.step-detail {
 		margin: 1rem 0 0 52px;
 		padding: 1.25rem;
-		background: white;
+		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
 		border-radius: 8px;
