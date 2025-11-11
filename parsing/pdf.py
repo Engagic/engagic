@@ -47,6 +47,49 @@ class PdfExtractor:
         text = pytesseract.image_to_string(img)
         return text
 
+    def _is_ocr_better(self, original: str, ocr_result: str, page_num: int) -> bool:
+        """Determine if OCR result is better than original text
+
+        Args:
+            original: Original extracted text
+            ocr_result: OCR-produced text
+            page_num: Page number (1-indexed, for logging)
+
+        Returns:
+            True if OCR should be used, False if original should be kept
+        """
+        orig_chars = len(original.strip())
+        ocr_chars = len(ocr_result.strip())
+
+        # If OCR produced nothing, always keep original
+        if ocr_chars == 0:
+            logger.info(f"[PyMuPDF] Page {page_num}: Keeping original (OCR produced nothing)")
+            return False
+
+        # Calculate quality metrics for OCR
+        ocr_letters = sum(1 for c in ocr_result if c.isalpha())
+        ocr_letter_ratio = ocr_letters / len(ocr_result) if len(ocr_result) > 0 else 0
+        ocr_words = len(ocr_result.split())
+
+        # OCR is better if:
+        # 1. Produced significantly more text (2x+ characters) with reasonable quality (>40% letters)
+        # 2. OR produced more text with high quality (>70% letters)
+        significantly_more = ocr_chars >= (orig_chars * 2) and ocr_letter_ratio > 0.4
+        high_quality_improvement = ocr_chars > orig_chars and ocr_letter_ratio > 0.7
+
+        if significantly_more or high_quality_improvement:
+            logger.info(
+                f"[PyMuPDF] Page {page_num}: Using OCR "
+                f"({ocr_chars} chars, {ocr_words} words, {ocr_letter_ratio:.1%} letters > original {orig_chars} chars)"
+            )
+            return True
+        else:
+            logger.info(
+                f"[PyMuPDF] Page {page_num}: Keeping original "
+                f"(OCR: {ocr_chars} chars, {ocr_letter_ratio:.1%} letters not better than original {orig_chars} chars)"
+            )
+            return False
+
     def extract_from_url(self, url: str, extract_links: bool = False) -> Dict[str, Any]:
         """Extract text and optionally links from PDF URL
 
@@ -86,29 +129,35 @@ class PdfExtractor:
 
                 # If page has minimal text, assume scanned/image-based PDF
                 if initial_char_count < self.ocr_threshold:
-                    # Log WHY we're OCRing
-                    initial_sample = page_text.strip()[:100].replace('\n', ' ')
+                    original_text = page_text  # Save original before OCR
+                    initial_sample = original_text.strip()[:100].replace('\n', ' ')
                     logger.info(
                         f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
                         f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
                         f"Original: '{initial_sample}'"
                     )
 
-                    page_text = self._ocr_page(page)
-                    ocr_char_count = len(page_text.strip())
-                    ocr_sample = page_text.strip()[:100].replace('\n', ' ')
+                    ocr_result = self._ocr_page(page)
+                    ocr_char_count = len(ocr_result.strip())
+                    ocr_sample = ocr_result.strip()[:100].replace('\n', ' ')
 
-                    # Calculate quality metrics
-                    letters = sum(1 for c in page_text if c.isalpha())
-                    letter_ratio = letters / len(page_text) if len(page_text) > 0 else 0
-                    word_count = len(page_text.split())
+                    # Calculate quality metrics for logging
+                    letters = sum(1 for c in ocr_result if c.isalpha())
+                    letter_ratio = letters / len(ocr_result) if len(ocr_result) > 0 else 0
+                    word_count = len(ocr_result.split())
 
                     logger.info(
                         f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
                         f"{word_count} words, {letter_ratio:.1%} letters. "
                         f"Sample: '{ocr_sample}'"
                     )
-                    ocr_pages += 1
+
+                    # Decide whether to use OCR or keep original
+                    if self._is_ocr_better(original_text, ocr_result, page_num + 1):
+                        page_text = ocr_result
+                        ocr_pages += 1
+                    else:
+                        page_text = original_text
 
                 text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
 
@@ -189,29 +238,35 @@ class PdfExtractor:
 
                 # If page has minimal text, assume scanned/image-based PDF
                 if initial_char_count < self.ocr_threshold:
-                    # Log WHY we're OCRing
-                    initial_sample = page_text.strip()[:100].replace('\n', ' ')
+                    original_text = page_text  # Save original before OCR
+                    initial_sample = original_text.strip()[:100].replace('\n', ' ')
                     logger.info(
                         f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
                         f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
                         f"Original: '{initial_sample}'"
                     )
 
-                    page_text = self._ocr_page(page)
-                    ocr_char_count = len(page_text.strip())
-                    ocr_sample = page_text.strip()[:100].replace('\n', ' ')
+                    ocr_result = self._ocr_page(page)
+                    ocr_char_count = len(ocr_result.strip())
+                    ocr_sample = ocr_result.strip()[:100].replace('\n', ' ')
 
-                    # Calculate quality metrics
-                    letters = sum(1 for c in page_text if c.isalpha())
-                    letter_ratio = letters / len(page_text) if len(page_text) > 0 else 0
-                    word_count = len(page_text.split())
+                    # Calculate quality metrics for logging
+                    letters = sum(1 for c in ocr_result if c.isalpha())
+                    letter_ratio = letters / len(ocr_result) if len(ocr_result) > 0 else 0
+                    word_count = len(ocr_result.split())
 
                     logger.info(
                         f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
                         f"{word_count} words, {letter_ratio:.1%} letters. "
                         f"Sample: '{ocr_sample}'"
                     )
-                    ocr_pages += 1
+
+                    # Decide whether to use OCR or keep original
+                    if self._is_ocr_better(original_text, ocr_result, page_num + 1):
+                        page_text = ocr_result
+                        ocr_pages += 1
+                    else:
+                        page_text = original_text
 
                 text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
 
