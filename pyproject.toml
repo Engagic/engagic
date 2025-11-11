@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["vendors", "vendors.adapters", "parsing", "analysis", "analysis.llm", "analysis.topics", "pipeline", "database", "server"]
-py-modules = ["config"]
+py-modules = ["config", "exceptions"]
 
 [project]
 name = "engagic"
