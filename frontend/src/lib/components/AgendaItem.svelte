@@ -19,6 +19,23 @@
 	const isExpanded = $derived(expandedItems.has(item.id));
 	const hasSummary = $derived(!!item.summary);
 
+	// Display agenda_number exactly as provided (already formatted), only add dot for sequence fallback
+	const displayNumber = $derived(item.agenda_number || `${item.sequence}.`);
+
+	// Generate human-readable anchor ID (prefer matter_file, then agenda_number, fallback to item.id)
+	const anchorId = $derived(() => {
+		if (item.matter_file) {
+			// Use matter file: "BL2025-1005" -> "bl2025-1005"
+			return item.matter_file.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+		}
+		if (item.agenda_number) {
+			// Use agenda number: "1." -> "item-1", "K. 87" -> "item-k-87"
+			return 'item-' + item.agenda_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+		}
+		// Fallback to item ID
+		return `item-${item.id}`;
+	});
+
 	function toggleItem() {
 		if (expandedItems.has(item.id)) {
 			expandedItems.delete(item.id);
@@ -132,7 +149,7 @@
 	const titleParts = $derived(truncateTitle(item.title));
 </script>
 
-<div class="agenda-item" id="item-{item.id}" data-expanded={isExpanded} data-has-summary={hasSummary}>
+<div class="agenda-item" id={anchorId()} data-expanded={isExpanded} data-has-summary={hasSummary}>
 	<div
 		class="item-header-clickable"
 		role="button"
@@ -143,7 +160,7 @@
 		<div class="item-header">
 			<div class="item-header-content">
 				<div class="item-title-container">
-					<span class="item-number">{item.agenda_number || item.sequence}.</span>
+					<span class="item-number">{displayNumber}</span>
 					<h3 class="item-title" data-truncated={titleParts.isTruncated}>
 						{titleParts.main}
 						{#if titleParts.remainder && !isExpanded}

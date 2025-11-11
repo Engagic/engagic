@@ -14,9 +14,6 @@ export function generateCityUrl(cityName: string, state: string): string {
 }
 
 export function generateMeetingSlug(meeting: Meeting): string {
-	// Use meeting title
-	const title = meeting.title || 'meeting';
-
 	// Extract date from meeting date
 	const dateStr = meeting.date || '';
 	let dateSlug = '';
@@ -30,47 +27,32 @@ export function generateMeetingSlug(meeting: Meeting): string {
 			datePart = dateStr.split(' - ')[0].trim();
 		}
 
-		// Also handle "on YYYY-MM-DD" format from title
-		const titleDateMatch = title.match(/on (\d{4}-\d{2}-\d{2})/);
-		if (titleDateMatch) {
-			datePart = titleDateMatch[1];
-		}
-
-		// Try to parse date and format as YYYY_MM_DD
+		// Try to parse date and format as YYYY-MM-DD
 		const date = new Date(datePart);
 		if (!isNaN(date.getTime())) {
 			const year = date.getFullYear();
 			const month = String(date.getMonth() + 1).padStart(2, '0');
 			const day = String(date.getDate()).padStart(2, '0');
-			dateSlug = `${year}_${month}_${day}`;
+			dateSlug = `${year}-${month}-${day}`;
 		}
 	}
 
-	// Clean title: remove date suffix if present, lowercase, remove special chars
-	let cleanTitle = title
-		.replace(/ on \d{4}-\d{2}-\d{2}.*$/, '') // Remove "on YYYY-MM-DD" suffix
-		.toLowerCase()
-		.replace(/[^a-z0-9\s]/g, '')
-		.replace(/\s+/g, '_')
-		.substring(0, 50); // Limit length
-
-	// Always include date in slug to avoid ambiguity
 	if (!dateSlug) {
 		// If we couldn't parse a date, use a fallback
 		console.warn('Could not parse date for meeting:', meeting);
 		dateSlug = 'undated';
 	}
 
-	// Combine title, date, and ID for direct lookup
-	return `${cleanTitle}_${dateSlug}_${meeting.id}`;
+	// Simple slug: date-id (backend looks up by ID anyway)
+	return `${dateSlug}-${meeting.id}`;
 }
 
-export function extractMeetingIdFromSlug(slug: string): number | null {
-	// Extract the ID from the end of the slug (format: title_date_id)
-	const parts = slug.split('_');
+export function extractMeetingIdFromSlug(slug: string): string | null {
+	// Extract the ID from the end of the slug (format: date-id)
+	const parts = slug.split('-');
 	const lastPart = parts[parts.length - 1];
-	const id = parseInt(lastPart, 10);
-	return isNaN(id) ? null : id;
+	// IDs are now strings, just return the last part
+	return lastPart || null;
 }
 
 export function parseCityUrl(cityUrl: string): { cityName: string; state: string } | null {
