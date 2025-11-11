@@ -66,10 +66,10 @@
 
 	const mostActiveCities = $derived(() => {
 		if (!metrics?.matters) return [];
-		const cityCounts: Record<string, { name: string; count: number }> = {};
+		const cityCounts: Record<string, { name: string; banana: string; count: number }> = {};
 		metrics.matters.forEach((m: any) => {
 			if (!cityCounts[m.city_name]) {
-				cityCounts[m.city_name] = { name: m.city_name, count: 0 };
+				cityCounts[m.city_name] = { name: m.city_name, banana: m.banana, count: 0 };
 			}
 			cityCounts[m.city_name].count++;
 		});
@@ -215,13 +215,13 @@
 					<h4 class="panel-title">Most Active Cities</h4>
 					<div class="city-ranking">
 						{#each mostActiveCities() as city, index}
-							<div class="city-rank-item">
+							<a href="/{city.banana}" class="city-rank-item">
 								<div class="rank-number">{index + 1}</div>
 								<div class="rank-content">
 									<div class="rank-city">{city.name}</div>
 									<div class="rank-count">{city.count} matters</div>
 								</div>
-							</div>
+							</a>
 						{/each}
 					</div>
 				</div>
@@ -728,11 +728,14 @@
 		background: var(--surface-secondary);
 		border-radius: 8px;
 		transition: all 0.2s ease;
+		text-decoration: none;
+		cursor: pointer;
 	}
 
 	.city-rank-item:hover {
-		background: var(--surface-primary);
-		box-shadow: 0 2px 6px var(--shadow-sm);
+		background: var(--surface-hover);
+		box-shadow: 0 2px 6px var(--shadow-md);
+		transform: translateY(-1px);
 	}
 
 	.rank-number {
