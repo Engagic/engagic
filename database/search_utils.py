@@ -62,24 +62,28 @@ def format_date(date_str: Optional[str]) -> str:
     except (ValueError, AttributeError):
         return "unknown_date"
 
-def build_engagic_url(banana: str, meeting_title: str, meeting_date: str, meeting_id: str) -> str:
+def build_engagic_url(banana: str, meeting_date: str, meeting_id: str) -> str:
     """
-    Construct full Engagic URL for a meeting.
-    
+    Construct full Engagic URL for a meeting using clean date-id format.
+
     Args:
         banana: City identifier (e.g., 'nashvilleTN')
-        meeting_title: Meeting title (will be slugified)
         meeting_date: ISO date string
         meeting_id: Meeting ID
-        
+
     Returns:
-        Full URL like: https://engagic.org/nashvilleTN/metropolitan_council_2025_11_04_2111
+        Full URL like: https://engagic.org/nashvilleTN/2025-11-04-2111
     """
-    slug = slugify(meeting_title)
-    date_part = format_date(meeting_date)
     if not meeting_id:
         meeting_id = "null"
-    return f"https://engagic.org/{banana}/{slug}_{date_part}_{meeting_id}"
+
+    try:
+        dt = datetime.fromisoformat(meeting_date.replace('Z', '+00:00'))
+        date_slug = dt.strftime('%Y-%m-%d')
+    except (ValueError, AttributeError):
+        date_slug = "undated"
+
+    return f"https://engagic.org/{banana}/{date_slug}-{meeting_id}"
 
 def parse_summary_sections(summary: str) -> Dict[str, Optional[str]]:
     """
@@ -267,7 +271,7 @@ def search_summaries(
         else:
             context = clean_summary[:300]
 
-        url = build_engagic_url(banana, meeting.title, meeting.date.isoformat() if meeting.date else None, meeting.id)
+        url = build_engagic_url(banana, meeting.date.isoformat() if meeting.date else None, meeting.id)
 
         results.append({
             'type': 'meeting',
@@ -344,9 +348,19 @@ def search_summaries(
         else:
             context = clean_summary[:300]
 
-        url = build_engagic_url(banana, meeting.title, meeting.date.isoformat() if meeting.date else None, meeting.id)
-        # Add item anchor for item-level deep linking
-        url = f"{url}#item-{item_id}"
+        url = build_engagic_url(banana, meeting.date.isoformat() if meeting.date else None, meeting.id)
+
+        # Generate human-readable anchor (prefer matter_file, then agenda_number, fallback to item.id)
+        if item.matter_file:
+            anchor = re.sub(r'[^a-z0-9-]', '-', item.matter_file.lower())
+        elif item.agenda_number:
+            clean = re.sub(r'[^a-z0-9]', '-', item.agenda_number.lower())
+            clean = re.sub(r'-+', '-', clean).strip('-')
+            anchor = f'item-{clean}'
+        else:
+            anchor = f"item-{item.id}"
+
+        url = f"{url}#{anchor}"
 
         results.append({
             'type': 'item',
@@ -365,7 +379,13 @@ def search_summaries(
             'item_sequence': item.sequence,
             'meeting_id': meeting.id,
             'item_id': item.id,
-            'banana': banana
+            'banana': banana,
+            # Matter fields (new)
+            'matter_id': item.matter_id,
+            'matter_file': item.matter_file,
+            'matter_type': item.matter_type,
+            'agenda_number': item.agenda_number,
+            'sponsors': item.sponsors
         })
 
     return results
