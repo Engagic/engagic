@@ -4,7 +4,7 @@ Gemini LLM Orchestration - Smart model selection and prompt management
 Responsibilities:
 - Load prompts from prompts.json
 - Select appropriate model (flash vs flash-lite) based on document size
-- Configure thinking budgets based on complexity
+- Configure extended thinking based on complexity
 - Handle single and batch API calls
 - Parse and validate responses
 """
@@ -133,7 +133,7 @@ class GeminiSummarizer:
             page_count = self._estimate_page_count(text)
 
         # Adaptive prompt selection based on document size
-        # Large items (100+ pages): comprehensive analysis with enhanced thinking
+        # Large items (100+ pages): comprehensive analysis with extended thinking mode
         # Standard items: focused analysis
         if page_count >= 100:
             prompt_type = "large"
@@ -784,25 +784,16 @@ class GeminiSummarizer:
             data = json.loads(response_text)
 
             # Validate JSON structure
-            required_fields = ["thinking", "summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
+            required_fields = ["summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
             missing_fields = [f for f in required_fields if f not in data]
             if missing_fields:
                 logger.error(f"[Summarizer] JSON missing required fields: {missing_fields}")
                 raise ValueError(f"Invalid JSON response: missing {missing_fields}")
 
             # Build comprehensive summary with all components
-            thinking_raw = data.get("thinking", "")
             summary_md = data.get("summary_markdown", "")
             impact_md = data.get("citizen_impact_markdown", "")
             confidence = data.get("confidence", "unknown")
-
-            # Handle thinking as either string or array (LLM sometimes ignores schema)
-            if isinstance(thinking_raw, list):
-                # Convert array to bullet-point string
-                thinking = "\n".join(f"- {bullet}" for bullet in thinking_raw if bullet)
-                logger.debug(f"[Summarizer] Converted thinking array ({len(thinking_raw)} items) to markdown bullets")
-            else:
-                thinking = thinking_raw
 
             # Validate and normalize topics
             raw_topics = data.get("topics", [])
@@ -840,9 +831,6 @@ class GeminiSummarizer:
 
             # Combine into single markdown document
             summary_parts = []
-
-            if thinking:
-                summary_parts.append(f"## Thinking\n\n{thinking}\n")
 
             if summary_md:
                 summary_parts.append(f"## Summary\n\n{summary_md}\n")
