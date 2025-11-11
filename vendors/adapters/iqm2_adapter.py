@@ -188,7 +188,8 @@ class IQM2Adapter(BaseAdapter):
             "meeting_id": f"iqm2-{self.slug}-{meeting_id}",
             "title": title,
             "start": meeting_dt.isoformat(),
-            "packet_url": packet_url,
+            "agenda_url": detail_url,  # HTML agenda source (Detail_Meeting.aspx)
+            "packet_url": packet_url,  # Full PDF packet (optional)
             "items": items,
         }
 
@@ -197,6 +198,66 @@ class IQM2Adapter(BaseAdapter):
         )
 
         return meeting_data
+
+    def _fetch_matter_metadata(self, legifile_id: str) -> Dict[str, Any]:
+        """
+        Fetch matter metadata from Detail_LegiFile.aspx page.
+
+        Extracts:
+        - matter_type (Category field)
+        - sponsors (Sponsors field)
+        - department (Department field)
+
+        Args:
+            legifile_id: LegiFile ID to fetch
+
+        Returns:
+            Dict with matter_type, sponsors (list), department
+        """
+        detail_url = f"{self.base_url}/Citizens/Detail_LegiFile.aspx?ID={legifile_id}"
+
+        try:
+            soup = self._fetch_html(detail_url)
+
+            # Find the LegiFileInfo table
+            info_table = soup.find("table", id="tblLegiFileInfo")
+            if not info_table:
+                return {}
+
+            metadata = {}
+
+            # Parse table rows
+            rows = info_table.find_all("tr")
+            for row in rows:
+                cells = row.find_all(["th", "td"])
+
+                # Process cell pairs (label: value)
+                i = 0
+                while i < len(cells) - 1:
+                    label = cells[i].get_text(strip=True).lower().replace(":", "")
+                    value = cells[i + 1].get_text(strip=True)
+
+                    if "category" in label and value:
+                        metadata["matter_type"] = value
+                    elif "sponsor" in label and value:
+                        # Split sponsors by comma or semicolon
+                        sponsors = [s.strip() for s in re.split(r'[,;]', value) if s.strip()]
+                        metadata["sponsors"] = sponsors
+                    elif "department" in label and value:
+                        metadata["department"] = value
+
+                    i += 2
+
+            logger.debug(
+                f"[iqm2:{self.slug}] Fetched matter metadata for {legifile_id}: {metadata}"
+            )
+            return metadata
+
+        except Exception as e:
+            logger.warning(
+                f"[iqm2:{self.slug}] Failed to fetch matter metadata for {legifile_id}: {e}"
+            )
+            return {}
 
     def _parse_agenda_items(
         self, soup: BeautifulSoup, meeting_id: str
@@ -251,17 +312,42 @@ class IQM2Adapter(BaseAdapter):
                         )
                     continue
 
-            # Check for main agenda item (letter numbering: A., B., C.)
+            # Check for main agenda item (letter or number numbering: A., B., C. or 1., 2., 3.)
             # Pattern: <td></td><td class='Num'>A. </td><td class='Title'>...</td>
+            # OR:      <td></td><td class='Num'>1. </td><td class='Title'>...</td>
+            # OR:      <td></td><td class='Num'></td><td class='Title'>COF 2025 #141: ...</td> (Cambridge pattern)
             if len(cells) >= 3:
                 num_cell = cells[1]
                 title_cell = cells[2]
 
-                # Main item with letter numbering
+                # Main item with letter or number numbering OR empty Num cell with LegiFile link
                 if num_cell.get("class") == ["Num"]:
                     num_text = num_cell.get_text(strip=True)
-                    # Match letter numbering: "A.", "B.", etc.
-                    if re.match(r"^[A-Z]\.\s*$", num_text):
+
+                    # Check if this is a link to a Detail_LegiFile page (indicates legislative item)
+                    title_link = title_cell.find("a", href=lambda x: x and "Detail_LegiFile.aspx" in x)
+
+                    # Match letter/number numbering OR empty Num cell with LegiFile link
+                    if re.match(r"^[A-Z0-9]+\.\s*$", num_text) or (not num_text and title_link):
+                        # If Num cell is empty, extract matter number from title text
+                        if not num_text and title_link:
+                            item_title_full = title_link.get_text(strip=True)
+                            # Extract matter number from title (e.g., "COF 2025 #141 : Title")
+                            matter_num_match = re.match(r"^([A-Z]+\s+\d+\s+#\d+)\s*:", item_title_full)
+                            if matter_num_match:
+                                num_text = matter_num_match.group(1)  # Use matter number as item_number
+                            else:
+                                # Fallback: just use sequence number
+                                num_text = str(item_counter + 1)
+
+                        # Extract item ID from LegiFile link if present
+                        legifile_id = None
+                        if title_link:
+                            href = title_link.get("href", "")
+                            id_match = re.search(r"ID=(\d+)", href)
+                            if id_match:
+                                legifile_id = id_match.group(1)
+
                         # Save previous item
                         if current_item:
                             items.append(current_item)
@@ -271,21 +357,45 @@ class IQM2Adapter(BaseAdapter):
                         item_number = num_text.strip()
 
                         # Extract title (might be a link)
-                        title_link = title_cell.find("a", href=True)
                         if title_link:
                             item_title = title_link.get_text(strip=True)
                         else:
                             item_title = title_cell.get_text(strip=True)
 
                         current_item = {
-                            "item_id": f"iqm2-{self.slug}-{meeting_id}-{item_counter}",
+                            "item_id": legifile_id or f"iqm2-{self.slug}-{meeting_id}-{item_counter}",
                             "title": item_title,
                             "sequence": item_counter,
-                            "item_number": item_number,  # Keep letter (A., B., etc.)
+                            "item_number": item_number,  # Keep letter/number (A., 1., etc.)
                             "section": current_section,  # Keep section context
                             "description": "",  # Will be filled from Comments rows
                             "attachments": [],
                         }
+
+                        # Add matter tracking if it's a LegiFile item
+                        if legifile_id:
+                            current_item["matter_id"] = legifile_id
+                            # Extract matter file from title
+                            # Patterns: "COF 2025 #141 :", "CMA 2025 #235 :", "25-O-1607 :", "18492 :"
+                            # Match everything before the colon
+                            matter_match = re.match(r"^([^:]+?)\s*:", item_title)
+                            if matter_match:
+                                matter_file = matter_match.group(1).strip()
+                                current_item["matter_file"] = matter_file
+                            else:
+                                # Fallback: use legifile_id
+                                current_item["matter_file"] = legifile_id
+
+                            # TODO: Fetch additional matter metadata (matter_type, sponsors, department)
+                            # Currently disabled due to performance (229 items × 1s = 4+ minutes)
+                            # Will re-enable with async requests or batch API
+                            # matter_metadata = self._fetch_matter_metadata(legifile_id)
+                            # if matter_metadata.get("matter_type"):
+                            #     current_item["matter_type"] = matter_metadata["matter_type"]
+                            # if matter_metadata.get("sponsors"):
+                            #     current_item["sponsors"] = matter_metadata["sponsors"]
+                            # if matter_metadata.get("department"):
+                            #     current_item["department"] = matter_metadata["department"]
 
                         logger.debug(
                             f"[iqm2:{self.slug}] Found item {item_number}: {item_title[:50]}"

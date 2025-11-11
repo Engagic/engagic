@@ -14,12 +14,6 @@ from dataclasses import dataclass, asdict
 logger = logging.getLogger("engagic")
 
 
-class DatabaseConnectionError(Exception):
-    """Raised when database connection is not established"""
-
-    pass
-
-
 @dataclass
 class City:
     """City entity - single source of truth"""
@@ -171,6 +165,103 @@ class Meeting:
 
 
 @dataclass
+class Matter:
+    """Matter entity - legislative items tracked across meetings
+
+    Matters-First Architecture (Nov 2025):
+    Matters are the fundamental unit - tracked across time, committees, and meetings.
+    Each matter has a canonical summary that's reused when attachments don't change.
+
+    Identity:
+    - id: Unique composite key (banana_matter_key, e.g., "nashvilleTN_25-1234")
+    - matter_file: Official public ID (25-1234, BL2025-1098)
+    - matter_id: Backend vendor ID (UUID, numeric, etc.)
+
+    Deduplication:
+    - canonical_summary: Deduplicated summary stored once
+    - canonical_topics: Topics extracted from canonical summary
+    - metadata: Contains attachment_hash for change detection
+    """
+
+    id: str  # Composite key: {banana}_{matter_key}
+    banana: str  # Foreign key to City
+    matter_file: Optional[str] = None  # Official public identifier (25-1234, BL2025-1098)
+    matter_id: Optional[str] = None  # Backend vendor identifier (UUID, numeric)
+    matter_type: Optional[str] = None  # Ordinance, Resolution, etc.
+    title: Optional[str] = None  # Matter title
+    canonical_summary: Optional[str] = None  # Deduplicated summary
+    canonical_topics: Optional[List[str]] = None  # Extracted topics
+    attachments: Optional[List[Dict[str, Any]]] = None  # Attachment metadata
+    metadata: Optional[Dict[str, Any]] = None  # attachment_hash, etc.
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        data = asdict(self)
+        if self.created_at:
+            data["created_at"] = self.created_at.isoformat()
+        if self.updated_at:
+            data["updated_at"] = self.updated_at.isoformat()
+        return data
+
+    @classmethod
+    def from_db_row(cls, row: sqlite3.Row) -> "Matter":
+        """Create Matter from database row"""
+        row_dict = dict(row)
+
+        # Deserialize JSON fields
+        canonical_topics = row_dict.get("canonical_topics")
+        if canonical_topics:
+            try:
+                canonical_topics = json.loads(canonical_topics)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize canonical_topics JSON: {canonical_topics}")
+                canonical_topics = None
+        else:
+            canonical_topics = None
+
+        attachments = row_dict.get("attachments")
+        if attachments:
+            try:
+                attachments = json.loads(attachments)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize attachments JSON: {attachments}")
+                attachments = None
+        else:
+            attachments = None
+
+        metadata = row_dict.get("metadata")
+        if metadata:
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize metadata JSON: {metadata}")
+                metadata = None
+        else:
+            metadata = None
+
+        return cls(
+            id=row_dict["id"],
+            banana=row_dict["banana"],
+            matter_file=row_dict.get("matter_file"),
+            matter_id=row_dict.get("matter_id"),
+            matter_type=row_dict.get("matter_type"),
+            title=row_dict.get("title"),
+            canonical_summary=row_dict.get("canonical_summary"),
+            canonical_topics=canonical_topics,
+            attachments=attachments,
+            metadata=metadata,
+            created_at=datetime.fromisoformat(row_dict["created_at"])
+            if row_dict.get("created_at")
+            else None,
+            updated_at=datetime.fromisoformat(row_dict["updated_at"])
+            if row_dict.get("updated_at")
+            else None,
+        )
+
+
+@dataclass
 class AgendaItem:
     """Agenda item entity - individual items within a meeting
 
@@ -181,6 +272,9 @@ class AgendaItem:
     - matter_type: Flexible metadata (Ordinance, Resolution, CD 12, etc.)
     - agenda_number: Position on THIS specific agenda (1, K. 87, etc.)
     - sponsors: List of sponsor names (when available)
+
+    Items can point to Matter objects via matter_file/matter_id.
+    When a Matter has a canonical_summary, items inherit it.
 
     Not all vendors provide all fields - that's expected and fine.
     """
@@ -199,6 +293,7 @@ class AgendaItem:
     sponsors: Optional[List[str]] = None  # Sponsor names
     summary: Optional[str] = None
     topics: Optional[List[str]] = None  # Extracted topics
+    matter: Optional["Matter"] = None  # Linked Matter object (loaded on demand)
     created_at: Optional[datetime] = None
 
     def to_dict(self) -> dict:
@@ -206,6 +301,9 @@ class AgendaItem:
         data = asdict(self)
         if self.created_at:
             data["created_at"] = self.created_at.isoformat()
+        # Exclude matter object from serialization (loaded on demand)
+        if "matter" in data:
+            del data["matter"]
         return data
 
     @classmethod

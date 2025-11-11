@@ -5,8 +5,10 @@ Monitoring and health check API routes
 import logging
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import Response
 from database.db import UnifiedDatabase
 from server.services.ticker import generate_ticker_item
+from server.metrics import metrics, get_metrics_text
 from config import config
 
 logger = logging.getLogger("engagic")
@@ -201,12 +203,12 @@ async def get_queue_stats(db: UnifiedDatabase = Depends(get_db)):
                 "processing": queue_stats.get("processing_count", 0),
                 "completed": queue_stats.get("completed_count", 0),
                 "failed": queue_stats.get("failed_count", 0),
-                "permanently_failed": queue_stats.get("permanently_failed", 0),
+                "dead_letter": queue_stats.get("dead_letter_count", 0),
                 "avg_processing_seconds": round(
                     queue_stats.get("avg_processing_seconds", 0), 2
                 ),
             },
-            "note": "Queue is processed continuously by background daemon",
+            "note": "Queue is processed continuously by background daemon. Failed jobs retry 3 times before moving to dead_letter.",
         }
     except Exception as e:
         logger.error(f"Error fetching queue stats: {str(e)}")
@@ -238,6 +240,25 @@ async def get_metrics(db: UnifiedDatabase = Depends(get_db)):
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
+
+
+@router.get("/metrics")
+async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
+    """Prometheus metrics endpoint
+
+    Returns metrics in Prometheus text format for scraping.
+    Updated with real-time queue statistics.
+    """
+    try:
+        # Update queue size gauges with current stats
+        queue_stats = db.get_queue_stats()
+        metrics.update_queue_sizes(queue_stats)
+
+        # Return Prometheus text format
+        return Response(content=get_metrics_text(), media_type="text/plain")
+    except Exception as e:
+        logger.error(f"Prometheus metrics endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate metrics")
 
 
 @router.get("/api/analytics")

@@ -9,7 +9,8 @@ import json
 from typing import Optional, List, Dict, Any
 
 from database.repositories.base import BaseRepository
-from database.models import Meeting, AgendaItem, DatabaseConnectionError
+from database.models import Meeting, AgendaItem
+from exceptions import DatabaseConnectionError
 
 logger = logging.getLogger("engagic")
 

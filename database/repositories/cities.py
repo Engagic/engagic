@@ -10,7 +10,8 @@ from typing import Optional, List, Dict
 from datetime import datetime
 
 from database.repositories.base import BaseRepository
-from database.models import City, DatabaseConnectionError
+from database.models import City
+from exceptions import DatabaseConnectionError
 
 logger = logging.getLogger("engagic")
 

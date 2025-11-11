@@ -8,6 +8,7 @@ This facade provides the same API as before but delegates to focused repositorie
 - CityRepository: City and zipcode operations
 - MeetingRepository: Meeting storage and retrieval
 - ItemRepository: Agenda item operations
+- MatterRepository: Matter operations (matters-first architecture)
 - QueueRepository: Processing queue management
 - SearchRepository: Search, topics, cache, and stats
 """
@@ -19,12 +20,15 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
 
-from database.models import City, Meeting, AgendaItem, DatabaseConnectionError
+from database.models import City, Meeting, AgendaItem, Matter
+from exceptions import DatabaseConnectionError
 from database.repositories.cities import CityRepository
 from database.repositories.meetings import MeetingRepository
 from database.repositories.items import ItemRepository
+from database.repositories.matters import MatterRepository
 from database.repositories.queue import QueueRepository
 from database.repositories.search import SearchRepository
+from pipeline.utils import hash_attachments, get_matter_key
 
 logger = logging.getLogger("engagic")
 
@@ -46,6 +50,7 @@ class UnifiedDatabase:
         self.cities = CityRepository(self.conn)
         self.meetings = MeetingRepository(self.conn)
         self.items = ItemRepository(self.conn)
+        self.matters = MatterRepository(self.conn)
         self.queue = QueueRepository(self.conn)
         self.search = SearchRepository(self.conn)
 
@@ -144,12 +149,13 @@ class UnifiedDatabase:
             source_url TEXT NOT NULL UNIQUE,
             meeting_id TEXT,
             banana TEXT,
-            status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+            status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'dead_letter')),
             priority INTEGER DEFAULT 0,
             retry_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             started_at TIMESTAMP,
             completed_at TIMESTAMP,
+            failed_at TIMESTAMP,
             error_message TEXT,
             processing_metadata TEXT,
             FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
@@ -509,50 +515,49 @@ class UnifiedDatabase:
                 )
             elif has_items or packet_url:
                 # Calculate priority based on meeting date proximity
-                # Recent past + near future = HIGH priority
-                # Far past + far future = LOW priority
                 if meeting_date:
                     days_from_now = (meeting_date - datetime.now()).days
-                    # Use absolute value: closer to today = higher priority
                     days_distance = abs(days_from_now)
                 else:
                     days_distance = 999
 
-                # Priority decreases as distance from today increases
-                # Today: 150, Yesterday/Tomorrow: 149, 2 days: 148, etc.
                 priority = max(0, 150 - days_distance)
 
-                # Priority order: items:// (item-level) > packet_url (monolithic)
-                # Note: agenda_url is NOT enqueued - it's already processed to extract items
-                if has_items:
-                    queue_url = f"items://{stored_meeting.id}"
-                    processing_type = "item-level-batch"
+                # MATTERS-FIRST: Deduplicate summarization work across meetings
+                # If matter exists with unchanged attachments, reuse canonical summary
+                if has_items and 'agenda_items' in locals():
+                    matters_enqueued = self._enqueue_matters_first(
+                        city.banana, stored_meeting, agenda_items, priority
+                    )
+
+                    if matters_enqueued > 0:
+                        logger.debug(
+                            f"Enqueued {matters_enqueued} matters for {stored_meeting.title} (priority {priority})"
+                        )
+                    else:
+                        logger.debug(f"All matters already processed for {stored_meeting.title}")
+
+                # MONOLITH FALLBACK: No items at all, process entire packet
                 elif packet_url:
-                    queue_url = packet_url
-                    processing_type = "monolithic-packet"
+                    self.enqueue_for_processing(
+                        source_url=packet_url,
+                        meeting_id=stored_meeting.id,
+                        banana=city.banana,
+                        priority=priority,
+                        metadata={
+                            "has_items": False,
+                            "has_agenda": bool(agenda_url),
+                            "has_packet": True,
+                        },
+                    )
+                    logger.debug(
+                        f"Enqueued monolithic-packet processing for {stored_meeting.title} (priority {priority})"
+                    )
                 else:
                     # No items and no packet - nothing to process
                     logger.warning(
                         f"[DB] Meeting {stored_meeting.id} has no items or packet URL - skipping queue"
                     )
-                    queue_url = None
-
-                if queue_url:
-                    self.enqueue_for_processing(
-                        source_url=queue_url,
-                        meeting_id=stored_meeting.id,
-                        banana=city.banana,
-                        priority=priority,
-                        metadata={
-                            "has_items": has_items,
-                            "has_agenda": bool(agenda_url),
-                            "has_packet": bool(packet_url),
-                        },
-                    )
-
-                logger.debug(
-                    f"Enqueued {processing_type} processing for {stored_meeting.title} (priority {priority})"
-                )
             else:
                 logger.debug(
                     f"Meeting {stored_meeting.title} has no agenda/packet/items - stored for display only"
@@ -570,11 +575,12 @@ class UnifiedDatabase:
         self, meeting: Meeting, items_data: List[Dict], agenda_items: List[AgendaItem]
     ) -> Dict[str, int]:
         """
-        Track legislative matters across meetings for Intelligence Layer.
+        Track legislative matters across meetings (Matters-First Architecture).
 
         For each agenda item with a matter_file:
-        1. Upsert into city_matters (canonical bill representation)
-        2. Create matter_appearance record (timeline tracking)
+        1. Create/update Matter object with attachments
+        2. Store in city_matters table via MatterRepository
+        3. Create matter_appearance record (timeline tracking)
 
         Args:
             meeting: Stored Meeting object
@@ -584,7 +590,9 @@ class UnifiedDatabase:
         Returns:
             Dict with 'tracked' and 'duplicate' counts
         """
-        stats = {'tracked': 0, 'duplicate': 0}
+        from vendors.utils.item_filters import should_skip_matter
+
+        stats = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0}
 
         if not items_data or not agenda_items:
             return stats
@@ -603,52 +611,92 @@ class UnifiedDatabase:
             sponsors = raw_item.get("sponsors", [])
             matter_type = raw_item.get("matter_type")
 
-            # Build matter ID (prefer matter_file for Legistar, fallback to matter_id for PrimeGov)
-            matter_key = agenda_item.matter_file or agenda_item.matter_id
-            matter_id = f"{meeting.banana}_{matter_key}"
+            # Skip procedural matter types (minutes, info items, calendars)
+            if matter_type and should_skip_matter(matter_type):
+                stats['skipped_procedural'] += 1
+                logger.debug(f"[Matters] Skipping procedural: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
+                continue
+
+            # Build matter ID using deterministic hashing
+            from database.id_generation import generate_matter_id
+            matter_composite_id = generate_matter_id(
+                banana=meeting.banana,
+                matter_file=agenda_item.matter_file,
+                matter_id=agenda_item.matter_id
+            )
 
             try:
                 # Check if matter exists
-                existing = self.conn.execute(
-                    "SELECT * FROM city_matters WHERE id = ?", (matter_id,)
-                ).fetchone()
+                existing_matter = self.get_matter(matter_composite_id)
 
-                if existing:
-                    # Update last_seen and appearance_count
+                # Compute attachment hash for deduplication
+                # Uses fast URL-only mode by default
+                # For better change detection (at cost of latency), use:
+                # attachment_hash = hash_attachments(agenda_item.attachments, include_metadata=True)
+                attachment_hash = hash_attachments(agenda_item.attachments)
+
+                if existing_matter:
+                    # Update last_seen and appearance_count using raw SQL
+                    # (these fields not in Matter model yet, but tracked in city_matters table)
                     self.conn.execute(
                         """
                         UPDATE city_matters
                         SET last_seen = ?,
                             appearance_count = appearance_count + 1,
+                            attachments = ?,
+                            metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', ?),
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                     """,
-                        (meeting.date, matter_id),
+                        (
+                            meeting.date,
+                            json.dumps(agenda_item.attachments) if agenda_item.attachments else None,
+                            attachment_hash,
+                            matter_composite_id,
+                        ),
                     )
+                    stats['duplicate'] += 1
+                    logger.info(f"[Matters] Duplicate: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
                 else:
-                    # Insert new matter
+                    # Create new Matter object
+                    matter_obj = Matter(
+                        id=matter_composite_id,
+                        banana=meeting.banana,
+                        matter_id=agenda_item.matter_id,
+                        matter_file=agenda_item.matter_file,
+                        matter_type=matter_type,
+                        title=agenda_item.title,
+                        canonical_summary=None,  # Will be filled by processor
+                        canonical_topics=None,
+                        attachments=agenda_item.attachments,
+                        metadata={'attachment_hash': attachment_hash},
+                    )
+
+                    # Store via Matter repository
+                    self.store_matter(matter_obj)
+
+                    # Add first_seen and last_seen (not in Matter model)
                     self.conn.execute(
                         """
-                        INSERT INTO city_matters (
-                            id, banana, matter_id, matter_file, matter_type,
-                            title, sponsors, first_seen, last_seen
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        UPDATE city_matters
+                        SET first_seen = ?,
+                            last_seen = ?,
+                            sponsors = ?,
+                            appearance_count = 1
+                        WHERE id = ?
                     """,
                         (
-                            matter_id,
-                            meeting.banana,
-                            agenda_item.matter_id,
-                            agenda_item.matter_file,
-                            matter_type,
-                            agenda_item.title,
+                            meeting.date,
+                            meeting.date,
                             json.dumps(sponsors) if sponsors else None,
-                            meeting.date,
-                            meeting.date,
+                            matter_composite_id,
                         ),
                     )
 
+                    stats['tracked'] += 1
+                    logger.info(f"[Matters] New: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type}) - {len(sponsors)} sponsors")
+
                 # Create matter_appearance record
-                # Extract committee from meeting title
                 committee = meeting.title.split("-")[0].strip() if meeting.title else None
 
                 self.conn.execute(
@@ -659,7 +707,7 @@ class UnifiedDatabase:
                     ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                     (
-                        matter_id,
+                        matter_composite_id,
                         meeting.id,
                         agenda_item.id,
                         meeting.date,
@@ -669,18 +717,154 @@ class UnifiedDatabase:
                 )
 
                 self.conn.commit()
-                if existing:
-                    stats['duplicate'] += 1
-                    logger.info(f"[Matters] Duplicate: {matter_key} ({matter_type})")
-                else:
-                    stats['tracked'] += 1
-                    logger.info(f"[Matters] New: {matter_key} ({matter_type}) - {len(sponsors)} sponsors")
 
             except Exception as e:
-                logger.error(f"[Matters] Error tracking matter {matter_id}: {e}")
+                logger.error(f"[Matters] Error tracking matter {matter_composite_id}: {e}")
                 continue
 
         return stats
+
+    def _enqueue_matters_first(
+        self,
+        banana: str,
+        meeting: Meeting,
+        agenda_items: List[AgendaItem],
+        priority: int,
+    ) -> int:
+        """
+        Matters-first enqueue logic: Deduplicate summarization work.
+
+        Groups items by matter, checks if matter already processed with unchanged
+        attachments. If unchanged, copies canonical summary. If new/changed, enqueues.
+
+        Args:
+            banana: City identifier
+            meeting: Meeting object
+            agenda_items: List of agenda items with matter tracking
+            priority: Queue priority
+
+        Returns:
+            Number of matters enqueued (0 if all reused from canonical)
+        """
+        from vendors.utils.item_filters import should_skip_matter
+        from database.id_generation import generate_matter_id
+
+        # Group items by matter
+        matters_map: Dict[str, List[AgendaItem]] = {}
+        items_without_matters = []
+
+        for item in agenda_items:
+            matter_key = get_matter_key(item.matter_file, item.matter_id)
+            if matter_key:
+                if matter_key not in matters_map:
+                    matters_map[matter_key] = []
+                matters_map[matter_key].append(item)
+            else:
+                items_without_matters.append(item)
+
+        enqueued_count = 0
+
+        # Process each matter
+        for matter_key, matter_items in matters_map.items():
+            # Use first item to get matter identifiers
+            first_item = matter_items[0]
+            matter_id = generate_matter_id(
+                banana=banana,
+                matter_file=first_item.matter_file,
+                matter_id=first_item.matter_id
+            )
+
+            # Filter out procedural matter types (minutes, info items, calendars)
+            matter_type = matter_items[0].matter_type if matter_items else None
+            if matter_type and should_skip_matter(matter_type):
+                logger.debug(
+                    f"[Matters] Skipping procedural matter: {matter_key} ({matter_type})"
+                )
+                continue
+
+            # Check if matter already processed
+            existing_matter = self._get_matter(matter_id)
+
+            if existing_matter and existing_matter.get("canonical_summary"):
+                # Matter exists - check if attachments changed
+                # Use first item's attachments as representative (should be same across items)
+                current_hash = hash_attachments(matter_items[0].attachments)
+
+                metadata = json.loads(existing_matter.get("metadata") or "{}")
+                stored_hash = metadata.get("attachment_hash")
+
+                if stored_hash == current_hash:
+                    # Unchanged - copy canonical summary to all items
+                    self._apply_canonical_summary(matter_items, existing_matter)
+                    logger.debug(
+                        f"[Matters] Reusing canonical summary for {matter_key} ({len(matter_items)} items)"
+                    )
+                    continue  # Skip enqueue
+
+            # New or changed - enqueue matter for processing
+            self.enqueue_for_processing(
+                source_url=f"matters://{matter_id}",
+                meeting_id=meeting.id,
+                banana=banana,
+                priority=priority,
+                metadata={
+                    "matter_key": matter_key,
+                    "item_count": len(matter_items),
+                    "item_ids": [item.id for item in matter_items],
+                },
+            )
+            enqueued_count += 1
+
+        # Items without matters - enqueue as item-level batch (fallback)
+        if items_without_matters:
+            self.enqueue_for_processing(
+                source_url=f"items://{meeting.id}",
+                meeting_id=meeting.id,
+                banana=banana,
+                priority=priority,
+                metadata={
+                    "item_count": len(items_without_matters),
+                    "no_matter_tracking": True,
+                },
+            )
+            enqueued_count += 1
+
+        return enqueued_count
+
+    def _get_matter(self, matter_id: str) -> Optional[Dict[str, Any]]:
+        """Get matter by ID for deduplication checks"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.execute(
+            "SELECT * FROM city_matters WHERE id = ?", (matter_id,)
+        )
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+    def _apply_canonical_summary(
+        self, items: List[AgendaItem], matter: Dict[str, Any]
+    ):
+        """Apply canonical summary from matter to all items"""
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        canonical_summary = matter.get("canonical_summary")
+        canonical_topics = matter.get("canonical_topics")
+
+        for item in items:
+            self.conn.execute(
+                """
+                UPDATE items
+                SET summary = ?, topics = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (canonical_summary, canonical_topics, item.id),
+            )
+
+        self.conn.commit()
 
     def update_meeting_summary(
         self,
@@ -718,6 +902,88 @@ class UnifiedDatabase:
         """Update agenda item with summary - delegates to ItemRepository"""
         return self.items.update_agenda_item(item_id, summary, topics)
 
+    def get_agenda_item(self, item_id: str) -> Optional[AgendaItem]:
+        """Get single agenda item by ID"""
+        items = self.get_agenda_items_by_ids([item_id])
+        return items[0] if items else None
+
+    def get_agenda_items_by_ids(self, item_ids: List[str]) -> List[AgendaItem]:
+        """Get multiple agenda items by IDs"""
+        if not item_ids:
+            return []
+
+        placeholders = ",".join("?" * len(item_ids))
+        rows = self.conn.execute(
+            f"SELECT * FROM items WHERE id IN ({placeholders})",
+            item_ids
+        ).fetchall()
+
+        return [AgendaItem.from_db_row(row) for row in rows]
+
+    # ========== Matter Operations (delegate to MatterRepository) ==========
+
+    def store_matter(self, matter: Matter) -> bool:
+        """Store or update a matter - delegates to MatterRepository"""
+        return self.matters.store_matter(matter)
+
+    def get_matter(self, matter_id: str) -> Optional[Matter]:
+        """Get matter by composite ID - delegates to MatterRepository"""
+        return self.matters.get_matter(matter_id)
+
+    def get_matters_by_city(self, banana: str, include_processed: bool = True) -> List[Matter]:
+        """Get all matters for a city - delegates to MatterRepository"""
+        return self.matters.get_matters_by_city(banana, include_processed)
+
+    def get_matter_by_keys(
+        self, banana: str, matter_file: Optional[str] = None, matter_id: Optional[str] = None
+    ) -> Optional[Matter]:
+        """Get matter by matter_file or matter_id - delegates to MatterRepository"""
+        return self.matters.get_matter_by_keys(banana, matter_file, matter_id)
+
+    def update_matter_summary(
+        self, matter_id: str, canonical_summary: str, canonical_topics: List[str], attachment_hash: str
+    ) -> None:
+        """Update matter canonical summary - delegates to MatterRepository"""
+        return self.matters.update_matter_summary(matter_id, canonical_summary, canonical_topics, attachment_hash)
+
+    @staticmethod
+    def generate_matter_id(
+        banana: str,
+        matter_file: Optional[str] = None,
+        matter_id: Optional[str] = None
+    ) -> str:
+        """Generate deterministic matter ID from identifiers
+
+        Convenience method for ID generation. Uses SHA256 hashing for determinism.
+
+        Args:
+            banana: City identifier
+            matter_file: Public matter file (25-1234, BL2025-1098)
+            matter_id: Backend matter ID (UUID, numeric)
+
+        Returns:
+            Composite ID: {banana}_{hash}
+
+        Example:
+            >>> UnifiedDatabase.generate_matter_id("nashvilleTN", matter_file="BL2025-1098")
+            'nashvilleTN_7a8f3b2c1d9e4f5a'
+        """
+        from database.id_generation import generate_matter_id
+        return generate_matter_id(banana, matter_file, matter_id)
+
+    @staticmethod
+    def validate_matter_id(matter_id: str) -> bool:
+        """Validate matter ID format
+
+        Args:
+            matter_id: Matter ID to validate
+
+        Returns:
+            True if valid format, False otherwise
+        """
+        from database.id_generation import validate_matter_id
+        return validate_matter_id(matter_id)
+
     # ========== Processing Queue Operations (delegate to QueueRepository) ==========
 
     def enqueue_for_processing(
@@ -735,10 +1001,35 @@ class UnifiedDatabase:
         """
         return self.queue.enqueue_for_processing(source_url, meeting_id, banana, priority, metadata)
 
+    def enqueue_meeting_job(
+        self,
+        meeting_id: str,
+        source_url: str,
+        banana: str,
+        priority: int = 0,
+    ) -> int:
+        """Enqueue typed meeting job - delegates to QueueRepository"""
+        return self.queue.enqueue_meeting_job(meeting_id, source_url, banana, priority)
+
+    def enqueue_matter_job(
+        self,
+        matter_id: str,
+        meeting_id: str,
+        item_ids: List[str],
+        banana: str,
+        priority: int = 0,
+    ) -> int:
+        """Enqueue typed matter job - delegates to QueueRepository"""
+        return self.queue.enqueue_matter_job(matter_id, meeting_id, item_ids, banana, priority)
+
     def get_next_for_processing(
         self, banana: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
-        """Get next item from queue - delegates to QueueRepository"""
+    ):
+        """Get next typed job from queue - delegates to QueueRepository
+
+        Returns:
+            QueueJob with typed payload, or None if queue empty
+        """
         return self.queue.get_next_for_processing(banana)
 
     def mark_processing_complete(self, queue_id: int) -> None:
@@ -762,6 +1053,10 @@ class UnifiedDatabase:
     def get_queue_stats(self) -> Dict[str, Any]:
         """Get queue statistics - delegates to QueueRepository"""
         return self.queue.get_queue_stats()
+
+    def get_dead_letter_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get dead letter queue jobs - delegates to QueueRepository"""
+        return self.queue.get_dead_letter_jobs(limit)
 
     def bulk_enqueue_unprocessed_meetings(self, limit: Optional[int] = None) -> int:
         """Bulk enqueue meetings - delegates to QueueRepository"""

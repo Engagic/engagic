@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+
 logger = logging.getLogger("engagic")
 
 # Browser-like headers to avoid bot detection

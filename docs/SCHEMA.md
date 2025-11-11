@@ -1,11 +1,23 @@
 # Engagic Database Schema
 
-Complete reference for the Engagic unified SQLite database.
+Quick reference for the Engagic unified SQLite database schema and SQL queries.
+
+**For repository pattern implementation and code examples, see:** [../database/README.md](../database/README.md)
 
 **Database:** SQLite 3.x with WAL mode
 **Location:** `/root/engagic/data/engagic.db` (production)
-**Code:** Repository Pattern (database/db.py facade → 5 focused repositories)
-**Last Updated:** November 2, 2025
+**Code:** Repository Pattern (database/db.py facade → 6 focused repositories)
+**Last Updated:** November 11, 2025
+
+---
+
+**This document provides:**
+- Table schemas and column definitions
+- JSON structure specifications
+- SQL query examples
+- Database maintenance commands
+
+**For Python code usage, see:** [../database/README.md](../database/README.md)
 
 ---
 
@@ -640,4 +652,6 @@ SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size
 
 ---
 
-**Last Updated:** October 31, 2025
+**Last Updated:** November 11, 2025
+
+**See Also:** [../database/README.md](../database/README.md) for repository pattern and Python code usage
