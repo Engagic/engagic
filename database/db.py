@@ -593,7 +593,8 @@ class UnifiedDatabase:
         items_map = {item["item_id"]: item for item in items_data}
 
         for agenda_item in agenda_items:
-            if not agenda_item.matter_file:
+            # Skip items without any matter tracking
+            if not agenda_item.matter_file and not agenda_item.matter_id:
                 continue
 
             # Get raw item data for sponsors and matter_type
@@ -602,8 +603,9 @@ class UnifiedDatabase:
             sponsors = raw_item.get("sponsors", [])
             matter_type = raw_item.get("matter_type")
 
-            # Upsert into city_matters
-            matter_id = f"{meeting.banana}_{agenda_item.matter_file}"
+            # Build matter ID (prefer matter_file for Legistar, fallback to matter_id for PrimeGov)
+            matter_key = agenda_item.matter_file or agenda_item.matter_id
+            matter_id = f"{meeting.banana}_{matter_key}"
 
             try:
                 # Check if matter exists
@@ -669,10 +671,10 @@ class UnifiedDatabase:
                 self.conn.commit()
                 if existing:
                     stats['duplicate'] += 1
-                    logger.info(f"[Matters] Duplicate: {agenda_item.matter_file} ({matter_type})")
+                    logger.info(f"[Matters] Duplicate: {matter_key} ({matter_type})")
                 else:
                     stats['tracked'] += 1
-                    logger.info(f"[Matters] New: {agenda_item.matter_file} ({matter_type}) - {len(sponsors)} sponsors")
+                    logger.info(f"[Matters] New: {matter_key} ({matter_type}) - {len(sponsors)} sponsors")
 
             except Exception as e:
                 logger.error(f"[Matters] Error tracking matter {matter_id}: {e}")

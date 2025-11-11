@@ -295,6 +295,8 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
                 'title': item_title,
                 'sequence': sequence,
                 'file_number': file_number,
+                'matter_file': file_number,  # For matter tracking (e.g., "251041", "BL2025-1234")
+                'matter_id': legislation_id,  # Legislation ID as matter_id
                 'item_type': item_type,
                 'status': status,
                 'attachments': [],  # Could fetch from LegislationDetail.aspx later
