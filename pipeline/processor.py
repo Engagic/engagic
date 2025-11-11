@@ -462,19 +462,41 @@ class Processor:
             logger.warning(f"[MatterProcessing] No summary generated for matter {matter_id}")
             return
 
-        # Store canonical summary in city_matters table
+        # Store canonical summary in city_matters table (UPSERT)
         attachment_hash = hash_attachments(representative_item.attachments)
+
+        # Extract city banana from matter_id (format: "sanfranciscoCA_250894")
+        banana = matter_id.rsplit('_', 1)[0]
 
         self.db.conn.execute(
             """
-            UPDATE city_matters
-            SET canonical_summary = ?,
-                canonical_topics = ?,
-                metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', ?),
+            INSERT INTO city_matters (
+                id, banana, matter_id, matter_file, matter_type, title, sponsors,
+                canonical_summary, canonical_topics, attachments, metadata,
+                first_seen, last_seen, appearance_count
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json_object('attachment_hash', ?),
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                canonical_summary = excluded.canonical_summary,
+                canonical_topics = excluded.canonical_topics,
+                metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', excluded.metadata->>'attachment_hash'),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
             """,
-            (summary, json.dumps(topics), attachment_hash, matter_id),
+            (
+                matter_id,
+                banana,
+                representative_item.matter_id,
+                representative_item.matter_file,
+                representative_item.matter_type,
+                representative_item.title,
+                json.dumps(representative_item.sponsors) if hasattr(representative_item, 'sponsors') and representative_item.sponsors else None,
+                summary,
+                json.dumps(topics),
+                json.dumps(representative_item.attachments),
+                attachment_hash,
+                len(items)
+            ),
         )
         self.db.conn.commit()
 
