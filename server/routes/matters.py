@@ -272,6 +272,20 @@ async def get_state_matters(
             for city in cities
         ]
 
+        # Get meeting statistics for this state
+        meeting_stats = db.conn.execute(
+            """
+            SELECT
+                COUNT(*) as total_meetings,
+                SUM(CASE WHEN agenda_url IS NOT NULL OR packet_url IS NOT NULL THEN 1 ELSE 0 END) as with_agendas,
+                SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as with_summaries
+            FROM meetings m
+            JOIN cities c ON m.banana = c.banana
+            WHERE c.state = ?
+            """,
+            (state_code,)
+        ).fetchone()
+
         return {
             "success": True,
             "state": state_code,
@@ -280,7 +294,12 @@ async def get_state_matters(
             "matters": matters_list,
             "total_matters": len(matters_list),
             "topic_distribution": topic_aggregation,
-            "filtered_by_topic": topic
+            "filtered_by_topic": topic,
+            "meeting_stats": {
+                "total_meetings": meeting_stats["total_meetings"],
+                "with_agendas": meeting_stats["with_agendas"],
+                "with_summaries": meeting_stats["with_summaries"]
+            }
         }
 
     except HTTPException:
