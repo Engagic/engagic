@@ -5,7 +5,6 @@ Handles matter tracking, timelines, and cross-meeting aggregation
 """
 
 import logging
-from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Request
 from database.db import UnifiedDatabase
 
@@ -250,7 +249,7 @@ async def get_state_matters(
                         if t not in topic_aggregation:
                             topic_aggregation[t] = 0
                         topic_aggregation[t] += 1
-                except:
+                except (json.JSONDecodeError, TypeError, KeyError):
                     pass
 
         # Get cities count in this state
