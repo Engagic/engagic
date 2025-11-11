@@ -301,14 +301,14 @@ class Processor:
             elif isinstance(att, dict):
                 att_url = att.get("url")
                 att_type = att.get("type", "unknown")
-            else:
-                continue
 
-            # Handle text segments directly
-            if att_type == "text_segment":
-                text_content = att.get("content", "")
-                if text_content:
-                    item_parts.append(text_content)
+                # Handle text segments directly
+                if att_type == "text_segment":
+                    text_content = att.get("content", "")
+                    if text_content:
+                        item_parts.append(text_content)
+                    continue
+            else:
                 continue
 
             # Extract PDFs
