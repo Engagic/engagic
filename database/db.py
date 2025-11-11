@@ -588,7 +588,9 @@ class UnifiedDatabase:
         Returns:
             Dict with 'tracked' and 'duplicate' counts
         """
-        stats = {'tracked': 0, 'duplicate': 0}
+        from vendors.utils.item_filters import should_skip_matter
+
+        stats = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0}
 
         if not items_data or not agenda_items:
             return stats
@@ -606,6 +608,12 @@ class UnifiedDatabase:
             raw_item = items_map.get(item_id_short, {})
             sponsors = raw_item.get("sponsors", [])
             matter_type = raw_item.get("matter_type")
+
+            # Skip procedural matter types (minutes, info items, calendars)
+            if matter_type and should_skip_matter(matter_type):
+                stats['skipped_procedural'] += 1
+                logger.debug(f"[Matters] Skipping procedural: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
+                continue
 
             # Build matter ID (prefer matter_file for Legistar, fallback to matter_id for PrimeGov)
             matter_key = agenda_item.matter_file or agenda_item.matter_id
@@ -729,6 +737,8 @@ class UnifiedDatabase:
         Returns:
             Number of matters enqueued (0 if all reused from canonical)
         """
+        from vendors.utils.item_filters import should_skip_matter
+
         # Group items by matter
         matters_map: Dict[str, List[AgendaItem]] = {}
         items_without_matters = []
@@ -747,6 +757,14 @@ class UnifiedDatabase:
         # Process each matter
         for matter_key, matter_items in matters_map.items():
             matter_id = f"{banana}_{matter_key}"
+
+            # Filter out procedural matter types (minutes, info items, calendars)
+            matter_type = matter_items[0].matter_type if matter_items else None
+            if matter_type and should_skip_matter(matter_type):
+                logger.debug(
+                    f"[Matters] Skipping procedural matter: {matter_key} ({matter_type})"
+                )
+                continue
 
             # Check if matter already processed
             existing_matter = self._get_matter(matter_id)
