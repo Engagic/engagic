@@ -40,15 +40,17 @@ class LegistarAdapter(BaseAdapter):
         """
         api_yielded = 0
         try:
+            logger.info(f"[Vendor] legistar:{self.slug} using API")
             for meeting in self._fetch_meetings_api(days_back, days_forward):
                 api_yielded += 1
                 yield meeting
         except Exception as e:
             if hasattr(e, 'response') and e.response.status_code in [400, 403, 404]:
                 logger.warning(
-                    f"[legistar:{self.slug}] API failed (HTTP {e.response.status_code}), "
+                    f"[Vendor] legistar:{self.slug} API failed (HTTP {e.response.status_code}), "
                     f"falling back to HTML scraping"
                 )
+                logger.info(f"[Vendor] legistar:{self.slug} using HTML fallback")
                 yield from self._fetch_meetings_html(days_back, days_forward)
             else:
                 raise
@@ -57,10 +59,13 @@ class LegistarAdapter(BaseAdapter):
         # If API succeeded but returned 0 events, fall back to HTML
         if api_yielded == 0:
             logger.warning(
-                f"[legistar:{self.slug}] API returned 0 events, "
+                f"[Vendor] legistar:{self.slug} API returned 0 events, "
                 f"falling back to HTML scraping"
             )
+            logger.info(f"[Vendor] legistar:{self.slug} using HTML fallback")
             yield from self._fetch_meetings_html(days_back, days_forward)
+        else:
+            logger.info(f"[Vendor] legistar:{self.slug} API returned {api_yielded} meetings")
 
     def _fetch_meetings_api(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """

@@ -309,7 +309,7 @@ class UnifiedDatabase:
 
     def store_meeting_from_sync(
         self, meeting_dict: Dict[str, Any], city: City
-    ) -> Optional[Meeting]:
+    ) -> tuple[Optional[Meeting], Dict[str, int]]:
         """
         Transform vendor meeting dict → validate → store → enqueue for processing
 
@@ -328,6 +328,15 @@ class UnifiedDatabase:
             Stored Meeting object (or None if validation failed)
         """
         from vendors.validator import MeetingValidator
+        from vendors.utils.item_filters import should_skip_procedural_item
+
+        # Initialize stats tracking
+        stats = {
+            'items_stored': 0,
+            'items_skipped_procedural': 0,
+            'matters_tracked': 0,
+            'matters_duplicate': 0,
+        }
 
         try:
             # Parse date from adapter format
@@ -388,17 +397,17 @@ class UnifiedDatabase:
                 city.vendor,
                 city.slug,
             ):
-                logger.warning(f"Skipping corrupted meeting: {meeting_obj.title}")
-                return None
+                logger.warning(f"[Items] Skipping corrupted meeting: {meeting_obj.title}")
+                return None, stats
 
             # Store meeting (upsert)
             stored_meeting = self.store_meeting(meeting_obj)
-            logger.debug(f"Stored meeting: {stored_meeting.title} (id: {stored_meeting.id})")
 
             # Store agenda items if present (preserve existing summaries on re-sync)
             if meeting_dict.get("items"):
                 items = meeting_dict["items"]
                 agenda_items = []
+                procedural_items = []
 
                 # Build map of existing items to preserve summaries
                 existing_items = self.get_agenda_items(stored_meeting.id)
@@ -406,11 +415,20 @@ class UnifiedDatabase:
 
                 for item_data in items:
                     item_id = f"{stored_meeting.id}_{item_data['item_id']}"
+                    item_title = item_data.get("title", "")
+                    item_type = item_data.get("matter_type", "")
+
+                    # Check if procedural (skip for processing but log)
+                    if should_skip_procedural_item(item_title, item_type):
+                        procedural_items.append(item_title[:50])
+                        stats['items_skipped_procedural'] += 1
+                        # Still store it, just mark it as skip
+                        logger.info(f"[Items] Procedural (skipped): {item_title[:60]}")
 
                     agenda_item = AgendaItem(
                         id=item_id,
                         meeting_id=stored_meeting.id,
-                        title=item_data.get("title", ""),
+                        title=item_title,
                         sequence=item_data.get("sequence", 0),
                         attachments=item_data.get("attachments", []),
                         matter_id=item_data.get("matter_id"),
@@ -430,18 +448,30 @@ class UnifiedDatabase:
                         if existing_item.topics:
                             agenda_item.topics = existing_item.topics
 
+                    # Log item with matter tracking
+                    if agenda_item.matter_file or agenda_item.matter_id:
+                        logger.info(
+                            f"[Items] {item_title[:50]} | Matter: {agenda_item.matter_file or agenda_item.matter_id}"
+                        )
+                    else:
+                        logger.info(f"[Items] {item_title[:50]}")
+
                     agenda_items.append(agenda_item)
 
                 if agenda_items:
                     count = self.store_agenda_items(stored_meeting.id, agenda_items)
+                    stats['items_stored'] = count
                     items_with_summaries = sum(1 for item in agenda_items if item.summary)
-                    logger.debug(
-                        f"Stored {count} agenda items for {stored_meeting.title} "
-                        f"({items_with_summaries} with preserved summaries)"
+
+                    logger.info(
+                        f"[Items] Stored {count} items ({stats['items_skipped_procedural']} procedural, "
+                        f"{items_with_summaries} with preserved summaries)"
                     )
 
                     # Track matters in city_matters and matter_appearances tables
-                    self._track_matters(stored_meeting, items, agenda_items)
+                    matters_stats = self._track_matters(stored_meeting, items, agenda_items)
+                    stats['matters_tracked'] = matters_stats.get('tracked', 0)
+                    stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
 
 
             # Check if already processed before enqueuing (to avoid wasting credits)
@@ -528,17 +558,17 @@ class UnifiedDatabase:
                     f"Meeting {stored_meeting.title} has no agenda/packet/items - stored for display only"
                 )
 
-            return stored_meeting
+            return stored_meeting, stats
 
         except Exception as e:
             logger.error(
                 f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
             )
-            return None
+            return None, stats
 
     def _track_matters(
         self, meeting: Meeting, items_data: List[Dict], agenda_items: List[AgendaItem]
-    ) -> None:
+    ) -> Dict[str, int]:
         """
         Track legislative matters across meetings for Intelligence Layer.
 
@@ -550,9 +580,14 @@ class UnifiedDatabase:
             meeting: Stored Meeting object
             items_data: Raw item data from adapter (with sponsors, matter_type)
             agenda_items: Stored AgendaItem objects
+
+        Returns:
+            Dict with 'tracked' and 'duplicate' counts
         """
+        stats = {'tracked': 0, 'duplicate': 0}
+
         if not items_data or not agenda_items:
-            return
+            return stats
 
         # Build map from item_id to raw data for sponsor/type lookup
         items_map = {item["item_id"]: item for item in items_data}
@@ -632,11 +667,18 @@ class UnifiedDatabase:
                 )
 
                 self.conn.commit()
-                logger.debug(f"[Matter Tracking] {agenda_item.matter_file}: {matter_type} - {len(sponsors)} sponsors")
+                if existing:
+                    stats['duplicate'] += 1
+                    logger.info(f"[Matters] Duplicate: {agenda_item.matter_file} ({matter_type})")
+                else:
+                    stats['tracked'] += 1
+                    logger.info(f"[Matters] New: {agenda_item.matter_file} ({matter_type}) - {len(sponsors)} sponsors")
 
             except Exception as e:
-                logger.error(f"Error tracking matter {matter_id}: {e}")
+                logger.error(f"[Matters] Error tracking matter {matter_id}: {e}")
                 continue
+
+        return stats
 
     def update_meeting_summary(
         self,

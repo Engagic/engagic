@@ -312,7 +312,7 @@ class Fetcher:
         # Use context manager to ensure session cleanup
         with adapter:
             try:
-                logger.info(f"Syncing {city.banana} with {city.vendor}")
+                logger.info(f"[Sync] Starting {city.banana} ({city.vendor})")
                 result.status = SyncStatus.IN_PROGRESS
 
                 # Fetch meetings using unified adapter interface
@@ -328,55 +328,69 @@ class Fetcher:
                         if m.get("items") or m.get("agenda_url") or m.get("packet_url")
                     ]
 
+                    # Count total items
+                    total_items = sum(len(m.get("items", [])) for m in all_meetings)
+
+                    # Count items with matter tracking
+                    total_matters = 0
+                    for meeting in all_meetings:
+                        for item in meeting.get("items", []):
+                            if item.get("matter_file") or item.get("matter_id"):
+                                total_matters += 1
+
                 except Exception as e:
-                    logger.error(f"Error fetching meetings for {city.banana}: {e}")
+                    logger.error(f"[Sync] Error fetching meetings for {city.banana}: {e}")
                     result.status = SyncStatus.FAILED
                     result.error_message = str(e)
                     return result
 
                 result.meetings_found = len(all_meetings)
 
-                # Log what we found with better detail
+                # Log what we found with detailed breakdown
                 logger.info(
-                    f"Found {len(all_meetings)} meetings for {city.banana}: "
-                    f"{len(meetings_with_items)} with items, "
-                    f"{len(meetings_with_agenda_url)} with agenda_url, "
-                    f"{len(meetings_with_packet_url)} with packet_url"
+                    f"[Sync] {city.banana}: Found {len(all_meetings)} meetings, "
+                    f"{total_items} items ({total_matters} with matter tracking)"
+                )
+                logger.info(
+                    f"[Sync] {city.banana}: Breakdown: {len(meetings_with_items)} item-level, "
+                    f"{len(meetings_with_agenda_url)} with HTML agenda, "
+                    f"{len(meetings_with_packet_url)} with PDF packet"
                 )
 
                 # Store ALL meetings and enqueue for processing
                 processed_count = 0
+                items_stored_count = 0
+                matters_tracked_count = 0
 
                 logger.info(
-                    f"Starting to process {len(all_meetings)} meetings for storage"
+                    f"[Sync] {city.banana}: Storing {len(all_meetings)} meetings..."
                 )
                 for i, meeting_dict in enumerate(all_meetings):
-                    # Progress update every 100 meetings for large cities
-                    if (i + 1) % 100 == 0:
+                    # Progress update every 10 meetings
+                    if (i + 1) % 10 == 0:
                         logger.info(
-                            f"Progress: {i + 1}/{len(all_meetings)} meetings processed"
+                            f"[Sync] {city.banana}: Progress {i + 1}/{len(all_meetings)} meetings"
                         )
 
-                    logger.debug(
-                        f"Processing meeting {i + 1}/{len(all_meetings)}: "
-                        f"{meeting_dict.get('title')}"
-                    )
                     if not self.is_running:
-                        logger.warning("Processing stopped - is_running is False")
+                        logger.warning("[Sync] Processing stopped - is_running is False")
                         break
 
                     # Use database method to handle all transformation and storage
-                    stored_meeting = self.db.store_meeting_from_sync(meeting_dict, city)
+                    stored_meeting, storage_stats = self.db.store_meeting_from_sync(meeting_dict, city)
                     if stored_meeting:
                         processed_count += 1
+                        items_stored_count += storage_stats.get('items_stored', 0)
+                        matters_tracked_count += storage_stats.get('matters_tracked', 0)
 
                 result.meetings_processed = processed_count
                 result.status = SyncStatus.COMPLETED
                 result.duration_seconds = time.time() - start_time
 
                 logger.info(
-                    f"Synced {city.banana}: {result.meetings_found} meetings found, "
-                    f"{len(meetings_with_processable_content)} processable, {processed_count} stored"
+                    f"[Sync] {city.banana}: Complete! {processed_count} meetings, "
+                    f"{items_stored_count} items, {matters_tracked_count} matters tracked "
+                    f"({result.duration_seconds:.1f}s)"
                 )
 
                 # Log memory after adapter cleanup
