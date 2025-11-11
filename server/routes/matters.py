@@ -5,6 +5,7 @@ Handles matter tracking, timelines, and cross-meeting aggregation
 """
 
 import logging
+import random
 from fastapi import APIRouter, HTTPException, Depends, Request
 from database.db import UnifiedDatabase
 
@@ -307,3 +308,94 @@ async def get_state_matters(
     except Exception as e:
         logger.error(f"Error fetching state matters for {state_code}: {str(e)}")
         raise HTTPException(status_code=500, detail="Error retrieving state matters")
+
+
+@router.get("/random-matter")
+async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
+    """Get a random high-quality matter (2+ appearances)
+
+    Returns a random matter with its timeline for showcasing legislative tracking
+    """
+    try:
+        # Get all matters with 2+ appearances AND summaries
+        matters = db.conn.execute(
+            """
+            SELECT
+                m.id,
+                m.matter_file,
+                m.matter_id,
+                m.matter_type,
+                m.title,
+                m.banana,
+                m.canonical_summary,
+                m.canonical_topics,
+                c.name as city_name,
+                c.state,
+                COUNT(i.id) as appearance_count
+            FROM city_matters m
+            JOIN cities c ON m.banana = c.banana
+            LEFT JOIN items i ON (
+                i.matter_file = m.matter_file OR i.matter_id = m.matter_id
+            )
+            WHERE m.canonical_summary IS NOT NULL AND m.canonical_summary != ''
+            GROUP BY m.id
+            HAVING COUNT(i.id) >= 2
+            """,
+        ).fetchall()
+
+        if not matters:
+            raise HTTPException(status_code=404, detail="No high-quality matters found")
+
+        # Pick a random matter
+        matter = random.choice(matters)
+        matter_dict = dict(matter)
+
+        # Get timeline for this matter
+        timeline_items = db.conn.execute(
+            """
+            SELECT
+                i.*,
+                m.title as meeting_title,
+                m.date as meeting_date
+            FROM items i
+            JOIN meetings m ON i.meeting_id = m.id
+            WHERE i.matter_file = ? OR i.matter_id = ?
+            ORDER BY m.date ASC, i.sequence ASC
+            """,
+            (matter_dict["matter_file"], matter_dict["matter_id"])
+        ).fetchall()
+
+        timeline = []
+        for item in timeline_items:
+            timeline.append({
+                "item_id": item["id"],
+                "meeting_id": item["meeting_id"],
+                "meeting_title": item["meeting_title"],
+                "meeting_date": item["meeting_date"],
+                "agenda_number": item["agenda_number"],
+                "summary": item["summary"],
+                "topics": item["topics"]
+            })
+
+        return {
+            "success": True,
+            "matter": {
+                "id": matter_dict["id"],
+                "matter_file": matter_dict["matter_file"],
+                "matter_type": matter_dict["matter_type"],
+                "title": matter_dict["title"],
+                "city_name": matter_dict["city_name"],
+                "state": matter_dict["state"],
+                "banana": matter_dict["banana"],
+                "canonical_summary": matter_dict["canonical_summary"],
+                "canonical_topics": matter_dict["canonical_topics"],
+                "appearance_count": matter_dict["appearance_count"]
+            },
+            "timeline": timeline
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching random matter: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving random matter")

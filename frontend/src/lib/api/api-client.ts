@@ -241,5 +241,36 @@ export const apiClient = {
 		const response = await fetchWithRetry(url.toString());
 
 		return response.json();
+	},
+
+	async getRandomMatter(): Promise<{
+		success: boolean;
+		matter: {
+			id: string;
+			matter_file: string;
+			matter_type: string;
+			title: string;
+			city_name: string;
+			state: string;
+			banana: string;
+			canonical_summary?: string;
+			canonical_topics?: string;
+			appearance_count: number;
+		};
+		timeline: Array<{
+			item_id: string;
+			meeting_id: string;
+			meeting_title: string;
+			meeting_date: string;
+			agenda_number?: string;
+			summary?: string;
+			topics?: string[];
+		}>;
+	}> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/random-matter`
+		);
+
+		return response.json();
 	}
 };
