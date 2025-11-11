@@ -1,0 +1,335 @@
+"""
+Legistar HTML Parser - Extract attachments and agenda items from Legistar HTML pages
+
+Two main functions:
+1. parse_legislation_attachments() - Extract attachments from LegislationDetail.aspx
+2. parse_html_agenda() - Extract agenda items from MeetingDetail.aspx (HTML fallback)
+"""
+
+import re
+import logging
+from typing import Dict, Any, List
+from bs4 import BeautifulSoup
+
+logger = logging.getLogger("engagic")
+
+
+def parse_legislation_attachments(html: str, base_url: str) -> List[Dict[str, Any]]:
+    """
+    Parse attachments from Legistar LegislationDetail.aspx page.
+
+    Args:
+        html: HTML content from LegislationDetail.aspx
+        base_url: Base URL for building absolute URLs
+
+    Returns:
+        List of attachment dictionaries: [{'name': str, 'url': str, 'type': str}]
+    """
+    from urllib.parse import urljoin
+
+    soup = BeautifulSoup(html, 'html.parser')
+    attachments = []
+
+    # Find the attachments table
+    attachments_table = soup.find('table', id='ctl00_ContentPlaceHolder1_tblAttachments')
+
+    if not attachments_table:
+        logger.debug("[HTMLParser:Legistar] No attachments table found")
+        return attachments
+
+    # Find the span containing attachment links
+    attachments_span = attachments_table.find('span', id='ctl00_ContentPlaceHolder1_lblAttachments2')
+
+    if not attachments_span:
+        logger.debug("[HTMLParser:Legistar] No attachments span found")
+        return attachments
+
+    # Find all links in the span
+    links = attachments_span.find_all('a', href=True)
+
+    for link in links:
+        href = link.get('href', '')
+        name = link.get_text(strip=True)
+
+        if not href or not name:
+            continue
+
+        # Build absolute URL
+        attachment_url = urljoin(base_url, href)
+
+        # Determine file type from URL or name
+        url_lower = attachment_url.lower()
+        name_lower = name.lower()
+
+        if '.pdf' in url_lower or 'pdf' in name_lower:
+            file_type = 'pdf'
+        elif '.doc' in url_lower or 'doc' in name_lower:
+            file_type = 'doc'
+        else:
+            # Default to PDF for View.ashx links (most are PDFs)
+            file_type = 'pdf'
+
+        attachments.append({
+            'name': name,
+            'url': attachment_url,
+            'type': file_type,
+        })
+
+    logger.debug(f"[HTMLParser:Legistar] Found {len(attachments)} attachments")
+
+    return attachments
+
+
+def parse_novusagenda_html_agenda(html: str) -> Dict[str, Any]:
+    """
+    Parse NovusAgenda MeetingView HTML to extract items and attachments.
+
+    NovusAgenda structure:
+    - Items in table grid (can vary by implementation)
+    - Each item may have link to CoverSheet.aspx with ItemID
+    - Attachments may be embedded or linked
+
+    Args:
+        html: HTML content from MeetingView.aspx or similar agenda page
+
+    Returns:
+        {
+            'participation': {},  # NovusAgenda doesn't have structured participation
+            'items': [
+                {
+                    'item_id': str,
+                    'title': str,
+                    'sequence': int,
+                    'attachments': [{'name': str, 'url': str, 'type': str}]
+                }
+            ]
+        }
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    items = []
+
+    # Try to find items grid (pattern varies, log what we find)
+    # Look for common patterns: tables, divs with item classes, etc.
+
+    # Log page structure for debugging
+    logger.debug(f"[HTMLParser:NovusAgenda] HTML length: {len(html)} characters")
+
+    # Pattern 1: Look for links to CoverSheet.aspx (item detail pages)
+    # Note: NovusAgenda uses "CoverSheet" with both C and S capitalized
+    coversheet_links = soup.find_all('a', href=re.compile(r'CoverSheet\.aspx\?ItemID=', re.IGNORECASE))
+
+    if coversheet_links:
+        logger.info(f"[HTMLParser:NovusAgenda] Found {len(coversheet_links)} Coversheet links")
+
+        for sequence, link in enumerate(coversheet_links, 1):
+            # Extract ItemID from href
+            href = link.get('href', '')
+            item_id_match = re.search(r'ItemID=(\d+)', href)
+            if not item_id_match:
+                continue
+
+            item_id = item_id_match.group(1)
+
+            # Get title from link text or parent context
+            title = link.get_text(strip=True)
+            if not title:
+                # Try parent td or container
+                parent_td = link.find_parent('td')
+                if parent_td:
+                    title = parent_td.get_text(strip=True)
+
+            items.append({
+                'item_id': item_id,
+                'title': title,
+                'sequence': sequence,
+                'attachments': [],  # Will be populated if we fetch Coversheet page
+            })
+
+    # Pattern 2: Look for agenda item tables or divs
+    # Try finding tables with agenda item data
+    agenda_tables = soup.find_all('table', class_=re.compile(r'agenda', re.I))
+    if agenda_tables:
+        logger.info(f"[HTMLParser:NovusAgenda] Found {len(agenda_tables)} agenda tables")
+
+    # Pattern 3: Look for PDF links that might be attachments
+    pdf_links = soup.find_all('a', href=re.compile(r'\.pdf$|DisplayAgendaPDF', re.I))
+    if pdf_links:
+        logger.info(f"[HTMLParser:NovusAgenda] Found {len(pdf_links)} PDF links")
+
+    # Pattern 4: Look for "Online Agenda" / "HTML Agenda" / "View Agenda" links
+    agenda_view_links = soup.find_all('a', text=re.compile(r'(online|html|view).*agenda', re.I))
+    if agenda_view_links:
+        logger.info(f"[HTMLParser:NovusAgenda] Found {len(agenda_view_links)} agenda view links")
+        for link in agenda_view_links:
+            logger.debug(f"[HTMLParser:NovusAgenda] Agenda view link: {link.get('onClick', link.get('href', 'no href'))}")
+
+    # Pattern 5: Look for image-based agenda links (common pattern)
+    img_links = soup.find_all('img', alt=re.compile(r'agenda|item', re.I))
+    if img_links:
+        logger.info(f"[HTMLParser:NovusAgenda] Found {len(img_links)} agenda/item images")
+        for img in img_links[:5]:  # Log first 5
+            logger.debug(f"[HTMLParser:NovusAgenda] Image alt: {img.get('alt')}")
+
+    logger.info(
+        f"[HTMLParser:NovusAgenda] Extracted {len(items)} items from HTML"
+    )
+
+    return {
+        'participation': {},
+        'items': items,
+    }
+
+
+def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, Any]:
+    """
+    Parse Legistar MeetingDetail HTML to extract items.
+
+    Legistar structure:
+    - Items in Telerik RadGrid (table.rgMasterTable)
+    - Rows with class rgRow or rgAltRow
+    - Columns: File #, Ver., Agenda #, Name, Type, Status, Title, Action, Result, Action Details, Video
+    - File # links to LegislationDetail.aspx with ID parameter for potential attachment fetching
+
+    Args:
+        html: HTML content from MeetingDetail.aspx page
+        meeting_id: Meeting ID for generating item IDs
+        base_url: Base URL for building absolute URLs
+
+    Returns:
+        {
+            'participation': {},  # Legistar HTML doesn't have structured participation in detail page
+            'items': [
+                {
+                    'item_id': str,        # Legislation ID from File # link
+                    'title': str,          # Full title from Title column
+                    'sequence': int,       # Row number
+                    'item_type': str,      # Type column (Ordinance, Resolution, etc.)
+                    'status': str,         # Status column
+                    'file_number': str,    # File # text
+                    'attachments': []      # Empty for now, could fetch from LegislationDetail later
+                }
+            ]
+        }
+    """
+    from urllib.parse import urljoin
+
+    soup = BeautifulSoup(html, 'html.parser')
+    items = []
+
+    # Find the RadGrid master table
+    master_table = soup.find('table', class_='rgMasterTable')
+
+    if not master_table:
+        logger.debug("[HTMLParser:Legistar] No rgMasterTable found in HTML")
+        return {'participation': {}, 'items': []}
+
+    # Find all agenda item rows (rgRow and rgAltRow)
+    rows = master_table.find_all('tr', class_=['rgRow', 'rgAltRow'])
+
+    if not rows:
+        logger.debug("[HTMLParser:Legistar] No rgRow/rgAltRow rows found")
+        return {'participation': {}, 'items': []}
+
+    logger.debug(f"[HTMLParser:Legistar] Found {len(rows)} rows in RadGrid")
+
+    for sequence, row in enumerate(rows, 1):
+        try:
+            cells = row.find_all('td')
+
+            # Legistar RadGrid columns (0-indexed):
+            # 0: File # (with link to LegislationDetail)
+            # 1: Ver. (version)
+            # 2: Agenda # (item number - often empty)
+            # 3: Name (short name)
+            # 4: Type (Ordinance, Resolution, Hearing, etc.)
+            # 5: Status
+            # 6: Title (full detailed title)
+            # 7: Action
+            # 8: Result
+            # 9: Action Details
+            # 10: Video
+
+            if len(cells) < 7:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has only {len(cells)} cells, skipping")
+                continue
+
+            # Extract File # and legislation ID
+            file_cell = cells[0]
+            file_link = file_cell.find('a', href=lambda x: x and 'LegislationDetail.aspx' in x)
+
+            if not file_link:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no LegislationDetail link, skipping")
+                continue
+
+            file_number = file_link.get_text(strip=True)
+
+            # Extract legislation ID from URL (ID=7494673)
+            href = file_link.get('href', '')
+            legislation_id_match = re.search(r'ID=(\d+)', href)
+            legislation_id = legislation_id_match.group(1) if legislation_id_match else None
+
+            if not legislation_id:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no ID in link, skipping")
+                continue
+
+            # Extract other fields
+            version = cells[1].get_text(strip=True) if len(cells) > 1 else ''
+            agenda_number = cells[2].get_text(strip=True) if len(cells) > 2 else ''
+            name = cells[3].get_text(strip=True) if len(cells) > 3 else ''
+            item_type = cells[4].get_text(strip=True) if len(cells) > 4 else ''
+            status = cells[5].get_text(strip=True) if len(cells) > 5 else ''
+            title = cells[6].get_text(strip=True) if len(cells) > 6 else ''
+
+            # Use full title if available, otherwise fall back to name
+            item_title = title if title else name
+
+            if not item_title:
+                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no title, skipping")
+                continue
+
+            # Build full legislation detail URL for potential future attachment fetching
+            legislation_url = urljoin(base_url, href) if href else None
+
+            item_data = {
+                'item_id': legislation_id,
+                'title': item_title,
+                'sequence': sequence,
+                'file_number': file_number,
+                'item_type': item_type,
+                'status': status,
+                'attachments': [],  # Could fetch from LegislationDetail.aspx later
+            }
+
+            # Optional fields
+            if version:
+                item_data['version'] = version
+            if agenda_number:
+                item_data['agenda_number'] = agenda_number
+            if legislation_url:
+                item_data['legislation_url'] = legislation_url
+
+            items.append(item_data)
+
+            logger.debug(
+                f"[HTMLParser:Legistar] Item {sequence}: File #{file_number} - '{item_title[:60]}...'"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"[HTMLParser:Legistar] Error parsing row {sequence}: {e}"
+            )
+            continue
+
+    logger.info(
+        f"[HTMLParser:Legistar] Extracted {len(items)} items from meeting {meeting_id}"
+    )
+
+    return {
+        'participation': {},
+        'items': items,
+    }
+
+
+# Confidence: 8/10
+# Works with PrimeGov's current HTML structure.
+# May need adjustments if they change class names or div IDs.

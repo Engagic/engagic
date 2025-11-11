@@ -8,7 +8,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, Iterator
 from vendors.adapters.base_adapter import BaseAdapter, logger
-from vendors.adapters.html_agenda_parser import parse_novusagenda_html_agenda
+from vendors.adapters.parsers.novusagenda_parser import parse_html_agenda
+from vendors.utils.item_filters import should_skip_procedural_item
 
 
 class NovusAgendaAdapter(BaseAdapter):
@@ -164,8 +165,20 @@ class NovusAgendaAdapter(BaseAdapter):
                     agenda_html = response.text
 
                     # Parse for items
-                    parsed = parse_novusagenda_html_agenda(agenda_html)
+                    parsed = parse_html_agenda(agenda_html)
                     items = parsed.get('items', [])
+
+                    # Filter procedural items
+                    items_before = len(items)
+                    items = [
+                        item for item in items
+                        if not should_skip_procedural_item(item.get('title', ''))
+                    ]
+                    items_filtered = items_before - len(items)
+                    if items_filtered > 0:
+                        logger.info(
+                            f"[novusagenda:{self.slug}] Filtered {items_filtered} procedural items"
+                        )
 
                     logger.info(
                         f"[novusagenda:{self.slug}] Meeting {meeting_id}: "

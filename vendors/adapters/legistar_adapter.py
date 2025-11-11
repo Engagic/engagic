@@ -9,39 +9,7 @@ from datetime import datetime, timedelta
 import re
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter import BaseAdapter, logger
-
-
-# Procedural item patterns to skip (no civic impact)
-SKIP_ITEM_PATTERNS = [
-    r'appointment',
-    r'confirmation',
-    r'public comment',
-    r'communications',
-    r'roll call',
-    r'invocation',
-    r'pledge of allegiance',
-    r'approval of (minutes|agenda)',
-    r'adjourn',
-]
-
-def should_skip_item(title: str, item_type: str = "") -> bool:
-    """
-    Check if an agenda item should be skipped (procedural, no civic impact).
-
-    Args:
-        title: Item title
-        item_type: Item type (if available)
-
-    Returns:
-        True if item should be skipped
-    """
-    combined = f"{title} {item_type}".lower()
-
-    for pattern in SKIP_ITEM_PATTERNS:
-        if re.search(pattern, combined, re.IGNORECASE):
-            return True
-
-    return False
+from vendors.utils.item_filters import should_skip_procedural_item
 
 
 class LegistarAdapter(BaseAdapter):
@@ -788,7 +756,7 @@ class LegistarAdapter(BaseAdapter):
                 item_type = item.get('item_type', '')
 
                 # Skip procedural items
-                if should_skip_item(item_title, item_type):
+                if should_skip_procedural_item(item_title, item_type):
                     items_filtered += 1
                     logger.debug(
                         f"[legistar:{self.slug}] Meeting {meeting_id}: Skipping procedural item: {item_title[:60]}"
@@ -874,13 +842,13 @@ class LegistarAdapter(BaseAdapter):
         Returns:
             List of agenda item dictionaries
         """
-        from vendors.adapters.html_agenda_parser import parse_legistar_html_agenda
+        from vendors.adapters.parsers.legistar_parser import parse_html_agenda
 
         # Convert soup back to HTML string for the parser
         html = str(soup)
 
         # Use dedicated Legistar HTML parser
-        parsed_data = parse_legistar_html_agenda(html, meeting_id, base_url)
+        parsed_data = parse_html_agenda(html, meeting_id, base_url)
 
         items = parsed_data.get('items', [])
 
@@ -953,7 +921,7 @@ class LegistarAdapter(BaseAdapter):
         Returns:
             List of attachment dictionaries
         """
-        from vendors.adapters.html_agenda_parser import parse_legistar_legislation_attachments
+        from vendors.adapters.parsers.legistar_parser import parse_legislation_attachments
 
         legislation_url = item.get('legislation_url')
         if not legislation_url:
@@ -962,7 +930,7 @@ class LegistarAdapter(BaseAdapter):
         try:
             soup = self._fetch_html(legislation_url)
             html = str(soup)
-            attachments = parse_legistar_legislation_attachments(html, base_url)
+            attachments = parse_legislation_attachments(html, base_url)
 
             # Filter to include at most one Leg Ver attachment
             attachments = self._filter_leg_ver_attachments(attachments)

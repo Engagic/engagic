@@ -7,7 +7,8 @@ Cities using PrimeGov: Palo Alto CA, Mountain View CA, Sunnyvale CA, and many ot
 from typing import Dict, Any, Iterator
 from urllib.parse import urlencode
 from vendors.adapters.base_adapter import BaseAdapter, logger
-from vendors.adapters.html_agenda_parser import parse_primegov_html_agenda
+from vendors.adapters.parsers.primegov_parser import parse_html_agenda
+from vendors.utils.item_filters import should_skip_procedural_item
 
 
 class PrimeGovAdapter(BaseAdapter):
@@ -146,7 +147,22 @@ class PrimeGovAdapter(BaseAdapter):
         html = response.text
 
         # Parse it
-        parsed = parse_primegov_html_agenda(html)
+        parsed = parse_html_agenda(html)
+
+        # Filter procedural items (roll call, approval of minutes, etc.)
+        items_before = len(parsed['items'])
+        parsed['items'] = [
+            item for item in parsed['items']
+            if not should_skip_procedural_item(
+                item.get('title', ''),
+                item.get('item_type', '')
+            )
+        ]
+        items_filtered = items_before - len(parsed['items'])
+        if items_filtered > 0:
+            logger.info(
+                f"[primegov:{self.slug}] Filtered {items_filtered} procedural items"
+            )
 
         # Convert relative attachment URLs to absolute URLs
         # Also ensure type field is set (defense-in-depth)
