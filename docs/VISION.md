@@ -98,6 +98,7 @@ Features (to build):
 - ✅ Participation info (email/phone/Zoom, one-click civic action)
 - ✅ Cache-first API (<100ms response times)
 - ✅ Modular architecture (6 logical clusters, Repository Pattern, clean separation)
+- ✅ Matter evolution timeline (architectural surprise): Matters-first architecture gives legislative timeline tracking for free - items store frozen summaries, matter_appearances tracks each occurrence, enabling "this bill was amended between readings" intelligence without migrations
 
 **What's Missing:**
 - ❌ User accounts/profiles
