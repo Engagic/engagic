@@ -226,6 +226,11 @@ export const apiClient = {
 		total_matters: number;
 		topic_distribution: Record<string, number>;
 		filtered_by_topic?: string;
+		meeting_stats: {
+			total_meetings: number;
+			with_agendas: number;
+			with_summaries: number;
+		};
 	}> {
 		const url = new URL(`${config.apiBaseUrl}/api/state/${stateCode}/matters`);
 		url.searchParams.set('limit', limit.toString());

@@ -128,7 +128,36 @@
 			</div>
 		</div>
 
-		<!-- Cities List - Always show -->
+		<!-- Metrics Grid -->
+		{#if metrics.meeting_stats}
+			<div class="metrics-grid">
+				<div class="metric-card">
+					<div class="metric-label">Total Meetings</div>
+					<div class="metric-value">{metrics.meeting_stats.total_meetings}</div>
+					<div class="metric-change">tracked in database</div>
+				</div>
+
+				<div class="metric-card">
+					<div class="metric-label">With Agendas</div>
+					<div class="metric-value">{metrics.meeting_stats.with_agendas}</div>
+					<div class="metric-change">packets available</div>
+				</div>
+
+				<div class="metric-card">
+					<div class="metric-label">With Summaries</div>
+					<div class="metric-value">{metrics.meeting_stats.with_summaries}</div>
+					<div class="metric-change">AI analyzed</div>
+				</div>
+
+				<div class="metric-card">
+					<div class="metric-label">Recurring Matters</div>
+					<div class="metric-value">{metrics.total_matters}</div>
+					<div class="metric-change">tracked across meetings</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Cities List -->
 		{#if metrics.cities && metrics.cities.length > 0}
 			<div class="cities-section">
 				<h4 class="section-title">Cities in {stateName || metrics.state} ({metrics.cities_count})</h4>
@@ -149,33 +178,6 @@
 				<p class="explanation">We only track matters that appear in multiple meetings (2+ appearances).</p>
 			</div>
 		{:else}
-
-		<!-- Metrics Grid -->
-		<div class="metrics-grid">
-			<div class="metric-card">
-				<div class="metric-label">Total Matters</div>
-				<div class="metric-value">{metrics.total_matters}</div>
-				<div class="metric-change">being tracked</div>
-			</div>
-
-			<div class="metric-card">
-				<div class="metric-label">Cities Active</div>
-				<div class="metric-value">{metrics.cities_count}</div>
-				<div class="metric-change">with legislative activity</div>
-			</div>
-
-			<div class="metric-card">
-				<div class="metric-label">Avg Appearances</div>
-				<div class="metric-value">{avgAppearances}</div>
-				<div class="metric-change">per matter</div>
-			</div>
-
-			<div class="metric-card">
-				<div class="metric-label">Active Topics</div>
-				<div class="metric-value">{Object.keys(metrics.topic_distribution || {}).length}</div>
-				<div class="metric-change">categories identified</div>
-			</div>
-		</div>
 
 		{#if topTopics.length > 0}
 			<div class="topics-section">
@@ -888,6 +890,12 @@
 
 		.intelligence-grid {
 			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 768px) {
+		.metrics-grid {
+			grid-template-columns: repeat(2, 1fr);
 		}
 	}
 
