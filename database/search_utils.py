@@ -166,10 +166,13 @@ def search_summaries(
     db_path: Optional[str] = None
 ) -> List[Dict]:
     """
-    Search for text in meeting and item summaries.
+    Search for text in meeting and item summaries (individual occurrences).
 
-    Returns complete meeting/item objects with all display data needed
-    for motioncount frontend (attachments, agenda URLs, full summaries, etc).
+    Note: For searching matter-level canonical summaries (deduplicated across meetings),
+    use search_matters() instead.
+
+    Returns complete meeting/item objects with all display data including
+    matter fields for items that are part of tracked matters.
 
     Args:
         search_term: String to search for (e.g., "Beazer Homes", "Uber")
@@ -181,7 +184,7 @@ def search_summaries(
     Returns:
         List of dicts with keys:
             - type: 'meeting' or 'item'
-            - url: Full Engagic URL (for reference only)
+            - url: Full Engagic URL with clean slug (e.g., /nashvilleTN/2025-11-04-2111#bl2025-1005)
             - city: City name with state
             - date: Meeting date (ISO string)
             - meeting_title: Meeting title
@@ -193,10 +196,15 @@ def search_summaries(
             - packet_url: PDF packet URL (if available)
             - attachments: Item attachments (only for items)
             - topics: Extracted topics
-            - participation: Meeting participation info
-            - meeting_id: Meeting ID (integer)
+            - participation: Meeting participation info (only for meetings)
+            - meeting_id: Meeting ID (string)
             - item_id: Item ID (only for items)
             - banana: City banana
+            - matter_id: Matter ID (only for items with matters)
+            - matter_file: Official matter file like "BL2025-1005" (only for items with matters)
+            - matter_type: Matter type (Ordinance, Resolution, etc.) (only for items with matters)
+            - agenda_number: Agenda position like "1." or "K. 87" (only for items)
+            - sponsors: Sponsor names (only for items with matters)
     """
     if db_path is None:
         db_path = os.getenv('ENGAGIC_UNIFIED_DB', '/root/engagic/data/engagic.db')
@@ -386,6 +394,152 @@ def search_summaries(
             'matter_type': item.matter_type,
             'agenda_number': item.agenda_number,
             'sponsors': item.sponsors
+        })
+
+    return results
+
+
+def search_matters(
+    search_term: str,
+    city_banana: Optional[str] = None,
+    state: Optional[str] = None,
+    case_sensitive: bool = False,
+    db_path: Optional[str] = None
+) -> List[Dict]:
+    """
+    Search for text in canonical matter summaries (matter-level search).
+
+    Searches the canonical_summary field in city_matters table, which contains
+    the deduplicated summary for matters that appear across multiple meetings.
+
+    Args:
+        search_term: String to search for (e.g., "Beazer Homes", "affordable housing")
+        city_banana: Optional city filter (e.g., 'nashvilleTN')
+        state: Optional state filter (e.g., 'CA', 'TN')
+        case_sensitive: Whether search should be case-sensitive
+        db_path: Optional database path (defaults to env var)
+
+    Returns:
+        List of dicts with keys:
+            - type: 'matter'
+            - city: City name with state
+            - matter_id: Matter ID
+            - matter_file: Official matter file (e.g., "BL2025-1005")
+            - matter_type: Type (Ordinance, Resolution, etc.)
+            - title: Matter title
+            - sponsors: Sponsor names (JSON array)
+            - context: Text snippet around match
+            - summary: Full canonical summary
+            - topics: Canonical topics (JSON array)
+            - appearance_count: Number of times this matter appeared
+            - first_seen: First appearance date
+            - last_seen: Most recent appearance date
+            - banana: City banana
+            - timeline_url: URL to view matter timeline
+    """
+    if db_path is None:
+        db_path = os.getenv('ENGAGIC_UNIFIED_DB', '/root/engagic/data/engagic.db')
+
+    db = UnifiedDatabase(db_path)
+    conn = db.conn
+
+    results = []
+    like_pattern = f'%{search_term}%'
+
+    # Build filter clauses
+    filters = []
+    params = [like_pattern]
+
+    if city_banana:
+        filters.append("m.banana = ?")
+        params.append(city_banana)
+
+    if state:
+        filters.append("c.state = ?")
+        params.append(state.upper())
+
+    filter_clause = ""
+    if filters:
+        filter_clause = " AND " + " AND ".join(filters)
+
+    # Search in canonical matter summaries
+    query = f'''
+        SELECT m.id, m.banana, m.matter_file, m.matter_type, m.title,
+               m.sponsors, m.canonical_summary, m.canonical_topics,
+               m.appearance_count, m.first_seen, m.last_seen,
+               c.name as city_name, c.state
+        FROM city_matters m
+        JOIN cities c ON m.banana = c.banana
+        WHERE m.canonical_summary IS NOT NULL
+          AND m.canonical_summary LIKE ?
+          AND m.appearance_count >= 2
+          {filter_clause}
+        ORDER BY m.last_seen DESC
+    '''
+
+    cursor = conn.execute(query, params)
+
+    for row in cursor.fetchall():
+        matter_id = row[0]
+        banana = row[1]
+        matter_file = row[2]
+        matter_type = row[3]
+        title = row[4]
+        sponsors = row[5]
+        canonical_summary = row[6]
+        canonical_topics = row[7]
+        appearance_count = row[8]
+        first_seen = row[9]
+        last_seen = row[10]
+        city_name = row[11]
+        state_code = row[12]
+
+        city = f"{city_name}, {state_code}"
+
+        # Strip markdown for context search
+        clean_summary = strip_markdown(canonical_summary)
+
+        # Find context around the match
+        if case_sensitive:
+            match_pos = clean_summary.find(search_term)
+        else:
+            match_pos = clean_summary.lower().find(search_term.lower())
+
+        if match_pos != -1:
+            start = max(0, match_pos - 150)
+            end = min(len(clean_summary), match_pos + len(search_term) + 150)
+            context = clean_summary[start:end]
+            if start > 0:
+                context = "..." + context
+            if end < len(clean_summary):
+                context = context + "..."
+        else:
+            context = clean_summary[:300]
+
+        # Build timeline URL (links to matter timeline view)
+        # For now, just link to the city page with matters view
+        if matter_file:
+            anchor = re.sub(r'[^a-z0-9-]', '-', matter_file.lower())
+        else:
+            anchor = matter_id
+        timeline_url = f"https://engagic.org/{banana}?view=matters#{anchor}"
+
+        results.append({
+            'type': 'matter',
+            'city': city,
+            'matter_id': matter_id,
+            'matter_file': matter_file,
+            'matter_type': matter_type,
+            'title': title,
+            'sponsors': sponsors,
+            'context': context,
+            'summary': canonical_summary,
+            'topics': canonical_topics,
+            'appearance_count': appearance_count,
+            'first_seen': first_seen,
+            'last_seen': last_seen,
+            'banana': banana,
+            'timeline_url': timeline_url
         })
 
     return results
