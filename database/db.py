@@ -747,6 +747,7 @@ class UnifiedDatabase:
             Number of matters enqueued (0 if all reused from canonical)
         """
         from vendors.utils.item_filters import should_skip_matter
+        from database.id_generation import generate_matter_id
 
         # Group items by matter
         matters_map: Dict[str, List[AgendaItem]] = {}
@@ -765,7 +766,13 @@ class UnifiedDatabase:
 
         # Process each matter
         for matter_key, matter_items in matters_map.items():
-            matter_id = f"{banana}_{matter_key}"
+            # Use first item to get matter identifiers
+            first_item = matter_items[0]
+            matter_id = generate_matter_id(
+                banana=banana,
+                matter_file=first_item.matter_file,
+                matter_id=first_item.matter_id
+            )
 
             # Filter out procedural matter types (minutes, info items, calendars)
             matter_type = matter_items[0].matter_type if matter_items else None
