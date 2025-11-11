@@ -25,6 +25,12 @@ export interface AgendaItem {
 	summary?: string;
 	topics?: string[];
 	created_at?: string;
+	// Matter tracking (Nov 2025)
+	matter_id?: string;  // Backend unique identifier
+	matter_file?: string;  // Official public identifier (BL2025-1005, 25-1209, etc.)
+	matter_type?: string;  // Ordinance, Resolution, CD 12, etc.
+	agenda_number?: string;  // Position on this agenda (1, K. 87, etc.)
+	sponsors?: string[];  // Sponsor names
 }
 
 export interface Meeting {

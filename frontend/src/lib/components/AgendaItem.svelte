@@ -152,6 +152,16 @@
 							{titleParts.remainder}
 						{/if}
 					</h3>
+					{#if item.matter_file}
+						<span class="matter-badge" title="Matter: {item.matter_file}">
+							{item.matter_file}
+						</span>
+					{/if}
+					{#if item.matter_type}
+						<span class="matter-type-badge" title="Type: {item.matter_type}">
+							{item.matter_type}
+						</span>
+					{/if}
 					{#if !hasSummary}
 						<span class="procedural-badge">Unprocessed</span>
 					{/if}
@@ -332,6 +342,45 @@
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
 		text-transform: uppercase;
+		letter-spacing: 0.3px;
+		margin-left: 0.5rem;
+	}
+
+	.matter-badge {
+		display: inline-block;
+		padding: 0.2rem 0.6rem;
+		background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+		color: #1e40af;
+		border: 1.5px solid #3b82f6;
+		border-radius: 12px;
+		font-size: 0.7rem;
+		font-weight: 700;
+		font-family: 'IBM Plex Mono', monospace;
+		letter-spacing: 0.5px;
+		margin-left: 0.5rem;
+		box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2);
+		transition: all 0.2s ease;
+		cursor: help;
+	}
+
+	.matter-badge:hover {
+		background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
+		border-color: #2563eb;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+	}
+
+	.matter-type-badge {
+		display: inline-block;
+		padding: 0.2rem 0.6rem;
+		background: #f3f4f6;
+		color: #4b5563;
+		border: 1px solid #d1d5db;
+		border-radius: 12px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		font-family: 'IBM Plex Mono', monospace;
+		text-transform: capitalize;
 		letter-spacing: 0.3px;
 		margin-left: 0.5rem;
 	}
@@ -774,6 +823,18 @@
 		.procedural-badge {
 			font-size: 0.6rem;
 			padding: 0.12rem 0.4rem;
+		}
+
+		.matter-badge {
+			font-size: 0.65rem;
+			padding: 0.18rem 0.5rem;
+			margin-left: 0.35rem;
+		}
+
+		.matter-type-badge {
+			font-size: 0.6rem;
+			padding: 0.18rem 0.5rem;
+			margin-left: 0.35rem;
 		}
 
 		.item-summary-preview {

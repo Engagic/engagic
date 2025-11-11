@@ -12,7 +12,7 @@ from config import config
 from database.db import UnifiedDatabase
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
-from server.routes import search, meetings, topics, admin, monitoring, flyer
+from server.routes import search, meetings, topics, admin, monitoring, flyer, matters
 
 # Configure structured logging
 logging.basicConfig(
@@ -68,6 +68,7 @@ app.include_router(meetings.router)    # Meeting endpoints
 app.include_router(topics.router)      # Topic endpoints
 app.include_router(admin.router)       # Admin endpoints
 app.include_router(flyer.router)       # Flyer generation endpoints
+app.include_router(matters.router)     # Matter timeline and tracking endpoints
 
 
 if __name__ == "__main__":

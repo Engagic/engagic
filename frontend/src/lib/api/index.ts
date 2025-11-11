@@ -9,3 +9,6 @@ export const getAnalytics = apiClient.getAnalytics.bind(apiClient);
 export const searchByTopic = apiClient.searchByTopic.bind(apiClient);
 export const getMeeting = apiClient.getMeeting.bind(apiClient);
 export const generateFlyer = apiClient.generateFlyer.bind(apiClient);
+export const getMatterTimeline = apiClient.getMatterTimeline.bind(apiClient);
+export const getCityMatters = apiClient.getCityMatters.bind(apiClient);
+export const getStateMatters = apiClient.getStateMatters.bind(apiClient);
