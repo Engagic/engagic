@@ -8,6 +8,7 @@
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
 	import Footer from '$lib/components/Footer.svelte';
+	import StateMetrics from '$lib/components/StateMetrics.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -185,6 +186,46 @@
 			handleSearch();
 		}
 	}
+
+	// Detect if search is for a state
+	const STATE_CODES: Record<string, string> = {
+		AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
+		CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia',
+		HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+		KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland',
+		MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri',
+		MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+		NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio',
+		OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
+		SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont',
+		VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming'
+	};
+
+	function detectStateSearch(query: string): { isState: boolean; stateCode?: string; stateName?: string } {
+		const trimmed = query.trim();
+		const upper = trimmed.toUpperCase();
+
+		// Check if it's a 2-letter state code
+		if (upper.length === 2 && STATE_CODES[upper]) {
+			return { isState: true, stateCode: upper, stateName: STATE_CODES[upper] };
+		}
+
+		// Check if it's a full state name
+		const stateEntry = Object.entries(STATE_CODES).find(([, name]) =>
+			name.toLowerCase() === trimmed.toLowerCase()
+		);
+
+		if (stateEntry) {
+			return { isState: true, stateCode: stateEntry[0], stateName: stateEntry[1] };
+		}
+
+		return { isState: false };
+	}
+
+	const stateSearch = $derived(() => {
+		if (!searchQuery) return { isState: false };
+		return detectStateSearch(searchQuery);
+	});
 </script>
 
 <svelte:head>
@@ -277,6 +318,10 @@
 
 	{#if searchResults}
 		<div class="results-section">
+			{#if stateSearch().isState && searchResults.success === false && searchResults.ambiguous}
+				<StateMetrics stateCode={stateSearch().stateCode!} stateName={stateSearch().stateName} />
+			{/if}
+
 			{#if searchResults.success === false && searchResults.ambiguous && searchResults.city_options}
 				<div class="ambiguous-cities">
 					<div class="ambiguous-message">
