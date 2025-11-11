@@ -6,6 +6,53 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-11] MILESTONE: Unified Matter Tracking Framework (Legistar + PrimeGov)
+
+**Matter-level tracking now works across vendors.** Implemented unified schema that adapts vendor-specific legislative tracking into one coherent framework, enabling cross-meeting matter tracking regardless of civic tech vendor.
+
+**What Changed:**
+- Created unified matter tracking schema (vendor-agnostic):
+  - `matter_id`: Backend unique identifier (UUID for PrimeGov, numeric for Legistar)
+  - `matter_file`: Official public identifier (25-1209, BL2025-1098, etc.)
+  - `matter_type`: Flexible metadata (Ordinance, CD 12, Resolution, etc.)
+  - `agenda_number`: Position on this specific agenda
+  - `sponsors`: Sponsor names (JSON array, when available)
+- Updated PrimeGov HTML parser to extract matter tracking:
+  - Detects LA-style meeting-item wrappers with `data-mig` (matter GUID)
+  - Extracts matter_file from forcepopulate table first row
+  - Extracts matter_type from forcepopulate table second row first cell
+  - Falls back to Palo Alto pattern (direct agenda-item divs) for older cities
+- Database schema updates:
+  - Added `matter_type` TEXT column to items table
+  - Added `sponsors` TEXT column to items table (stores JSON array)
+  - Updated AgendaItem model to include new fields
+  - Updated ItemRepository to serialize/deserialize sponsors JSON
+  - Updated UnifiedDatabase facade to pass through new fields
+- End-to-end tested with Austin (Legistar) and LA (PrimeGov)
+
+**Design Philosophy:**
+- Vendors adapt INTO the unified schema (not schema-per-vendor)
+- `matter_type` intentionally flexible - captures whatever metadata the city provides
+- Not all fields required from all vendors - expected and fine
+- Same matter can appear across multiple meetings with same `matter_id`
+
+**Vendor Comparison:**
+- **Legistar** (Austin): matter_type = "Discussion and Possible Action" (semantic content classification)
+- **PrimeGov** (LA): matter_type = "CD 12" (council district designation)
+- Both useful context, no forced semantic consistency
+
+**Test Results:**
+- Los Angeles (PrimeGov): 71 items, 71 with matter tracking (100% coverage for City Council)
+- Austin (Legistar): 22 items, 11 with matter tracking (50% - procedural items excluded)
+
+**Code Changes:**
+- `vendors/adapters/html_agenda_parser.py`: Added LA pattern detection + matter extraction
+- `database/models.py`: Updated AgendaItem with matter_type and sponsors
+- `database/repositories/items.py`: Serialize/deserialize sponsors JSON
+- `database/db.py`: Pass matter_type and sponsors to AgendaItem construction
+
+---
+
 ## [2025-11-11] MILESTONE: Legistar Matter Tracking + Date Filtering Fixes
 
 **Legislative lifecycle tracking now operational.** Cities using Legistar (NYC, SF, Boston, Nashville) can now track bills/resolutions across their multi-meeting lifecycle from introduction through committee review to final passage.
