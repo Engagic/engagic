@@ -114,14 +114,27 @@ async def get_city_matters(
             LEFT JOIN meetings mt ON i.meeting_id = mt.id
             WHERE m.banana = ?
             GROUP BY m.id
+            HAVING COUNT(i.id) >= 2
             ORDER BY last_seen_date DESC, m.created_at DESC
             LIMIT ? OFFSET ?
             """,
             (banana, limit, offset)
         ).fetchall()
 
+        # Count only matters with 2+ appearances
         total_count = db.conn.execute(
-            "SELECT COUNT(*) FROM city_matters WHERE banana = ?",
+            """
+            SELECT COUNT(*) FROM (
+                SELECT m.id
+                FROM city_matters m
+                LEFT JOIN items i ON (
+                    i.matter_file = m.matter_file OR i.matter_id = m.matter_id
+                )
+                WHERE m.banana = ?
+                GROUP BY m.id
+                HAVING COUNT(i.id) >= 2
+            )
+            """,
             (banana,)
         ).fetchone()[0]
 
@@ -202,6 +215,7 @@ async def get_state_matters(
 
         query += """
             GROUP BY m.id
+            HAVING COUNT(i.id) >= 2
             ORDER BY m.last_seen DESC
             LIMIT ?
         """

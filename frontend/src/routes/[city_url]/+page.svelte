@@ -17,12 +17,18 @@
 	let viewMode = $state<'meetings' | 'matters'>('meetings');
 	let cityMatters = $state<any>(null);
 	let mattersLoading = $state(false);
+	let mattersChecked = $state(false);
 
 	// Data comes from load function - already available
 	let searchResults = $state(data.searchResults);
 	let upcomingMeetings: Meeting[] = $state(data.upcomingMeetings || []);
 	let pastMeetings: Meeting[] = $state(data.pastMeetings || []);
 
+	// Derived: Check if city has qualifying matters (2+ appearances)
+	const hasQualifyingMatters = $derived(() => {
+		if (!mattersChecked) return true; // Assume matters exist until checked
+		return cityMatters && cityMatters.total_count > 0;
+	});
 
 	async function loadCityMatters() {
 		if (cityMatters) return; // Already loaded
@@ -30,8 +36,15 @@
 		try {
 			const result = await getCityMatters(city_banana, 50, 0);
 			cityMatters = result;
+			mattersChecked = true;
+
+			// If no qualifying matters, switch back to meetings view
+			if (result.total_count === 0) {
+				viewMode = 'meetings';
+			}
 		} catch (err) {
 			console.error('Failed to load city matters:', err);
+			mattersChecked = true;
 		} finally {
 			mattersLoading = false;
 		}
@@ -89,22 +102,24 @@
 	</div>
 
 	{#if searchResults && searchResults.success}
-		<div class="view-toggle">
-			<button
-				class="toggle-btn"
-				class:active={viewMode === 'meetings'}
-				onclick={() => viewMode = 'meetings'}
-			>
-				Meetings
-			</button>
-			<button
-				class="toggle-btn"
-				class:active={viewMode === 'matters'}
-				onclick={() => switchToMatters()}
-			>
-				Matters
-			</button>
-		</div>
+		{#if hasQualifyingMatters()}
+			<div class="view-toggle">
+				<button
+					class="toggle-btn"
+					class:active={viewMode === 'meetings'}
+					onclick={() => viewMode = 'meetings'}
+				>
+					Meetings
+				</button>
+				<button
+					class="toggle-btn"
+					class:active={viewMode === 'matters'}
+					onclick={() => switchToMatters()}
+				>
+					Matters
+				</button>
+			</div>
+		{/if}
 
 		{#if viewMode === 'meetings'}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
