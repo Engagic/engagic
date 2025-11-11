@@ -82,10 +82,32 @@ class PdfExtractor:
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 page_text = page.get_text()  # type: ignore[attr-defined]
+                initial_char_count = len(page_text.strip())
 
                 # If page has minimal text, assume scanned/image-based PDF
-                if len(page_text.strip()) < self.ocr_threshold:
+                if initial_char_count < self.ocr_threshold:
+                    # Log WHY we're OCRing
+                    initial_sample = page_text.strip()[:100].replace('\n', ' ')
+                    logger.info(
+                        f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
+                        f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
+                        f"Original: '{initial_sample}'"
+                    )
+
                     page_text = self._ocr_page(page)
+                    ocr_char_count = len(page_text.strip())
+                    ocr_sample = page_text.strip()[:100].replace('\n', ' ')
+
+                    # Calculate quality metrics
+                    letters = sum(1 for c in page_text if c.isalpha())
+                    letter_ratio = letters / len(page_text) if len(page_text) > 0 else 0
+                    word_count = len(page_text.split())
+
+                    logger.info(
+                        f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
+                        f"{word_count} words, {letter_ratio:.1%} letters. "
+                        f"Sample: '{ocr_sample}'"
+                    )
                     ocr_pages += 1
 
                 text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
@@ -163,10 +185,32 @@ class PdfExtractor:
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 page_text = page.get_text()  # type: ignore[attr-defined]
+                initial_char_count = len(page_text.strip())
 
                 # If page has minimal text, assume scanned/image-based PDF
-                if len(page_text.strip()) < self.ocr_threshold:
+                if initial_char_count < self.ocr_threshold:
+                    # Log WHY we're OCRing
+                    initial_sample = page_text.strip()[:100].replace('\n', ' ')
+                    logger.info(
+                        f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
+                        f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
+                        f"Original: '{initial_sample}'"
+                    )
+
                     page_text = self._ocr_page(page)
+                    ocr_char_count = len(page_text.strip())
+                    ocr_sample = page_text.strip()[:100].replace('\n', ' ')
+
+                    # Calculate quality metrics
+                    letters = sum(1 for c in page_text if c.isalpha())
+                    letter_ratio = letters / len(page_text) if len(page_text) > 0 else 0
+                    word_count = len(page_text.split())
+
+                    logger.info(
+                        f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
+                        f"{word_count} words, {letter_ratio:.1%} letters. "
+                        f"Sample: '{ocr_sample}'"
+                    )
                     ocr_pages += 1
 
                 text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
