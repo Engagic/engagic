@@ -3,10 +3,11 @@
 @import '@fontsource/ibm-plex-mono/600.css';
 
 :root {
-	/* Progressive widths: search -> meetings -> detail */
+	/* Progressive widths: search -> meetings -> detail -> state */
 	--width-search: 600px;
 	--width-meetings: 800px;
 	--width-detail: 1000px;
+	--width-state: 1400px;
 }
 
 :root.light {
@@ -37,6 +38,17 @@
 	--shadow-lg: rgba(79, 70, 229, 0.12);
 	--ticker-bg: #4f46e5;
 	--ticker-text: #ffffff;
+
+	/* Badge colors */
+	--badge-blue-bg: #dbeafe;
+	--badge-blue-border: #bfdbfe;
+	--badge-blue-text: #1e40af;
+	--badge-green-bg: #d1fae5;
+	--badge-green-border: #86efac;
+	--badge-green-text: #065f46;
+	--badge-info-bg: #eff6ff;
+	--badge-info-border: #bfdbfe;
+	--badge-info-text: #1e40af;
 }
 
 :root.dark {
@@ -67,6 +79,17 @@
 	--shadow-lg: rgba(251, 146, 60, 0.25);
 	--ticker-bg: #1e293b;
 	--ticker-text: #f8fafc;
+
+	/* Badge colors */
+	--badge-blue-bg: #1e3a8a;
+	--badge-blue-border: #3b82f6;
+	--badge-blue-text: #93c5fd;
+	--badge-green-bg: #064e3b;
+	--badge-green-border: #10b981;
+	--badge-green-text: #6ee7b7;
+	--badge-info-bg: #1e3a5f;
+	--badge-info-border: #3b82f6;
+	--badge-info-text: #93c5fd;
 }
 
 * {

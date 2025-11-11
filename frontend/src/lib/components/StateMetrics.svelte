@@ -5,23 +5,26 @@
 	interface Props {
 		stateCode: string;
 		stateName?: string;
+		initialMetrics?: any;
 	}
 
-	let { stateCode, stateName }: Props = $props();
+	let { stateCode, stateName, initialMetrics }: Props = $props();
 
-	let metrics = $state<any>(null);
-	let loading = $state(true);
+	let metrics = $state<any>(initialMetrics || null);
+	let loading = $state(!initialMetrics);
 	let error = $state('');
 	let selectedTopic = $state<string | null>(null);
 
 	onMount(async () => {
-		try {
-			const result = await getStateMatters(stateCode);
-			metrics = result;
-			loading = false;
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load state metrics';
-			loading = false;
+		if (!initialMetrics) {
+			try {
+				const result = await getStateMatters(stateCode);
+				metrics = result;
+				loading = false;
+			} catch (err) {
+				error = err instanceof Error ? err.message : 'Failed to load state metrics';
+				loading = false;
+			}
 		}
 	});
 
@@ -429,7 +432,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem 1rem;
-		background: white;
+		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
 		border-radius: 24px;
 		cursor: pointer;
@@ -455,14 +458,14 @@
 	}
 
 	.topic-pill.selected .pill-label {
-		color: white;
+		color: var(--civic-white);
 	}
 
 	.pill-count {
 		font-size: 0.75rem;
 		font-weight: 700;
 		color: var(--civic-blue);
-		background: #eff6ff;
+		background: var(--surface-hover);
 		padding: 0.15rem 0.5rem;
 		border-radius: 12px;
 		min-width: 24px;
@@ -471,18 +474,18 @@
 
 	.topic-pill.selected .pill-count {
 		color: var(--civic-blue);
-		background: white;
+		background: var(--surface-primary);
 	}
 
 	.filter-indicator {
 		margin-top: 1rem;
 		padding: 0.75rem 1rem;
-		background: #eff6ff;
-		border: 1px solid #bfdbfe;
+		background: var(--badge-info-bg);
+		border: 1px solid var(--badge-info-border);
 		border-radius: 8px;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
-		color: var(--civic-blue);
+		color: var(--badge-info-text);
 		display: flex;
 		align-items: center;
 		gap: 1rem;
@@ -492,7 +495,7 @@
 	.clear-filter {
 		padding: 0.25rem 0.75rem;
 		background: var(--civic-blue);
-		color: white;
+		color: var(--civic-white);
 		border: none;
 		border-radius: 6px;
 		font-family: 'IBM Plex Mono', monospace;
@@ -513,7 +516,7 @@
 	}
 
 	.recent-matter {
-		background: white;
+		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
 		border-radius: 8px;
@@ -547,11 +550,11 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
 		font-weight: 700;
-		color: #1e40af;
-		background: #dbeafe;
+		color: var(--badge-blue-text);
+		background: var(--badge-blue-bg);
 		padding: 0.25rem 0.6rem;
 		border-radius: 6px;
-		border: 1px solid #bfdbfe;
+		border: 1px solid var(--badge-blue-border);
 	}
 
 	.matter-city {
@@ -571,11 +574,11 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
 		font-weight: 700;
-		color: var(--civic-green);
-		background: #d1fae5;
+		color: var(--badge-green-text);
+		background: var(--badge-green-bg);
 		padding: 0.25rem 0.5rem;
 		border-radius: 6px;
-		border: 1px solid #86efac;
+		border: 1px solid var(--badge-green-border);
 	}
 
 	.matter-title {
@@ -665,19 +668,19 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
 		font-weight: 700;
-		color: #1e40af;
-		background: #dbeafe;
+		color: var(--badge-blue-text);
+		background: var(--badge-blue-bg);
 		padding: 0.2rem 0.5rem;
 		border-radius: 4px;
-		border: 1px solid #bfdbfe;
+		border: 1px solid var(--badge-blue-border);
 	}
 
 	.intel-appearances {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
 		font-weight: 700;
-		color: var(--civic-green);
-		background: #d1fae5;
+		color: var(--badge-green-text);
+		background: var(--badge-green-bg);
 		padding: 0.2rem 0.5rem;
 		border-radius: 4px;
 	}
@@ -714,8 +717,8 @@
 	}
 
 	.city-rank-item:hover {
-		background: white;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+		background: var(--surface-primary);
+		box-shadow: 0 2px 6px var(--shadow-sm);
 	}
 
 	.rank-number {
@@ -726,7 +729,7 @@
 		align-items: center;
 		justify-content: center;
 		background: var(--civic-blue);
-		color: white;
+		color: var(--civic-white);
 		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 700;
 		font-size: 0.9rem;

@@ -19,7 +19,10 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+from server.metrics import metrics
+
+logger = get_logger(__name__).bind(component="analyzer")
 
 # Model thresholds
 FLASH_LITE_MAX_CHARS = 200000  # Use Flash-Lite for documents under ~200K chars
@@ -64,7 +67,25 @@ class GeminiSummarizer:
         with open(prompts_file, "r") as f:
             self.prompts = json.load(f)
 
-        logger.info(f"[Summarizer] Loaded {len(self.prompts)} prompt categories")
+        logger.info("prompts loaded", prompt_categories=len(self.prompts), version=self.prompts_version)
+
+    def _calculate_cost(self, model_name: str, input_tokens: int, output_tokens: int) -> float:
+        """Calculate API cost in dollars based on model and token usage
+
+        Pricing (as of Nov 2025):
+        - Gemini Flash: $0.075/1M input, $0.30/1M output
+        - Gemini Flash-Lite: $0.0375/1M input, $0.15/1M output
+
+        Confidence: 8/10 - Pricing accurate as of deployment but may change
+        """
+        if "lite" in model_name.lower():
+            input_cost = (input_tokens / 1_000_000) * 0.0375
+            output_cost = (output_tokens / 1_000_000) * 0.15
+        else:
+            input_cost = (input_tokens / 1_000_000) * 0.075
+            output_cost = (output_tokens / 1_000_000) * 0.30
+
+        return input_cost + output_cost
 
     def summarize_meeting(self, text: str) -> str:
         """Summarize a full meeting agenda
@@ -86,9 +107,7 @@ class GeminiSummarizer:
             model_name = self.flash_model_name
             model_display = "flash"
 
-        logger.info(
-            f"[Summarizer] Summarizing {page_count} pages ({text_size} chars) using Gemini {model_display}"
-        )
+        logger.info("summarizing meeting", page_count=page_count, text_size=text_size, model=model_display)
 
         # Prompt selection based on document size
         if page_count <= 30:
@@ -99,6 +118,11 @@ class GeminiSummarizer:
         # Thinking configuration based on complexity
         config = self._get_thinking_config(page_count, text_size, model_name)
 
+        # Track API call duration and success
+        start_time = time.time()
+        success = False
+        prompt_type = "meeting_short" if page_count <= 30 else "meeting_comprehensive"
+
         try:
             response = self.client.models.generate_content(
                 model=model_name, contents=prompt, config=config
@@ -107,10 +131,41 @@ class GeminiSummarizer:
             if response.text is None:
                 raise ValueError("Gemini returned no text in response")
 
+            # Extract token usage if available
+            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+            output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+
+            duration = time.time() - start_time
+            success = True
+
+            # Record metrics
+            metrics.record_llm_call(
+                model=model_display,
+                prompt_type=prompt_type,
+                duration_seconds=duration,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_dollars=self._calculate_cost(model_name, input_tokens, output_tokens),
+                success=True
+            )
+
+            logger.info("meeting summarized", duration_seconds=round(duration, 1), input_tokens=input_tokens, output_tokens=output_tokens, model=model_display)
+
             return response.text
 
         except Exception as e:
-            logger.error(f"[Summarizer] Meeting summarization failed: {e}")
+            duration = time.time() - start_time
+            metrics.record_llm_call(
+                model=model_display,
+                prompt_type=prompt_type,
+                duration_seconds=duration,
+                input_tokens=0,
+                output_tokens=0,
+                cost_dollars=0,
+                success=False
+            )
+            metrics.record_error(component="analyzer", error=e)
+            logger.error("meeting summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__)
             raise
 
     def summarize_item(self, item_title: str, text: str, page_count: Optional[int] = None) -> Tuple[str, List[str]]:
@@ -162,6 +217,9 @@ class GeminiSummarizer:
             response_schema=response_schema
         )
 
+        # Track API call
+        start_time = time.time()
+
         try:
             response = self.client.models.generate_content(
                 model=model_name, contents=prompt, config=config
@@ -170,13 +228,43 @@ class GeminiSummarizer:
             if not response.text:
                 raise ValueError("Gemini returned no text")
 
+            # Extract token usage
+            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+            output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+
+            duration = time.time() - start_time
+
+            # Record metrics
+            metrics.record_llm_call(
+                model=model_display,
+                prompt_type=f"item_{prompt_type}",
+                duration_seconds=duration,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_dollars=self._calculate_cost(model_name, input_tokens, output_tokens),
+                success=True
+            )
+
             # Parse response based on version
             summary, topics = self._parse_item_response(response.text)
+
+            logger.debug(f"[Summarizer] Item summarized in {duration:.1f}s ({input_tokens} in, {output_tokens} out)")
 
             return summary, topics
 
         except Exception as e:
-            logger.error(f"[Summarizer] Item summarization failed: {e}")
+            duration = time.time() - start_time
+            metrics.record_llm_call(
+                model=model_display,
+                prompt_type=f"item_{prompt_type}",
+                duration_seconds=duration,
+                input_tokens=0,
+                output_tokens=0,
+                cost_dollars=0,
+                success=False
+            )
+            metrics.record_error(component="analyzer", error=e)
+            logger.error("item summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__, prompt_type=prompt_type)
             raise
 
     def summarize_batch(
@@ -220,9 +308,7 @@ class GeminiSummarizer:
             return
 
         total_items = len(item_requests)
-        logger.info(
-            f"[Summarizer] Processing {total_items} items using Batch API (50% savings)"
-        )
+        logger.info("processing batch", total_items=total_items, batch_enabled=True, cost_savings_percent=50)
 
         # Create Gemini cache for shared context if available and meets minimum threshold
         cache_name = None
@@ -448,6 +534,9 @@ class GeminiSummarizer:
                     f"[Summarizer] Submitting chunk {chunk_num} batch job"
                 )
 
+                # Track batch job timing
+                batch_start_time = time.time()
+
                 batch_job = self.client.batches.create(
                     model=self.flash_model_name,
                     src=uploaded_file.name,
@@ -640,15 +729,36 @@ class GeminiSummarizer:
                     logger.warning(f"[Summarizer] Failed to cleanup temp file: {cleanup_error}")
 
                 successful = sum(1 for r in results if r.get("success"))
-                logger.info(
-                    f"[Summarizer] Chunk {chunk_num} complete: {successful}/{len(results)} successful"
-                )
+                failed = len(results) - successful
+                batch_duration = time.time() - batch_start_time
+
+                # Record metrics for each item in batch
+                for result in results:
+                    # Estimate prompt type from request
+                    req = request_map.get(result["item_id"], {})
+                    page_count = req.get("page_count", 0) if req else 0
+                    prompt_type = "large" if page_count >= 100 else "standard"
+
+                    metrics.record_llm_call(
+                        model="flash",
+                        prompt_type=f"item_{prompt_type}_batch",
+                        duration_seconds=batch_duration / len(results),  # Amortize batch time
+                        input_tokens=0,  # Batch API doesn't provide per-item token counts
+                        output_tokens=0,
+                        cost_dollars=0,  # Track via batch-level estimates
+                        success=result.get("success", False)
+                    )
+
+                logger.info("batch chunk complete", chunk_num=chunk_num, duration_seconds=round(batch_duration, 1), successful=successful, total=len(results), failure_rate=round(failed / len(results) * 100, 1) if results else 0)
 
                 return results
 
             except Exception as e:
                 error_str = str(e)
                 is_quota_error = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+
+                # Record error metrics
+                metrics.record_error(component="analyzer", error=e)
 
                 if is_quota_error and attempt < max_retries - 1:
                     # Exponential backoff on quota errors
@@ -661,9 +771,22 @@ class GeminiSummarizer:
                     continue
                 else:
                     # Final attempt failed or non-quota error
-                    logger.error(
-                        f"[Summarizer] Chunk {chunk_num} failed after {attempt + 1} attempts: {e}"
-                    )
+                    logger.error("batch chunk failed", chunk_num=chunk_num, attempts=attempt + 1, error=str(e), error_type=type(e).__name__)
+
+                    # Record failed batch metrics
+                    for req in chunk_requests:
+                        page_count = req.get("page_count", 0)
+                        prompt_type = "large" if page_count >= 100 else "standard"
+                        metrics.record_llm_call(
+                            model="flash",
+                            prompt_type=f"item_{prompt_type}_batch",
+                            duration_seconds=0,
+                            input_tokens=0,
+                            output_tokens=0,
+                            cost_dollars=0,
+                            success=False
+                        )
+
                     return [
                         {"item_id": req["item_id"], "success": False, "error": error_str}
                         for req in chunk_requests
