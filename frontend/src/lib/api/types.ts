@@ -63,6 +63,7 @@ export interface Meeting {
 export interface RandomMeetingResponse {
 	status: string;
 	meeting: {
+		id: string;
 		banana: string;
 		title: string;
 		date: string;
@@ -75,7 +76,7 @@ export interface RandomMeetingResponse {
 export interface RandomMeetingWithItemsResponse {
 	success: boolean;
 	meeting: {
-		id: number;
+		id: string;
 		banana: string;
 		title: string;
 		date: string;
@@ -171,7 +172,7 @@ export interface TickerResponse {
 export type FlyerPosition = 'support' | 'oppose' | 'more_info';
 
 export interface FlyerRequest {
-	meeting_id: number;
+	meeting_id: string;
 	item_id: string | null;
 	position: FlyerPosition;
 	custom_message: string | null;
