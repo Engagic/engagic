@@ -1,12 +1,24 @@
 # Engagic API Reference
 
-Complete reference for the Engagic public API.
+Complete reference for the Engagic public API endpoints.
+
+**For server code architecture and implementation details, see:** [../server/README.md](../server/README.md)
 
 **Base URL (Production):** `https://api.engagic.org`
 **Base URL (Local):** `http://localhost:8000`
 
 **Version:** v1
-**Last Updated:** November 1, 2025 (Post-Server Refactor)
+**Last Updated:** November 11, 2025
+
+---
+
+**This document provides:**
+- Public API endpoint specifications
+- Request/response examples
+- Authentication and rate limiting
+- Error codes and troubleshooting
+
+**For server implementation, see:** [../server/README.md](../server/README.md)
 
 ---
 
@@ -702,4 +714,8 @@ curl https://api.engagic.org/api/stats
 **Questions:** See [documentation](README.md)
 **Issues:** Create GitHub issue with request details
 
-**Last Updated:** October 31, 2025
+---
+
+**Last Updated:** November 11, 2025
+
+**See Also:** [../server/README.md](../server/README.md) for server code architecture and implementation
