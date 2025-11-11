@@ -4,6 +4,7 @@ import logging
 
 from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
 from vendors.adapters.civicplus_adapter import CivicPlusAdapter
+from vendors.adapters.escribe_adapter import EscribeAdapter
 from vendors.adapters.granicus_adapter import GranicusAdapter
 from vendors.adapters.iqm2_adapter import IQM2Adapter
 from vendors.adapters.legistar_adapter import LegistarAdapter
@@ -34,6 +35,7 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
     supported_vendors = {
         "civicclerk",
         "civicplus",
+        "escribe",
         "granicus",
         "iqm2",
         "legistar",
@@ -51,6 +53,8 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
         return CivicClerkAdapter(city_slug)
     elif vendor == "civicplus":
         return CivicPlusAdapter(city_slug)
+    elif vendor == "escribe":
+        return EscribeAdapter(city_slug)
     elif vendor == "granicus":
         return GranicusAdapter(city_slug)
     elif vendor == "iqm2":

@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database.db import UnifiedDatabase
-from database.search import search_summaries
+from database.search_utils import search_summaries
 from config import Config
 
 

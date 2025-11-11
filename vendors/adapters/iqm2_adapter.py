@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
+from vendors.utils.item_filters import should_skip_procedural_item
 from bs4 import BeautifulSoup
 
 
@@ -164,6 +165,18 @@ class IQM2Adapter(BaseAdapter):
 
         # Extract items from MeetingDetail table
         items = self._parse_agenda_items(soup, meeting_id)
+
+        # Filter procedural items (roll call, approval of minutes, etc.)
+        items_before = len(items)
+        items = [
+            item for item in items
+            if not should_skip_procedural_item(item.get('title', ''))
+        ]
+        items_filtered = items_before - len(items)
+        if items_filtered > 0:
+            logger.info(
+                f"[iqm2:{self.slug}] Filtered {items_filtered} procedural items"
+            )
 
         # Extract packet URL if available
         packet_url = None

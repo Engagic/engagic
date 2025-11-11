@@ -16,7 +16,8 @@ from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse, urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
-from vendors.adapters.html_agenda_parser import parse_granicus_html_agenda
+from vendors.adapters.parsers.granicus_parser import parse_html_agenda
+from vendors.utils.item_filters import should_skip_procedural_item
 
 
 class GranicusAdapter(BaseAdapter):
@@ -434,7 +435,19 @@ class GranicusAdapter(BaseAdapter):
 
         # Parse HTML
         html = response.text
-        parsed = parse_granicus_html_agenda(html)
+        parsed = parse_html_agenda(html)
+
+        # Filter procedural items (roll call, approval of minutes, etc.)
+        items_before = len(parsed['items'])
+        parsed['items'] = [
+            item for item in parsed['items']
+            if not should_skip_procedural_item(item.get('title', ''))
+        ]
+        items_filtered = items_before - len(parsed['items'])
+        if items_filtered > 0:
+            logger.info(
+                f"[granicus:{self.slug}] Filtered {items_filtered} procedural items"
+            )
 
         # Convert relative attachment URLs to absolute URLs
         # Also ensure type field is set (defense-in-depth)
