@@ -41,14 +41,14 @@
 		}
 	}
 
-	const topTopics = $derived(() => {
+	const topTopics = $derived.by(() => {
 		if (!metrics?.topic_distribution) return [];
 		return Object.entries(metrics.topic_distribution)
 			.sort(([, a], [, b]) => (b as number) - (a as number))
 			.slice(0, 8);
 	});
 
-	const recentMatters = $derived(() => {
+	const recentMatters = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		return metrics.matters
 			.filter((m: any) => m.last_seen)
@@ -56,7 +56,7 @@
 			.slice(0, 5);
 	});
 
-	const longestTrackedMatters = $derived(() => {
+	const longestTrackedMatters = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		return metrics.matters
 			.filter((m: any) => m.appearance_count > 1)
@@ -64,7 +64,7 @@
 			.slice(0, 5);
 	});
 
-	const mostActiveCities = $derived(() => {
+	const mostActiveCities = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		const cityCounts: Record<string, { name: string; banana: string; count: number }> = {};
 		metrics.matters.forEach((m: any) => {
@@ -78,7 +78,7 @@
 			.slice(0, 5);
 	});
 
-	const matterTypeBreakdown = $derived(() => {
+	const matterTypeBreakdown = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		const typeCounts: Record<string, number> = {};
 		metrics.matters.forEach((m: any) => {
@@ -90,7 +90,7 @@
 			.slice(0, 6);
 	});
 
-	const avgAppearances = $derived(() => {
+	const avgAppearances = $derived.by(() => {
 		if (!metrics?.matters || metrics.matters.length === 0) return 0;
 		const total = metrics.matters.reduce((sum: number, m: any) => sum + (m.appearance_count || 0), 0);
 		return (total / metrics.matters.length).toFixed(1);
@@ -128,6 +128,21 @@
 			</div>
 		</div>
 
+		<!-- Cities List - Always show -->
+		{#if metrics.cities && metrics.cities.length > 0}
+			<div class="cities-section">
+				<h4 class="section-title">Cities in {stateName || metrics.state} ({metrics.cities_count})</h4>
+				<div class="cities-grid">
+					{#each metrics.cities as city (city.banana)}
+						<a href="/{city.banana}" class="city-card">
+							<div class="city-name">{city.name}</div>
+							<div class="city-vendor">{city.vendor}</div>
+						</a>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
 		{#if metrics.total_matters === 0}
 			<div class="no-matters-message">
 				<p>No recurring legislative matters found for this state.</p>
@@ -151,7 +166,7 @@
 
 			<div class="metric-card">
 				<div class="metric-label">Avg Appearances</div>
-				<div class="metric-value">{avgAppearances()}</div>
+				<div class="metric-value">{avgAppearances}</div>
 				<div class="metric-change">per matter</div>
 			</div>
 
@@ -162,11 +177,11 @@
 			</div>
 		</div>
 
-		{#if topTopics().length > 0}
+		{#if topTopics.length > 0}
 			<div class="topics-section">
 				<h4 class="section-title">Hot Topics Across State</h4>
 				<div class="topic-pills">
-					{#each topTopics() as [topic, count]}
+					{#each topTopics as [topic, count]}
 						<button
 							class="topic-pill"
 							class:selected={selectedTopic === topic}
@@ -189,11 +204,11 @@
 		<!-- Intelligence Panels Grid -->
 		<div class="intelligence-grid">
 			<!-- Longest Tracked Matters -->
-			{#if longestTrackedMatters().length > 0}
+			{#if longestTrackedMatters.length > 0}
 				<div class="intel-panel">
 					<h4 class="panel-title">Longest Tracked</h4>
 					<div class="intel-list">
-						{#each longestTrackedMatters() as matter}
+						{#each longestTrackedMatters as matter}
 							<a href="/matter/{matter.id}" class="intel-item">
 								<div class="intel-item-header">
 									{#if matter.matter_file}
@@ -210,11 +225,11 @@
 			{/if}
 
 			<!-- Most Active Cities -->
-			{#if mostActiveCities().length > 0}
+			{#if mostActiveCities.length > 0}
 				<div class="intel-panel">
 					<h4 class="panel-title">Most Active Cities</h4>
 					<div class="city-ranking">
-						{#each mostActiveCities() as city, index}
+						{#each mostActiveCities as city, index}
 							<a href="/{city.banana}" class="city-rank-item">
 								<div class="rank-number">{index + 1}</div>
 								<div class="rank-content">
@@ -228,11 +243,11 @@
 			{/if}
 
 			<!-- Matter Type Breakdown -->
-			{#if matterTypeBreakdown().length > 0}
+			{#if matterTypeBreakdown.length > 0}
 				<div class="intel-panel">
 					<h4 class="panel-title">Matter Types</h4>
 					<div class="type-breakdown">
-						{#each matterTypeBreakdown() as [type, count]}
+						{#each matterTypeBreakdown as [type, count]}
 							<div class="type-item">
 								<div class="type-label">{type}</div>
 								<div class="type-bar-container">
@@ -246,11 +261,11 @@
 			{/if}
 
 			<!-- Recent Activity -->
-			{#if recentMatters().length > 0}
+			{#if recentMatters.length > 0}
 				<div class="intel-panel activity-panel">
 					<h4 class="panel-title">Recent Activity</h4>
 					<div class="recent-matters">
-						{#each recentMatters() as matter}
+						{#each recentMatters as matter}
 							<a href="/matter/{matter.id}" class="recent-matter">
 								<div class="matter-header">
 									<div class="matter-meta">
@@ -384,6 +399,55 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
 		color: var(--civic-gray);
+	}
+
+	/* Cities Section */
+	.cities-section {
+		margin: 2rem 0;
+		padding: 1.5rem;
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-radius: 12px;
+	}
+
+	.cities-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: 1rem;
+		margin-top: 1rem;
+	}
+
+	.city-card {
+		display: block;
+		padding: 1rem;
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: 8px;
+		text-decoration: none;
+		transition: all 0.2s ease;
+		cursor: pointer;
+	}
+
+	.city-card:hover {
+		border-color: var(--civic-blue);
+		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+		transform: translateY(-2px);
+	}
+
+	.city-name {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin-bottom: 0.25rem;
+	}
+
+	.city-vendor {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 	}
 
 	.no-matters-message {
@@ -835,6 +899,14 @@
 
 		.dashboard-title {
 			font-size: 1.3rem;
+		}
+
+		.cities-section {
+			padding: 1rem;
+		}
+
+		.cities-grid {
+			grid-template-columns: 1fr;
 		}
 
 		.metrics-grid {
