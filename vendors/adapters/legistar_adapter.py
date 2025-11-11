@@ -11,6 +11,39 @@ import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter import BaseAdapter, logger
 
 
+# Procedural item patterns to skip (no civic impact)
+SKIP_ITEM_PATTERNS = [
+    r'appointment',
+    r'confirmation',
+    r'public comment',
+    r'communications',
+    r'roll call',
+    r'invocation',
+    r'pledge of allegiance',
+    r'approval of (minutes|agenda)',
+    r'adjourn',
+]
+
+def should_skip_item(title: str, item_type: str = "") -> bool:
+    """
+    Check if an agenda item should be skipped (procedural, no civic impact).
+
+    Args:
+        title: Item title
+        item_type: Item type (if available)
+
+    Returns:
+        True if item should be skipped
+    """
+    combined = f"{title} {item_type}".lower()
+
+    for pattern in SKIP_ITEM_PATTERNS:
+        if re.search(pattern, combined, re.IGNORECASE):
+            return True
+
+    return False
+
+
 class LegistarAdapter(BaseAdapter):
     """Adapter for cities using Legistar platform"""
 
@@ -26,45 +59,61 @@ class LegistarAdapter(BaseAdapter):
         self.api_token = api_token
         self.base_url = f"https://webapi.legistar.com/v1/{self.slug}"
 
-    def fetch_meetings(self, days_forward: int = 60) -> Iterator[Dict[str, Any]]:
+    def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """
-        Fetch upcoming meetings (tries API first, falls back to HTML).
+        Fetch meetings in moving window (tries API first, falls back to HTML).
 
         Args:
-            days_forward: Number of days to look ahead (default 60)
+            days_back: Days to look backward (default 7, captures recent votes)
+            days_forward: Days to look forward (default 14, captures upcoming meetings)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url
         """
+        api_yielded = 0
         try:
-            yield from self._fetch_meetings_api(days_forward)
+            for meeting in self._fetch_meetings_api(days_back, days_forward):
+                api_yielded += 1
+                yield meeting
         except Exception as e:
             if hasattr(e, 'response') and e.response.status_code in [400, 403, 404]:
                 logger.warning(
                     f"[legistar:{self.slug}] API failed (HTTP {e.response.status_code}), "
                     f"falling back to HTML scraping"
                 )
-                yield from self._fetch_meetings_html(days_forward)
+                yield from self._fetch_meetings_html(days_back, days_forward)
             else:
                 raise
+            return
 
-    def _fetch_meetings_api(self, days_forward: int = 60) -> Iterator[Dict[str, Any]]:
+        # If API succeeded but returned 0 events, fall back to HTML
+        if api_yielded == 0:
+            logger.warning(
+                f"[legistar:{self.slug}] API returned 0 events, "
+                f"falling back to HTML scraping"
+            )
+            yield from self._fetch_meetings_html(days_back, days_forward)
+
+    def _fetch_meetings_api(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """
-        Fetch upcoming meetings from Legistar Web API.
+        Fetch meetings in date range from Legistar Web API.
 
         Args:
-            days_forward: Number of days to look ahead (default 60)
+            days_back: Days to look backward (default 7)
+            days_forward: Days to look forward (default 14)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url
         """
-        # Build date range for upcoming events
-        today = datetime.now()
-        future_date = today + timedelta(days=days_forward)
+        # Build date range (1 week back, 2 weeks forward)
+        # Strip time component for fair comparison with date-only events
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date_dt = today - timedelta(days=days_back)
+        end_date_dt = today + timedelta(days=days_forward)
 
         # Format dates for OData filter
-        start_date = today.strftime("%Y-%m-%d")
-        end_date = future_date.strftime("%Y-%m-%d")
+        start_date = start_date_dt.strftime("%Y-%m-%d")
+        end_date = end_date_dt.strftime("%Y-%m-%d")
 
         # Build OData filter
         filter_str = (
@@ -105,7 +154,28 @@ class LegistarAdapter(BaseAdapter):
                 )
                 return
 
+        # CRITICAL: Filter client-side because some APIs (Nashville) ignore server filters
+        filtered_events = []
         for event in events:
+            event_date_str = event.get("EventDate")
+            if event_date_str:
+                try:
+                    event_date = datetime.fromisoformat(event_date_str.replace("Z", "+00:00"))
+                    # Only include events within our date range
+                    if start_date_dt <= event_date <= end_date_dt:
+                        filtered_events.append(event)
+                except Exception as e:
+                    logger.debug(f"[legistar:{self.slug}] Could not parse date {event_date_str}: {e}")
+                    # Include events with unparseable dates (let validation handle them)
+                    filtered_events.append(event)
+            else:
+                filtered_events.append(event)
+
+        logger.info(
+            f"[legistar:{self.slug}] Client-side filtered {len(events)} → {len(filtered_events)} events within date range"
+        )
+
+        for event in filtered_events:
             # Extract event data
             event_id = event.get("EventId")
             event_date = event.get("EventDate")
@@ -203,11 +273,19 @@ class LegistarAdapter(BaseAdapter):
             title = (item.get("EventItemTitle") or "").strip()
             sequence = item.get("EventItemAgendaSequence", 0)
             matter_id = item.get("EventItemMatterId")
+            matter_file = item.get("EventItemMatterFile")  # Bill number (BL2025-1005)
+            agenda_number = item.get("EventItemAgendaNumber")  # Position (E1, K. 87)
 
-            # Fetch attachments if matter exists
+            # Fetch matter metadata and attachments if matter exists
             attachments = []
+            matter_type = None
+            sponsors = []
+
             if matter_id:
                 attachments = self._fetch_matter_attachments(matter_id)
+                metadata = self._fetch_matter_metadata(matter_id)
+                matter_type = metadata.get("matter_type")
+                sponsors = metadata.get("sponsors", [])
 
             processed_items.append(
                 {
@@ -215,6 +293,10 @@ class LegistarAdapter(BaseAdapter):
                     "title": title,
                     "sequence": sequence,
                     "matter_id": str(matter_id) if matter_id else None,
+                    "matter_file": matter_file,
+                    "matter_type": matter_type,
+                    "sponsors": sponsors,
+                    "agenda_number": agenda_number,
                     "attachments": attachments,
                 }
             )
@@ -226,6 +308,46 @@ class LegistarAdapter(BaseAdapter):
             f"[legistar:{self.slug}] Event {event_id}: {len(processed_items)} items total, {items_with_attachments} with attachments"
         )
         return processed_items
+
+    def _fetch_matter_metadata(self, matter_id: int) -> Dict[str, Any]:
+        """
+        Fetch matter metadata (type, sponsors).
+
+        Args:
+            matter_id: Legistar matter ID
+
+        Returns:
+            Dict with matter_type and sponsors
+        """
+        metadata = {"matter_type": None, "sponsors": []}
+
+        try:
+            # Fetch matter details for type
+            matter_url = f"{self.base_url}/matters/{matter_id}"
+            params = {"token": self.api_token} if self.api_token else {}
+            response = self._get(matter_url, params=params)
+            matter_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else None
+
+            if matter_data:
+                metadata["matter_type"] = matter_data.get("MatterTypeName")
+
+            # Fetch sponsors
+            sponsors_url = f"{self.base_url}/matters/{matter_id}/sponsors"
+            response = self._get(sponsors_url, params=params)
+            sponsors_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else []
+
+            if sponsors_data:
+                # Extract sponsor names, sorted by sequence
+                metadata["sponsors"] = [
+                    s.get("MatterSponsorName")
+                    for s in sorted(sponsors_data, key=lambda x: x.get("MatterSponsorSequence", 999))
+                    if s.get("MatterSponsorName")
+                ]
+
+        except Exception as e:
+            logger.debug(f"[legistar:{self.slug}] Could not fetch matter metadata for {matter_id}: {e}")
+
+        return metadata
 
     def _fetch_matter_attachments(self, matter_id: int) -> List[Dict[str, Any]]:
         """
@@ -363,6 +485,8 @@ class LegistarAdapter(BaseAdapter):
                     'EventItemTitle': 'EventItemTitle',
                     'EventItemAgendaSequence': 'EventItemAgendaSequence',
                     'EventItemMatterId': 'EventItemMatterId',
+                    'EventItemMatterFile': 'EventItemMatterFile',
+                    'EventItemAgendaNumber': 'EventItemAgendaNumber',
                 }
 
                 for xml_field, json_field in field_map.items():
@@ -372,7 +496,7 @@ class LegistarAdapter(BaseAdapter):
                         if xml_field in ('EventItemId', 'EventItemMatterId', 'EventItemAgendaSequence'):
                             item[json_field] = int(elem.text)
                         else:
-                            item[json_field] = elem.text
+                            item[json_field] = elem.text.strip() if elem.text else None
 
                 # Only add items that have at least an ID
                 if 'EventItemId' in item:
@@ -427,12 +551,13 @@ class LegistarAdapter(BaseAdapter):
             logger.error(f"[legistar:{self.slug}] XML parsing error for attachments: {e}")
             raise
 
-    def _fetch_meetings_html(self, days_forward: int = 60) -> Iterator[Dict[str, Any]]:
+    def _fetch_meetings_html(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """
         Fetch meetings by scraping HTML calendar (fallback when API fails).
 
         Args:
-            days_forward: Number of days to look ahead (default 60)
+            days_back: Days to look backward (default 7)
+            days_forward: Days to look forward (default 14)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, items
@@ -468,9 +593,9 @@ class LegistarAdapter(BaseAdapter):
         # Extract base URL for building absolute URLs
         html_base_url = calendar_url.rsplit('/', 1)[0]
 
-        # Date range filter
-        today = datetime.now()
-        start_date = today - timedelta(days=7)
+        # Date range filter (strip time component for fair comparison with date-only meetings)
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
         # Find meeting rows in RadGrid calendar table
@@ -575,13 +700,18 @@ class LegistarAdapter(BaseAdapter):
                             break
 
                 if not meeting_dt:
-                    logger.debug(
-                        f"[legistar:{self.slug}] Could not parse date for meeting {meeting_id}"
+                    logger.info(
+                        f"[legistar:{self.slug}] Meeting {meeting_id} ({title}): Could not parse date - SKIPPED"
                     )
                     continue
 
                 # Filter by date range
                 if not (start_date <= meeting_dt <= end_date):
+                    logger.debug(
+                        f"[legistar:{self.slug}] Meeting {meeting_id} ({title}): "
+                        f"Date {meeting_dt.strftime('%Y-%m-%d')} outside range "
+                        f"[{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}] - SKIPPED"
+                    )
                     continue
 
                 # Extract agenda PDF from calendar row (fallback if detail page unavailable)
@@ -597,7 +727,14 @@ class LegistarAdapter(BaseAdapter):
 
                 if meeting_data:
                     meetings_yielded += 1
+                    logger.info(
+                        f"[legistar:{self.slug}] Meeting {meeting_id} ({title}) on {meeting_dt.strftime('%Y-%m-%d')}: YIELDED"
+                    )
                     yield meeting_data
+                else:
+                    logger.info(
+                        f"[legistar:{self.slug}] Meeting {meeting_id} ({title}) on {meeting_dt.strftime('%Y-%m-%d')}: NO DATA (detail page returned None)"
+                    )
 
             except Exception as e:
                 logger.warning(
@@ -641,18 +778,41 @@ class LegistarAdapter(BaseAdapter):
             # Parse agenda items from detail page
             items = self._parse_html_agenda_items(soup, meeting_id, base_url)
 
-            # Fetch attachments for each item (3rd layer)
+            # Filter and fetch attachments (only for non-procedural items)
+            items_filtered = 0
             items_with_attachments = 0
+            substantive_items = 0
+
             for item in items:
+                item_title = item.get('title', '')
+                item_type = item.get('item_type', '')
+
+                # Skip procedural items
+                if should_skip_item(item_title, item_type):
+                    items_filtered += 1
+                    logger.debug(
+                        f"[legistar:{self.slug}] Meeting {meeting_id}: Skipping procedural item: {item_title[:60]}"
+                    )
+                    # Mark item as filtered so it's not stored
+                    item['_filtered'] = True
+                    continue
+
+                substantive_items += 1
+
+                # Fetch attachments for substantive items
                 attachments = self._fetch_item_attachments(item, base_url)
                 if attachments:
                     item['attachments'] = attachments
                     items_with_attachments += 1
 
-            if items_with_attachments > 0:
+            if items_filtered > 0:
                 logger.info(
-                    f"[legistar:{self.slug}] Meeting {meeting_id}: {items_with_attachments}/{len(items)} items have attachments"
+                    f"[legistar:{self.slug}] Meeting {meeting_id}: Filtered {items_filtered} procedural items"
                 )
+            logger.info(
+                f"[legistar:{self.slug}] Meeting {meeting_id}: {substantive_items} substantive items "
+                f"({items_with_attachments} with attachments = processable)"
+            )
 
             # Look for agenda PDF link if not provided from calendar
             if not packet_url:
@@ -676,12 +836,15 @@ class LegistarAdapter(BaseAdapter):
         }
 
         # Architecture: items extracted → agenda_url, no items → packet_url
-        if items:
+        # Filter out items marked as procedural
+        substantive_items = [item for item in items if not item.get('_filtered')]
+
+        if substantive_items:
             if packet_url:
                 meeting_data["agenda_url"] = packet_url
-            meeting_data["items"] = items
+            meeting_data["items"] = substantive_items
             logger.info(
-                f"[legistar:{self.slug}] Meeting {meeting_id}: extracted {len(items)} items from HTML"
+                f"[legistar:{self.slug}] Meeting {meeting_id}: extracted {len(substantive_items)} substantive items from HTML"
             )
         elif packet_url:
             meeting_data["packet_url"] = packet_url

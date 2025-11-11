@@ -6,6 +6,62 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-11] MILESTONE: Legistar Matter Tracking + Date Filtering Fixes
+
+**Legislative lifecycle tracking now operational.** Cities using Legistar (NYC, SF, Boston, Nashville) can now track bills/resolutions across their multi-meeting lifecycle from introduction through committee review to final passage.
+
+**What Changed:**
+- Fixed critical date filtering bug in Legistar adapter (API and HTML paths)
+  - Bug: datetime comparison failed when meeting at midnight vs sync at 00:48:54
+  - Fix: Strip time component for fair date-only comparison
+  - Impact: Nashville sync went from 0 meetings to 5 meetings found
+- Updated date range: 1 week backward, 2 weeks forward (was 7 back, 60 forward)
+  - Captures recent votes/approvals on tracked matters
+  - Captures upcoming meetings with new introductions
+- Added procedural item filtering (appointments, confirmations, public comment, etc.)
+  - Reduces noise in matter tracking
+  - Focus on substantive legislative items
+- Fixed missing `import json` in database/db.py
+  - Matter tracking was silently failing with "name 'json' is not defined"
+  - All matter tracking calls now succeed
+
+**Matter Tracking Architecture:**
+- `items` table: Stores matter_file and matter_id on each agenda item (duplicated for fast queries)
+- `city_matters` table: Canonical bill representation (id = "nashvilleTN_BL2025-1099")
+- `matter_appearances` table: Timeline of bill across meetings (committee → full council progression)
+- Automatic tracking: `_track_matters()` called after storing items, gracefully skips non-Legistar items
+
+**Nashville Test Results:**
+- 5 meetings synced (Nov 4, 2025 - all from 1 week lookback)
+- 229 total items across meetings
+- 173 items with matter_file
+- 40 unique legislative matters tracked (bills and resolutions)
+- 40 matter appearances recorded
+- Example matters: RS2025-1600 (Ryan White funding), BL2025-1106 (Community garden ordinance)
+
+**Vendor Differentiation Identified:**
+- **Legistar**: Legislative management system with bill tracking (matter_file, sponsors, type, lifecycle)
+  - Used by legislative-heavy cities: NYC, SF, Boston, Nashville, Seattle
+  - API provides matter metadata, sponsors, attachments
+  - Enables: Bill progression tracking, sponsor analysis, vote tracking, timeline view
+- **Granicus/PrimeGov**: Meeting management systems (agenda items only, no legislative IDs)
+  - Used by smaller cities with simpler agendas
+  - No legislative lifecycle tracking capability
+  - Still get full processing: extraction, summarization, storage
+
+**Code Changes:**
+- `vendors/adapters/legistar_adapter.py`: Date filtering fix, procedural filtering, date range update
+- `vendors/adapters/base_adapter.py`: Enhanced HTTP response logging
+- `database/db.py`: Added missing json import for matter tracking
+
+**Validation:**
+- Linting: Clean (ruff check --fix)
+- Type checking: BS4 stub errors only (expected per CLAUDE.md)
+- Compilation: All files compile successfully
+- Runtime: Matter tracking verified with Nashville data
+
+---
+
 ## [2025-11-04] DISCOVERED: Gemini Batch API Key-Scrambling Bug + Smart Recovery
 
 **The intermittent corruption.** Discovered Gemini Batch API has a rare but catastrophic bug where response keys get scrambled, causing summaries to be assigned to wrong items in a circular rotation pattern.

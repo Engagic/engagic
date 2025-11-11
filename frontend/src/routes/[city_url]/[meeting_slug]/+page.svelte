@@ -446,7 +446,7 @@
 								<div class="item-header">
 									<div class="item-header-content">
 										<div class="item-title-container">
-											<span class="item-number">{item.sequence}.</span>
+											<span class="item-number">{item.agenda_number || item.sequence}.</span>
 											<h3 class="item-title" data-truncated={titleParts.isTruncated}>
 												{titleParts.main}
 												{#if titleParts.remainder && !isExpanded}

@@ -6,11 +6,10 @@ Converts passive browsing into active participation.
 """
 
 import base64
-import os
 import re
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Optional, Tuple
 from database.db import UnifiedDatabase, Meeting, AgendaItem
 
 

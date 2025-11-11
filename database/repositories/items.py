@@ -43,15 +43,23 @@ class ItemRepository(BaseRepository):
                 json.dumps(item.attachments) if item.attachments else None
             )
             topics_json = json.dumps(item.topics) if item.topics else None
+            sponsors_json = json.dumps(item.sponsors) if item.sponsors else None
 
             self._execute(
                 """
-                INSERT INTO items (id, meeting_id, title, sequence, attachments, summary, topics)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO items (id, meeting_id, title, sequence, attachments,
+                                   matter_id, matter_file, matter_type, agenda_number,
+                                   sponsors, summary, topics)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     sequence = excluded.sequence,
                     attachments = excluded.attachments,
+                    matter_id = excluded.matter_id,
+                    matter_file = excluded.matter_file,
+                    matter_type = excluded.matter_type,
+                    agenda_number = excluded.agenda_number,
+                    sponsors = excluded.sponsors,
                     -- PRESERVE existing summary/topics if new values are NULL
                     summary = CASE
                         WHEN excluded.summary IS NOT NULL THEN excluded.summary
@@ -68,6 +76,11 @@ class ItemRepository(BaseRepository):
                     item.title,
                     item.sequence,
                     attachments_json,
+                    item.matter_id,
+                    item.matter_file,
+                    item.matter_type,
+                    item.agenda_number,
+                    sponsors_json,
                     item.summary,
                     topics_json,
                 ),

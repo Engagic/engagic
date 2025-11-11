@@ -12,6 +12,7 @@ This facade provides the same API as before but delegates to focused repositorie
 - SearchRepository: Search, topics, cache, and stats
 """
 
+import json
 import logging
 import sqlite3
 from typing import Optional, List, Dict, Any
@@ -412,6 +413,11 @@ class UnifiedDatabase:
                         title=item_data.get("title", ""),
                         sequence=item_data.get("sequence", 0),
                         attachments=item_data.get("attachments", []),
+                        matter_id=item_data.get("matter_id"),
+                        matter_file=item_data.get("matter_file"),
+                        matter_type=item_data.get("matter_type"),
+                        agenda_number=item_data.get("agenda_number"),
+                        sponsors=item_data.get("sponsors"),
                         summary=None,
                         topics=None,
                     )
@@ -433,6 +439,10 @@ class UnifiedDatabase:
                         f"Stored {count} agenda items for {stored_meeting.title} "
                         f"({items_with_summaries} with preserved summaries)"
                     )
+
+                    # Track matters in city_matters and matter_appearances tables
+                    self._track_matters(stored_meeting, items, agenda_items)
+
 
             # Check if already processed before enqueuing (to avoid wasting credits)
             # AGENDA-FIRST: Check item-level summaries (golden path) first
@@ -525,6 +535,108 @@ class UnifiedDatabase:
                 f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
             )
             return None
+
+    def _track_matters(
+        self, meeting: Meeting, items_data: List[Dict], agenda_items: List[AgendaItem]
+    ) -> None:
+        """
+        Track legislative matters across meetings for Intelligence Layer.
+
+        For each agenda item with a matter_file:
+        1. Upsert into city_matters (canonical bill representation)
+        2. Create matter_appearance record (timeline tracking)
+
+        Args:
+            meeting: Stored Meeting object
+            items_data: Raw item data from adapter (with sponsors, matter_type)
+            agenda_items: Stored AgendaItem objects
+        """
+        if not items_data or not agenda_items:
+            return
+
+        # Build map from item_id to raw data for sponsor/type lookup
+        items_map = {item["item_id"]: item for item in items_data}
+
+        for agenda_item in agenda_items:
+            if not agenda_item.matter_file:
+                continue
+
+            # Get raw item data for sponsors and matter_type
+            item_id_short = agenda_item.id.split("_", 1)[1]  # Remove meeting_id prefix
+            raw_item = items_map.get(item_id_short, {})
+            sponsors = raw_item.get("sponsors", [])
+            matter_type = raw_item.get("matter_type")
+
+            # Upsert into city_matters
+            matter_id = f"{meeting.banana}_{agenda_item.matter_file}"
+
+            try:
+                # Check if matter exists
+                existing = self.conn.execute(
+                    "SELECT * FROM city_matters WHERE id = ?", (matter_id,)
+                ).fetchone()
+
+                if existing:
+                    # Update last_seen and appearance_count
+                    self.conn.execute(
+                        """
+                        UPDATE city_matters
+                        SET last_seen = ?,
+                            appearance_count = appearance_count + 1,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """,
+                        (meeting.date, matter_id),
+                    )
+                else:
+                    # Insert new matter
+                    self.conn.execute(
+                        """
+                        INSERT INTO city_matters (
+                            id, banana, matter_id, matter_file, matter_type,
+                            title, sponsors, first_seen, last_seen
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                        (
+                            matter_id,
+                            meeting.banana,
+                            agenda_item.matter_id,
+                            agenda_item.matter_file,
+                            matter_type,
+                            agenda_item.title,
+                            json.dumps(sponsors) if sponsors else None,
+                            meeting.date,
+                            meeting.date,
+                        ),
+                    )
+
+                # Create matter_appearance record
+                # Extract committee from meeting title
+                committee = meeting.title.split("-")[0].strip() if meeting.title else None
+
+                self.conn.execute(
+                    """
+                    INSERT OR IGNORE INTO matter_appearances (
+                        matter_id, meeting_id, item_id, appeared_at,
+                        committee, sequence
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        matter_id,
+                        meeting.id,
+                        agenda_item.id,
+                        meeting.date,
+                        committee,
+                        agenda_item.sequence,
+                    ),
+                )
+
+                self.conn.commit()
+                logger.debug(f"[Matter Tracking] {agenda_item.matter_file}: {matter_type} - {len(sponsors)} sponsors")
+
+            except Exception as e:
+                logger.error(f"Error tracking matter {matter_id}: {e}")
+                continue
 
     def update_meeting_summary(
         self,

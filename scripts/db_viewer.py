@@ -590,14 +590,14 @@ class DatabaseViewer:
                 if result.get('topics'):
                     print(f"Topics: {', '.join(result['topics'])}")
 
-                print(f"\nContext snippet:")
+                print("\nContext snippet:")
                 print(result.get('context', 'N/A'))
 
-                print(f"\nFull summary:")
+                print("\nFull summary:")
                 print(result.get('summary', 'N/A'))
 
                 if result.get('thinking'):
-                    print(f"\nThinking:")
+                    print("\nThinking:")
                     print(result['thinking'])
 
                 if result.get('attachments'):
