@@ -690,7 +690,14 @@ def main():
             # Read from file
             file_path = arg[1:]
             with open(file_path, "r") as f:
-                return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+                cities = []
+                for line in f:
+                    # Strip comments (everything after #)
+                    line = line.split('#')[0].strip()
+                    # Skip empty lines
+                    if line:
+                        cities.append(line)
+                return cities
         else:
             # Comma-separated
             return [c.strip() for c in arg.split(",") if c.strip()]
