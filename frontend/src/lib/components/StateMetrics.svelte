@@ -92,6 +92,13 @@
 			</div>
 		</div>
 
+		{#if metrics.total_matters === 0}
+			<div class="no-matters-message">
+				<p>No recurring legislative matters found for this state.</p>
+				<p class="explanation">We only track matters that appear in multiple meetings (2+ appearances).</p>
+			</div>
+		{/if}
+
 		{#if topTopics().length > 0}
 			<div class="topics-section">
 				<h4 class="section-title">Hot Topics Across State</h4>
@@ -220,6 +227,27 @@
 		font-size: 0.85rem;
 		color: var(--civic-gray);
 		font-weight: 500;
+	}
+
+	.no-matters-message {
+		margin-top: 2rem;
+		padding: 2rem;
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-radius: 8px;
+		text-align: center;
+	}
+
+	.no-matters-message p {
+		margin: 0 0 0.5rem 0;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		color: var(--text-primary);
+	}
+
+	.no-matters-message .explanation {
+		font-size: 0.8rem;
+		color: var(--civic-gray);
 	}
 
 	.topics-section,

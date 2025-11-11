@@ -31,17 +31,32 @@
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 	}
 
-	function extractMeetingType(title: string): string {
+	function extractMeetingType(title: string): { name: string; type: 'committee' | 'council' | 'board' | 'other' } {
 		// Extract committee/meeting type from title
 		const lower = title.toLowerCase();
 		if (lower.includes('committee')) {
 			const match = title.match(/([\w\s]+committee)/i);
-			return match ? match[1] : 'Committee';
+			return { name: match ? match[1] : 'Committee', type: 'committee' };
 		}
-		if (lower.includes('council')) return 'City Council';
-		if (lower.includes('board')) return 'Board';
-		if (lower.includes('commission')) return 'Commission';
-		return 'Meeting';
+		if (lower.includes('council')) {
+			return { name: 'City Council', type: 'council' };
+		}
+		if (lower.includes('board')) {
+			const match = title.match(/([\w\s]+board)/i);
+			return { name: match ? match[1] : 'Board', type: 'board' };
+		}
+		if (lower.includes('commission')) {
+			const match = title.match(/([\w\s]+commission)/i);
+			return { name: match ? match[1] : 'Commission', type: 'committee' };
+		}
+		return { name: 'Meeting', type: 'other' };
+	}
+
+	function inferStatus(index: number, total: number): string {
+		// Infer legislative status from position in timeline
+		if (index === 0) return 'Introduced';
+		if (index === total - 1) return 'Recent';
+		return 'Under Review';
 	}
 </script>
 
@@ -58,59 +73,73 @@
 				{/if}
 				<span class="appearance-count">{timeline.appearance_count} appearance{timeline.appearance_count === 1 ? '' : 's'}</span>
 			</div>
+			<div class="timeline-subtitle">Legislative Journey</div>
 		</div>
 
-		<div class="timeline-track">
-			<div class="track-line"></div>
-			<div class="timeline-nodes">
-				{#each timeline.timeline as appearance, index}
-					{@const meetingType = extractMeetingType(appearance.meeting_title)}
+		<div class="timeline-flow">
+			{#each timeline.timeline as appearance, index}
+				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
+				{@const status = inferStatus(index, timeline.timeline.length)}
+				{@const isSelected = selectedAppearance === index}
+
+				<div class="flow-step" class:selected={isSelected}>
 					<button
-						class="timeline-node"
-						class:selected={selectedAppearance === index}
+						class="step-card"
+						class:committee={meetingInfo.type === 'committee'}
+						class:council={meetingInfo.type === 'council'}
+						class:board={meetingInfo.type === 'board'}
 						class:has-summary={!!appearance.summary}
-						onclick={() => selectedAppearance = selectedAppearance === index ? null : index}
-						title="{meetingType} on {formatDate(appearance.meeting_date)}"
+						onclick={() => selectedAppearance = isSelected ? null : index}
 					>
-						<div class="node-dot"></div>
-						<div class="node-label">
-							<div class="node-date">{formatDate(appearance.meeting_date)}</div>
-							<div class="node-meeting">{meetingType}</div>
+						<div class="step-number">{index + 1}</div>
+						<div class="step-content">
+							<div class="step-header">
+								<div class="step-type">{meetingInfo.name}</div>
+								<div class="step-status">{status}</div>
+							</div>
+							<div class="step-date">{formatDate(appearance.meeting_date)}</div>
+							{#if appearance.agenda_number}
+								<div class="step-agenda">Item {appearance.agenda_number}</div>
+							{/if}
+						</div>
+						<div class="step-expand">
+							{isSelected ? '▼' : '▶'}
 						</div>
 					</button>
-				{/each}
-			</div>
-		</div>
 
-		{#if selectedAppearance !== null && timeline.timeline[selectedAppearance]}
-			{@const selected = timeline.timeline[selectedAppearance]}
-			<div class="timeline-detail">
-				<div class="detail-header">
-					<h4>{selected.meeting_title}</h4>
-					<time>{formatDate(selected.meeting_date)}</time>
+					{#if isSelected}
+						<div class="step-detail">
+							<h4 class="detail-title">{appearance.meeting_title}</h4>
+							{#if appearance.topics}
+								{@const topics = JSON.parse(appearance.topics)}
+								{#if topics.length > 0}
+									<div class="detail-topics">
+										{#each topics as topic}
+											<span class="detail-topic-tag">{topic}</span>
+										{/each}
+									</div>
+								{/if}
+							{/if}
+							{#if appearance.summary}
+								<div class="detail-summary">
+									{appearance.summary.substring(0, 300)}{appearance.summary.length > 300 ? '...' : ''}
+								</div>
+							{/if}
+							<a href="/{appearance.banana}/{appearance.meeting_id}" class="detail-link">
+								View Full Meeting →
+							</a>
+						</div>
+					{/if}
 				</div>
-				{#if selected.agenda_number}
-					<div class="detail-meta">
-						Agenda Item: {selected.agenda_number}
+
+				{#if index < timeline.timeline.length - 1}
+					<div class="flow-arrow">
+						<div class="arrow-line"></div>
+						<div class="arrow-head">↓</div>
 					</div>
 				{/if}
-				{#if selected.topics && selected.topics.length > 0}
-					<div class="detail-topics">
-						{#each JSON.parse(selected.topics) as topic}
-							<span class="detail-topic-tag">{topic}</span>
-						{/each}
-					</div>
-				{/if}
-				{#if selected.summary}
-					<div class="detail-summary">
-						{selected.summary.substring(0, 300)}{selected.summary.length > 300 ? '...' : ''}
-					</div>
-				{/if}
-				<a href="/{selected.banana}/{selected.meeting_id}" class="detail-link">
-					View Full Meeting →
-				</a>
-			</div>
-		{/if}
+			{/each}
+		</div>
 	</div>
 {:else}
 	<div class="timeline-empty">No timeline data available</div>
@@ -137,11 +166,12 @@
 		border-radius: 12px;
 		padding: 1.5rem;
 		margin: 1.5rem 0;
-		transition: all 0.3s ease;
 	}
 
 	.timeline-header {
 		margin-bottom: 2rem;
+		border-bottom: 2px solid var(--border-primary);
+		padding-bottom: 1rem;
 	}
 
 	.timeline-title {
@@ -149,13 +179,14 @@
 		align-items: center;
 		gap: 1rem;
 		flex-wrap: wrap;
+		margin-bottom: 0.5rem;
 	}
 
 	.matter-id {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.1rem;
 		font-weight: 700;
-		color: var(--civic-blue);
+		color: #1e40af;
 		padding: 0.35rem 0.75rem;
 		background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
 		border: 2px solid #3b82f6;
@@ -169,117 +200,32 @@
 		font-weight: 500;
 	}
 
-	.timeline-track {
-		position: relative;
-		padding: 2rem 0;
-		overflow-x: auto;
-		overflow-y: visible;
-	}
-
-	.track-line {
-		position: absolute;
-		top: 50%;
-		left: 2rem;
-		right: 2rem;
-		height: 3px;
-		background: linear-gradient(90deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
-		border-radius: 2px;
-		transform: translateY(-50%);
-		z-index: 1;
-	}
-
-	.timeline-nodes {
-		position: relative;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		min-width: fit-content;
-		padding: 0 2rem;
-		gap: 2rem;
-		z-index: 2;
-	}
-
-	.timeline-node {
-		position: relative;
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.5rem;
-		transition: all 0.2s ease;
-	}
-
-	.timeline-node:hover {
-		transform: translateY(-2px);
-	}
-
-	.node-dot {
-		width: 18px;
-		height: 18px;
-		background: var(--surface-primary);
-		border: 3px solid var(--civic-blue);
-		border-radius: 50%;
-		transition: all 0.2s ease;
-		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
-	}
-
-	.timeline-node.has-summary .node-dot {
-		background: var(--civic-green);
-		border-color: var(--civic-green);
-		box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-	}
-
-	.timeline-node.selected .node-dot {
-		width: 24px;
-		height: 24px;
-		border-width: 4px;
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
-	}
-
-	.timeline-node:hover .node-dot {
-		transform: scale(1.15);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
-	}
-
-	.node-label {
-		text-align: center;
-		white-space: nowrap;
-	}
-
-	.node-date {
+	.timeline-subtitle {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		margin-bottom: 0.25rem;
-	}
-
-	.node-meeting {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
 		color: var(--civic-gray);
-		font-weight: 500;
-		max-width: 120px;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		font-weight: 600;
 	}
 
-	.timeline-detail {
-		margin-top: 2rem;
-		padding: 1.5rem;
-		background: var(--surface-secondary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: 8px;
-		animation: slideIn 0.2s ease-out;
+	/* Vertical flow timeline */
+	.timeline-flow {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+		position: relative;
 	}
 
-	@keyframes slideIn {
+	.flow-step {
+		position: relative;
+		animation: fadeIn 0.3s ease-out;
+	}
+
+	@keyframes fadeIn {
 		from {
 			opacity: 0;
-			transform: translateY(-10px);
+			transform: translateY(10px);
 		}
 		to {
 			opacity: 1;
@@ -287,34 +233,182 @@
 		}
 	}
 
-	.detail-header {
+	.step-card {
+		width: 100%;
 		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
+		align-items: center;
 		gap: 1rem;
-		margin-bottom: 1rem;
-		flex-wrap: wrap;
+		padding: 1rem 1.25rem;
+		background: var(--surface-secondary);
+		border: 2px solid var(--border-primary);
+		border-left: 4px solid var(--civic-blue);
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		font-family: 'IBM Plex Mono', monospace;
+		text-align: left;
 	}
 
-	.detail-header h4 {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.1rem;
+	.step-card:hover {
+		transform: translateX(4px);
+		border-left-width: 6px;
+		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+	}
+
+	.step-card.committee {
+		border-left-color: #8b5cf6;
+	}
+
+	.step-card.council {
+		border-left-color: #10b981;
+	}
+
+	.step-card.board {
+		border-left-color: #f59e0b;
+	}
+
+	.step-card.has-summary {
+		background: linear-gradient(135deg, var(--surface-secondary) 0%, rgba(16, 185, 129, 0.05) 100%);
+	}
+
+	.flow-step.selected .step-card {
+		border-left-width: 6px;
+		box-shadow: 0 6px 16px rgba(79, 70, 229, 0.2);
+	}
+
+	.step-number {
+		flex-shrink: 0;
+		width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--civic-blue);
+		color: white;
+		border-radius: 50%;
+		font-weight: 700;
+		font-size: 0.9rem;
+	}
+
+	.step-card.committee .step-number {
+		background: #8b5cf6;
+	}
+
+	.step-card.council .step-number {
+		background: #10b981;
+	}
+
+	.step-card.board .step-number {
+		background: #f59e0b;
+	}
+
+	.step-content {
+		flex: 1;
+	}
+
+	.step-header {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.step-type {
 		font-weight: 600;
+		font-size: 0.95rem;
 		color: var(--text-primary);
-		margin: 0;
 	}
 
-	.detail-header time {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-gray);
+	.step-status {
+		font-size: 0.7rem;
+		padding: 0.2rem 0.5rem;
+		background: var(--civic-blue);
+		color: white;
+		border-radius: 4px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		font-weight: 600;
 	}
 
-	.detail-meta {
-		font-family: 'IBM Plex Mono', monospace;
+	.step-card.committee .step-status {
+		background: #8b5cf6;
+	}
+
+	.step-card.council .step-status {
+		background: #10b981;
+	}
+
+	.step-date {
 		font-size: 0.8rem;
 		color: var(--civic-gray);
-		margin-bottom: 0.75rem;
+		font-weight: 500;
+	}
+
+	.step-agenda {
+		font-size: 0.75rem;
+		color: var(--civic-gray);
+		margin-top: 0.25rem;
+	}
+
+	.step-expand {
+		flex-shrink: 0;
+		font-size: 1.2rem;
+		color: var(--civic-blue);
+		transition: transform 0.2s ease;
+	}
+
+	/* Flow arrows */
+	.flow-arrow {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		height: 40px;
+		position: relative;
+	}
+
+	.arrow-line {
+		width: 2px;
+		flex: 1;
+		background: linear-gradient(180deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
+	}
+
+	.arrow-head {
+		font-size: 1.5rem;
+		line-height: 1;
+		color: var(--civic-accent);
+		font-weight: bold;
+	}
+
+	/* Expanded detail */
+	.step-detail {
+		margin: 1rem 0 0 52px;
+		padding: 1.25rem;
+		background: white;
+		border: 2px solid var(--border-primary);
+		border-left: 4px solid var(--civic-blue);
+		border-radius: 8px;
+		animation: expandIn 0.2s ease-out;
+	}
+
+	@keyframes expandIn {
+		from {
+			opacity: 0;
+			max-height: 0;
+			margin-top: 0;
+		}
+		to {
+			opacity: 1;
+			max-height: 500px;
+			margin-top: 1rem;
+		}
+	}
+
+	.detail-title {
+		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin: 0 0 1rem 0;
 	}
 
 	.detail-topics {
@@ -328,7 +422,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
 		padding: 0.25rem 0.6rem;
-		background: var(--surface-primary);
+		background: var(--surface-secondary);
 		color: var(--civic-blue);
 		border: 1px solid var(--border-primary);
 		border-radius: 4px;
@@ -337,9 +431,9 @@
 
 	.detail-summary {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 0.95rem;
+		font-size: 0.9rem;
 		line-height: 1.6;
-		color: var(--text-primary);
+		color: var(--text-secondary);
 		margin-bottom: 1rem;
 	}
 
@@ -350,7 +444,7 @@
 		font-weight: 600;
 		color: var(--civic-blue);
 		text-decoration: none;
-		transition: color 0.2s ease;
+		transition: all 0.2s ease;
 	}
 
 	.detail-link:hover {
@@ -363,21 +457,32 @@
 			padding: 1rem;
 		}
 
-		.timeline-nodes {
-			gap: 1.5rem;
+		.step-card {
+			padding: 0.75rem 1rem;
+			gap: 0.75rem;
 		}
 
-		.node-label {
-			font-size: 0.7rem;
+		.step-number {
+			width: 28px;
+			height: 28px;
+			font-size: 0.8rem;
 		}
 
-		.node-meeting {
-			max-width: 80px;
+		.step-type {
+			font-size: 0.85rem;
 		}
 
-		.detail-header {
-			flex-direction: column;
-			align-items: flex-start;
+		.step-status {
+			font-size: 0.65rem;
+			padding: 0.15rem 0.4rem;
+		}
+
+		.step-detail {
+			margin-left: 0;
+		}
+
+		.flow-arrow {
+			height: 30px;
 		}
 	}
 </style>
