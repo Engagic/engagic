@@ -160,18 +160,23 @@ class Processor:
                 logger.info(f"[Processor] Processing queue job {queue_id}: {source_url}")
 
                 try:
-                    # Get meeting from database
-                    meeting = self.db.get_meeting(meeting_id)
-                    if not meeting:
-                        self.db.mark_processing_failed(
-                            queue_id, "Meeting not found in database"
-                        )
-                        continue
-
-                    # Use item-aware processing path
+                    # Route based on source URL type
                     if self.analyzer:
                         try:
-                            self.process_meeting(meeting)
+                            if source_url.startswith("matters://"):
+                                # MATTERS-FIRST: Process matter across all appearances
+                                matter_id = source_url.replace("matters://", "")
+                                self.process_matter(matter_id, meeting_id, job.get("processing_metadata"))
+                            else:
+                                # ITEM-LEVEL or MONOLITH: Traditional meeting processing
+                                meeting = self.db.get_meeting(meeting_id)
+                                if not meeting:
+                                    self.db.mark_processing_failed(
+                                        queue_id, "Meeting not found in database"
+                                    )
+                                    continue
+                                self.process_meeting(meeting)
+
                             self.db.mark_processing_complete(queue_id)
                             logger.info(
                                 f"[Processor] Queue job {queue_id} completed successfully"
@@ -256,6 +261,207 @@ class Processor:
             "processed_count": processed_count,
             "failed_count": failed_count,
         }
+
+    def _process_single_item(self, item):
+        """Process a single agenda item (extract PDFs and summarize)
+
+        Args:
+            item: AgendaItem object to process
+
+        Returns:
+            Dict with 'success', 'summary', 'topics' keys, or None if processing fails
+        """
+
+        if not self.analyzer:
+            logger.warning("[SingleItemProcessing] Analyzer not available")
+            return None
+
+        # Skip procedural items
+        if is_procedural_item(item.title):
+            logger.debug(f"[SingleItemProcessing] Skipping procedural item: {item.title[:50]}")
+            return None
+
+        if not item.attachments:
+            logger.debug(f"[SingleItemProcessing] No attachments for {item.title[:50]}")
+            return None
+
+        # Check if entire item is public comments
+        if is_public_comment_attachment(item.title):
+            logger.info(f"[SingleItemProcessing] Skipping public comments item: {item.title[:80]}")
+            return None
+
+        # Extract text from attachments
+        item_parts = []
+        total_page_count = 0
+
+        for att in item.attachments:
+            if isinstance(att, str):
+                att_url = att
+                att_type = "pdf"
+            elif isinstance(att, dict):
+                att_url = att.get("url")
+                att_type = att.get("type", "unknown")
+            else:
+                continue
+
+            # Handle text segments directly
+            if att_type == "text_segment":
+                text_content = att.get("content", "")
+                if text_content:
+                    item_parts.append(text_content)
+                continue
+
+            # Extract PDFs
+            if att_type in ("pdf", "unknown") or isinstance(att, str):
+                if att_url:
+                    # Skip public comment attachments
+                    url_path = att_url.split('/')[-1] if att_url else ""
+                    if is_public_comment_attachment(url_path):
+                        logger.debug(f"[SingleItemProcessing] Skipping public comments: {url_path}")
+                        continue
+
+                    try:
+                        result = self.analyzer.pdf_extractor.extract_from_url(att_url)
+                        if result.get("success") and result.get("text"):
+                            item_parts.append(f"=== {url_path} ===\n{result['text']}")
+                            total_page_count += result.get("page_count", 0)
+                            logger.debug(
+                                f"[SingleItemProcessing] Extracted '{url_path}': "
+                                f"{result.get('page_count', 0)} pages, {len(result['text']):,} chars"
+                            )
+                    except Exception as e:
+                        logger.warning(f"[SingleItemProcessing] Failed to extract {url_path}: {e}")
+
+        if not item_parts:
+            logger.warning(f"[SingleItemProcessing] No text extracted for {item.title[:50]}")
+            return None
+
+        combined_text = "\n\n".join(item_parts)
+
+        # Build batch request (single item)
+        batch_request = [
+            {
+                "item_id": item.id,
+                "title": item.title,
+                "text": combined_text,
+                "sequence": item.sequence,
+                "page_count": total_page_count if total_page_count > 0 else None,
+            }
+        ]
+
+        # Process via batch API (single item)
+        try:
+            for chunk_results in self.analyzer.process_batch_items(batch_request, shared_context=None, meeting_id=None):
+                # Should only be one chunk with one result
+                if chunk_results:
+                    result = chunk_results[0]
+                    if result.get("success"):
+                        # Normalize topics
+                        raw_topics = result.get("topics", [])
+                        normalized_topics = get_normalizer().normalize(raw_topics)
+
+                        return {
+                            "success": True,
+                            "summary": result["summary"],
+                            "topics": normalized_topics,
+                        }
+                    else:
+                        logger.warning(
+                            f"[SingleItemProcessing] Failed: {result.get('error')}"
+                        )
+                        return None
+        except Exception as e:
+            logger.error(f"[SingleItemProcessing] Processing error: {e}")
+            return None
+
+        return None
+
+    def process_matter(self, matter_id: str, meeting_id: str, metadata: Optional[Dict] = None):
+        """Process a matter across all its appearances (matters-first path)
+
+        Args:
+            matter_id: Matter identifier (e.g., "sanfranciscoCA_251041")
+            meeting_id: Meeting ID where matter appears
+            metadata: Queue metadata with item_ids
+        """
+        import json
+        from pipeline.utils import hash_attachments
+
+        logger.info(f"[MatterProcessing] Processing matter {matter_id}")
+
+        # Get item IDs from metadata
+        if not metadata:
+            metadata = {}
+
+        item_ids = metadata.get("item_ids", [])
+        if not item_ids:
+            logger.error(f"[MatterProcessing] No item_ids in metadata for {matter_id}")
+            return
+
+        # Get items for this matter
+        items = []
+        for item_id in item_ids:
+            item = self.db.get_agenda_item(item_id)
+            if item:
+                items.append(item)
+
+        if not items:
+            logger.error(f"[MatterProcessing] No items found for matter {matter_id}")
+            return
+
+        # Use first item as representative (all should have same attachments for a matter)
+        representative_item = items[0]
+
+        logger.info(
+            f"[MatterProcessing] Matter {matter_id} has {len(items)} appearances, "
+            f"{len(representative_item.attachments)} attachments"
+        )
+
+        # Process item (extract PDFs and summarize)
+        result = self._process_single_item(representative_item)
+
+        if not result:
+            logger.warning(f"[MatterProcessing] No result for matter {matter_id}")
+            return
+
+        summary = result.get("summary")
+        topics = result.get("topics", [])
+
+        if not summary:
+            logger.warning(f"[MatterProcessing] No summary generated for matter {matter_id}")
+            return
+
+        # Store canonical summary in city_matters table
+        attachment_hash = hash_attachments(representative_item.attachments)
+
+        self.db.conn.execute(
+            """
+            UPDATE city_matters
+            SET canonical_summary = ?,
+                canonical_topics = ?,
+                metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', ?),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (summary, json.dumps(topics), attachment_hash, matter_id),
+        )
+        self.db.conn.commit()
+
+        logger.info(f"[MatterProcessing] Stored canonical summary for {matter_id}")
+
+        # Backfill all items with canonical summary
+        for item in items:
+            self.db.conn.execute(
+                """
+                UPDATE items
+                SET summary = ?, topics = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (summary, json.dumps(topics), item.id),
+            )
+
+        self.db.conn.commit()
+        logger.info(f"[MatterProcessing] Backfilled {len(items)} items with canonical summary")
 
     def process_meeting(self, meeting: Meeting):
         """Process summary for a single meeting (agenda-first: items > packet)
@@ -391,6 +597,40 @@ class Processor:
                 )
                 continue
 
+            # MATTERS-FIRST DEDUPLICATION: Check if item has matter with canonical summary
+            if item.matter_file or item.matter_id:
+                matter = self.db.get_matter_by_keys(
+                    meeting.banana,
+                    matter_file=item.matter_file,
+                    matter_id=item.matter_id
+                )
+
+                if matter and matter.canonical_summary:
+                    # Reuse canonical summary from matter
+                    logger.debug(
+                        f"[MattersDedupe] Reusing canonical summary for {item.title[:50]} "
+                        f"(matter: {item.matter_file or item.matter_id})"
+                    )
+
+                    # Update item with canonical summary if not already set
+                    if not item.summary:
+                        self.db.update_agenda_item(
+                            item_id=item.id,
+                            summary=matter.canonical_summary,
+                            topics=matter.canonical_topics or []
+                        )
+
+                    already_processed.append(
+                        {
+                            "sequence": item.sequence,
+                            "title": item.title,
+                            "summary": matter.canonical_summary,
+                            "topics": matter.canonical_topics or [],
+                        }
+                    )
+                    continue
+
+            # Check if item already has summary (from previous processing)
             if item.summary:
                 logger.debug(f"[ItemProcessing] Item already processed: {item.title[:50]}")
                 already_processed.append(
