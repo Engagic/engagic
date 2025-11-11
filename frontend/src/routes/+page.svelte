@@ -16,7 +16,7 @@
 	let searchResults: SearchResult | null = $state(null);
 	let loading = $state(false);
 	let loadingRandom = $state(false);
-	let loadingRandomItems = $state(false);
+	let loadingRandomPolicy = $state(false);
 	let error = $state('');
 	let currentStatIndex = $state(0);
 
@@ -116,7 +116,7 @@
 		error = '';
 
 		try {
-			const result = await apiClient.getRandomBestMeeting();
+			const result = await apiClient.getRandomMeetingWithItems();
 			if (result.meeting) {
 				// Extract city name and state from banana
 				// banana format is like "planoTX" - city name + state code
@@ -155,36 +155,26 @@
 		}
 	}
 
-	async function handleRandomMeetingWithItems() {
-		loadingRandomItems = true;
+	async function handleRandomPolicy() {
+		loadingRandomPolicy = true;
 		error = '';
 
 		try {
-			const result = await apiClient.getRandomMeetingWithItems();
-			if (result.meeting) {
-				const banana = result.meeting.banana;
-
-				const meeting: Meeting = {
-					id: result.meeting.id,
-					banana: banana,
-					title: result.meeting.title,
-					date: result.meeting.date,
-					packet_url: result.meeting.packet_url
-				};
-
-				const meetingSlug = generateMeetingSlug(meeting);
-				logger.trackEvent('random_meeting_with_items_click', {
-					city: banana,
-					item_count: result.meeting.item_count
+			const result = await apiClient.getRandomMatter();
+			if (result.matter) {
+				logger.trackEvent('random_policy_click', {
+					matter_id: result.matter.id,
+					city: result.matter.banana,
+					appearance_count: result.matter.appearance_count
 				});
 
-				goto(`/${banana}/${meetingSlug}`);
+				goto(`/matter/${result.matter.id}`);
 			}
 		} catch (err) {
-			logger.error('Random meeting with items failed', err as Error);
-			error = 'Failed to load random meeting. Please try again.';
+			logger.error('Random policy failed', err as Error);
+			error = 'Failed to load random policy. Please try again.';
 		} finally {
-			loadingRandomItems = false;
+			loadingRandomPolicy = false;
 		}
 	}
 
@@ -281,7 +271,7 @@
 			bind:value={searchQuery}
 			onkeydown={handleKeydown}
 			placeholder="Enter zipcode, city, or state"
-			disabled={loading || loadingRandom}
+			disabled={loading || loadingRandom || loadingRandomPolicy}
 			aria-label="Search for local government meetings"
 			aria-invalid={!!error}
 			aria-describedby={error ? "search-error" : undefined}
@@ -289,7 +279,7 @@
 		<button
 			class="search-button"
 			onclick={handleSearch}
-			disabled={loading || loadingRandom || loadingRandomItems || !searchQuery.trim()}
+			disabled={loading || loadingRandom || loadingRandomPolicy || !searchQuery.trim()}
 		>
 			{loading ? 'Searching...' : 'Search'}
 		</button>
@@ -302,17 +292,17 @@
 			<button
 				class="random-button random-meeting"
 				onclick={handleRandomMeeting}
-				disabled={loading || loadingRandom || loadingRandomItems}
+				disabled={loading || loadingRandom || loadingRandomPolicy}
 			>
 				{loadingRandom ? 'Loading...' : '🎲 Random Meeting'}
 			</button>
 
 			<button
-				class="random-button random-items"
-				onclick={handleRandomMeetingWithItems}
-				disabled={loading || loadingRandom || loadingRandomItems}
+				class="random-button random-policy"
+				onclick={handleRandomPolicy}
+				disabled={loading || loadingRandom || loadingRandomPolicy}
 			>
-				{loadingRandomItems ? 'Loading...' : '🛸 Meeting with Items'}
+				{loadingRandomPolicy ? 'Loading...' : '📜 Random Policy'}
 			</button>
 		</div>
 	</div>

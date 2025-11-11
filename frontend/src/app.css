@@ -461,12 +461,12 @@ body {
 	box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
 }
 
-.random-items {
+.random-policy {
 	background: var(--civic-accent);
 	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
 }
 
-.random-items:hover {
+.random-policy:hover {
 	background: #7c3aed;
 	transform: translateY(-2px);
 	box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
