@@ -1,0 +1,609 @@
+# Pipeline - Orchestration & Processing
+
+**Purpose:** Orchestrates the complete data flow from vendor fetching to LLM analysis to database storage.
+
+The pipeline handles:
+- Background daemon lifecycle (sync + processing loops)
+- City sync scheduling and vendor routing
+- Processing queue management
+- PDF extraction and LLM analysis
+- Topic normalization and aggregation
+
+---
+
+## Architecture Overview
+
+The pipeline consists of **4 focused modules** with clear responsibilities:
+
+```
+┌──────────────┐
+│  Conductor   │  Lightweight orchestration (start/stop, admin commands)
+└──────┬───────┘
+       │
+       ├──────> Fetcher    (City sync, vendor routing, rate limiting)
+       │
+       └──────> Processor  (Queue processing, item assembly)
+                     │
+                     └──────> Analyzer (PDF extraction, LLM analysis)
+```
+
+**Key Pattern:** Conductor delegates to Fetcher and Processor, which are specialized for their domains.
+
+---
+
+## Module Reference
+
+### 1. `conductor.py` - Orchestration (268 lines)
+
+**Entry point for all pipeline operations.** Coordinates sync and processing loops.
+
+#### Responsibilities
+- Start/stop background daemon threads
+- Sync loop (runs every 7 days)
+- Processing loop (continuously processes queue)
+- Admin commands (force sync, status, preview)
+- Global state management (`is_running` flag)
+
+#### Key Methods
+
+```python
+conductor = Conductor(unified_db_path="/path/to/engagic.db")
+
+# Background daemon (production)
+conductor.start()  # Starts sync + processing threads
+conductor.stop()   # Graceful shutdown
+
+# Single city operations (admin/testing)
+conductor.force_sync_city("paloaltoCA")
+conductor.sync_and_process_city("paloaltoCA")
+
+# Multi-city operations
+conductor.sync_cities(["paloaltoCA", "oaklandCA"])
+conductor.process_cities(["paloaltoCA", "oaklandCA"])
+
+# Preview and debugging
+conductor.preview_queue(city_banana="paloaltoCA", limit=10)
+conductor.extract_text_preview(meeting_id, output_file="text.txt")
+conductor.preview_items(meeting_id, extract_text=True)
+```
+
+#### CLI Usage
+
+```bash
+# Background daemon (continuous sync + processing)
+engagic-daemon
+
+# Fetcher only (sync without processing)
+engagic-daemon --fetcher
+
+# Admin operations
+engagic-daemon --sync-city paloaltoCA
+engagic-daemon --sync-and-process-city paloaltoCA
+engagic-daemon --preview-queue paloaltoCA
+engagic-daemon --status
+```
+
+#### Threading Model
+- **Sync thread:** Runs `_sync_loop()` every 7 days (calls `fetcher.sync_all()`)
+- **Processing thread:** Runs `_processing_loop()` continuously (calls `processor.process_queue()`)
+- Both threads check `is_running` flag for graceful shutdown
+
+---
+
+### 2. `fetcher.py` - City Sync & Vendor Routing (518 lines)
+
+**Fetches meetings from vendor platforms.** Handles rate limiting, retry logic, and database storage.
+
+#### Responsibilities
+- Sync all cities (vendor-grouped, rate-limited)
+- Adaptive sync scheduling (high activity = more frequent)
+- Vendor-aware rate limiting (3-5s delays)
+- Meeting + item storage via `db.store_meeting_from_sync()`
+- Matter tracking (Matters-First architecture)
+- Failed city tracking
+
+#### Key Methods
+
+```python
+fetcher = Fetcher(db=unified_db)
+
+# Sync all active cities (vendor-grouped, rate-limited)
+results: List[SyncResult] = fetcher.sync_all()
+
+# Sync specific cities
+results = fetcher.sync_cities(["paloaltoCA", "oaklandCA"])
+
+# Sync by vendor
+results = fetcher.sync_vendors(["legistar", "primegov"])
+
+# Single city sync
+result: SyncResult = fetcher.sync_city("paloaltoCA")
+```
+
+#### SyncResult Object
+
+```python
+@dataclass
+class SyncResult:
+    city_banana: str
+    status: SyncStatus  # COMPLETED, FAILED, SKIPPED
+    meetings_found: int = 0
+    meetings_processed: int = 0
+    duration_seconds: float = 0.0
+    error_message: Optional[str] = None
+```
+
+#### Sync Flow
+
+1. **Group cities by vendor** (primegov, legistar, granicus, etc.)
+2. **Prioritize by activity** (high activity cities first)
+3. **Check sync schedule** (`_should_sync_city()` - adaptive intervals)
+4. **Apply rate limiting** (`RateLimiter.wait_if_needed(vendor)`)
+5. **Fetch meetings** (`adapter.fetch_meetings()`)
+6. **Store in database** (`db.store_meeting_from_sync()`)
+   - Creates Meeting + AgendaItem objects
+   - Validates meeting data
+   - Tracks matters (city_matters + matter_appearances)
+   - Enqueues for processing (matters-first or item-level)
+7. **Track failures** (`failed_cities` set)
+
+#### Adaptive Sync Scheduling
+
+```python
+# High activity (2+ meetings/week): Sync every 12 hours
+# Medium activity (1+ meeting/week): Sync every 24 hours
+# Low activity (some meetings): Sync every 7 days
+# Very low activity (no recent meetings): Sync every 7 days
+```
+
+#### Vendor Rate Limiting
+
+- **3-5 second delay** between requests to same vendor
+- **30-40 second break** between vendor groups
+- **Polite crawling** to avoid overloading civic tech platforms
+
+---
+
+### 3. `processor.py` - Queue Processing & Item Assembly (971 lines)
+
+**Processes jobs from the queue.** Extracts text from PDFs, assembles items, orchestrates LLM analysis.
+
+#### Responsibilities
+- Process queue continuously (`process_queue()`)
+- Extract text from PDFs (via `Analyzer.pdf_extractor`)
+- Filter procedural items and public comments
+- Document-level caching (deduplication within meeting)
+- Batch item processing (50% cost savings)
+- Topic normalization and aggregation
+- Incremental saving (per-chunk)
+
+#### Key Methods
+
+```python
+processor = Processor(db=unified_db, analyzer=analyzer)
+
+# Continuous queue processing (production)
+processor.process_queue()
+
+# Process specific city (admin/testing)
+stats = processor.process_city_jobs("paloaltoCA")
+# Returns: {"processed_count": 5, "failed_count": 1}
+
+# Process single meeting (internal)
+processor.process_meeting(meeting)  # Agenda-first: items > packet
+```
+
+#### Processing Paths
+
+**Path 1: Item-Level Processing (PRIMARY - 58% of cities)**
+```
+Meeting has agenda_items
+  ├─ Filter procedural items (minutes, roll call, etc.)
+  ├─ Build document cache (meeting-level, shared URLs)
+  │   └─ Extract each unique PDF once (not per-item)
+  ├─ Separate shared vs item-specific documents
+  ├─ Build batch requests (item-specific text only)
+  ├─ Process via Analyzer.process_batch_items()
+  │   └─ Gemini Batch API (50% cost savings)
+  │   └─ Generator yields chunks as they complete
+  ├─ Normalize topics (via TopicNormalizer)
+  ├─ Save incrementally (per-chunk, not end-of-batch)
+  ├─ Aggregate topics to meeting level
+  └─ Update meeting metadata (topics, participation)
+```
+
+**Path 2: Monolithic Processing (FALLBACK - 42% of cities)**
+```
+Meeting has packet_url (no items)
+  ├─ Extract full PDF text
+  ├─ Meeting-level prompt (short/comprehensive)
+  ├─ Single LLM call
+  └─ Store meeting summary
+```
+
+**Path 3: Matters-First Processing (NEW - Nov 2025)**
+```
+Agenda item has matter_file/matter_id
+  ├─ Check if matter already processed
+  ├─ Compare attachment hash (changed?)
+  │   ├─ If unchanged: Reuse canonical summary
+  │   └─ If changed: Process and update canonical
+  ├─ Process matter once (representative item)
+  └─ Backfill all appearances with canonical summary
+```
+
+#### Document Caching (Item-Level Path)
+
+**Problem:** Multiple items reference the same PDF → extract once, reuse many times.
+
+**Solution:** Meeting-level document cache.
+
+```python
+# Example: Staff report shared across 3 agenda items
+document_cache = {
+    "staff_report.pdf": {
+        "text": "...",
+        "page_count": 45,
+        "name": "staff_report.pdf"
+    }
+}
+
+# Shared documents go in meeting context (cached once)
+shared_context = "=== staff_report.pdf ===\n{text}"
+
+# Item-specific documents go in item request
+item_request = {
+    "item_id": "item_123",
+    "title": "Approve Contract",
+    "text": "=== contract.pdf ===\n{text}",  # Item-specific only
+    "page_count": 12
+}
+```
+
+#### Procedural Filtering
+
+**Skip low-value items to save API costs:**
+
+```python
+PROCEDURAL_PATTERNS = [
+    "review of minutes",
+    "approval of minutes",
+    "roll call",
+    "pledge of allegiance",
+    "adjournment"
+]
+
+PUBLIC_COMMENT_PATTERNS = [
+    "public comment",
+    "public correspondence",
+    "comment letters",
+    "written comment",
+    "petitions and communications"  # SF uses this heavily
+]
+```
+
+#### Incremental Saving
+
+**Generator-based processing:** Save results immediately after each chunk completes.
+
+```python
+for chunk_results in analyzer.process_batch_items(batch_requests):
+    # Save IMMEDIATELY (not at end of batch)
+    for result in chunk_results:
+        db.update_agenda_item(item_id, summary, topics)
+
+    # If crash occurs, already-saved items are preserved
+```
+
+**Why this matters:** Gemini Batch API can take minutes. If crash occurs, we don't lose all work.
+
+---
+
+### 4. `analyzer.py` - LLM Analysis Orchestration (218 lines)
+
+**Coordinates PDF extraction and LLM analysis.** Thin wrapper around parsing and analysis modules.
+
+#### Responsibilities
+- PDF text extraction (via `PdfExtractor`)
+- Participation info parsing (email, phone, Zoom)
+- LLM summarization (via `GeminiSummarizer`)
+- Batch item processing (via `GeminiSummarizer.summarize_batch()`)
+- Caching integration (check before processing)
+
+#### Key Methods
+
+```python
+analyzer = Analyzer(api_key=config.GEMINI_API_KEY)
+
+# Monolithic processing (packet_url)
+summary, method, participation = analyzer.process_agenda(packet_url)
+
+# Item-level batch processing (generator)
+for chunk_results in analyzer.process_batch_items(item_requests, shared_context):
+    # Process results incrementally
+    for result in chunk_results:
+        item_id = result["item_id"]
+        summary = result["summary"]
+        topics = result["topics"]
+```
+
+#### Dependencies
+
+- **`parsing/pdf.py`** - PyMuPDF text extraction
+- **`parsing/participation.py`** - Email/phone/Zoom extraction
+- **`analysis/llm/summarizer.py`** - Gemini API orchestration
+- **`database/db.py`** - Caching and storage
+
+#### Error Handling
+
+```python
+try:
+    result = pdf_extractor.extract_from_url(url)
+    if result["success"]:
+        text = result["text"]
+        summary = summarizer.summarize_meeting(text)
+        return summary, "pymupdf_gemini", participation
+except Exception as e:
+    # Fail fast - no fallback tiers
+    raise AnalysisError("Document analysis failed")
+```
+
+---
+
+## Data Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Conductor                                                        │
+│  ├─ Sync Thread (every 7 days)                                  │
+│  │   └─> Fetcher.sync_all()                                     │
+│  │                                                               │
+│  └─ Processing Thread (continuous)                              │
+│      └─> Processor.process_queue()                              │
+└─────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Fetcher (City Sync)                                             │
+│  ├─ Group cities by vendor                                      │
+│  ├─ Prioritize by activity                                      │
+│  ├─ Rate limit (3-5s delays)                                    │
+│  ├─ Adapter.fetch_meetings()                                    │
+│  └─ db.store_meeting_from_sync()                                │
+│      ├─ Store Meeting + AgendaItem objects                      │
+│      ├─ Track matters (city_matters + matter_appearances)       │
+│      └─ Enqueue for processing (matters-first or item-level)    │
+└─────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Processing Queue (SQLite)                                       │
+│  ├─ Priority-based (recent meetings first)                      │
+│  ├─ Typed jobs (MeetingJob, MatterJob)                          │
+│  ├─ Retry logic (3 attempts → DLQ)                              │
+│  └─ Status tracking (pending, processing, completed, failed)    │
+└─────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Processor (Queue Processing)                                    │
+│  ├─ Get next job from queue                                     │
+│  ├─ Dispatch by job type:                                       │
+│  │   ├─ MeetingJob → process_meeting()                          │
+│  │   └─ MatterJob → process_matter()                            │
+│  │                                                               │
+│  ├─ ITEM-LEVEL PATH (if meeting has items):                     │
+│  │   ├─ Build document cache (shared URLs)                      │
+│  │   ├─ Build batch requests (item-specific text)               │
+│  │   ├─ Analyzer.process_batch_items() [generator]              │
+│  │   ├─ Save incrementally (per-chunk)                          │
+│  │   └─ Aggregate topics to meeting                             │
+│  │                                                               │
+│  ├─ MONOLITHIC PATH (if packet_url only):                       │
+│  │   ├─ Analyzer.process_agenda(packet_url)                     │
+│  │   └─ Store meeting summary                                   │
+│  │                                                               │
+│  └─ MATTERS-FIRST PATH (if matter_file/matter_id):              │
+│      ├─ Check if matter already processed                       │
+│      ├─ Compare attachment hash                                 │
+│      ├─ Process matter once (representative item)               │
+│      └─ Backfill all appearances with canonical summary         │
+└─────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Analyzer (LLM Analysis)                                         │
+│  ├─ PdfExtractor.extract_from_url()                             │
+│  ├─ parse_participation_info()                                  │
+│  ├─ GeminiSummarizer.summarize_meeting()                        │
+│  └─ GeminiSummarizer.summarize_batch() [generator]              │
+└─────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Database (UnifiedDatabase)                                      │
+│  ├─ update_meeting_summary()                                    │
+│  ├─ update_agenda_item()                                        │
+│  ├─ update_matter_summary()                                     │
+│  └─ mark_processing_complete()                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Processing Queue Architecture
+
+**Location:** `database/repositories/queue.py` (managed by `database/`)
+
+**Schema:**
+```sql
+CREATE TABLE queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_type TEXT,  -- "meeting" or "matter"
+    payload TEXT,   -- JSON payload (MeetingJob or MatterJob)
+    source_url TEXT NOT NULL UNIQUE,
+    meeting_id TEXT,
+    banana TEXT,
+    status TEXT DEFAULT 'pending',
+    priority INTEGER DEFAULT 0,
+    retry_count INTEGER DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    failed_at TIMESTAMP
+);
+```
+
+**Job Types:**
+
+```python
+# MeetingJob (item-level or monolithic)
+{
+    "job_type": "meeting",
+    "payload": {
+        "meeting_id": "sanfranciscoCA_2025-11-10",
+        "source_url": "https://..."
+    }
+}
+
+# MatterJob (matters-first)
+{
+    "job_type": "matter",
+    "payload": {
+        "matter_id": "sanfranciscoCA_251041",
+        "meeting_id": "sanfranciscoCA_2025-11-10",
+        "item_ids": ["item_1", "item_2"]
+    }
+}
+```
+
+**Status Flow:**
+```
+pending → processing → completed
+                    └──> failed (retry < 3)
+                    └──> dead_letter (retry >= 3)
+```
+
+**Priority Scoring:**
+```python
+# Recent meetings = high priority
+# Today: 150, Yesterday: 149, 2 days ago: 148, etc.
+priority = max(0, 150 - days_distance)
+```
+
+---
+
+## Configuration
+
+**Required Environment Variables:**
+```bash
+GEMINI_API_KEY=your_api_key_here
+ENGAGIC_DB_DIR=/root/engagic/data
+ENGAGIC_UNIFIED_DB=/root/engagic/data/engagic.db
+ENGAGIC_SYNC_INTERVAL_HOURS=72
+```
+
+**Optional:**
+```bash
+NYC_LEGISTAR_TOKEN=token_for_nyc_api  # NYC requires API token
+ENGAGIC_LOG_LEVEL=INFO
+```
+
+---
+
+## Common Operations
+
+### Local Development (One-Off Sync)
+
+```bash
+# Sync single city
+engagic-daemon --sync-city paloaltoCA
+
+# Sync and process immediately
+engagic-daemon --sync-and-process-city paloaltoCA
+
+# Preview queue
+engagic-daemon --preview-queue paloaltoCA
+
+# Extract text for debugging
+engagic-daemon --extract-text meeting_id --output-file text.txt
+```
+
+### Production Deployment (Background Daemon)
+
+```bash
+# Fetcher service (sync only, no processing)
+engagic-daemon --fetcher
+
+# Full daemon (sync + processing)
+engagic-daemon
+```
+
+**Deployment:** VPS runs two systemd services:
+1. **`engagic-fetcher.service`** - Syncs cities every 72 hours
+2. **`engagic-processor.service`** - Processes queue continuously
+
+---
+
+## Error Handling & Retry Logic
+
+### Sync Errors (Fetcher)
+
+**Retry:** 2 attempts with exponential backoff (5s, 20s)
+```python
+# Attempt 1: Immediate
+# Attempt 2: Wait 5s + jitter
+# Attempt 3: Wait 20s + jitter
+# If all fail: Add to failed_cities set
+```
+
+### Processing Errors (Processor)
+
+**Retry:** 3 attempts with priority decay
+```python
+# Attempt 1: priority = 150 (recent meeting)
+# Attempt 2: priority = 130 (drops by 20)
+# Attempt 3: priority = 110 (drops by 40)
+# If all fail: Move to dead_letter queue
+```
+
+**Non-retryable errors:**
+- "Analyzer not available" (no API key)
+- These are marked as `failed` without retry logic
+
+---
+
+## Performance Characteristics
+
+- **Sync cycle:** ~2 hours for 500 cities (rate-limited)
+- **Item processing:** 10-30s per item (Gemini latency)
+- **Batch processing:** 50% cost savings over individual calls
+- **Document caching:** Reduces API costs for shared attachments
+- **Memory:** ~500MB for daemon (PDF extraction peak)
+- **Incremental saving:** Prevents data loss on crashes
+
+---
+
+## Key Patterns
+
+1. **Agenda-First:** Check for items before falling back to packet_url
+2. **Matters-First:** Deduplicate summarization work across meetings
+3. **Document Caching:** Extract shared PDFs once per meeting
+4. **Incremental Saving:** Save results per-chunk, not end-of-batch
+5. **Generator-Based:** Yield chunk results immediately (don't buffer)
+6. **Fail-Fast:** Single processing tier (no fallback to premium)
+7. **Procedural Filtering:** Skip low-value items to save costs
+
+---
+
+## Related Modules
+
+- **`vendors/`** - Adapter implementations for civic tech platforms
+- **`parsing/`** - PDF text extraction and participation parsing
+- **`analysis/`** - LLM summarization and topic normalization
+- **`database/`** - Repository Pattern for data persistence
+
+---
+
+**Last Updated:** 2025-11-11 (Documentation Sprint)

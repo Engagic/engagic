@@ -323,10 +323,6 @@ class Fetcher:
                     meetings_with_items = [m for m in all_meetings if m.get("items")]
                     meetings_with_agenda_url = [m for m in all_meetings if m.get("agenda_url")]
                     meetings_with_packet_url = [m for m in all_meetings if m.get("packet_url")]
-                    meetings_with_processable_content = [
-                        m for m in all_meetings
-                        if m.get("items") or m.get("agenda_url") or m.get("packet_url")
-                    ]
 
                     # Count total items
                     total_items = sum(len(m.get("items", [])) for m in all_meetings)
@@ -361,6 +357,7 @@ class Fetcher:
                 processed_count = 0
                 items_stored_count = 0
                 matters_tracked_count = 0
+                matters_duplicate_count = 0
 
                 logger.info(
                     f"[Sync] {city.banana}: Storing {len(all_meetings)} meetings..."
@@ -382,14 +379,21 @@ class Fetcher:
                         processed_count += 1
                         items_stored_count += storage_stats.get('items_stored', 0)
                         matters_tracked_count += storage_stats.get('matters_tracked', 0)
+                        matters_duplicate_count += storage_stats.get('matters_duplicate', 0)
 
                 result.meetings_processed = processed_count
                 result.status = SyncStatus.COMPLETED
                 result.duration_seconds = time.time() - start_time
 
+                # Build matter summary message
+                if matters_duplicate_count > 0:
+                    matter_summary = f"{matters_tracked_count} new matters ({matters_duplicate_count} already tracked)"
+                else:
+                    matter_summary = f"{matters_tracked_count} matters tracked"
+
                 logger.info(
                     f"[Sync] {city.banana}: Complete! {processed_count} meetings, "
-                    f"{items_stored_count} items, {matters_tracked_count} matters tracked "
+                    f"{items_stored_count} items, {matter_summary} "
                     f"({result.duration_seconds:.1f}s)"
                 )
 

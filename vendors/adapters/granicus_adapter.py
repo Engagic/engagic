@@ -567,7 +567,7 @@ class GranicusAdapter(BaseAdapter):
                     matter_file = file_id_match.group(1)
 
                 # Find hyperlinks on this page (attachments)
-                page_links = [l for l in links if l.get('page') == current_page]
+                page_links = [link for link in links if link.get('page') == current_page]
                 attachments = []
                 for link in page_links:
                     url = link.get('url', '')

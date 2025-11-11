@@ -130,7 +130,13 @@ export const apiClient = {
 		return response.json();
 	},
 
-	async getMeeting(meetingId: number): Promise<any> {
+	async getMeeting(meetingId: string): Promise<{
+		success: boolean;
+		meeting: any;
+		city_name: string | null;
+		state: string | null;
+		banana: string;
+	}> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/meeting/${meetingId}`
 		);
@@ -147,7 +153,7 @@ export const apiClient = {
 	},
 
 	async generateFlyer(params: {
-		meeting_id: number;
+		meeting_id: string;
 		item_id?: string;
 		position: 'support' | 'oppose' | 'more_info';
 		custom_message?: string;
@@ -164,5 +170,66 @@ export const apiClient = {
 		);
 
 		return response.text();
+	},
+
+	async getMatterTimeline(matterId: string): Promise<{
+		success: boolean;
+		matter: any;
+		timeline: Array<{
+			item_id: string;
+			meeting_id: string;
+			meeting_title: string;
+			meeting_date: string;
+			city_name: string;
+			state: string;
+			banana: string;
+			agenda_number?: string;
+			summary?: string;
+			topics?: string[];
+		}>;
+		appearance_count: number;
+	}> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/matters/${matterId}/timeline`
+		);
+
+		return response.json();
+	},
+
+	async getCityMatters(banana: string, limit: number = 50, offset: number = 0): Promise<{
+		success: boolean;
+		city_name: string;
+		state: string;
+		banana: string;
+		matters: Array<any>;
+		total_count: number;
+		limit: number;
+		offset: number;
+	}> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/city/${banana}/matters?limit=${limit}&offset=${offset}`
+		);
+
+		return response.json();
+	},
+
+	async getStateMatters(stateCode: string, topic?: string, limit: number = 100): Promise<{
+		success: boolean;
+		state: string;
+		cities_count: number;
+		matters: Array<any>;
+		total_matters: number;
+		topic_distribution: Record<string, number>;
+		filtered_by_topic?: string;
+	}> {
+		const url = new URL(`${config.apiBaseUrl}/api/state/${stateCode}/matters`);
+		url.searchParams.set('limit', limit.toString());
+		if (topic) {
+			url.searchParams.set('topic', topic);
+		}
+
+		const response = await fetchWithRetry(url.toString());
+
+		return response.json();
 	}
 };

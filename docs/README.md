@@ -16,6 +16,33 @@ Comprehensive documentation for the Engagic civic intelligence platform.
 
 ---
 
+## Module Documentation (NEW)
+
+Comprehensive folder-level documentation for core modules:
+
+- **[Pipeline Documentation](../pipeline/README.md)** (~700 lines)
+  - Processing flow orchestration (4 focused modules)
+  - Item-level vs monolithic processing paths
+  - Queue architecture and job types
+  - Matter tracking workflow
+  - Configuration and deployment
+
+- **[Database Documentation](../database/README.md)** (~800 lines)
+  - Repository Pattern architecture
+  - 6 specialized repositories (cities, meetings, items, matters, queue, search)
+  - Complete schema documentation
+  - Data models and preservation patterns
+  - Common operations and examples
+
+- **[Server Documentation](../server/README.md)** (~850 lines)
+  - Modular FastAPI architecture
+  - 6 route modules + service layer + middleware
+  - Complete API endpoints reference
+  - Prometheus metrics and rate limiting
+  - Common patterns for extending the API
+
+---
+
 ## Core Documentation
 
 ### Architecture & Philosophy
@@ -60,7 +87,12 @@ Comprehensive documentation for the Engagic civic intelligence platform.
 
 ## API Reference
 
-- **[API Documentation](API.md)** - Complete endpoint reference
+- **[Server README](../server/README.md)** - Complete server module documentation
+  - Modular FastAPI architecture
+  - Route modules and service layer
+  - Middleware and dependency injection
+
+- **[API Documentation](API.md)** - Public API endpoint reference
   - Search endpoints (zipcode, city, topic)
   - Topic endpoints (list, search, popular)
   - System endpoints (health, stats, metrics)
@@ -76,13 +108,15 @@ Comprehensive documentation for the Engagic civic intelligence platform.
 
 ## Database
 
-- **[Schema Documentation](SCHEMA.md)** - Database structure reference
-  - Core tables (cities, meetings, items)
-  - Processing tables (cache, queue)
+- **[Database README](../database/README.md)** - Complete module documentation
+  - Repository Pattern architecture and implementation
+  - Data models and common operations
+  - Python code usage examples
+
+- **[Schema Documentation](SCHEMA.md)** - Quick reference for SQL queries
+  - Table schemas and column definitions
   - JSON structures (topics, participation, attachments)
-  - Relationships and foreign keys
-  - Indices and performance optimization
-  - Query examples
+  - Query examples and maintenance commands
 
 **Technology:**
 - SQLite 3.x with WAL mode
@@ -146,4 +180,10 @@ engagic/
 
 ---
 
-**Last Updated:** October 31, 2025
+**Last Updated:** November 11, 2025
+
+**See Also:**
+- [../pipeline/README.md](../pipeline/README.md) - Pipeline module documentation
+- [../database/README.md](../database/README.md) - Database module documentation
+- [../server/README.md](../server/README.md) - Server module documentation
+- [../CLAUDE.md](../CLAUDE.md) - Project overview and coding standards

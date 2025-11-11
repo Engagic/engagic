@@ -1,8 +1,28 @@
 import os
 import logging
+import sys
 from typing import Optional
 
+import structlog
+
 logger = logging.getLogger("engagic")
+
+
+def get_logger(name: str = "engagic"):
+    """Get a structured logger instance
+
+    Usage:
+        logger = get_logger(__name__)
+        logger = logger.bind(component="vendor", vendor="legistar")
+        logger.info("fetching meetings", days_back=7, mode="api")
+
+    Args:
+        name: Logger name (typically __name__ or module path)
+
+    Returns:
+        Structured logger instance with context binding support
+    """
+    return structlog.get_logger(name)
 
 
 class Config:
@@ -138,5 +158,65 @@ class Config:
         }
 
 
+def configure_structlog(is_development: bool = False, log_level: str = "INFO"):
+    """Configure structlog for structured logging
+
+    Args:
+        is_development: If True, use human-readable console output. If False, use JSON.
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
+
+    Confidence: 8/10 - Standard structlog setup with dev/prod modes
+    """
+    # Convert log level string to logging constant
+    numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+
+    # Shared processors for all modes
+    shared_processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.StackInfoRenderer(),
+    ]
+
+    if is_development:
+        # Development: Human-readable colored output
+        processors = shared_processors + [
+            structlog.dev.ConsoleRenderer(
+                colors=True,
+                exception_formatter=structlog.dev.plain_traceback,
+            )
+        ]
+    else:
+        # Production: JSON output for log aggregation
+        processors = shared_processors + [
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ]
+
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+    # Configure standard logging (for backward compatibility during migration)
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=numeric_level,
+    )
+
+
 # Global configuration instance
 config = Config()
+
+# Configure structured logging
+# Use development mode if DEBUG=true or localhost in origins
+configure_structlog(
+    is_development=config.is_development(),
+    log_level=config.LOG_LEVEL
+)

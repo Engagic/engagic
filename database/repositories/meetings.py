@@ -11,7 +11,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 from database.repositories.base import BaseRepository
-from database.models import Meeting, DatabaseConnectionError
+from database.models import Meeting
+from exceptions import DatabaseConnectionError
 
 logger = logging.getLogger("engagic")
 

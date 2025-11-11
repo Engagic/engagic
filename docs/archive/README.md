@@ -2,7 +2,16 @@
 
 Historical documentation from completed work sessions.
 
-## Recently Added (2025-10-31)
+## Recently Added (2025-11-11)
+
+### Architecture Documentation
+- **ARCHITECTURE.md** - High-level architecture overview (superseded by folder-level READMEs)
+  - Item-first architecture principles
+  - Two parallel pipelines explanation
+  - API and database schema overview
+  - **Note:** Content now covered in pipeline/README.md, database/README.md, server/README.md
+
+## Previously Added (2025-10-31)
 
 ### Engineering Assessments & Session Notes
 - **ENGINEERING_ASSESSMENT_2025.md** - Comprehensive October 2025 codebase audit
@@ -38,4 +47,7 @@ Historical documentation from completed work sessions.
 
 These docs are kept for historical context but are no longer active references.
 
-**Current documentation**: See root-level `ARCHITECTURE.md`, `CLAUDE.md`, and `README.md`
+**Current documentation**:
+- Root-level: `CLAUDE.md` (project overview)
+- Folder-level: `pipeline/README.md`, `database/README.md`, `server/README.md`
+- Additional: `docs/README.md` (documentation index)

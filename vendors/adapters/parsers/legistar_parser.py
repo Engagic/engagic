@@ -223,6 +223,32 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
         logger.debug("[HTMLParser:Legistar] No rgMasterTable found in HTML")
         return {'participation': {}, 'items': []}
 
+    # Build column map from header row (different Legistar sites have different columns)
+    # Header row may have class='rgHeader' or no class (just first tr with th elements)
+    header_row = master_table.find('tr', class_='rgHeader')
+    if not header_row:
+        # Try finding first tr with th elements
+        header_row = master_table.find('tr')
+        if header_row and not header_row.find_all('th'):
+            header_row = None
+
+    column_map = {}
+    if header_row:
+        headers = header_row.find_all('th')
+        for i, th in enumerate(headers):
+            # Normalize header text (remove nbsp, lowercase)
+            header_text = th.get_text(strip=True).replace('\xa0', ' ').lower()
+            column_map[header_text] = i
+        logger.debug(f"[HTMLParser:Legistar] Column map: {column_map}")
+    else:
+        # Fallback: assume standard layout if no header found
+        logger.warning("[HTMLParser:Legistar] No header row found, using default column positions")
+        column_map = {
+            'file #': 0, 'ver.': 1, 'agenda #': 2, 'name': 3,
+            'type': 4, 'status': 5, 'title': 6, 'action': 7,
+            'result': 8, 'action details': 9, 'video': 10
+        }
+
     # Find all agenda item rows (rgRow and rgAltRow)
     rows = master_table.find_all('tr', class_=['rgRow', 'rgAltRow'])
 
@@ -236,24 +262,11 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
         try:
             cells = row.find_all('td')
 
-            # Legistar RadGrid columns (0-indexed):
-            # 0: File # (with link to LegislationDetail)
-            # 1: Ver. (version)
-            # 2: Agenda # (item number - often empty)
-            # 3: Name (short name)
-            # 4: Type (Ordinance, Resolution, Hearing, etc.)
-            # 5: Status
-            # 6: Title (full detailed title)
-            # 7: Action
-            # 8: Result
-            # 9: Action Details
-            # 10: Video
-
-            if len(cells) < 7:
+            if len(cells) < 5:
                 logger.debug(f"[HTMLParser:Legistar] Row {sequence} has only {len(cells)} cells, skipping")
                 continue
 
-            # Extract File # and legislation ID
+            # Extract File # and legislation ID (always column 0)
             file_cell = cells[0]
             file_link = file_cell.find('a', href=lambda x: x and 'LegislationDetail.aspx' in x)
 
@@ -272,13 +285,19 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
                 logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no ID in link, skipping")
                 continue
 
-            # Extract other fields
-            version = cells[1].get_text(strip=True) if len(cells) > 1 else ''
-            agenda_number = cells[2].get_text(strip=True) if len(cells) > 2 else ''
-            name = cells[3].get_text(strip=True) if len(cells) > 3 else ''
-            item_type = cells[4].get_text(strip=True) if len(cells) > 4 else ''
-            status = cells[5].get_text(strip=True) if len(cells) > 5 else ''
-            title = cells[6].get_text(strip=True) if len(cells) > 6 else ''
+            # Extract fields using column map
+            def get_cell_text(col_name: str) -> str:
+                idx = column_map.get(col_name.lower())
+                if idx is not None and idx < len(cells):
+                    return cells[idx].get_text(strip=True)
+                return ''
+
+            version = get_cell_text('ver.')
+            agenda_number = get_cell_text('agenda #')
+            name = get_cell_text('name')
+            item_type = get_cell_text('type')
+            status = get_cell_text('status')  # May not exist in all layouts (e.g., Philadelphia)
+            title = get_cell_text('title')
 
             # Use full title if available, otherwise fall back to name
             item_title = title if title else name
@@ -298,7 +317,6 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
                 'matter_file': file_number,  # For matter tracking (e.g., "251041", "BL2025-1234")
                 'matter_id': legislation_id,  # Legislation ID as matter_id
                 'item_type': item_type,
-                'status': status,
                 'attachments': [],  # Could fetch from LegislationDetail.aspx later
             }
 
@@ -307,6 +325,8 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
                 item_data['version'] = version
             if agenda_number:
                 item_data['agenda_number'] = agenda_number
+            if status:
+                item_data['status'] = status
             if legislation_url:
                 item_data['legislation_url'] = legislation_url
 
