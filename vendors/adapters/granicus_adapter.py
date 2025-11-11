@@ -11,6 +11,7 @@ Complex adapter because Granicus doesn't provide a clean API - requires:
 
 import os
 import json
+import re
 import hashlib
 from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime
@@ -18,6 +19,7 @@ from urllib.parse import parse_qs, urlparse, urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.adapters.parsers.granicus_parser import parse_html_agenda
 from vendors.utils.item_filters import should_skip_procedural_item
+from parsing.pdf import PdfExtractor
 
 
 class GranicusAdapter(BaseAdapter):
@@ -33,6 +35,7 @@ class GranicusAdapter(BaseAdapter):
         super().__init__(city_slug, vendor="granicus")
         self.base_url = f"https://{self.slug}.granicus.com"
         self.view_ids_file = "data/granicus_view_ids.json"
+        self.pdf_extractor = PdfExtractor()
 
         # Discover or load view_id
         self.view_id = self._get_view_id()
@@ -179,9 +182,16 @@ class GranicusAdapter(BaseAdapter):
             for tag in ["h1", "h2", "h3", "h4", "h5"]:
                 upcoming_heading = soup.find(tag, string=lambda t: t and "upcoming" in t.lower())
                 if upcoming_heading:
+                    # PREFER next sibling table (most specific scope)
+                    next_table = upcoming_heading.find_next_sibling("table")
+                    if next_table:
+                        upcoming_section = next_table
+                        logger.info(f"[granicus:{self.slug}] Found upcoming section via {tag} heading (sibling table)")
+                        break
+                    # Fallback to parent div if no sibling table
                     upcoming_section = upcoming_heading.find_parent("div")
                     if upcoming_section:
-                        logger.info(f"[granicus:{self.slug}] Found upcoming section via {tag} heading")
+                        logger.info(f"[granicus:{self.slug}] Found upcoming section via {tag} heading (parent div)")
                         break
         if not upcoming_section:
             # Check for table-based layout
@@ -428,9 +438,35 @@ class GranicusAdapter(BaseAdapter):
         is_pdf = 'application/pdf' in content_type or response.content[:4] == b'%PDF'
 
         if is_pdf:
-            logger.debug(
-                f"[granicus:{self.slug}] AgendaViewer returned PDF, not HTML - skipping item parsing"
+            logger.info(
+                f"[granicus:{self.slug}] AgendaViewer returned PDF - attempting item extraction"
             )
+            # Try to extract items from PDF with hyperlinks
+            try:
+                pdf_result = self.pdf_extractor.extract_from_bytes(response.content, extract_links=True)
+                if pdf_result['success'] and pdf_result.get('text'):
+                    items = self._parse_pdf_agenda_items(
+                        pdf_result['text'],
+                        pdf_result.get('links', [])
+                    )
+                    if items:
+                        logger.info(
+                            f"[granicus:{self.slug}] Extracted {len(items)} items from PDF"
+                        )
+                        return {'participation': {}, 'items': items}
+                    else:
+                        logger.warning(
+                            f"[granicus:{self.slug}] PDF extraction succeeded but no items found"
+                        )
+                else:
+                    logger.warning(
+                        f"[granicus:{self.slug}] PDF extraction failed: {pdf_result.get('error', 'unknown')}"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"[granicus:{self.slug}] Failed to extract items from PDF: {e}"
+                )
+            # Fallback: return empty items (will become packet_url)
             return {'participation': {}, 'items': []}
 
         # Parse HTML
@@ -466,3 +502,96 @@ class GranicusAdapter(BaseAdapter):
         )
 
         return parsed
+
+    def _parse_pdf_agenda_items(self, pdf_text: str, links: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Parse Granicus PDF agenda to extract numbered items and map hyperlink attachments.
+
+        Strategy: Look for numbered items (1., 2., 3.) or File IDs (2025-00111),
+        extract title text, map hyperlinks on the same page to that item.
+
+        Args:
+            pdf_text: Full text extracted from PDF (with PAGE markers)
+            links: List of hyperlinks with structure [{'page': int, 'url': str}]
+
+        Returns:
+            List of item dicts with item_id, title, sequence, attachments, matter_file
+        """
+        items = []
+
+        # Split by pages to track which page we're on
+        page_texts = pdf_text.split('--- PAGE')
+
+        # Pattern for numbered items: "1." or "2." at start of line
+        item_pattern = re.compile(r'^\s*(\d+)\.\s+(.+?)(?:\n|$)', re.MULTILINE)
+
+        for page_idx, page_text in enumerate(page_texts):
+            if page_idx == 0:
+                continue  # Skip text before first PAGE marker
+
+            # Extract page number from header
+            page_match = re.match(r'^\s*(\d+)\s*---', page_text)
+            current_page = int(page_match.group(1)) if page_match else page_idx
+
+            # Find all numbered items on this page
+            for match in item_pattern.finditer(page_text):
+                sequence = int(match.group(1))
+                title_start = match.group(2).strip()
+
+                # Try to extract more title text (next few lines)
+                start_pos = match.end()
+                next_item = item_pattern.search(page_text, start_pos)
+                if next_item:
+                    end_pos = next_item.start()
+                else:
+                    end_pos = min(start_pos + 500, len(page_text))  # Max 500 chars
+
+                item_text = page_text[start_pos:end_pos].strip()
+
+                # Build full title (first line from match + continuation)
+                title_lines = item_text.split('\n')
+                title = title_start
+                if title_lines:
+                    # Add first continuation line if it doesn't look like a new section
+                    first_line = title_lines[0].strip()
+                    if first_line and not re.match(r'^\d+\.', first_line):
+                        title += ' ' + first_line
+
+                # Clean up title (limit length)
+                title = ' '.join(title.split())[:200]  # Max 200 chars, normalize whitespace
+
+                # Extract File ID if present (format: "File ID: 2025-00111")
+                matter_file = None
+                file_id_match = re.search(r'File ID:\s*(\d{4}-\d+)', item_text)
+                if file_id_match:
+                    matter_file = file_id_match.group(1)
+
+                # Find hyperlinks on this page (attachments)
+                page_links = [l for l in links if l.get('page') == current_page]
+                attachments = []
+                for link in page_links:
+                    url = link.get('url', '')
+                    if url:
+                        # Try to infer attachment name from URL or use generic
+                        name = url.split('/')[-1] if '/' in url else f"Attachment {len(attachments) + 1}"
+                        attachments.append({
+                            'name': name,
+                            'url': url,
+                            'type': 'pdf'
+                        })
+
+                item_dict = {
+                    'item_id': str(sequence),
+                    'title': title,
+                    'sequence': sequence,
+                    'attachments': attachments,
+                }
+
+                # Add matter tracking if File ID found
+                if matter_file:
+                    item_dict['matter_file'] = matter_file
+                    item_dict['matter_id'] = matter_file
+
+                items.append(item_dict)
+
+        return items

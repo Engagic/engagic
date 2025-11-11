@@ -141,8 +141,12 @@ class PdfExtractor:
                 "extraction_time": extraction_time,
             }
 
-    def extract_from_bytes(self, pdf_bytes: bytes) -> Dict[str, Any]:
-        """Extract text from PDF bytes
+    def extract_from_bytes(self, pdf_bytes: bytes, extract_links: bool = False) -> Dict[str, Any]:
+        """Extract text and optionally links from PDF bytes
+
+        Args:
+            pdf_bytes: PDF file content as bytes
+            extract_links: If True, also extract hyperlinks from PDF
 
         Returns dict with extraction results (same format as extract_from_url)
         """
@@ -152,6 +156,7 @@ class PdfExtractor:
             # Extract with PyMuPDF (with OCR fallback for scanned pages)
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text_parts = []
+            all_links = []
             ocr_pages = 0
 
             for page_num in range(len(doc)):
@@ -165,6 +170,17 @@ class PdfExtractor:
 
                 text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
 
+                # Extract links if requested
+                if extract_links:
+                    page_links = page.get_links()  # type: ignore[attr-defined]
+                    for link in page_links:
+                        if 'uri' in link and link['uri']:
+                            all_links.append({
+                                'page': page_num + 1,
+                                'url': link['uri'],
+                                'rect': link.get('from', None),
+                            })
+
             full_text = "\n\n".join(text_parts)
             page_count = len(doc)
             doc.close()
@@ -177,10 +193,12 @@ class PdfExtractor:
             log_msg = f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars"
             if ocr_pages > 0:
                 log_msg += f" (OCR: {ocr_pages} pages)"
+            if extract_links:
+                log_msg += f", {len(all_links)} links"
             log_msg += f" in {extraction_time:.2f}s"
             logger.info(log_msg)
 
-            return {
+            result = {
                 "success": True,
                 "text": full_text,
                 "method": method,
@@ -188,6 +206,11 @@ class PdfExtractor:
                 "extraction_time": extraction_time,
                 "ocr_pages": ocr_pages,
             }
+
+            if extract_links:
+                result['links'] = all_links
+
+            return result
 
         except Exception as e:
             extraction_time = time.time() - start_time

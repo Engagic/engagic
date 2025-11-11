@@ -1,0 +1,41 @@
+# Working Metro Areas - Confirmed Item-Level Processing
+# Cities with 5+ successfully processed agenda items
+# Last updated: 2025-11-10
+
+# CALIFORNIA (8 cities)
+# Bay Area Peninsula
+sanfranciscoCA          # 105 item summaries - Legistar
+paloaltoCA              # 44 item summaries - PrimeGov
+berkeleyCA              # 23 item summaries - Berkeley custom
+alamedaCA               # 15 item summaries - Legistar
+sunnyvaleCA             # 5 item summaries - Legistar
+menloparkCA             # 3 item summaries - Menlo Park custom
+mountainviewCA          # 3 item summaries - Legistar
+
+# TEXAS (2 cities)
+dallasTX                # 60 item summaries - Legistar
+austinTX                # 44 item summaries - Legistar
+
+# COLORADO (1 city)
+denverCO                # 72 item summaries - Legistar
+
+# NEW YORK (1 city)
+newyorkNY               # 54 item summaries - Legistar
+
+# ARIZONA (1 city)
+phoenixAZ               # 35 item summaries - Legistar
+
+# MASSACHUSETTS (1 city)
+bostonMA                # 15 item summaries - Legistar
+
+# TENNESSEE (1 city)
+nashvilleTN             # 12 item summaries - Legistar
+
+# WASHINGTON (1 city)
+bellevueWA              # 11 item summaries - Legistar
+
+# NORTH CAROLINA (1 city)
+charlotteNC             # 9 item summaries - Legistar
+
+# PENNSYLVANIA (1 city)
+philadelphiaPA          # 5 item summaries - Legistar

@@ -104,12 +104,20 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
                         'type': 'pdf',  # MetaViewer links are PDFs - conductor needs this for extraction
                     })
 
-        items.append({
+        # Add matter tracking (File ID as matter_file)
+        item_dict = {
             'item_id': item_id,
             'title': title,
             'sequence': sequence,
             'attachments': attachments,
-        })
+        }
+
+        # If item_id looks like a File ID (YYYY-NNNNN), treat as matter_file
+        if item_id and re.match(r'^\d{4}-\d+$', item_id):
+            item_dict['matter_file'] = item_id
+            item_dict['matter_id'] = item_id  # Use same value for both (no separate backend ID)
+
+        items.append(item_dict)
 
         logger.debug(
             f"[HTMLParser:Granicus] Item {sequence}: '{title[:60]}...' "
