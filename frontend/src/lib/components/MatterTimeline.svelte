@@ -12,7 +12,7 @@
 	let timeline = $state<any>(null);
 	let loading = $state(true);
 	let error = $state('');
-	let selectedAppearance = $state<number | null>(null);
+	let expandedAppearances = $state<Set<number>>(new Set());
 
 	onMount(async () => {
 		try {
@@ -80,16 +80,23 @@
 			{#each timeline.timeline as appearance, index}
 				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
 				{@const status = inferStatus(index, timeline.timeline.length)}
-				{@const isSelected = selectedAppearance === index}
+				{@const isExpanded = expandedAppearances.has(index)}
 
-				<div class="flow-step" class:selected={isSelected}>
+				<div class="flow-step" class:selected={isExpanded}>
 					<button
 						class="step-card"
 						class:committee={meetingInfo.type === 'committee'}
 						class:council={meetingInfo.type === 'council'}
 						class:board={meetingInfo.type === 'board'}
 						class:has-summary={!!appearance.summary}
-						onclick={() => selectedAppearance = isSelected ? null : index}
+						onclick={() => {
+							if (isExpanded) {
+								expandedAppearances.delete(index);
+							} else {
+								expandedAppearances.add(index);
+							}
+							expandedAppearances = expandedAppearances;
+						}}
 					>
 						<div class="step-number">{index + 1}</div>
 						<div class="step-content">
@@ -103,11 +110,11 @@
 							{/if}
 						</div>
 						<div class="step-expand">
-							{isSelected ? '▼' : '▶'}
+							{isExpanded ? '▼' : '▶'}
 						</div>
 					</button>
 
-					{#if isSelected}
+					{#if isExpanded}
 						<div class="step-detail">
 							<h4 class="detail-title">{appearance.meeting_title}</h4>
 							{#if appearance.topics}
@@ -314,28 +321,40 @@
 	}
 
 	.step-type {
-		font-weight: 600;
-		font-size: 0.95rem;
+		font-weight: 700;
+		font-size: 1rem;
 		color: var(--text-primary);
+		font-family: 'IBM Plex Mono', monospace;
 	}
 
 	.step-status {
 		font-size: 0.7rem;
 		padding: 0.2rem 0.5rem;
 		background: var(--civic-blue);
-		color: white;
+		color: var(--civic-white);
 		border-radius: 4px;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		font-weight: 600;
+		font-weight: 700;
+		border: 1.5px solid currentColor;
 	}
 
 	.step-card.committee .step-status {
-		background: var(--committee-color);
+		background: var(--surface-primary);
+		color: var(--committee-color);
+		border-color: var(--committee-color);
 	}
 
 	.step-card.council .step-status {
-		background: var(--council-color);
+		background: var(--surface-primary);
+		color: var(--council-color);
+		border-color: var(--council-color);
+	}
+
+	.step-card.board .step-status {
+		background: var(--surface-primary);
+		color: var(--board-color);
+		border-color: var(--board-color);
 	}
 
 	.step-date {
