@@ -23,9 +23,10 @@ from enum import Enum
 from database.db import UnifiedDatabase, City
 from vendors.factory import get_adapter
 from vendors.rate_limiter import RateLimiter
-from config import config
+from config import config, get_logger
+from server.metrics import metrics
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="fetcher")
 
 # Memory monitoring
 try:
@@ -385,6 +386,11 @@ class Fetcher:
                 result.status = SyncStatus.COMPLETED
                 result.duration_seconds = time.time() - start_time
 
+                # Record metrics
+                metrics.meetings_synced.labels(city=city.banana, vendor=city.vendor).inc(processed_count)
+                metrics.items_extracted.labels(city=city.banana, vendor=city.vendor).inc(items_stored_count)
+                metrics.matters_tracked.labels(city=city.banana).inc(matters_tracked_count)
+
                 # Build matter summary message
                 if matters_duplicate_count > 0:
                     matter_summary = f"{matters_tracked_count} new matters ({matters_duplicate_count} already tracked)"
@@ -392,9 +398,14 @@ class Fetcher:
                     matter_summary = f"{matters_tracked_count} matters tracked"
 
                 logger.info(
-                    f"[Sync] {city.banana}: Complete! {processed_count} meetings, "
-                    f"{items_stored_count} items, {matter_summary} "
-                    f"({result.duration_seconds:.1f}s)"
+                    "sync complete",
+                    city=city.banana,
+                    vendor=city.vendor,
+                    meetings=processed_count,
+                    items=items_stored_count,
+                    new_matters=matters_tracked_count,
+                    duplicate_matters=matters_duplicate_count,
+                    duration_seconds=round(result.duration_seconds, 1)
                 )
 
                 # Log memory after adapter cleanup
@@ -404,7 +415,11 @@ class Fetcher:
                 result.status = SyncStatus.FAILED
                 result.error_message = str(e)
                 result.duration_seconds = time.time() - start_time
-                logger.error(f"Failed to sync {city.banana}: {e}")
+
+                # Record error metrics
+                metrics.record_error(component="fetcher", error=e)
+
+                logger.error("sync failed", city=city.banana, vendor=city.vendor, duration_seconds=round(result.duration_seconds, 1), error=str(e), error_type=type(e).__name__)
 
                 # Add small delay on error
                 time.sleep(2 + random.uniform(0, 1))

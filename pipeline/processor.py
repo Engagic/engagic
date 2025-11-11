@@ -19,6 +19,7 @@ from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
 from config import config, get_logger
+from server.metrics import metrics
 
 logger = get_logger(__name__).bind(component="processor")
 
@@ -242,7 +243,11 @@ class Processor:
             queue_id = job.id
             job_type = job.job_type
 
-            logger.info(f"[Processor] Processing job {queue_id} (type: {job_type})")
+            logger.info("processing job", queue_id=queue_id, job_type=job_type)
+
+            # Track processing duration
+            job_start_time = time.time()
+            job_success = False
 
             try:
                 # Type-safe dispatch
@@ -253,35 +258,50 @@ class Processor:
                         if not meeting:
                             self.db.mark_processing_failed(queue_id, "Meeting not found")
                             failed_count += 1
+                            metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
                             continue
                         # Process the meeting (item-aware)
-                        self.process_meeting(meeting)
+                        with metrics.processing_duration.labels(job_type="meeting").time():
+                            self.process_meeting(meeting)
                         self.db.mark_processing_complete(queue_id)
                         processed_count += 1
-                        logger.info(f"[Processor] Processed meeting {job.payload.meeting_id}")
+                        job_success = True
+                        logger.info("processed meeting", meeting_id=job.payload.meeting_id, duration_seconds=round(time.time() - job_start_time, 1))
                     else:
                         raise ValueError("Invalid payload type for meeting job")
                 elif job_type == "matter":
                     from pipeline.models import MatterJob
                     if isinstance(job.payload, MatterJob):
-                        self.process_matter(
-                            job.payload.matter_id,
-                            job.payload.meeting_id,
-                            {"item_ids": job.payload.item_ids}
-                        )
+                        with metrics.processing_duration.labels(job_type="matter").time():
+                            self.process_matter(
+                                job.payload.matter_id,
+                                job.payload.meeting_id,
+                                {"item_ids": job.payload.item_ids}
+                            )
                         self.db.mark_processing_complete(queue_id)
                         processed_count += 1
-                        logger.info(f"[Processor] Processed matter {job.payload.matter_id}")
+                        job_success = True
+                        logger.info("processed matter", matter_id=job.payload.matter_id, duration_seconds=round(time.time() - job_start_time, 1))
                     else:
                         raise ValueError("Invalid payload type for matter job")
                 else:
                     raise ValueError(f"Unknown job type: {job_type}")
 
+                # Record successful job
+                if job_success:
+                    metrics.queue_jobs_processed.labels(job_type=job_type, status="completed").inc()
+
             except Exception as e:
                 error_msg = str(e)
                 self.db.mark_processing_failed(queue_id, error_msg)
                 failed_count += 1
-                logger.error(f"[Processor] Failed to process job {queue_id}: {e}")
+                job_duration = time.time() - job_start_time
+
+                # Record metrics
+                metrics.queue_jobs_processed.labels(job_type=job_type, status="failed").inc()
+                metrics.record_error(component="processor", error=e)
+
+                logger.error("job processing failed", queue_id=queue_id, job_type=job_type, duration_seconds=round(job_duration, 1), error=str(e), error_type=type(e).__name__)
 
         logger.info(
             f"[Processor] Processing complete for {city_banana}: "

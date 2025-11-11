@@ -9,6 +9,7 @@ Extracts common patterns:
 """
 
 import logging
+import time
 import requests
 from typing import Optional, List, Dict, Any, Iterator
 from datetime import datetime
@@ -17,8 +18,10 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from config import get_logger
+from server.metrics import metrics
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="vendor")
 
 # Browser-like headers to avoid bot detection
 DEFAULT_HEADERS = {
@@ -140,52 +143,93 @@ class BaseAdapter:
 
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+        # Track request duration
+        start_time = time.time()
+        status = "error"
+
         try:
-            logger.info(f"[{self.vendor}:{self.slug}] GET {url}")
+            logger.debug("vendor request", vendor=self.vendor, slug=self.slug, method="GET", url=url[:100])
             response = self.session.get(url, **kwargs)
 
             # Log response details BEFORE raise_for_status so we see failures
             content_length = len(response.content)
             content_type = response.headers.get('content-type', 'unknown')
-            logger.info(
-                f"[{self.vendor}:{self.slug}] Response: HTTP {response.status_code} "
-                f"({content_length} bytes, {content_type})"
+            duration = time.time() - start_time
+
+            logger.debug(
+                "vendor response",
+                vendor=self.vendor,
+                slug=self.slug,
+                status_code=response.status_code,
+                content_length=content_length,
+                content_type=content_type,
+                duration_seconds=round(duration, 2)
             )
 
             response.raise_for_status()
+
+            # Record successful request
+            status = "success"
+            metrics.vendor_requests.labels(vendor=self.vendor, status="success").inc()
+            metrics.vendor_request_duration.labels(vendor=self.vendor).observe(duration)
+
             return response
-        except requests.Timeout:
-            logger.error(f"[{self.vendor}:{self.slug}] Timeout fetching {url}")
+        except requests.Timeout as e:
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status="timeout").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error("vendor request timeout", vendor=self.vendor, slug=self.slug, url=url[:100], duration_seconds=round(duration, 2))
             raise
         except requests.HTTPError as e:
-            logger.error(
-                f"[{self.vendor}:{self.slug}] HTTP {e.response.status_code} for {url}"
-            )
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{e.response.status_code}").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error("vendor http error", vendor=self.vendor, slug=self.slug, status_code=e.response.status_code, url=url[:100], duration_seconds=round(duration, 2))
             raise
         except requests.RequestException as e:
-            logger.error(f"[{self.vendor}:{self.slug}] Request failed for {url}: {e}")
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error("vendor request failed", vendor=self.vendor, slug=self.slug, url=url[:100], error=str(e), error_type=type(e).__name__, duration_seconds=round(duration, 2))
             raise
 
     def _post(self, url: str, **kwargs) -> requests.Response:
         """Make POST request with error handling"""
         kwargs.setdefault("timeout", 30)
 
+        # Track request duration
+        start_time = time.time()
+
         try:
-            logger.info(f"[{self.vendor}:{self.slug}] POST {url}")
+            logger.debug("vendor request", vendor=self.vendor, slug=self.slug, method="POST", url=url[:100])
             response = self.session.post(url, **kwargs)
             response.raise_for_status()
 
             # Log response summary
             content_length = len(response.content)
             content_type = response.headers.get('content-type', 'unknown')
+            duration = time.time() - start_time
+
             logger.debug(
-                f"[{self.vendor}:{self.slug}] Response: {response.status_code} "
-                f"({content_length} bytes, {content_type})"
+                "vendor response",
+                vendor=self.vendor,
+                slug=self.slug,
+                status_code=response.status_code,
+                content_length=content_length,
+                content_type=content_type,
+                duration_seconds=round(duration, 2)
             )
+
+            # Record successful request
+            metrics.vendor_requests.labels(vendor=self.vendor, status="success").inc()
+            metrics.vendor_request_duration.labels(vendor=self.vendor).observe(duration)
 
             return response
         except requests.RequestException as e:
-            logger.error(f"[{self.vendor}:{self.slug}] POST failed for {url}: {e}")
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error("vendor POST failed", vendor=self.vendor, slug=self.slug, url=url[:100], error=str(e), error_type=type(e).__name__, duration_seconds=round(duration, 2))
             raise
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:

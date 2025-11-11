@@ -8,7 +8,6 @@
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
 	import Footer from '$lib/components/Footer.svelte';
-	import StateMetrics from '$lib/components/StateMetrics.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -72,6 +71,14 @@
 		const validationError = validateSearchQuery(searchQuery);
 		if (validationError) {
 			error = validationError;
+			return;
+		}
+
+		// Check if this is a state search
+		const stateDetection = detectStateSearch(searchQuery);
+		if (stateDetection.isState && stateDetection.stateCode) {
+			logger.trackEvent('state_search', { query: searchQuery, state: stateDetection.stateCode });
+			goto(`/state/${stateDetection.stateCode}`);
 			return;
 		}
 
@@ -318,10 +325,6 @@
 
 	{#if searchResults}
 		<div class="results-section">
-			{#if stateSearch().isState && searchResults.success === false && searchResults.ambiguous}
-				<StateMetrics stateCode={stateSearch().stateCode!} stateName={stateSearch().stateName} />
-			{/if}
-
 			{#if searchResults.success === false && searchResults.ambiguous && searchResults.city_options}
 				<div class="ambiguous-cities">
 					<div class="ambiguous-message">
