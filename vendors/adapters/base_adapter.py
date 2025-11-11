@@ -117,6 +117,15 @@ class BaseAdapter:
         """
         kwargs.setdefault("timeout", 30)
 
+        # For Legistar API endpoints, prefer JSON over XML
+        # Default Accept header requests XML before JSON, causing APIs to return XML
+        if 'webapi.legistar.com' in url:
+            headers = kwargs.get('headers', {})
+            if 'Accept' not in headers:
+                headers = headers.copy() if headers else {}
+                headers['Accept'] = 'application/json, application/xml;q=0.9, */*;q=0.8'
+                kwargs['headers'] = headers
+
         # Disable SSL verification for Granicus domains (known S3 redirect issue)
         # Confidence: 8/10 - Safe for public civic data, Granicus infra issue
         # Granicus redirects to S3 with mismatched SSL certs, causing verification failures
@@ -133,16 +142,16 @@ class BaseAdapter:
         try:
             logger.info(f"[{self.vendor}:{self.slug}] GET {url}")
             response = self.session.get(url, **kwargs)
-            response.raise_for_status()
 
-            # Log response summary
+            # Log response details BEFORE raise_for_status so we see failures
             content_length = len(response.content)
             content_type = response.headers.get('content-type', 'unknown')
-            logger.debug(
-                f"[{self.vendor}:{self.slug}] Response: {response.status_code} "
+            logger.info(
+                f"[{self.vendor}:{self.slug}] Response: HTTP {response.status_code} "
                 f"({content_length} bytes, {content_type})"
             )
 
+            response.raise_for_status()
             return response
         except requests.Timeout:
             logger.error(f"[{self.vendor}:{self.slug}] Timeout fetching {url}")

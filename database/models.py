@@ -172,7 +172,18 @@ class Meeting:
 
 @dataclass
 class AgendaItem:
-    """Agenda item entity - individual items within a meeting"""
+    """Agenda item entity - individual items within a meeting
+
+    Matter Tracking (Nov 2025):
+    Unified schema across all vendors (Legistar, PrimeGov, Granicus, etc.):
+    - matter_id: Backend unique identifier (UUID, numeric ID, etc.)
+    - matter_file: Official public-facing identifier (BL2025-1005, 25-1209, etc.)
+    - matter_type: Flexible metadata (Ordinance, Resolution, CD 12, etc.)
+    - agenda_number: Position on THIS specific agenda (1, K. 87, etc.)
+    - sponsors: List of sponsor names (when available)
+
+    Not all vendors provide all fields - that's expected and fine.
+    """
 
     id: str  # Vendor-specific item ID
     meeting_id: str  # Foreign key to Meeting
@@ -181,6 +192,11 @@ class AgendaItem:
     attachments: List[
         Any
     ]  # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
+    matter_id: Optional[str] = None  # Backend unique identifier
+    matter_file: Optional[str] = None  # Official public identifier (BL2025-1005, 25-1209)
+    matter_type: Optional[str] = None  # Flexible metadata (Ordinance, CD 12, etc.)
+    agenda_number: Optional[str] = None  # Position on this agenda
+    sponsors: Optional[List[str]] = None  # Sponsor names
     summary: Optional[str] = None
     topics: Optional[List[str]] = None  # Extracted topics
     created_at: Optional[datetime] = None
@@ -218,12 +234,27 @@ class AgendaItem:
         else:
             topics = None
 
+        sponsors = row_dict.get("sponsors")
+        if sponsors:
+            try:
+                sponsors = json.loads(sponsors)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize sponsors JSON: {sponsors}")
+                sponsors = None
+        else:
+            sponsors = None
+
         return cls(
             id=row_dict["id"],
             meeting_id=row_dict["meeting_id"],
             title=row_dict["title"],
             sequence=row_dict["sequence"],
             attachments=attachments,
+            matter_id=row_dict.get("matter_id"),
+            matter_file=row_dict.get("matter_file"),
+            matter_type=row_dict.get("matter_type"),
+            agenda_number=row_dict.get("agenda_number"),
+            sponsors=sponsors,
             summary=row_dict.get("summary"),
             topics=topics,
             created_at=datetime.fromisoformat(row_dict["created_at"])
