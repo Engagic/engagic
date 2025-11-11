@@ -130,7 +130,13 @@ export const apiClient = {
 		return response.json();
 	},
 
-	async getMeeting(meetingId: number): Promise<any> {
+	async getMeeting(meetingId: string): Promise<{
+		success: boolean;
+		meeting: any;
+		city_name: string | null;
+		state: string | null;
+		banana: string;
+	}> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/meeting/${meetingId}`
 		);
@@ -147,7 +153,7 @@ export const apiClient = {
 	},
 
 	async generateFlyer(params: {
-		meeting_id: number;
+		meeting_id: string;
 		item_id?: string;
 		position: 'support' | 'oppose' | 'more_info';
 		custom_message?: string;
