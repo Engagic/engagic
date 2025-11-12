@@ -636,13 +636,24 @@ class UnifiedDatabase:
                 attachment_hash = hash_attachments(agenda_item.attachments)
 
                 if existing_matter:
-                    # Update last_seen and appearance_count using raw SQL
-                    # (these fields not in Matter model yet, but tracked in city_matters table)
-                    self.conn.execute(
+                    # Check if this meeting_id is already counted for this matter
+                    appearance_exists = self.conn.execute(
                         """
+                        SELECT COUNT(*) FROM matter_appearances
+                        WHERE matter_id = ? AND meeting_id = ?
+                        """,
+                        (matter_composite_id, meeting.id)
+                    ).fetchone()[0] > 0
+
+                    # Only increment appearance_count if this is a NEW meeting
+                    increment_sql = "appearance_count + 1" if not appearance_exists else "appearance_count"
+
+                    # Update last_seen and appearance_count (only if new meeting)
+                    self.conn.execute(
+                        f"""
                         UPDATE city_matters
                         SET last_seen = ?,
-                            appearance_count = appearance_count + 1,
+                            appearance_count = {increment_sql},
                             attachments = ?,
                             metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', ?),
                             updated_at = CURRENT_TIMESTAMP
@@ -656,7 +667,7 @@ class UnifiedDatabase:
                         ),
                     )
                     stats['duplicate'] += 1
-                    logger.info(f"[Matters] Duplicate: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
+                    logger.info(f"[Matters] {'New appearance' if not appearance_exists else 'Reprocess'}: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
                 else:
                     # Create new Matter object
                     matter_obj = Matter(
