@@ -2,6 +2,7 @@
 Search utilities for finding text in meeting and item summaries.
 """
 
+import json
 import os
 import re
 from datetime import datetime
@@ -409,8 +410,7 @@ def search_matters(
     """
     Search for text in canonical matter summaries (matter-level search).
 
-    Searches the canonical_summary field in city_matters table, which contains
-    the deduplicated summary for matters that appear across multiple meetings.
+    Uses Matter objects from MatterRepository for consistency with other search functions.
 
     Args:
         search_term: String to search for (e.g., "Beazer Homes", "affordable housing")
@@ -427,10 +427,10 @@ def search_matters(
             - matter_file: Official matter file (e.g., "BL2025-1005")
             - matter_type: Type (Ordinance, Resolution, etc.)
             - title: Matter title
-            - sponsors: Sponsor names (JSON array)
+            - sponsors: Sponsor names (array, deserialized from JSON)
             - context: Text snippet around match
             - summary: Full canonical summary
-            - topics: Canonical topics (JSON array)
+            - topics: Canonical topics (array, deserialized from JSON)
             - appearance_count: Number of times this matter appeared
             - first_seen: First appearance date
             - last_seen: Most recent appearance date
@@ -441,63 +441,31 @@ def search_matters(
         db_path = os.getenv('ENGAGIC_UNIFIED_DB', '/root/engagic/data/engagic.db')
 
     db = UnifiedDatabase(db_path)
-    conn = db.conn
+
+    # Use repository method to get Matter objects
+    matters = db.search_matters(search_term, city_banana, state, case_sensitive)
 
     results = []
-    like_pattern = f'%{search_term}%'
 
-    # Build filter clauses
-    filters = []
-    params = [like_pattern]
+    for matter in matters:
+        # Get city name from cities table
+        city_row = db.conn.execute(
+            "SELECT name, state FROM cities WHERE banana = ?",
+            (matter.banana,)
+        ).fetchone()
 
-    if city_banana:
-        filters.append("m.banana = ?")
-        params.append(city_banana)
+        if not city_row:
+            continue
 
-    if state:
-        filters.append("c.state = ?")
-        params.append(state.upper())
+        city = f"{city_row[0]}, {city_row[1]}"
 
-    filter_clause = ""
-    if filters:
-        filter_clause = " AND " + " AND ".join(filters)
-
-    # Search in canonical matter summaries
-    query = f'''
-        SELECT m.id, m.banana, m.matter_file, m.matter_type, m.title,
-               m.sponsors, m.canonical_summary, m.canonical_topics,
-               m.appearance_count, m.first_seen, m.last_seen,
-               c.name as city_name, c.state
-        FROM city_matters m
-        JOIN cities c ON m.banana = c.banana
-        WHERE m.canonical_summary IS NOT NULL
-          AND m.canonical_summary LIKE ?
-          AND m.appearance_count >= 2
-          {filter_clause}
-        ORDER BY m.last_seen DESC
-    '''
-
-    cursor = conn.execute(query, params)
-
-    for row in cursor.fetchall():
-        matter_id = row[0]
-        banana = row[1]
-        matter_file = row[2]
-        matter_type = row[3]
-        title = row[4]
-        sponsors = row[5]
-        canonical_summary = row[6]
-        canonical_topics = row[7]
-        appearance_count = row[8]
-        first_seen = row[9]
-        last_seen = row[10]
-        city_name = row[11]
-        state_code = row[12]
-
-        city = f"{city_name}, {state_code}"
+        # Matter objects automatically deserialize JSON fields
+        # Topics and sponsors are already lists
+        sponsors = matter.sponsors if matter.sponsors else []
+        topics = matter.canonical_topics if matter.canonical_topics else []
 
         # Strip markdown for context search
-        clean_summary = strip_markdown(canonical_summary)
+        clean_summary = strip_markdown(matter.canonical_summary or '')
 
         # Find context around the match
         if case_sensitive:
@@ -516,29 +484,28 @@ def search_matters(
         else:
             context = clean_summary[:300]
 
-        # Build timeline URL (links to matter timeline view)
-        # For now, just link to the city page with matters view
-        if matter_file:
-            anchor = re.sub(r'[^a-z0-9-]', '-', matter_file.lower())
+        # Build timeline URL
+        if matter.matter_file:
+            anchor = re.sub(r'[^a-z0-9-]', '-', matter.matter_file.lower())
         else:
-            anchor = matter_id
-        timeline_url = f"https://engagic.org/{banana}?view=matters#{anchor}"
+            anchor = matter.id
+        timeline_url = f"https://engagic.org/{matter.banana}?view=matters#{anchor}"
 
         results.append({
             'type': 'matter',
             'city': city,
-            'matter_id': matter_id,
-            'matter_file': matter_file,
-            'matter_type': matter_type,
-            'title': title,
+            'matter_id': matter.id,
+            'matter_file': matter.matter_file,
+            'matter_type': matter.matter_type,
+            'title': matter.title,
             'sponsors': sponsors,
             'context': context,
-            'summary': canonical_summary,
-            'topics': canonical_topics,
-            'appearance_count': appearance_count,
-            'first_seen': first_seen,
-            'last_seen': last_seen,
-            'banana': banana,
+            'summary': matter.canonical_summary,
+            'topics': topics,
+            'appearance_count': matter.appearance_count,
+            'first_seen': matter.first_seen.isoformat() if matter.first_seen else None,
+            'last_seen': matter.last_seen.isoformat() if matter.last_seen else None,
+            'banana': matter.banana,
             'timeline_url': timeline_url
         })
 

@@ -189,8 +189,13 @@ class Matter:
     matter_id: Optional[str] = None  # Backend vendor identifier (UUID, numeric)
     matter_type: Optional[str] = None  # Ordinance, Resolution, etc.
     title: Optional[str] = None  # Matter title
+    sponsors: Optional[List[str]] = None  # Sponsor names
     canonical_summary: Optional[str] = None  # Deduplicated summary
     canonical_topics: Optional[List[str]] = None  # Extracted topics
+    first_seen: Optional[datetime] = None  # First appearance date
+    last_seen: Optional[datetime] = None  # Most recent appearance date
+    appearance_count: int = 1  # Number of appearances across meetings
+    status: str = "active"  # Matter status
     attachments: Optional[List[Dict[str, Any]]] = None  # Attachment metadata
     metadata: Optional[Dict[str, Any]] = None  # attachment_hash, etc.
     created_at: Optional[datetime] = None
@@ -211,6 +216,16 @@ class Matter:
         row_dict = dict(row)
 
         # Deserialize JSON fields
+        sponsors = row_dict.get("sponsors")
+        if sponsors:
+            try:
+                sponsors = json.loads(sponsors)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to deserialize sponsors JSON: {sponsors}")
+                sponsors = None
+        else:
+            sponsors = None
+
         canonical_topics = row_dict.get("canonical_topics")
         if canonical_topics:
             try:
@@ -248,8 +263,17 @@ class Matter:
             matter_id=row_dict.get("matter_id"),
             matter_type=row_dict.get("matter_type"),
             title=row_dict.get("title"),
+            sponsors=sponsors,
             canonical_summary=row_dict.get("canonical_summary"),
             canonical_topics=canonical_topics,
+            first_seen=datetime.fromisoformat(row_dict["first_seen"])
+            if row_dict.get("first_seen")
+            else None,
+            last_seen=datetime.fromisoformat(row_dict["last_seen"])
+            if row_dict.get("last_seen")
+            else None,
+            appearance_count=row_dict.get("appearance_count", 1),
+            status=row_dict.get("status", "active"),
             attachments=attachments,
             metadata=metadata,
             created_at=datetime.fromisoformat(row_dict["created_at"])
