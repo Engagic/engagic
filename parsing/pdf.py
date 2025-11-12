@@ -13,10 +13,10 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
-# Set reasonable limit for OCR on scanned PDFs
-# 200MP = ~600MB peak RAM (safe for 2GB VPS with other services)
+# Set conservative limit for OCR on scanned PDFs
+# 100MP = ~300MB peak RAM (conservative for 2GB VPS with other services)
 # Convert PIL warnings to errors to catch decompression bombs
-Image.MAX_IMAGE_PIXELS = 200000000
+Image.MAX_IMAGE_PIXELS = 100000000
 warnings.simplefilter('error', Image.DecompressionBombWarning)
 
 logger = logging.getLogger("engagic")
@@ -25,12 +25,13 @@ logger = logging.getLogger("engagic")
 class PdfExtractor:
     """PDF extractor using PyMuPDF with OCR fallback"""
 
-    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 300):
+    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 150):
         """Initialize PDF extractor
 
         Args:
             ocr_threshold: Minimum characters per page before triggering OCR fallback
             ocr_dpi: DPI for image rendering when using OCR (higher = better quality, slower)
+                    Default 150 (reduced from 300) to prevent memory issues on VPS
         """
         self.ocr_threshold = ocr_threshold
         self.ocr_dpi = ocr_dpi
@@ -47,9 +48,25 @@ class PdfExtractor:
         try:
             # Render page to high-DPI image
             pix = page.get_pixmap(dpi=self.ocr_dpi)
+
+            # Check image size BEFORE trying PIL (prevent OOM)
+            # 100MP = ~300MB peak RAM (conservative threshold for 2GB VPS with other services)
+            megapixels = (pix.width * pix.height) / 1000000
+            logger.debug(
+                f"[PyMuPDF] Page {page.number + 1}: Rendering at {self.ocr_dpi} DPI = "
+                f"{pix.width}x{pix.height} ({megapixels:.1f}MP)"
+            )
+
+            if megapixels > 100:
+                logger.warning(
+                    f"[PyMuPDF] Page {page.number + 1}: Image too large ({pix.width}x{pix.height} = "
+                    f"{megapixels:.1f}MP), skipping OCR to prevent OOM"
+                )
+                return ""
+
             img_bytes = pix.tobytes("png")
 
-            # Try to load image (may hit decompression bomb limit)
+            # Try to load image with PIL
             img = Image.open(io.BytesIO(img_bytes))
 
             # Run Tesseract OCR
@@ -57,15 +74,12 @@ class PdfExtractor:
             return text
 
         except (Image.DecompressionBombError, Image.DecompressionBombWarning) as e:
-            # Image too large for safe OCR processing
-            logger.warning(
-                f"Page {page.number}: Image too large ({pix.width}x{pix.height} = "
-                f"{pix.width * pix.height / 1000000:.1f}MP), skipping OCR to prevent OOM"
-            )
+            # PIL decompression bomb protection triggered
+            logger.warning(f"[PyMuPDF] Page {page.number + 1}: PIL decompression bomb detected, skipping OCR")
             return ""
         except Exception as e:
             # Catch any other OCR failures gracefully
-            logger.error(f"Page {page.number}: OCR failed - {e}")
+            logger.error(f"[PyMuPDF] Page {page.number + 1}: OCR failed - {e}")
             return ""
 
     def _is_ocr_better(self, original: str, ocr_result: str, page_num: int) -> bool:
