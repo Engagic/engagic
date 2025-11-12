@@ -22,15 +22,15 @@
 	// Display agenda_number exactly as provided (already formatted), only add dot for sequence fallback
 	const displayNumber = $derived(item.agenda_number || `${item.sequence}.`);
 
-	// Generate human-readable anchor ID (prefer matter_file, then agenda_number, fallback to item.id)
+	// Generate human-readable anchor ID (prefer agenda_number for meeting context, then matter_file, fallback to item.id)
 	const anchorId = $derived(() => {
-		if (item.matter_file) {
-			// Use matter file: "BL2025-1005" -> "bl2025-1005"
-			return item.matter_file.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-		}
 		if (item.agenda_number) {
-			// Use agenda number: "1." -> "item-1", "K. 87" -> "item-k-87"
+			// Use agenda number: "5-E" -> "item-5-e" (meeting-specific position)
 			return 'item-' + item.agenda_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+		}
+		if (item.matter_file) {
+			// Use matter file: "2025-5470" -> "2025-5470" (legislative file number)
+			return item.matter_file.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 		}
 		// Fallback to item ID
 		return `item-${item.id}`;

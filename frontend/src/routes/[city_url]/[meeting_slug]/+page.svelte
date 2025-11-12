@@ -22,27 +22,42 @@
 	let expandedThinking = new SvelteSet<string>();
 	let flyerGenerating = $state(false);
 
-	// Handle deep linking to specific items
+	// Handle deep linking to specific items (supports both #item-5-e and #2025-5470 formats)
 	$effect(() => {
 		if (typeof window !== 'undefined' && window.location.hash) {
-			const hash = window.location.hash;
-			const itemId = hash.replace('#item-', '');
+			const hash = window.location.hash.substring(1); // Remove #
 
-			if (itemId) {
-				expandedItems.add(itemId);
-
-				setTimeout(() => {
-					const element = document.getElementById(`item-${itemId}`);
-					if (element) {
-						element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-						const isDark = document.documentElement.classList.contains('dark');
-						element.style.backgroundColor = isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(14, 165, 233, 0.1)';
-						setTimeout(() => {
-							element.style.backgroundColor = '';
-							element.style.transition = 'background-color 1s ease';
-						}, 2000);
+			if (hash) {
+				// Find the matching item by checking all items for matching anchor ID
+				const matchingItem = selectedMeeting?.items?.find(item => {
+					// Generate anchor ID using same logic as AgendaItem component
+					let anchorId = '';
+					if (item.agenda_number) {
+						anchorId = 'item-' + item.agenda_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+					} else if (item.matter_file) {
+						anchorId = item.matter_file.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+					} else {
+						anchorId = `item-${item.id}`;
 					}
-				}, 100);
+					return anchorId === hash;
+				});
+
+				if (matchingItem) {
+					expandedItems.add(matchingItem.id);
+
+					setTimeout(() => {
+						const element = document.getElementById(hash);
+						if (element) {
+							element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+							const isDark = document.documentElement.classList.contains('dark');
+							element.style.backgroundColor = isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(14, 165, 233, 0.1)';
+							setTimeout(() => {
+								element.style.backgroundColor = '';
+								element.style.transition = 'background-color 1s ease';
+							}, 2000);
+						}
+					}, 100);
+				}
 			}
 		}
 	});

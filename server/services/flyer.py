@@ -102,6 +102,29 @@ def _generate_meeting_slug(meeting: Meeting) -> str:
     return f"{clean_title}_{date_slug}_{meeting.id}"
 
 
+def _generate_item_anchor(item: AgendaItem) -> str:
+    """Generate item anchor matching AgendaItem component logic
+
+    Priority: agenda_number (meeting context) > matter_file (legislative ID) > item.id (fallback)
+    """
+    if item.agenda_number:
+        # Use agenda number: "5-E" -> "item-5-e"
+        anchor = item.agenda_number.lower()
+        anchor = re.sub(r'[^a-z0-9]', '-', anchor)
+        anchor = re.sub(r'-+', '-', anchor)
+        anchor = anchor.strip('-')
+        return f"item-{anchor}"
+
+    if item.matter_file:
+        # Use matter file: "2025-5470" -> "2025-5470"
+        anchor = item.matter_file.lower()
+        anchor = re.sub(r'[^a-z0-9-]', '-', anchor)
+        return anchor
+
+    # Fallback to item ID
+    return f"item-{item.id}"
+
+
 def generate_meeting_flyer(
     meeting: Meeting,
     item: Optional[AgendaItem],
@@ -142,7 +165,8 @@ def generate_meeting_flyer(
 
     # Add item anchor for deep linking (when item-specific flyer)
     if item:
-        meeting_url += f"#item-{item.id}"
+        anchor = _generate_item_anchor(item)
+        meeting_url += f"#{anchor}"
 
     # Generate QR code and logo as data URLs
     qr_data_url = _generate_qr_code(meeting_url)
