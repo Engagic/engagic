@@ -1,16 +1,17 @@
 <script lang="ts">
 	import { getStateMatters } from '$lib/api/index';
+	import type { GetStateMattersResponse, StateMatterSummary } from '$lib/api/types';
 	import { onMount } from 'svelte';
 
 	interface Props {
 		stateCode: string;
 		stateName?: string;
-		initialMetrics?: any;
+		initialMetrics?: GetStateMattersResponse;
 	}
 
 	let { stateCode, stateName, initialMetrics }: Props = $props();
 
-	let metrics = $state<any>(initialMetrics || null);
+	let metrics = $state<GetStateMattersResponse | null>(initialMetrics || null);
 	let loading = $state(!initialMetrics);
 	let error = $state('');
 	let selectedTopic = $state<string | null>(null);
@@ -51,23 +52,23 @@
 	const recentMatters = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		return metrics.matters
-			.filter((m: any) => m.last_seen)
-			.sort((a: any, b: any) => new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime())
+			.filter((m: StateMatterSummary) => m.last_seen)
+			.sort((a: StateMatterSummary, b: StateMatterSummary) => new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime())
 			.slice(0, 5);
 	});
 
 	const longestTrackedMatters = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		return metrics.matters
-			.filter((m: any) => m.appearance_count > 1)
-			.sort((a: any, b: any) => b.appearance_count - a.appearance_count)
+			.filter((m: StateMatterSummary) => m.appearance_count > 1)
+			.sort((a: StateMatterSummary, b: StateMatterSummary) => b.appearance_count - a.appearance_count)
 			.slice(0, 5);
 	});
 
 	const mostActiveCities = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		const cityCounts: Record<string, { name: string; banana: string; count: number }> = {};
-		metrics.matters.forEach((m: any) => {
+		metrics.matters.forEach((m: StateMatterSummary) => {
 			if (!cityCounts[m.city_name]) {
 				cityCounts[m.city_name] = { name: m.city_name, banana: m.banana, count: 0 };
 			}
@@ -81,7 +82,7 @@
 	const matterTypeBreakdown = $derived.by(() => {
 		if (!metrics?.matters) return [];
 		const typeCounts: Record<string, number> = {};
-		metrics.matters.forEach((m: any) => {
+		metrics.matters.forEach((m: StateMatterSummary) => {
 			const type = m.matter_type || 'Unknown';
 			typeCounts[type] = (typeCounts[type] || 0) + 1;
 		});
@@ -92,7 +93,7 @@
 
 	const avgAppearances = $derived.by(() => {
 		if (!metrics?.matters || metrics.matters.length === 0) return 0;
-		const total = metrics.matters.reduce((sum: number, m: any) => sum + (m.appearance_count || 0), 0);
+		const total = metrics.matters.reduce((sum: number, m: StateMatterSummary) => sum + (m.appearance_count || 0), 0);
 		return (total / metrics.matters.length).toFixed(1);
 	});
 

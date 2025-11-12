@@ -1,16 +1,18 @@
 <script lang="ts">
 	import { getMatterTimeline } from '$lib/api/index';
+	import type { MatterTimelineResponse, MatterTimelineAppearance } from '$lib/api/types';
+	import { generateAnchorId } from '$lib/utils/anchor';
 	import { onMount } from 'svelte';
 
 	interface Props {
 		matterId?: string;
 		matterFile?: string;
-		timelineData?: any;
+		timelineData?: MatterTimelineResponse;
 	}
 
 	let { matterId, matterFile, timelineData }: Props = $props();
 
-	let timeline = $state<any>(timelineData || null);
+	let timeline = $state<MatterTimelineResponse | null>(timelineData || null);
 	let loading = $state(!timelineData);
 	let error = $state('');
 	let expandedAppearances = $state<Set<number>>(new Set());
@@ -63,21 +65,16 @@
 		return 'Under Review';
 	}
 
-	function buildItemAnchor(appearance: any): string {
-		// Build anchor ID using same logic as AgendaItem component (agenda_number first)
-		if (appearance.agenda_number) {
-			// Use agenda number: "5-E" -> "item-5-e" (meeting-specific position)
-			return 'item-' + appearance.agenda_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-		}
-		if (matterFile) {
-			// Use matter file: "2025-5470" -> "2025-5470" (legislative file number)
-			return matterFile.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-		}
-		// Fallback to item ID
-		return `item-${appearance.item_id}`;
+	function buildItemAnchor(appearance: MatterTimelineAppearance): string {
+		// Build anchor ID using shared utility, with matter_file override from component prop
+		return generateAnchorId({
+			id: appearance.item_id,
+			agenda_number: appearance.agenda_number,
+			matter_file: matterFile || undefined
+		});
 	}
 
-	function buildMeetingLink(appearance: any): string {
+	function buildMeetingLink(appearance: MatterTimelineAppearance): string {
 		// Build full meeting URL with anchor
 		const anchor = buildItemAnchor(appearance);
 		return `/${appearance.banana}/${appearance.meeting_id}#${anchor}`;
@@ -114,6 +111,7 @@
 						class:council={meetingInfo.type === 'council'}
 						class:board={meetingInfo.type === 'board'}
 						class:has-summary={!!appearance.summary}
+						data-sveltekit-preload-data="hover"
 					>
 						<div class="step-number">{index + 1}</div>
 						<div class="step-content">

@@ -103,11 +103,14 @@
 
 	{#if searchResults && searchResults.success}
 		{#if hasQualifyingMatters()}
-			<div class="view-toggle">
+			<div class="view-toggle" role="tablist" aria-label="View mode selection">
 				<button
 					class="toggle-btn"
 					class:active={viewMode === 'meetings'}
 					onclick={() => viewMode = 'meetings'}
+					role="tab"
+					aria-selected={viewMode === 'meetings'}
+					aria-controls="content-panel"
 				>
 					Meetings
 				</button>
@@ -115,6 +118,9 @@
 					class="toggle-btn"
 					class:active={viewMode === 'matters'}
 					onclick={() => switchToMatters()}
+					role="tab"
+					aria-selected={viewMode === 'matters'}
+					aria-controls="content-panel"
 				>
 					Matters
 				</button>
@@ -135,6 +141,8 @@
 							<button
 								class="toggle-past-btn"
 								onclick={() => showPastMeetings = !showPastMeetings}
+								aria-label={showPastMeetings ? `Hide ${pastMeetings.length} past meetings` : `Show ${pastMeetings.length} past meetings`}
+								aria-expanded={showPastMeetings}
 							>
 								{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({pastMeetings.length})
 							</button>
