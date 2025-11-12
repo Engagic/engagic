@@ -6,6 +6,7 @@ Moved from: infocore/processing/pdf_extractor.py
 import io
 import logging
 import time
+import warnings
 import requests
 from typing import Dict, Any
 import fitz  # PyMuPDF
@@ -14,8 +15,9 @@ from PIL import Image
 
 # Set reasonable limit for OCR on scanned PDFs
 # 200MP = ~600MB peak RAM (safe for 2GB VPS with other services)
-# Larger images (blueprints, charts) will skip OCR gracefully
+# Convert PIL warnings to errors to catch decompression bombs
 Image.MAX_IMAGE_PIXELS = 200000000
+warnings.simplefilter('error', Image.DecompressionBombWarning)
 
 logger = logging.getLogger("engagic")
 
