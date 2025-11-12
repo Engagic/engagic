@@ -655,7 +655,7 @@ class UnifiedDatabase:
                         SET last_seen = ?,
                             appearance_count = {increment_sql},
                             attachments = ?,
-                            metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', ?),
+                            metadata = json_set(COALESCE(metadata, '{{}}'), '$.attachment_hash', ?),
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                     """,
@@ -748,6 +748,8 @@ class UnifiedDatabase:
         Groups items by matter, checks if matter already processed with unchanged
         attachments. If unchanged, copies canonical summary. If new/changed, enqueues.
 
+        STRICT IMPROVEMENT: Aggregates ALL items across ALL meetings for matter before enqueuing.
+
         Args:
             banana: City identifier
             meeting: Meeting object
@@ -758,9 +760,9 @@ class UnifiedDatabase:
             Number of matters enqueued (0 if all reused from canonical)
         """
         from vendors.utils.item_filters import should_skip_matter
-        from database.id_generation import generate_matter_id
+        from database.id_generation import generate_matter_id, validate_matter_id
 
-        # Group items by matter
+        # Group items by matter (from current meeting)
         matters_map: Dict[str, List[AgendaItem]] = {}
         items_without_matters = []
 
@@ -785,6 +787,11 @@ class UnifiedDatabase:
                 matter_id=first_item.matter_id
             )
 
+            # STRICT IMPROVEMENT: Validate matter_id format before enqueuing
+            if not validate_matter_id(matter_id):
+                logger.error(f"[Matters] Invalid matter_id format generated: {matter_id}")
+                continue
+
             # Filter out procedural matter types (minutes, info items, calendars)
             matter_type = matter_items[0].matter_type if matter_items else None
             if matter_type and should_skip_matter(matter_type):
@@ -793,26 +800,40 @@ class UnifiedDatabase:
                 )
                 continue
 
+            # STRICT IMPROVEMENT: Query ALL items across ALL meetings for this matter
+            # This ensures we process ALL attachments and backfill ALL appearances
+            all_items_for_matter = self._get_all_items_for_matter(
+                banana=banana,
+                matter_file=first_item.matter_file,
+                matter_id=first_item.matter_id
+            )
+
+            if not all_items_for_matter:
+                logger.warning(f"[Matters] No items found for matter {matter_key}")
+                continue
+
             # Check if matter already processed
             existing_matter = self._get_matter(matter_id)
 
             if existing_matter and existing_matter.get("canonical_summary"):
                 # Matter exists - check if attachments changed
                 # Use first item's attachments as representative (should be same across items)
-                current_hash = hash_attachments(matter_items[0].attachments)
+                current_hash = hash_attachments(all_items_for_matter[0].attachments)
 
                 metadata = json.loads(existing_matter.get("metadata") or "{}")
                 stored_hash = metadata.get("attachment_hash")
 
                 if stored_hash == current_hash:
-                    # Unchanged - copy canonical summary to all items
-                    self._apply_canonical_summary(matter_items, existing_matter)
+                    # Unchanged - copy canonical summary to ALL items (including from other meetings)
+                    self._apply_canonical_summary(all_items_for_matter, existing_matter)
                     logger.debug(
-                        f"[Matters] Reusing canonical summary for {matter_key} ({len(matter_items)} items)"
+                        f"[Matters] Reusing canonical summary for {matter_key} "
+                        f"({len(all_items_for_matter)} items across all meetings)"
                     )
                     continue  # Skip enqueue
 
             # New or changed - enqueue matter for processing
+            # Include ALL item IDs across ALL meetings
             self.enqueue_for_processing(
                 source_url=f"matters://{matter_id}",
                 meeting_id=meeting.id,
@@ -820,11 +841,15 @@ class UnifiedDatabase:
                 priority=priority,
                 metadata={
                     "matter_key": matter_key,
-                    "item_count": len(matter_items),
-                    "item_ids": [item.id for item in matter_items],
+                    "item_count": len(all_items_for_matter),
+                    "item_ids": [item.id for item in all_items_for_matter],
                 },
             )
             enqueued_count += 1
+            logger.info(
+                f"[Matters] Enqueued {matter_key} with {len(all_items_for_matter)} items "
+                f"across {len(set(item.meeting_id for item in all_items_for_matter))} meetings"
+            )
 
         # Items without matters - enqueue as item-level batch (fallback)
         if items_without_matters:
@@ -854,6 +879,74 @@ class UnifiedDatabase:
         if row:
             return dict(row)
         return None
+
+    def _get_all_items_for_matter(
+        self,
+        banana: str,
+        matter_file: Optional[str] = None,
+        matter_id: Optional[str] = None
+    ) -> List[AgendaItem]:
+        """Get ALL agenda items across ALL meetings for a given matter
+
+        STRICT IMPROVEMENT: Ensures we aggregate all appearances of a matter
+        before enqueuing, not just items from current meeting.
+
+        Args:
+            banana: City identifier
+            matter_file: Official public identifier (e.g., "BL2025-1107")
+            matter_id: Backend vendor identifier
+
+        Returns:
+            List of ALL AgendaItem objects for this matter across all meetings
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        if not matter_file and not matter_id:
+            return []
+
+        # Build query to find all items with matching matter identifiers
+        # Must join with meetings to filter by banana (matters are city-specific)
+        query = """
+            SELECT i.* FROM items i
+            JOIN meetings m ON i.meeting_id = m.id
+            WHERE m.banana = ?
+        """
+        params = [banana]
+
+        if matter_file and matter_id:
+            # Both provided - most specific match
+            query += " AND (i.matter_file = ? OR i.matter_id = ?)"
+            params.extend([matter_file, matter_id])
+        elif matter_file:
+            query += " AND i.matter_file = ?"
+            params.append(matter_file)
+        else:  # matter_id only
+            query += " AND i.matter_id = ?"
+            params.append(matter_id)
+
+        cursor = self.conn.execute(query, params)
+        rows = cursor.fetchall()
+
+        # Convert to AgendaItem objects
+        items = []
+        for row in rows:
+            items.append(AgendaItem(
+                id=row["id"],
+                meeting_id=row["meeting_id"],
+                title=row["title"],
+                sequence=row["sequence"],
+                attachments=json.loads(row["attachments"]) if row["attachments"] else [],
+                summary=row["summary"],
+                topics=json.loads(row["topics"]) if row["topics"] else None,
+                matter_id=row["matter_id"],
+                matter_file=row["matter_file"],
+                matter_type=row["matter_type"],
+                agenda_number=row["agenda_number"],
+                sponsors=json.loads(row["sponsors"]) if row["sponsors"] else None,
+            ))
+
+        return items
 
     def _apply_canonical_summary(
         self, items: List[AgendaItem], matter: Dict[str, Any]

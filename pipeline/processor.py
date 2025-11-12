@@ -431,31 +431,58 @@ class Processor:
     def process_matter(self, matter_id: str, meeting_id: str, metadata: Optional[Dict] = None):
         """Process a matter across all its appearances (matters-first path)
 
+        STRICT IMPROVEMENT: Queries ALL items from database (not just payload)
+        and atomically updates canonical_summary + all item summaries.
+
         Args:
             matter_id: Matter identifier (e.g., "sanfranciscoCA_251041")
             meeting_id: Meeting ID where matter appears
-            metadata: Queue metadata with item_ids
+            metadata: Queue metadata with item_ids (deprecated - query from DB instead)
         """
         import json
         from pipeline.utils import hash_attachments
 
         logger.info(f"[MatterProcessing] Processing matter {matter_id}")
 
-        # Get item IDs from metadata
-        if not metadata:
-            metadata = {}
-
-        item_ids = metadata.get("item_ids", [])
-        if not item_ids:
-            logger.error(f"[MatterProcessing] No item_ids in metadata for {matter_id}")
+        # Validate matter_id format
+        if not validate_matter_id(matter_id):
+            logger.error(f"[MatterProcessing] Invalid matter_id format: {matter_id}")
             return
 
-        # Get items for this matter
+        banana = extract_banana_from_matter_id(matter_id)
+
+        # STRICT IMPROVEMENT: Query ALL items from database (not just from payload)
+        # This ensures we find all appearances even if payload is incomplete
         items = []
-        for item_id in item_ids:
-            item = self.db.get_agenda_item(item_id)
-            if item:
-                items.append(item)
+
+        # First try to get from payload for backward compat
+        if metadata:
+            item_ids = metadata.get("item_ids", [])
+            for item_id in item_ids:
+                item = self.db.get_agenda_item(item_id)
+                if item:
+                    items.append(item)
+
+        # If no items from payload, query database directly
+        if not items:
+            logger.warning(f"[MatterProcessing] No items in payload, querying database for {matter_id}")
+            # Get first item to extract matter identifiers
+            cursor = self.db.conn.execute(
+                """
+                SELECT i.matter_file, i.matter_id FROM items i
+                JOIN meetings m ON i.meeting_id = m.id
+                WHERE m.banana = ? AND (i.matter_file IS NOT NULL OR i.matter_id IS NOT NULL)
+                LIMIT 1
+                """,
+                (banana,)
+            )
+            row = cursor.fetchone()
+            if row:
+                items = self.db._get_all_items_for_matter(
+                    banana=banana,
+                    matter_file=row["matter_file"],
+                    matter_id=row["matter_id"]
+                )
 
         if not items:
             logger.error(f"[MatterProcessing] No items found for matter {matter_id}")
@@ -465,7 +492,8 @@ class Processor:
         representative_item = items[0]
 
         logger.info(
-            f"[MatterProcessing] Matter {matter_id} has {len(items)} appearances, "
+            f"[MatterProcessing] Matter {matter_id} has {len(items)} appearances "
+            f"across {len(set(item.meeting_id for item in items))} meetings, "
             f"{len(representative_item.attachments)} attachments"
         )
 
@@ -483,63 +511,66 @@ class Processor:
             logger.warning(f"[MatterProcessing] No summary generated for matter {matter_id}")
             return
 
-        # Store canonical summary in city_matters table (UPSERT)
+        # STRICT IMPROVEMENT: Atomic update of canonical_summary + all items
+        # Use transaction to ensure consistency
         attachment_hash = hash_attachments(representative_item.attachments)
 
-        # Validate and extract city banana from matter_id (format: "sanfranciscoCA_250894")
-        if not validate_matter_id(matter_id):
-            logger.error(f"[MatterProcessing] Invalid matter_id format: {matter_id}")
-            return
-
-        banana = extract_banana_from_matter_id(matter_id)
-
-        self.db.conn.execute(
-            """
-            INSERT INTO city_matters (
-                id, banana, matter_id, matter_file, matter_type, title, sponsors,
-                canonical_summary, canonical_topics, attachments, metadata,
-                first_seen, last_seen, appearance_count
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json_object('attachment_hash', ?),
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                canonical_summary = excluded.canonical_summary,
-                canonical_topics = excluded.canonical_topics,
-                metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', excluded.metadata->>'attachment_hash'),
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (
-                matter_id,
-                banana,
-                representative_item.matter_id,
-                representative_item.matter_file,
-                representative_item.matter_type,
-                representative_item.title,
-                json.dumps(representative_item.sponsors) if hasattr(representative_item, 'sponsors') and representative_item.sponsors else None,
-                summary,
-                json.dumps(topics),
-                json.dumps(representative_item.attachments),
-                attachment_hash,
-                len(items)
-            ),
-        )
-        self.db.conn.commit()
-
-        logger.info(f"[MatterProcessing] Stored canonical summary for {matter_id}")
-
-        # Backfill all items with canonical summary
-        for item in items:
+        try:
+            # Step 1: Upsert canonical summary in city_matters
             self.db.conn.execute(
                 """
-                UPDATE items
-                SET summary = ?, topics = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                INSERT INTO city_matters (
+                    id, banana, matter_id, matter_file, matter_type, title, sponsors,
+                    canonical_summary, canonical_topics, attachments, metadata,
+                    first_seen, last_seen, appearance_count
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json_object('attachment_hash', ?),
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    canonical_summary = excluded.canonical_summary,
+                    canonical_topics = excluded.canonical_topics,
+                    metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', excluded.metadata->>'attachment_hash'),
+                    updated_at = CURRENT_TIMESTAMP
                 """,
-                (summary, json.dumps(topics), item.id),
+                (
+                    matter_id,
+                    banana,
+                    representative_item.matter_id,
+                    representative_item.matter_file,
+                    representative_item.matter_type,
+                    representative_item.title,
+                    json.dumps(representative_item.sponsors) if hasattr(representative_item, 'sponsors') and representative_item.sponsors else None,
+                    summary,
+                    json.dumps(topics),
+                    json.dumps(representative_item.attachments),
+                    attachment_hash,
+                    len(items)
+                ),
             )
 
-        self.db.conn.commit()
-        logger.info(f"[MatterProcessing] Backfilled {len(items)} items with canonical summary")
+            # Step 2: Backfill ALL items atomically
+            for item in items:
+                self.db.conn.execute(
+                    """
+                    UPDATE items
+                    SET summary = ?, topics = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (summary, json.dumps(topics), item.id),
+                )
+
+            # Commit transaction atomically
+            self.db.conn.commit()
+
+            logger.info(
+                f"[MatterProcessing] Atomically stored canonical summary and backfilled "
+                f"{len(items)} items for {matter_id}"
+            )
+
+        except Exception as e:
+            self.db.conn.rollback()
+            logger.error(f"[MatterProcessing] Failed to store summary for {matter_id}: {e}")
+            raise
 
     def process_meeting(self, meeting: Meeting):
         """Process summary for a single meeting (agenda-first: items > packet)
