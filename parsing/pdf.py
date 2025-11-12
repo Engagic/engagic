@@ -12,6 +12,10 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
+# Set reasonable limit for OCR on scanned PDFs
+# 200MP = ~600MB peak RAM (safe for 2GB VPS with other services)
+# Larger images (blueprints, charts) will skip OCR gracefully
+Image.MAX_IMAGE_PIXELS = 200000000
 
 logger = logging.getLogger("engagic")
 
@@ -36,16 +40,31 @@ class PdfExtractor:
             page: PyMuPDF page object
 
         Returns:
-            Extracted text from OCR
+            Extracted text from OCR, or empty string if image too large
         """
-        # Render page to high-DPI image
-        pix = page.get_pixmap(dpi=self.ocr_dpi)
-        img_bytes = pix.tobytes("png")
-        img = Image.open(io.BytesIO(img_bytes))
+        try:
+            # Render page to high-DPI image
+            pix = page.get_pixmap(dpi=self.ocr_dpi)
+            img_bytes = pix.tobytes("png")
 
-        # Run Tesseract OCR
-        text = pytesseract.image_to_string(img)
-        return text
+            # Try to load image (may hit decompression bomb limit)
+            img = Image.open(io.BytesIO(img_bytes))
+
+            # Run Tesseract OCR
+            text = pytesseract.image_to_string(img)
+            return text
+
+        except (Image.DecompressionBombError, Image.DecompressionBombWarning) as e:
+            # Image too large for safe OCR processing
+            logger.warning(
+                f"Page {page.number}: Image too large ({pix.width}x{pix.height} = "
+                f"{pix.width * pix.height / 1000000:.1f}MP), skipping OCR to prevent OOM"
+            )
+            return ""
+        except Exception as e:
+            # Catch any other OCR failures gracefully
+            logger.error(f"Page {page.number}: OCR failed - {e}")
+            return ""
 
     def _is_ocr_better(self, original: str, ocr_result: str, page_num: int) -> bool:
         """Determine if OCR result is better than original text
