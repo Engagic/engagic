@@ -52,10 +52,10 @@
 <div class="matter-page">
 	<div class="matter-container">
 		<div class="breadcrumb">
-			<a href="/" class="breadcrumb-link">← Back to Search</a>
+			<a href="/" class="breadcrumb-link" data-sveltekit-preload-data="hover">← Back to Search</a>
 			{#if firstAppearance}
 				<span class="breadcrumb-separator">•</span>
-				<a href="/{firstAppearance.banana}" class="breadcrumb-link">{firstAppearance.city_name}</a>
+				<a href="/{firstAppearance.banana}" class="breadcrumb-link" data-sveltekit-preload-data="hover">{firstAppearance.city_name}</a>
 			{/if}
 		</div>
 
@@ -132,7 +132,15 @@
 
 		<div class="timeline-section">
 			<h2 class="section-title">Legislative Journey</h2>
-			<MatterTimeline timelineData={data.timeline} matterFile={matter.matter_file} />
+			<svelte:boundary onerror={(e) => console.error('Timeline error:', e)}>
+				<MatterTimeline timelineData={data.timeline} matterFile={matter.matter_file} />
+				{#snippet failed(error)}
+					<div class="error-message">
+						<p>Unable to load legislative timeline</p>
+						<p class="error-detail">{error.message}</p>
+					</div>
+				{/snippet}
+			</svelte:boundary>
 		</div>
 	</div>
 
@@ -451,6 +459,26 @@
 		font-size: 0.9rem;
 		color: var(--text-primary);
 		line-height: 1.6;
+	}
+
+	.error-message {
+		padding: 1.5rem;
+		background: var(--surface-secondary);
+		border: 2px solid #ef4444;
+		border-radius: 8px;
+		text-align: center;
+	}
+
+	.error-message p {
+		margin: 0.5rem 0;
+		color: var(--text-primary);
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+	}
+
+	.error-detail {
+		color: #ef4444;
+		font-size: 0.85rem;
 	}
 
 	@media (max-width: 768px) {

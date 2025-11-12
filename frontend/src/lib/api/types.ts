@@ -228,3 +228,103 @@ export function isSearchAmbiguous(result: SearchResult): result is SearchAmbiguo
 export function isSearchError(result: SearchResult): result is SearchError {
 	return result.success === false && !result.ambiguous;
 }
+
+// Matter types
+export interface Matter {
+	id: string;
+	matter_file?: string;
+	matter_type?: string;
+	title: string;
+	canonical_summary?: string;
+	canonical_topics?: string;  // JSON string array
+	sponsors?: string;
+	attachments?: string;  // JSON string array
+	first_seen: string;
+	last_seen: string;
+}
+
+export interface MatterTimelineAppearance {
+	item_id: string;
+	meeting_id: string;
+	meeting_title: string;
+	meeting_date: string;
+	city_name: string;
+	state: string;
+	banana: string;
+	agenda_number?: string;
+	summary?: string;
+	topics?: string[];
+}
+
+export interface MatterTimelineResponse {
+	success: boolean;
+	matter: Matter;
+	timeline: MatterTimelineAppearance[];
+	appearance_count: number;
+}
+
+export interface GetMeetingResponse {
+	success: boolean;
+	meeting: Meeting;
+	city_name: string | null;
+	state: string | null;
+	banana: string;
+}
+
+export interface MatterSummary {
+	id: string;
+	matter_file?: string;
+	matter_type?: string;
+	title: string;
+	canonical_summary?: string;
+	canonical_topics?: string;
+	appearance_count: number;
+	first_seen: string;
+	last_seen: string;
+}
+
+export interface GetCityMattersResponse {
+	success: boolean;
+	city_name: string;
+	state: string;
+	banana: string;
+	matters: MatterSummary[];
+	total_count: number;
+	limit: number;
+	offset: number;
+}
+
+export interface StateMatterSummary {
+	id: string;
+	matter_file?: string;
+	matter_type?: string;
+	title: string;
+	canonical_summary?: string;
+	canonical_topics?: string;
+	appearance_count: number;
+	first_seen: string;
+	last_seen: string;
+	city_name: string;
+	banana: string;
+	state: string;
+}
+
+export interface GetStateMattersResponse {
+	success: boolean;
+	state: string;
+	cities_count: number;
+	cities: Array<{
+		banana: string;
+		name: string;
+		vendor: string;
+	}>;
+	matters: StateMatterSummary[];
+	total_matters: number;
+	topic_distribution: Record<string, number>;
+	filtered_by_topic?: string;
+	meeting_stats: {
+		total_meetings: number;
+		with_agendas: number;
+		with_summaries: number;
+	};
+}

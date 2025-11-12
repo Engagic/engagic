@@ -2,6 +2,7 @@
 	import { marked } from 'marked';
 	import type { AgendaItem as AgendaItemType, Meeting } from '$lib/api/types';
 	import { generateFlyer } from '$lib/api/index';
+	import { generateAnchorId } from '$lib/utils/anchor';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	interface Props {
@@ -22,19 +23,8 @@
 	// Display agenda_number exactly as provided (already formatted), only add dot for sequence fallback
 	const displayNumber = $derived(item.agenda_number || `${item.sequence}.`);
 
-	// Generate human-readable anchor ID (prefer agenda_number for meeting context, then matter_file, fallback to item.id)
-	const anchorId = $derived(() => {
-		if (item.agenda_number) {
-			// Use agenda number: "5-E" -> "item-5-e" (meeting-specific position)
-			return 'item-' + item.agenda_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-		}
-		if (item.matter_file) {
-			// Use matter file: "2025-5470" -> "2025-5470" (legislative file number)
-			return item.matter_file.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-		}
-		// Fallback to item ID
-		return `item-${item.id}`;
-	});
+	// Generate anchor ID using shared utility (agenda_number > matter_file > item.id)
+	const anchorId = $derived(() => generateAnchorId(item));
 
 	function toggleItem() {
 		if (expandedItems.has(item.id)) {
@@ -156,6 +146,8 @@
 		tabindex="0"
 		onclick={() => toggleItem()}
 		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleItem(); } }}
+		aria-expanded={isExpanded}
+		aria-label={isExpanded ? 'Collapse agenda item details' : 'Expand agenda item details'}
 	>
 		<div class="item-header">
 			<div class="item-header-content">
@@ -232,6 +224,8 @@
 						<button
 							class="thinking-toggle"
 							onclick={(e) => { e.stopPropagation(); toggleThinking(); }}
+							aria-expanded={expandedThinking.has(item.id)}
+							aria-label={expandedThinking.has(item.id) ? 'Collapse thinking trace' : 'Expand thinking trace'}
 						>
 							💭 Thinking trace (click to {expandedThinking.has(item.id) ? 'collapse' : 'expand'})
 						</button>
@@ -255,6 +249,7 @@
 							e.stopPropagation();
 							generateSimpleFlyer('yes');
 						}}
+						aria-label={flyerGenerating ? 'Generating support flyer' : 'Generate flyer expressing support for this item'}
 					>
 						{flyerGenerating ? '⏳ Generating...' : '✓ Say Yes'}
 					</button>
@@ -265,6 +260,7 @@
 							e.stopPropagation();
 							generateSimpleFlyer('no');
 						}}
+						aria-label={flyerGenerating ? 'Generating opposition flyer' : 'Generate flyer expressing opposition to this item'}
 					>
 						{flyerGenerating ? '⏳ Generating...' : '✗ Say No'}
 					</button>

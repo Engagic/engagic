@@ -4,6 +4,7 @@
 	import { marked } from 'marked';
 	import type { SearchResult, Meeting } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
+	import { findItemByAnchor } from '$lib/utils/anchor';
 	import Footer from '$lib/components/Footer.svelte';
 	import ParticipationBox from '$lib/components/ParticipationBox.svelte';
 	import MeetingStatusBanner from '$lib/components/MeetingStatusBanner.svelte';
@@ -27,20 +28,9 @@
 		if (typeof window !== 'undefined' && window.location.hash) {
 			const hash = window.location.hash.substring(1); // Remove #
 
-			if (hash) {
-				// Find the matching item by checking all items for matching anchor ID
-				const matchingItem = selectedMeeting?.items?.find(item => {
-					// Generate anchor ID using same logic as AgendaItem component
-					let anchorId = '';
-					if (item.agenda_number) {
-						anchorId = 'item-' + item.agenda_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-					} else if (item.matter_file) {
-						anchorId = item.matter_file.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-					} else {
-						anchorId = `item-${item.id}`;
-					}
-					return anchorId === hash;
-				});
+			if (hash && selectedMeeting?.items) {
+				// Find the matching item using shared utility
+				const matchingItem = findItemByAnchor(selectedMeeting.items, hash);
 
 				if (matchingItem) {
 					expandedItems.add(matchingItem.id);
@@ -103,8 +93,8 @@
 <div class="container">
 	<div class="main-content">
 		<div class="top-nav">
-			<a href="/{city_banana}" class="back-link">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
-			<a href="/" class="compact-logo" aria-label="Return to engagic homepage">
+			<a href="/{city_banana}" class="back-link" data-sveltekit-preload-data="hover">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
+			<a href="/" class="compact-logo" aria-label="Return to engagic homepage" data-sveltekit-preload-data="hover">
 				<img src="/icon-64.png" alt="engagic" class="logo-icon" />
 			</a>
 		</div>
@@ -168,6 +158,8 @@
 							<button
 								class="toggle-procedural-btn"
 								onclick={() => showProceduralItems = !showProceduralItems}
+								aria-label={showProceduralItems ? `Hide ${proceduralItems.length} procedural items` : `Show ${proceduralItems.length} procedural items`}
+								aria-expanded={showProceduralItems}
 							>
 								{showProceduralItems ? 'Hide' : 'Show'} {proceduralItems.length} Procedural
 							</button>
@@ -179,15 +171,23 @@
 			{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
 				<div class="agenda-items">
 					{#each displayedItems as item (item.id)}
-						<AgendaItem
-							{item}
-							meeting={selectedMeeting}
-							{expandedItems}
-							{expandedTitles}
-							{expandedThinking}
-							{flyerGenerating}
-							onFlyerGenerate={handleFlyerGenerateChange}
-						/>
+						<svelte:boundary onerror={(e) => console.error('Agenda item error:', e, item.id)}>
+							<AgendaItem
+								{item}
+								meeting={selectedMeeting}
+								{expandedItems}
+								{expandedTitles}
+								{expandedThinking}
+								{flyerGenerating}
+								onFlyerGenerate={handleFlyerGenerateChange}
+							/>
+							{#snippet failed(error)}
+								<div class="agenda-item-error">
+									<p>Unable to display agenda item</p>
+									<p class="error-detail-small">{item.agenda_number || item.sequence}: {error.message}</p>
+								</div>
+							{/snippet}
+						</svelte:boundary>
 					{/each}
 				</div>
 			{:else if selectedMeeting.summary}
@@ -391,6 +391,27 @@
 		flex-direction: column;
 		gap: 1rem;
 		margin-top: 2rem;
+	}
+
+	.agenda-item-error {
+		padding: 1rem;
+		background: var(--surface-secondary);
+		border: 2px solid #ef4444;
+		border-radius: 8px;
+		text-align: center;
+		margin: 1rem 0;
+	}
+
+	.agenda-item-error p {
+		margin: 0.25rem 0;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--text-primary);
+	}
+
+	.error-detail-small {
+		color: #ef4444;
+		font-size: 0.75rem;
 	}
 
 	.meeting-summary {
