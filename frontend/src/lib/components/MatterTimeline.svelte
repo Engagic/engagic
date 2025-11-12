@@ -3,25 +3,29 @@
 	import { onMount } from 'svelte';
 
 	interface Props {
-		matterId: string;
+		matterId?: string;
 		matterFile?: string;
+		timelineData?: any;
 	}
 
-	let { matterId, matterFile }: Props = $props();
+	let { matterId, matterFile, timelineData }: Props = $props();
 
-	let timeline = $state<any>(null);
-	let loading = $state(true);
+	let timeline = $state<any>(timelineData || null);
+	let loading = $state(!timelineData);
 	let error = $state('');
 	let expandedAppearances = $state<Set<number>>(new Set());
 
 	onMount(async () => {
-		try {
-			const result = await getMatterTimeline(matterId);
-			timeline = result;
-			loading = false;
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load matter timeline';
-			loading = false;
+		// Only fetch if timeline data wasn't provided as a prop
+		if (!timelineData && matterId) {
+			try {
+				const result = await getMatterTimeline(matterId);
+				timeline = result;
+				loading = false;
+			} catch (err) {
+				error = err instanceof Error ? err.message : 'Failed to load matter timeline';
+				loading = false;
+			}
 		}
 	});
 
@@ -58,6 +62,26 @@
 		if (index === total - 1) return 'Recent';
 		return 'Under Review';
 	}
+
+	function buildItemAnchor(appearance: any): string {
+		// Build anchor ID using same logic as AgendaItem component (agenda_number first)
+		if (appearance.agenda_number) {
+			// Use agenda number: "5-E" -> "item-5-e" (meeting-specific position)
+			return 'item-' + appearance.agenda_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+		}
+		if (matterFile) {
+			// Use matter file: "2025-5470" -> "2025-5470" (legislative file number)
+			return matterFile.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+		}
+		// Fallback to item ID
+		return `item-${appearance.item_id}`;
+	}
+
+	function buildMeetingLink(appearance: any): string {
+		// Build full meeting URL with anchor
+		const anchor = buildItemAnchor(appearance);
+		return `/${appearance.banana}/${appearance.meeting_id}#${anchor}`;
+	}
 </script>
 
 {#if loading}
@@ -83,20 +107,13 @@
 				{@const isExpanded = expandedAppearances.has(index)}
 
 				<div class="flow-step" class:selected={isExpanded}>
-					<button
+					<a
+						href={buildMeetingLink(appearance)}
 						class="step-card"
 						class:committee={meetingInfo.type === 'committee'}
 						class:council={meetingInfo.type === 'council'}
 						class:board={meetingInfo.type === 'board'}
 						class:has-summary={!!appearance.summary}
-						onclick={() => {
-							if (isExpanded) {
-								expandedAppearances.delete(index);
-							} else {
-								expandedAppearances.add(index);
-							}
-							expandedAppearances = expandedAppearances;
-						}}
 					>
 						<div class="step-number">{index + 1}</div>
 						<div class="step-content">
@@ -109,42 +126,9 @@
 								<div class="step-agenda">Item {appearance.agenda_number}</div>
 							{/if}
 						</div>
-						<div class="step-expand">
-							{isExpanded ? '▼' : '▶'}
-						</div>
-					</button>
-
-					{#if isExpanded}
-						<div class="step-detail">
-							<h4 class="detail-title">{appearance.meeting_title}</h4>
-							{#if appearance.topics}
-								{@const topics = JSON.parse(appearance.topics)}
-								{#if topics.length > 0}
-									<div class="detail-topics">
-										{#each topics as topic}
-											<span class="detail-topic-tag">{topic}</span>
-										{/each}
-									</div>
-								{/if}
-							{/if}
-							{#if appearance.summary}
-								<div class="detail-summary">
-									{appearance.summary.substring(0, 300)}{appearance.summary.length > 300 ? '...' : ''}
-								</div>
-							{/if}
-							<a href="/{appearance.banana}/{appearance.meeting_id}" class="detail-link">
-								View Full Meeting →
-							</a>
-						</div>
-					{/if}
+						<div class="step-arrow">→</div>
+					</a>
 				</div>
-
-				{#if index < timeline.timeline.length - 1}
-					<div class="flow-arrow">
-						<div class="arrow-line"></div>
-						<div class="arrow-head">↓</div>
-					</div>
-				{/if}
 			{/each}
 		</div>
 	</div>
@@ -369,106 +353,11 @@
 		margin-top: 0.25rem;
 	}
 
-	.step-expand {
+	.step-arrow {
 		flex-shrink: 0;
 		font-size: 1.2rem;
 		color: var(--civic-blue);
 		transition: transform 0.2s ease;
-	}
-
-	/* Flow arrows */
-	.flow-arrow {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		height: 40px;
-		position: relative;
-	}
-
-	.arrow-line {
-		width: 2px;
-		flex: 1;
-		background: linear-gradient(180deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
-	}
-
-	.arrow-head {
-		font-size: 1.5rem;
-		line-height: 1;
-		color: var(--civic-accent);
-		font-weight: bold;
-	}
-
-	/* Expanded detail */
-	.step-detail {
-		margin: 1rem 0 0 52px;
-		padding: 1.25rem;
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: 8px;
-		animation: expandIn 0.2s ease-out;
-	}
-
-	@keyframes expandIn {
-		from {
-			opacity: 0;
-			max-height: 0;
-			margin-top: 0;
-		}
-		to {
-			opacity: 1;
-			max-height: 500px;
-			margin-top: 1rem;
-		}
-	}
-
-	.detail-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0 0 1rem 0;
-	}
-
-	.detail-topics {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-bottom: 1rem;
-	}
-
-	.detail-topic-tag {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		padding: 0.25rem 0.6rem;
-		background: var(--surface-secondary);
-		color: var(--civic-blue);
-		border: 1px solid var(--border-primary);
-		border-radius: 4px;
-		font-weight: 500;
-	}
-
-	.detail-summary {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 0.9rem;
-		line-height: 1.6;
-		color: var(--text-secondary);
-		margin-bottom: 1rem;
-	}
-
-	.detail-link {
-		display: inline-block;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		text-decoration: none;
-		transition: all 0.2s ease;
-	}
-
-	.detail-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
 	}
 
 	@media (max-width: 640px) {
@@ -494,14 +383,6 @@
 		.step-status {
 			font-size: 0.65rem;
 			padding: 0.15rem 0.4rem;
-		}
-
-		.step-detail {
-			margin-left: 0;
-		}
-
-		.flow-arrow {
-			height: 30px;
 		}
 	}
 </style>

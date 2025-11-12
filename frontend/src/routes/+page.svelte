@@ -90,11 +90,12 @@
 			const result = await apiClient.searchMeetings(searchQuery.trim());
 			searchResults = result;
 
-			// If successful and has city info, navigate to city page
+			// If successful and has city info, navigate to city page with cached data
 			if (isSearchSuccess(result)) {
 				const cityUrl = generateCityUrl(result.city_name, result.state);
 				logger.trackEvent('search_success', { query: searchQuery, city: result.city_name });
-				goto(`/${cityUrl}`);
+				// Pass search results through navigation state to avoid duplicate API call
+				goto(`/${cityUrl}`, { state: { cachedSearchResults: result } });
 			} else if (isSearchAmbiguous(result)) {
 				logger.trackEvent('search_ambiguous', { query: searchQuery });
 			}
@@ -108,7 +109,18 @@
 
 	async function handleCityOptionClick(cityOption: CityOption) {
 		const cityUrl = generateCityUrl(cityOption.city_name, cityOption.state);
-		goto(`/${cityUrl}`);
+
+		// Fetch city data once and pass through navigation state
+		loading = true;
+		try {
+			const result = await apiClient.searchMeetings(`${cityOption.city_name}, ${cityOption.state}`);
+			goto(`/${cityUrl}`, { state: { cachedSearchResults: result } });
+		} catch (err) {
+			// Fallback: navigate without cache, let city page handle fetch
+			goto(`/${cityUrl}`);
+		} finally {
+			loading = false;
+		}
 	}
 	
 	async function handleRandomMeeting() {

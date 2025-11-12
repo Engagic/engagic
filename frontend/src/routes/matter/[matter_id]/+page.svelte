@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { marked } from 'marked';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -30,7 +31,17 @@
 		}
 	}
 
+	function parseAttachments(attachmentsJson: string | null): Array<{ name: string; url: string; type: string }> {
+		if (!attachmentsJson) return [];
+		try {
+			return JSON.parse(attachmentsJson);
+		} catch {
+			return [];
+		}
+	}
+
 	const topics = $derived(parseTopics(matter.canonical_topics));
+	const attachments = $derived(parseAttachments(matter.attachments));
 </script>
 
 <svelte:head>
@@ -93,7 +104,21 @@
 			<div class="matter-summary-section">
 				<h2 class="section-title">Summary</h2>
 				<div class="matter-summary">
-					{@html matter.canonical_summary}
+					{@html marked(matter.canonical_summary)}
+				</div>
+			</div>
+		{/if}
+
+		{#if attachments.length > 0}
+			<div class="attachments-section">
+				<h2 class="section-title">Attachments</h2>
+				<div class="attachments-list">
+					{#each attachments as attachment}
+						<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
+							<span class="attachment-icon">📎</span>
+							<span class="attachment-name">{attachment.name}</span>
+						</a>
+					{/each}
 				</div>
 			</div>
 		{/if}
@@ -107,7 +132,7 @@
 
 		<div class="timeline-section">
 			<h2 class="section-title">Legislative Journey</h2>
-			<MatterTimeline matterId={data.matterId} matterFile={matter.matter_file} />
+			<MatterTimeline timelineData={data.timeline} matterFile={matter.matter_file} />
 		</div>
 	</div>
 
@@ -199,10 +224,10 @@
 
 	.matter-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 2rem;
+		font-size: 1.25rem;
 		font-weight: 700;
 		color: var(--text-primary);
-		line-height: 1.3;
+		line-height: 1.4;
 		margin: 0 0 1.5rem 0;
 	}
 
@@ -253,6 +278,7 @@
 	}
 
 	.matter-summary-section,
+	.attachments-section,
 	.sponsors-section,
 	.timeline-section {
 		background: var(--surface-primary);
@@ -275,27 +301,149 @@
 
 	.matter-summary {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1rem;
-		line-height: 1.7;
+		font-size: 1.05rem;
+		line-height: 1.8;
 		color: var(--text-primary);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
 	}
 
-	.matter-summary :global(h2) {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
+	.matter-summary :global(h1),
+	.matter-summary :global(h2),
+	.matter-summary :global(h3),
+	.matter-summary :global(h4) {
+		font-family: Georgia, 'Times New Roman', Times, serif;
+		color: var(--text-primary);
+		margin-top: 2.5rem;
+		margin-bottom: 1rem;
+		line-height: 1.3;
 		font-weight: 600;
-		text-transform: uppercase;
-		color: var(--civic-gray);
-		margin: 1.5rem 0 0.75rem 0;
+	}
+
+	.matter-summary :global(h1) { font-size: 1.75rem; }
+	.matter-summary :global(h2) { font-size: 1.5rem; }
+	.matter-summary :global(h3) { font-size: 1.25rem; }
+	.matter-summary :global(h4) { font-size: 1.1rem; }
+
+	.matter-summary :global(h1:first-child),
+	.matter-summary :global(h2:first-child),
+	.matter-summary :global(h3:first-child),
+	.matter-summary :global(h4:first-child) {
+		margin-top: 0;
 	}
 
 	.matter-summary :global(p) {
-		margin: 0.75rem 0;
+		margin: 1.5rem 0;
+	}
+
+	.matter-summary :global(ul),
+	.matter-summary :global(ol) {
+		margin: 1.5rem 0;
+		padding-left: 2rem;
+	}
+
+	.matter-summary :global(li) {
+		margin: 0.5rem 0;
+	}
+
+	.matter-summary :global(blockquote) {
+		margin: 2rem 0;
+		padding-left: 1.5rem;
+		border-left: 4px solid var(--text-secondary);
+		color: var(--text-secondary);
+		font-style: italic;
+	}
+
+	.matter-summary :global(code) {
+		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+		font-size: 0.9em;
+		background: var(--surface-secondary);
+		color: var(--text-primary);
+		padding: 0.2rem 0.4rem;
+		border-radius: 3px;
+	}
+
+	.matter-summary :global(pre) {
+		margin: 2rem 0;
+		padding: 1.5rem;
+		background: var(--surface-secondary);
+		border-radius: 8px;
+		overflow-x: auto;
+	}
+
+	.matter-summary :global(pre code) {
+		background: none;
+		padding: 0;
 	}
 
 	.matter-summary :global(strong) {
 		font-weight: 700;
 		color: var(--text-primary);
+	}
+
+	.matter-summary :global(em) {
+		font-style: italic;
+	}
+
+	.matter-summary :global(hr) {
+		margin: 2.5rem 0;
+		border: none;
+		border-top: 1px solid var(--border-primary);
+	}
+
+	.matter-summary :global(a) {
+		color: var(--text-link);
+		text-decoration: underline;
+		transition: color 0.2s ease;
+	}
+
+	.matter-summary :global(a:hover) {
+		color: var(--civic-accent);
+	}
+
+	.matter-summary :global(img) {
+		max-width: 100%;
+		height: auto;
+		border-radius: 8px;
+		margin: 2rem 0;
+	}
+
+	.attachments-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.attachment-link {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-radius: 8px;
+		text-decoration: none;
+		color: var(--text-primary);
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		transition: all 0.2s ease;
+	}
+
+	.attachment-link:hover {
+		background: var(--civic-blue);
+		border-color: var(--civic-blue);
+		color: var(--civic-white);
+		transform: translateX(4px);
+	}
+
+	.attachment-icon {
+		font-size: 1.1rem;
+		flex-shrink: 0;
+	}
+
+	.attachment-name {
+		flex: 1;
+		font-weight: 500;
 	}
 
 	.sponsors-list {
@@ -315,7 +463,7 @@
 		}
 
 		.matter-title {
-			font-size: 1.5rem;
+			font-size: 1.1rem;
 		}
 
 		.matter-meta {
@@ -324,6 +472,7 @@
 		}
 
 		.matter-summary-section,
+		.attachments-section,
 		.sponsors-section,
 		.timeline-section {
 			padding: 1.25rem;

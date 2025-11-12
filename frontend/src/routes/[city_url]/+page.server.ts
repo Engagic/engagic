@@ -4,7 +4,7 @@ import { parseCityUrl } from '$lib/utils/utils';
 import { processMeetingDates } from '$lib/utils/meetings';
 import { error, redirect } from '@sveltejs/kit';
 
-export const load: PageLoad = async ({ params, setHeaders }) => {
+export const load: PageLoad = async ({ params, setHeaders, state }) => {
 	const { city_url } = params;
 
 	// Check if this is a static route
@@ -18,12 +18,18 @@ export const load: PageLoad = async ({ params, setHeaders }) => {
 		throw error(404, 'Invalid city URL format');
 	}
 
-	// Fetch city data
-	const searchQuery = `${parsed.cityName}, ${parsed.state}`;
-	const result = await searchMeetings(searchQuery);
+	// Use cached search results from navigation state if available (avoids duplicate API call)
+	let result: SearchResult;
+	if (state?.cachedSearchResults) {
+		result = state.cachedSearchResults as SearchResult;
+	} else {
+		// Fallback: fetch city data (direct navigation, refresh, etc.)
+		const searchQuery = `${parsed.cityName}, ${parsed.state}`;
+		result = await searchMeetings(searchQuery);
 
-	if (!result.success) {
-		throw error(404, result.message || 'City not found');
+		if (!result.success) {
+			throw error(404, result.message || 'City not found');
+		}
 	}
 
 	// Cache city meetings for 2 minutes (agendas don't change frequently)
