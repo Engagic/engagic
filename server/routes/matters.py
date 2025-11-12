@@ -32,7 +32,7 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
         if not matter:
             raise HTTPException(status_code=404, detail="Matter not found")
 
-        # Get all items for this matter across meetings
+        # Get all items for this matter across meetings (ONLY in this city)
         items = db.conn.execute(
             """
             SELECT
@@ -45,10 +45,11 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
             FROM items i
             JOIN meetings m ON i.meeting_id = m.id
             JOIN cities c ON m.banana = c.banana
-            WHERE i.matter_file = ? OR i.matter_id = ?
+            WHERE (i.matter_file = ? OR i.matter_id = ?)
+              AND m.banana = ?
             ORDER BY m.date ASC, i.sequence ASC
             """,
-            (matter.matter_file, matter.matter_id)
+            (matter.matter_file, matter.matter_id, matter.banana)
         ).fetchall()
 
         if not items:
