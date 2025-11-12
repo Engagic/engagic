@@ -196,3 +196,55 @@ class MatterRepository(BaseRepository):
 
         self._commit()
         logger.debug(f"Updated matter {matter_id} with canonical summary")
+
+    def search_matters(
+        self,
+        search_term: str,
+        banana: Optional[str] = None,
+        state: Optional[str] = None,
+        case_sensitive: bool = False
+    ) -> List[Matter]:
+        """
+        Search for text in canonical matter summaries.
+
+        Args:
+            search_term: String to search for
+            banana: Optional city filter
+            state: Optional state filter (2-letter code)
+            case_sensitive: Whether search should be case-sensitive
+
+        Returns:
+            List of Matter objects ordered by last_seen DESC
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        like_pattern = f'%{search_term}%'
+        filters = []
+        params = [like_pattern]
+
+        if banana:
+            filters.append("m.banana = ?")
+            params.append(banana)
+
+        if state:
+            filters.append("c.state = ?")
+            params.append(state.upper())
+
+        filter_clause = ""
+        if filters:
+            filter_clause = " AND " + " AND ".join(filters)
+
+        query = f'''
+            SELECT m.*
+            FROM city_matters m
+            JOIN cities c ON m.banana = c.banana
+            WHERE m.canonical_summary IS NOT NULL
+              AND m.canonical_summary LIKE ?
+              AND m.appearance_count >= 1
+              {filter_clause}
+            ORDER BY m.last_seen DESC
+        '''
+
+        rows = self._fetch_all(query, tuple(params))
+        return [Matter.from_db_row(row) for row in rows]

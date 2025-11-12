@@ -946,6 +946,16 @@ class UnifiedDatabase:
         """Update matter canonical summary - delegates to MatterRepository"""
         return self.matters.update_matter_summary(matter_id, canonical_summary, canonical_topics, attachment_hash)
 
+    def search_matters(
+        self,
+        search_term: str,
+        banana: Optional[str] = None,
+        state: Optional[str] = None,
+        case_sensitive: bool = False
+    ) -> List[Matter]:
+        """Search matters by canonical summary text - delegates to MatterRepository"""
+        return self.matters.search_matters(search_term, banana, state, case_sensitive)
+
     @staticmethod
     def generate_matter_id(
         banana: str,
