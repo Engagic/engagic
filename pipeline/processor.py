@@ -15,6 +15,7 @@ import time
 from typing import List, Optional, Dict, Any
 
 from database.db import UnifiedDatabase, Meeting
+from database.id_generation import validate_matter_id, extract_banana_from_matter_id
 from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
@@ -485,8 +486,12 @@ class Processor:
         # Store canonical summary in city_matters table (UPSERT)
         attachment_hash = hash_attachments(representative_item.attachments)
 
-        # Extract city banana from matter_id (format: "sanfranciscoCA_250894")
-        banana = matter_id.rsplit('_', 1)[0]
+        # Validate and extract city banana from matter_id (format: "sanfranciscoCA_250894")
+        if not validate_matter_id(matter_id):
+            logger.error(f"[MatterProcessing] Invalid matter_id format: {matter_id}")
+            return
+
+        banana = extract_banana_from_matter_id(matter_id)
 
         self.db.conn.execute(
             """

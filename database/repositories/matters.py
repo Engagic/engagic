@@ -12,7 +12,7 @@ from typing import List, Optional
 from database.repositories.base import BaseRepository
 from database.models import Matter
 from exceptions import DatabaseConnectionError
-from database.id_generation import generate_matter_id
+from database.id_generation import generate_matter_id, validate_matter_id
 
 logger = logging.getLogger("engagic")
 
@@ -35,6 +35,13 @@ class MatterRepository(BaseRepository):
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
+
+        # Validate matter ID format (must be hashed: {banana}_{16-hex})
+        if not validate_matter_id(matter.id):
+            raise ValueError(
+                f"Invalid matter ID format: {matter.id}. "
+                f"Must use generate_matter_id() to create properly hashed IDs."
+            )
 
         # Serialize JSON fields
         canonical_topics_json = (
