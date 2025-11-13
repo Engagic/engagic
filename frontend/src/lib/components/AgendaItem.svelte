@@ -131,6 +131,22 @@
 							{item.matter_type}
 						</span>
 					{/if}
+					{#if item.sponsors && item.sponsors.length > 0}
+						<span class="sponsors-badge" title="Sponsors: {item.sponsors.join(', ')}">
+							{item.sponsors.length === 1 ? item.sponsors[0] : `${item.sponsors.length} sponsors`}
+						</span>
+					{/if}
+					{#if item.matter && item.matter.appearance_count && item.matter.appearance_count > 1}
+						<a
+							href="/matter/{item.matter.id}"
+							class="matter-timeline-badge"
+							title="View legislative journey across {item.matter.appearance_count} meetings"
+							onclick={(e) => e.stopPropagation()}
+							data-sveltekit-preload-data="hover"
+						>
+							{item.matter.appearance_count} appearances
+						</a>
+					{/if}
 					{#if !hasSummary}
 						<span class="procedural-badge">Unprocessed</span>
 					{/if}
@@ -335,6 +351,46 @@
 		text-transform: capitalize;
 		letter-spacing: 0.3px;
 		margin-left: 0.5rem;
+	}
+
+	.sponsors-badge {
+		display: inline-block;
+		padding: 0.2rem 0.6rem;
+		background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+		color: #92400e;
+		border: 1.5px solid #f59e0b;
+		border-radius: 12px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		font-family: 'IBM Plex Mono', monospace;
+		letter-spacing: 0.3px;
+		margin-left: 0.5rem;
+		cursor: help;
+	}
+
+	.matter-timeline-badge {
+		display: inline-block;
+		padding: 0.2rem 0.6rem;
+		background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+		color: #065f46;
+		border: 1.5px solid #10b981;
+		border-radius: 12px;
+		font-size: 0.65rem;
+		font-weight: 700;
+		font-family: 'IBM Plex Mono', monospace;
+		letter-spacing: 0.3px;
+		margin-left: 0.5rem;
+		text-decoration: none;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2);
+	}
+
+	.matter-timeline-badge:hover {
+		background: linear-gradient(135deg, #bbf7d0 0%, #86efac 100%);
+		border-color: #059669;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
 	}
 
 	.item-summary-preview {
@@ -687,6 +743,18 @@
 		}
 
 		.matter-type-badge {
+			font-size: 0.6rem;
+			padding: 0.18rem 0.5rem;
+			margin-left: 0.35rem;
+		}
+
+		.sponsors-badge {
+			font-size: 0.6rem;
+			padding: 0.18rem 0.5rem;
+			margin-left: 0.35rem;
+		}
+
+		.matter-timeline-badge {
 			font-size: 0.6rem;
 			padding: 0.18rem 0.5rem;
 			margin-left: 0.35rem;
