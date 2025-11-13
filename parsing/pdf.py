@@ -73,7 +73,7 @@ class PdfExtractor:
             text = pytesseract.image_to_string(img)
             return text
 
-        except (Image.DecompressionBombError, Image.DecompressionBombWarning) as e:
+        except (Image.DecompressionBombError, Image.DecompressionBombWarning):
             # PIL decompression bomb protection triggered
             logger.warning(f"[PyMuPDF] Page {page.number + 1}: PIL decompression bomb detected, skipping OCR")
             return ""

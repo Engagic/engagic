@@ -17,7 +17,7 @@ def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:
     """Clean summary for flyer display
 
     Extracts summary, citizen impact, and confidence rating.
-    Removes thinking and LLM artifacts for concise print output.
+    Removes LLM artifacts for concise print output.
 
     Returns:
         Tuple of (cleaned_summary, confidence_rating)
@@ -27,12 +27,7 @@ def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:
 
     confidence = ""
 
-    # Step 1: Remove thinking section entirely (before "## Summary")
-    parts = re.split(r'^## Thinking\s*$', summary, flags=re.MULTILINE)
-    if len(parts) > 1:
-        summary = parts[1]  # Everything after thinking
-
-    # Step 2: Extract Summary, Citizen Impact, and Confidence sections
+    # Step 1: Extract Summary, Citizen Impact, and Confidence sections
     # Split into sections by ## headers
     sections = re.split(r'^##\s+(\w+.*?)$', summary, flags=re.MULTILINE)
 
@@ -63,7 +58,7 @@ def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:
 
     summary = "\n\n".join(keep_sections)
 
-    # Step 3: Remove LLM preamble patterns
+    # Step 2: Remove LLM preamble patterns
     summary = re.sub(r'=== DOCUMENT \d+ ===', '', summary)
     summary = re.sub(r'--- SECTION \d+ SUMMARY ---', '', summary)
     summary = re.sub(r"Here's a concise summary of the[^:]*:", '', summary, flags=re.IGNORECASE)
@@ -71,14 +66,14 @@ def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:
     summary = re.sub(r"Here's the key points[^:]*:", '', summary, flags=re.IGNORECASE)
     summary = re.sub(r"Summary of the[^:]*:", '', summary, flags=re.IGNORECASE)
 
-    # Step 4: Clean up markdown for print (keep bullets, remove bold)
+    # Step 3: Clean up markdown for print (keep bullets, remove bold)
     summary = re.sub(r'\*\*([^*]+)\*\*', r'\1', summary)  # Remove bold markdown
     summary = re.sub(r'^[\*\-]\s+', '• ', summary, flags=re.MULTILINE)  # Standardize bullets
     summary = re.sub(r'\n{3,}', '\n\n', summary)  # Collapse extra newlines
 
     summary = summary.strip()
 
-    # Step 5: Convert to simple HTML
+    # Step 4: Convert to simple HTML
     summary = summary.replace('\n\n', '</p><p>')
     summary = summary.replace('\n', '<br>')
 
@@ -323,7 +318,7 @@ def _generate_qr_code(url: str) -> str:
         # Generate QR code
         qr = qrcode.QRCode(
             version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,  # type: ignore[attr-defined]
             box_size=10,
             border=2,
         )
@@ -335,7 +330,7 @@ def _generate_qr_code(url: str) -> str:
 
         # Convert to data URL
         buffer = BytesIO()
-        img.save(buffer, format="PNG")
+        img.save(buffer, format="PNG")  # type: ignore[call-arg]
         img_bytes = buffer.getvalue()
         img_base64 = base64.b64encode(img_bytes).decode()
 

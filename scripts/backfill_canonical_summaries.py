@@ -7,9 +7,6 @@ at the city_matters level was never populated.
 """
 
 import sqlite3
-import json
-import sys
-from pathlib import Path
 
 def backfill_canonical_summaries():
     """Backfill canonical_summary from existing item summaries"""

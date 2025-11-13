@@ -12,7 +12,6 @@ Responsibilities:
 import os
 import json
 import time
-import logging
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -118,9 +117,8 @@ class GeminiSummarizer:
         # Thinking configuration based on complexity
         config = self._get_thinking_config(page_count, text_size, model_name)
 
-        # Track API call duration and success
+        # Track API call duration
         start_time = time.time()
-        success = False
         prompt_type = "meeting_short" if page_count <= 30 else "meeting_comprehensive"
 
         try:
@@ -136,7 +134,6 @@ class GeminiSummarizer:
             output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
 
             duration = time.time() - start_time
-            success = True
 
             # Record metrics
             metrics.record_llm_call(
@@ -193,6 +190,7 @@ class GeminiSummarizer:
         if page_count >= 100:
             prompt_type = "large"
             model_name = self.flash_model_name  # Always use flash for large items
+            model_display = "flash"
             logger.info(
                 f"[Summarizer] Large item '{item_title[:50]}...' ({page_count} pages, {text_size} chars) - using comprehensive prompt"
             )
@@ -201,8 +199,10 @@ class GeminiSummarizer:
             # Model selection for standard items
             if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
                 model_name = self.flash_lite_model_name
+                model_display = "flash-lite"
             else:
                 model_name = self.flash_model_name
+                model_display = "flash"
             logger.info(
                 f"[Summarizer] Standard item '{item_title[:50]}...' ({page_count} pages, {text_size} chars)"
             )

@@ -91,8 +91,8 @@ def main():
         print("\n" + "=" * 60)
         print("Schema fix complete!")
         print("=" * 60)
-        print(f"  first_seen: NOT NULL -> nullable")
-        print(f"  last_seen: NOT NULL -> nullable")
+        print("  first_seen: NOT NULL -> nullable")
+        print("  last_seen: NOT NULL -> nullable")
         print(f"  {count} records preserved")
 
     except Exception as e:

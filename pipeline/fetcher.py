@@ -11,7 +11,6 @@ Handles:
 Moved from: pipeline/conductor.py (refactored)
 """
 
-import logging
 import time
 import random
 import os
@@ -390,12 +389,6 @@ class Fetcher:
                 metrics.meetings_synced.labels(city=city.banana, vendor=city.vendor).inc(processed_count)
                 metrics.items_extracted.labels(city=city.banana, vendor=city.vendor).inc(items_stored_count)
                 metrics.matters_tracked.labels(city=city.banana).inc(matters_tracked_count)
-
-                # Build matter summary message
-                if matters_duplicate_count > 0:
-                    matter_summary = f"{matters_tracked_count} new matters ({matters_duplicate_count} already tracked)"
-                else:
-                    matter_summary = f"{matters_tracked_count} matters tracked"
 
                 logger.info(
                     "sync complete",

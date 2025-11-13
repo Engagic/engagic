@@ -20,7 +20,7 @@ Confidence: 9/10 - Verified working with item-level extraction
 
 import logging
 import re
-from typing import Dict, Any, List, Iterator
+from typing import Dict, Any, List, Iterator, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
@@ -349,7 +349,7 @@ class BerkeleyAdapter(BaseAdapter):
         logger.debug(f"[berkeley:{self.slug}] Extracted {len(items)} items")
         return items
 
-    def _parse_date(self, date_str: str) -> datetime:
+    def _parse_date(self, date_str: str) -> Optional[datetime]:
         """
         Parse Berkeley date formats:
         - ISO 8601: "2025-11-11T02:00:00Z"

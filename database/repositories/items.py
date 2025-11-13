@@ -36,9 +36,19 @@ class ItemRepository(BaseRepository):
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
+        from database.id_generation import validate_matter_id
+
         stored_count = 0
 
         for item in items:
+            # Defensive: validate matter_id format before storing
+            if item.matter_id:
+                if not validate_matter_id(item.matter_id):
+                    logger.error(
+                        f"[Items] CRITICAL: Refusing to store item {item.id} with invalid matter_id format: '{item.matter_id}'"
+                    )
+                    continue  # Skip this item, don't store broken data
+
             # Serialize JSON fields
             attachments_json = (
                 json.dumps(item.attachments) if item.attachments else None
@@ -46,47 +56,60 @@ class ItemRepository(BaseRepository):
             topics_json = json.dumps(item.topics) if item.topics else None
             sponsors_json = json.dumps(item.sponsors) if item.sponsors else None
 
-            self._execute(
-                """
-                INSERT INTO items (id, meeting_id, title, sequence, attachments,
-                                   matter_id, matter_file, matter_type, agenda_number,
-                                   sponsors, summary, topics)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    title = excluded.title,
-                    sequence = excluded.sequence,
-                    attachments = excluded.attachments,
-                    matter_id = excluded.matter_id,
-                    matter_file = excluded.matter_file,
-                    matter_type = excluded.matter_type,
-                    agenda_number = excluded.agenda_number,
-                    sponsors = excluded.sponsors,
-                    -- PRESERVE existing summary/topics if new values are NULL
-                    summary = CASE
-                        WHEN excluded.summary IS NOT NULL THEN excluded.summary
-                        ELSE items.summary
-                    END,
-                    topics = CASE
-                        WHEN excluded.topics IS NOT NULL THEN excluded.topics
-                        ELSE items.topics
-                    END
-            """,
-                (
-                    item.id,
-                    meeting_id,
-                    item.title,
-                    item.sequence,
-                    attachments_json,
-                    item.matter_id,
-                    item.matter_file,
-                    item.matter_type,
-                    item.agenda_number,
-                    sponsors_json,
-                    item.summary,
-                    topics_json,
-                ),
-            )
-            stored_count += 1
+            try:
+                self._execute(
+                    """
+                    INSERT INTO items (id, meeting_id, title, sequence, attachments,
+                                       matter_id, matter_file, matter_type, agenda_number,
+                                       sponsors, summary, topics)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        title = excluded.title,
+                        sequence = excluded.sequence,
+                        attachments = excluded.attachments,
+                        matter_id = excluded.matter_id,
+                        matter_file = excluded.matter_file,
+                        matter_type = excluded.matter_type,
+                        agenda_number = excluded.agenda_number,
+                        sponsors = excluded.sponsors,
+                        -- PRESERVE existing summary/topics if new values are NULL
+                        summary = CASE
+                            WHEN excluded.summary IS NOT NULL THEN excluded.summary
+                            ELSE items.summary
+                        END,
+                        topics = CASE
+                            WHEN excluded.topics IS NOT NULL THEN excluded.topics
+                            ELSE items.topics
+                        END
+                """,
+                    (
+                        item.id,
+                        meeting_id,
+                        item.title,
+                        item.sequence,
+                        attachments_json,
+                        item.matter_id,
+                        item.matter_file,
+                        item.matter_type,
+                        item.agenda_number,
+                        sponsors_json,
+                        item.summary,
+                        topics_json,
+                    ),
+                )
+                stored_count += 1
+            except Exception as e:
+                # Catch FK constraint violations and log clearly
+                error_msg = str(e)
+                if "FOREIGN KEY constraint failed" in error_msg:
+                    logger.error(
+                        f"[Items] FK CONSTRAINT FAILED for item {item.id}: matter_id '{item.matter_id}' "
+                        f"does not exist in city_matters table. Matter tracking broken for this item."
+                    )
+                else:
+                    logger.error(f"[Items] Failed to store item {item.id}: {e}")
+                # Continue with other items instead of failing entire batch
+                continue
 
         self._commit()
         logger.debug(f"Stored {stored_count} agenda items for meeting {meeting_id}")

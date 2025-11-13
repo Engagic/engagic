@@ -28,7 +28,7 @@ from database.repositories.items import ItemRepository
 from database.repositories.matters import MatterRepository
 from database.repositories.queue import QueueRepository
 from database.repositories.search import SearchRepository
-from pipeline.utils import hash_attachments, get_matter_key
+from pipeline.utils import hash_attachments
 
 logger = logging.getLogger("engagic")
 
@@ -39,10 +39,11 @@ class UnifiedDatabase:
     Delegates to focused repositories for cleaner separation of concerns.
     """
 
+    conn: sqlite3.Connection
+
     def __init__(self, db_path: str):
         """Initialize unified database connection and repositories"""
         self.db_path = db_path
-        self.conn = None
         self._connect()
         self._init_schema()
 
@@ -119,7 +120,51 @@ class UnifiedDatabase:
             FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
         );
 
+        -- City Matters: Canonical representation of legislative items
+        -- Matters-First Architecture: Each matter has ONE canonical summary
+        -- that is reused across all appearances (deduplication)
+        CREATE TABLE IF NOT EXISTS city_matters (
+            id TEXT PRIMARY KEY,
+            banana TEXT NOT NULL,
+            matter_id TEXT,
+            matter_file TEXT,
+            matter_type TEXT,
+            title TEXT NOT NULL,
+            sponsors TEXT,
+            canonical_summary TEXT,
+            canonical_topics TEXT,
+            attachments TEXT,
+            metadata TEXT,
+            first_seen TIMESTAMP,
+            last_seen TIMESTAMP,
+            appearance_count INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
+        );
+
+        -- Matter Appearances: Timeline tracking for matters across meetings
+        -- Junction table linking matters to meetings via agenda items
+        CREATE TABLE IF NOT EXISTS matter_appearances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            matter_id TEXT NOT NULL,
+            meeting_id TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            appeared_at TIMESTAMP NOT NULL,
+            committee TEXT,
+            action TEXT,
+            vote_tally TEXT,
+            sequence INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+            FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+            UNIQUE(matter_id, meeting_id, item_id)
+        );
+
         -- Agenda items: Individual items within meetings
+        -- matter_id stores COMPOSITE HASHED ID matching city_matters.id
         CREATE TABLE IF NOT EXISTS items (
             id TEXT PRIMARY KEY,
             meeting_id TEXT NOT NULL,
@@ -134,7 +179,8 @@ class UnifiedDatabase:
             summary TEXT,
             topics TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+            FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE SET NULL
         );
 
         -- Processing cache: Track PDF processing for cost optimization
@@ -233,6 +279,14 @@ class UnifiedDatabase:
         CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
         CREATE INDEX IF NOT EXISTS idx_items_matter_file ON items(matter_file) WHERE matter_file IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_items_matter_id ON items(matter_id) WHERE matter_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_city_matters_banana ON city_matters(banana);
+        CREATE INDEX IF NOT EXISTS idx_city_matters_matter_file ON city_matters(matter_file);
+        CREATE INDEX IF NOT EXISTS idx_city_matters_first_seen ON city_matters(first_seen);
+        CREATE INDEX IF NOT EXISTS idx_city_matters_status ON city_matters(status);
+        CREATE INDEX IF NOT EXISTS idx_matter_appearances_matter ON matter_appearances(matter_id);
+        CREATE INDEX IF NOT EXISTS idx_matter_appearances_meeting ON matter_appearances(meeting_id);
+        CREATE INDEX IF NOT EXISTS idx_matter_appearances_item ON matter_appearances(item_id);
+        CREATE INDEX IF NOT EXISTS idx_matter_appearances_date ON matter_appearances(appeared_at);
         CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(content_hash);
         CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status);
         CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue(priority DESC);
@@ -438,14 +492,33 @@ class UnifiedDatabase:
                         # Still store it, just mark it as skip
                         logger.info(f"[Items] Procedural (skipped): {item_title[:60]}")
 
+                    # Generate composite matter_id for FK relationship
+                    # Items.matter_id MUST match city_matters.id (composite hashed ID)
+                    composite_matter_id = None
+                    raw_matter_id = item_data.get("matter_id")
+                    raw_matter_file = item_data.get("matter_file")
+
+                    if raw_matter_id or raw_matter_file:
+                        from database.id_generation import generate_matter_id
+                        try:
+                            composite_matter_id = generate_matter_id(
+                                banana=city.banana,
+                                matter_file=raw_matter_file,
+                                matter_id=raw_matter_id
+                            )
+                        except ValueError as e:
+                            logger.warning(
+                                f"[Items] Could not generate matter_id for {item_title[:40]}: {e}"
+                            )
+
                     agenda_item = AgendaItem(
                         id=item_id,
                         meeting_id=stored_meeting.id,
                         title=item_title,
                         sequence=item_data.get("sequence", 0),
                         attachments=item_data.get("attachments", []),
-                        matter_id=item_data.get("matter_id"),
-                        matter_file=item_data.get("matter_file"),
+                        matter_id=composite_matter_id,  # Store COMPOSITE ID for FK
+                        matter_file=raw_matter_file,     # Store public identifier
                         matter_type=item_data.get("matter_type"),
                         agenda_number=item_data.get("agenda_number"),
                         sponsors=item_data.get("sponsors"),
@@ -462,9 +535,11 @@ class UnifiedDatabase:
                             agenda_item.topics = existing_item.topics
 
                     # Log item with matter tracking
-                    if agenda_item.matter_file or agenda_item.matter_id:
+                    if agenda_item.matter_file or composite_matter_id:
                         logger.info(
-                            f"[Items] {item_title[:50]} | Matter: {agenda_item.matter_file or agenda_item.matter_id}"
+                            f"[Items] {item_title[:50]} | Matter: {agenda_item.matter_file} ({composite_matter_id[:24]}...)"
+                            if composite_matter_id else
+                            f"[Items] {item_title[:50]} | Matter: {agenda_item.matter_file}"
                         )
                     else:
                         logger.info(f"[Items] {item_title[:50]}")
@@ -612,29 +687,33 @@ class UnifiedDatabase:
         items_map = {item["item_id"]: item for item in items_data}
 
         for agenda_item in agenda_items:
-            # Skip items without any matter tracking
-            if not agenda_item.matter_file and not agenda_item.matter_id:
+            # agenda_item.matter_id is ALREADY composite hash (set during item creation)
+            # Skip items without matter tracking
+            if not agenda_item.matter_id:
                 continue
 
-            # Get raw item data for sponsors and matter_type
+            # Defensive validation
+            from database.id_generation import validate_matter_id
+            if not validate_matter_id(agenda_item.matter_id):
+                logger.error(
+                    f"[Matters] Invalid matter_id format in item {agenda_item.id}: '{agenda_item.matter_id}'"
+                )
+                continue
+
+            matter_composite_id = agenda_item.matter_id  # Already composite
+
+            # Get raw vendor data (for storing in city_matters table)
             item_id_short = agenda_item.id.split("_", 1)[1]  # Remove meeting_id prefix
             raw_item = items_map.get(item_id_short, {})
             sponsors = raw_item.get("sponsors", [])
             matter_type = raw_item.get("matter_type")
+            raw_vendor_matter_id = raw_item.get("matter_id")  # RAW vendor ID (UUID, numeric, etc.)
 
             # Skip procedural matter types (minutes, info items, calendars)
             if matter_type and should_skip_matter(matter_type):
                 stats['skipped_procedural'] += 1
-                logger.debug(f"[Matters] Skipping procedural: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
+                logger.debug(f"[Matters] Skipping procedural: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type})")
                 continue
-
-            # Build matter ID using deterministic hashing
-            from database.id_generation import generate_matter_id
-            matter_composite_id = generate_matter_id(
-                banana=meeting.banana,
-                matter_file=agenda_item.matter_file,
-                matter_id=agenda_item.matter_id
-            )
 
             try:
                 # Check if matter exists
@@ -678,14 +757,15 @@ class UnifiedDatabase:
                         ),
                     )
                     stats['duplicate'] += 1
-                    logger.info(f"[Matters] {'New appearance' if not appearance_exists else 'Reprocess'}: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type})")
+                    logger.info(f"[Matters] {'New appearance' if not appearance_exists else 'Reprocess'}: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type})")
                 else:
                     # Create new Matter object
+                    # Store RAW vendor identifiers for reference, composite as primary key
                     matter_obj = Matter(
-                        id=matter_composite_id,
+                        id=matter_composite_id,              # Composite hash (PRIMARY KEY)
                         banana=meeting.banana,
-                        matter_id=agenda_item.matter_id,
-                        matter_file=agenda_item.matter_file,
+                        matter_id=raw_vendor_matter_id,      # RAW vendor ID (for reference)
+                        matter_file=agenda_item.matter_file,  # Public identifier (for display)
                         matter_type=matter_type,
                         title=agenda_item.title,
                         sponsors=sponsors,
@@ -702,11 +782,11 @@ class UnifiedDatabase:
                     try:
                         self.store_matter(matter_obj)
                     except Exception as e:
-                        logger.error(f"[Matters] FAILED to store matter {agenda_item.matter_file or agenda_item.matter_id}: {e}")
+                        logger.error(f"[Matters] FAILED to store matter {agenda_item.matter_file or raw_vendor_matter_id}: {e}")
                         raise
 
                     stats['tracked'] += 1
-                    logger.info(f"[Matters] New: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type}) - {len(sponsors)} sponsors")
+                    logger.info(f"[Matters] New: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type}) - {len(sponsors)} sponsors")
 
                 # Create matter_appearance record
                 committee = meeting.title.split("-")[0].strip() if meeting.title else None
@@ -746,10 +826,8 @@ class UnifiedDatabase:
         """
         Matters-first enqueue logic: Deduplicate summarization work.
 
-        Groups items by matter, checks if matter already processed with unchanged
-        attachments. If unchanged, copies canonical summary. If new/changed, enqueues.
-
-        STRICT IMPROVEMENT: Aggregates ALL items across ALL meetings for matter before enqueuing.
+        Groups items by matter_id (composite hash), checks if matter already processed
+        with unchanged attachments. If unchanged, copies canonical summary. If new/changed, enqueues.
 
         Args:
             banana: City identifier
@@ -761,74 +839,61 @@ class UnifiedDatabase:
             Number of matters enqueued (0 if all reused from canonical)
         """
         from vendors.utils.item_filters import should_skip_matter
-        from database.id_generation import generate_matter_id, validate_matter_id
+        from database.id_generation import validate_matter_id
 
-        # Group items by matter (from current meeting)
+        # Group items by matter_id (already composite hash from item creation)
         matters_map: Dict[str, List[AgendaItem]] = {}
         items_without_matters = []
 
         for item in agenda_items:
-            matter_key = get_matter_key(item.matter_file, item.matter_id)
-            if matter_key:
-                if matter_key not in matters_map:
-                    matters_map[matter_key] = []
-                matters_map[matter_key].append(item)
+            if item.matter_id:
+                # item.matter_id is already composite hash - just use it directly
+                if item.matter_id not in matters_map:
+                    matters_map[item.matter_id] = []
+                matters_map[item.matter_id].append(item)
             else:
                 items_without_matters.append(item)
 
         enqueued_count = 0
 
         # Process each matter
-        for matter_key, matter_items in matters_map.items():
-            # Use first item to get matter identifiers
-            first_item = matter_items[0]
-            matter_id = generate_matter_id(
-                banana=banana,
-                matter_file=first_item.matter_file,
-                matter_id=first_item.matter_id
-            )
-
-            # STRICT IMPROVEMENT: Validate matter_id format before enqueuing
+        for matter_id, matter_items in matters_map.items():
+            # matter_id is already composite hash, validate it
             if not validate_matter_id(matter_id):
-                logger.error(f"[Matters] Invalid matter_id format generated: {matter_id}")
+                logger.error(f"[Matters] Invalid matter_id format in items: {matter_id}")
                 continue
 
-            # Filter out procedural matter types (minutes, info items, calendars)
-            matter_type = matter_items[0].matter_type if matter_items else None
+            # Filter out procedural matter types
+            first_item = matter_items[0]
+            matter_type = first_item.matter_type
             if matter_type and should_skip_matter(matter_type):
                 logger.debug(
-                    f"[Matters] Skipping procedural matter: {matter_key} ({matter_type})"
+                    f"[Matters] Skipping procedural matter: {first_item.matter_file or matter_id} ({matter_type})"
                 )
                 continue
 
-            # STRICT IMPROVEMENT: Query ALL items across ALL meetings for this matter
-            # This ensures we process ALL attachments and backfill ALL appearances
-            all_items_for_matter = self._get_all_items_for_matter(
-                banana=banana,
-                matter_file=first_item.matter_file,
-                matter_id=first_item.matter_id
-            )
+            # Query ALL items across ALL meetings for this matter (by composite ID)
+            all_items_for_matter = self._get_all_items_for_matter(matter_id)
 
             if not all_items_for_matter:
-                logger.warning(f"[Matters] No items found for matter {matter_key}")
+                logger.warning(f"[Matters] No items found for matter {first_item.matter_file or matter_id}")
                 continue
 
             # Check if matter already processed
-            existing_matter = self._get_matter(matter_id)
+            existing_matter = self.get_matter(matter_id)
 
-            if existing_matter and existing_matter.get("canonical_summary"):
+            if existing_matter and existing_matter.canonical_summary:
                 # Matter exists - check if attachments changed
                 # Use first item's attachments as representative (should be same across items)
                 current_hash = hash_attachments(all_items_for_matter[0].attachments)
 
-                metadata = json.loads(existing_matter.get("metadata") or "{}")
-                stored_hash = metadata.get("attachment_hash")
+                stored_hash = existing_matter.metadata.get("attachment_hash") if existing_matter.metadata else None
 
                 if stored_hash == current_hash:
                     # Unchanged - copy canonical summary to ALL items (including from other meetings)
                     self._apply_canonical_summary(all_items_for_matter, existing_matter)
                     logger.debug(
-                        f"[Matters] Reusing canonical summary for {matter_key} "
+                        f"[Matters] Reusing canonical summary for {first_item.matter_file or matter_id} "
                         f"({len(all_items_for_matter)} items across all meetings)"
                     )
                     continue  # Skip enqueue
@@ -841,14 +906,14 @@ class UnifiedDatabase:
                 banana=banana,
                 priority=priority,
                 metadata={
-                    "matter_key": matter_key,
+                    "matter_file": first_item.matter_file,
                     "item_count": len(all_items_for_matter),
                     "item_ids": [item.id for item in all_items_for_matter],
                 },
             )
             enqueued_count += 1
             logger.info(
-                f"[Matters] Enqueued {matter_key} with {len(all_items_for_matter)} items "
+                f"[Matters] Enqueued {first_item.matter_file or matter_id} with {len(all_items_for_matter)} items "
                 f"across {len(set(item.meeting_id for item in all_items_for_matter))} meetings"
             )
 
@@ -881,21 +946,13 @@ class UnifiedDatabase:
             return dict(row)
         return None
 
-    def _get_all_items_for_matter(
-        self,
-        banana: str,
-        matter_file: Optional[str] = None,
-        matter_id: Optional[str] = None
-    ) -> List[AgendaItem]:
-        """Get ALL agenda items across ALL meetings for a given matter
+    def _get_all_items_for_matter(self, matter_id: str) -> List[AgendaItem]:
+        """Get ALL agenda items across ALL meetings for a given matter.
 
-        STRICT IMPROVEMENT: Ensures we aggregate all appearances of a matter
-        before enqueuing, not just items from current meeting.
+        Uses composite matter_id (FK to city_matters) for simple, fast lookup.
 
         Args:
-            banana: City identifier
-            matter_file: Official public identifier (e.g., "BL2025-1107")
-            matter_id: Backend vendor identifier
+            matter_id: Composite matter ID (e.g., "nashvilleTN_7a8f3b2c1d9e4f5a")
 
         Returns:
             List of ALL AgendaItem objects for this matter across all meetings
@@ -903,30 +960,18 @@ class UnifiedDatabase:
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
-        if not matter_file and not matter_id:
+        if not matter_id:
             return []
 
-        # Build query to find all items with matching matter identifiers
-        # Must join with meetings to filter by banana (matters are city-specific)
-        query = """
+        # Simple FK lookup - matter_id is already composite hash
+        cursor = self.conn.execute(
+            """
             SELECT i.* FROM items i
-            JOIN meetings m ON i.meeting_id = m.id
-            WHERE m.banana = ?
-        """
-        params = [banana]
-
-        if matter_file and matter_id:
-            # Both provided - most specific match
-            query += " AND (i.matter_file = ? OR i.matter_id = ?)"
-            params.extend([matter_file, matter_id])
-        elif matter_file:
-            query += " AND i.matter_file = ?"
-            params.append(matter_file)
-        else:  # matter_id only
-            query += " AND i.matter_id = ?"
-            params.append(matter_id)
-
-        cursor = self.conn.execute(query, params)
+            WHERE i.matter_id = ?
+            ORDER BY i.meeting_id, i.sequence
+            """,
+            (matter_id,)
+        )
         rows = cursor.fetchall()
 
         # Convert to AgendaItem objects
@@ -950,23 +995,23 @@ class UnifiedDatabase:
         return items
 
     def _apply_canonical_summary(
-        self, items: List[AgendaItem], matter: Dict[str, Any]
+        self, items: List[AgendaItem], matter: Matter
     ):
         """Apply canonical summary from matter to all items"""
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
-        canonical_summary = matter.get("canonical_summary")
-        canonical_topics = matter.get("canonical_topics")
+        canonical_summary = matter.canonical_summary
+        canonical_topics_json = json.dumps(matter.canonical_topics) if matter.canonical_topics else None
 
         for item in items:
             self.conn.execute(
                 """
                 UPDATE items
-                SET summary = ?, topics = ?, updated_at = CURRENT_TIMESTAMP
+                SET summary = ?, topics = ?
                 WHERE id = ?
                 """,
-                (canonical_summary, canonical_topics, item.id),
+                (canonical_summary, canonical_topics_json, item.id),
             )
 
         self.conn.commit()
@@ -1213,20 +1258,25 @@ class UnifiedDatabase:
 
     def validate_matter_tracking(self, meeting_id: str) -> Dict[str, int]:
         """
-        Validate that all items with matter_id have corresponding city_matters records.
+        Validate matter tracking integrity for a meeting.
 
-        This detects orphaned items that failed to create city_matters due to
-        constraint violations or other errors during sync.
+        Checks:
+        1. FK integrity: items.matter_id → city_matters.id
+        2. ID format: items.matter_id uses composite hash format
+        3. Timeline: matter_appearances links exist
 
         Args:
             meeting_id: Meeting ID to validate
 
         Returns:
-            Dict with validation stats: orphaned_count, total_items_with_matter
+            Dict with validation stats
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
+        from database.id_generation import validate_matter_id
+
+        # Check 1: FK integrity (items → city_matters)
         cursor = self.conn.execute("""
             SELECT COUNT(*) as orphaned_count
             FROM items i
@@ -1234,32 +1284,58 @@ class UnifiedDatabase:
               AND i.matter_id IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM city_matters cm WHERE cm.id = i.matter_id)
         """, (meeting_id,))
-
         orphaned_count = cursor.fetchone()[0]
 
+        # Check 2: ID format validation
+        cursor = self.conn.execute("""
+            SELECT matter_id FROM items
+            WHERE meeting_id = ? AND matter_id IS NOT NULL
+        """, (meeting_id,))
+        invalid_format_count = 0
+        for row in cursor.fetchall():
+            if not validate_matter_id(row[0]):
+                invalid_format_count += 1
+                logger.error(f"[Matters] Invalid matter_id format: {row[0]}")
+
+        # Check 3: Timeline tracking (matter_appearances)
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) as missing_appearances
+            FROM items i
+            WHERE i.meeting_id = ?
+              AND i.matter_id IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM matter_appearances ma
+                WHERE ma.item_id = i.id AND ma.meeting_id = ?
+              )
+        """, (meeting_id, meeting_id))
+        missing_appearances = cursor.fetchone()[0]
+
+        # Total matter-tracked items
         cursor = self.conn.execute("""
             SELECT COUNT(*) as total
             FROM items
-            WHERE meeting_id = ?
-              AND matter_id IS NOT NULL
+            WHERE meeting_id = ? AND matter_id IS NOT NULL
         """, (meeting_id,))
-
         total_items_with_matter = cursor.fetchone()[0]
 
-        if orphaned_count > 0:
+        # Report results
+        if orphaned_count > 0 or invalid_format_count > 0 or missing_appearances > 0:
             logger.error(
-                f"[Matters] VALIDATION FAILED: {orphaned_count} orphaned items "
-                f"(out of {total_items_with_matter}) missing city_matters records "
-                f"for meeting {meeting_id}"
+                f"[Matters] VALIDATION FAILED for meeting {meeting_id}:\n"
+                f"  - Orphaned items (no city_matters): {orphaned_count}\n"
+                f"  - Invalid matter_id format: {invalid_format_count}\n"
+                f"  - Missing matter_appearances: {missing_appearances}\n"
+                f"  - Total items with matters: {total_items_with_matter}"
             )
         else:
             logger.debug(
-                f"[Matters] Validation passed: all {total_items_with_matter} items "
-                f"have city_matters records"
+                f"[Matters] Validation passed: all {total_items_with_matter} items valid"
             )
 
         return {
             'orphaned_count': orphaned_count,
+            'invalid_format_count': invalid_format_count,
+            'missing_appearances': missing_appearances,
             'total_items_with_matter': total_items_with_matter,
         }
 
