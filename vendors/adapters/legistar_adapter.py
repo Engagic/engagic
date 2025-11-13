@@ -245,6 +245,11 @@ class LegistarAdapter(BaseAdapter):
             item_id = item.get("EventItemId")
             title = (item.get("EventItemTitle") or "").strip()
             sequence = item.get("EventItemAgendaSequence", 0)
+
+            # Skip section headers (no sequence number)
+            if sequence is None:
+                continue
+
             matter_id = item.get("EventItemMatterId")
             matter_file = item.get("EventItemMatterFile")  # Bill number (BL2025-1005)
             agenda_number = item.get("EventItemAgendaNumber")  # Position (E1, K. 87)
