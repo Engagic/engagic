@@ -51,17 +51,22 @@ class MatterRepository(BaseRepository):
             json.dumps(matter.attachments) if matter.attachments else None
         )
         metadata_json = json.dumps(matter.metadata) if matter.metadata else None
+        sponsors_json = json.dumps(matter.sponsors) if matter.sponsors else None
 
         self._execute(
             """
             INSERT INTO city_matters (id, banana, matter_file, matter_id, matter_type,
                                       title, canonical_summary, canonical_topics,
-                                      attachments, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      attachments, metadata, sponsors, first_seen,
+                                      last_seen, appearance_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title = excluded.title,
                 attachments = excluded.attachments,
                 metadata = excluded.metadata,
+                sponsors = excluded.sponsors,
+                last_seen = excluded.last_seen,
+                appearance_count = excluded.appearance_count,
                 updated_at = CURRENT_TIMESTAMP,
                 -- PRESERVE existing canonical summary/topics if new values are NULL
                 canonical_summary = CASE
@@ -84,6 +89,10 @@ class MatterRepository(BaseRepository):
                 canonical_topics_json,
                 attachments_json,
                 metadata_json,
+                sponsors_json,
+                matter.first_seen,
+                matter.last_seen,
+                matter.appearance_count,
             ),
         )
 
