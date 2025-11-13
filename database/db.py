@@ -37,12 +37,21 @@ class UnifiedDatabase:
     """
     Single database interface for all Engagic data.
     Delegates to focused repositories for cleaner separation of concerns.
+
+    Threading Model:
+    - Each instance creates its own SQLite connection
+    - WAL mode enables multiple writers with separate connections
+    - DO NOT share instances across threads - create one per thread
     """
 
     conn: sqlite3.Connection
 
     def __init__(self, db_path: str):
-        """Initialize unified database connection and repositories"""
+        """Initialize unified database connection and repositories
+
+        Note: Each instance is thread-local. Multi-threaded applications
+        should create one UnifiedDatabase instance per thread.
+        """
         self.db_path = db_path
         self._connect()
         self._init_schema()
@@ -58,7 +67,12 @@ class UnifiedDatabase:
         logger.info(f"Initialized unified database at {db_path}")
 
     def _connect(self):
-        """Create database connection with optimizations"""
+        """Create database connection with optimizations
+
+        Note: check_same_thread=False allows passing connection to repositories,
+        but instances should NOT be shared across threads. Each thread should
+        create its own UnifiedDatabase instance for proper isolation.
+        """
         # Ensure directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -66,6 +80,7 @@ class UnifiedDatabase:
         self.conn.row_factory = sqlite3.Row
 
         # Performance optimizations
+        # WAL mode enables multiple writers (each with own connection)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA cache_size=10000")
@@ -584,21 +599,34 @@ class UnifiedDatabase:
                     agenda_items.append(agenda_item)
 
                 if agenda_items:
-                    # Track matters FIRST in city_matters table (creates FK targets)
-                    # CRITICAL: Must happen before store_agenda_items to avoid FK constraint failures
-                    matters_stats = self._track_matters(stored_meeting, items, agenda_items)
-                    stats['matters_tracked'] = matters_stats.get('tracked', 0)
-                    stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
+                    # ATOMIC TRANSACTION: Track matters + store items + create appearances
+                    # All-or-nothing: if any step fails, rollback entire meeting ingest
+                    try:
+                        self.conn.execute("BEGIN")
 
-                    # THEN store items (FK targets exist now)
-                    count = self.store_agenda_items(stored_meeting.id, agenda_items)
-                    stats['items_stored'] = count
-                    items_with_summaries = sum(1 for item in agenda_items if item.summary)
+                        # Track matters FIRST in city_matters table (creates FK targets)
+                        # CRITICAL: Must happen before store_agenda_items to avoid FK constraint failures
+                        matters_stats = self._track_matters(stored_meeting, items, agenda_items, defer_commit=True)
+                        stats['matters_tracked'] = matters_stats.get('tracked', 0)
+                        stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
 
-                    logger.info(
-                        f"[Items] Stored {count} items ({stats['items_skipped_procedural']} procedural, "
-                        f"{items_with_summaries} with preserved summaries)"
-                    )
+                        # THEN store items (FK targets exist now)
+                        count = self.store_agenda_items(stored_meeting.id, agenda_items, defer_commit=True)
+                        stats['items_stored'] = count
+                        items_with_summaries = sum(1 for item in agenda_items if item.summary)
+
+                        # Commit transaction atomically
+                        self.conn.commit()
+
+                        logger.info(
+                            f"[Items] Stored {count} items ({stats['items_skipped_procedural']} procedural, "
+                            f"{items_with_summaries} with preserved summaries)"
+                        )
+
+                    except Exception as e:
+                        self.conn.rollback()
+                        logger.error(f"[Items] Transaction rolled back due to error: {e}")
+                        raise
 
 
             # Check if already processed before enqueuing (to avoid wasting credits)
@@ -692,7 +720,7 @@ class UnifiedDatabase:
             return None, stats
 
     def _track_matters(
-        self, meeting: Meeting, items_data: List[Dict], agenda_items: List[AgendaItem]
+        self, meeting: Meeting, items_data: List[Dict], agenda_items: List[AgendaItem], defer_commit: bool = False
     ) -> Dict[str, int]:
         """
         Track legislative matters across meetings (Matters-First Architecture).
@@ -706,6 +734,7 @@ class UnifiedDatabase:
             meeting: Stored Meeting object
             items_data: Raw item data from adapter (with sponsors, matter_type)
             agenda_items: Stored AgendaItem objects
+            defer_commit: If True, skip commit (caller handles transaction)
 
         Returns:
             Dict with 'tracked' and 'duplicate' counts
@@ -842,7 +871,8 @@ class UnifiedDatabase:
                     ),
                 )
 
-                self.conn.commit()
+                if not defer_commit:
+                    self.conn.commit()
 
             except Exception as e:
                 logger.error(f"[Matters] Error tracking matter {matter_composite_id}: {e}")
@@ -1074,9 +1104,9 @@ class UnifiedDatabase:
 
     # ========== Agenda Item Operations (delegate to ItemRepository) ==========
 
-    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
+    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem], defer_commit: bool = False) -> int:
         """Store agenda items - delegates to ItemRepository"""
-        return self.items.store_agenda_items(meeting_id, items)
+        return self.items.store_agenda_items(meeting_id, items, defer_commit=defer_commit)
 
     def get_agenda_items(self, meeting_id: str, load_matters: bool = False) -> List[AgendaItem]:
         """Get agenda items for meeting - delegates to ItemRepository
@@ -1385,3 +1415,12 @@ class UnifiedDatabase:
         if self.conn:
             self.conn.close()
             logger.info("Database connection closed")
+
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures connection cleanup"""
+        self.close()
+        return False

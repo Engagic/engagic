@@ -19,7 +19,7 @@ logger = logging.getLogger("engagic")
 class ItemRepository(BaseRepository):
     """Repository for agenda item operations"""
 
-    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
+    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem], defer_commit: bool = False) -> int:
         """
         Store agenda items for a meeting.
 
@@ -29,6 +29,7 @@ class ItemRepository(BaseRepository):
         Args:
             meeting_id: The meeting ID these items belong to
             items: List of AgendaItem objects
+            defer_commit: If True, skip commit (caller handles transaction)
 
         Returns:
             Number of items stored
@@ -113,7 +114,8 @@ class ItemRepository(BaseRepository):
                 # Continue with other items instead of failing entire batch
                 continue
 
-        self._commit()
+        if not defer_commit:
+            self._commit()
         logger.debug(f"Stored {stored_count} agenda items for meeting {meeting_id}")
         return stored_count
 

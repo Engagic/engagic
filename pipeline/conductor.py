@@ -38,19 +38,22 @@ class Conductor:
         # Use config path if not provided
         db_path = unified_db_path or config.UNIFIED_DB_PATH
 
+        # Conductor's own connection (for status queries, admin commands)
         self.db = UnifiedDatabase(db_path)
         self.is_running = False
         self.sync_thread = None
         self.processing_thread = None
 
-        # Initialize fetcher (handles city sync)
-        self.fetcher = Fetcher(db=self.db)
-        logger.info("[Conductor] Fetcher initialized")
+        # Initialize fetcher with its own connection (for sync_thread)
+        # CRITICAL: Each background thread needs its own SQLite connection
+        # to avoid "database is locked" errors and race conditions
+        self.fetcher = Fetcher(db=None)  # Creates own connection
+        logger.info("[Conductor] Fetcher initialized with dedicated connection")
 
-        # Initialize processor (handles queue processing)
-        self.processor = Processor(db=self.db)
+        # Initialize processor with its own connection (for processing_thread)
+        self.processor = Processor(db=None)  # Creates own connection
         logger.info(
-            f"[Conductor] Processor initialized "
+            f"[Conductor] Processor initialized with dedicated connection "
             f"({'with' if self.processor.analyzer else 'without'} LLM analyzer)"
         )
 
