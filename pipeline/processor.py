@@ -34,6 +34,7 @@ PROCEDURAL_PATTERNS = [
     "pledge of allegiance",
     "invocation",
     "adjournment",
+    "proclamation",  # Ceremonial honors, not policy
 ]
 
 # Public comment attachment patterns (high token cost, low signal)
