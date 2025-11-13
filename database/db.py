@@ -171,6 +171,7 @@ class UnifiedDatabase:
             title TEXT NOT NULL,
             sequence INTEGER NOT NULL,
             attachments TEXT,
+            attachment_hash TEXT,
             matter_id TEXT,
             matter_file TEXT,
             matter_type TEXT,
@@ -269,6 +270,24 @@ class UnifiedDatabase:
             PRIMARY KEY (tracked_item_id, meeting_id)
         );
 
+        -- User profiles: End-user accounts (Phase 2)
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- User topic subscriptions: Topics users want alerts for (Phase 2)
+        CREATE TABLE IF NOT EXISTS user_topic_subscriptions (
+            user_id TEXT NOT NULL,
+            banana TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE,
+            FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+            PRIMARY KEY (user_id, banana, topic)
+        );
+
         -- Performance indices
         CREATE INDEX IF NOT EXISTS idx_cities_vendor ON cities(vendor);
         CREATE INDEX IF NOT EXISTS idx_cities_state ON cities(state);
@@ -279,6 +298,7 @@ class UnifiedDatabase:
         CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
         CREATE INDEX IF NOT EXISTS idx_items_matter_file ON items(matter_file) WHERE matter_file IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_items_matter_id ON items(matter_id) WHERE matter_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_items_meeting_id ON items(meeting_id);
         CREATE INDEX IF NOT EXISTS idx_city_matters_banana ON city_matters(banana);
         CREATE INDEX IF NOT EXISTS idx_city_matters_matter_file ON city_matters(matter_file);
         CREATE INDEX IF NOT EXISTS idx_city_matters_first_seen ON city_matters(first_seen);
@@ -295,6 +315,10 @@ class UnifiedDatabase:
         CREATE INDEX IF NOT EXISTS idx_tracked_items_tenant ON tracked_items(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_city ON tracked_items(banana);
         CREATE INDEX IF NOT EXISTS idx_tracked_items_status ON tracked_items(status);
+        CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON user_profiles(email);
+        CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_topic_subscriptions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_subscriptions_city ON user_topic_subscriptions(banana);
+        CREATE INDEX IF NOT EXISTS idx_user_subscriptions_topic ON user_topic_subscriptions(topic);
         """
 
         self.conn.executescript(schema)
@@ -507,16 +531,27 @@ class UnifiedDatabase:
                                 matter_id=raw_matter_id
                             )
                         except ValueError as e:
-                            logger.warning(
-                                f"[Items] Could not generate matter_id for {item_title[:40]}: {e}"
+                            # Fail-fast: Item claims to have a matter but generation failed
+                            # This indicates data quality issues that should be fixed at adapter level
+                            logger.error(
+                                f"[Items] FATAL: Invalid matter data for {item_title[:40]}: {e}"
                             )
+                            raise ValueError(
+                                f"Item '{item_title}' has invalid matter data (matter_id={raw_matter_id}, "
+                                f"matter_file={raw_matter_file}): {e}"
+                            ) from e
+
+                    # Compute attachment hash for change detection
+                    item_attachments = item_data.get("attachments", [])
+                    item_attachment_hash = hash_attachments(item_attachments) if item_attachments else None
 
                     agenda_item = AgendaItem(
                         id=item_id,
                         meeting_id=stored_meeting.id,
                         title=item_title,
                         sequence=item_data.get("sequence", 0),
-                        attachments=item_data.get("attachments", []),
+                        attachments=item_attachments,
+                        attachment_hash=item_attachment_hash,
                         matter_id=composite_matter_id,  # Store COMPOSITE ID for FK
                         matter_file=raw_matter_file,     # Store public identifier
                         matter_type=item_data.get("matter_type"),
@@ -1031,9 +1066,14 @@ class UnifiedDatabase:
         """Store agenda items - delegates to ItemRepository"""
         return self.items.store_agenda_items(meeting_id, items)
 
-    def get_agenda_items(self, meeting_id: str) -> List[AgendaItem]:
-        """Get agenda items for meeting - delegates to ItemRepository"""
-        return self.items.get_agenda_items(meeting_id)
+    def get_agenda_items(self, meeting_id: str, load_matters: bool = False) -> List[AgendaItem]:
+        """Get agenda items for meeting - delegates to ItemRepository
+
+        Args:
+            meeting_id: The meeting ID
+            load_matters: If True, eagerly load Matter objects for items (default: False)
+        """
+        return self.items.get_agenda_items(meeting_id, load_matters=load_matters)
 
     def update_agenda_item(self, item_id: str, summary: str, topics: List[str]) -> None:
         """Update agenda item with summary - delegates to ItemRepository"""

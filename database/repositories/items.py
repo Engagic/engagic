@@ -59,14 +59,15 @@ class ItemRepository(BaseRepository):
             try:
                 self._execute(
                     """
-                    INSERT INTO items (id, meeting_id, title, sequence, attachments,
+                    INSERT INTO items (id, meeting_id, title, sequence, attachments, attachment_hash,
                                        matter_id, matter_file, matter_type, agenda_number,
                                        sponsors, summary, topics)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         title = excluded.title,
                         sequence = excluded.sequence,
                         attachments = excluded.attachments,
+                        attachment_hash = excluded.attachment_hash,
                         matter_id = excluded.matter_id,
                         matter_file = excluded.matter_file,
                         matter_type = excluded.matter_type,
@@ -88,6 +89,7 @@ class ItemRepository(BaseRepository):
                         item.title,
                         item.sequence,
                         attachments_json,
+                        item.attachment_hash,
                         item.matter_id,
                         item.matter_file,
                         item.matter_type,
@@ -115,15 +117,16 @@ class ItemRepository(BaseRepository):
         logger.debug(f"Stored {stored_count} agenda items for meeting {meeting_id}")
         return stored_count
 
-    def get_agenda_items(self, meeting_id: str) -> List[AgendaItem]:
+    def get_agenda_items(self, meeting_id: str, load_matters: bool = False) -> List[AgendaItem]:
         """
         Get all agenda items for a meeting, ordered by sequence.
 
         Args:
             meeting_id: The meeting ID
+            load_matters: If True, eagerly load Matter objects for items (default: False)
 
         Returns:
-            List of AgendaItem objects
+            List of AgendaItem objects (with matter field populated if load_matters=True)
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -137,7 +140,31 @@ class ItemRepository(BaseRepository):
             (meeting_id,),
         )
 
-        return [AgendaItem.from_db_row(row) for row in rows]
+        items = [AgendaItem.from_db_row(row) for row in rows]
+
+        # Eager load matters if requested
+        if load_matters:
+            # Get all unique matter_ids from items
+            matter_ids = {item.matter_id for item in items if item.matter_id}
+
+            if matter_ids:
+                # Fetch all matters in a single query
+                placeholders = ",".join("?" * len(matter_ids))
+                matter_rows = self._fetch_all(
+                    f"SELECT * FROM city_matters WHERE id IN ({placeholders})",
+                    tuple(matter_ids),
+                )
+
+                # Build matter lookup map
+                from database.models import Matter
+                matters_map = {Matter.from_db_row(row).id: Matter.from_db_row(row) for row in matter_rows}
+
+                # Populate matter field on items
+                for item in items:
+                    if item.matter_id and item.matter_id in matters_map:
+                        item.matter = matters_map[item.matter_id]
+
+        return items
 
     def update_agenda_item(self, item_id: str, summary: str, topics: List[str]) -> None:
         """

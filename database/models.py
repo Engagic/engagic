@@ -310,6 +310,7 @@ class AgendaItem:
     attachments: List[
         Any
     ]  # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
+    attachment_hash: Optional[str] = None  # SHA-256 hash of attachments for change detection
     matter_id: Optional[str] = None  # Backend unique identifier
     matter_file: Optional[str] = None  # Official public identifier (BL2025-1005, 25-1209)
     matter_type: Optional[str] = None  # Flexible metadata (Ordinance, CD 12, etc.)
@@ -325,9 +326,15 @@ class AgendaItem:
         data = asdict(self)
         if self.created_at:
             data["created_at"] = self.created_at.isoformat()
-        # Exclude matter object from serialization (loaded on demand)
-        if "matter" in data:
+
+        # Handle matter field: include if loaded, exclude if None
+        if "matter" in data and data["matter"] is not None:
+            # Matter was eagerly loaded - serialize it
+            data["matter"] = self.matter.to_dict() if self.matter else None
+        elif "matter" in data:
+            # Matter is None - exclude from response
             del data["matter"]
+
         return data
 
     @classmethod
@@ -372,6 +379,7 @@ class AgendaItem:
             title=row_dict["title"],
             sequence=row_dict["sequence"],
             attachments=attachments,
+            attachment_hash=row_dict.get("attachment_hash"),
             matter_id=row_dict.get("matter_id"),
             matter_file=row_dict.get("matter_file"),
             matter_type=row_dict.get("matter_type"),
