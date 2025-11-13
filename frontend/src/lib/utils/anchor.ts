@@ -51,13 +51,19 @@ export function generateAnchorId(item: AnchorableItem): string {
 /**
  * Find matching item by anchor hash
  *
+ * Gracefully matches ALL possible anchor formats for an item:
+ * - agenda_number format (primary): "item-5-e"
+ * - matter_file format (fallback): "bl2025-1098"
+ * - item.id format (final fallback): "item-abc123"
+ *
  * @param items - Array of items to search
  * @param hash - URL hash (with or without leading #)
  * @returns Matching item or undefined
  *
  * @example
- * findItemByAnchor(items, '#item-5-e')
- * findItemByAnchor(items, '2025-5470')
+ * findItemByAnchor(items, '#item-5-e')      // matches agenda_number
+ * findItemByAnchor(items, 'bl2025-1098')    // matches matter_file
+ * findItemByAnchor(items, 'item-abc123')    // matches item.id
  */
 export function findItemByAnchor<T extends AnchorableItem>(
 	items: T[],
@@ -67,7 +73,33 @@ export function findItemByAnchor<T extends AnchorableItem>(
 	const normalizedHash = hash.startsWith('#') ? hash.substring(1) : hash;
 
 	return items.find(item => {
-		const anchorId = generateAnchorId(item);
-		return anchorId === normalizedHash;
+		// Check all possible anchor formats for this item
+		const possibleAnchors: string[] = [];
+
+		// Format 1: agenda_number (if present)
+		if (item.agenda_number) {
+			const normalized = item.agenda_number
+				.toLowerCase()
+				.replace(/[^a-z0-9]/g, '-')
+				.replace(/-+/g, '-')
+				.replace(/^-|-$/g, '');
+			possibleAnchors.push(`item-${normalized}`);
+		}
+
+		// Format 2: matter_file (if present)
+		if (item.matter_file) {
+			const normalized = item.matter_file
+				.toLowerCase()
+				.replace(/[^a-z0-9-]/g, '-');
+			possibleAnchors.push(normalized);
+		}
+
+		// Format 3: item.id (always present as fallback)
+		if (item.id) {
+			possibleAnchors.push(`item-${item.id}`);
+		}
+
+		// Match if hash equals any possible anchor format
+		return possibleAnchors.includes(normalizedHash);
 	});
 }
