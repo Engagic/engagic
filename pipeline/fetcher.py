@@ -13,7 +13,6 @@ Moved from: pipeline/conductor.py (refactored)
 
 import time
 import random
-import os
 from datetime import datetime
 from typing import List, Optional, Set
 from dataclasses import dataclass
@@ -27,26 +26,9 @@ from server.metrics import metrics
 
 logger = get_logger(__name__).bind(component="fetcher")
 
-# Memory monitoring
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    PSUTIL_AVAILABLE = False
-    logger.warning("psutil not available - memory monitoring disabled")
-
-
-def log_memory_usage(context: str = ""):
-    """Log current memory usage in MB"""
-    if not PSUTIL_AVAILABLE:
-        return
-    try:
-        process = psutil.Process(os.getpid())
-        mem_info = process.memory_info()
-        mem_mb = mem_info.rss / 1024 / 1024
-        logger.info(f"[Memory] {context}: {mem_mb:.1f}MB RSS")
-    except Exception as e:
-        logger.debug(f"[Memory] Failed to log: {e}")
+# Timing constants (seconds)
+SYNC_ERROR_DELAY_BASE = 2  # Base delay after sync error
+SYNC_ERROR_DELAY_JITTER = 1  # Random jitter to add
 
 
 class SyncStatus(Enum):
@@ -166,17 +148,12 @@ class Fetcher:
                 if result.status == SyncStatus.FAILED:
                     self.failed_cities.add(city.banana)
 
-                # Log memory every 10 cities
-                if len(results) % 10 == 0:
-                    log_memory_usage(f"After {len(results)} cities")
-
             # Break between vendor groups to be extra polite
             if vendor_cities:
                 vendor_break = 30 + random.uniform(0, 10)  # 30-40 seconds
                 logger.info(
                     f"Completed {vendor} cities, taking {vendor_break:.1f}s break..."
                 )
-                log_memory_usage(f"After {vendor} vendor group")
                 time.sleep(vendor_break)
 
         # Log summary
@@ -401,9 +378,6 @@ class Fetcher:
                     duration_seconds=round(result.duration_seconds, 1)
                 )
 
-                # Log memory after adapter cleanup
-                log_memory_usage(f"After {city.banana}")
-
             except Exception as e:
                 result.status = SyncStatus.FAILED
                 result.error_message = str(e)
@@ -414,8 +388,8 @@ class Fetcher:
 
                 logger.error("sync failed", city=city.banana, vendor=city.vendor, duration_seconds=round(result.duration_seconds, 1), error=str(e), error_type=type(e).__name__)
 
-                # Add small delay on error
-                time.sleep(2 + random.uniform(0, 1))
+                # Add small delay on error with jitter
+                time.sleep(SYNC_ERROR_DELAY_BASE + random.uniform(0, SYNC_ERROR_DELAY_JITTER))
 
             return result
 

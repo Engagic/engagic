@@ -111,15 +111,9 @@ class Config:
         if self.API_PORT <= 0 or self.API_PORT > 65535:
             raise ValueError("ENGAGIC_PORT must be between 1 and 65535")
 
-        # Log configuration warnings
-        if (
-            not self.ANTHROPIC_API_KEY
-            and not self.GEMINI_API_KEY
-            and not self.LLM_API_KEY
-        ):
+        if not any([self.ANTHROPIC_API_KEY, self.GEMINI_API_KEY, self.LLM_API_KEY]):
             logger.warning("No LLM API key configured - AI features will be disabled")
 
-        # Ensure database directory exists
         db_dir = os.path.dirname(self.UNIFIED_DB_PATH)
         if db_dir and not os.path.exists(db_dir):
             logger.info(f"Creating database directory: {db_dir}")

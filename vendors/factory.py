@@ -16,6 +16,19 @@ from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
 
 logger = logging.getLogger("engagic")
 
+VENDOR_ADAPTERS = {
+    "civicclerk": CivicClerkAdapter,
+    "civicplus": CivicPlusAdapter,
+    "escribe": EscribeAdapter,
+    "granicus": GranicusAdapter,
+    "iqm2": IQM2Adapter,
+    "legistar": LegistarAdapter,
+    "novusagenda": NovusAgendaAdapter,
+    "primegov": PrimeGovAdapter,
+    "berkeley": BerkeleyAdapter,
+    "menlopark": MenloParkAdapter,
+}
+
 
 def get_adapter(vendor: str, city_slug: str, **kwargs):
     """Get appropriate adapter for vendor
@@ -32,46 +45,13 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
         - berkeley: Berkeley City Council (Drupal CMS)
         - menlopark: Menlo Park City Council (simple table)
     """
-    supported_vendors = {
-        "civicclerk",
-        "civicplus",
-        "escribe",
-        "granicus",
-        "iqm2",
-        "legistar",
-        "novusagenda",
-        "primegov",
-        "berkeley",
-        "menlopark",
-    }
-
-    if vendor not in supported_vendors:
+    if vendor not in VENDOR_ADAPTERS:
         logger.debug(f"Unsupported vendor: {vendor} for city {city_slug}")
         return None
 
-    if vendor == "civicclerk":
-        return CivicClerkAdapter(city_slug)
-    elif vendor == "civicplus":
-        return CivicPlusAdapter(city_slug)
-    elif vendor == "escribe":
-        return EscribeAdapter(city_slug)
-    elif vendor == "granicus":
-        return GranicusAdapter(city_slug)
-    elif vendor == "iqm2":
-        return IQM2Adapter(city_slug)
-    elif vendor == "legistar":
-        # NYC requires API token
-        api_token = kwargs.get("api_token")
-        if api_token:
-            return LegistarAdapter(city_slug, api_token=api_token)
-        return LegistarAdapter(city_slug)
-    elif vendor == "novusagenda":
-        return NovusAgendaAdapter(city_slug)
-    elif vendor == "primegov":
-        return PrimeGovAdapter(city_slug)
-    elif vendor == "berkeley":
-        return BerkeleyAdapter(city_slug)
-    elif vendor == "menlopark":
-        return MenloParkAdapter(city_slug)
-    else:
-        return None
+    adapter_cls = VENDOR_ADAPTERS[vendor]
+
+    if vendor == "legistar" and kwargs.get("api_token"):
+        return adapter_cls(city_slug, api_token=kwargs["api_token"])
+
+    return adapter_cls(city_slug)

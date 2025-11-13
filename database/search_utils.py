@@ -2,7 +2,6 @@
 Search utilities for finding text in meeting and item summaries.
 """
 
-import os
 import re
 from datetime import datetime
 from typing import List, Dict, Optional
