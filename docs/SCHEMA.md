@@ -172,6 +172,7 @@ Individual agenda items within meetings.
 | `title` | TEXT NOT NULL | Agenda item title |
 | `sequence` | INTEGER NOT NULL | Order within agenda (1, 2, 3...) |
 | `attachments` | TEXT | JSON array of attachment objects |
+| `attachment_hash` | TEXT | SHA-256 hash of attachments for change detection |
 | `summary` | TEXT | LLM-generated item summary (markdown) |
 | `topics` | TEXT | JSON array of canonical topics |
 | `created_at` | TIMESTAMP | Record creation timestamp |
@@ -229,22 +230,23 @@ Processing job queue with priority support.
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER PRIMARY KEY | Auto-increment job ID |
-| `packet_url` | TEXT NOT NULL UNIQUE | PDF URL to process |
+| `source_url` | TEXT NOT NULL UNIQUE | Vendor-agnostic URL to process (agenda_url or packet_url) |
 | `meeting_id` | TEXT | Associated meeting ID (FK to meetings) |
 | `banana` | TEXT | City identifier (FK to cities) |
-| `status` | TEXT | Job status: 'pending', 'processing', 'completed', 'failed' |
+| `status` | TEXT | Job status: 'pending', 'processing', 'completed', 'failed', 'dead_letter' |
 | `priority` | INTEGER | Priority score (higher = more urgent, default: 0) |
 | `retry_count` | INTEGER | Number of retry attempts (default: 0) |
 | `created_at` | TIMESTAMP | Job creation timestamp |
 | `started_at` | TIMESTAMP | Processing start timestamp |
 | `completed_at` | TIMESTAMP | Processing completion timestamp |
+| `failed_at` | TIMESTAMP | Failure timestamp |
 | `error_message` | TEXT | Failure details if status='failed' |
-| `processing_metadata` | TEXT | JSON metadata about processing |
+| `processing_metadata` | TEXT | JSON metadata about processing (optional) |
 
 **Constraints:**
 - `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
 - `FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE`
-- `CHECK (status IN ('pending', 'processing', 'completed', 'failed'))`
+- `CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'dead_letter'))`
 
 **Indices:**
 - `idx_queue_status` on `status`
@@ -252,14 +254,77 @@ Processing job queue with priority support.
 
 **Priority Calculation:**
 ```python
-# Recent meetings get higher priority
-days_old = (now - meeting_date).days
-priority = max(0, 100 - days_old)
+# Recent meetings get higher priority (0-150 scale)
+days_from_meeting = abs((now - meeting_date).days)
+priority = max(0, 150 - days_from_meeting)
+
+# Retry jobs get priority penalty
+if retry_count > 0:
+    priority -= (20 * retry_count)
+```
+
+**Dead Letter Queue:**
+Jobs that fail repeatedly (typically 3+ retries) are marked `status='dead_letter'` for manual review. This prevents infinite retry loops while preserving error context.
+
+---
+
+## Phase 2 Tables (User Profiles & Alerts)
+
+These tables support end-user features: user accounts, city subscriptions, and topic-based alerts.
+
+### `user_profiles`
+
+End-user accounts for civic engagement features (Phase 2).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | User identifier (UUID) |
+| `email` | TEXT UNIQUE NOT NULL | User email address |
+| `created_at` | TIMESTAMP | Account creation timestamp |
+
+**Indices:**
+- `idx_user_profiles_email` on `email` (UNIQUE constraint enforced)
+
+**Purpose:** Simple email-based accounts for alert subscriptions. Authentication via magic links (no passwords initially).
+
+---
+
+### `user_topic_subscriptions`
+
+Topics and cities users want to receive alerts about.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `user_id` | TEXT NOT NULL | User ID (FK to user_profiles) |
+| `banana` | TEXT NOT NULL | City identifier (FK to cities) |
+| `topic` | TEXT NOT NULL | Canonical topic identifier (housing, zoning, etc.) |
+| `created_at` | TIMESTAMP | Subscription creation timestamp |
+
+**Primary Key:** Composite `(user_id, banana, topic)`
+
+**Constraints:**
+- `FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE`
+- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+
+**Indices:**
+- `idx_user_subscriptions_user` on `user_id`
+- `idx_user_subscriptions_city` on `banana`
+- `idx_user_subscriptions_topic` on `topic`
+
+**Purpose:** Track which topics each user cares about in which cities. Alert service matches meeting topics against subscriptions to send targeted notifications.
+
+**Example:**
+```sql
+-- User subscribes to housing and zoning in Palo Alto
+INSERT INTO user_topic_subscriptions (user_id, banana, topic)
+VALUES
+  ('user_abc123', 'paloaltoCA', 'housing'),
+  ('user_abc123', 'paloaltoCA', 'zoning');
 ```
 
 ---
 
-## Future Tables (Not Yet Used)
+## Future Tables (Phases 5-6)
 
 These tables support planned features (Phases 5-6) but are not actively used yet.
 
@@ -438,6 +503,9 @@ CREATE INDEX idx_zipcodes_zipcode ON zipcodes(zipcode);
 CREATE INDEX idx_meetings_banana ON meetings(banana);
 CREATE INDEX idx_meetings_date ON meetings(date);
 CREATE INDEX idx_meetings_status ON meetings(processing_status);
+
+-- Items
+CREATE INDEX idx_items_meeting_id ON items(meeting_id);
 
 -- Cache
 CREATE INDEX idx_cache_hash ON cache(content_hash);
