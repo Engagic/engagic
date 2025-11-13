@@ -488,16 +488,38 @@ class Processor:
             logger.error(f"[MatterProcessing] No items found for matter {matter_id}")
             return
 
-        # Use first item as representative (all should have same attachments for a matter)
+        # Aggregate ALL attachments from ALL items (deduplicate by URL)
+        all_attachments = []
+        seen_urls = set()
+
+        for item in items:
+            for att in item.attachments:
+                # Normalize attachment to dict
+                if isinstance(att, str):
+                    att_url = att
+                elif isinstance(att, dict):
+                    att_url = att.get("url")
+                else:
+                    continue
+
+                # Deduplicate by URL
+                if att_url and att_url not in seen_urls:
+                    seen_urls.add(att_url)
+                    all_attachments.append(att)
+
+        # Use first item as template (for metadata like title, matter_file, etc.)
         representative_item = items[0]
+
+        # Override attachments with aggregated set
+        representative_item.attachments = all_attachments
 
         logger.info(
             f"[MatterProcessing] Matter {matter_id} has {len(items)} appearances "
             f"across {len(set(item.meeting_id for item in items))} meetings, "
-            f"{len(representative_item.attachments)} attachments"
+            f"{len(all_attachments)} unique attachments (aggregated from all appearances)"
         )
 
-        # Process item (extract PDFs and summarize)
+        # Process item with ALL aggregated attachments (extract PDFs and summarize)
         result = self._process_single_item(representative_item)
 
         if not result:

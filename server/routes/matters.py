@@ -4,6 +4,7 @@ Matter API routes
 Handles matter tracking, timelines, and cross-meeting aggregation
 """
 
+import json
 import logging
 import random
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -67,7 +68,7 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
                 "banana": item["banana"],
                 "agenda_number": item["agenda_number"],
                 "summary": item["summary"],
-                "topics": item["topics"]
+                "topics": json.loads(item["topics"]) if item["topics"] else []
             })
 
         return {
@@ -112,14 +113,14 @@ async def get_city_matters(
             LEFT JOIN meetings mt ON i.meeting_id = mt.id
             WHERE m.banana = ?
             GROUP BY m.id
-            HAVING COUNT(i.id) >= 2
+            HAVING COUNT(i.id) >= 1
             ORDER BY last_seen_date DESC, m.created_at DESC
             LIMIT ? OFFSET ?
             """,
             (banana, limit, offset)
         ).fetchall()
 
-        # Count only matters with 2+ appearances
+        # Count all matters with at least one appearance
         total_count = db.conn.execute(
             """
             SELECT COUNT(*) FROM (
@@ -128,7 +129,7 @@ async def get_city_matters(
                 LEFT JOIN items i ON i.matter_id = m.id
                 WHERE m.banana = ?
                 GROUP BY m.id
-                HAVING COUNT(i.id) >= 2
+                HAVING COUNT(i.id) >= 1
             )
             """,
             (banana,)
@@ -167,7 +168,7 @@ async def get_city_matters(
                     "banana": item["banana"],
                     "agenda_number": item["agenda_number"],
                     "summary": item["summary"],
-                    "topics": item["topics"]
+                    "topics": json.loads(item["topics"]) if item["topics"] else []
                 }
                 for item in timeline_items
             ]
@@ -178,9 +179,9 @@ async def get_city_matters(
                 "matter_id": matter_dict["matter_id"],
                 "matter_type": matter_dict["matter_type"],
                 "title": matter_dict["title"],
-                "sponsors": matter_dict["sponsors"],
+                "sponsors": json.loads(matter_dict["sponsors"]) if matter_dict["sponsors"] else [],
                 "canonical_summary": matter_dict["canonical_summary"],
-                "canonical_topics": matter_dict["canonical_topics"],
+                "canonical_topics": json.loads(matter_dict["canonical_topics"]) if matter_dict["canonical_topics"] else [],
                 "first_seen": matter_dict["first_seen"],
                 "last_seen": matter_dict["last_seen"],
                 "appearance_count": matter_dict["actual_appearance_count"],
