@@ -1,6 +1,6 @@
 // Centralized date formatting utilities
 
-export function formatMeetingDate(dateString: string): string {
+export function formatMeetingDate(dateString: string | null): string {
 	if (!dateString || dateString === 'null' || dateString === '') {
 		return 'Date TBD';
 	}
@@ -19,7 +19,7 @@ export function formatMeetingDate(dateString: string): string {
 	return `${monthName} ${day}, ${year}`;
 }
 
-export function extractTime(dateString: string): string {
+export function extractTime(dateString: string | null): string {
 	if (!dateString || dateString === 'null' || dateString === '') {
 		return '';
 	}
@@ -37,7 +37,7 @@ export function extractTime(dateString: string): string {
 	});
 }
 
-export function formatMeetingDateLong(dateString: string): string {
+export function formatMeetingDateLong(dateString: string | null): string {
 	if (!dateString || dateString === 'null' || dateString === '') {
 		return 'Date TBD';
 	}

@@ -35,10 +35,10 @@ export interface AgendaItem {
 }
 
 export interface Meeting {
-	id?: string;
+	id: string;
 	banana: string;
 	title: string;
-	date: string; // ISO format datetime
+	date: string | null; // ISO format datetime or null when missing
 	agenda_url?: string; // HTML/PDF agenda with extracted items (item-based, primary)
 	packet_url?: string | string[]; // Monolithic PDF fallback (no items extracted)
 	summary?: string;
@@ -237,9 +237,9 @@ export interface Matter {
 	matter_type?: string;
 	title: string;
 	canonical_summary?: string;
-	canonical_topics?: string;  // JSON string array
-	sponsors?: string;
-	attachments?: string;  // JSON string array
+	canonical_topics?: string[];
+	sponsors?: string[];
+	attachments?: Array<{ name: string; url: string; type: string }>;
 	first_seen: string;
 	last_seen: string;
 	appearance_count?: number;  // Number of times this matter appeared across meetings
