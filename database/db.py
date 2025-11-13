@@ -584,6 +584,13 @@ class UnifiedDatabase:
                     agenda_items.append(agenda_item)
 
                 if agenda_items:
+                    # Track matters FIRST in city_matters table (creates FK targets)
+                    # CRITICAL: Must happen before store_agenda_items to avoid FK constraint failures
+                    matters_stats = self._track_matters(stored_meeting, items, agenda_items)
+                    stats['matters_tracked'] = matters_stats.get('tracked', 0)
+                    stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
+
+                    # THEN store items (FK targets exist now)
                     count = self.store_agenda_items(stored_meeting.id, agenda_items)
                     stats['items_stored'] = count
                     items_with_summaries = sum(1 for item in agenda_items if item.summary)
@@ -592,11 +599,6 @@ class UnifiedDatabase:
                         f"[Items] Stored {count} items ({stats['items_skipped_procedural']} procedural, "
                         f"{items_with_summaries} with preserved summaries)"
                     )
-
-                    # Track matters in city_matters and matter_appearances tables
-                    matters_stats = self._track_matters(stored_meeting, items, agenda_items)
-                    stats['matters_tracked'] = matters_stats.get('tracked', 0)
-                    stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
 
 
             # Check if already processed before enqueuing (to avoid wasting credits)
