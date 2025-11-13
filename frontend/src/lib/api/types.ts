@@ -31,6 +31,7 @@ export interface AgendaItem {
 	matter_type?: string;  // Ordinance, Resolution, CD 12, etc.
 	agenda_number?: string;  // Position on this agenda (1, K. 87, etc.)
 	sponsors?: string[];  // Sponsor names
+	matter?: Matter;  // Eagerly loaded Matter object (when load_matters=True in API)
 }
 
 export interface Meeting {
@@ -241,6 +242,7 @@ export interface Matter {
 	attachments?: string;  // JSON string array
 	first_seen: string;
 	last_seen: string;
+	appearance_count?: number;  // Number of times this matter appeared across meetings
 }
 
 export interface MatterTimelineAppearance {

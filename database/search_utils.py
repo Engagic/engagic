@@ -276,13 +276,13 @@ def search_summaries(
 
         url = build_engagic_url(banana, meeting.date.isoformat() if meeting.date else None, meeting.id)
 
-        # Generate human-readable anchor (prefer matter_file, then agenda_number, fallback to item.id)
-        if item.matter_file:
-            anchor = re.sub(r'[^a-z0-9-]', '-', item.matter_file.lower())
-        elif item.agenda_number:
+        # Generate anchor matching frontend/backend logic: agenda_number > matter_file > item.id
+        if item.agenda_number:
             clean = re.sub(r'[^a-z0-9]', '-', item.agenda_number.lower())
             clean = re.sub(r'-+', '-', clean).strip('-')
             anchor = f'item-{clean}'
+        elif item.matter_file:
+            anchor = re.sub(r'[^a-z0-9-]', '-', item.matter_file.lower())
         else:
             anchor = f"item-{item.id}"
 
