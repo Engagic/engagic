@@ -83,10 +83,9 @@ class TopicNormalizer:
         canonical_topics = set()
 
         for topic in topics:
-            if not topic:
-                continue
-
             topic_lower = topic.strip().lower()
+            if not topic_lower:
+                continue
 
             # Direct match
             if topic_lower in self._synonym_map:

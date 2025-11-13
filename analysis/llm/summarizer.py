@@ -248,8 +248,6 @@ class GeminiSummarizer:
             # Parse response based on version
             summary, topics = self._parse_item_response(response.text)
 
-            logger.debug(f"[Summarizer] Item summarized in {duration:.1f}s ({input_tokens} in, {output_tokens} out)")
-
             return summary, topics
 
         except Exception as e:
@@ -491,28 +489,6 @@ class GeminiSummarizer:
                     request_map[item_id] = req
 
                 temp_file.close()
-
-                # DEBUG: Show first JSONL line to verify format
-                with open(temp_path, 'r') as debug_file:
-                    first_line = debug_file.readline()
-                    try:
-                        parsed = json.loads(first_line)
-                        logger.info("[Summarizer] DEBUG JSONL structure:")
-                        logger.info(f"  - key: {parsed.get('key')}")
-                        logger.info(f"  - request.contents: {type(parsed.get('request', {}).get('contents'))}")
-                        gen_config = parsed.get('request', {}).get('generationConfig', {})
-                        if gen_config:
-                            logger.info(f"  - request.generationConfig keys: {list(gen_config.keys())}")
-                            # Show responseSchema structure
-                            if 'responseSchema' in gen_config:
-                                schema = gen_config['responseSchema']
-                                logger.info(f"  - responseSchema type: {schema.get('type')}")
-                                logger.info(f"  - responseSchema properties count: {len(schema.get('properties', {}))}")
-                        if 'cachedContent' in parsed.get('request', {}):
-                            logger.info(f"  - request.cachedContent: {parsed['request']['cachedContent']}")
-                        logger.info(f"  - Full first line (truncated): {first_line[:800]}")
-                    except Exception as e:
-                        logger.error(f"[Summarizer] DEBUG Failed to parse JSONL: {e}")
 
                 # Upload JSONL file
                 logger.info(
@@ -965,10 +941,6 @@ class GeminiSummarizer:
                 summary_parts.append(f"## Confidence\n\n{confidence}")
 
             summary = "\n".join(summary_parts)
-
-            logger.debug(
-                f"[Summarizer] Parsed JSON response: {len(topics)} valid topics, confidence={confidence}"
-            )
 
             return summary, topics
 

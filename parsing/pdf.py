@@ -74,12 +74,10 @@ class PdfExtractor:
             return text
 
         except (Image.DecompressionBombError, Image.DecompressionBombWarning):
-            # PIL decompression bomb protection triggered
-            logger.warning(f"[PyMuPDF] Page {page.number + 1}: PIL decompression bomb detected, skipping OCR")
+            logger.warning(f"Page {page.number + 1}: Image too large for OCR, skipping")
             return ""
-        except Exception as e:
-            # Catch any other OCR failures gracefully
-            logger.error(f"[PyMuPDF] Page {page.number + 1}: OCR failed - {e}")
+        except (OSError, pytesseract.TesseractError) as e:
+            logger.error(f"Page {page.number + 1}: OCR failed - {type(e).__name__}: {e}")
             return ""
 
     def _is_ocr_better(self, original: str, ocr_result: str, page_num: int) -> bool:

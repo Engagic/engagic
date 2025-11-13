@@ -131,28 +131,23 @@ class MeetingValidator:
             return {"valid": True, "action": "store"}
 
         # Domain mismatch - this is data corruption!
-        error_msg = (
-            f"Domain mismatch for {city_name}: "
-            f"packet_url domain '{domain}' does not match vendor '{vendor}' slug '{slug}' "
-            f"(expected: {expected_domains})"
-        )
+        error_msg = f"Domain mismatch: {domain} not in {expected_domains}"
 
-        logger.error(f"[{city_banana}] CORRUPTION DETECTED: {error_msg}")
-        logger.error(f"[{city_banana}] Packet URL: {packet_url}")
+        logger.error(
+            f"[{city_banana}] packet url validation failed: {error_msg}",
+            extra={
+                "city_banana": city_banana,
+                "domain": domain,
+                "expected": expected_domains,
+                "vendor": vendor,
+                "packet_url": packet_url,
+            }
+        )
 
         return {
             "valid": False,
             "error": error_msg,
             "action": "reject",
-            "details": {
-                "packet_url": packet_url,
-                "domain": domain,
-                "expected_domains": expected_domains,
-                "city_banana": city_banana,
-                "city_name": city_name,
-                "vendor": vendor,
-                "slug": slug,
-            },
         }
 
     @classmethod

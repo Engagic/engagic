@@ -24,8 +24,7 @@ from server.metrics import metrics
 
 logger = get_logger(__name__).bind(component="processor")
 
-# Procedural items to skip (low informational value)
-# Focus on substantive policy, not administrative overhead
+# Skip procedural items (administrative overhead, not policy)
 PROCEDURAL_PATTERNS = [
     "review of minutes",
     "approval of minutes",
@@ -34,12 +33,10 @@ PROCEDURAL_PATTERNS = [
     "pledge of allegiance",
     "invocation",
     "adjournment",
-    "proclamation",  # Ceremonial honors, not policy
+    "proclamation",
 ]
 
-# Public comment attachment patterns (high token cost, low signal)
-# These attachments often contain hundreds of pages of form letters
-# Built from cross-city analysis of SF, LA, Palo Alto, Santa Clara, Oakland
+# Skip public comment attachments (high token cost, low informational value)
 PUBLIC_COMMENT_PATTERNS = [
     "public comment",
     "public correspondence",
@@ -57,6 +54,11 @@ PUBLIC_COMMENT_PATTERNS = [
     "pub corr",  # SF abbreviation for public correspondence
     "pulbic corr",  # Common typo seen in SF data
 ]
+
+# Queue processing timing constants (seconds)
+QUEUE_POLL_INTERVAL = 5  # Time to wait when queue is empty
+QUEUE_ERROR_BACKOFF = 2  # Brief backoff after job processing error
+QUEUE_FATAL_ERROR_BACKOFF = 10  # Longer backoff after fatal queue error
 
 
 def is_procedural_item(title: str) -> bool:
@@ -153,7 +155,7 @@ class Processor:
 
                 if not job:
                     # No jobs available, sleep briefly
-                    time.sleep(5)
+                    time.sleep(QUEUE_POLL_INTERVAL)
                     continue
 
                 queue_id = job.id
@@ -215,12 +217,12 @@ class Processor:
                     self.db.mark_processing_failed(queue_id, error_msg)
                     logger.error(f"[Processor] Error processing queue job {queue_id}: {e}")
                     # Sleep briefly on error to avoid tight loop
-                    time.sleep(2)
+                    time.sleep(QUEUE_ERROR_BACKOFF)
 
             except Exception as e:
                 logger.error(f"[Processor] Queue processor error: {e}")
                 # Sleep on error to avoid tight loop
-                time.sleep(10)
+                time.sleep(QUEUE_FATAL_ERROR_BACKOFF)
 
     def process_city_jobs(self, city_banana: str) -> dict:
         """Process all queued jobs for a specific city

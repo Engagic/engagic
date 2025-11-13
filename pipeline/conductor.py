@@ -15,6 +15,7 @@ import signal
 import sys
 import time
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
@@ -24,6 +25,9 @@ from pipeline.processor import Processor
 from config import config
 
 logger = logging.getLogger("engagic")
+
+# Shutdown polling interval (seconds)
+SHUTDOWN_POLL_INTERVAL = 1
 
 
 class Conductor:
@@ -59,6 +63,20 @@ class Conductor:
 
         # Track sync status
         self.last_full_sync = None
+
+    @contextmanager
+    def enable_processing(self):
+        """Context manager for temporarily enabling processing state"""
+        old_state = self.is_running
+        self.is_running = True
+        self.fetcher.is_running = True
+        self.processor.is_running = True
+        try:
+            yield
+        finally:
+            self.is_running = old_state
+            self.fetcher.is_running = old_state
+            self.processor.is_running = old_state
 
     def start(self):
         """Start background processing threads"""
@@ -119,7 +137,7 @@ class Conductor:
                 for _ in range(7 * 24 * 60 * 60):  # 7 days in seconds
                     if not self.is_running:
                         break
-                    time.sleep(1)
+                    time.sleep(SHUTDOWN_POLL_INTERVAL)
 
             except Exception as e:
                 logger.error(f"[Conductor] Sync loop error: {e}")
@@ -169,12 +187,7 @@ class Conductor:
         Returns:
             SyncResult object
         """
-        # Temporarily enable running state
-        old_is_running = self.is_running
-        self.is_running = True
-        self.fetcher.is_running = True
-
-        try:
+        with self.enable_processing():
             result = self.fetcher.sync_city(city_banana)
 
             # Update failed cities tracking
@@ -185,10 +198,6 @@ class Conductor:
                 self.fetcher.failed_cities.discard(city_banana)
 
             return result
-        finally:
-            # Restore original is_running state
-            self.is_running = old_is_running
-            self.fetcher.is_running = old_is_running
 
     def sync_and_process_city(self, city_banana: str) -> Dict[str, Any]:
         """Sync a city and immediately process all its queued jobs
@@ -233,12 +242,7 @@ class Conductor:
 
         logger.info(f"[Conductor] Processing queued jobs for {city_banana}...")
 
-        # Temporarily enable processing
-        old_is_running = self.is_running
-        self.is_running = True
-        self.processor.is_running = True
-
-        try:
+        with self.enable_processing():
             processing_stats = self.processor.process_city_jobs(city_banana)
 
             return {
@@ -247,11 +251,6 @@ class Conductor:
                 "processed_count": processing_stats["processed_count"],
                 "failed_count": processing_stats["failed_count"],
             }
-
-        finally:
-            # Restore original is_running state
-            self.is_running = old_is_running
-            self.processor.is_running = old_is_running
 
     def sync_cities(self, city_bananas: List[str]) -> List[Dict[str, Any]]:
         """Sync multiple cities (fetches meetings, enqueues for processing)
@@ -299,16 +298,11 @@ class Conductor:
                 "error": "Analyzer not available",
             }
 
-        # Temporarily enable processing
-        old_is_running = self.is_running
-        self.is_running = True
-        self.processor.is_running = True
-
         total_processed = 0
         total_failed = 0
         city_results = []
 
-        try:
+        with self.enable_processing():
             for banana in city_bananas:
                 if not self.is_running:
                     break
@@ -331,11 +325,6 @@ class Conductor:
                 "failed_count": total_failed,
                 "city_results": city_results,
             }
-
-        finally:
-            # Restore original is_running state
-            self.is_running = old_is_running
-            self.processor.is_running = old_is_running
 
     def sync_and_process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
         """Sync multiple cities and immediately process all their meetings
@@ -773,7 +762,7 @@ def main():
                 for _ in range(72 * 60 * 60):
                     if not conductor.is_running:
                         break
-                    time.sleep(1)
+                    time.sleep(SHUTDOWN_POLL_INTERVAL)
 
             except Exception as e:
                 logger.error(f"[Fetcher] Sync loop error: {e}")
@@ -782,7 +771,7 @@ def main():
                 for _ in range(2 * 60 * 60):
                     if not conductor.is_running:
                         break
-                    time.sleep(1)
+                    time.sleep(SHUTDOWN_POLL_INTERVAL)
 
     # Preview and inspection
     elif args.preview_queue:
