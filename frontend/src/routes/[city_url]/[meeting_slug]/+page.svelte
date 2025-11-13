@@ -20,7 +20,6 @@
 	let showProceduralItems = $state(false);
 	let expandedTitles = new SvelteSet<string>();
 	let expandedItems = new SvelteSet<string>();
-	let expandedThinking = new SvelteSet<string>();
 	let flyerGenerating = $state(false);
 
 	// Handle deep linking to specific items (supports both #item-5-e and #2025-5470 formats)
@@ -177,7 +176,6 @@
 								meeting={selectedMeeting}
 								{expandedItems}
 								{expandedTitles}
-								{expandedThinking}
 								{flyerGenerating}
 								onFlyerGenerate={handleFlyerGenerateChange}
 							/>

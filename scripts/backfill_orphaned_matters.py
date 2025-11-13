@@ -242,7 +242,7 @@ def main():
             return 0
 
         # Find orphaned matters
-        logger.info(f"Finding orphaned matters...")
+        logger.info("Finding orphaned matters...")
         orphaned_matters = find_orphaned_matters(conn)
         logger.info(f"Found {len(orphaned_matters)} orphaned matters to backfill")
 
@@ -255,12 +255,12 @@ def main():
                 banana = matter['banana']
                 city_counts[banana] = city_counts.get(banana, 0) + 1
 
-            logger.info(f"\nOrphaned matters by city:")
+            logger.info("\nOrphaned matters by city:")
             for banana, count in sorted(city_counts.items(), key=lambda x: x[1], reverse=True):
                 logger.info(f"  {banana}: {count} matters")
 
             # Show a few examples
-            logger.info(f"\nExample orphaned matters:")
+            logger.info("\nExample orphaned matters:")
             for matter in orphaned_matters[:5]:
                 logger.info(
                     f"  {matter['banana']}: {matter['title'][:60]}... "

@@ -2,7 +2,6 @@
 Search utilities for finding text in meeting and item summaries.
 """
 
-import json
 import os
 import re
 from datetime import datetime
@@ -63,13 +62,13 @@ def format_date(date_str: Optional[str]) -> str:
     except (ValueError, AttributeError):
         return "unknown_date"
 
-def build_engagic_url(banana: str, meeting_date: str, meeting_id: str) -> str:
+def build_engagic_url(banana: str, meeting_date: Optional[str], meeting_id: str) -> str:
     """
     Construct full Engagic URL for a meeting using clean date-id format.
 
     Args:
         banana: City identifier (e.g., 'nashvilleTN')
-        meeting_date: ISO date string
+        meeting_date: ISO date string (may be None)
         meeting_id: Meeting ID
 
     Returns:
@@ -79,85 +78,15 @@ def build_engagic_url(banana: str, meeting_date: str, meeting_id: str) -> str:
         meeting_id = "null"
 
     try:
-        dt = datetime.fromisoformat(meeting_date.replace('Z', '+00:00'))
-        date_slug = dt.strftime('%Y-%m-%d')
+        if meeting_date:
+            dt = datetime.fromisoformat(meeting_date.replace('Z', '+00:00'))
+            date_slug = dt.strftime('%Y-%m-%d')
+        else:
+            date_slug = "undated"
     except (ValueError, AttributeError):
         date_slug = "undated"
 
     return f"https://engagic.org/{banana}/{date_slug}-{meeting_id}"
-
-def parse_summary_sections(summary: str) -> Dict[str, Optional[str]]:
-    """
-    Parse summary markdown to extract Thinking and Summary sections.
-
-    Handles multiple formats:
-    - ## Thinking (heading format from engagic frontend)
-    - **Thinking** (bold inline format)
-    - Thinking (bare text at start)
-
-    Args:
-        summary: Full summary markdown (may contain Thinking section)
-
-    Returns:
-        dict with keys:
-            - thinking: Content of Thinking section (if present)
-            - summary: Content of Summary section (without Thinking)
-    """
-    if not summary:
-        return {'thinking': None, 'summary': ''}
-
-    # Check for "## Thinking" heading format first
-    parts = re.split(r'^## Thinking\s*$', summary, flags=re.MULTILINE)
-    if len(parts) >= 2:
-        before = parts[0].strip()
-        after_thinking = parts[1]
-
-        # Find next section heading to split thinking from summary
-        next_section = re.search(r'^##\s+', after_thinking, flags=re.MULTILINE)
-
-        if next_section:
-            thinking_end = next_section.start()
-            thinking_content = after_thinking[:thinking_end].strip()
-            summary_content = after_thinking[thinking_end:].strip()
-            full_summary = (before + '\n\n' + summary_content).strip() if before else summary_content
-            return {
-                'thinking': thinking_content,
-                'summary': full_summary
-            }
-
-        # No next section - everything after is thinking
-        return {
-            'thinking': after_thinking.strip(),
-            'summary': before if before else ''
-        }
-
-    # Check for inline "Thinking ... Summary:" format
-    # Look for "Summary:" marker which indicates where actual summary starts
-    summary_marker = re.search(r'\b(?:##\s*)?Summary\s*:?\s*', summary, flags=re.IGNORECASE)
-
-    if summary_marker:
-        # Everything before "Summary:" is thinking (if it mentions "Thinking")
-        before_summary = summary[:summary_marker.start()].strip()
-        after_summary = summary[summary_marker.end():].strip()
-
-        # Check if the before part contains "Thinking"
-        if re.search(r'\bThinking\b', before_summary, flags=re.IGNORECASE):
-            # Strip "Thinking" or "**Thinking**" prefix from thinking content
-            thinking_clean = re.sub(r'^(?:\*\*)?Thinking(?:\*\*)?\s*', '', before_summary, flags=re.IGNORECASE).strip()
-            return {
-                'thinking': thinking_clean,
-                'summary': after_summary
-            }
-        else:
-            # No thinking, but found Summary: marker
-            return {
-                'thinking': None,
-                'summary': after_summary
-            }
-
-    # No clear markers - return full summary
-    return {'thinking': None, 'summary': summary}
-
 
 def search_summaries(
     search_term: str,
@@ -190,9 +119,8 @@ def search_summaries(
             - date: Meeting date (ISO string)
             - meeting_title: Meeting title
             - item_title: Item title (only for items)
-            - context: Text snippet around match (from Summary section)
-            - summary: Full summary markdown (Thinking section removed)
-            - thinking: Thinking section markdown (if present)
+            - context: Text snippet around match
+            - summary: Full summary markdown
             - agenda_url: HTML agenda URL (if available)
             - packet_url: PDF packet URL (if available)
             - attachments: Item attachments (only for items)
@@ -255,15 +183,10 @@ def search_summaries(
         if not meeting:
             continue
 
-        # Parse summary sections
-        sections = parse_summary_sections(meeting.summary or '')
-        summary_only = sections['summary']
-        thinking = sections['thinking']
-
         # Strip markdown for context search
-        clean_summary = strip_markdown(summary_only)
+        clean_summary = strip_markdown(meeting.summary or '')
 
-        # Find context around the match in Summary section (not Thinking)
+        # Find context around the match
         if case_sensitive:
             match_pos = clean_summary.find(search_term)
         else:
@@ -289,8 +212,7 @@ def search_summaries(
             'date': meeting.date.isoformat() if meeting.date else None,
             'meeting_title': meeting.title,
             'context': context,
-            'summary': summary_only,
-            'thinking': thinking,
+            'summary': meeting.summary,
             'agenda_url': meeting.agenda_url,
             'packet_url': meeting.packet_url,
             'topics': meeting.topics,
@@ -332,15 +254,10 @@ def search_summaries(
         if not item:
             continue
 
-        # Parse summary sections (items can also have Thinking sections)
-        sections = parse_summary_sections(item.summary or '')
-        summary_only = sections['summary']
-        thinking = sections['thinking']
-
         # Strip markdown for context search
-        clean_summary = strip_markdown(summary_only)
+        clean_summary = strip_markdown(item.summary or '')
 
-        # Find context around the match in Summary section (not Thinking)
+        # Find context around the match
         if case_sensitive:
             match_pos = clean_summary.find(search_term)
         else:
@@ -379,8 +296,7 @@ def search_summaries(
             'meeting_title': meeting.title,
             'item_title': item.title,
             'context': context,
-            'summary': summary_only,
-            'thinking': thinking,
+            'summary': item.summary,
             'agenda_url': meeting.agenda_url,
             'packet_url': meeting.packet_url,
             'attachments': item.attachments,

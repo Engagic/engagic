@@ -32,7 +32,7 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
         if not matter:
             raise HTTPException(status_code=404, detail="Matter not found")
 
-        # Get all items for this matter across meetings (ONLY in this city)
+        # Get all items for this matter across meetings (simple FK join)
         items = db.conn.execute(
             """
             SELECT
@@ -45,11 +45,10 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
             FROM items i
             JOIN meetings m ON i.meeting_id = m.id
             JOIN cities c ON m.banana = c.banana
-            WHERE (i.matter_file = ? OR i.matter_id = ?)
-              AND m.banana = ?
+            WHERE i.matter_id = ?
             ORDER BY m.date ASC, i.sequence ASC
             """,
-            (matter.matter_file, matter.matter_id, matter.banana)
+            (matter.id,)
         ).fetchall()
 
         if not items:
@@ -109,9 +108,7 @@ async def get_city_matters(
                 COUNT(i.id) as actual_appearance_count,
                 MAX(mt.date) as last_seen_date
             FROM city_matters m
-            LEFT JOIN items i ON (
-                i.matter_file = m.matter_file OR i.matter_id = m.matter_id
-            )
+            LEFT JOIN items i ON i.matter_id = m.id
             LEFT JOIN meetings mt ON i.meeting_id = mt.id
             WHERE m.banana = ?
             GROUP BY m.id
@@ -128,9 +125,7 @@ async def get_city_matters(
             SELECT COUNT(*) FROM (
                 SELECT m.id
                 FROM city_matters m
-                LEFT JOIN items i ON (
-                    i.matter_file = m.matter_file OR i.matter_id = m.matter_id
-                )
+                LEFT JOIN items i ON i.matter_id = m.id
                 WHERE m.banana = ?
                 GROUP BY m.id
                 HAVING COUNT(i.id) >= 2
@@ -143,7 +138,7 @@ async def get_city_matters(
         for matter in matters:
             matter_dict = dict(matter)
 
-            # Fetch timeline for this matter (avoid N+1 by including it in response)
+            # Fetch timeline for this matter (simple FK join)
             timeline_items = db.conn.execute(
                 """
                 SELECT
@@ -157,11 +152,10 @@ async def get_city_matters(
                     m.banana
                 FROM items i
                 JOIN meetings m ON i.meeting_id = m.id
-                WHERE (i.matter_file = ? OR i.matter_id = ?)
-                  AND m.banana = ?
+                WHERE i.matter_id = ?
                 ORDER BY m.date ASC, i.sequence ASC
                 """,
-                (matter_dict["matter_file"], matter_dict["matter_id"], banana)
+                (matter_dict["id"],)
             ).fetchall()
 
             timeline = [
@@ -239,13 +233,11 @@ async def get_state_matters(
                 COUNT(i.id) as appearance_count
             FROM city_matters m
             JOIN cities c ON m.banana = c.banana
-            LEFT JOIN items i ON (
-                i.matter_file = m.matter_file OR i.matter_id = m.matter_id
-            )
+            LEFT JOIN items i ON i.matter_id = m.id
             WHERE c.state = ?
         """
 
-        params = [state_code]
+        params: list[str | int] = [state_code]
 
         if topic:
             query += " AND json_extract(m.canonical_topics, '$') LIKE ?"
@@ -372,9 +364,7 @@ async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
                 COUNT(i.id) as appearance_count
             FROM city_matters m
             JOIN cities c ON m.banana = c.banana
-            LEFT JOIN items i ON (
-                i.matter_file = m.matter_file OR i.matter_id = m.matter_id
-            )
+            LEFT JOIN items i ON i.matter_id = m.id
             WHERE m.canonical_summary IS NOT NULL AND m.canonical_summary != ''
             GROUP BY m.id
             HAVING COUNT(i.id) >= 2
@@ -388,7 +378,7 @@ async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
         matter = random.choice(matters)
         matter_dict = dict(matter)
 
-        # Get timeline for this matter
+        # Get timeline for this matter (simple FK join)
         timeline_items = db.conn.execute(
             """
             SELECT
@@ -397,10 +387,10 @@ async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
                 m.date as meeting_date
             FROM items i
             JOIN meetings m ON i.meeting_id = m.id
-            WHERE i.matter_file = ? OR i.matter_id = ?
+            WHERE i.matter_id = ?
             ORDER BY m.date ASC, i.sequence ASC
             """,
-            (matter_dict["matter_file"], matter_dict["matter_id"])
+            (matter_dict["id"],)
         ).fetchall()
 
         timeline = []

@@ -12,7 +12,7 @@ Confidence: 8/10 - Pattern is consistent across meetings
 """
 
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -118,7 +118,7 @@ def _find_attachments_for_item(
     title: str,
     page: int,
     all_links: List[Dict[str, Any]],
-    attachment_marker: str = None
+    attachment_marker: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Find attachment links for a specific item.

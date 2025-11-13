@@ -154,19 +154,33 @@ class MatterRepository(BaseRepository):
         self, banana: str, matter_file: Optional[str] = None, matter_id: Optional[str] = None
     ) -> Optional[Matter]:
         """
-        Get a matter by matter_file or matter_id using deterministic ID generation.
+        DEPRECATED: Get a matter by matter_file or matter_id using deterministic ID generation.
 
-        This is the preferred lookup method as it uses the same hashing
-        logic as matter creation, ensuring consistent lookups.
+        This method is deprecated as of 2025-11-12. Items now store composite matter_id
+        directly, so you should use get_matter(item.matter_id) instead.
+
+        This method remains for backward compatibility but generates composite ID
+        from raw identifiers, which is slower than direct lookup.
 
         Args:
             banana: City identifier
             matter_file: Official matter file (25-1234, BL2025-1098)
-            matter_id: Backend matter ID (UUID, numeric)
+            matter_id: Backend matter ID (UUID, numeric) - RAW, not composite
 
         Returns:
             Matter object or None if not found
+
+        Deprecation:
+            Use get_matter(composite_id) directly instead. Items already have
+            composite matter_id stored, no need to regenerate.
         """
+        import warnings
+        warnings.warn(
+            "get_matter_by_keys() is deprecated. Use get_matter(item.matter_id) directly.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 

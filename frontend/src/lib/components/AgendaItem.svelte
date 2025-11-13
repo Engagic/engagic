@@ -10,12 +10,11 @@
 		meeting: Meeting;
 		expandedItems: SvelteSet<string>;
 		expandedTitles: SvelteSet<string>;
-		expandedThinking: SvelteSet<string>;
 		flyerGenerating: boolean;
 		onFlyerGenerate: (generating: boolean) => void;
 	}
 
-	let { item, meeting, expandedItems, expandedTitles, expandedThinking, flyerGenerating, onFlyerGenerate }: Props = $props();
+	let { item, meeting, expandedItems, expandedTitles, flyerGenerating, onFlyerGenerate }: Props = $props();
 
 	const isExpanded = $derived(expandedItems.has(item.id));
 	const hasSummary = $derived(!!item.summary);
@@ -32,45 +31,6 @@
 		} else {
 			expandedItems.add(item.id);
 		}
-	}
-
-	function toggleThinking() {
-		if (expandedThinking.has(item.id)) {
-			expandedThinking.delete(item.id);
-		} else {
-			expandedThinking.add(item.id);
-		}
-	}
-
-	function parseSummaryForThinking(summary: string): { thinking: string | null; summary: string } {
-		if (!summary) return { thinking: null, summary: '' };
-
-		const parts = summary.split(/^## Thinking\s*$/m);
-
-		if (parts.length < 2) {
-			return { thinking: null, summary };
-		}
-
-		const before = parts[0].trim();
-		const afterThinking = parts[1];
-
-		const nextSectionMatch = afterThinking.match(/^##\s+/m);
-
-		if (nextSectionMatch) {
-			const thinkingEnd = nextSectionMatch.index!;
-			const thinkingContent = afterThinking.substring(0, thinkingEnd).trim();
-			const summaryContent = afterThinking.substring(thinkingEnd).trim();
-
-			return {
-				thinking: thinkingContent,
-				summary: (before ? before + '\n\n' : '') + summaryContent
-			};
-		}
-
-		return {
-			thinking: afterThinking.trim(),
-			summary: before || ''
-		};
 	}
 
 	function truncateTitle(title: string): { main: string; remainder: string | null; isTruncated: boolean } {
@@ -188,8 +148,7 @@
 					{/if}
 				</div>
 				{#if !isExpanded && hasSummary}
-					{@const summaryParts = parseSummaryForThinking(item.summary!)}
-					{@const cleanText = summaryParts.summary
+					{@const cleanText = item.summary!
 						.replace(/^#+\s*Summary\s*$/mi, '')
 						.replace(/^Summary:?\s*/mi, '')
 						.replace(/\*\*Summary\*\*:?\s*/gi, '')
@@ -217,28 +176,8 @@
 	{#if isExpanded}
 		<div class="item-expanded-content">
 			{#if item.summary}
-				{@const summaryParts = parseSummaryForThinking(item.summary)}
-
-				{#if summaryParts.thinking}
-					<div class="thinking-section" class:expanded={expandedThinking.has(item.id)}>
-						<button
-							class="thinking-toggle"
-							onclick={(e) => { e.stopPropagation(); toggleThinking(); }}
-							aria-expanded={expandedThinking.has(item.id)}
-							aria-label={expandedThinking.has(item.id) ? 'Collapse thinking trace' : 'Expand thinking trace'}
-						>
-							💭 Thinking trace (click to {expandedThinking.has(item.id) ? 'collapse' : 'expand'})
-						</button>
-						{#if expandedThinking.has(item.id)}
-							<div class="thinking-content">
-								{@html marked(summaryParts.thinking)}
-							</div>
-						{/if}
-					</div>
-				{/if}
-
 				<div class="item-summary">
-					{@html marked(summaryParts.summary)}
+					{@html marked(item.summary)}
 				</div>
 
 				<div class="item-action-bar">
@@ -550,14 +489,6 @@
 		-moz-osx-font-smoothing: grayscale;
 	}
 
-	.thinking-content {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		line-height: 1.7;
-		font-size: 1rem;
-		color: var(--text-primary);
-		letter-spacing: 0.01em;
-	}
-
 	.item-summary :global(p) {
 		margin: 1rem 0;
 	}
@@ -590,90 +521,6 @@
 
 	.item-summary :global(li) {
 		margin: 0.4rem 0;
-	}
-
-	.thinking-section {
-		margin-bottom: 1.5rem;
-	}
-
-	.thinking-toggle {
-		display: block;
-		width: 100%;
-		text-align: left;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		padding: 0.75rem 1rem;
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		box-shadow: 0 1px 3px var(--shadow-sm);
-	}
-
-	.thinking-toggle:hover {
-		border-color: var(--civic-blue);
-		box-shadow: 0 2px 6px var(--shadow-md);
-		transform: translateY(-1px);
-	}
-
-	.thinking-section.expanded .thinking-toggle {
-		border-color: var(--civic-blue);
-		background: var(--surface-hover);
-	}
-
-	.thinking-content {
-		margin-top: 0.75rem;
-		padding: 1rem;
-		border-left: 3px solid var(--civic-blue);
-		background: var(--surface-secondary);
-		border-radius: 4px;
-		animation: expandThinking 0.2s ease forwards;
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		line-height: 1.7;
-		font-size: 1rem;
-		color: var(--text-primary);
-		letter-spacing: 0.01em;
-	}
-
-	.thinking-content :global(h2) {
-		display: none;
-	}
-
-	.thinking-content :global(p) {
-		margin: 1rem 0;
-	}
-
-	.thinking-content :global(p:first-child) {
-		margin-top: 0;
-	}
-
-	.thinking-content :global(strong) {
-		font-weight: 700;
-		color: var(--text-primary);
-	}
-
-	.thinking-content :global(ul),
-	.thinking-content :global(ol) {
-		margin: 0.75rem 0;
-		padding-left: 1.5rem;
-	}
-
-	.thinking-content :global(li) {
-		margin: 0.4rem 0;
-	}
-
-	@keyframes expandThinking {
-		from {
-			opacity: 0;
-			transform: translateY(-10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 
 	.item-attachments-container {
@@ -788,11 +635,6 @@
 
 		.item-expanded-content {
 			padding: 0 1rem 1rem 1rem;
-		}
-
-		.thinking-toggle {
-			font-size: 0.75rem;
-			padding: 0.65rem 0.85rem;
 		}
 
 		.item-header {

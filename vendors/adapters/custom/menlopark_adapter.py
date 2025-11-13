@@ -27,7 +27,7 @@ Confidence: 8/10 - PDF parsing reliable, link mapping based on page proximity
 """
 
 import logging
-from typing import Dict, Any, Iterator
+from typing import Dict, Any, Iterator, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
@@ -171,7 +171,7 @@ class MenloParkAdapter(BaseAdapter):
             yield meeting_data
             meetings_found += 1
 
-    def _parse_date(self, date_str: str) -> datetime:
+    def _parse_date(self, date_str: str) -> Optional[datetime]:
         """
         Parse Menlo Park date formats:
         - "Nov. 4, 2025"

@@ -479,11 +479,8 @@ class Processor:
             )
             row = cursor.fetchone()
             if row:
-                items = self.db._get_all_items_for_matter(
-                    banana=banana,
-                    matter_file=row["matter_file"],
-                    matter_id=row["matter_id"]
-                )
+                # matter_id is already composite hash, just pass it directly
+                items = self.db._get_all_items_for_matter(matter_id)
 
         if not items:
             logger.error(f"[MatterProcessing] No items found for matter {matter_id}")
@@ -708,12 +705,9 @@ class Processor:
                 continue
 
             # MATTERS-FIRST DEDUPLICATION: Check if item has matter with canonical summary
-            if item.matter_file or item.matter_id:
-                matter = self.db.get_matter_by_keys(
-                    meeting.banana,
-                    matter_file=item.matter_file,
-                    matter_id=item.matter_id
-                )
+            if item.matter_id:
+                # item.matter_id is already composite hash - direct FK lookup
+                matter = self.db.get_matter(item.matter_id)
 
                 if matter and matter.canonical_summary:
                     # Reuse canonical summary from matter

@@ -8,7 +8,6 @@ Extracts common patterns:
 - Error handling and logging
 """
 
-import logging
 import time
 import requests
 from typing import Optional, List, Dict, Any, Iterator
@@ -145,7 +144,6 @@ class BaseAdapter:
 
         # Track request duration
         start_time = time.time()
-        status = "error"
 
         try:
             logger.debug("vendor request", vendor=self.vendor, slug=self.slug, method="GET", url=url[:100])
@@ -169,7 +167,6 @@ class BaseAdapter:
             response.raise_for_status()
 
             # Record successful request
-            status = "success"
             metrics.vendor_requests.labels(vendor=self.vendor, status="success").inc()
             metrics.vendor_request_duration.labels(vendor=self.vendor).observe(duration)
 
