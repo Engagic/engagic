@@ -34,6 +34,9 @@ PROCEDURAL_PATTERNS = [
     "invocation",
     "adjournment",
     "proclamation",
+    "commendation",
+    "recognition",
+    "ceremonial",
 ]
 
 # Skip public comment attachments (high token cost, low informational value)
