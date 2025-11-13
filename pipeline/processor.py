@@ -513,6 +513,12 @@ class Processor:
         # Use transaction to ensure consistency
         attachment_hash = hash_attachments(representative_item.attachments)
 
+        # Fetch existing matter to preserve raw matter_id (vendor UUID/numeric ID)
+        # CRITICAL: items.matter_id contains composite hash (FK), not raw vendor ID
+        # city_matters.matter_id must contain raw vendor ID for traceability
+        existing_matter = self.db.get_matter(matter_id)
+        raw_matter_id = existing_matter.matter_id if existing_matter else None
+
         try:
             # Step 1: Upsert canonical summary in city_matters
             self.db.conn.execute(
@@ -533,7 +539,7 @@ class Processor:
                 (
                     matter_id,
                     banana,
-                    representative_item.matter_id,
+                    raw_matter_id,  # Use raw vendor ID, not composite hash
                     representative_item.matter_file,
                     representative_item.matter_type,
                     representative_item.title,
@@ -551,7 +557,7 @@ class Processor:
                 self.db.conn.execute(
                     """
                     UPDATE items
-                    SET summary = ?, topics = ?, updated_at = CURRENT_TIMESTAMP
+                    SET summary = ?, topics = ?
                     WHERE id = ?
                     """,
                     (summary, json.dumps(topics), item.id),
