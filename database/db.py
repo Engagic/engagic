@@ -126,6 +126,11 @@ class UnifiedDatabase:
             title TEXT NOT NULL,
             sequence INTEGER NOT NULL,
             attachments TEXT,
+            matter_id TEXT,
+            matter_file TEXT,
+            matter_type TEXT,
+            agenda_number TEXT,
+            sponsors TEXT,
             summary TEXT,
             topics TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -226,6 +231,8 @@ class UnifiedDatabase:
         CREATE INDEX IF NOT EXISTS idx_meetings_banana ON meetings(banana);
         CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
         CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
+        CREATE INDEX IF NOT EXISTS idx_items_matter_file ON items(matter_file) WHERE matter_file IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_items_matter_id ON items(matter_id) WHERE matter_id IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(content_hash);
         CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status);
         CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue(priority DESC);
