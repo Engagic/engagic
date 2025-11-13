@@ -450,7 +450,7 @@
 
 	.matter-card-title {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.15rem;
+		font-size: 1rem;
 		font-weight: 600;
 		color: var(--text-primary);
 		line-height: 1.4;
