@@ -122,9 +122,21 @@
 						{/if}
 					</h3>
 					{#if item.matter_file}
-						<span class="matter-badge" title="Matter: {item.matter_file}">
-							{item.matter_file}
-						</span>
+						{#if item.matter_id}
+							<a
+								href="/matter/{item.matter_id}"
+								class="matter-badge matter-badge-link"
+								title="View legislative journey for {item.matter_file}"
+								onclick={(e) => e.stopPropagation()}
+								data-sveltekit-preload-data="hover"
+							>
+								{item.matter_file}
+							</a>
+						{:else}
+							<span class="matter-badge" title="Matter: {item.matter_file}">
+								{item.matter_file}
+							</span>
+						{/if}
 					{/if}
 					{#if item.matter_type}
 						<span class="matter-type-badge" title="Type: {item.matter_type}">
@@ -331,7 +343,13 @@
 		cursor: help;
 	}
 
-	.matter-badge:hover {
+	.matter-badge-link {
+		text-decoration: none;
+		cursor: pointer;
+	}
+
+	.matter-badge:hover,
+	.matter-badge-link:hover {
 		background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
 		border-color: #2563eb;
 		transform: translateY(-1px);
@@ -736,7 +754,8 @@
 			padding: 0.12rem 0.4rem;
 		}
 
-		.matter-badge {
+		.matter-badge,
+		.matter-badge-link {
 			font-size: 0.65rem;
 			padding: 0.18rem 0.5rem;
 			margin-left: 0.35rem;

@@ -24,6 +24,7 @@
 
 	const topics = $derived(matter.canonical_topics || []);
 	const attachments = $derived(matter.attachments || []);
+	const sponsors = $derived(matter.sponsors || []);
 </script>
 
 <svelte:head>
@@ -105,10 +106,10 @@
 			</div>
 		{/if}
 
-		{#if matter.sponsors}
+		{#if sponsors.length > 0}
 			<div class="sponsors-section">
 				<h2 class="section-title">Sponsors</h2>
-				<div class="sponsors-list">{matter.sponsors}</div>
+				<div class="sponsors-list">{sponsors.join(', ')}</div>
 			</div>
 		{/if}
 
