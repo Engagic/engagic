@@ -16,9 +16,8 @@ Confidence: 10/10 - Defensive, transactional, validates at every step.
 import sqlite3
 import logging
 import sys
-import json
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 from pathlib import Path
 
 # Setup logging
@@ -96,7 +95,7 @@ def create_missing_city_matters(conn: sqlite3.Connection, orphans: List[Dict]) -
 
     Returns: (created_count, nulled_count)
     """
-    from database.id_generation import generate_matter_id, validate_matter_id
+    from database.id_generation import validate_matter_id
 
     created = 0
     nulled = 0

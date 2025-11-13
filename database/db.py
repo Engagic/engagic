@@ -621,16 +621,11 @@ class UnifiedDatabase:
 
                 # MONOLITH FALLBACK: No items at all, process entire packet
                 elif packet_url:
-                    self.enqueue_for_processing(
-                        source_url=packet_url,
+                    self.enqueue_meeting_job(
                         meeting_id=stored_meeting.id,
+                        source_url=packet_url,
                         banana=city.banana,
                         priority=priority,
-                        metadata={
-                            "has_items": False,
-                            "has_agenda": bool(agenda_url),
-                            "has_packet": True,
-                        },
                     )
                     logger.debug(
                         f"Enqueued monolithic-packet processing for {stored_meeting.title} (priority {priority})"
@@ -900,16 +895,12 @@ class UnifiedDatabase:
 
             # New or changed - enqueue matter for processing
             # Include ALL item IDs across ALL meetings
-            self.enqueue_for_processing(
-                source_url=f"matters://{matter_id}",
+            self.enqueue_matter_job(
+                matter_id=matter_id,
                 meeting_id=meeting.id,
+                item_ids=[item.id for item in all_items_for_matter],
                 banana=banana,
                 priority=priority,
-                metadata={
-                    "matter_file": first_item.matter_file,
-                    "item_count": len(all_items_for_matter),
-                    "item_ids": [item.id for item in all_items_for_matter],
-                },
             )
             enqueued_count += 1
             logger.info(
@@ -919,15 +910,11 @@ class UnifiedDatabase:
 
         # Items without matters - enqueue as item-level batch (fallback)
         if items_without_matters:
-            self.enqueue_for_processing(
-                source_url=f"items://{meeting.id}",
+            self.enqueue_meeting_job(
                 meeting_id=meeting.id,
+                source_url=f"items://{meeting.id}",
                 banana=banana,
                 priority=priority,
-                metadata={
-                    "item_count": len(items_without_matters),
-                    "no_matter_tracking": True,
-                },
             )
             enqueued_count += 1
 

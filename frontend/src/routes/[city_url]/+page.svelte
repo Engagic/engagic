@@ -243,7 +243,6 @@
 												matter: {
 													id: matter.id,
 													matter_file: matter.matter_file,
-													matter_id: matter.matter_id,
 													matter_type: matter.matter_type,
 													title: matter.title,
 													canonical_summary: matter.canonical_summary,
