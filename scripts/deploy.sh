@@ -676,11 +676,13 @@ case "$COMMAND" in
     status)         status_all ;;
     logs-api)
         if systemctl is-active --quiet "$API_SERVICE"; then
-            exec journalctl -u engagic-api -f
+            log "Streaming API logs (Ctrl+C to exit)..."
+            journalctl -u engagic-api -f --no-pager
         else
             warn "API not running via systemd"
             if [ -f "$APP_DIR/logs/api.log" ]; then
-                exec tail -f "$APP_DIR/logs/api.log"
+                log "Streaming API logs (Ctrl+C to exit)..."
+                tail -f "$APP_DIR/logs/api.log"
             else
                 error "No API logs found"
             fi
@@ -688,15 +690,16 @@ case "$COMMAND" in
         ;;
     logs-fetch)
         if systemctl is-active --quiet "$FETCHER_SERVICE"; then
-            exec journalctl -u engagic-fetcher -f
+            log "Streaming fetcher logs (Ctrl+C to exit)..."
+            journalctl -u engagic-fetcher -f --no-pager
         else
             warn "Fetcher not running via systemd"
         fi
         ;;
     logs)
-        log "Showing all engagic logs..."
+        log "Showing all engagic logs (Ctrl+C to exit)..."
         if [ -f "/root/engagic/engagic.log" ]; then
-            exec tail -f /root/engagic/engagic.log
+            tail -f /root/engagic/engagic.log
         else
             warn "No log file found at /root/engagic/engagic.log"
         fi
