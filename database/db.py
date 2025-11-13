@@ -563,6 +563,10 @@ class UnifiedDatabase:
                     f"Meeting {stored_meeting.title} has no agenda/packet/items - stored for display only"
                 )
 
+            # Validate matter tracking (detect orphaned items)
+            if agenda_items:
+                self.validate_matter_tracking(stored_meeting.id)
+
             return stored_meeting, stats
 
         except Exception as e:
@@ -677,32 +681,22 @@ class UnifiedDatabase:
                         matter_file=agenda_item.matter_file,
                         matter_type=matter_type,
                         title=agenda_item.title,
+                        sponsors=sponsors,
                         canonical_summary=None,  # Will be filled by processor
                         canonical_topics=None,
                         attachments=agenda_item.attachments,
                         metadata={'attachment_hash': attachment_hash},
+                        first_seen=meeting.date,
+                        last_seen=meeting.date,
+                        appearance_count=1,
                     )
 
-                    # Store via Matter repository
-                    self.store_matter(matter_obj)
-
-                    # Add first_seen and last_seen (not in Matter model)
-                    self.conn.execute(
-                        """
-                        UPDATE city_matters
-                        SET first_seen = ?,
-                            last_seen = ?,
-                            sponsors = ?,
-                            appearance_count = 1
-                        WHERE id = ?
-                    """,
-                        (
-                            meeting.date,
-                            meeting.date,
-                            json.dumps(sponsors) if sponsors else None,
-                            matter_composite_id,
-                        ),
-                    )
+                    # Store via Matter repository (single-phase INSERT with all fields)
+                    try:
+                        self.store_matter(matter_obj)
+                    except Exception as e:
+                        logger.error(f"[Matters] FAILED to store matter {agenda_item.matter_file or agenda_item.matter_id}: {e}")
+                        raise
 
                     stats['tracked'] += 1
                     logger.info(f"[Matters] New: {agenda_item.matter_file or agenda_item.matter_id} ({matter_type}) - {len(sponsors)} sponsors")
@@ -1209,6 +1203,58 @@ class UnifiedDatabase:
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics - delegates to SearchRepository"""
         return self.search.get_stats()
+
+    def validate_matter_tracking(self, meeting_id: str) -> Dict[str, int]:
+        """
+        Validate that all items with matter_id have corresponding city_matters records.
+
+        This detects orphaned items that failed to create city_matters due to
+        constraint violations or other errors during sync.
+
+        Args:
+            meeting_id: Meeting ID to validate
+
+        Returns:
+            Dict with validation stats: orphaned_count, total_items_with_matter
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) as orphaned_count
+            FROM items i
+            WHERE i.meeting_id = ?
+              AND i.matter_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM city_matters cm WHERE cm.id = i.matter_id)
+        """, (meeting_id,))
+
+        orphaned_count = cursor.fetchone()[0]
+
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) as total
+            FROM items
+            WHERE meeting_id = ?
+              AND matter_id IS NOT NULL
+        """, (meeting_id,))
+
+        total_items_with_matter = cursor.fetchone()[0]
+
+        if orphaned_count > 0:
+            logger.error(
+                f"[Matters] VALIDATION FAILED: {orphaned_count} orphaned items "
+                f"(out of {total_items_with_matter}) missing city_matters records "
+                f"for meeting {meeting_id}"
+            )
+        else:
+            logger.debug(
+                f"[Matters] Validation passed: all {total_items_with_matter} items "
+                f"have city_matters records"
+            )
+
+        return {
+            'orphaned_count': orphaned_count,
+            'total_items_with_matter': total_items_with_matter,
+        }
 
     # ========== Utilities ==========
 
