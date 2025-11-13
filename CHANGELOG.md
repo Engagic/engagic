@@ -6,6 +6,110 @@ Format: [Date] - [Component] - [Change Description]
 
 ---
 
+## [2025-11-12] Data Model Fixes & Phase 2 Schema (User Profiles & Alerts)
+
+**Foundation cleanup complete. Phase 2 schema ready.** Fixed 5 critical data model issues discovered during architecture audit and added complete user schema for Phase 2 (User Profiles & Alerts).
+
+**What Changed:**
+
+**1. Documentation Drift Fixed (SCHEMA.md)**
+- Fixed queue table documentation mismatch:
+  - packet_url → source_url (reflects agnostic URL design)
+  - Added missing fields: failed_at, job_type, payload
+  - Added dead_letter status value
+  - Documented priority decay behavior and dead letter queue pattern
+- Added attachment_hash to items table documentation
+- Created new "Phase 2 Tables" section for user schema
+
+**2. Performance Index Added (database/db.py:282)**
+- Added idx_items_meeting_id index for O(log n) item lookups
+- Fixes full table scan on every meeting detail page load
+- Critical for frontend performance at scale (100K+ items)
+
+**3. Matter Validation Fail-Fast (database/db.py:510-519)**
+- Changed matter_id generation from warning to error
+- Items with invalid matter data now fail meeting sync immediately
+- Forces adapter-level fixes for data quality issues
+- Prevents orphaned items pointing to non-existent matters
+
+**4. Attachment Hash Storage (database/db.py:174, 522-524)**
+- Added attachment_hash column to items table schema
+- Items compute and store SHA-256 hash at creation time
+- Enables fast change detection without re-hashing identical content
+- Updated AgendaItem model and ItemRepository to handle hash field
+- Eliminates wasteful re-processing of unchanged attachments
+
+**5. Matter Relationship Exposure (THE BIG ONE)**
+- Added load_matters=True parameter to get_agenda_items()
+- Eagerly loads Matter objects with single query (not N+1)
+- Updated API service to load matters by default
+- Matter field now included in item serialization when loaded
+- Frontend can now display "this bill appeared 3 times across these meetings"
+- Unblocks matter timeline feature that was designed but never wired up
+
+**6. Phase 2 User Schema (database/db.py:273-289, 318-321)**
+- Created user_profiles table (id, email, created_at)
+- Created user_topic_subscriptions table (user_id, banana, topic)
+- Added 4 performance indices for user/subscription queries:
+  - idx_user_profiles_email (unique constraint)
+  - idx_user_subscriptions_user, city, topic
+- Composite primary key (user_id, banana, topic) prevents duplicates
+- Ready for magic link auth + topic-based alerts
+
+**Architecture Impact:**
+
+**Matter Timeline Now Accessible:**
+```python
+# Before: matter field always None
+items = db.get_agenda_items(meeting_id)
+item.matter  # Always None
+
+# After: matter field populated with eager loading
+items = db.get_agenda_items(meeting_id, load_matters=True)
+item.matter  # Matter object with canonical_summary, appearances, etc.
+```
+
+**User Subscriptions Ready:**
+```sql
+-- User subscribes to housing and zoning in Palo Alto
+INSERT INTO user_topic_subscriptions (user_id, banana, topic)
+VALUES
+  ('user_abc123', 'paloaltoCA', 'housing'),
+  ('user_abc123', 'paloaltoCA', 'zoning');
+
+-- Alert service matches meeting topics against subscriptions
+SELECT DISTINCT u.email, m.title, m.topics
+FROM meetings m
+JOIN user_topic_subscriptions s ON m.banana = s.banana
+JOIN user_profiles u ON s.user_id = u.id
+WHERE json_each(m.topics, s.topic)
+  AND m.date >= date('now');
+```
+
+**Files Modified:**
+- `docs/SCHEMA.md` - Queue table fix, attachment_hash docs, Phase 2 schema (lines 232-325)
+- `database/db.py` - Index, user tables, attachment_hash column (lines 174, 273-289, 282, 318-321, 510-519, 522-524, 1047-1054)
+- `database/models.py` - AgendaItem attachment_hash field and matter serialization (lines 313, 330-336, 376)
+- `database/repositories/items.py` - Eager loading, hash storage (lines 62-70, 92, 120-167)
+- `server/services/meeting.py` - Enable matter loading in API (lines 20-24)
+
+**Migration Notes:**
+- Schema changes auto-apply via CREATE TABLE IF NOT EXISTS
+- New index and columns added automatically on first connection
+- Fully backwards compatible, no data loss
+- Existing meetings will get attachment hashes computed on next sync
+- Matter relationships available immediately via load_matters=True
+
+**Validation:**
+- Linting: Clean (ruff check --fix)
+- Type checking: Clean (pyright, BS4 stubs ignored per CLAUDE.md)
+- Compilation: All files compile successfully
+- Schema: Verified with sqlite3 schema inspection
+
+**Status:** COMPLETE - All blocking issues resolved, Phase 2 ready to implement
+
+---
+
 ## [2025-11-11] MILESTONE: Unified Matter Tracking Framework (Legistar + PrimeGov)
 
 **Matter-level tracking now works across vendors.** Implemented unified schema that adapts vendor-specific legislative tracking into one coherent framework, enabling cross-meeting matter tracking regardless of civic tech vendor.
