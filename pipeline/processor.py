@@ -363,8 +363,8 @@ class Processor:
             else:
                 continue
 
-            # Extract PDFs
-            if att_type in ("pdf", "unknown") or isinstance(att, str):
+            # Extract PDFs and documents
+            if att_type in ("pdf", "doc", "unknown") or isinstance(att, str):
                 if att_url:
                     # Skip public comment attachments
                     url_path = att_url.split('/')[-1] if att_url else ""
@@ -787,8 +787,8 @@ class Processor:
                     else:
                         continue
 
-                    # Only process PDF/unknown types (not text segments)
-                    if att_type in ("pdf", "unknown") or isinstance(att, str):
+                    # Only process PDF/document/unknown types (not text segments)
+                    if att_type in ("pdf", "doc", "unknown") or isinstance(att, str):
                         if att_url:
                             item_urls.append(att_url)
 
