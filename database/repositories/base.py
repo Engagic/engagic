@@ -44,6 +44,10 @@ class BaseRepository:
             cursor = self.conn.cursor()
             cursor.execute(query, params)
             return cursor
+        except sqlite3.IntegrityError:
+            # Let IntegrityError pass through for specialized handling
+            # (UNIQUE constraints, FK violations, etc.)
+            raise
         except sqlite3.Error as e:
             raise DatabaseError(f"Query execution failed: {e}", context={'query': query[:100]})
 
