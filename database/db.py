@@ -510,7 +510,8 @@ class UnifiedDatabase:
                     item_type = item_data.get("matter_type", "")
 
                     # Check if procedural (skip for processing but log)
-                    if should_skip_procedural_item(item_title, item_type):
+                    is_procedural = should_skip_procedural_item(item_title, item_type)
+                    if is_procedural:
                         procedural_items.append(item_title[:50])
                         stats['items_skipped_procedural'] += 1
                         # Still store it, just mark it as skip
@@ -518,11 +519,12 @@ class UnifiedDatabase:
 
                     # Generate composite matter_id for FK relationship
                     # Items.matter_id MUST match city_matters.id (composite hashed ID)
+                    # Skip matter tracking for procedural items (they don't need timeline tracking)
                     composite_matter_id = None
                     raw_matter_id = item_data.get("matter_id")
                     raw_matter_file = item_data.get("matter_file")
 
-                    if raw_matter_id or raw_matter_file:
+                    if not is_procedural and (raw_matter_id or raw_matter_file):
                         from database.id_generation import generate_matter_id
                         try:
                             composite_matter_id = generate_matter_id(
@@ -919,14 +921,22 @@ class UnifiedDatabase:
 
                 stored_hash = existing_matter.metadata.get("attachment_hash") if existing_matter.metadata else None
 
-                if stored_hash == current_hash:
-                    # Unchanged - copy canonical summary to ALL items (including from other meetings)
+                # Also check if any items are missing summaries (e.g., user deleted for reprocessing)
+                items_missing_summary = [item for item in all_items_for_matter if not item.summary]
+
+                if stored_hash == current_hash and not items_missing_summary:
+                    # Unchanged AND all items have summaries - copy canonical summary to ALL items
                     self._apply_canonical_summary(all_items_for_matter, existing_matter)
                     logger.debug(
                         f"[Matters] Reusing canonical summary for {first_item.matter_file or matter_id} "
                         f"({len(all_items_for_matter)} items across all meetings)"
                     )
                     continue  # Skip enqueue
+                elif items_missing_summary:
+                    logger.info(
+                        f"[Matters] Re-enqueueing {first_item.matter_file or matter_id}: "
+                        f"{len(items_missing_summary)} items missing summaries (manual deletion detected)"
+                    )
 
             # New or changed - enqueue matter for processing
             # Include ALL item IDs across ALL meetings
