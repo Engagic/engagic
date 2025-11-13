@@ -766,7 +766,7 @@ class UnifiedDatabase:
             matter_composite_id = agenda_item.matter_id  # Already composite
 
             # Get raw vendor data (for storing in city_matters table)
-            item_id_short = agenda_item.id.split("_", 1)[1]  # Remove meeting_id prefix
+            item_id_short = agenda_item.id.rsplit("_", 1)[1]  # Remove meeting_id prefix (rsplit handles underscores in meeting_id)
             raw_item = items_map.get(item_id_short, {})
             sponsors = raw_item.get("sponsors", [])
             matter_type = raw_item.get("matter_type")

@@ -368,8 +368,8 @@ class GeminiSummarizer:
                     f"[Summarizer] Processing chunk {chunk_num}/{len(chunks)} ({len(chunk)} items)"
                 )
 
-                # Process chunk with retry logic (pass cache_name if available)
-                chunk_results = self._process_batch_chunk(chunk, chunk_num, cache_name)
+                # Process chunk with retry logic (pass cache_name and shared_context)
+                chunk_results = self._process_batch_chunk(chunk, chunk_num, cache_name, shared_context)
 
                 # Track stats
                 chunk_successful = sum(1 for r in chunk_results if r.get("success"))
@@ -410,7 +410,8 @@ class GeminiSummarizer:
         self,
         chunk_requests: List[Dict[str, Any]],
         chunk_num: int,
-        cache_name: Optional[str] = None
+        cache_name: Optional[str] = None,
+        shared_context: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Process a single chunk of batch requests with retry logic using JSONL file method
 
@@ -418,6 +419,7 @@ class GeminiSummarizer:
             chunk_requests: List of item requests for this chunk
             chunk_num: Chunk number for logging
             cache_name: Optional Gemini cache name for shared context
+            shared_context: Optional shared context text (used inline if not cached)
 
         Returns:
             List of results for this chunk
@@ -445,6 +447,10 @@ class GeminiSummarizer:
                     item_title = req["title"]
                     item_id = req["item_id"]
                     text = req["text"]
+
+                    # If shared context exists but not cached, prepend it inline
+                    if shared_context and not cache_name:
+                        text = f"=== SHARED CONTEXT (Background documents for this meeting) ===\n\n{shared_context}\n\n=== AGENDA ITEM: {item_title} ===\n\n{text}"
 
                     # Use actual page count if available, otherwise estimate
                     page_count = req.get("page_count")
