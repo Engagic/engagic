@@ -522,10 +522,10 @@
 	.no-summary {
 		text-align: center;
 		padding: 4rem 2rem;
-		background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+		background: var(--surface-secondary);
 		border-radius: 12px;
-		border: 2px solid #bfdbfe;
-		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.08);
+		border: 2px solid var(--border-primary);
+		box-shadow: 0 2px 8px var(--shadow-sm);
 	}
 
 	.processing-title {

@@ -66,11 +66,12 @@
 	}
 
 	function buildItemAnchor(appearance: MatterTimelineAppearance): string {
-		// Build anchor ID using shared utility, with matter_file override from component prop
+		// Build anchor ID with full hierarchy: agenda_number > matter_file > item_id
+		// Use matter_file from the matter object (all appearances share the same matter_file)
 		return generateAnchorId({
 			id: appearance.item_id,
 			agenda_number: appearance.agenda_number,
-			matter_file: matterFile || undefined
+			matter_file: timeline?.matter?.matter_file || matterFile || undefined
 		});
 	}
 
