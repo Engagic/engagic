@@ -233,9 +233,26 @@
 										{matter.canonical_summary.substring(0, 200)}{matter.canonical_summary.length > 200 ? '...' : ''}
 									</div>
 								{/if}
-								{#if hasMultipleAppearances}
+								{#if hasMultipleAppearances && matter.timeline}
 									<div class="matter-timeline-container">
-										<MatterTimeline matterId={matter.id} matterFile={matter.matter_file} />
+										<MatterTimeline
+											matterId={matter.id}
+											matterFile={matter.matter_file}
+											timelineData={{
+												success: true,
+												matter: {
+													id: matter.id,
+													matter_file: matter.matter_file,
+													matter_id: matter.matter_id,
+													matter_type: matter.matter_type,
+													title: matter.title,
+													canonical_summary: matter.canonical_summary,
+													canonical_topics: matter.canonical_topics
+												},
+												timeline: matter.timeline,
+												appearance_count: matter.appearance_count
+											}}
+										/>
 									</div>
 								{/if}
 							</div>

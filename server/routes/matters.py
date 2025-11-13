@@ -142,6 +142,42 @@ async def get_city_matters(
         matters_list = []
         for matter in matters:
             matter_dict = dict(matter)
+
+            # Fetch timeline for this matter (avoid N+1 by including it in response)
+            timeline_items = db.conn.execute(
+                """
+                SELECT
+                    i.id as item_id,
+                    i.meeting_id,
+                    i.agenda_number,
+                    i.summary,
+                    i.topics,
+                    m.title as meeting_title,
+                    m.date as meeting_date,
+                    m.banana
+                FROM items i
+                JOIN meetings m ON i.meeting_id = m.id
+                WHERE (i.matter_file = ? OR i.matter_id = ?)
+                  AND m.banana = ?
+                ORDER BY m.date ASC, i.sequence ASC
+                """,
+                (matter_dict["matter_file"], matter_dict["matter_id"], banana)
+            ).fetchall()
+
+            timeline = [
+                {
+                    "item_id": item["item_id"],
+                    "meeting_id": item["meeting_id"],
+                    "meeting_title": item["meeting_title"],
+                    "meeting_date": item["meeting_date"],
+                    "banana": item["banana"],
+                    "agenda_number": item["agenda_number"],
+                    "summary": item["summary"],
+                    "topics": item["topics"]
+                }
+                for item in timeline_items
+            ]
+
             matters_list.append({
                 "id": matter_dict["id"],
                 "matter_file": matter_dict["matter_file"],
@@ -154,7 +190,8 @@ async def get_city_matters(
                 "first_seen": matter_dict["first_seen"],
                 "last_seen": matter_dict["last_seen"],
                 "appearance_count": matter_dict["actual_appearance_count"],
-                "status": matter_dict["status"]
+                "status": matter_dict["status"],
+                "timeline": timeline
             })
 
         return {
