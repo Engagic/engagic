@@ -67,7 +67,7 @@
 			const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
 			const html = await generateFlyer({
-				meeting_id: meeting.id!,
+				meeting_id: meeting.id,
 				item_id: item.id,
 				position: apiPosition,
 				dark_mode: isDarkMode || false

@@ -283,15 +283,12 @@
 									{/if}
 								</div>
 								<div class="matter-title">{matter.title}</div>
-								{#if matter.canonical_topics}
-									{@const topics = JSON.parse(matter.canonical_topics)}
-									{#if topics.length > 0}
-										<div class="matter-topics">
-											{#each topics.slice(0, 3) as topic}
-												<span class="mini-topic">{topic}</span>
-											{/each}
-										</div>
-									{/if}
+								{#if matter.canonical_topics && matter.canonical_topics.length > 0}
+									<div class="matter-topics">
+										{#each matter.canonical_topics.slice(0, 3) as topic}
+											<span class="mini-topic">{topic}</span>
+										{/each}
+									</div>
 								{/if}
 							</a>
 						{/each}

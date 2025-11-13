@@ -22,26 +22,8 @@
 		});
 	}
 
-	function parseTopics(topicsJson: string | null): string[] {
-		if (!topicsJson) return [];
-		try {
-			return JSON.parse(topicsJson);
-		} catch {
-			return [];
-		}
-	}
-
-	function parseAttachments(attachmentsJson: string | null): Array<{ name: string; url: string; type: string }> {
-		if (!attachmentsJson) return [];
-		try {
-			return JSON.parse(attachmentsJson);
-		} catch {
-			return [];
-		}
-	}
-
-	const topics = $derived(parseTopics(matter.canonical_topics));
-	const attachments = $derived(parseAttachments(matter.attachments));
+	const topics = $derived(matter.canonical_topics || []);
+	const attachments = $derived(matter.attachments || []);
 </script>
 
 <svelte:head>

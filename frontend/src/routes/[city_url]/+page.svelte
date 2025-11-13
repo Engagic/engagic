@@ -218,15 +218,12 @@
 									{/if}
 								</div>
 								<h3 class="matter-card-title">{matter.title}</h3>
-								{#if matter.canonical_topics}
-									{@const topics = JSON.parse(matter.canonical_topics)}
-									{#if topics.length > 0}
-										<div class="matter-card-topics">
-											{#each topics.slice(0, 4) as topic}
-												<span class="matter-topic-tag">{topic}</span>
-											{/each}
-										</div>
-									{/if}
+								{#if matter.canonical_topics && matter.canonical_topics.length > 0}
+									<div class="matter-card-topics">
+										{#each matter.canonical_topics.slice(0, 4) as topic}
+											<span class="matter-topic-tag">{topic}</span>
+										{/each}
+									</div>
 								{/if}
 								{#if matter.canonical_summary}
 									<div class="matter-card-summary">

@@ -14,7 +14,17 @@ async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
     """Check rate limits for API endpoints"""
-    client_ip = request.client.host if request.client else "unknown"
+    # Get real client IP from trusted proxy headers (priority order)
+    # Cloudflare: CF-Connecting-IP (most reliable)
+    # nginx: X-Real-IP
+    # Standard: X-Forwarded-For (take leftmost/original client)
+    # Fallback: request.client.host
+    client_ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Real-IP")
+        or (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() if request.headers.get("X-Forwarded-For") else None)
+        or (request.client.host if request.client else "unknown")
+    )
 
     # Skip rate limiting for OPTIONS requests (CORS preflight)
     if request.method == "OPTIONS":
@@ -36,6 +46,8 @@ async def rate_limit_middleware(
                     "X-RateLimit-Remaining": "0",
                     "Access-Control-Allow-Origin": origin,
                     "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "*",
+                    "Access-Control-Allow-Headers": "*",
                 },
             )
 
