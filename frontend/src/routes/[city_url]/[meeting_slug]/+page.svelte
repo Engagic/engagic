@@ -82,6 +82,29 @@
 	function handleFlyerGenerateChange(generating: boolean) {
 		flyerGenerating = generating;
 	}
+
+	// Snapshot: Preserve UI state and scroll position during navigation
+	export const snapshot = {
+		capture: () => ({
+			showProceduralItems,
+			expandedTitles: Array.from(expandedTitles),
+			expandedItems: Array.from(expandedItems),
+			scrollY: typeof window !== 'undefined' ? window.scrollY : 0
+		}),
+		restore: (values: {
+			showProceduralItems: boolean;
+			expandedTitles: string[];
+			expandedItems: string[];
+			scrollY: number;
+		}) => {
+			showProceduralItems = values.showProceduralItems;
+			expandedTitles = new SvelteSet(values.expandedTitles);
+			expandedItems = new SvelteSet(values.expandedItems);
+			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
+				setTimeout(() => window.scrollTo(0, values.scrollY), 0);
+			}
+		}
+	};
 </script>
 
 <svelte:head>

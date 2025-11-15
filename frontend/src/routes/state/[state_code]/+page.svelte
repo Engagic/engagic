@@ -21,6 +21,18 @@
 	};
 
 	const stateName = $derived(STATE_NAMES[data.stateCode] || data.stateCode);
+
+	// Snapshot: Preserve scroll position during navigation
+	export const snapshot = {
+		capture: () => ({
+			scrollY: typeof window !== 'undefined' ? window.scrollY : 0
+		}),
+		restore: (values: { scrollY: number }) => {
+			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
+				setTimeout(() => window.scrollTo(0, values.scrollY), 0);
+			}
+		}
+	};
 </script>
 
 <svelte:head>
