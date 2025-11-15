@@ -504,10 +504,11 @@ class UnifiedDatabase:
                 meeting_obj.topics = existing_meeting.topics
                 logger.debug(f"Preserved existing summary for {meeting_obj.title}")
 
-            # Validate meeting before storing
+            # Validate meeting before storing (checks both packet_url and agenda_url)
             if not MeetingValidator.validate_and_store(
                 {
                     "packet_url": meeting_obj.packet_url,
+                    "agenda_url": meeting_obj.agenda_url,
                     "title": meeting_obj.title,
                 },
                 city.banana,
