@@ -601,9 +601,8 @@ class UnifiedDatabase:
                 if agenda_items:
                     # ATOMIC TRANSACTION: Track matters + store items + create appearances
                     # All-or-nothing: if any step fails, rollback entire meeting ingest
+                    # Note: Using defer_commit=True with final commit for implicit transaction control
                     try:
-                        self.conn.execute("BEGIN")
-
                         # Track matters FIRST in city_matters table (creates FK targets)
                         # CRITICAL: Must happen before store_agenda_items to avoid FK constraint failures
                         matters_stats = self._track_matters(stored_meeting, items, agenda_items, defer_commit=True)
@@ -876,7 +875,7 @@ class UnifiedDatabase:
 
             except Exception as e:
                 logger.error(f"[Matters] Error tracking matter {matter_composite_id}: {e}")
-                continue
+                raise  # Propagate to outer transaction handler for rollback
 
         return stats
 

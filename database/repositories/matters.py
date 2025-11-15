@@ -54,6 +54,16 @@ class MatterRepository(BaseRepository):
         metadata_json = json.dumps(matter.metadata) if matter.metadata else None
         sponsors_json = json.dumps(matter.sponsors) if matter.sponsors else None
 
+        # Debug: Log the banana value to diagnose FK failures
+        logger.debug(f"[Matters] Inserting matter {matter.id} with banana='{matter.banana}'")
+
+        # Sanity check: Verify city exists before insert (diagnose FK failures)
+        city_check = self._fetch_one("SELECT banana FROM cities WHERE banana = ?", (matter.banana,))
+        if not city_check:
+            logger.error(f"[Matters] FATAL: City '{matter.banana}' does NOT exist in cities table! FK will fail.")
+        else:
+            logger.debug(f"[Matters] City '{matter.banana}' verified in cities table")
+
         self._execute(
             """
             INSERT INTO city_matters (id, banana, matter_file, matter_id, matter_type,
