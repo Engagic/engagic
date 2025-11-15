@@ -44,6 +44,14 @@ class MatterRepository(BaseRepository):
                 f"Must use generate_matter_id() to create properly hashed IDs."
             )
 
+        # Verify city exists before insert (prevent FK constraint failures)
+        city_check = self._fetch_one("SELECT banana FROM cities WHERE banana = ?", (matter.banana,))
+        if not city_check:
+            raise ValueError(
+                f"City '{matter.banana}' does not exist in cities table. "
+                f"Cannot create matter for non-existent city."
+            )
+
         # Serialize JSON fields
         canonical_topics_json = (
             json.dumps(matter.canonical_topics) if matter.canonical_topics else None
