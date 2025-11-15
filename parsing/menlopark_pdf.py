@@ -37,12 +37,16 @@ def _is_valid_agenda_item_title(title: str) -> bool:
     form_field_keywords = [
         'FACILITY ID', 'CERS ID', 'ZIP CODE', 'SITE ADDRESS',
         'BUSINESS NAME', 'PHONE NUMBER', 'CONTACT NAME',
+<<<<<<< HEAD
         'OTHER (Specify)', 'EXAMPLE', 'LOCATION', 'CAPABILITY',
         'INCIDENTAL OPERATIONS', 'CALLING PUBLIC EMERGENCY',
         'NEAREST MEDICAL FACILITY', 'LOCAL UNIFIED PROGRAM AGENCY',
         'MONITOR FOR LEAKS', 'WRITTEN PROCEDURES DESCRIBING',
         'HAZARDOUS MATERIALS', 'EMPLOYEE TRAINING PLAN',
         'NO ATTACHMENTS ARE REQUIRED', 'FOLLOWING ARRANGEMENTS',
+=======
+        'OTHER (Specify)', 'EXAMPLE', 'LOCATION', 'CAPABILITY'
+>>>>>>> main
     ]
 
     for keyword in form_field_keywords:
@@ -81,8 +85,9 @@ def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Di
     # Track current page for link mapping
     current_page = 0
 
-    # Pattern to match item IDs: H1., I1., J1., K1., etc.
+    # Pattern to match item IDs: A1., B1., H1., I1., J1., K1., etc.
     # Strategy: Find item ID, then capture text until next item or section
+    # Filter out form field garbage via title validation below
     item_id_pattern = re.compile(r'^([A-Z]\d+)\.\s*$', re.MULTILINE)
 
     # Find all items across all pages
