@@ -17,6 +17,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "anthropic>=0.64.0",
     "beautifulsoup4>=4.13.5",
+    "click>=8.1.0",
     "fastapi>=0.116.1",
     "google-genai",
     "lxml",

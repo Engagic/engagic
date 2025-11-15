@@ -25,6 +25,104 @@ logger = logging.getLogger("engagic")
 class QueueRepository(BaseRepository):
     """Repository for processing queue operations"""
 
+    def _enqueue_job_with_upsert(
+        self,
+        job_type: str,
+        payload_json: str,
+        meeting_id: str,
+        banana: str,
+        priority: int,
+        source_url: str,
+        job_display_id: str,
+        extra_log_info: str = ""
+    ) -> int:
+        """Shared UPSERT logic for enqueueing jobs
+
+        Handles the common pattern:
+        - If job is NEW: inserts and returns queue_id
+        - If job is COMPLETED/FAILED/DEAD_LETTER: resets to pending and returns queue_id
+        - If job is PENDING/PROCESSING: returns -1 (already in queue, no change)
+
+        Args:
+            job_type: "meeting" or "matter"
+            payload_json: Serialized job payload
+            meeting_id: Meeting ID
+            banana: City banana
+            priority: Queue priority
+            source_url: Unique job identifier
+            job_display_id: ID for logging (meeting_id or matter_id)
+            extra_log_info: Additional context for logging
+
+        Returns:
+            Queue ID if enqueued/re-enqueued, -1 if already pending/processing
+
+        Confidence: 9/10 - Extracted from proven UPSERT pattern
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        # Check if job exists and what state it's in
+        existing = self._fetch_one(
+            "SELECT id, status FROM queue WHERE source_url = ?",
+            (source_url,)
+        )
+
+        if existing:
+            queue_id = existing["id"]
+            status = existing["status"]
+
+            # If already pending or processing, return -1 (no change needed)
+            if status in ("pending", "processing"):
+                logger.debug(f"{job_type.capitalize()} job {job_display_id} already in queue (status={status})")
+                return -1
+
+            # If completed/failed/dead_letter, reset to pending
+            if status in ("completed", "failed", "dead_letter"):
+                self._execute(
+                    """
+                    UPDATE queue
+                    SET status = 'pending',
+                        job_type = ?,
+                        payload = ?,
+                        meeting_id = ?,
+                        banana = ?,
+                        priority = ?,
+                        retry_count = 0,
+                        error_message = NULL,
+                        started_at = NULL,
+                        completed_at = NULL,
+                        failed_at = NULL
+                    WHERE id = ?
+                    """,
+                    (job_type, payload_json, meeting_id, banana, priority, queue_id),
+                )
+                self._commit()
+                log_msg = f"Re-enqueued {job_type} job {job_display_id} (was {status}, now pending) with priority {priority}"
+                if extra_log_info:
+                    log_msg += f" {extra_log_info}"
+                logger.info(log_msg)
+                return queue_id
+
+        # New job - insert
+        cursor = self._execute(
+            """
+            INSERT INTO queue
+            (job_type, payload, meeting_id, banana, priority, source_url)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (job_type, payload_json, meeting_id, banana, priority, source_url),
+        )
+        self._commit()
+        queue_id = cursor.lastrowid
+        if queue_id is None:
+            raise DatabaseConnectionError("Failed to get queue ID after insert")
+
+        log_msg = f"Enqueued {job_type} job {job_display_id} for processing with priority {priority}"
+        if extra_log_info:
+            log_msg += f" {extra_log_info}"
+        logger.info(log_msg)
+        return queue_id
+
     def enqueue_meeting_job(
         self,
         meeting_id: str,
@@ -50,70 +148,19 @@ class QueueRepository(BaseRepository):
 
         Confidence: 9/10 - UPSERT pattern is standard for idempotent job queues
         """
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
         payload = MeetingJob(meeting_id=meeting_id, source_url=source_url)
         payload_json = serialize_payload(payload)
 
-        # Check if job exists and what state it's in
-        existing = self._fetch_one(
-            "SELECT id, status FROM queue WHERE source_url = ?",
-            (source_url,)
+        return self._enqueue_job_with_upsert(
+            job_type="meeting",
+            payload_json=payload_json,
+            meeting_id=meeting_id,
+            banana=banana,
+            priority=priority,
+            source_url=source_url,
+            job_display_id=meeting_id,
+            extra_log_info=""
         )
-
-        if existing:
-            queue_id = existing["id"]
-            status = existing["status"]
-
-            # If already pending or processing, return -1 (no change needed)
-            if status in ("pending", "processing"):
-                logger.debug(f"Meeting job {meeting_id} already in queue (status={status})")
-                return -1
-
-            # If completed/failed/dead_letter, reset to pending
-            if status in ("completed", "failed", "dead_letter"):
-                self._execute(
-                    """
-                    UPDATE queue
-                    SET status = 'pending',
-                        job_type = ?,
-                        payload = ?,
-                        meeting_id = ?,
-                        banana = ?,
-                        priority = ?,
-                        retry_count = 0,
-                        error_message = NULL,
-                        started_at = NULL,
-                        completed_at = NULL,
-                        failed_at = NULL
-                    WHERE id = ?
-                    """,
-                    ("meeting", payload_json, meeting_id, banana, priority, queue_id),
-                )
-                self._commit()
-                logger.info(
-                    f"Re-enqueued meeting job {meeting_id} (was {status}, now pending) with priority {priority}"
-                )
-                return queue_id
-
-        # New job - insert
-        cursor = self._execute(
-            """
-            INSERT INTO queue
-            (job_type, payload, meeting_id, banana, priority, source_url)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            ("meeting", payload_json, meeting_id, banana, priority, source_url),
-        )
-        self._commit()
-        queue_id = cursor.lastrowid
-        if queue_id is None:
-            raise DatabaseConnectionError("Failed to get queue ID after insert")
-        logger.info(
-            f"Enqueued meeting job {meeting_id} for processing with priority {priority}"
-        )
-        return queue_id
 
     def enqueue_matter_job(
         self,
@@ -145,74 +192,22 @@ class QueueRepository(BaseRepository):
 
         Confidence: 9/10 - UPSERT pattern with payload update for idempotent re-enqueueing
         """
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
         payload = MatterJob(matter_id=matter_id, meeting_id=meeting_id, item_ids=item_ids)
         payload_json = serialize_payload(payload)
 
         # Use matter_id as source_url for uniqueness constraint (backward compat)
         source_url = f"matters://{matter_id}"
 
-        # Check if job exists and what state it's in
-        existing = self._fetch_one(
-            "SELECT id, status FROM queue WHERE source_url = ?",
-            (source_url,)
+        return self._enqueue_job_with_upsert(
+            job_type="matter",
+            payload_json=payload_json,
+            meeting_id=meeting_id,
+            banana=banana,
+            priority=priority,
+            source_url=source_url,
+            job_display_id=matter_id,
+            extra_log_info=f"with {len(item_ids)} items"
         )
-
-        if existing:
-            queue_id = existing["id"]
-            status = existing["status"]
-
-            # If already pending or processing, return -1 (no change needed)
-            if status in ("pending", "processing"):
-                logger.debug(f"Matter job {matter_id} already in queue (status={status})")
-                return -1
-
-            # If completed/failed/dead_letter, reset to pending with updated payload
-            if status in ("completed", "failed", "dead_letter"):
-                self._execute(
-                    """
-                    UPDATE queue
-                    SET status = 'pending',
-                        job_type = ?,
-                        payload = ?,
-                        meeting_id = ?,
-                        banana = ?,
-                        priority = ?,
-                        retry_count = 0,
-                        error_message = NULL,
-                        started_at = NULL,
-                        completed_at = NULL,
-                        failed_at = NULL
-                    WHERE id = ?
-                    """,
-                    ("matter", payload_json, meeting_id, banana, priority, queue_id),
-                )
-                self._commit()
-                logger.info(
-                    f"Re-enqueued matter job {matter_id} (was {status}, now pending) "
-                    f"with {len(item_ids)} items and priority {priority}"
-                )
-                return queue_id
-
-        # New job - insert
-        cursor = self._execute(
-            """
-            INSERT INTO queue
-            (job_type, payload, meeting_id, banana, priority, source_url)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            ("matter", payload_json, meeting_id, banana, priority, source_url),
-        )
-        self._commit()
-        queue_id = cursor.lastrowid
-        if queue_id is None:
-            raise DatabaseConnectionError("Failed to get queue ID after insert")
-        logger.info(
-            f"Enqueued matter job {matter_id} for processing with priority {priority}"
-        )
-        return queue_id
 
     def enqueue_for_processing(
         self,
