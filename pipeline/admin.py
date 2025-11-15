@@ -8,7 +8,7 @@ These are debugging tools, not core orchestration logic.
 import logging
 from typing import Dict, Any, Optional
 
-import config
+from config import config
 from database.db import UnifiedDatabase
 
 logger = logging.getLogger("engagic")

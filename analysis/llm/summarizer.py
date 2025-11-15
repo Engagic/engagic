@@ -14,6 +14,7 @@ import json
 import time
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+from importlib.resources import files
 
 from google import genai
 from google.genai import types
@@ -56,15 +57,15 @@ class GeminiSummarizer:
         self.flash_lite_model_name = "gemini-2.5-flash-lite"
 
         # Load prompts from JSON (v2 only)
-        if prompts_path is None:
-            prompts_file = Path(__file__).parent / "prompts_v2.json"
-        else:
-            prompts_file = Path(prompts_path)
-
         self.prompts_version = "v2"
 
-        with open(prompts_file, "r") as f:
-            self.prompts = json.load(f)
+        if prompts_path is None:
+            # Load from package resources (works in installed packages)
+            prompts_text = files("analysis.llm").joinpath("prompts_v2.json").read_text()
+            self.prompts = json.loads(prompts_text)
+        else:
+            with open(prompts_path, "r") as f:
+                self.prompts = json.load(f)
 
         logger.info("prompts loaded", prompt_categories=len(self.prompts), version=self.prompts_version)
 
