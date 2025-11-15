@@ -179,4 +179,21 @@
 		margin-top: 0.25rem;
 		text-transform: capitalize;
 	}
+
+	@media (max-width: 640px) {
+		.meeting-card-header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.5rem;
+		}
+
+		.meeting-card-body {
+			flex-direction: column;
+			gap: 0.75rem;
+		}
+
+		.right-column {
+			text-align: left;
+		}
+	}
 </style>
