@@ -715,8 +715,41 @@
 			gap: 0.5rem;
 		}
 
+		.item-title-container {
+			display: grid;
+			grid-template-columns: auto 1fr;
+			grid-template-rows: auto auto;
+			gap: 0.35rem 0.5rem;
+			align-items: baseline;
+		}
+
 		.item-number {
 			font-size: 1rem;
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.item-title {
+			font-size: 1rem;
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.item-title-container > *:not(.item-number):not(.item-title) {
+			grid-column: 1 / -1;
+			grid-row: 2;
+			margin-left: 0;
+			justify-self: flex-start;
+		}
+
+		.item-title-container > .matter-badge,
+		.item-title-container > .matter-badge-link,
+		.item-title-container > .matter-type-badge,
+		.item-title-container > .sponsors-badge,
+		.item-title-container > .matter-timeline-badge,
+		.item-title-container > .procedural-badge {
+			display: inline-block;
+			margin-right: 0.35rem;
 		}
 
 		.expand-icon {
@@ -729,10 +762,6 @@
 			min-width: 1.25rem;
 			height: 1.25rem;
 			font-size: 0.65rem;
-		}
-
-		.item-title {
-			font-size: 1rem;
 		}
 
 		.item-topic-tag-small {
@@ -758,25 +787,21 @@
 		.matter-badge-link {
 			font-size: 0.65rem;
 			padding: 0.18rem 0.5rem;
-			margin-left: 0.35rem;
 		}
 
 		.matter-type-badge {
 			font-size: 0.6rem;
 			padding: 0.18rem 0.5rem;
-			margin-left: 0.35rem;
 		}
 
 		.sponsors-badge {
 			font-size: 0.6rem;
 			padding: 0.18rem 0.5rem;
-			margin-left: 0.35rem;
 		}
 
 		.matter-timeline-badge {
 			font-size: 0.6rem;
 			padding: 0.18rem 0.5rem;
-			margin-left: 0.35rem;
 		}
 
 		.item-summary-preview {
