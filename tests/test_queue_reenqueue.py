@@ -13,8 +13,7 @@ import os
 from datetime import datetime
 
 from database.db import UnifiedDatabase
-from database.repositories.queue import QueueRepository
-from database.models import Meeting, AgendaItem
+from database.models import Meeting
 
 
 class TestQueueReenqueue(unittest.TestCase):
