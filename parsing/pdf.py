@@ -320,6 +320,8 @@ class PdfExtractor:
 
             # Check for legislative legend once (if formatting detection enabled)
             use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
+            if use_formatting:
+                logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
 
             for page_num in range(len(doc)):
                 page = doc[page_num]
@@ -438,6 +440,8 @@ class PdfExtractor:
 
             # Check for legislative legend once (if formatting detection enabled)
             use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
+            if use_formatting:
+                logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
 
             for page_num in range(len(doc)):
                 page = doc[page_num]
