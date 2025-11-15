@@ -145,10 +145,10 @@ class NovusAgendaAdapter(BaseAdapter):
 
             # Generate fallback meeting_id if not found
             if not meeting_id:
-                import hashlib
-
-                id_string = f"{meeting_type}_{date_str}"
-                meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
+                meeting_id = self._generate_meeting_id(
+                    title=meeting_type,
+                    date=meeting_date
+                )
 
             if not packet_url and not agenda_url:
                 logger.debug(

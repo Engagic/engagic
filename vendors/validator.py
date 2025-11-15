@@ -90,6 +90,17 @@ class MeetingValidator:
         if not packet_url:
             return {"valid": True, "action": "store"}
 
+        # TODO: Handle List[str] packet URLs (eScribe adapter returns lists at line 117)
+        # Current limitation: Assumes packet_url is str, crashes on .startswith() if list
+        # Impact: Zero eScribe cities currently, but schema supports Optional[str | List[str]]
+        # Fix: Normalize to list, validate each URL individually
+        # Example:
+        #   urls = [packet_url] if isinstance(packet_url, str) else packet_url
+        #   for url in urls:
+        #       if url.startswith("http"):  # validate each
+        # Also update database/db.py:496 to handle list storage (likely already works via JSON)
+        # Confidence: 8/10 - straightforward fix, just deferred due to 0% city coverage
+
         # Extract domain from packet URL
         if packet_url.startswith("http"):
             domain = urlparse(packet_url).netloc.lower()

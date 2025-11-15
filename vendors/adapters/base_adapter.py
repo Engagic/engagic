@@ -288,6 +288,47 @@ class BaseAdapter:
             )
             return None
 
+    def _generate_meeting_id(
+        self,
+        title: str,
+        date: Optional[datetime],
+        meeting_type: Optional[str] = None
+    ) -> str:
+        """Generate deterministic meeting ID when vendor doesn't provide one
+
+        Uses MD5 hash of "{slug}_{date}_{title}_{type}" to create consistent
+        8-character IDs. Ensures same meeting produces same ID across re-syncs.
+
+        This is a FALLBACK for vendors that don't provide meeting IDs.
+        Always prefer vendor-provided IDs when available.
+
+        Args:
+            title: Meeting title
+            date: Meeting date (if available)
+            meeting_type: Optional meeting type (for vendors that separate by type)
+
+        Returns:
+            8-character hexadecimal hash
+
+        Example:
+            >>> adapter._generate_meeting_id("City Council", datetime(2025, 1, 15))
+            'a3f2c8d1'
+
+        Confidence: 9/10 - Proven pattern from NovusAgenda adapter
+        """
+        import hashlib
+
+        date_str = date.strftime("%Y%m%d") if date else "nodate"
+        type_str = f"_{meeting_type}" if meeting_type else ""
+        id_string = f"{self.slug}_{date_str}_{title}{type_str}"
+
+        meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
+        logger.debug(
+            f"[{self.vendor}:{self.slug}] Generated fallback meeting_id: {meeting_id} "
+            f"for '{title}' on {date_str}"
+        )
+        return meeting_id
+
     def _fetch_html(self, url: str) -> BeautifulSoup:
         """
         Fetch URL and return BeautifulSoup object.

@@ -34,6 +34,11 @@ class QueueRepository(BaseRepository):
     ) -> int:
         """Enqueue a meeting processing job (typed)
 
+        Uses UPSERT pattern to handle re-enqueueing of completed jobs.
+        - If job is NEW: inserts and returns queue_id
+        - If job is COMPLETED/FAILED/DEAD_LETTER: resets to pending and returns queue_id
+        - If job is PENDING/PROCESSING: returns -1 (already in queue, no change)
+
         Args:
             meeting_id: Meeting ID
             source_url: agenda_url or packet_url
@@ -41,7 +46,9 @@ class QueueRepository(BaseRepository):
             priority: Queue priority (higher = processed first)
 
         Returns:
-            Queue ID or -1 if already exists
+            Queue ID if enqueued/re-enqueued, -1 if already pending/processing
+
+        Confidence: 9/10 - UPSERT pattern is standard for idempotent job queues
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -49,28 +56,64 @@ class QueueRepository(BaseRepository):
         payload = MeetingJob(meeting_id=meeting_id, source_url=source_url)
         payload_json = serialize_payload(payload)
 
-        try:
-            cursor = self._execute(
-                """
-                INSERT INTO queue
-                (job_type, payload, meeting_id, banana, priority, source_url)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                ("meeting", payload_json, meeting_id, banana, priority, source_url),
-            )
-            self._commit()
-            queue_id = cursor.lastrowid
-            if queue_id is None:
-                raise DatabaseConnectionError("Failed to get queue ID after insert")
-            logger.info(
-                f"Enqueued meeting job {meeting_id} for processing with priority {priority}"
-            )
-            return queue_id
-        except sqlite3.IntegrityError as e:
-            if "UNIQUE constraint failed" in str(e):
-                logger.debug(f"Meeting job {meeting_id} already in queue")
+        # Check if job exists and what state it's in
+        existing = self._fetch_one(
+            "SELECT id, status FROM queue WHERE source_url = ?",
+            (source_url,)
+        )
+
+        if existing:
+            queue_id = existing["id"]
+            status = existing["status"]
+
+            # If already pending or processing, return -1 (no change needed)
+            if status in ("pending", "processing"):
+                logger.debug(f"Meeting job {meeting_id} already in queue (status={status})")
                 return -1
-            raise
+
+            # If completed/failed/dead_letter, reset to pending
+            if status in ("completed", "failed", "dead_letter"):
+                self._execute(
+                    """
+                    UPDATE queue
+                    SET status = 'pending',
+                        job_type = ?,
+                        payload = ?,
+                        meeting_id = ?,
+                        banana = ?,
+                        priority = ?,
+                        retry_count = 0,
+                        error_message = NULL,
+                        started_at = NULL,
+                        completed_at = NULL,
+                        failed_at = NULL
+                    WHERE id = ?
+                    """,
+                    ("meeting", payload_json, meeting_id, banana, priority, queue_id),
+                )
+                self._commit()
+                logger.info(
+                    f"Re-enqueued meeting job {meeting_id} (was {status}, now pending) with priority {priority}"
+                )
+                return queue_id
+
+        # New job - insert
+        cursor = self._execute(
+            """
+            INSERT INTO queue
+            (job_type, payload, meeting_id, banana, priority, source_url)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("meeting", payload_json, meeting_id, banana, priority, source_url),
+        )
+        self._commit()
+        queue_id = cursor.lastrowid
+        if queue_id is None:
+            raise DatabaseConnectionError("Failed to get queue ID after insert")
+        logger.info(
+            f"Enqueued meeting job {meeting_id} for processing with priority {priority}"
+        )
+        return queue_id
 
     def enqueue_matter_job(
         self,
@@ -82,6 +125,14 @@ class QueueRepository(BaseRepository):
     ) -> int:
         """Enqueue a matter processing job (typed)
 
+        Uses UPSERT pattern to handle re-enqueueing of completed jobs.
+        - If job is NEW: inserts and returns queue_id
+        - If job is COMPLETED/FAILED/DEAD_LETTER: resets to pending and returns queue_id
+        - If job is PENDING/PROCESSING: returns -1 (already in queue, no change)
+
+        IMPORTANT: Updates payload on re-enqueue to handle changing item_ids
+        (e.g., when attachments change or items are manually deleted for reprocessing).
+
         Args:
             matter_id: Matter ID (composite: {banana}_{matter_key})
             meeting_id: Representative meeting ID
@@ -90,7 +141,9 @@ class QueueRepository(BaseRepository):
             priority: Queue priority (higher = processed first)
 
         Returns:
-            Queue ID or -1 if already exists
+            Queue ID if enqueued/re-enqueued, -1 if already pending/processing
+
+        Confidence: 9/10 - UPSERT pattern with payload update for idempotent re-enqueueing
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -101,28 +154,65 @@ class QueueRepository(BaseRepository):
         # Use matter_id as source_url for uniqueness constraint (backward compat)
         source_url = f"matters://{matter_id}"
 
-        try:
-            cursor = self._execute(
-                """
-                INSERT INTO queue
-                (job_type, payload, meeting_id, banana, priority, source_url)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                ("matter", payload_json, meeting_id, banana, priority, source_url),
-            )
-            self._commit()
-            queue_id = cursor.lastrowid
-            if queue_id is None:
-                raise DatabaseConnectionError("Failed to get queue ID after insert")
-            logger.info(
-                f"Enqueued matter job {matter_id} for processing with priority {priority}"
-            )
-            return queue_id
-        except sqlite3.IntegrityError as e:
-            if "UNIQUE constraint failed" in str(e):
-                logger.debug(f"Matter job {matter_id} already in queue")
+        # Check if job exists and what state it's in
+        existing = self._fetch_one(
+            "SELECT id, status FROM queue WHERE source_url = ?",
+            (source_url,)
+        )
+
+        if existing:
+            queue_id = existing["id"]
+            status = existing["status"]
+
+            # If already pending or processing, return -1 (no change needed)
+            if status in ("pending", "processing"):
+                logger.debug(f"Matter job {matter_id} already in queue (status={status})")
                 return -1
-            raise
+
+            # If completed/failed/dead_letter, reset to pending with updated payload
+            if status in ("completed", "failed", "dead_letter"):
+                self._execute(
+                    """
+                    UPDATE queue
+                    SET status = 'pending',
+                        job_type = ?,
+                        payload = ?,
+                        meeting_id = ?,
+                        banana = ?,
+                        priority = ?,
+                        retry_count = 0,
+                        error_message = NULL,
+                        started_at = NULL,
+                        completed_at = NULL,
+                        failed_at = NULL
+                    WHERE id = ?
+                    """,
+                    ("matter", payload_json, meeting_id, banana, priority, queue_id),
+                )
+                self._commit()
+                logger.info(
+                    f"Re-enqueued matter job {matter_id} (was {status}, now pending) "
+                    f"with {len(item_ids)} items and priority {priority}"
+                )
+                return queue_id
+
+        # New job - insert
+        cursor = self._execute(
+            """
+            INSERT INTO queue
+            (job_type, payload, meeting_id, banana, priority, source_url)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("matter", payload_json, meeting_id, banana, priority, source_url),
+        )
+        self._commit()
+        queue_id = cursor.lastrowid
+        if queue_id is None:
+            raise DatabaseConnectionError("Failed to get queue ID after insert")
+        logger.info(
+            f"Enqueued matter job {matter_id} for processing with priority {priority}"
+        )
+        return queue_id
 
     def enqueue_for_processing(
         self,

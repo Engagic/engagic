@@ -216,6 +216,8 @@ class UnifiedDatabase:
             source_url TEXT NOT NULL UNIQUE,
             meeting_id TEXT,
             banana TEXT,
+            job_type TEXT,
+            payload TEXT,
             status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'dead_letter')),
             priority INTEGER DEFAULT 0,
             retry_count INTEGER DEFAULT 0,
@@ -468,9 +470,20 @@ class UnifiedDatabase:
                     except Exception:
                         continue
 
+            # Validate meeting_id (fail fast if adapter didn't provide one)
+            meeting_id = meeting_dict.get("meeting_id")
+            if not meeting_id or not meeting_id.strip():
+                logger.error(
+                    f"[{city.banana}] CRITICAL: Adapter returned blank meeting_id for "
+                    f"'{meeting_dict.get('title', 'Unknown')}' on {meeting_dict.get('date', 'Unknown')}. "
+                    f"Adapter should use _generate_meeting_id() fallback."
+                )
+                failed_count += 1
+                continue
+
             # Create Meeting object
             meeting_obj = Meeting(
-                id=meeting_dict.get("meeting_id", ""),
+                id=meeting_id,
                 banana=city.banana,
                 title=meeting_dict.get("title", ""),
                 date=meeting_date,
@@ -983,28 +996,32 @@ class UnifiedDatabase:
 
             # New or changed - enqueue matter for processing
             # Include ALL item IDs across ALL meetings
-            self.enqueue_matter_job(
+            queue_id = self.enqueue_matter_job(
                 matter_id=matter_id,
                 meeting_id=meeting.id,
                 item_ids=[item.id for item in all_items_for_matter],
                 banana=banana,
                 priority=priority,
             )
-            enqueued_count += 1
-            logger.info(
-                f"[Matters] Enqueued {first_item.matter_file or matter_id} with {len(all_items_for_matter)} items "
-                f"across {len(set(item.meeting_id for item in all_items_for_matter))} meetings"
-            )
+            # Only count if actually enqueued (not -1 for already pending/processing)
+            if queue_id != -1:
+                enqueued_count += 1
+                logger.info(
+                    f"[Matters] Enqueued {first_item.matter_file or matter_id} with {len(all_items_for_matter)} items "
+                    f"across {len(set(item.meeting_id for item in all_items_for_matter))} meetings"
+                )
 
         # Items without matters - enqueue as item-level batch (fallback)
         if items_without_matters:
-            self.enqueue_meeting_job(
+            queue_id = self.enqueue_meeting_job(
                 meeting_id=meeting.id,
                 source_url=f"items://{meeting.id}",
                 banana=banana,
                 priority=priority,
             )
-            enqueued_count += 1
+            # Only count if actually enqueued (not -1 for already pending/processing)
+            if queue_id != -1:
+                enqueued_count += 1
 
         return enqueued_count
 
