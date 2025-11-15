@@ -416,56 +416,41 @@ class Fetcher:
         """Sync city with retry (5s, 20s delays)"""
         city_name = city.name
         city_banana = city.banana
-
-        wait_times = [5, 20]  # Fixed wait times for attempts
+        wait_times = [5, 20]
+        last_error = "Unknown retry error"
 
         for attempt in range(max_retries):
             try:
                 result = self._sync_city(city)
 
-                # If successful or skipped, return immediately
+                # Success or skip - return immediately
                 if result.status in [SyncStatus.COMPLETED, SyncStatus.SKIPPED]:
                     return result
 
-                # If failed and we have retries left, wait and retry
-                if attempt < max_retries - 1:
-                    wait_time = wait_times[attempt] + random.uniform(0, 2)
-                    logger.warning(
-                        f"Sync failed for {city_name} (attempt {attempt + 1}/{max_retries}), "
-                        f"retrying in {wait_time:.1f}s: {result.error_message}"
-                    )
-                    time.sleep(wait_time)
-                else:
-                    logger.error(
-                        f"Final sync failure for {city_name} after {max_retries} attempts: "
-                        f"{result.error_message}"
-                    )
-                    return result
+                # Failed - store error for potential retry
+                last_error = result.error_message or "Sync failed"
 
             except Exception as e:
-                if attempt < max_retries - 1:
-                    wait_time = wait_times[attempt] + random.uniform(0, 2)
-                    logger.warning(
-                        f"Exception syncing {city_name} (attempt {attempt + 1}/{max_retries}), "
-                        f"retrying in {wait_time:.1f}s: {e}"
-                    )
-                    time.sleep(wait_time)
-                else:
-                    logger.error(
-                        f"Final exception for {city_name} after {max_retries} attempts: {e}"
-                    )
-                    return SyncResult(
-                        city_banana=city_banana,
-                        status=SyncStatus.FAILED,
-                        error_message=str(e),
-                    )
+                # Exception - store error for potential retry
+                last_error = str(e)
 
-        # Shouldn't reach here
-        return SyncResult(
-            city_banana=city_banana,
-            status=SyncStatus.FAILED,
-            error_message="Unknown retry error",
-        )
+            # Retry logic (runs for both failure and exception paths)
+            is_last_attempt = attempt >= max_retries - 1
+
+            if is_last_attempt:
+                logger.error(f"Final sync failure for {city_name} after {max_retries} attempts: {last_error}")
+                return SyncResult(city_banana=city_banana, status=SyncStatus.FAILED, error_message=last_error)
+
+            # Wait before retry
+            wait_time = wait_times[attempt] + random.uniform(0, 2)
+            logger.warning(
+                f"Sync failed for {city_name} (attempt {attempt + 1}/{max_retries}), "
+                f"retrying in {wait_time:.1f}s: {last_error}"
+            )
+            time.sleep(wait_time)
+
+        # Shouldn't reach here due to is_last_attempt logic
+        return SyncResult(city_banana=city_banana, status=SyncStatus.FAILED, error_message=last_error)
 
     def _should_sync_city(self, city: City) -> bool:
         """Determine if city needs syncing based on activity patterns"""
