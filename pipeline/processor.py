@@ -60,6 +60,20 @@ PUBLIC_COMMENT_PATTERNS = [
     "committee packet",  # Full form
 ]
 
+# Skip parcel tables and property lists (massive PDFs with no civic value)
+# Example: "Parcel Tables" (992 pages!) - just property IDs and addresses
+PARCEL_TABLE_PATTERNS = [
+    "parcel table",
+    "parcel list",
+    "parcel map",
+    "tax parcel",
+    "property list",
+    "property table",
+    "assessor",
+    "apn list",  # Assessor Parcel Number
+    "parcel number",
+]
+
 # Queue processing timing constants (seconds)
 QUEUE_POLL_INTERVAL = 5  # Time to wait when queue is empty
 QUEUE_ERROR_BACKOFF = 2  # Brief backoff after job processing error
@@ -73,9 +87,12 @@ def is_procedural_item(title: str) -> bool:
 
 
 def is_public_comment_attachment(name: str) -> bool:
-    """Check if attachment is public comments (high token cost, low signal)"""
+    """Check if attachment is public comments or parcel tables (high token cost, low signal)"""
     name_lower = name.lower()
-    return any(pattern in name_lower for pattern in PUBLIC_COMMENT_PATTERNS)
+    return (
+        any(pattern in name_lower for pattern in PUBLIC_COMMENT_PATTERNS) or
+        any(pattern in name_lower for pattern in PARCEL_TABLE_PATTERNS)
+    )
 
 
 def is_likely_public_comment_compilation(
@@ -402,9 +419,9 @@ class Processor:
             logger.debug(f"[SingleItemProcessing] No attachments for {item.title[:50]}")
             return None
 
-        # Check if entire item is public comments
+        # Check if entire item is public comments or parcel tables
         if is_public_comment_attachment(item.title):
-            logger.info(f"[SingleItemProcessing] Skipping public comments item: {item.title[:80]}")
+            logger.info(f"[SingleItemProcessing] Skipping low-value item (public comments/parcel tables): {item.title[:80]}")
             return None
 
         # Extract text from attachments
@@ -431,10 +448,10 @@ class Processor:
             # Extract PDFs and documents
             if att_type in ("pdf", "doc", "unknown") or isinstance(att, str):
                 if att_url:
-                    # Skip public comment attachments
+                    # Skip public comment and parcel table attachments
                     url_path = att_url.split('/')[-1] if att_url else ""
                     if is_public_comment_attachment(url_path):
-                        logger.debug(f"[SingleItemProcessing] Skipping public comments: {url_path}")
+                        logger.debug(f"[SingleItemProcessing] Skipping low-value attachment: {url_path}")
                         continue
 
                     try:
@@ -901,10 +918,10 @@ class Processor:
 
             # Second pass: Extract each unique URL once
             for att_url in all_urls:
-                # Skip public comment attachments
+                # Skip public comment and parcel table attachments
                 url_path = att_url.split('/')[-1] if att_url else ""
                 if is_public_comment_attachment(url_path):
-                    logger.debug(f"[DocumentCache] Skipping public comments: {url_path}")
+                    logger.debug(f"[DocumentCache] Skipping low-value attachment: {url_path}")
                     continue
 
                 try:
@@ -967,13 +984,13 @@ class Processor:
 
             for item in need_processing:
                 try:
-                    # Check if entire item is public comments (e.g., "Petitions and Communications")
+                    # Check if entire item is public comments or parcel tables (e.g., "Petitions and Communications", "Parcel Tables")
                     # If so, skip all its attachments
-                    item_is_public_comments = is_public_comment_attachment(item.title)
+                    item_is_low_value = is_public_comment_attachment(item.title)
 
-                    if item_is_public_comments:
+                    if item_is_low_value:
                         logger.info(
-                            f"[ItemFilter] Skipping entire item (public comments): {item.title[:80]}"
+                            f"[ItemFilter] Skipping entire item (public comments/parcel tables): {item.title[:80]}"
                         )
                         continue
 
