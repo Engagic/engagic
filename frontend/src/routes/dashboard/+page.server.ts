@@ -1,9 +1,9 @@
 import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import type { PageLoad } from './$types';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'https://api.engagic.org';
 
-export const load: PageServerLoad = async ({ fetch }) => {
+export const load: PageLoad = async ({ fetch }) => {
 	try {
 		// Fetch all dashboard data in parallel
 		const [overview, geographic, topicTrends, matterTrends, funding, processing] = await Promise.all([

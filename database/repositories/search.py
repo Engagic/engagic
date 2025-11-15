@@ -258,13 +258,16 @@ class SearchRepository(BaseRepository):
         matters_row = self._fetch_one("SELECT COUNT(*) as count FROM city_matters")
         total_matters = matters_row["count"] if matters_row else 0
 
-        # Cross-state matters
+        # Cross-state matters (matters appearing in multiple states)
         cross_state_row = self._fetch_one("""
-            SELECT COUNT(DISTINCT cm.matter_id) as count
-            FROM city_matters cm
-            JOIN cities c ON cm.city_banana = c.city_banana
-            GROUP BY cm.matter_id
-            HAVING COUNT(DISTINCT c.state) > 1
+            SELECT COUNT(*) as count
+            FROM (
+                SELECT cm.matter_id
+                FROM city_matters cm
+                JOIN cities c ON cm.city_banana = c.city_banana
+                GROUP BY cm.matter_id
+                HAVING COUNT(DISTINCT c.state) > 1
+            ) AS cross_state_matters
         """)
         cross_state_matters = cross_state_row["count"] if cross_state_row else 0
 
