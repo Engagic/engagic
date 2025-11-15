@@ -37,16 +37,7 @@ def _is_valid_agenda_item_title(title: str) -> bool:
     form_field_keywords = [
         'FACILITY ID', 'CERS ID', 'ZIP CODE', 'SITE ADDRESS',
         'BUSINESS NAME', 'PHONE NUMBER', 'CONTACT NAME',
-<<<<<<< HEAD
-        'OTHER (Specify)', 'EXAMPLE', 'LOCATION', 'CAPABILITY',
-        'INCIDENTAL OPERATIONS', 'CALLING PUBLIC EMERGENCY',
-        'NEAREST MEDICAL FACILITY', 'LOCAL UNIFIED PROGRAM AGENCY',
-        'MONITOR FOR LEAKS', 'WRITTEN PROCEDURES DESCRIBING',
-        'HAZARDOUS MATERIALS', 'EMPLOYEE TRAINING PLAN',
-        'NO ATTACHMENTS ARE REQUIRED', 'FOLLOWING ARRANGEMENTS',
-=======
         'OTHER (Specify)', 'EXAMPLE', 'LOCATION', 'CAPABILITY'
->>>>>>> main
     ]
 
     for keyword in form_field_keywords:
