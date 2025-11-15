@@ -1,6 +1,12 @@
 """PDF extractor using PyMuPDF with OCR fallback
 
 Moved from: infocore/processing/pdf_extractor.py
+
+Legislative formatting detection (strikethrough/underline):
+- Detects thin filled rectangles (MS Word/LibreOffice export format)
+- Strikethrough = deletions from law (line through middle of text)
+- Underline = additions to law (line below text)
+- Outputs as [DELETED: text] and [ADDED: text] tags in markdown
 """
 
 import io
@@ -8,7 +14,7 @@ import logging
 import time
 import warnings
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
@@ -22,19 +28,176 @@ warnings.simplefilter('error', Image.DecompressionBombWarning)
 logger = logging.getLogger("engagic")
 
 
+def _detect_horizontal_lines(page: fitz.Page) -> List[Tuple[float, float, float]]:
+    """
+    Detect horizontal lines from drawing instructions.
+
+    Strikethrough/underline in MS Word/LibreOffice are rendered as THIN FILLED RECTANGLES.
+
+    Returns:
+        list of (x0, x1, y_position) tuples for horizontal bars
+    """
+    lines = []
+    paths = page.get_drawings()
+
+    for path in paths:
+        # Check if this path is a filled black rectangle (potential line)
+        fill_color = path.get("fill")
+        if fill_color and fill_color == (0.0, 0.0, 0.0):  # Black fill
+            for item in path["items"]:
+                if item[0] == "re":  # Rectangle
+                    rect = item[1]
+                    x0, y0, x1, y1 = rect
+
+                    height = abs(y1 - y0)
+                    width = abs(x1 - x0)
+
+                    # Thin horizontal rectangle (height < 2 points, width > 5 points)
+                    if height < 2 and width > 5:
+                        y_mid = (y0 + y1) / 2
+                        lines.append((x0, x1, y_mid))
+
+                # Also check for actual line items (just in case)
+                elif item[0] == "l":
+                    p1, p2 = item[1:]
+                    if abs(p1.y - p2.y) < 0.5:
+                        line_x0 = min(p1.x, p2.x)
+                        line_x1 = max(p1.x, p2.x)
+                        lines.append((line_x0, line_x1, p1.y))
+
+    return lines
+
+
+def _match_lines_to_text(page: fitz.Page, lines: List[Tuple[float, float, float]]) -> Dict[str, List[Tuple[str, Tuple]]]:
+    """
+    Match horizontal lines to text spans and classify as strikethrough/underline.
+
+    Returns dict with:
+        'strikethrough': list of (text, bbox) tuples
+        'underline': list of (text, bbox) tuples
+    """
+    result = {
+        'strikethrough': [],
+        'underline': []
+    }
+
+    # Get text with detailed positioning
+    text_dict = page.get_text("dict")
+
+    for block in text_dict["blocks"]:
+        if block.get("type") != 0:  # Skip non-text blocks
+            continue
+
+        for line_obj in block.get("lines", []):
+            for span in line_obj.get("spans", []):
+                text = span.get("text", "").strip()
+                if not text:
+                    continue
+
+                bbox = span["bbox"]  # (x0, y0, x1, y1)
+                text_x0, text_y0, text_x1, text_y1 = bbox
+
+                # Text vertical center and bottom
+                text_bottom_y = text_y1
+                text_height = text_y1 - text_y0
+
+                # Check each horizontal line
+                for line_x0, line_x1, line_y in lines:
+                    # Check if line horizontally overlaps with text
+                    # (with small tolerance for slight misalignment)
+                    if not (line_x1 < text_x0 - 2 or line_x0 > text_x1 + 2):
+                        # Line overlaps text horizontally
+
+                        # Strikethrough: line passes through middle of text
+                        # (within 30% to 70% of text height from top)
+                        if text_y0 + 0.3 * text_height <= line_y <= text_y0 + 0.7 * text_height:
+                            result['strikethrough'].append((text, bbox))
+                            break
+
+                        # Underline: line is just below text
+                        # (within 3 points below text bottom, or just touching)
+                        elif text_bottom_y - 1 <= line_y <= text_bottom_y + 3:
+                            result['underline'].append((text, bbox))
+                            break
+
+    return result
+
+
+def _has_legislative_legend(doc: fitz.Document) -> bool:
+    """Check if document contains legislative formatting legend (any page)."""
+    for page_num in range(len(doc)):
+        text = doc[page_num].get_text().lower()
+        if (("addition" in text or "added" in text) and "underline" in text and
+            ("deletion" in text or "deleted" in text) and "strikethrough" in text):
+            return True
+    return False
+
+
+def _extract_text_with_formatting(page: fitz.Page, page_num: int) -> str:
+    """
+    Extract text from page with legislative formatting tags.
+
+    Returns text with [DELETED: ...] and [ADDED: ...] tags for strikethrough/underline.
+    """
+    # Detect horizontal lines (strikethrough/underline indicators)
+    lines = _detect_horizontal_lines(page)
+
+    if not lines:
+        # No formatting detected, return plain text
+        return page.get_text()
+
+    # Match lines to text
+    matched = _match_lines_to_text(page, lines)
+    strikethrough_spans = {bbox: text for text, bbox in matched['strikethrough']}
+    underline_spans = {bbox: text for text, bbox in matched['underline']}
+
+    # Get text with detailed positioning
+    text_dict = page.get_text("dict")
+    result_parts = []
+
+    for block in text_dict["blocks"]:
+        if block.get("type") != 0:  # Skip non-text blocks
+            continue
+
+        block_parts = []
+        for line_obj in block.get("lines", []):
+            line_parts = []
+            for span in line_obj.get("spans", []):
+                text = span.get("text", "")
+                bbox = tuple(span["bbox"])
+
+                # Check if this span has formatting
+                if bbox in strikethrough_spans:
+                    line_parts.append(f"[DELETED: {text}]")
+                elif bbox in underline_spans:
+                    line_parts.append(f"[ADDED: {text}]")
+                else:
+                    line_parts.append(text)
+
+            block_parts.append("".join(line_parts))
+
+        result_parts.append("\n".join(block_parts))
+
+    return "\n\n".join(result_parts)
+
+
 class PdfExtractor:
     """PDF extractor using PyMuPDF with OCR fallback"""
 
-    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 150):
+    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 150, detect_legislative_formatting: bool = True):
         """Initialize PDF extractor
 
         Args:
             ocr_threshold: Minimum characters per page before triggering OCR fallback
             ocr_dpi: DPI for image rendering when using OCR (higher = better quality, slower)
                     Default 150 (reduced from 300) to prevent memory issues on VPS
+            detect_legislative_formatting: If True, detect strikethrough (deletions) and underline (additions)
+                    in legislative documents with formatting legends and tag them as [DELETED: ...] and [ADDED: ...]
+                    Only activates if document contains legislative formatting legend. Default: True (safe for all PDFs)
         """
         self.ocr_threshold = ocr_threshold
         self.ocr_dpi = ocr_dpi
+        self.detect_legislative_formatting = detect_legislative_formatting
 
     def _ocr_page(self, page) -> str:
         """Extract text from page using OCR
@@ -155,9 +318,18 @@ class PdfExtractor:
             all_links = []
             ocr_pages = 0
 
+            # Check for legislative legend once (if formatting detection enabled)
+            use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
+
             for page_num in range(len(doc)):
                 page = doc[page_num]
-                page_text = page.get_text()  # type: ignore[attr-defined]
+
+                # Extract text (with or without legislative formatting detection)
+                if use_formatting:
+                    page_text = _extract_text_with_formatting(page, page_num + 1)
+                else:
+                    page_text = page.get_text()  # type: ignore[attr-defined]
+
                 initial_char_count = len(page_text.strip())
 
                 # If page has minimal text, assume scanned/image-based PDF
@@ -264,9 +436,18 @@ class PdfExtractor:
             all_links = []
             ocr_pages = 0
 
+            # Check for legislative legend once (if formatting detection enabled)
+            use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
+
             for page_num in range(len(doc)):
                 page = doc[page_num]
-                page_text = page.get_text()  # type: ignore[attr-defined]
+
+                # Extract text (with or without legislative formatting detection)
+                if use_formatting:
+                    page_text = _extract_text_with_formatting(page, page_num + 1)
+                else:
+                    page_text = page.get_text()  # type: ignore[attr-defined]
+
                 initial_char_count = len(page_text.strip())
 
                 # If page has minimal text, assume scanned/image-based PDF
