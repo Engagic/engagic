@@ -637,8 +637,7 @@ class UnifiedDatabase:
                     # All-or-nothing: if any step fails, rollback entire meeting ingest
                     # Note: Using defer_commit=True with final commit for implicit transaction control
                     try:
-                        # Track matters FIRST in city_matters table (creates FK targets)
-                        # CRITICAL: Must happen before store_agenda_items to avoid FK constraint failures
+                        # Track matters FIRST in city_matters table (creates FK targets for items.matter_id)
                         matters_stats = self._track_matters(stored_meeting, items, agenda_items, defer_commit=True)
                         stats['matters_tracked'] = matters_stats.get('tracked', 0)
                         stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
@@ -647,6 +646,10 @@ class UnifiedDatabase:
                         count = self.store_agenda_items(stored_meeting.id, agenda_items, defer_commit=True)
                         stats['items_stored'] = count
                         items_with_summaries = sum(1 for item in agenda_items if item.summary)
+
+                        # FINALLY create matter_appearances (requires both matters AND items to exist)
+                        appearances_count = self._create_matter_appearances(stored_meeting, agenda_items, defer_commit=True)
+                        stats['appearances_created'] = appearances_count
 
                         # Commit transaction atomically
                         self.conn.commit()
@@ -888,16 +891,43 @@ class UnifiedDatabase:
                     stats['tracked'] += 1
                     logger.info(f"[Matters] New: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type}) - {len(sponsors)} sponsors")
 
-                # Create matter_appearance record
-                committee = meeting.title.split("-")[0].strip() if meeting.title else None
+            except Exception as e:
+                logger.error(f"[Matters] Error tracking matter {matter_composite_id}: {e}")
+                raise  # Propagate to outer transaction handler for rollback
 
+        return stats
+
+    def _create_matter_appearances(
+        self,
+        meeting: Meeting,
+        agenda_items: List[AgendaItem],
+        defer_commit: bool = False
+    ) -> int:
+        """
+        Create matter_appearances AFTER items are stored.
+
+        CRITICAL: Must be called AFTER store_agenda_items to avoid FK constraint failures
+        (matter_appearances.item_id → items.id)
+        """
+        count = 0
+        committee = meeting.title.split("-")[0].strip() if meeting.title else None
+
+        for agenda_item in agenda_items:
+            if not (agenda_item.matter_id or agenda_item.matter_file):
+                continue
+
+            matter_composite_id = agenda_item.matter_id
+            if not matter_composite_id:
+                continue
+
+            try:
                 self.conn.execute(
                     """
                     INSERT OR IGNORE INTO matter_appearances (
                         matter_id, meeting_id, item_id, appeared_at,
                         committee, sequence
                     ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
+                    """,
                     (
                         matter_composite_id,
                         meeting.id,
@@ -907,15 +937,15 @@ class UnifiedDatabase:
                         agenda_item.sequence,
                     ),
                 )
-
-                if not defer_commit:
-                    self.conn.commit()
-
+                count += 1
             except Exception as e:
-                logger.error(f"[Matters] Error tracking matter {matter_composite_id}: {e}")
-                raise  # Propagate to outer transaction handler for rollback
+                logger.error(f"[Matters] Failed to create appearance for {matter_composite_id}: {e}")
+                raise
 
-        return stats
+        if not defer_commit:
+            self.conn.commit()
+
+        return count
 
     def _enqueue_matters_first(
         self,
