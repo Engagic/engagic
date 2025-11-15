@@ -15,6 +15,43 @@ import re
 from typing import Dict, Any, List, Optional
 
 
+def _is_valid_agenda_item_title(title: str) -> bool:
+    """
+    Validate if a title looks like a real agenda item vs form field garbage.
+
+    Form field patterns to reject:
+    - Too short (< 10 chars): "CA", "ZIP CODE"
+    - All caps + short (< 40 chars): "FACILITY ID #", "BUSINESS SITE ADDRESS"
+    - Common form field keywords
+
+    Confidence: 7/10 - May need tuning based on edge cases
+    """
+    if not title or len(title) < 10:
+        return False
+
+    # Reject all-caps short titles (form field labels)
+    if title.isupper() and len(title) < 40:
+        return False
+
+    # Reject common form field keywords
+    form_field_keywords = [
+        'FACILITY ID', 'CERS ID', 'ZIP CODE', 'SITE ADDRESS',
+        'BUSINESS NAME', 'PHONE NUMBER', 'CONTACT NAME',
+        'OTHER (Specify)', 'EXAMPLE', 'LOCATION', 'CAPABILITY',
+        'INCIDENTAL OPERATIONS', 'CALLING PUBLIC EMERGENCY',
+        'NEAREST MEDICAL FACILITY', 'LOCAL UNIFIED PROGRAM AGENCY',
+        'MONITOR FOR LEAKS', 'WRITTEN PROCEDURES DESCRIBING',
+        'HAZARDOUS MATERIALS', 'EMPLOYEE TRAINING PLAN',
+        'NO ATTACHMENTS ARE REQUIRED', 'FOLLOWING ARRANGEMENTS',
+    ]
+
+    for keyword in form_field_keywords:
+        if keyword in title.upper():
+            return False
+
+    return True
+
+
 def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Parse Menlo Park PDF agenda to extract items and map attachments.
@@ -82,6 +119,10 @@ def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Di
             # Parse title (first line, cleaned up)
             title_lines = item_text.split('\n', 1)
             title = title_lines[0].strip() if title_lines else ""
+
+            # Skip form field garbage (validate title)
+            if not _is_valid_agenda_item_title(title):
+                continue
 
             # Look for attachment marker in the full item text
             attachment_marker = None
