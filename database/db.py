@@ -539,24 +539,36 @@ class UnifiedDatabase:
                     raw_matter_id = item_data.get("matter_id")
                     raw_matter_file = item_data.get("matter_file")
 
+                    # Check BOTH title-based AND matter_type-based procedural filters
+                    # to prevent FK constraint failures from matter tracking skip
                     if not is_procedural and (raw_matter_id or raw_matter_file):
                         from database.id_generation import generate_matter_id
-                        try:
-                            composite_matter_id = generate_matter_id(
-                                banana=city.banana,
-                                matter_file=raw_matter_file,
-                                matter_id=raw_matter_id
+                        from vendors.utils.item_filters import should_skip_matter
+
+                        # Additional check: skip if matter_type is procedural
+                        # (e.g., "Minutes (Min)", "Information Item (Inf)")
+                        if should_skip_matter(item_type):
+                            logger.debug(
+                                f"[Items] Skipping matter tracking for procedural type: {item_title[:40]} ({item_type})"
                             )
-                        except ValueError as e:
-                            # Fail-fast: Item claims to have a matter but generation failed
-                            # This indicates data quality issues that should be fixed at adapter level
-                            logger.error(
-                                f"[Items] FATAL: Invalid matter data for {item_title[:40]}: {e}"
-                            )
-                            raise ValueError(
-                                f"Item '{item_title}' has invalid matter data (matter_id={raw_matter_id}, "
-                                f"matter_file={raw_matter_file}): {e}"
-                            ) from e
+                            composite_matter_id = None
+                        else:
+                            try:
+                                composite_matter_id = generate_matter_id(
+                                    banana=city.banana,
+                                    matter_file=raw_matter_file,
+                                    matter_id=raw_matter_id
+                                )
+                            except ValueError as e:
+                                # Fail-fast: Item claims to have a matter but generation failed
+                                # This indicates data quality issues that should be fixed at adapter level
+                                logger.error(
+                                    f"[Items] FATAL: Invalid matter data for {item_title[:40]}: {e}"
+                                )
+                                raise ValueError(
+                                    f"Item '{item_title}' has invalid matter data (matter_id={raw_matter_id}, "
+                                    f"matter_file={raw_matter_file}): {e}"
+                                ) from e
 
                     # Compute attachment hash for change detection
                     item_attachments = item_data.get("attachments", [])
