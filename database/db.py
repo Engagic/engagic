@@ -478,8 +478,7 @@ class UnifiedDatabase:
                     f"'{meeting_dict.get('title', 'Unknown')}' on {meeting_dict.get('date', 'Unknown')}. "
                     f"Adapter should use _generate_meeting_id() fallback."
                 )
-                failed_count += 1
-                continue
+                return (None, stats)
 
             # Create Meeting object
             meeting_obj = Meeting(
