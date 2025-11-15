@@ -20,7 +20,7 @@ logger = logging.getLogger("engagic")
 class MatterRepository(BaseRepository):
     """Repository for matter operations"""
 
-    def store_matter(self, matter: Matter) -> bool:
+    def store_matter(self, matter: Matter, defer_commit: bool = False) -> bool:
         """
         Store or update a matter.
 
@@ -29,6 +29,7 @@ class MatterRepository(BaseRepository):
 
         Args:
             matter: Matter object to store
+            defer_commit: If True, skip commit (caller handles transaction)
 
         Returns:
             True if stored successfully
@@ -96,7 +97,8 @@ class MatterRepository(BaseRepository):
             ),
         )
 
-        self._commit()
+        if not defer_commit:
+            self._commit()
         logger.debug(f"Stored matter {matter.id}")
         return True
 

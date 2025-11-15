@@ -843,7 +843,7 @@ class UnifiedDatabase:
 
                     # Store via Matter repository (single-phase INSERT with all fields)
                     try:
-                        self.store_matter(matter_obj)
+                        self.store_matter(matter_obj, defer_commit=defer_commit)
                     except Exception as e:
                         logger.error(f"[Matters] FAILED to store matter {agenda_item.matter_file or raw_vendor_matter_id}: {e}")
                         raise
@@ -1141,9 +1141,9 @@ class UnifiedDatabase:
 
     # ========== Matter Operations (delegate to MatterRepository) ==========
 
-    def store_matter(self, matter: Matter) -> bool:
+    def store_matter(self, matter: Matter, defer_commit: bool = False) -> bool:
         """Store or update a matter - delegates to MatterRepository"""
-        return self.matters.store_matter(matter)
+        return self.matters.store_matter(matter, defer_commit=defer_commit)
 
     def get_matter(self, matter_id: str) -> Optional[Matter]:
         """Get matter by composite ID - delegates to MatterRepository"""
