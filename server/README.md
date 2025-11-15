@@ -18,40 +18,42 @@ Provides:
 
 ```
 server/
-├── main.py                  98 lines  - FastAPI app initialization
+├── main.py                 109 lines  - FastAPI app initialization
 ├── rate_limiter.py         309 lines  - SQLite-based rate limiting
 ├── metrics.py              222 lines  - Prometheus instrumentation
 │
-├── routes/                 712 lines  - HTTP request handlers
-│   ├── search.py           (62 lines)
-│   ├── meetings.py        (150 lines)
-│   ├── topics.py          (129 lines)
-│   ├── admin.py            (82 lines)
-│   ├── monitoring.py      (341 lines)
-│   └── flyer.py            (83 lines)
+├── routes/                1271 lines  - HTTP request handlers
+│   ├── search.py            (61 lines)
+│   ├── admin.py             (81 lines)
+│   ├── flyer.py             (82 lines)
+│   ├── topics.py           (128 lines)
+│   ├── meetings.py         (149 lines)
+│   ├── monitoring.py       (340 lines)
+│   └── matters.py          (430 lines)
 │
-├── services/               346 lines  - Business logic
-│   ├── search.py          (316 lines)
-│   ├── meeting.py          (39 lines)
-│   ├── flyer.py           (template)
-│   └── ticker.py          (generator)
+├── services/                894 lines  - Business logic (+ 369 HTML)
+│   ├── meeting.py           (41 lines)
+│   ├── ticker.py           (177 lines)
+│   ├── search.py           (315 lines)
+│   ├── flyer.py            (361 lines)
+│   └── flyer_template.html (369 lines)
 │
-├── middleware/              69 lines  - Cross-cutting concerns
-│   ├── logging.py          (38 lines)
-│   └── rate_limiting.py    (44 lines)
+├── middleware/               92 lines  - Cross-cutting concerns
+│   ├── logging.py           (37 lines)
+│   └── rate_limiting.py     (55 lines)
 │
-├── models/                  85 lines  - Request validation
-│   └── requests.py         (85 lines)
+├── models/                  119 lines  - Request validation
+│   └── requests.py         (119 lines)
 │
-└── utils/                  227 lines  - Reusable utilities
-    ├── constants.py        (97 lines) - State mappings
-    ├── geo.py             (119 lines) - City/state parsing
-    └── validation.py       (32 lines) - Input sanitization
+└── utils/                   245 lines  - Reusable utilities
+    ├── validation.py        (31 lines) - Input sanitization
+    ├── constants.py         (96 lines) - State mappings
+    └── geo.py              (118 lines) - City/state parsing
 ```
 
 **Why this structure?**
-- **98-line main.py** (down from 1,245) - Minimal entry point
-- **Focused route modules** - Single responsibility per file
+- **109-line main.py** (down from 1,245) - Minimal entry point
+- **Focused route modules** - Single responsibility per file (7 modules)
 - **Service layer** - Business logic separate from HTTP concerns
 - **Dependency injection** - Database and rate limiter via FastAPI deps
 - **Clean imports** - No circular dependencies
@@ -99,7 +101,7 @@ response = requests.post("http://localhost:8000/api/search/by-topic", json={
 
 ## Module Reference
 
-### 1. `main.py` - Application Entry Point (98 lines)
+### 1. `main.py` - Application Entry Point (109 lines)
 
 **Minimal FastAPI app initialization.** Just wiring, no business logic.
 
@@ -292,11 +294,11 @@ engagic_llm_api_cost_dollars{model="gemini-2.5-flash"} 15.75
 
 ---
 
-## Route Modules (712 lines total)
+## Route Modules (1271 lines total)
 
 **Each route module focuses on one domain.** No business logic - delegate to services.
 
-### 1. `routes/search.py` (62 lines)
+### 1. `routes/search.py` (61 lines)
 
 **Single unified search endpoint** - handles zipcode, city, or state.
 
@@ -339,7 +341,7 @@ POST /api/search {"query": "California"}
 
 ---
 
-### 2. `routes/meetings.py` (150 lines)
+### 2. `routes/meetings.py` (149 lines)
 
 **Meeting retrieval and processing.**
 
@@ -383,7 +385,7 @@ async def get_random_meeting_with_items(db: UnifiedDatabase = Depends(get_db)):
 
 ---
 
-### 3. `routes/topics.py` (129 lines)
+### 3. `routes/topics.py` (128 lines)
 
 **Topic-based search and browsing.**
 
@@ -450,7 +452,7 @@ async def get_popular_topics(db: UnifiedDatabase = Depends(get_db)):
 
 ---
 
-### 4. `routes/admin.py` (82 lines)
+### 4. `routes/admin.py` (81 lines)
 
 **Admin endpoints with bearer token authentication.**
 
@@ -485,7 +487,7 @@ curl -X POST http://localhost:8000/api/admin/sync-city/paloaltoCA \
 
 ---
 
-### 5. `routes/monitoring.py` (341 lines)
+### 5. `routes/monitoring.py` (340 lines)
 
 **Health checks, stats, metrics, and analytics.**
 
@@ -558,7 +560,7 @@ async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
 
 ---
 
-### 6. `routes/flyer.py` (83 lines)
+### 6. `routes/flyer.py` (82 lines)
 
 **Civic action flyer generation.**
 
@@ -602,11 +604,101 @@ POST /api/flyer/generate
 
 ---
 
-## Service Layer (346 lines)
+### 7. `routes/matters.py` (430 lines)
+
+**Matter tracking and timeline endpoints.**
+
+```python
+@router.get("/api/matters/{matter_id}")
+async def get_matter(matter_id: str, db: UnifiedDatabase = Depends(get_db)):
+    """Get matter details with timeline across all appearances
+
+    Returns:
+        - Canonical summary (from city_matters table)
+        - Timeline of all appearances across meetings
+        - Attachment history (if attachments changed)
+        - Vote history (if tracking votes)
+    """
+    matter = db.get_matter(matter_id)
+    if not matter:
+        raise HTTPException(status_code=404, detail="Matter not found")
+
+    # Get all appearances
+    appearances = db.get_matter_appearances(matter_id)
+
+    # Build timeline
+    timeline = []
+    for appearance in appearances:
+        meeting = db.get_meeting(appearance.meeting_id)
+        item = db.get_agenda_item(appearance.item_id)
+
+        timeline.append({
+            "meeting_id": meeting.id,
+            "meeting_date": meeting.date,
+            "meeting_title": meeting.title,
+            "item_title": item.title,
+            "item_sequence": item.sequence,
+            "action_taken": appearance.action_taken,
+            "vote_result": appearance.vote_result
+        })
+
+    return {
+        "success": True,
+        "matter": {
+            "id": matter.id,
+            "matter_file": matter.matter_file,
+            "title": matter.title,
+            "canonical_summary": matter.canonical_summary,
+            "topics": matter.canonical_topics,
+            "sponsors": matter.sponsors,
+            "first_seen": matter.first_seen,
+            "last_seen": matter.last_seen,
+            "appearance_count": len(timeline)
+        },
+        "timeline": sorted(timeline, key=lambda x: x["meeting_date"], reverse=True)
+    }
+
+@router.get("/api/city/{banana}/matters")
+async def get_city_matters(
+    banana: str,
+    limit: int = 50,
+    db: UnifiedDatabase = Depends(get_db)
+):
+    """Get all tracked matters for a city
+
+    Returns matters sorted by recency (last_seen DESC)
+    """
+    matters = db.get_city_matters(banana, limit=limit)
+
+    return {
+        "success": True,
+        "matters": [
+            {
+                "id": m.id,
+                "matter_file": m.matter_file,
+                "title": m.title,
+                "canonical_summary": m.canonical_summary,
+                "topics": m.canonical_topics,
+                "appearance_count": m.appearance_count,
+                "first_seen": m.first_seen,
+                "last_seen": m.last_seen
+            }
+            for m in matters
+        ]
+    }
+```
+
+**Use case:** Track legislation across multiple meetings (bills, ordinances, projects).
+
+**Matters-first architecture:** One summary for a matter, reused across all appearances.
+
+---
+
+## Service Layer (894 lines + 369 HTML)
 
 **Business logic separated from HTTP concerns.**
 
-### 1. `services/search.py` (316 lines)
+### 1. `services/search.py` (315 lines)
 
 **Core search logic** for zipcode, city, and state searches.
 
@@ -707,7 +799,7 @@ def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]
 
 ---
 
-### 2. `services/meeting.py` (39 lines)
+### 2. `services/meeting.py` (41 lines)
 
 **Meeting retrieval with items attached.**
 
@@ -741,11 +833,133 @@ def get_meetings_with_items(meetings: List[Meeting], db: UnifiedDatabase) -> Lis
 
 ---
 
-## Middleware (69 lines)
+### 3. `services/flyer.py` (361 lines)
+
+**Generate printable civic action flyers.**
+
+```python
+def generate_meeting_flyer(
+    meeting: Meeting,
+    item: Optional[AgendaItem],
+    position: str,
+    custom_message: Optional[str],
+    user_name: Optional[str],
+    db: UnifiedDatabase,
+    dark_mode: bool = False
+) -> str:
+    """Generate HTML flyer for a meeting or specific agenda item
+
+    Args:
+        meeting: Meeting object
+        item: Optional specific agenda item
+        position: "support" | "oppose" | "more_info"
+        custom_message: User's custom message
+        user_name: User's name (for signature)
+        db: Database instance (for city info)
+        dark_mode: Use dark theme
+
+    Returns:
+        HTML document ready for printing
+    """
+    # Get city information
+    city = db.get_city(banana=meeting.banana)
+
+    # Build flyer context
+    context = {
+        "city_name": city.name,
+        "meeting_title": meeting.title,
+        "meeting_date": meeting.date.strftime("%B %d, %Y") if meeting.date else "TBD",
+        "meeting_time": meeting.date.strftime("%I:%M %p") if meeting.date else "TBD",
+        "position": position,
+        "position_display": {
+            "support": "IN SUPPORT",
+            "oppose": "IN OPPOSITION",
+            "more_info": "REQUESTING MORE INFORMATION"
+        }[position],
+        "custom_message": custom_message,
+        "user_name": user_name or "A Concerned Resident",
+        "participation": meeting.participation or {},
+        "dark_mode": dark_mode
+    }
+
+    # Add item-specific context
+    if item:
+        context["item_title"] = item.title
+        context["item_summary"] = item.summary
+        context["item_sequence"] = item.sequence
+
+    # Render template
+    template = load_flyer_template()
+    return template.render(**context)
+```
+
+**Template:** `services/flyer_template.html` (369 lines) - Jinja2 template with print-optimized CSS.
+
+**Features:**
+- Print-optimized layout (single page, no page breaks)
+- QR code for meeting details
+- Participation info (email, phone, Zoom)
+- Position-specific styling (green=support, red=oppose, blue=more_info)
+- Dark mode support
+- Professional typography
+
+---
+
+### 4. `services/ticker.py` (177 lines)
+
+**Generate homepage ticker items.**
+
+```python
+def generate_ticker_item(meeting_dict: Dict[str, Any], db: UnifiedDatabase) -> Dict[str, Any]:
+    """Generate a ticker item from a meeting
+
+    Args:
+        meeting_dict: Meeting dict with items
+        db: Database instance
+
+    Returns:
+        Ticker item dict with headline and link
+    """
+    city = db.get_city(banana=meeting_dict["banana"])
+
+    # Extract most interesting item
+    items = meeting_dict.get("items", [])
+    if items:
+        # Prioritize items with high-interest topics
+        high_interest_topics = ["housing", "zoning", "development", "transportation", "environment"]
+        interesting_items = [
+            item for item in items
+            if any(topic in (item.get("topics") or []) for topic in high_interest_topics)
+        ]
+
+        if interesting_items:
+            item = interesting_items[0]
+            headline = f"{city.name}: {item['title'][:100]}"
+        else:
+            item = items[0]
+            headline = f"{city.name}: {item['title'][:100]}"
+    else:
+        headline = f"{city.name}: {meeting_dict['title'][:100]}"
+
+    return {
+        "headline": headline,
+        "meeting_id": meeting_dict["id"],
+        "city_name": city.name,
+        "state": city.state,
+        "meeting_date": meeting_dict.get("date"),
+        "topics": meeting_dict.get("topics", [])
+    }
+```
+
+**Use case:** Homepage "news ticker" showing recent civic activity across all cities.
+
+---
+
+## Middleware (92 lines)
 
 **Cross-cutting concerns applied to all requests.**
 
-### 1. `middleware/logging.py` (38 lines)
+### 1. `middleware/logging.py` (37 lines)
 
 **Request/response logging with unique IDs.**
 
@@ -777,7 +991,7 @@ async def log_requests(request: Request, call_next):
 
 ---
 
-### 2. `middleware/rate_limiting.py` (44 lines)
+### 2. `middleware/rate_limiting.py` (55 lines)
 
 **Rate limit enforcement.**
 
@@ -807,11 +1021,11 @@ async def rate_limit_middleware(request: Request, call_next, rate_limiter: SQLit
 
 ---
 
-## Models (85 lines)
+## Models (119 lines)
 
 **Pydantic models for request validation.**
 
-### `models/requests.py`
+### `models/requests.py` (119 lines)
 
 ```python
 class SearchRequest(BaseModel):
@@ -871,11 +1085,11 @@ class FlyerRequest(BaseModel):
 
 ---
 
-## Utils (227 lines)
+## Utils (245 lines)
 
 **Reusable utilities across the server.**
 
-### 1. `utils/constants.py` (97 lines)
+### 1. `utils/constants.py` (96 lines)
 
 **State mappings and special city names.**
 
@@ -904,7 +1118,7 @@ SPECIAL_CITIES = {
 
 ---
 
-### 2. `utils/geo.py` (119 lines)
+### 2. `utils/geo.py` (118 lines)
 
 **City and state parsing.**
 
@@ -955,7 +1169,7 @@ def get_state_abbreviation(state_input: str) -> str:
 
 ---
 
-### 3. `utils/validation.py` (32 lines)
+### 3. `utils/validation.py` (31 lines)
 
 **Input sanitization and SQL injection prevention.**
 
@@ -1011,6 +1225,13 @@ GET    /api/random-meeting-with-items Get random meeting with items
 ```
 GET    /api/topics                    Get all canonical topics (16 topics)
 GET    /api/topics/popular            Get most common topics
+```
+
+### Matters
+
+```
+GET    /api/matters/{matter_id}       Get matter with timeline of appearances
+GET    /api/city/{banana}/matters     Get all tracked matters for a city
 ```
 
 ### Admin (requires Bearer token)

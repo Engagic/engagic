@@ -13,7 +13,7 @@ The pipeline handles:
 
 ## Architecture Overview
 
-The pipeline consists of **4 focused modules** with clear responsibilities:
+The pipeline consists of **6 focused modules** with clear responsibilities:
 
 ```
 ┌──────────────┐
@@ -24,16 +24,20 @@ The pipeline consists of **4 focused modules** with clear responsibilities:
        │
        └──────> Processor  (Queue processing, item assembly)
                      │
-                     └──────> Analyzer (PDF extraction, LLM analysis)
+                     ├──────> Analyzer (PDF extraction, LLM analysis)
+                     │
+                     ├──────> Models   (Job type definitions)
+                     │
+                     └──────> Utils    (Matter-first utilities)
 ```
 
-**Key Pattern:** Conductor delegates to Fetcher and Processor, which are specialized for their domains.
+**Key Pattern:** Conductor delegates to Fetcher and Processor, which are specialized for their domains. Models define typed job payloads. Utils provide matter-first deduplication utilities.
 
 ---
 
 ## Module Reference
 
-### 1. `conductor.py` - Orchestration (268 lines)
+### 1. `conductor.py` - Orchestration (800 lines)
 
 **Entry point for all pipeline operations.** Coordinates sync and processing loops.
 
@@ -90,7 +94,7 @@ engagic-daemon --status
 
 ---
 
-### 2. `fetcher.py` - City Sync & Vendor Routing (518 lines)
+### 2. `fetcher.py` - City Sync & Vendor Routing (520 lines)
 
 **Fetches meetings from vendor platforms.** Handles rate limiting, retry logic, and database storage.
 
@@ -164,7 +168,7 @@ class SyncResult:
 
 ---
 
-### 3. `processor.py` - Queue Processing & Item Assembly (971 lines)
+### 3. `processor.py` - Queue Processing & Item Assembly (1178 lines)
 
 **Processes jobs from the queue.** Extracts text from PDFs, assembles items, orchestrates LLM analysis.
 
@@ -303,50 +307,181 @@ for chunk_results in analyzer.process_batch_items(batch_requests):
 
 **Coordinates PDF extraction and LLM analysis.** Thin wrapper around parsing and analysis modules.
 
+---
+
+### 5. `models.py` - Job Type Definitions (157 lines)
+
+**Type-safe job payload definitions.** Enables exhaustive type checking and safe dispatch.
+
 #### Responsibilities
-- PDF text extraction (via `PdfExtractor`)
-- Participation info parsing (email, phone, Zoom)
-- LLM summarization (via `GeminiSummarizer`)
-- Batch item processing (via `GeminiSummarizer.summarize_batch()`)
-- Caching integration (check before processing)
+- Define job types (MeetingJob, MatterJob)
+- Serialize/deserialize payloads to/from JSON
+- Helper functions for job creation
+- Database row to job object conversion
 
-#### Key Methods
-
-```python
-analyzer = Analyzer(api_key=config.GEMINI_API_KEY)
-
-# Monolithic processing (packet_url)
-summary, method, participation = analyzer.process_agenda(packet_url)
-
-# Item-level batch processing (generator)
-for chunk_results in analyzer.process_batch_items(item_requests, shared_context):
-    # Process results incrementally
-    for result in chunk_results:
-        item_id = result["item_id"]
-        summary = result["summary"]
-        topics = result["topics"]
-```
-
-#### Dependencies
-
-- **`parsing/pdf.py`** - PyMuPDF text extraction
-- **`parsing/participation.py`** - Email/phone/Zoom extraction
-- **`analysis/llm/summarizer.py`** - Gemini API orchestration
-- **`database/db.py`** - Caching and storage
-
-#### Error Handling
+#### Job Types
 
 ```python
-try:
-    result = pdf_extractor.extract_from_url(url)
-    if result["success"]:
-        text = result["text"]
-        summary = summarizer.summarize_meeting(text)
-        return summary, "pymupdf_gemini", participation
-except Exception as e:
-    # Fail fast - no fallback tiers
-    raise AnalysisError("Document analysis failed")
+@dataclass
+class MeetingJob:
+    """Process a meeting (monolithic or item-level)"""
+    meeting_id: str
+    source_url: str  # agenda_url or packet_url
+
+@dataclass
+class MatterJob:
+    """Process a matter across all its appearances (matters-first)"""
+    matter_id: str  # Composite ID: {banana}_{matter_key}
+    meeting_id: str  # Representative meeting where matter appears
+    item_ids: List[str]  # All agenda item IDs for this matter
+
+@dataclass
+class QueueJob:
+    """Typed queue job with discriminated union payload"""
+    id: int
+    job_type: JobType  # "meeting" | "matter"
+    payload: JobPayload  # MeetingJob | MatterJob
+    banana: str
+    priority: int
+    status: str
+    retry_count: int = 0
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 ```
+
+#### Helper Functions
+
+```python
+# Create meeting job
+job_data = create_meeting_job(
+    meeting_id="paloaltoCA_2025-11-10",
+    source_url="https://...",
+    banana="paloaltoCA",
+    priority=150
+)
+
+# Create matter job
+job_data = create_matter_job(
+    matter_id="sanfranciscoCA_251041",
+    meeting_id="sanfranciscoCA_2025-11-10",
+    item_ids=["item_1", "item_2", "item_3"],
+    banana="sanfranciscoCA",
+    priority=150
+)
+
+# Deserialize from database row
+job = QueueJob.from_db_row(db_row)
+```
+
+#### Type Safety
+
+**Discriminated union pattern:** `job_type` field determines which payload type is present.
+
+```python
+# Type-safe dispatch
+if job.job_type == "meeting":
+    assert isinstance(job.payload, MeetingJob)
+    process_meeting(job.payload.meeting_id)
+elif job.job_type == "matter":
+    assert isinstance(job.payload, MatterJob)
+    process_matter(job.payload.matter_id, job.payload.item_ids)
+```
+
+---
+
+### 6. `utils.py` - Matter-First Utilities (130 lines)
+
+**Utilities for matter-first processing.** Attachment hashing and matter key extraction.
+
+#### Responsibilities
+- Generate stable attachment hashes for deduplication
+- Extract canonical matter keys from vendor data
+- Support URL-only or metadata-enhanced hashing modes
+
+#### Key Functions
+
+```python
+from pipeline.utils import hash_attachments, get_matter_key
+
+# Hash attachments for deduplication (URL-only mode, fast)
+attachments = [
+    {"url": "https://city.gov/doc1.pdf", "name": "Staff Report"},
+    {"url": "https://city.gov/doc2.pdf", "name": "Ordinance"}
+]
+hash_value = hash_attachments(attachments)  # SHA256 hex digest
+
+# Hash with metadata (slower, more accurate)
+hash_value = hash_attachments(attachments, include_metadata=True)
+# Fetches Content-Length and Last-Modified headers via HEAD requests
+
+# Extract canonical matter key (prefer semantic ID over UUID)
+matter_key = get_matter_key(matter_file="25-1234", matter_id="uuid-abc")
+# Returns: "25-1234" (semantic ID preferred)
+
+matter_key = get_matter_key(matter_file=None, matter_id="uuid-abc")
+# Returns: "uuid-abc" (fallback to UUID)
+```
+
+#### Attachment Hashing Strategy
+
+**Two modes:**
+
+1. **URL-only (default):** Fast, but misses CDN rotations
+   ```python
+   hash_attachments(attachments)
+   # Hashes: [(url, name), (url, name), ...]
+   ```
+
+2. **Metadata-enhanced:** Slower, better change detection
+   ```python
+   hash_attachments(attachments, include_metadata=True)
+   # Hashes: [(url, name, content_length, last_modified), ...]
+   # Makes HEAD requests to get metadata
+   ```
+
+**Use case:** Detect when matter attachments have changed across appearances.
+
+```python
+# In processor.py (matters-first path)
+attachment_hash = hash_attachments(item.attachments)
+
+# Compare with stored hash
+existing_matter = db.get_matter(matter_id)
+if existing_matter and existing_matter.attachment_hash == attachment_hash:
+    # Reuse canonical summary (no changes)
+    reuse_canonical_summary()
+else:
+    # Re-process (attachments changed)
+    process_matter_fresh()
+```
+
+#### Matter Key Strategy
+
+**Problem:** Vendors use different identifiers for legislative matters.
+
+- **Semantic IDs:** Public-facing (e.g., "BL2025-1098", "25-1234")
+- **Backend UUIDs:** Internal tracking (e.g., "uuid-abc-123")
+
+**Solution:** Prefer semantic ID over UUID.
+
+```python
+# Nashville (Legistar)
+matter_file = "BL2025-1098"  # Public bill number
+matter_id = "12345"  # Internal ID
+get_matter_key(matter_file, matter_id)  # Returns: "BL2025-1098"
+
+# San Francisco (Legistar)
+matter_file = "251041"  # Public file number
+matter_id = "uuid-..."  # Internal UUID
+get_matter_key(matter_file, matter_id)  # Returns: "251041"
+
+# Fallback (no semantic ID)
+get_matter_key(None, "uuid-abc")  # Returns: "uuid-abc"
+```
+
+**Why this matters:** Matter keys are used as primary keys in `city_matters` table. Semantic IDs are more stable and user-friendly than UUIDs.
 
 ---
 

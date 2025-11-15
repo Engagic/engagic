@@ -17,16 +17,22 @@ The database uses a **Repository Pattern** with a **facade** that delegates to f
 
 ```
 ┌─────────────────────┐
-│  UnifiedDatabase    │  Facade (519 lines)
+│  UnifiedDatabase    │  Facade (1497 lines)
 │  (db.py)            │
 └──────────┬──────────┘
            │
-           ├──> CityRepository      (241 lines) - City and zipcode operations
-           ├──> MeetingRepository   (190 lines) - Meeting storage and retrieval
-           ├──> ItemRepository      (115 lines) - Agenda item operations
-           ├──> MatterRepository    (199 lines) - Matter operations (matters-first)
-           ├──> QueueRepository     (273 lines) - Processing queue management
-           └──> SearchRepository    (202 lines) - Search, topics, cache, stats
+           ├──> repositories/base.py        (95 lines)  - Base repository class
+           ├──> repositories/cities.py     (248 lines) - City and zipcode operations
+           ├──> repositories/meetings.py   (234 lines) - Meeting storage and retrieval
+           ├──> repositories/items.py      (196 lines) - Agenda item operations
+           ├──> repositories/matters.py    (300 lines) - Matter operations (matters-first)
+           ├──> repositories/queue.py      (578 lines) - Processing queue management
+           └──> repositories/search.py     (231 lines) - Search, topics, cache, stats
+
+Supporting Modules:
+├── models.py          (393 lines) - Data models (City, Meeting, AgendaItem, Matter)
+├── id_generation.py   (148 lines) - Deterministic matter ID generation (SHA256)
+└── search_utils.py    (433 lines) - Search utilities (strip_markdown, search_summaries, search_matters)
 ```
 
 **Why Repository Pattern?**
@@ -342,7 +348,7 @@ city = City.from_db_row(db_row)
 
 ## Repository Guide
 
-### 1. CityRepository (241 lines)
+### 1. CityRepository (248 lines)
 
 **Operations:**
 - Unified city lookup (banana, slug, zipcode, name+state)
@@ -384,7 +390,7 @@ last_sync = db.get_city_last_sync("paloaltoCA")  # datetime or None
 
 ---
 
-### 2. MeetingRepository (190 lines)
+### 2. MeetingRepository (234 lines)
 
 **Operations:**
 - Meeting storage (upsert with preservation)
@@ -439,7 +445,7 @@ ON CONFLICT(id) DO UPDATE SET
 
 ---
 
-### 3. ItemRepository (115 lines)
+### 3. ItemRepository (196 lines)
 
 **Operations:**
 - Batch item storage (preserves summaries on re-sync)
@@ -471,7 +477,7 @@ items = db.get_agenda_items_by_ids(["item_1", "item_2"])
 
 ---
 
-### 4. MatterRepository (199 lines)
+### 4. MatterRepository (300 lines)
 
 **Operations:**
 - Matter storage (preserves canonical summary on re-sync)
@@ -538,7 +544,7 @@ else:
 
 ---
 
-### 5. QueueRepository (273 lines)
+### 5. QueueRepository (578 lines)
 
 **Operations:**
 - Enqueue typed jobs (MeetingJob, MatterJob)
@@ -617,7 +623,7 @@ cleared = db.clear_queue()  # {"pending": 10, "processing": 2, ...}
 
 ---
 
-### 6. SearchRepository (202 lines)
+### 6. SearchRepository (231 lines)
 
 **Operations:**
 - Topic-based meeting search
@@ -981,4 +987,144 @@ ON CONFLICT(id) DO UPDATE SET
 
 ---
 
-**Last Updated:** 2025-11-11 (Documentation Sprint)
+---
+
+## Supporting Modules
+
+### `models.py` - Data Models (393 lines)
+
+**Dataclasses representing core entities.**
+
+```python
+from database.models import City, Meeting, AgendaItem, Matter
+
+# All models have:
+# - .to_dict() → Convert to dict for JSON serialization
+# - .from_db_row(row) → Create from SQLite row
+```
+
+**Models:**
+- **City** (19 fields) - City registry with vendor info
+- **Meeting** (21 fields) - Meeting with optional summary
+- **AgendaItem** (15 fields) - Individual agenda item with matter tracking
+- **Matter** (16 fields) - Legislative matter with canonical summary
+
+**Key Features:**
+- Automatic datetime conversion (`created_at`, `updated_at`)
+- JSON field deserialization (`topics`, `attachments`, `participation`)
+- Type safety with dataclasses
+
+---
+
+### `id_generation.py` - Matter ID Generation (148 lines)
+
+**Deterministic, collision-free ID generation for matters.**
+
+```python
+from database.id_generation import generate_matter_id, validate_matter_id
+
+# Generate deterministic matter ID
+matter_id = generate_matter_id(
+    banana="nashvilleTN",
+    matter_file="BL2025-1098"
+)
+# Returns: "nashvilleTN_7a8f3b2c1d9e4f5a" (SHA256 hash, first 16 hex chars)
+
+# Same inputs always produce same ID
+matter_id2 = generate_matter_id("nashvilleTN", matter_file="BL2025-1098")
+assert matter_id == matter_id2  # ✓ Deterministic
+
+# Validate format
+is_valid = validate_matter_id("nashvilleTN_7a8f3b2c1d9e4f5a")  # True
+
+# Extract banana from matter ID
+banana = extract_banana_from_matter_id("nashvilleTN_7a8f3b2c1d9e4f5a")
+# Returns: "nashvilleTN"
+```
+
+**Design Philosophy:**
+- **Deterministic:** Same inputs → same ID (enables deduplication)
+- **Unique:** SHA256 collision probability negligible
+- **Bidirectional:** Can lookup by original identifiers
+- **Original data preserved:** Store `matter_file` and `matter_id` in record
+
+**Hash Format:**
+- Composite ID: `{banana}_{hash}`
+- Hash: First 16 hex chars of SHA256 (64 bits = 2^64 combinations)
+- Example: `"nashvilleTN_7a8f3b2c1d9e4f5a"`
+
+**Use case:** Generate consistent IDs for legislative matters across vendors.
+
+---
+
+### `search_utils.py` - Search Utilities (433 lines)
+
+**Full-text search in meeting and item summaries.**
+
+```python
+from database.search_utils import search_summaries, search_matters, strip_markdown
+
+# Search in meeting/item summaries (individual occurrences)
+results = search_summaries(
+    search_term="affordable housing",
+    city_banana="sanfranciscoCA",
+    state="CA",
+    case_sensitive=False
+)
+
+# Returns list of dicts:
+# [
+#     {
+#         "type": "meeting",  # or "item"
+#         "url": "https://engagic.org/sanfranciscoCA/2025-11-10-2111",
+#         "city": "San Francisco, CA",
+#         "meeting_title": "Board of Supervisors",
+#         "context": "...affordable housing project...",
+#         "summary": "Full summary markdown...",
+#         "topics": ["housing", "zoning"],
+#         ...
+#     }
+# ]
+
+# Search in matter canonical summaries (deduplicated)
+matters = search_matters(
+    search_term="zoning amendment",
+    city_banana="nashvilleTN"
+)
+
+# Returns list of dicts:
+# [
+#     {
+#         "type": "matter",
+#         "matter_id": "nashvilleTN_7a8f3b2c",
+#         "matter_file": "BL2025-1098",
+#         "title": "Zoning Amendment for District 12",
+#         "summary": "Canonical summary...",
+#         "topics": ["zoning", "development"],
+#         "appearance_count": 3,
+#         "timeline_url": "https://engagic.org/nashvilleTN?view=matters#bl2025-1098"
+#     }
+# ]
+
+# Strip markdown for display
+clean_text = strip_markdown("**Bold** and *italic* text")
+# Returns: "Bold and italic text"
+
+# Build Engagic URL
+url = build_engagic_url("nashvilleTN", "2025-11-10T14:00:00Z", "2111")
+# Returns: "https://engagic.org/nashvilleTN/2025-11-10-2111"
+```
+
+**Functions:**
+- **`search_summaries()`** - Search meeting/item summaries (individual occurrences)
+- **`search_matters()`** - Search canonical matter summaries (deduplicated)
+- **`strip_markdown()`** - Remove markdown formatting for clean display
+- **`build_engagic_url()`** - Construct URLs with date-id format
+- **`format_date()`** - Convert ISO dates to YYYY_MM_DD
+- **`slugify()`** - Convert text to URL-friendly slugs
+
+**Use case:** Full-text search across all civic meeting content.
+
+---
+
+**Last Updated:** 2025-11-14 (Documentation Sprint - Database Module)

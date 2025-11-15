@@ -2,52 +2,30 @@
 
 Historical documentation from completed work sessions.
 
-## Recently Added (2025-11-11)
+## What's Here
 
-### Architecture Documentation
-- **ARCHITECTURE.md** - High-level architecture overview (superseded by folder-level READMEs)
-  - Item-first architecture principles
-  - Two parallel pipelines explanation
-  - API and database schema overview
-  - **Note:** Content now covered in pipeline/README.md, database/README.md, server/README.md
+**ENGINEERING_ASSESSMENT_2025.md** (October 31, 2025)
+- Comprehensive codebase audit and assessment
+- Architecture overview, strengths/concerns, production readiness
+- Snapshot of the system at ~9,000 lines Python backend
+- Historical reference for understanding architectural evolution
 
-## Previously Added (2025-10-31)
+**Recent incident docs** (November 12, 2025)
+- INCIDENT_2025_11_12_matter_tracking.md
+- MATTER_TRACKING_FIX_2025_11_12.md
+- WORKAROUNDS_ELIMINATED_2025_11_12.md
 
-### Engineering Assessments & Session Notes
-- **ENGINEERING_ASSESSMENT_2025.md** - Comprehensive October 2025 codebase audit
-- **GRANICUS_FIXES_OCT31.md** - Granicus adapter bugfixes and improvements
-- **REFACTOR_TEST_RESULTS.md** - Test results from refactoring work
+## What Was Removed (November 14, 2025)
 
-## Previously Added (2025-10-30)
+**Deleted obsolete docs:**
+- Session notes and audit documents (20+ files)
+- Refactor proposals and completion notes (superseded by CLAUDE.md)
+- Old architectural docs (content now in folder-level READMEs)
+- SMOKEPAC.md, MOTIONCOUNT_ARCHITECTURE.md, NO_DAEMON.md, TOPIC_EXTRACTION.md, REGIONAL_PROCESSING.md
 
-### Item-First Architecture Migration
-- **AUDIT_FRONTEND_BACKEND.md** - Initial audit findings (9 integration issues)
-- **COMPLETE_INTEGRATION_AUDIT_2025-10-30.md** - Summary of all fixes
-- **INTEGRATION_FIXES_2025-10-30.md** - Detailed changelog
-- **DATA_EXPOSURE_AUDIT_2025-10-30.md** - What data wasn't being exposed
-- **PROCESSING_FLOW_ANALYSIS.md** - How concatenation worked (now removed)
+**Current documentation lives in:**
+- Root: CLAUDE.md (project overview and architecture)
+- Folders: pipeline/README.md, database/README.md, server/README.md
+- Docs: docs/VISION.md, docs/DEPLOYMENT.md, docs/API.md, etc.
 
-**Result**: Refactored to item-first architecture. See `ARCHITECTURE.md` in root.
-
----
-
-## Previously Archived
-
-### Other Historical Docs
-- **BREAKTHROUGH_COMPLETE.md** - Granicus item-level processing milestone
-- **IMPROVEMENT_PLAN.md** - Earlier roadmap
-- **memory_fixes.md** - Memory optimization notes
-- **PROCESSOR_REFACTOR.md** - Processor modularization
-- **README-DEPLOYMENT.md** - Old deployment notes
-- **REORGANIZATION_2025.md** - Directory reorganization notes
-- **SESSION_OCT30_2025.md** - Session notes
-- **VPS_MIGRATION_CHECKLIST.md** - VPS setup checklist
-
----
-
-These docs are kept for historical context but are no longer active references.
-
-**Current documentation**:
-- Root-level: `CLAUDE.md` (project overview)
-- Folder-level: `pipeline/README.md`, `database/README.md`, `server/README.md`
-- Additional: `docs/README.md` (documentation index)
+Archive exists for historical context, not active reference.
