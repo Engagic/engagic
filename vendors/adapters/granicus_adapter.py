@@ -9,12 +9,13 @@ Complex adapter because Granicus doesn't provide a clean API - requires:
 - PDF extraction from AgendaViewer pages
 """
 
-import os
-import json
-import re
 import hashlib
-from typing import Dict, Any, List, Optional, Iterator
+import json
+import os
+import re
+import requests
 from datetime import datetime
+from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import parse_qs, urlparse, urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.adapters.parsers.granicus_parser import parse_html_agenda
@@ -142,7 +143,7 @@ class GranicusAdapter(BaseAdapter):
                 candidates.append((i, score))
                 logger.debug(f"[granicus:{self.slug}] view_id {i} score: {score}")
 
-            except Exception:
+            except (requests.RequestException, json.JSONDecodeError):
                 continue
 
         # Sort by score (descending) and return highest

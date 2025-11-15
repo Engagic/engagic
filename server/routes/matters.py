@@ -281,8 +281,8 @@ async def get_state_matters(
                         if t not in topic_aggregation:
                             topic_aggregation[t] = 0
                         topic_aggregation[t] += 1
-                except (json.JSONDecodeError, TypeError, KeyError):
-                    pass
+                except (json.JSONDecodeError, TypeError, KeyError) as e:
+                    logger.debug(f"Invalid topics JSON: {e}")
 
         # Get cities in this state
         cities = db.conn.execute(

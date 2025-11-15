@@ -187,7 +187,7 @@ class MenloParkAdapter(BaseAdapter):
         ]:
             try:
                 return datetime.strptime(date_str, fmt)
-            except Exception:
+            except ValueError:
                 continue
 
         return None

@@ -9,6 +9,7 @@ This adapter handles:
 """
 
 import re
+import requests
 from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
@@ -97,7 +98,7 @@ class CivicPlusAdapter(BaseAdapter):
                 ):
                     logger.info(f"[civicplus:{self.slug}] Found agenda page: {pattern}")
                     return test_url
-            except Exception:
+            except (requests.RequestException, ConnectionError, TimeoutError):
                 continue
 
         logger.warning(f"[civicplus:{self.slug}] Could not find agenda page")

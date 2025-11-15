@@ -512,7 +512,8 @@ class Fetcher:
                 # Priority score: activity + time pressure
                 return recent_meetings * 10 + min(hours_since_sync / 24, 10)
 
-            except Exception:
+            except (AttributeError, TypeError) as e:
+                logger.warning(f"Failed to calculate priority for {city.banana}: {e}")
                 return 100  # Medium priority on error
 
         return sorted(cities, key=get_priority, reverse=True)
