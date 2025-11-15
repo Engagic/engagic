@@ -510,9 +510,9 @@ class UnifiedDatabase:
             stored_meeting = self.store_meeting(meeting_obj)
 
             # Store agenda items if present (preserve existing summaries on re-sync)
+            agenda_items = []  # Initialize outside if block for later reference
             if meeting_dict.get("items"):
                 items = meeting_dict["items"]
-                agenda_items = []
                 procedural_items = []
 
                 # Build map of existing items to preserve summaries
