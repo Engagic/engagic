@@ -8,8 +8,8 @@ Handles variations like "affordable housing" -> "housing", "rezoning" -> "zoning
 import json
 import logging
 import os
-from pathlib import Path
 from typing import List, Optional
+from importlib.resources import files
 
 logger = logging.getLogger("engagic")
 
@@ -35,13 +35,15 @@ class TopicNormalizer:
         Initialize normalizer with taxonomy
 
         Args:
-            taxonomy_path: Path to taxonomy.json (defaults to same directory)
+            taxonomy_path: Path to taxonomy.json (defaults to package resource)
         """
         if taxonomy_path is None:
-            taxonomy_path = str(Path(__file__).parent / "taxonomy.json")
-
-        with open(taxonomy_path, "r") as f:
-            data = json.load(f)
+            # Load from package resources (works in installed packages)
+            taxonomy_text = files("analysis.topics").joinpath("taxonomy.json").read_text()
+            data = json.loads(taxonomy_text)
+        else:
+            with open(taxonomy_path, "r") as f:
+                data = json.load(f)
 
         self.taxonomy = data["taxonomy"]
         self.prompt_examples = data["prompt_examples"]

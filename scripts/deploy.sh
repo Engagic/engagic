@@ -114,7 +114,7 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=$APP_DIR
-ExecStart=$VENV_DIR/bin/python3 -m pipeline.conductor --fetcher
+ExecStart=$VENV_DIR/bin/engagic-conductor fetcher
 Restart=always
 RestartSec=60
 StandardOutput=journal
@@ -443,7 +443,7 @@ sync_city() {
         source ~/.llm_secrets
         set +a
     fi
-    uv run engagic-conductor --sync-city "$1"
+    uv run engagic-conductor sync-city "$1"
 }
 
 sync_and_process_city() {
@@ -460,7 +460,7 @@ sync_and_process_city() {
         source ~/.llm_secrets
         set +a
     fi
-    uv run engagic-conductor --sync-and-process-city "$1"
+    uv run engagic-conductor sync-and-process-city "$1"
 }
 
 sync_cities() {
@@ -477,7 +477,7 @@ sync_cities() {
         source ~/.llm_secrets
         set +a
     fi
-    uv run engagic-conductor --sync-cities "$1"
+    uv run engagic-conductor sync-cities "$1"
 }
 
 process_cities() {
@@ -494,7 +494,7 @@ process_cities() {
         source ~/.llm_secrets
         set +a
     fi
-    uv run engagic-conductor --process-cities "$1"
+    uv run engagic-conductor process-cities "$1"
 }
 
 sync_and_process_cities() {
@@ -511,7 +511,7 @@ sync_and_process_cities() {
         source ~/.llm_secrets
         set +a
     fi
-    uv run engagic-conductor --sync-and-process-cities "$1"
+    uv run engagic-conductor sync-and-process-cities "$1"
 }
 
 process_unprocessed() {
@@ -523,13 +523,13 @@ process_unprocessed() {
         source ~/.llm_secrets
         set +a
     fi
-    uv run engagic-conductor --full-sync
+    uv run engagic-conductor full-sync
 }
 
 preview_queue() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
-    uv run engagic-conductor --preview-queue "${1:-all}"
+    uv run engagic-conductor preview-queue "${1:-}"
 }
 
 extract_text() {
@@ -540,18 +540,14 @@ extract_text() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
 
-    # Build command
-    CMD="uv run engagic-conductor --extract-text $1"
-
-    # Add output file if provided
+    # Build command with Click syntax
     if [ -n "$2" ]; then
-        CMD="$CMD --output-file $2"
         log "Extracting text from meeting $1 to $2..."
+        uv run engagic-conductor extract-text "$1" --output-file "$2"
     else
         log "Extracting text preview from meeting $1..."
+        uv run engagic-conductor extract-text "$1"
     fi
-
-    eval $CMD
 }
 
 preview_items() {
@@ -562,25 +558,19 @@ preview_items() {
     cd "$APP_DIR"
     source "$VENV_DIR/bin/activate"
 
-    # Build command
-    CMD="uv run engagic-conductor --preview-items $1"
-
-    # Add extract flag if provided
+    # Build command with Click syntax
     if [ "$2" = "--extract" ]; then
-        CMD="$CMD --extract-item-text"
-
-        # Add output directory if provided
         if [ -n "$3" ]; then
-            CMD="$CMD --output-dir $3"
             log "Previewing items for $1 with text extraction to $3..."
+            uv run engagic-conductor preview-items "$1" --extract-text --output-dir "$3"
         else
             log "Previewing items for $1 with text extraction..."
+            uv run engagic-conductor preview-items "$1" --extract-text
         fi
     else
         log "Previewing items structure for $1..."
+        uv run engagic-conductor preview-items "$1"
     fi
-
-    eval $CMD
 }
 
 show_help() {

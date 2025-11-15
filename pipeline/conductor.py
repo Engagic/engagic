@@ -399,182 +399,6 @@ class Conductor:
             "previews": previews,
         }
 
-    def extract_text_preview(self, meeting_id: str, output_file: Optional[str] = None) -> Dict[str, Any]:
-        """Extract text from meeting PDF without processing (for manual review)
-
-        Args:
-            meeting_id: Meeting identifier
-            output_file: Optional file path to save extracted text
-
-        Returns:
-            Dictionary with text preview and stats
-        """
-        logger.info(f"[Conductor] Extracting text preview for {meeting_id}...")
-
-        meeting = self.db.get_meeting(meeting_id)
-        if not meeting:
-            return {"error": "Meeting not found"}
-
-        # Try agenda_url first (item-level), fallback to packet_url (monolithic)
-        source_url = meeting.agenda_url or meeting.packet_url
-        if not source_url:
-            return {"error": "No agenda or packet URL for this meeting"}
-
-        try:
-            # Extract text using PDF extractor (doesn't need LLM analyzer)
-            from parsing.pdf import PdfExtractor
-            extractor = PdfExtractor()
-
-            # Handle URL being either str or List[str]
-            url = source_url[0] if isinstance(source_url, list) else source_url
-
-            logger.info(f"[Conductor] Downloading PDF: {url}")
-            extraction_result = extractor.extract_from_url(url)
-
-            if not extraction_result["success"]:
-                return {
-                    "error": extraction_result.get("error", "Failed to extract text"),
-                    "meeting_id": meeting_id,
-                }
-
-            text = extraction_result["text"]
-            page_count = extraction_result.get("page_count", 0)
-            text_length = len(text)
-
-            # Optionally save to file
-            if output_file:
-                with open(output_file, "w") as f:
-                    f.write(f"Meeting: {meeting.title}\n")
-                    f.write(f"Date: {meeting.date}\n")
-                    f.write(f"URL: {source_url}\n")
-                    f.write(f"Pages: {page_count}\n")
-                    f.write(f"Characters: {text_length}\n")
-                    f.write("=" * 80 + "\n\n")
-                    f.write(text)
-                logger.info(f"[Conductor] Saved text to {output_file}")
-
-            # Return preview (first 2000 chars)
-            preview_text = text[:2000] + ("..." if len(text) > 2000 else "")
-
-            return {
-                "success": True,
-                "meeting_id": meeting_id,
-                "title": meeting.title,
-                "date": meeting.date.isoformat() if meeting.date else None,
-                "page_count": page_count,
-                "text_length": text_length,
-                "preview": preview_text,
-                "saved_to": output_file,
-            }
-
-        except Exception as e:
-            logger.error(f"[Conductor] Failed to extract text: {e}")
-            return {
-                "error": str(e),
-                "meeting_id": meeting_id,
-            }
-
-    def preview_items(self, meeting_id: str, extract_text: bool = False, output_dir: Optional[str] = None) -> Dict[str, Any]:
-        """Preview items and optionally extract text from their attachments
-
-        Args:
-            meeting_id: Meeting identifier
-            extract_text: Whether to extract text from item attachments (default False)
-            output_dir: Optional directory to save extracted texts
-
-        Returns:
-            Dictionary with items structure and optional text previews
-        """
-        logger.info(f"[Conductor] Previewing items for {meeting_id}...")
-
-        meeting = self.db.get_meeting(meeting_id)
-        if not meeting:
-            return {"error": "Meeting not found"}
-
-        # Get items from database
-        agenda_items = self.db.get_agenda_items(meeting_id)
-        if not agenda_items:
-            return {
-                "error": "No items found for this meeting",
-                "meeting_id": meeting_id,
-                "meeting_title": meeting.title,
-            }
-
-        items_preview = []
-
-        for item in agenda_items:
-            item_data = {
-                "item_id": item.id,  # AgendaItem uses 'id', not 'item_id'
-                "title": item.title,
-                "sequence": item.sequence,
-                "attachments": [
-                    {
-                        "name": att.get("name", "Unknown"),
-                        "url": att.get("url", ""),
-                        "type": att.get("type", "unknown"),
-                    }
-                    for att in (item.attachments or [])
-                ],
-                "has_summary": bool(item.summary),
-            }
-
-            # Optionally extract text from first attachment
-            if extract_text and item.attachments:
-                first_attachment = item.attachments[0]
-                att_url = first_attachment.get("url")
-
-                if att_url and att_url.endswith(".pdf"):
-                    try:
-                        from parsing.pdf import PdfExtractor
-                        extractor = PdfExtractor()
-
-                        logger.info(f"[Conductor] Extracting text from {item.id} attachment...")
-                        extraction_result = extractor.extract_from_url(att_url)
-
-                        if extraction_result["success"]:
-                            text = extraction_result["text"]
-                            page_count = extraction_result.get("page_count", 0)
-
-                            # Preview first 500 chars
-                            item_data["text_preview"] = text[:500] + ("..." if len(text) > 500 else "")
-                            item_data["page_count"] = page_count
-                            item_data["text_length"] = len(text)
-
-                            # Optionally save to file
-                            if output_dir:
-                                import os
-                                os.makedirs(output_dir, exist_ok=True)
-                                filename = f"{item.id}.txt"
-                                filepath = os.path.join(output_dir, filename)
-
-                                with open(filepath, "w") as f:
-                                    f.write(f"Item: {item.title}\n")
-                                    f.write(f"Attachment: {first_attachment.get('name')}\n")
-                                    f.write(f"URL: {att_url}\n")
-                                    f.write(f"Pages: {page_count}\n")
-                                    f.write(f"Characters: {len(text)}\n")
-                                    f.write("=" * 80 + "\n\n")
-                                    f.write(text)
-
-                                item_data["saved_to"] = filepath
-                                logger.info(f"[Conductor] Saved {item.id} text to {filepath}")
-                        else:
-                            item_data["text_error"] = extraction_result.get("error", "Failed to extract")
-
-                    except Exception as e:
-                        logger.warning(f"[Conductor] Failed to extract text for {item.id}: {e}")
-                        item_data["text_error"] = str(e)
-
-            items_preview.append(item_data)
-
-        return {
-            "success": True,
-            "meeting_id": meeting_id,
-            "meeting_title": meeting.title,
-            "meeting_date": meeting.date.isoformat() if meeting.date else None,
-            "total_items": len(agenda_items),
-            "items": items_preview,
-        }
 
 
 # Global instance
@@ -603,69 +427,24 @@ def stop_conductor():
         _conductor = None
 
 
+def _parse_city_list(arg: str) -> List[str]:
+    """Helper to parse city list (supports comma-separated or @file)"""
+    if arg.startswith("@"):
+        file_path = arg[1:]
+        with open(file_path, "r") as f:
+            cities = []
+            for line in f:
+                line = line.split('#')[0].strip()
+                if line:
+                    cities.append(line)
+            return cities
+    return [c.strip() for c in arg.split(",") if c.strip()]
+
+
 def main():
     """Entry point for engagic-conductor and engagic-daemon CLI"""
-    import argparse
+    import click
     import json
-
-    parser = argparse.ArgumentParser(description="Background processor for engagic")
-
-    # Single city operations
-    parser.add_argument("--sync-city", help="Sync specific city by city_banana")
-    parser.add_argument(
-        "--sync-and-process-city",
-        help="Sync city and immediately process all its meetings",
-    )
-
-    # Multi-city operations
-    parser.add_argument(
-        "--sync-cities",
-        help="Sync multiple cities (comma-separated bananas or @file path)",
-    )
-    parser.add_argument(
-        "--process-cities",
-        help="Process queued jobs for multiple cities (comma-separated bananas or @file path)",
-    )
-    parser.add_argument(
-        "--sync-and-process-cities",
-        help="Sync and process multiple cities (comma-separated bananas or @file path)",
-    )
-
-    # Batch operations
-    parser.add_argument("--full-sync", action="store_true", help="Run full sync once")
-    parser.add_argument("--status", action="store_true", help="Show status")
-    parser.add_argument("--fetcher", action="store_true", help="Run as fetcher service (auto sync only, no processing)")
-
-    # Preview and inspection
-    parser.add_argument(
-        "--preview-queue",
-        nargs="?",
-        const="all",
-        help="Preview queued jobs (optionally specify city_banana)",
-    )
-    parser.add_argument(
-        "--extract-text",
-        help="Extract text from meeting PDF for manual review (meeting_id)",
-    )
-    parser.add_argument(
-        "--output-file",
-        help="Output file for extracted text (use with --extract-text)",
-    )
-    parser.add_argument(
-        "--preview-items",
-        help="Preview items for a meeting (meeting_id)",
-    )
-    parser.add_argument(
-        "--extract-item-text",
-        action="store_true",
-        help="Extract text from item attachments (use with --preview-items)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        help="Output directory for item texts (use with --preview-items --extract-item-text)",
-    )
-
-    args = parser.parse_args()
 
     # Configure logging for CLI usage
     logging.basicConfig(
@@ -674,60 +453,78 @@ def main():
         handlers=[logging.StreamHandler()],
     )
 
-    conductor = Conductor()
+    @click.group(invoke_without_command=True)
+    @click.pass_context
+    def cli(ctx):
+        """Background processor for engagic"""
+        if ctx.invoked_subcommand is None:
+            click.echo(ctx.get_help())
 
-    # Helper to parse city list (supports comma-separated or @file)
-    def parse_city_list(arg: str) -> List[str]:
-        if arg.startswith("@"):
-            # Read from file
-            file_path = arg[1:]
-            with open(file_path, "r") as f:
-                cities = []
-                for line in f:
-                    # Strip comments (everything after #)
-                    line = line.split('#')[0].strip()
-                    # Skip empty lines
-                    if line:
-                        cities.append(line)
-                return cities
-        else:
-            # Comma-separated
-            return [c.strip() for c in arg.split(",") if c.strip()]
+    @cli.command("sync-city")
+    @click.argument("banana")
+    def sync_city(banana):
+        """Sync specific city by city_banana"""
+        conductor = Conductor()
+        result = conductor.force_sync_city(banana)
+        click.echo(f"Sync result: {result}")
 
-    # Single city operations
-    if args.sync_city:
-        result = conductor.force_sync_city(args.sync_city)
-        print(f"Sync result: {result}")
-    elif args.sync_and_process_city:
-        result = conductor.sync_and_process_city(args.sync_and_process_city)
-        print(json.dumps(result, indent=2))
+    @cli.command("sync-and-process-city")
+    @click.argument("banana")
+    def sync_and_process_city(banana):
+        """Sync city and immediately process all its meetings"""
+        conductor = Conductor()
+        result = conductor.sync_and_process_city(banana)
+        click.echo(json.dumps(result, indent=2))
 
-    # Multi-city operations
-    elif args.sync_cities:
-        cities = parse_city_list(args.sync_cities)
-        print(f"Syncing {len(cities)} cities: {', '.join(cities)}")
-        results = conductor.sync_cities(cities)
-        print(json.dumps(results, indent=2))
-    elif args.process_cities:
-        cities = parse_city_list(args.process_cities)
-        print(f"Processing queued jobs for {len(cities)} cities: {', '.join(cities)}")
-        results = conductor.process_cities(cities)
-        print(json.dumps(results, indent=2))
-    elif args.sync_and_process_cities:
-        cities = parse_city_list(args.sync_and_process_cities)
-        print(f"Syncing and processing {len(cities)} cities: {', '.join(cities)}")
-        results = conductor.sync_and_process_cities(cities)
-        print(json.dumps(results, indent=2))
+    @cli.command("sync-cities")
+    @click.argument("cities")
+    def sync_cities(cities):
+        """Sync multiple cities (comma-separated bananas or @file path)"""
+        conductor = Conductor()
+        city_list = _parse_city_list(cities)
+        click.echo(f"Syncing {len(city_list)} cities: {', '.join(city_list)}")
+        results = conductor.sync_cities(city_list)
+        click.echo(json.dumps(results, indent=2))
 
-    # Batch operations
-    elif args.full_sync:
+    @cli.command("process-cities")
+    @click.argument("cities")
+    def process_cities(cities):
+        """Process queued jobs for multiple cities (comma-separated bananas or @file path)"""
+        conductor = Conductor()
+        city_list = _parse_city_list(cities)
+        click.echo(f"Processing queued jobs for {len(city_list)} cities: {', '.join(city_list)}")
+        results = conductor.process_cities(city_list)
+        click.echo(json.dumps(results, indent=2))
+
+    @cli.command("sync-and-process-cities")
+    @click.argument("cities")
+    def sync_and_process_cities(cities):
+        """Sync and process multiple cities (comma-separated bananas or @file path)"""
+        conductor = Conductor()
+        city_list = _parse_city_list(cities)
+        click.echo(f"Syncing and processing {len(city_list)} cities: {', '.join(city_list)}")
+        results = conductor.sync_and_process_cities(city_list)
+        click.echo(json.dumps(results, indent=2))
+
+    @cli.command("full-sync")
+    def full_sync():
+        """Run full sync once"""
+        conductor = Conductor()
         results = conductor.fetcher.sync_all()
-        print(f"Full sync complete: {len(results)} cities processed")
-    elif args.status:
-        status = conductor.get_sync_status()
-        print(f"Status: {status}")
-    elif args.fetcher:
-        # Setup signal handlers for graceful shutdown
+        click.echo(f"Full sync complete: {len(results)} cities processed")
+
+    @cli.command("status")
+    def status():
+        """Show sync status"""
+        conductor = Conductor()
+        sync_status = conductor.get_sync_status()
+        click.echo(f"Status: {sync_status}")
+
+    @cli.command("fetcher")
+    def fetcher():
+        """Run as fetcher service (auto sync only, no processing)"""
+        conductor = Conductor()
+
         def signal_handler(signum, frame):
             sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
             logger.info(f"[Fetcher] Received {sig_name}, initiating graceful shutdown...")
@@ -742,11 +539,9 @@ def main():
         logger.info("[Fetcher] Starting fetcher service (sync only, no processing)")
         logger.info("[Fetcher] Sync interval: 72 hours")
 
-        # Enable running state for fetcher only
         conductor.is_running = True
         conductor.fetcher.is_running = True
 
-        # Run sync loop (same as _sync_loop but without starting processing thread)
         while conductor.is_running:
             try:
                 logger.info("[Fetcher] Starting city sync cycle...")
@@ -757,7 +552,6 @@ def main():
                 failed = len([r for r in results if r.status == SyncStatus.FAILED])
                 logger.info(f"[Fetcher] Sync cycle complete: {succeeded} succeeded, {failed} failed")
 
-                # Sleep for 72 hours (checking every second for shutdown signal)
                 logger.info("[Fetcher] Sleeping for 72 hours until next sync...")
                 for _ in range(72 * 60 * 60):
                     if not conductor.is_running:
@@ -766,33 +560,40 @@ def main():
 
             except Exception as e:
                 logger.error(f"[Fetcher] Sync loop error: {e}")
-                # Sleep for 2 hours on error
                 logger.info("[Fetcher] Sleeping for 2 hours after error...")
                 for _ in range(2 * 60 * 60):
                     if not conductor.is_running:
                         break
                     time.sleep(SHUTDOWN_POLL_INTERVAL)
 
-    # Preview and inspection
-    elif args.preview_queue:
-        city_banana = None if args.preview_queue == "all" else args.preview_queue
-        result = conductor.preview_queue(city_banana=city_banana)
-        print(json.dumps(result, indent=2))
-    elif args.extract_text:
-        meeting_id = args.extract_text
-        output_file = args.output_file
-        result = conductor.extract_text_preview(meeting_id, output_file=output_file)
-        print(json.dumps(result, indent=2))
+    @cli.command("preview-queue")
+    @click.argument("banana", required=False)
+    def preview_queue(banana):
+        """Preview queued jobs (optionally specify city_banana)"""
+        conductor = Conductor()
+        result = conductor.preview_queue(city_banana=banana)
+        click.echo(json.dumps(result, indent=2))
 
-    elif args.preview_items:
-        meeting_id = args.preview_items
-        extract_text = args.extract_item_text
-        output_dir = args.output_dir
-        result = conductor.preview_items(meeting_id, extract_text=extract_text, output_dir=output_dir)
-        print(json.dumps(result, indent=2))
+    @cli.command("extract-text")
+    @click.argument("meeting_id")
+    @click.option("--output-file", "-o", help="Output file for extracted text")
+    def extract_text(meeting_id, output_file):
+        """Extract text from meeting PDF for manual review"""
+        from pipeline.admin import extract_text_preview
+        result = extract_text_preview(meeting_id, output_file=output_file)
+        click.echo(json.dumps(result, indent=2))
 
-    else:
-        parser.print_help()
+    @cli.command("preview-items")
+    @click.argument("meeting_id")
+    @click.option("--extract-text", is_flag=True, help="Extract text from item attachments")
+    @click.option("--output-dir", "-o", help="Output directory for item texts")
+    def preview_items(meeting_id, extract_text, output_dir):
+        """Preview items for a meeting"""
+        from pipeline.admin import preview_items as preview_items_func
+        result = preview_items_func(meeting_id, extract_text=extract_text, output_dir=output_dir)
+        click.echo(json.dumps(result, indent=2))
+
+    cli()
 
 
 if __name__ == "__main__":
