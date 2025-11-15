@@ -111,8 +111,8 @@ class ItemRepository(BaseRepository):
                     )
                 else:
                     logger.error(f"[Items] Failed to store item {item.id}: {e}")
-                # Continue with other items instead of failing entire batch
-                continue
+                # Propagate error to trigger transaction rollback
+                raise
 
         if not defer_commit:
             self._commit()
