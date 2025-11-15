@@ -45,6 +45,7 @@ class SyncResult:
     status: SyncStatus
     meetings_found: int = 0
     meetings_processed: int = 0
+    meetings_skipped: int = 0
     duration_seconds: float = 0.0
     error_message: Optional[str] = None
 
@@ -335,6 +336,7 @@ class Fetcher:
                 items_stored_count = 0
                 matters_tracked_count = 0
                 matters_duplicate_count = 0
+                skipped_meetings = 0
 
                 logger.info(
                     f"[Sync] {city.banana}: Storing {len(all_meetings)} meetings..."
@@ -352,13 +354,29 @@ class Fetcher:
 
                     # Use database method to handle all transformation and storage
                     stored_meeting, storage_stats = self.db.store_meeting_from_sync(meeting_dict, city)
-                    if stored_meeting:
-                        processed_count += 1
-                        items_stored_count += storage_stats.get('items_stored', 0)
-                        matters_tracked_count += storage_stats.get('matters_tracked', 0)
-                        matters_duplicate_count += storage_stats.get('matters_duplicate', 0)
+                    if not stored_meeting:
+                        skipped = storage_stats.get('meetings_skipped', 0)
+                        reason = storage_stats.get('skip_reason')
+                        skipped_title = storage_stats.get('skipped_title') or meeting_dict.get("title", "Unknown")
+                        if skipped:
+                            skipped_meetings += skipped
+                            logger.warning(
+                                f"[Sync] Skipped meeting '{skipped_title}' "
+                                f"({reason or 'unknown reason'})"
+                            )
+                        else:
+                            logger.warning(
+                                f"[Sync] Failed to store meeting '{skipped_title}' without skip metadata"
+                            )
+                        continue
+
+                    processed_count += 1
+                    items_stored_count += storage_stats.get('items_stored', 0)
+                    matters_tracked_count += storage_stats.get('matters_tracked', 0)
+                    matters_duplicate_count += storage_stats.get('matters_duplicate', 0)
 
                 result.meetings_processed = processed_count
+                result.meetings_skipped = skipped_meetings
                 result.status = SyncStatus.COMPLETED
                 result.duration_seconds = time.time() - start_time
 
@@ -372,6 +390,7 @@ class Fetcher:
                     city=city.banana,
                     vendor=city.vendor,
                     meetings=processed_count,
+                    skipped_meetings=skipped_meetings,
                     items=items_stored_count,
                     new_matters=matters_tracked_count,
                     duplicate_matters=matters_duplicate_count,
