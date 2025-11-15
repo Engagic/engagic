@@ -11,6 +11,7 @@ import re
 from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
+from importlib.resources import files
 from database.db import UnifiedDatabase, Meeting, AgendaItem
 
 logger = logging.getLogger("engagic")
@@ -146,10 +147,8 @@ def generate_meeting_flyer(
     Returns:
         HTML string ready for printing
     """
-    # Load template
-    template_path = Path(__file__).parent / "flyer_template.html"
-    with open(template_path, 'r', encoding='utf-8') as f:
-        template = f.read()
+    # Load template from package resources (works in installed packages)
+    template = files("server.services").joinpath("flyer_template.html").read_text(encoding='utf-8')
 
     # Get city info
     city = db.get_city(banana=meeting.banana)
@@ -277,11 +276,19 @@ def _generate_logo_data_url() -> str:
     Falls back to SVG placeholder if file not found.
     """
     try:
-        # Look for logo in common locations
+        # Try loading from package resources first (works in installed packages)
+        try:
+            logo_bytes = files("server").joinpath("static/icon-192.png").read_bytes()
+            logo_base64 = base64.b64encode(logo_bytes).decode()
+            return f"data:image/png;base64,{logo_base64}"
+        except (FileNotFoundError, ModuleNotFoundError):
+            pass
+
+        # Fallback to filesystem paths (development mode or manual deployment)
         possible_paths = [
+            Path("/root/engagic/frontend/static/icon-192.png"),
             Path(__file__).parent.parent.parent / "frontend" / "static" / "icon-192.png",
             Path(__file__).parent.parent.parent / "static" / "icon-192.png",
-            Path("/root/engagic/frontend/static/icon-192.png"),
         ]
 
         for logo_path in possible_paths:

@@ -3,8 +3,16 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["vendors", "vendors.adapters", "parsing", "analysis", "analysis.llm", "analysis.topics", "pipeline", "database", "server"]
 py-modules = ["config", "exceptions"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+database = ["schema.sql", "migrations/*.sql"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vendors*", "parsing*", "analysis*", "pipeline*", "database*", "server*"]
+exclude = ["tests*", "scripts*", "docs*", "frontend*"]
 
 [project]
 name = "engagic"
@@ -17,6 +25,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "anthropic>=0.64.0",
     "beautifulsoup4>=4.13.5",
+    "click>=8.1.0",
     "fastapi>=0.116.1",
     "google-genai",
     "lxml",
