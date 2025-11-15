@@ -127,7 +127,8 @@ class MeetingRepository(BaseRepository):
                 processing_time = CASE
                     WHEN excluded.processing_time IS NOT NULL THEN excluded.processing_time
                     ELSE meetings.processing_time
-                END
+                END,
+                updated_at = CURRENT_TIMESTAMP
         """,
             (
                 meeting.id,

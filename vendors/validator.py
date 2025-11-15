@@ -60,19 +60,21 @@ class MeetingValidator:
     }
 
     @classmethod
-    def validate_packet_url(
+    def validate_url(
         cls,
-        packet_url: Optional[str],
+        url: Optional[str],
+        url_type: str,
         city_banana: str,
         city_name: str,
         vendor: str,
         slug: str,
     ) -> Dict[str, Any]:
         """
-        Validate that packet_url domain matches vendor/slug configuration.
+        Validate that URL domain matches vendor/slug configuration.
 
         Args:
-            packet_url: URL to meeting packet PDF
+            url: URL to validate (packet_url, agenda_url, or attachment)
+            url_type: Type of URL for logging ('packet_url', 'agenda_url', 'attachment')
             city_banana: City banana identifier
             city_name: Human-readable city name
             vendor: Configured vendor name
@@ -86,8 +88,8 @@ class MeetingValidator:
                 'action': 'store' | 'warn' | 'reject'
             }
         """
-        # No packet URL is OK (meeting without packet)
-        if not packet_url:
+        # No URL is OK (meeting without this URL type)
+        if not url:
             return {"valid": True, "action": "store"}
 
         # TODO: Handle List[str] packet URLs (eScribe adapter returns lists at line 117)
@@ -101,21 +103,21 @@ class MeetingValidator:
         # Also update database/db.py:496 to handle list storage (likely already works via JSON)
         # Confidence: 8/10 - straightforward fix, just deferred due to 0% city coverage
 
-        # Extract domain from packet URL
-        if packet_url.startswith("http"):
-            domain = urlparse(packet_url).netloc.lower()
-        elif packet_url.startswith("//"):
+        # Extract domain from URL
+        if url.startswith("http"):
+            domain = urlparse(url).netloc.lower()
+        elif url.startswith("//"):
             # Protocol-relative URL like //s3.amazonaws.com/...
-            parts = packet_url.split("/")
+            parts = url.split("/")
             domain = parts[2].lower() if len(parts) > 2 else ""
         else:
             # Relative URL or malformed - can't validate
             logger.warning(
-                f"[{city_banana}] Cannot validate relative/malformed URL: {packet_url}"
+                f"[{city_banana}] Cannot validate relative/malformed {url_type}: {url}"
             )
             return {
                 "valid": True,
-                "warning": f"Relative/malformed URL: {packet_url}",
+                "warning": f"Relative/malformed {url_type}: {url}",
                 "action": "warn",
             }
 
@@ -145,13 +147,14 @@ class MeetingValidator:
         error_msg = f"Domain mismatch: {domain} not in {expected_domains}"
 
         logger.error(
-            f"[{city_banana}] packet url validation failed: {error_msg}",
+            f"[{city_banana}] {url_type} validation failed: {error_msg}",
             extra={
                 "city_banana": city_banana,
                 "domain": domain,
                 "expected": expected_domains,
                 "vendor": vendor,
-                "packet_url": packet_url,
+                "url_type": url_type,
+                "url": url,
             }
         )
 
@@ -160,6 +163,39 @@ class MeetingValidator:
             "error": error_msg,
             "action": "reject",
         }
+
+    @classmethod
+    def validate_packet_url(
+        cls,
+        packet_url: Optional[str],
+        city_banana: str,
+        city_name: str,
+        vendor: str,
+        slug: str,
+    ) -> Dict[str, Any]:
+        """
+        Validate that packet_url domain matches vendor/slug configuration.
+
+        Backwards-compatible wrapper around validate_url().
+
+        Args:
+            packet_url: URL to meeting packet PDF
+            city_banana: City banana identifier
+            city_name: Human-readable city name
+            vendor: Configured vendor name
+            slug: Configured vendor slug
+
+        Returns:
+            {
+                'valid': bool,
+                'warning': str (if valid but suspicious),
+                'error': str (if invalid),
+                'action': 'store' | 'warn' | 'reject'
+            }
+        """
+        return cls.validate_url(
+            packet_url, "packet_url", city_banana, city_name, vendor, slug
+        )
 
     @classmethod
     def validate_and_store(
@@ -173,8 +209,11 @@ class MeetingValidator:
         """
         Validate meeting and return whether it should be stored.
 
+        Validates both packet_url and agenda_url against expected vendor domains.
+        Rejects meeting if either URL fails validation.
+
         Args:
-            meeting_data: Meeting dict with 'packet_url' field
+            meeting_data: Meeting dict with 'packet_url' and 'agenda_url' fields
             city_banana: City banana identifier
             city_name: Human-readable city name
             vendor: Configured vendor name
@@ -184,24 +223,48 @@ class MeetingValidator:
             True if meeting should be stored, False if rejected
         """
         packet_url = meeting_data.get("packet_url")
+        agenda_url = meeting_data.get("agenda_url")
 
-        validation = cls.validate_packet_url(
+        # Validate packet_url
+        packet_validation = cls.validate_packet_url(
             packet_url, city_banana, city_name, vendor, slug
         )
 
-        if validation["action"] == "reject":
+        # Validate agenda_url
+        agenda_validation = cls.validate_url(
+            agenda_url, "agenda_url", city_banana, city_name, vendor, slug
+        )
+
+        # Reject if either URL fails validation
+        if packet_validation["action"] == "reject":
             logger.error(
-                f"[{city_banana}] REJECTING meeting due to corruption: "
+                f"[{city_banana}] REJECTING meeting due to packet_url corruption: "
                 f"{meeting_data.get('title', 'Unknown')}"
             )
-            logger.error(f"[{city_banana}] Reason: {validation['error']}")
+            logger.error(f"[{city_banana}] Reason: {packet_validation['error']}")
             return False
 
-        if validation["action"] == "warn":
-            logger.warning(
-                f"[{city_banana}] Storing meeting with warning: "
+        if agenda_validation["action"] == "reject":
+            logger.error(
+                f"[{city_banana}] REJECTING meeting due to agenda_url corruption: "
                 f"{meeting_data.get('title', 'Unknown')}"
             )
-            logger.warning(f"[{city_banana}] Warning: {validation.get('warning')}")
+            logger.error(f"[{city_banana}] Reason: {agenda_validation['error']}")
+            return False
+
+        # Warn if either URL is suspicious
+        if packet_validation["action"] == "warn":
+            logger.warning(
+                f"[{city_banana}] Storing meeting with packet_url warning: "
+                f"{meeting_data.get('title', 'Unknown')}"
+            )
+            logger.warning(f"[{city_banana}] Warning: {packet_validation.get('warning')}")
+
+        if agenda_validation["action"] == "warn":
+            logger.warning(
+                f"[{city_banana}] Storing meeting with agenda_url warning: "
+                f"{meeting_data.get('title', 'Unknown')}"
+            )
+            logger.warning(f"[{city_banana}] Warning: {agenda_validation.get('warning')}")
 
         return True
