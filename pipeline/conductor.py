@@ -370,28 +370,37 @@ class Conductor:
         jobs = []
         if city_banana:
             # Get jobs for specific city
-            job = self.db.get_next_for_processing(banana=city_banana)
+            job = self.db.queue.get_next_for_processing(banana=city_banana)
             if job:
                 jobs.append(job)
         else:
             # Get all pending jobs (need to implement this query)
             # For now, just show stats
-            stats = self.db.get_queue_stats()
+            stats = self.db.queue.get_queue_stats()
             return stats
 
         previews = []
         for job in jobs[:limit]:
-            meeting = self.db.get_meeting(job["meeting_id"])
+            # QueueJob is a dataclass, access attributes with dot notation
+            # Get meeting_id from the payload based on job type
+            if job.job_type == "meeting":
+                meeting_id = job.payload.meeting_id
+            elif job.job_type == "matter":
+                meeting_id = job.payload.meeting_id
+            else:
+                continue
+
+            meeting = self.db.meetings.get_meeting(meeting_id)
             if meeting:
                 previews.append({
-                    "queue_id": job["id"],
+                    "queue_id": job.id,
+                    "job_type": job.job_type,
                     "meeting_id": meeting.id,
-                    "city_banana": job["banana"],
+                    "city_banana": job.banana,
                     "title": meeting.title,
                     "date": meeting.date.isoformat() if meeting.date else None,
-                    "source_url": job["source_url"],
-                    "priority": job.get("priority", 0),
-                    "status": job["status"],
+                    "priority": job.priority,
+                    "status": job.status,
                 })
 
         return {
