@@ -56,6 +56,8 @@ PUBLIC_COMMENT_PATTERNS = [
     "communications",  # Often paired with "Petitions"
     "pub corr",  # SF abbreviation for public correspondence
     "pulbic corr",  # Common typo seen in SF data
+    "comm pkt",  # Committee packets (often contain public comments)
+    "committee packet",  # Full form
 ]
 
 # Queue processing timing constants (seconds)
@@ -74,6 +76,63 @@ def is_public_comment_attachment(name: str) -> bool:
     """Check if attachment is public comments (high token cost, low signal)"""
     name_lower = name.lower()
     return any(pattern in name_lower for pattern in PUBLIC_COMMENT_PATTERNS)
+
+
+def is_likely_public_comment_compilation(
+    extraction_result: Dict[str, Any],
+    url_path: str
+) -> bool:
+    """Detect public comment compilations after extraction based on document characteristics
+
+    These are typically:
+    - Very large PDFs (hundreds of pages)
+    - Heavily reliant on OCR (scanned form letters)
+    - Repetitive content patterns (many "Sincerely," signatures)
+
+    Args:
+        extraction_result: PDF extraction result dict with page_count, ocr_pages, text
+        url_path: Filename/path for logging
+
+    Returns:
+        True if document appears to be public comment compilation
+    """
+    page_count = extraction_result.get("page_count", 0)
+    ocr_pages = extraction_result.get("ocr_pages", 0)
+    text = extraction_result.get("text", "")
+
+    # Threshold 1: Excessive page count (> 200 pages)
+    # Legitimate legislative documents rarely exceed this
+    if page_count > 200:
+        logger.info(
+            f"[PublicCommentFilter] Skipping likely compilation '{url_path}': "
+            f"{page_count} pages exceeds threshold"
+        )
+        return True
+
+    # Threshold 2: High OCR ratio + large document (suggests bulk scanned form letters)
+    # If >30% of pages needed OCR and doc is >50 pages, likely public comments
+    if page_count > 50 and ocr_pages > 0:
+        ocr_ratio = ocr_pages / page_count
+        if ocr_ratio > 0.3:
+            logger.info(
+                f"[PublicCommentFilter] Skipping likely scanned compilation '{url_path}': "
+                f"{ocr_pages}/{page_count} pages ({ocr_ratio:.1%}) required OCR"
+            )
+            return True
+
+    # Threshold 3: Repetitive signature patterns (public comment form letters)
+    # Count "Sincerely," occurrences as proxy for individual letters
+    if len(text) > 5000:  # Check documents with substantial content
+        sincerely_count = text.lower().count("sincerely,")
+        # If >20 signatures, likely public comment compilation
+        if sincerely_count > 20:
+            logger.info(
+                f"[PublicCommentFilter] Skipping likely comment compilation '{url_path}': "
+                f"{sincerely_count} 'Sincerely,' signatures found"
+            )
+            return True
+
+    return False
 
 
 class Processor:
@@ -381,6 +440,13 @@ class Processor:
                     try:
                         result = self.analyzer.pdf_extractor.extract_from_url(att_url)
                         if result.get("success") and result.get("text"):
+                            # Post-extraction filter: Skip public comment compilations
+                            if is_likely_public_comment_compilation(result, url_path):
+                                logger.info(
+                                    f"[SingleItemProcessing] Skipping public comment compilation: {url_path}"
+                                )
+                                continue
+
                             item_parts.append(f"=== {url_path} ===\n{result['text']}")
                             total_page_count += result.get("page_count", 0)
                             logger.debug(
@@ -844,6 +910,13 @@ class Processor:
                 try:
                     result = self.analyzer.pdf_extractor.extract_from_url(att_url)
                     if result.get("success") and result.get("text"):
+                        # Post-extraction filter: Skip public comment compilations
+                        if is_likely_public_comment_compilation(result, url_path):
+                            logger.info(
+                                f"[DocumentCache] Skipping public comment compilation: {url_path}"
+                            )
+                            continue
+
                         document_cache[att_url] = {
                             "text": result["text"],
                             "page_count": result.get("page_count", 0),
