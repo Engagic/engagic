@@ -19,6 +19,7 @@ import sqlite3
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
+from importlib.resources import files
 
 from database.models import City, Meeting, AgendaItem, Matter
 from exceptions import DatabaseConnectionError
@@ -91,12 +92,16 @@ class UnifiedDatabase:
         self.conn.execute("PRAGMA foreign_keys=ON")
 
     def _init_schema(self):
-        """Initialize unified database schema from external SQL file"""
+        """Initialize unified database schema from external SQL file
+
+        Uses importlib.resources to load schema.sql, which works correctly
+        in both development (source tree) and production (installed package).
+        """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
-        schema_path = Path(__file__).parent / "schema.sql"
-        schema = schema_path.read_text()
+        # Load schema using importlib.resources (works in installed packages)
+        schema = files("database").joinpath("schema.sql").read_text()
 
         self.conn.executescript(schema)
         self.conn.commit()

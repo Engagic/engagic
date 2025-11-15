@@ -418,10 +418,12 @@ class Fetcher:
         city_banana = city.banana
         wait_times = [5, 20]
         last_error = "Unknown retry error"
+        last_result: Optional[SyncResult] = None
 
         for attempt in range(max_retries):
             try:
                 result = self._sync_city(city)
+                last_result = result  # Preserve for final failure case
 
                 # Success or skip - return immediately
                 if result.status in [SyncStatus.COMPLETED, SyncStatus.SKIPPED]:
@@ -439,6 +441,14 @@ class Fetcher:
 
             if is_last_attempt:
                 logger.error(f"Final sync failure for {city_name} after {max_retries} attempts: {last_error}")
+
+                # Preserve structured data from last attempt if available
+                if last_result:
+                    last_result.status = SyncStatus.FAILED
+                    last_result.error_message = last_error
+                    return last_result
+
+                # Exception path: create minimal result
                 return SyncResult(city_banana=city_banana, status=SyncStatus.FAILED, error_message=last_error)
 
             # Wait before retry
@@ -449,7 +459,11 @@ class Fetcher:
             )
             time.sleep(wait_time)
 
-        # Shouldn't reach here due to is_last_attempt logic
+        # Shouldn't reach here due to is_last_attempt logic, but preserve data if we do
+        if last_result:
+            last_result.status = SyncStatus.FAILED
+            last_result.error_message = last_error
+            return last_result
         return SyncResult(city_banana=city_banana, status=SyncStatus.FAILED, error_message=last_error)
 
     def _should_sync_city(self, city: City) -> bool:
