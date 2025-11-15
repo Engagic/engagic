@@ -551,7 +551,7 @@ class QueueRepository(BaseRepository):
                     )
                     days_from_now = (meeting_date - datetime.now()).days
                     days_distance = abs(days_from_now)
-                except Exception:
+                except (ValueError, TypeError):
                     days_distance = 999
             else:
                 days_distance = 999

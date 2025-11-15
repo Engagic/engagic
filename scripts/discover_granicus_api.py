@@ -230,6 +230,7 @@ class GranicusAPIDiscovery:
                         self.discoveries['embedded_data']['meetings'] = data
                         self.discoveries['success'] = True
                     except json.JSONDecodeError:
+                        self.log("  Invalid JSON in embedded data")
                         pass
 
             # Look for API base URLs
@@ -300,6 +301,7 @@ class GranicusAPIDiscovery:
                         })
                         self.discoveries['success'] = True
             except requests.RequestException:
+                self.log("  Request failed for data feed")
                 pass
 
         if not self.discoveries['data_feeds']:
@@ -341,8 +343,10 @@ class GranicusAPIDiscovery:
                         self.discoveries['success'] = True
                     except json.JSONDecodeError:
                         # Check if content length is significantly different
+                        self.log("  Invalid JSON response")
                         pass
             except requests.RequestException:
+                self.log("  Request failed for ViewPublisher params")
                 pass
 
         if not self.discoveries['viewpublisher_params']:

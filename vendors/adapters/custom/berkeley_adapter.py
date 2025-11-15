@@ -361,7 +361,7 @@ class BerkeleyAdapter(BaseAdapter):
         if 'T' in date_str:
             try:
                 return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            except Exception:
+            except ValueError:
                 pass
 
         # Try US format (MM/DD/YYYY)
@@ -370,7 +370,7 @@ class BerkeleyAdapter(BaseAdapter):
             month, day, year = match.groups()
             try:
                 return datetime(int(year), int(month), int(day))
-            except Exception:
+            except (ValueError, OverflowError):
                 pass
 
         return None

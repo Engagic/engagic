@@ -2,11 +2,14 @@
 Ticker service for generating news ticker items from meetings
 """
 
+import logging
 import re
 from typing import Dict, Any, Optional
 from datetime import datetime
 
 from database.db import UnifiedDatabase
+
+logger = logging.getLogger("engagic")
 
 
 def extract_excerpt(summary: str, prefer_middle: bool = True) -> str:
@@ -116,7 +119,8 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
     try:
         date_obj = datetime.fromisoformat(meeting['date'].replace('Z', '+00:00'))
         date_str = date_obj.strftime('%b %-d, %Y')
-    except Exception:
+    except (ValueError, KeyError, AttributeError) as e:
+        logger.debug(f"Invalid meeting date: {e}")
         return None
 
     # Extract excerpt (prefer item summaries, fall back to meeting summary)
@@ -161,7 +165,8 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
         # Format matches frontend generateMeetingSlug: {title}_{date}_{id}
         meeting_slug = f"{title_slug}_{date_slug}_{meeting_id}"
         url = f"/{banana}/{meeting_slug}"
-    except Exception:
+    except (ValueError, KeyError, AttributeError) as e:
+        logger.debug(f"Failed to generate meeting URL: {e}")
         return None
 
     return {

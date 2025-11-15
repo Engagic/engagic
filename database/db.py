@@ -470,7 +470,7 @@ class UnifiedDatabase:
                         else:
                             meeting_date = datetime.strptime(date_str, fmt)
                         break  # Successfully parsed
-                    except Exception:
+                    except ValueError:
                         continue
 
             # Validate meeting_id (fail fast if adapter didn't provide one)

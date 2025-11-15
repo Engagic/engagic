@@ -282,9 +282,9 @@ class BaseAdapter:
             from dateutil import parser
 
             return parser.parse(date_str, fuzzy=True)
-        except Exception:
+        except (ValueError, TypeError) as e:
             logger.warning(
-                f"[{self.vendor}:{self.slug}] Could not parse date: {date_str}"
+                f"[{self.vendor}:{self.slug}] Could not parse date '{date_str}': {e}"
             )
             return None
 

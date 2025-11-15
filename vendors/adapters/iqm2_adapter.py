@@ -389,13 +389,6 @@ class IQM2Adapter(BaseAdapter):
                             # TODO: Fetch additional matter metadata (matter_type, sponsors, department)
                             # Currently disabled due to performance (229 items × 1s = 4+ minutes)
                             # Will re-enable with async requests or batch API
-                            # matter_metadata = self._fetch_matter_metadata(legifile_id)
-                            # if matter_metadata.get("matter_type"):
-                            #     current_item["matter_type"] = matter_metadata["matter_type"]
-                            # if matter_metadata.get("sponsors"):
-                            #     current_item["sponsors"] = matter_metadata["sponsors"]
-                            # if matter_metadata.get("department"):
-                            #     current_item["department"] = matter_metadata["department"]
 
                         logger.debug(
                             f"[iqm2:{self.slug}] Found item {item_number}: {item_title[:50]}"

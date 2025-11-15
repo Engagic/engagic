@@ -6,11 +6,14 @@ Converts passive browsing into active participation.
 """
 
 import base64
+import logging
 import re
 from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
 from database.db import UnifiedDatabase, Meeting, AgendaItem
+
+logger = logging.getLogger("engagic")
 
 
 def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:
@@ -296,7 +299,8 @@ def _generate_logo_data_url() -> str:
         svg_base64 = base64.b64encode(svg.encode()).decode()
         return f"data:image/svg+xml;base64,{svg_base64}"
 
-    except Exception:
+    except (UnicodeEncodeError, ValueError, OSError) as e:
+        logger.warning(f"Logo generation failed, using fallback: {e}")
         # Fallback to simple SVG
         svg = '''<svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
             <rect width="48" height="48" rx="12" fill="#0ea5e9"/>
