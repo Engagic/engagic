@@ -205,53 +205,55 @@
 					<div class="matters-list">
 						{#each cityMatters.matters as matter}
 							{@const hasMultipleAppearances = matter.appearance_count > 1}
-							<div class="matter-card">
-								<div class="matter-card-header">
-									{#if matter.matter_file}
-										<span class="matter-file-badge">{matter.matter_file}</span>
+							<a href="/matter/{matter.id}" class="matter-card-link">
+								<div class="matter-card">
+									<div class="matter-card-header">
+										{#if matter.matter_file}
+											<span class="matter-file-badge">{matter.matter_file}</span>
+										{/if}
+										{#if matter.matter_type}
+											<span class="matter-type-label">{matter.matter_type}</span>
+										{/if}
+										{#if hasMultipleAppearances}
+											<span class="appearances-badge">{matter.appearance_count} appearances</span>
+										{/if}
+									</div>
+									<h3 class="matter-card-title">{matter.title}</h3>
+									{#if matter.canonical_topics && matter.canonical_topics.length > 0}
+										<div class="matter-card-topics">
+											{#each matter.canonical_topics.slice(0, 4) as topic}
+												<span class="matter-topic-tag">{topic}</span>
+											{/each}
+										</div>
 									{/if}
-									{#if matter.matter_type}
-										<span class="matter-type-label">{matter.matter_type}</span>
+									{#if matter.canonical_summary}
+										<div class="matter-card-summary">
+											{matter.canonical_summary.substring(0, 200)}{matter.canonical_summary.length > 200 ? '...' : ''}
+										</div>
 									{/if}
-									{#if hasMultipleAppearances}
-										<span class="appearances-badge">{matter.appearance_count} appearances</span>
+									{#if hasMultipleAppearances && matter.timeline}
+										<div class="matter-timeline-container">
+											<MatterTimeline
+												matterId={matter.id}
+												matterFile={matter.matter_file}
+												timelineData={{
+													success: true,
+													matter: {
+														id: matter.id,
+														matter_file: matter.matter_file,
+														matter_type: matter.matter_type,
+														title: matter.title,
+														canonical_summary: matter.canonical_summary,
+														canonical_topics: matter.canonical_topics
+													},
+													timeline: matter.timeline,
+													appearance_count: matter.appearance_count
+												}}
+											/>
+										</div>
 									{/if}
 								</div>
-								<h3 class="matter-card-title">{matter.title}</h3>
-								{#if matter.canonical_topics && matter.canonical_topics.length > 0}
-									<div class="matter-card-topics">
-										{#each matter.canonical_topics.slice(0, 4) as topic}
-											<span class="matter-topic-tag">{topic}</span>
-										{/each}
-									</div>
-								{/if}
-								{#if matter.canonical_summary}
-									<div class="matter-card-summary">
-										{matter.canonical_summary.substring(0, 200)}{matter.canonical_summary.length > 200 ? '...' : ''}
-									</div>
-								{/if}
-								{#if hasMultipleAppearances && matter.timeline}
-									<div class="matter-timeline-container">
-										<MatterTimeline
-											matterId={matter.id}
-											matterFile={matter.matter_file}
-											timelineData={{
-												success: true,
-												matter: {
-													id: matter.id,
-													matter_file: matter.matter_file,
-													matter_type: matter.matter_type,
-													title: matter.title,
-													canonical_summary: matter.canonical_summary,
-													canonical_topics: matter.canonical_topics
-												},
-												timeline: matter.timeline,
-												appearance_count: matter.appearance_count
-											}}
-										/>
-									</div>
-								{/if}
-							</div>
+							</a>
 						{/each}
 					</div>
 				</div>
@@ -390,6 +392,12 @@
 		gap: 1.5rem;
 	}
 
+	.matter-card-link {
+		text-decoration: none;
+		color: inherit;
+		display: block;
+	}
+
 	.matter-card {
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
@@ -397,11 +405,13 @@
 		border-radius: 12px;
 		padding: 1.5rem;
 		transition: all 0.2s ease;
+		cursor: pointer;
 	}
 
-	.matter-card:hover {
+	.matter-card-link:hover .matter-card {
 		border-left-color: var(--civic-accent);
 		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
+		transform: translateY(-2px);
 	}
 
 	.matter-card-header {
