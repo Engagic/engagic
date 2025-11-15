@@ -417,7 +417,7 @@ class UnifiedDatabase:
 
     def store_meeting_from_sync(
         self, meeting_dict: Dict[str, Any], city: City
-    ) -> tuple[Optional[Meeting], Dict[str, int]]:
+    ) -> tuple[Optional[Meeting], Dict[str, Any]]:
         """
         Transform vendor meeting dict → validate → store → enqueue for processing
 
@@ -444,6 +444,9 @@ class UnifiedDatabase:
             'items_skipped_procedural': 0,
             'matters_tracked': 0,
             'matters_duplicate': 0,
+            'meetings_skipped': 0,
+            'skip_reason': None,
+            'skipped_title': None,
         }
 
         try:
@@ -478,6 +481,9 @@ class UnifiedDatabase:
                     f"'{meeting_dict.get('title', 'Unknown')}' on {meeting_dict.get('date', 'Unknown')}. "
                     f"Adapter should use _generate_meeting_id() fallback."
                 )
+                stats['meetings_skipped'] = 1
+                stats['skip_reason'] = "missing_meeting_id"
+                stats['skipped_title'] = meeting_dict.get("title", "Unknown")
                 return (None, stats)
 
             # Create Meeting object
@@ -517,6 +523,9 @@ class UnifiedDatabase:
                 city.slug,
             ):
                 logger.warning(f"[Items] Skipping corrupted meeting: {meeting_obj.title}")
+                stats['meetings_skipped'] = 1
+                stats['skip_reason'] = "url_validation"
+                stats['skipped_title'] = meeting_obj.title or "Unknown"
                 return None, stats
 
             # Store meeting (upsert)
@@ -741,6 +750,10 @@ class UnifiedDatabase:
             logger.error(
                 f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
             )
+            if not stats.get('meetings_skipped'):
+                stats['meetings_skipped'] = 1
+                stats['skip_reason'] = "exception"
+                stats['skipped_title'] = meeting_dict.get("title", "Unknown")
             return None, stats
 
     def _track_matters(
