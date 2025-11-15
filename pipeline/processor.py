@@ -79,6 +79,10 @@ QUEUE_POLL_INTERVAL = 5  # Time to wait when queue is empty
 QUEUE_ERROR_BACKOFF = 2  # Brief backoff after job processing error
 QUEUE_FATAL_ERROR_BACKOFF = 10  # Longer backoff after fatal queue error
 
+# File size thresholds (bytes)
+MAX_ATTACHMENT_SIZE_MB = 50  # Skip attachments larger than 50MB (likely compilations)
+MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_MB * 1024 * 1024
+
 
 def is_procedural_item(title: str) -> bool:
     """Check if agenda item is procedural (skip to save API costs)"""
@@ -117,9 +121,9 @@ def is_likely_public_comment_compilation(
     ocr_pages = extraction_result.get("ocr_pages", 0)
     text = extraction_result.get("text", "")
 
-    # Threshold 1: Excessive page count (> 200 pages)
-    # Legitimate legislative documents rarely exceed this
-    if page_count > 200:
+    # Threshold 1: Excessive page count (> 1000 pages)
+    # Legislative documents can be hundreds of pages, but 1000+ is likely a compilation
+    if page_count > 1000:
         logger.info(
             f"[PublicCommentFilter] Skipping likely compilation '{url_path}': "
             f"{page_count} pages exceeds threshold"
@@ -432,9 +436,11 @@ class Processor:
             if isinstance(att, str):
                 att_url = att
                 att_type = "pdf"
+                att_name = ""
             elif isinstance(att, dict):
                 att_url = att.get("url")
                 att_type = att.get("type", "unknown")
+                att_name = att.get("name", "")
 
                 # Handle text segments directly
                 if att_type == "text_segment":
@@ -448,30 +454,29 @@ class Processor:
             # Extract PDFs and documents
             if att_type in ("pdf", "doc", "unknown") or isinstance(att, str):
                 if att_url:
-                    # Skip public comment and parcel table attachments
-                    url_path = att_url.split('/')[-1] if att_url else ""
-                    if is_public_comment_attachment(url_path):
-                        logger.debug(f"[SingleItemProcessing] Skipping low-value attachment: {url_path}")
+                    # Skip public comment and parcel table attachments by name
+                    if att_name and is_public_comment_attachment(att_name):
+                        logger.info(f"[SingleItemProcessing] Skipping low-value attachment: {att_name}")
                         continue
 
                     try:
                         result = self.analyzer.pdf_extractor.extract_from_url(att_url)
                         if result.get("success") and result.get("text"):
                             # Post-extraction filter: Skip public comment compilations
-                            if is_likely_public_comment_compilation(result, url_path):
+                            if is_likely_public_comment_compilation(result, att_name or att_url):
                                 logger.info(
-                                    f"[SingleItemProcessing] Skipping public comment compilation: {url_path}"
+                                    f"[SingleItemProcessing] Skipping public comment compilation: {att_name or att_url}"
                                 )
                                 continue
 
-                            item_parts.append(f"=== {url_path} ===\n{result['text']}")
+                            item_parts.append(f"=== {att_name or att_url} ===\n{result['text']}")
                             total_page_count += result.get("page_count", 0)
                             logger.debug(
-                                f"[SingleItemProcessing] Extracted '{url_path}': "
+                                f"[SingleItemProcessing] Extracted '{att_name or att_url}': "
                                 f"{result.get('page_count', 0)} pages, {len(result['text']):,} chars"
                             )
                     except Exception as e:
-                        logger.warning(f"[SingleItemProcessing] Failed to extract {url_path}: {e}")
+                        logger.warning(f"[SingleItemProcessing] Failed to extract {att_name or att_url}: {e}")
 
         if not item_parts:
             logger.warning(f"[SingleItemProcessing] No text extracted for {item.title[:50]}")
@@ -884,6 +889,7 @@ class Processor:
             # First pass: Per-item version filtering, then collect unique URLs
             all_urls = set()
             url_to_items = {}  # url -> list of item IDs that reference this URL
+            url_to_name = {}  # url -> attachment name
 
             for item in need_processing:
                 # Collect this item's attachment URLs
@@ -892,9 +898,11 @@ class Processor:
                     if isinstance(att, str):
                         att_url = att
                         att_type = "pdf"
+                        att_name = ""
                     elif isinstance(att, dict):
                         att_url = att.get("url")
                         att_type = att.get("type", "unknown")
+                        att_name = att.get("name", "")
                     else:
                         continue
 
@@ -902,6 +910,9 @@ class Processor:
                     if att_type in ("pdf", "doc", "unknown") or isinstance(att, str):
                         if att_url:
                             item_urls.append(att_url)
+                            # Track name for this URL
+                            if att_name and att_url not in url_to_name:
+                                url_to_name[att_url] = att_name
 
                 # Apply version filtering WITHIN this item's attachments
                 filtered_item_urls = self._filter_document_versions(item_urls)
@@ -918,38 +929,38 @@ class Processor:
 
             # Second pass: Extract each unique URL once
             for att_url in all_urls:
-                # Skip public comment and parcel table attachments
-                url_path = att_url.split('/')[-1] if att_url else ""
-                if is_public_comment_attachment(url_path):
-                    logger.debug(f"[DocumentCache] Skipping low-value attachment: {url_path}")
+                # Skip public comment and parcel table attachments by name
+                att_name = url_to_name.get(att_url, "")
+                if att_name and is_public_comment_attachment(att_name):
+                    logger.info(f"[DocumentCache] Skipping low-value attachment: {att_name}")
                     continue
 
                 try:
                     result = self.analyzer.pdf_extractor.extract_from_url(att_url)
                     if result.get("success") and result.get("text"):
                         # Post-extraction filter: Skip public comment compilations
-                        if is_likely_public_comment_compilation(result, url_path):
+                        if is_likely_public_comment_compilation(result, att_name or att_url):
                             logger.info(
-                                f"[DocumentCache] Skipping public comment compilation: {url_path}"
+                                f"[DocumentCache] Skipping public comment compilation: {att_name or att_url}"
                             )
                             continue
 
                         document_cache[att_url] = {
                             "text": result["text"],
                             "page_count": result.get("page_count", 0),
-                            "name": url_path
+                            "name": att_name or att_url
                         }
 
                         item_count = len(url_to_items[att_url])
                         cache_status = "shared" if item_count > 1 else "unique"
                         logger.info(
-                            f"[DocumentCache] Extracted '{url_path}': "
+                            f"[DocumentCache] Extracted '{att_name or att_url}': "
                             f"{result.get('page_count', 0)} pages, "
                             f"{len(result['text']):,} chars "
                             f"({cache_status}, {item_count} items)"
                         )
                 except Exception as e:
-                    logger.warning(f"[DocumentCache] Failed to extract {url_path}: {e}")
+                    logger.warning(f"[DocumentCache] Failed to extract {att_name or att_url}: {e}")
 
             # Separate shared vs item-specific documents
             shared_urls = {url for url, items in url_to_items.items() if len(items) > 1 and url in document_cache}
