@@ -23,7 +23,7 @@
 	const displayNumber = $derived(item.agenda_number || `${item.sequence}.`);
 
 	// Generate anchor ID using shared utility (agenda_number > matter_file > item.id)
-	const anchorId = $derived(() => generateAnchorId(item));
+	const anchorId = $derived.by(() => generateAnchorId(item));
 
 	function toggleItem() {
 		if (expandedItems.has(item.id)) {
@@ -162,17 +162,13 @@
 					{#if !hasSummary}
 						<span class="procedural-badge">Unprocessed</span>
 					{/if}
-				</div>
-				<div class="item-indicators">
 					{#if item.topics && item.topics.length > 0}
-						<div class="item-topics-preview">
-							{#each item.topics.slice(0, 2) as topic}
-								<span class="item-topic-tag-small" data-topic={topic.toLowerCase()}>{topic}</span>
-							{/each}
-							{#if item.topics.length > 2}
-								<span class="topic-more">+{item.topics.length - 2} more</span>
-							{/if}
-						</div>
+						{#each item.topics.slice(0, 2) as topic (topic)}
+							<span class="item-topic-tag-small" data-topic={topic.toLowerCase()}>{topic}</span>
+						{/each}
+						{#if item.topics.length > 2}
+							<span class="topic-more">+{item.topics.length - 2} more</span>
+						{/if}
 					{/if}
 				</div>
 				{#if !isExpanded && hasSummary}
@@ -238,7 +234,7 @@
 				<div class="item-attachments-container">
 					<div class="attachments-label">Attachments:</div>
 					<div class="item-attachments">
-						{#each item.attachments as attachment}
+						{#each item.attachments as attachment (attachment.url || attachment.name)}
 							{#if attachment.url}
 								<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link" onclick={(e) => e.stopPropagation()}>
 									{attachment.name || 'View Packet'}{attachment.pages ? ` (${attachment.pages})` : ''}
@@ -307,9 +303,9 @@
 		display: flex;
 		align-items: baseline;
 		gap: 0.5rem;
-		margin-bottom: 0.35rem;
+		margin-bottom: 0;
 		flex-wrap: wrap;
-		row-gap: 0.5rem;
+		row-gap: 0.25rem;
 	}
 
 	.procedural-badge {
@@ -501,20 +497,6 @@
 	.item-title-remainder {
 		color: var(--civic-gray);
 		font-weight: 400;
-	}
-
-	.item-indicators {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.item-topics-preview {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-		align-items: center;
 	}
 
 	.item-topic-tag-small {
