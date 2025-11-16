@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { marked } from 'marked';
+	import { cleanSummary } from '$lib/utils/markdown-utils';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -99,7 +100,7 @@
 			<div class="matter-summary-section">
 				<h2 class="section-title">Summary</h2>
 				<div class="matter-summary">
-					{@html marked(matter.canonical_summary)}
+					{@html marked(cleanSummary(matter.canonical_summary))}
 				</div>
 			</div>
 		{/if}

@@ -5,6 +5,7 @@
 	import type { SearchResult, Meeting } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
 	import { findItemByAnchor } from '$lib/utils/anchor';
+	import { cleanSummary } from '$lib/utils/markdown-utils';
 	import Footer from '$lib/components/Footer.svelte';
 	import ParticipationBox from '$lib/components/ParticipationBox.svelte';
 	import MeetingStatusBanner from '$lib/components/MeetingStatusBanner.svelte';
@@ -63,21 +64,6 @@
 			? selectedMeeting?.items || []
 			: summarizedItems
 	);
-
-	function cleanSummary(rawSummary: string): string {
-		if (!rawSummary) return '';
-
-		return rawSummary
-			.replace(/=== DOCUMENT \d+ ===/g, '')
-			.replace(/--- SECTION \d+ SUMMARY ---/g, '')
-			.replace(/Here's a concise summary of the[^:]*:/gi, '')
-			.replace(/Here's a summary of the[^:]*:/gi, '')
-			.replace(/Here's the key points[^:]*:/gi, '')
-			.replace(/Here's a structured analysis[^:]*:/gi, '')
-			.replace(/Summary of the[^:]*:/gi, '')
-			.replace(/\n{3,}/g, '\n\n')
-			.trim();
-	}
 
 	function handleFlyerGenerateChange(generating: boolean) {
 		flyerGenerating = generating;
