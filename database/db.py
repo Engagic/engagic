@@ -451,29 +451,42 @@ class UnifiedDatabase:
             # Check if matter already processed
             existing_matter = self.get_matter(matter_id)
 
-            if existing_matter and existing_matter.canonical_summary:
-                # Matter exists - check if attachments changed
-                # Use first item's attachments as representative (should be same across items)
-                current_hash = hash_attachments(all_items_for_matter[0].attachments)
+            # Check if any items are missing summaries (e.g., user deleted for reprocessing)
+            items_missing_summary = [item for item in all_items_for_matter if not item.summary]
 
-                stored_hash = existing_matter.metadata.get("attachment_hash") if existing_matter.metadata else None
-
-                # Also check if any items are missing summaries (e.g., user deleted for reprocessing)
-                items_missing_summary = [item for item in all_items_for_matter if not item.summary]
-
-                if stored_hash == current_hash and not items_missing_summary:
-                    # Unchanged AND all items have summaries - copy canonical summary to ALL items
+            # Skip reprocessing if ALL items already have summaries
+            if not items_missing_summary:
+                if existing_matter and existing_matter.canonical_summary:
+                    # Have canonical summary - reuse it
                     self._apply_canonical_summary(all_items_for_matter, existing_matter)
                     logger.debug(
                         f"[Matters] Reusing canonical summary for {first_item.matter_file or matter_id} "
                         f"({len(all_items_for_matter)} items across all meetings)"
                     )
-                    continue  # Skip enqueue
-                elif items_missing_summary:
-                    logger.info(
-                        f"[Matters] Re-enqueueing {first_item.matter_file or matter_id}: "
-                        f"{len(items_missing_summary)} items missing summaries (manual deletion detected)"
+                else:
+                    # All items have summaries but no canonical - skip reprocessing anyway
+                    logger.debug(
+                        f"[Matters] Skipping {first_item.matter_file or matter_id}: "
+                        f"all {len(all_items_for_matter)} items already have summaries"
                     )
+                continue  # Skip enqueue
+
+            # Check if attachments changed (only matters if we have canonical summary)
+            if existing_matter and existing_matter.canonical_summary:
+                current_hash = hash_attachments(all_items_for_matter[0].attachments)
+                stored_hash = existing_matter.metadata.get("attachment_hash") if existing_matter.metadata else None
+
+                if stored_hash == current_hash and not items_missing_summary:
+                    self._apply_canonical_summary(all_items_for_matter, existing_matter)
+                    logger.debug(f"[Matters] Unchanged attachments, reusing canonical for {first_item.matter_file or matter_id}")
+                    continue  # Skip enqueue
+
+            # Log reason for enqueueing
+            if items_missing_summary:
+                logger.info(
+                    f"[Matters] Enqueueing {first_item.matter_file or matter_id}: "
+                    f"{len(items_missing_summary)} items missing summaries"
+                )
 
             # New or changed - enqueue matter for processing
             # Include ALL item IDs across ALL meetings
@@ -494,15 +507,28 @@ class UnifiedDatabase:
 
         # Items without matters - enqueue as item-level batch (fallback)
         if items_without_matters:
-            queue_id = self.enqueue_meeting_job(
-                meeting_id=meeting.id,
-                source_url=f"items://{meeting.id}",
-                banana=banana,
-                priority=priority,
-            )
-            # Only count if actually enqueued (not -1 for already pending/processing)
-            if queue_id != -1:
-                enqueued_count += 1
+            # Check if any items need processing
+            items_needing_processing = [item for item in items_without_matters if not item.summary]
+
+            if items_needing_processing:
+                queue_id = self.enqueue_meeting_job(
+                    meeting_id=meeting.id,
+                    source_url=f"items://{meeting.id}",
+                    banana=banana,
+                    priority=priority,
+                )
+                # Only count if actually enqueued (not -1 for already pending/processing)
+                if queue_id != -1:
+                    enqueued_count += 1
+                    logger.info(
+                        f"[Items] Enqueued {len(items_needing_processing)}/{len(items_without_matters)} "
+                        f"items without matters for {meeting.id}"
+                    )
+            else:
+                logger.debug(
+                    f"[Items] Skipping {len(items_without_matters)} items without matters: "
+                    f"all already have summaries"
+                )
 
         return enqueued_count
 
