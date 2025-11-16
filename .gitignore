@@ -209,3 +209,4 @@ __pycache__/
 #  MCP server configurations for AI coding assistants like Claude Code
 #  These are local tooling configs and should not be committed
 .mcp.json
+prometheus/

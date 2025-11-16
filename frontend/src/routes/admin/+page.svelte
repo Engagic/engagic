@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { config } from '$lib/api/config';
 
-	const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+	const API_BASE = config.apiBaseUrl;
 
 	// Auth state
 	let adminToken = '';
