@@ -23,7 +23,7 @@
 	const displayNumber = $derived(item.agenda_number || `${item.sequence}.`);
 
 	// Generate anchor ID using shared utility (agenda_number > matter_file > item.id)
-	const anchorId = $derived.by(() => generateAnchorId(item));
+	const anchorId = $derived(() => generateAnchorId(item));
 
 	function toggleItem() {
 		if (expandedItems.has(item.id)) {
