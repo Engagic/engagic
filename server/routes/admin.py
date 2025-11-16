@@ -3,6 +3,8 @@ Admin API routes
 """
 
 import logging
+import httpx
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Depends
 from server.models.requests import ProcessRequest
 from config import config
@@ -79,3 +81,106 @@ async def force_process_meeting(
         "command": f"python /root/engagic/app/daemon.py --process-meeting {request.packet_url}",
         "alternative": "systemctl status engagic-daemon",
     }
+
+
+@router.get("/prometheus-query")
+async def prometheus_query(
+    query: str,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    step: Optional[str] = None,
+    is_admin: bool = Depends(verify_admin_token)
+):
+    """Proxy queries to Prometheus for dashboard metrics
+
+    Args:
+        query: PromQL query string
+        start: Start timestamp (RFC3339 or Unix timestamp)
+        end: End timestamp (RFC3339 or Unix timestamp)
+        step: Query resolution step width
+
+    Returns:
+        Prometheus query result in JSON format
+    """
+    try:
+        # Determine if this is a range query or instant query
+        prometheus_url = "http://localhost:9090/api/v1"
+
+        if start and end:
+            # Range query
+            url = f"{prometheus_url}/query_range"
+            params = {"query": query, "start": start, "end": end}
+            if step:
+                params["step"] = step
+        else:
+            # Instant query
+            url = f"{prometheus_url}/query"
+            params = {"query": query}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=30.0)
+            response.raise_for_status()
+            return response.json()
+
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Prometheus service unavailable. Ensure Prometheus is running on localhost:9090"
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Prometheus query timeout"
+        )
+    except Exception as e:
+        logger.error(f"Prometheus query error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prometheus query failed: {str(e)}"
+        )
+
+
+@router.get("/live-metrics")
+async def get_live_metrics(is_admin: bool = Depends(verify_admin_token)):
+    """Get current metrics snapshot for admin dashboard
+
+    Returns real-time metrics without requiring Prometheus queries.
+    Useful for quick health checks and current state visibility.
+
+    Returns:
+        JSON with current metric values
+    """
+    from server.metrics import get_metrics_text
+    from prometheus_client.parser import text_string_to_metric_families
+
+    try:
+        # Get raw Prometheus metrics
+        metrics_text = get_metrics_text()
+
+        # Parse metrics into structured format
+        metrics_data = {}
+        for family in text_string_to_metric_families(metrics_text):
+            metrics_data[family.name] = {
+                "type": family.type,
+                "help": family.documentation,
+                "samples": []
+            }
+
+            for sample in family.samples:
+                metrics_data[family.name]["samples"].append({
+                    "labels": sample.labels,
+                    "value": sample.value
+                })
+
+        return {
+            "success": True,
+            "timestamp": __import__("time").time(),
+            "metrics": metrics_data
+        }
+
+    except Exception as e:
+        logger.error(f"Error retrieving live metrics: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve metrics: {str(e)}"
+        )

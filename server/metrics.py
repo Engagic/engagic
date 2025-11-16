@@ -111,6 +111,25 @@ class EngagicMetrics:
             buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
         )
 
+        # User behavior metrics
+        self.page_views = Counter(
+            'engagic_page_views_total',
+            'Total page views by type',
+            ['page_type']  # search, city, matter, meeting, state
+        )
+
+        self.search_queries = Counter(
+            'engagic_search_queries_total',
+            'Total search queries by type',
+            ['query_type']  # zipcode, city_name, state
+        )
+
+        self.matter_engagement = Counter(
+            'engagic_matter_engagement_total',
+            'Matter page engagement actions',
+            ['action']  # view, timeline
+        )
+
         # Error metrics
         self.errors = Counter(
             'engagic_errors_total',
