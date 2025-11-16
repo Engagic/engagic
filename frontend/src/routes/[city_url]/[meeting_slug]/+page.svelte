@@ -19,8 +19,8 @@
 	let selectedMeeting: Meeting | null = $state(data.selectedMeeting || null);
 	let error = $state(data.error || '');
 	let showProceduralItems = $state(false);
-	let expandedTitles = new SvelteSet<string>();
-	let expandedItems = new SvelteSet<string>();
+	let expandedTitles = $state(new SvelteSet<string>());
+	let expandedItems = $state(new SvelteSet<string>());
 	let flyerGenerating = $state(false);
 
 	// Handle deep linking to specific items (supports both #item-5-e and #2025-5470 formats)
