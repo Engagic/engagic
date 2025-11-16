@@ -285,7 +285,6 @@ async def get_state_matters(
 
             # Aggregate by topics
             if matter_dict.get("canonical_topics"):
-                import json
                 try:
                     topics = json.loads(matter_dict["canonical_topics"])
                     for t in topics:
