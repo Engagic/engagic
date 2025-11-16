@@ -141,6 +141,90 @@ async def prometheus_query(
         )
 
 
+@router.get("/activity-feed")
+async def get_activity_feed(
+    limit: int = 100,
+    is_admin: bool = Depends(verify_admin_token)
+):
+    """Get recent user activity from API logs
+
+    Returns chronological feed of searches and page views
+    """
+    import subprocess
+    import re
+
+    try:
+        result = subprocess.run(
+            ['journalctl', '-u', 'engagic-api', '-n', '2000', '--no-pager'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        activities = []
+        lines = result.stdout.split('\n')
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+
+            # Parse timestamp
+            ts_match = re.match(r'^(\w+ \d+ \d+:\d+:\d+)', line)
+            if not ts_match:
+                i += 1
+                continue
+            timestamp = ts_match.group(1)
+
+            # Search events
+            if 'Search request:' in line:
+                query_match = re.search(r"Search request: '(.+?)'", line)
+                # Check next line for city result
+                if i + 1 < len(lines) and 'Found' in lines[i + 1]:
+                    city_match = re.search(r'Found (\d+) cached meetings for (.+?)$', lines[i + 1])
+                    if query_match and city_match:
+                        activities.append({
+                            'timestamp': timestamp,
+                            'type': 'search',
+                            'query': query_match.group(1),
+                            'city': city_match.group(2),
+                            'meeting_count': int(city_match.group(1))
+                        })
+
+            # Meeting views
+            elif 'GET /api/meeting/' in line:
+                meeting_match = re.search(r'GET /api/meeting/(\d+)', line)
+                if meeting_match:
+                    activities.append({
+                        'timestamp': timestamp,
+                        'type': 'meeting_view',
+                        'meeting_id': meeting_match.group(1)
+                    })
+
+            # City matters page
+            elif 'GET /api/city/' in line and '/matters' in line:
+                city_match = re.search(r'GET /api/city/([^/]+)/matters', line)
+                if city_match:
+                    activities.append({
+                        'timestamp': timestamp,
+                        'type': 'city_matters',
+                        'city_banana': city_match.group(1)
+                    })
+
+            i += 1
+
+        # Return most recent activities (reversed for chronological order)
+        recent = activities[-limit:] if len(activities) > limit else activities
+        return {
+            'success': True,
+            'activities': list(reversed(recent)),
+            'total': len(activities)
+        }
+
+    except Exception as e:
+        logger.error(f"Error retrieving activity feed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve activity feed: {str(e)}")
+
+
 @router.get("/live-metrics")
 async def get_live_metrics(is_admin: bool = Depends(verify_admin_token)):
     """Get current metrics snapshot for admin dashboard
