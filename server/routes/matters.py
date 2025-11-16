@@ -8,6 +8,7 @@ import json
 import logging
 import random
 from fastapi import APIRouter, HTTPException, Depends, Request
+from server.metrics import metrics
 from database.db import UnifiedDatabase
 
 logger = logging.getLogger("engagic")
@@ -32,6 +33,10 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
 
         if not matter:
             raise HTTPException(status_code=404, detail="Matter not found")
+
+        # Track matter engagement
+        metrics.page_views.labels(page_type='matter').inc()
+        metrics.matter_engagement.labels(action='timeline').inc()
 
         # Get all items for this matter across meetings (simple FK join)
         items = db.conn.execute(
@@ -101,6 +106,9 @@ async def get_city_matters(
         city = db.get_city(banana=banana)
         if not city:
             raise HTTPException(status_code=404, detail="City not found")
+
+        # Track city page view
+        metrics.page_views.labels(page_type='city').inc()
 
         matters = db.conn.execute(
             """
@@ -224,6 +232,9 @@ async def get_state_matters(
             raise HTTPException(status_code=400, detail="Invalid state code")
 
         state_code = state_code.upper()
+
+        # Track state page view
+        metrics.page_views.labels(page_type='state').inc()
 
         # Build query with optional topic filter
         query = """

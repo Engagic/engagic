@@ -3,7 +3,9 @@ Monitoring and health check API routes
 """
 
 import logging
+import time
 from datetime import datetime
+from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import Response
 from database.db import UnifiedDatabase
@@ -14,6 +16,11 @@ from config import config
 logger = logging.getLogger("engagic")
 
 router = APIRouter()
+
+# In-memory cache for ticker data (5 minute TTL)
+_ticker_cache: Optional[Dict[str, Any]] = None
+_ticker_cache_time: float = 0
+TICKER_CACHE_TTL = 300  # 5 minutes
 
 
 def get_db(request: Request) -> UnifiedDatabase:
@@ -314,8 +321,18 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
 
 @router.get("/api/ticker")
 async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
-    """Get pre-generated ticker items for homepage news ticker"""
+    """Get pre-generated ticker items for homepage news ticker (cached for 5 minutes)"""
+    global _ticker_cache, _ticker_cache_time
+
     try:
+        # Check cache
+        current_time = time.time()
+        if _ticker_cache and (current_time - _ticker_cache_time) < TICKER_CACHE_TTL:
+            logger.debug("Returning cached ticker data")
+            return _ticker_cache
+
+        # Cache miss - generate new ticker items
+        logger.info("Generating fresh ticker data")
         ticker_items = []
 
         # Fetch 15 random meetings with items
@@ -327,11 +344,17 @@ async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
                 if ticker_item:
                     ticker_items.append(ticker_item)
 
-        return {
+        result = {
             "success": True,
             "items": ticker_items,
             "count": len(ticker_items)
         }
+
+        # Update cache
+        _ticker_cache = result
+        _ticker_cache_time = current_time
+
+        return result
 
     except Exception as e:
         logger.error(f"Ticker endpoint failed: {e}")

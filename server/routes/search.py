@@ -11,6 +11,7 @@ from server.services.search import (
     handle_state_search,
 )
 from server.utils.geo import is_state_query
+from server.metrics import metrics
 from database.db import UnifiedDatabase
 
 logger = logging.getLogger("engagic")
@@ -45,11 +46,17 @@ async def search_meetings(request: SearchRequest, db: UnifiedDatabase = Depends(
 
         logger.info(f"Query analysis - is_zipcode: {is_zipcode}, is_state: {is_state}")
 
+        # Track search behavior metrics
+        metrics.page_views.labels(page_type='search').inc()
+
         if is_zipcode:
+            metrics.search_queries.labels(query_type='zipcode').inc()
             return handle_zipcode_search(query, db)
         elif is_state:
+            metrics.search_queries.labels(query_type='state').inc()
             return handle_state_search(query, db)
         else:
+            metrics.search_queries.labels(query_type='city_name').inc()
             return handle_city_search(query, db)
 
     except HTTPException:

@@ -1,0 +1,64 @@
+# Systemd service file for Prometheus
+#
+# Installation:
+#   1. Download Prometheus binary:
+#      cd /root/engagic
+#      wget https://github.com/prometheus/prometheus/releases/download/v2.48.0/prometheus-2.48.0.linux-amd64.tar.gz
+#      tar xvfz prometheus-2.48.0.linux-amd64.tar.gz
+#      mv prometheus-2.48.0.linux-amd64 prometheus
+#
+#   2. Install service:
+#      sudo cp prometheus.service /etc/systemd/system/
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable prometheus
+#      sudo systemctl start prometheus
+#
+#   3. Verify:
+#      sudo systemctl status prometheus
+#      curl http://localhost:9090/-/healthy
+
+[Unit]
+Description=Prometheus Monitoring System
+Documentation=https://prometheus.io/docs/introduction/overview/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Prometheus binary and config paths
+ExecStart=/root/engagic/prometheus/prometheus \
+  --config.file=/root/engagic/prometheus.yml \
+  --storage.tsdb.path=/root/engagic/data/prometheus \
+  --storage.tsdb.retention.time=30d \
+  --web.console.templates=/root/engagic/prometheus/consoles \
+  --web.console.libraries=/root/engagic/prometheus/console_libraries \
+  --web.listen-address=127.0.0.1:9090 \
+  --web.enable-lifecycle
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Working directory
+WorkingDirectory=/root/engagic
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prometheus
+
+[Install]
+WantedBy=multi-user.target
+
+# Reload config without restart:
+#   curl -X POST http://localhost:9090/-/reload
+#
+# View logs:
+#   sudo journalctl -u prometheus -f

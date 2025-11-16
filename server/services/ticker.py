@@ -146,7 +146,7 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
 
     # Generate meeting URL
     # Format: /{banana}/{meeting_slug}
-    # meeting_slug must match frontend format: {title}_{date}_{id}
+    # meeting_slug must match frontend format: {date}-{id} (simple format, backend looks up by ID)
     try:
         meeting_id = meeting.get('id')
         if not meeting_id:
@@ -156,14 +156,10 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
         year = date_obj.year
         month = str(date_obj.month).zfill(2)
         day = str(date_obj.day).zfill(2)
-        date_slug = f"{year}_{month}_{day}"
+        date_slug = f"{year}-{month}-{day}"
 
-        # Clean title: lowercase, alphanumeric only, underscores
-        title = meeting.get('title', 'meeting')
-        title_slug = re.sub(r'[^a-z0-9]+', '_', title.lower()).strip('_')[:50]
-
-        # Format matches frontend generateMeetingSlug: {title}_{date}_{id}
-        meeting_slug = f"{title_slug}_{date_slug}_{meeting_id}"
+        # Simple slug format matching frontend: {date}-{id}
+        meeting_slug = f"{date_slug}-{meeting_id}"
         url = f"/{banana}/{meeting_slug}"
     except (ValueError, KeyError, AttributeError) as e:
         logger.debug(f"Failed to generate meeting URL: {e}")

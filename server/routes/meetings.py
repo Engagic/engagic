@@ -8,6 +8,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, Request
 from server.models.requests import ProcessRequest
 from server.services.meeting import get_meeting_with_items
+from server.metrics import metrics
 from database.db import UnifiedDatabase
 
 logger = logging.getLogger("engagic")
@@ -29,6 +30,9 @@ async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
 
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
+
+        # Track meeting page view
+        metrics.page_views.labels(page_type='meeting').inc()
 
         # Build response with meeting data
         meeting_dict = get_meeting_with_items(meeting, db)

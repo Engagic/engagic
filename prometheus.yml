@@ -1,0 +1,57 @@
+# Prometheus configuration for Engagic metrics collection
+#
+# Scrapes metrics from Engagic API server every 15 seconds
+# Retains data for 30 days
+#
+# Usage:
+#   docker run -p 9090:9090 -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
+
+global:
+  scrape_interval: 15s  # Scrape targets every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+
+  # Attach these labels to all metrics
+  external_labels:
+    monitor: 'engagic-production'
+    environment: 'vps'
+
+# Scrape configurations
+scrape_configs:
+  # Engagic API metrics
+  - job_name: 'engagic-api'
+
+    # Scrape the /metrics endpoint
+    static_configs:
+      - targets: ['localhost:8000']  # Engagic API server
+        labels:
+          service: 'engagic-api'
+          component: 'backend'
+
+    # Metrics endpoint path
+    metrics_path: '/metrics'
+
+    # Connection settings
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+
+# Optional: Add node_exporter for system metrics (CPU, memory, disk)
+# Uncomment and install node_exporter for system health monitoring
+#
+#  - job_name: 'node-exporter'
+#    static_configs:
+#      - targets: ['localhost:9100']
+#        labels:
+#          service: 'node-exporter'
+#          component: 'system'
+
+# Storage configuration
+# Default: 15 days retention
+# For 30-day retention, add --storage.tsdb.retention.time=30d to Prometheus startup command

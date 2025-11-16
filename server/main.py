@@ -12,6 +12,7 @@ from config import config
 from database.db import UnifiedDatabase
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
+from server.middleware.metrics import metrics_middleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters
 
 # Configure structured logging
@@ -49,7 +50,12 @@ logger.info(f"Initialized shared database at {config.UNIFIED_DB_PATH}")
 app.state.db = db
 
 
-# Register middleware
+# Register middleware (order matters: metrics -> rate limiting -> logging)
+@app.middleware("http")
+async def metrics_middleware_wrapper(request, call_next):
+    return await metrics_middleware(request, call_next)
+
+
 @app.middleware("http")
 async def rate_limit_middleware_wrapper(request, call_next):
     from server.middleware.rate_limiting import rate_limit_middleware
