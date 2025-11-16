@@ -492,11 +492,10 @@
 		line-height: 1.45;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
-		flex: 1 1 auto;
+		flex: 1;
 		min-width: 0;
 		word-wrap: break-word;
 		overflow-wrap: break-word;
-		hyphens: auto;
 	}
 
 	.item-title-remainder {
