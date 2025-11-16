@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
 	import type { SearchResult, Meeting } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
@@ -18,8 +19,8 @@
 	let selectedMeeting: Meeting | null = $state(data.selectedMeeting || null);
 	let error = $state(data.error || '');
 	let showProceduralItems = $state(false);
-	let expandedTitles = $state(new Set<string>());
-	let expandedItems = $state(new Set<string>());
+	let expandedTitles = new SvelteSet<string>();
+	let expandedItems = new SvelteSet<string>();
 	let flyerGenerating = $state(false);
 
 	// Handle deep linking to specific items (supports both #item-5-e and #2025-5470 formats)
@@ -83,8 +84,8 @@
 			scrollY: number;
 		}) => {
 			showProceduralItems = values.showProceduralItems;
-			expandedTitles = new Set(values.expandedTitles);
-			expandedItems = new Set(values.expandedItems);
+			expandedTitles = new SvelteSet(values.expandedTitles);
+			expandedItems = new SvelteSet(values.expandedItems);
 			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
 				setTimeout(() => window.scrollTo(0, values.scrollY), 0);
 			}
