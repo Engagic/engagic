@@ -309,6 +309,7 @@
 		gap: 0.5rem;
 		margin-bottom: 0.35rem;
 		flex-wrap: wrap;
+		row-gap: 0.5rem;
 	}
 
 	.procedural-badge {
@@ -491,8 +492,11 @@
 		line-height: 1.45;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
-		flex: 1;
+		flex: 1 1 auto;
 		min-width: 0;
+		word-wrap: break-word;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 
 	.item-title-remainder {
