@@ -118,22 +118,22 @@
 			.sort((a, b) => b.value - a.value);
 	}
 
-	// Derived metrics
-	$: totalRequests = metrics ? getMetricValue('engagic_api_requests_total') : 0;
-	$: totalSearches = metrics ? getMetricValue('engagic_page_views_total', { page_type: 'search' }) : 0;
-	$: totalCityViews = metrics ? getMetricValue('engagic_page_views_total', { page_type: 'city' }) : 0;
-	$: totalMatterViews = metrics ? getMetricValue('engagic_page_views_total', { page_type: 'matter' }) : 0;
-	$: totalMeetingViews = metrics ? getMetricValue('engagic_page_views_total', { page_type: 'meeting' }) : 0;
+	// Derived metrics (Note: Prometheus strips _total suffix from counter names)
+	$: totalRequests = metrics ? getMetricValue('engagic_api_requests') : 0;
+	$: totalSearches = metrics ? getMetricValue('engagic_page_views', { page_type: 'search' }) : 0;
+	$: totalCityViews = metrics ? getMetricValue('engagic_page_views', { page_type: 'city' }) : 0;
+	$: totalMatterViews = metrics ? getMetricValue('engagic_page_views', { page_type: 'matter' }) : 0;
+	$: totalMeetingViews = metrics ? getMetricValue('engagic_page_views', { page_type: 'meeting' }) : 0;
 
-	$: searchByType = metrics ? getMetricsByLabel('engagic_search_queries_total', 'query_type') : [];
-	$: requestsByEndpoint = metrics ? getMetricsByLabel('engagic_api_requests_total', 'endpoint') : [];
+	$: searchByType = metrics ? getMetricsByLabel('engagic_search_queries', 'query_type') : [];
+	$: requestsByEndpoint = metrics ? getMetricsByLabel('engagic_api_requests', 'endpoint') : [];
 
 	$: queuePending = metrics ? getMetricValue('engagic_queue_size', { status: 'pending' }) : 0;
 	$: queueProcessing = metrics ? getMetricValue('engagic_queue_size', { status: 'processing' }) : 0;
 	$: queueCompleted = metrics ? getMetricValue('engagic_queue_size', { status: 'completed' }) : 0;
 	$: queueFailed = metrics ? getMetricValue('engagic_queue_size', { status: 'failed' }) : 0;
 
-	$: llmCalls = metrics ? getMetricValue('engagic_llm_api_calls_total') : 0;
+	$: llmCalls = metrics ? getMetricValue('engagic_llm_api_calls') : 0;
 	$: llmCost = metrics ? getMetricValue('engagic_llm_api_cost_dollars') : 0;
 </script>
 
