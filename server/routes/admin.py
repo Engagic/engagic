@@ -3,6 +3,7 @@ Admin API routes
 """
 
 import logging
+import time
 import httpx
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Depends
@@ -174,7 +175,7 @@ async def get_live_metrics(is_admin: bool = Depends(verify_admin_token)):
 
         return {
             "success": True,
-            "timestamp": __import__("time").time(),
+            "timestamp": time.time(),
             "metrics": metrics_data
         }
 
