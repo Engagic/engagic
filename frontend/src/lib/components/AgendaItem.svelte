@@ -111,7 +111,7 @@
 	>
 		<div class="item-header">
 			<div class="item-header-content">
-				<div class="item-title-container">
+				<div class="item-title-row">
 					<span class="item-number">{displayNumber}</span>
 					<h3 class="item-title" data-truncated={titleParts.isTruncated}>
 						{titleParts.main}
@@ -121,6 +121,8 @@
 							{titleParts.remainder}
 						{/if}
 					</h3>
+				</div>
+				<div class="item-badges-row">
 					{#if item.matter_file}
 						{#if item.matter_id}
 							<a
@@ -299,11 +301,17 @@
 		justify-content: space-between;
 	}
 
-	.item-title-container {
+	.item-title-row {
 		display: flex;
 		align-items: baseline;
 		gap: 0.5rem;
-		margin-bottom: 0;
+		margin-bottom: 0.5rem;
+	}
+
+	.item-badges-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 		flex-wrap: wrap;
 		row-gap: 0.25rem;
 	}
@@ -320,7 +328,6 @@
 		font-family: 'IBM Plex Mono', monospace;
 		text-transform: uppercase;
 		letter-spacing: 0.3px;
-		margin-left: 0.5rem;
 	}
 
 	.matter-badge {
@@ -334,7 +341,6 @@
 		font-weight: 700;
 		font-family: 'IBM Plex Mono', monospace;
 		letter-spacing: 0.5px;
-		margin-left: 0.5rem;
 		box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2);
 		transition: all 0.2s ease;
 		cursor: help;
@@ -365,7 +371,6 @@
 		font-family: 'IBM Plex Mono', monospace;
 		text-transform: capitalize;
 		letter-spacing: 0.3px;
-		margin-left: 0.5rem;
 	}
 
 	.sponsors-badge {
@@ -379,7 +384,6 @@
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
 		letter-spacing: 0.3px;
-		margin-left: 0.5rem;
 		cursor: help;
 	}
 
@@ -394,7 +398,6 @@
 		font-weight: 700;
 		font-family: 'IBM Plex Mono', monospace;
 		letter-spacing: 0.3px;
-		margin-left: 0.5rem;
 		text-decoration: none;
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -700,41 +703,21 @@
 			gap: 0.5rem;
 		}
 
-		.item-title-container {
-			display: grid;
-			grid-template-columns: auto 1fr;
-			grid-template-rows: auto auto;
-			gap: 0.35rem 0.5rem;
-			align-items: baseline;
+		.item-title-row {
+			gap: 0.35rem;
+			margin-bottom: 0.4rem;
 		}
 
 		.item-number {
 			font-size: 1rem;
-			grid-column: 1;
-			grid-row: 1;
 		}
 
 		.item-title {
 			font-size: 1rem;
-			grid-column: 2;
-			grid-row: 1;
 		}
 
-		.item-title-container > *:not(.item-number):not(.item-title) {
-			grid-column: 1 / -1;
-			grid-row: 2;
-			margin-left: 0;
-			justify-self: flex-start;
-		}
-
-		.item-title-container > .matter-badge,
-		.item-title-container > .matter-badge-link,
-		.item-title-container > .matter-type-badge,
-		.item-title-container > .sponsors-badge,
-		.item-title-container > .matter-timeline-badge,
-		.item-title-container > .procedural-badge {
-			display: inline-block;
-			margin-right: 0.35rem;
+		.item-badges-row {
+			gap: 0.35rem;
 		}
 
 		.expand-icon {
