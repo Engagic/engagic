@@ -93,6 +93,37 @@ def extract_excerpt(summary: str, prefer_middle: bool = True) -> str:
     return excerpt
 
 
+def _generate_item_anchor(item: Dict[str, Any]) -> str:
+    """Generate item anchor matching AgendaItem component logic
+
+    Priority: agenda_number (meeting context) > matter_file (legislative ID) > item.id (fallback)
+
+    Matches frontend anchor.ts and backend flyer.py logic for consistency.
+
+    Args:
+        item: Item dict with id, agenda_number, matter_file
+
+    Returns:
+        Anchor string (e.g., "item-5-e", "2025-5470", "item-abc123")
+    """
+    if item.get('agenda_number'):
+        # Use agenda number: "5-E" -> "item-5-e"
+        anchor = item['agenda_number'].lower()
+        anchor = re.sub(r'[^a-z0-9]', '-', anchor)
+        anchor = re.sub(r'-+', '-', anchor)
+        anchor = anchor.strip('-')
+        return f"item-{anchor}"
+
+    if item.get('matter_file'):
+        # Use matter file: "2025-5470" -> "2025-5470"
+        anchor = item['matter_file'].lower()
+        anchor = re.sub(r'[^a-z0-9-]', '-', anchor)
+        return anchor
+
+    # Fallback to item ID
+    return f"item-{item['id']}"
+
+
 def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Optional[Dict[str, str]]:
     """
     Generate a single ticker item from a meeting.
@@ -125,6 +156,7 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
 
     # Extract excerpt (prefer item summaries, fall back to meeting summary)
     excerpt = ""
+    selected_item = None  # Track which item was used for deep-linking
 
     # Try to get excerpt from items first (more specific and juicy)
     items = meeting.get('items', [])
@@ -135,6 +167,7 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
             import random
             random_item = random.choice(items_with_summaries)
             excerpt = extract_excerpt(random_item['summary'])
+            selected_item = random_item  # Track for anchor generation
 
     # Fall back to meeting summary
     if not excerpt and meeting.get('summary'):
@@ -161,6 +194,12 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
         # Simple slug format matching frontend: {date}-{id}
         meeting_slug = f"{date_slug}-{meeting_id}"
         url = f"/{banana}/{meeting_slug}"
+
+        # Add item-level anchor for deep-linking (if excerpt came from item)
+        if selected_item:
+            anchor = _generate_item_anchor(selected_item)
+            url += f"#{anchor}"
+
     except (ValueError, KeyError, AttributeError) as e:
         logger.debug(f"Failed to generate meeting URL: {e}")
         return None
