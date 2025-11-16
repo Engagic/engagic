@@ -10,8 +10,9 @@
 	let isAuthenticated = false;
 	let authError = '';
 
-	// Metrics data
+	// Metrics and activity data
 	let metrics: any = null;
+	let activities: any[] = [];
 	let loading = true;
 	let error = '';
 	let lastUpdate = '';
@@ -66,19 +67,26 @@
 		error = '';
 
 		try {
-			const response = await fetch(`${API_BASE}/api/admin/live-metrics`, {
-				headers: {
-					Authorization: `Bearer ${adminToken}`
-				}
-			});
+			// Load both metrics and activity feed
+			const [metricsRes, activityRes] = await Promise.all([
+				fetch(`${API_BASE}/api/admin/live-metrics`, {
+					headers: { Authorization: `Bearer ${adminToken}` }
+				}),
+				fetch(`${API_BASE}/api/admin/activity-feed?limit=50`, {
+					headers: { Authorization: `Bearer ${adminToken}` }
+				})
+			]);
 
-			if (!response.ok) {
-				throw new Error('Failed to load metrics');
+			if (!metricsRes.ok || !activityRes.ok) {
+				throw new Error('Failed to load data');
 			}
 
-			const data = await response.json();
-			metrics = data.metrics;
-			lastUpdate = new Date(data.timestamp * 1000).toLocaleTimeString();
+			const metricsData = await metricsRes.json();
+			const activityData = await activityRes.json();
+
+			metrics = metricsData.metrics;
+			activities = activityData.activities;
+			lastUpdate = new Date(metricsData.timestamp * 1000).toLocaleTimeString();
 		} catch (e: any) {
 			error = e.message;
 		} finally {
