@@ -3,13 +3,12 @@
 	import type { AgendaItem as AgendaItemType, Meeting } from '$lib/api/types';
 	import { generateFlyer } from '$lib/api/index';
 	import { generateAnchorId } from '$lib/utils/anchor';
-	import { SvelteSet } from 'svelte/reactivity';
 
 	interface Props {
 		item: AgendaItemType;
 		meeting: Meeting;
-		expandedItems: SvelteSet<string>;
-		expandedTitles: SvelteSet<string>;
+		expandedItems: Set<string>;
+		expandedTitles: Set<string>;
 		flyerGenerating: boolean;
 		onFlyerGenerate: (generating: boolean) => void;
 	}
