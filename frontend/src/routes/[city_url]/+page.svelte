@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import type { Meeting } from '$lib/api/index';
 	import { getCityMatters } from '$lib/api/index';
 	import MeetingCard from '$lib/components/MeetingCard.svelte';
@@ -10,7 +9,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let city_banana = $page.params.city_url;
+	const city_banana = $derived($page.params.city_url);
 	let showPastMeetings = $state(false);
 	let isInitialLoad = $state(true);
 	let viewMode = $state<'meetings' | 'matters'>('meetings');
@@ -18,14 +17,24 @@
 	let mattersLoading = $state(false);
 	let mattersChecked = $state(false);
 
-	// Data comes from server-side load function - already available
-	let searchResults = $state(data.searchResults);
-	let upcomingMeetings: Meeting[] = $state(data.upcomingMeetings || []);
-	let pastMeetings: Meeting[] = $state(data.pastMeetings || []);
+	// Data comes from server-side load function - reactive to navigation
+	const searchResults = $derived(data.searchResults);
+	const upcomingMeetings = $derived(data.upcomingMeetings || []);
+	const pastMeetings = $derived(data.pastMeetings || []);
 
 	// Client-side cache for matters data (2-minute expiration)
 	const MATTERS_CACHE_DURATION = 120000; // 2 minutes
 	const mattersCache = new Map<string, { data: any; timestamp: number }>();
+
+	// Reset matters state when city changes (client-side navigation)
+	$effect(() => {
+		// Access city_banana to create dependency
+		const currentCity = city_banana;
+		// Reset matters when city changes
+		cityMatters = null;
+		mattersChecked = false;
+		viewMode = 'meetings';
+	});
 
 	// Derived: Check if city has qualifying matters (2+ appearances)
 	const hasQualifyingMatters = $derived(() => {
@@ -34,6 +43,7 @@
 	});
 
 	async function loadCityMatters() {
+		if (mattersLoading) return; // Already fetching - prevent concurrent requests
 		if (cityMatters) return; // Already loaded in component state
 
 		// Check cache first (2-minute expiration)
