@@ -13,8 +13,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Store in locals so it's available to all server load functions
 	event.locals.clientIp = clientIp;
 
-	// DEBUG: Log what we're getting
-	console.log('[WORKER DEBUG] Client IP:', clientIp, 'Platform:', typeof (event.platform as any)?.cf);
-
 	return resolve(event);
 };
