@@ -21,7 +21,7 @@ async def log_requests(request: Request, call_next):
 
     # Log incoming request
     logger.info(
-        f"[{request_id}] {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}"
+        f"[{request_id}] {request.method} {request.url.path} - Client: {request.state.client_ip_hash}"
     )
 
     # Process request
