@@ -2,7 +2,7 @@ import type { PageServerLoad } from './$types';
 import { apiClient } from '$lib/api/api-client';
 import { error } from '@sveltejs/kit';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
 	const stateCode = params.state_code.toUpperCase();
 
 	// Validate state code format
@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ params }) => {
 	}
 
 	try {
-		const metrics = await apiClient.getStateMatters(stateCode);
+		const metrics = await apiClient.getStateMatters(stateCode, undefined, 100, locals.clientIp);
 
 		return {
 			stateCode,
