@@ -79,20 +79,20 @@
 
 				<div class="impact-card">
 					<div class="impact-number">{formatNumber(analytics.real_metrics.meetings_tracked)}</div>
-					<div class="impact-label">Total Meetings</div>
-					<div class="impact-desc">Meetings tracked across all cities</div>
+					<div class="impact-label">Meetings Tracked</div>
+					<div class="impact-desc">City council sessions monitored</div>
 				</div>
 
 				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.meetings_with_packet)}</div>
-					<div class="impact-label">Meetings with Packets</div>
-					<div class="impact-desc">Agenda documents available</div>
+					<div class="impact-number">{formatNumber(analytics.real_metrics.matters_tracked)}</div>
+					<div class="impact-label">Legislative Matters</div>
+					<div class="impact-desc">Across {formatNumber(analytics.real_metrics.agenda_items_processed)} agenda items</div>
 				</div>
 
 				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.agendas_summarized)}</div>
-					<div class="impact-label">Agendas Summarized</div>
-					<div class="impact-desc">Meeting packets made readable</div>
+					<div class="impact-number">{formatNumber(analytics.real_metrics.meetings_with_items)}</div>
+					<div class="impact-label">Item-Level Meetings</div>
+					<div class="impact-desc">Granular agenda extraction</div>
 				</div>
 			</div>
 		</section>

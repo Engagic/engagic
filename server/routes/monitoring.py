@@ -283,9 +283,17 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
         cursor.execute("SELECT COUNT(*) as total_cities FROM cities")
         total_cities = dict(cursor.fetchone())
 
+        cursor.execute("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
+        active_cities_stats = dict(cursor.fetchone())
+
         # Meeting stats
         cursor.execute("SELECT COUNT(*) as meetings_count FROM meetings")
         meetings_stats = dict(cursor.fetchone())
+
+        cursor.execute(
+            "SELECT COUNT(*) as meetings_with_items FROM meetings WHERE id IN (SELECT DISTINCT meeting_id FROM items)"
+        )
+        meetings_with_items_stats = dict(cursor.fetchone())
 
         cursor.execute(
             "SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''"
@@ -297,18 +305,25 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
         )
         summaries_stats = dict(cursor.fetchone())
 
-        cursor.execute("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
-        active_cities_stats = dict(cursor.fetchone())
+        # Item-level stats (matters-first architecture)
+        cursor.execute("SELECT COUNT(*) as items_count FROM items")
+        items_stats = dict(cursor.fetchone())
+
+        cursor.execute("SELECT COUNT(*) as matters_count FROM city_matters")
+        matters_stats = dict(cursor.fetchone())
 
         return {
             "success": True,
             "timestamp": datetime.now().isoformat(),
             "real_metrics": {
                 "cities_covered": total_cities["total_cities"],
+                "active_cities": active_cities_stats["active_cities"],
                 "meetings_tracked": meetings_stats["meetings_count"],
+                "meetings_with_items": meetings_with_items_stats["meetings_with_items"],
                 "meetings_with_packet": packets_stats["packets_count"],
                 "agendas_summarized": summaries_stats["summaries_count"],
-                "active_cities": active_cities_stats["active_cities"],
+                "agenda_items_processed": items_stats["items_count"],
+                "matters_tracked": matters_stats["matters_count"],
             },
         }
 
