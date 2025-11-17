@@ -15,16 +15,24 @@ import { ApiError, NetworkError } from './types';
 
 // Retry logic for failed requests
 async function fetchWithRetry(
-	url: string, 
+	url: string,
 	options: RequestInit = {},
-	retries: number = config.maxRetries
+	retries: number = config.maxRetries,
+	clientIp?: string
 ): Promise<Response> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), config.requestTimeout);
-	
+
+	// Add client IP header if provided (for server-side rate limiting)
+	const headers = new Headers(options.headers);
+	if (clientIp) {
+		headers.set('X-Forwarded-User-IP', clientIp);
+	}
+
 	try {
 		const response = await fetch(url, {
 			...options,
+			headers,
 			signal: controller.signal
 		});
 		
@@ -46,7 +54,7 @@ async function fetchWithRetry(
 		// Retry on 5xx errors
 		if (response.status >= 500 && retries > 0) {
 			await new Promise(resolve => setTimeout(resolve, config.retryDelay));
-			return fetchWithRetry(url, options, retries - 1);
+			return fetchWithRetry(url, options, retries - 1, clientIp);
 		}
 		
 		throw new ApiError(errorMessages.generic, response.status, false);
@@ -62,7 +70,7 @@ async function fetchWithRetry(
 			if (error.name === 'AbortError') {
 				if (retries > 0) {
 					await new Promise(resolve => setTimeout(resolve, config.retryDelay));
-					return fetchWithRetry(url, options, retries - 1);
+					return fetchWithRetry(url, options, retries - 1, clientIp);
 				}
 				throw new NetworkError(errorMessages.timeout);
 			}
@@ -78,30 +86,38 @@ async function fetchWithRetry(
 
 // API client with better error handling
 export const apiClient = {
-	async searchMeetings(query: string): Promise<SearchResult> {
+	async searchMeetings(query: string, clientIp?: string): Promise<SearchResult> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/search`,
 			{
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ query }),
-			}
+			},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();
 	},
 
-	async getAnalytics(): Promise<AnalyticsData> {
+	async getAnalytics(clientIp?: string): Promise<AnalyticsData> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/analytics`
+			`${config.apiBaseUrl}/api/analytics`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
-		
+
 		return response.json();
 	},
 	
-	async getRandomBestMeeting(): Promise<RandomMeetingResponse> {
+	async getRandomBestMeeting(clientIp?: string): Promise<RandomMeetingResponse> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/random-best-meeting`
+			`${config.apiBaseUrl}/api/random-best-meeting`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
 
 		const result = await response.json();
@@ -113,38 +129,49 @@ export const apiClient = {
 		return result;
 	},
 
-	async getRandomMeetingWithItems(): Promise<RandomMeetingWithItemsResponse> {
+	async getRandomMeetingWithItems(clientIp?: string): Promise<RandomMeetingWithItemsResponse> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/random-meeting-with-items`
+			`${config.apiBaseUrl}/api/random-meeting-with-items`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();
 	},
 
-	async searchByTopic(topic: string, banana?: string, limit: number = 50): Promise<TopicSearchResult> {
+	async searchByTopic(topic: string, banana?: string, limit: number = 50, clientIp?: string): Promise<TopicSearchResult> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/search/by-topic`,
 			{
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ topic, banana, limit })
-			}
+			},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();
 	},
 
-	async getMeeting(meetingId: string): Promise<GetMeetingResponse> {
+	async getMeeting(meetingId: string, clientIp?: string): Promise<GetMeetingResponse> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/meeting/${meetingId}`
+			`${config.apiBaseUrl}/api/meeting/${meetingId}`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();
 	},
 
-	async getTicker(): Promise<TickerResponse> {
+	async getTicker(clientIp?: string): Promise<TickerResponse> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/ticker`
+			`${config.apiBaseUrl}/api/ticker`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();
@@ -157,48 +184,56 @@ export const apiClient = {
 		custom_message?: string;
 		user_name?: string;
 		dark_mode?: boolean;
-	}): Promise<string> {
+	}, clientIp?: string): Promise<string> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/flyer/generate`,
 			{
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(params)
-			}
+			},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.text();
 	},
 
-	async getMatterTimeline(matterId: string): Promise<MatterTimelineResponse> {
+	async getMatterTimeline(matterId: string, clientIp?: string): Promise<MatterTimelineResponse> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/matters/${matterId}/timeline`
+			`${config.apiBaseUrl}/api/matters/${matterId}/timeline`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();
 	},
 
-	async getCityMatters(banana: string, limit: number = 50, offset: number = 0): Promise<GetCityMattersResponse> {
+	async getCityMatters(banana: string, limit: number = 50, offset: number = 0, clientIp?: string): Promise<GetCityMattersResponse> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/city/${banana}/matters?limit=${limit}&offset=${offset}`
+			`${config.apiBaseUrl}/api/city/${banana}/matters?limit=${limit}&offset=${offset}`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();
 	},
 
-	async getStateMatters(stateCode: string, topic?: string, limit: number = 100): Promise<GetStateMattersResponse> {
+	async getStateMatters(stateCode: string, topic?: string, limit: number = 100, clientIp?: string): Promise<GetStateMattersResponse> {
 		const url = new URL(`${config.apiBaseUrl}/api/state/${stateCode}/matters`);
 		url.searchParams.set('limit', limit.toString());
 		if (topic) {
 			url.searchParams.set('topic', topic);
 		}
 
-		const response = await fetchWithRetry(url.toString());
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
 
 		return response.json();
 	},
 
-	async getRandomMatter(): Promise<{
+	async getRandomMatter(clientIp?: string): Promise<{
 		success: boolean;
 		matter: {
 			id: string;
@@ -223,7 +258,10 @@ export const apiClient = {
 		}>;
 	}> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/random-matter`
+			`${config.apiBaseUrl}/api/random-matter`,
+			{},
+			config.maxRetries,
+			clientIp
 		);
 
 		return response.json();

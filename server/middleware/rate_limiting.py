@@ -2,6 +2,7 @@
 Rate limiting middleware
 """
 
+import hashlib
 import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -15,15 +16,32 @@ async def rate_limit_middleware(
 ):
     """Check rate limits for API endpoints with tier support"""
     # Get real client IP from trusted proxy headers (priority order)
-    # Cloudflare: CF-Connecting-IP (most reliable)
-    # nginx: X-Real-IP
-    # Standard: X-Forwarded-For (take leftmost/original client)
+    # X-Forwarded-User-IP: Set by our Cloudflare Worker for SSR requests (highest priority)
+    # CF-Connecting-IP: Set by Cloudflare for direct API requests
+    # X-Real-IP: Set by nginx
+    # X-Forwarded-For: Standard proxy header (take leftmost/original client)
     # Fallback: request.client.host
-    client_ip = (
-        request.headers.get("CF-Connecting-IP")
+    client_ip_raw = (
+        request.headers.get("X-Forwarded-User-IP")
+        or request.headers.get("CF-Connecting-IP")
         or request.headers.get("X-Real-IP")
         or (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() if request.headers.get("X-Forwarded-For") else None)
         or (request.client.host if request.client else "unknown")
+    )
+
+    # Hash IP for privacy (GDPR-friendly, can't reverse to get real IP)
+    # Same user = same hash = consistent rate limiting
+    # Use first 16 chars of SHA-256 hash for brevity
+    client_ip_hash = hashlib.sha256(client_ip_raw.encode()).hexdigest()[:16]
+
+    # DEBUG: Log all IP-related headers
+    logger.info(
+        f"[DEBUG IP] X-Forwarded-User-IP: {request.headers.get('X-Forwarded-User-IP')}, "
+        f"CF-Connecting-IP: {request.headers.get('CF-Connecting-IP')}, "
+        f"X-Real-IP: {request.headers.get('X-Real-IP')}, "
+        f"X-Forwarded-For: {request.headers.get('X-Forwarded-For')}, "
+        f"client.host: {request.client.host if request.client else 'unknown'}, "
+        f"RAW: {client_ip_raw}, HASH: {client_ip_hash}"
     )
 
     # Skip rate limiting for OPTIONS requests (CORS preflight)
@@ -36,13 +54,13 @@ async def rate_limit_middleware(
         # Get API key from header (optional, for future use)
         api_key = request.headers.get("X-API-Key")
 
-        is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(client_ip, api_key)
+        is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(client_ip_hash, api_key)
 
         if not is_allowed:
             limit_type = limit_info.get("limit_type", "unknown")
             tier = limit_info.get("tier", "basic")
             logger.warning(
-                f"Rate limit exceeded for {client_ip} - tier: {tier}, limit: {limit_type}"
+                f"Rate limit exceeded for {client_ip_hash} (hashed) - tier: {tier}, limit: {limit_type}"
             )
 
             # Construct graduated messaging based on limit type
