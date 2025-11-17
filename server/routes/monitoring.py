@@ -312,6 +312,19 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
         cursor.execute("SELECT COUNT(*) as matters_count FROM city_matters")
         matters_stats = dict(cursor.fetchone())
 
+        # Unique summaries = deduplicated matters + standalone items with summaries
+        cursor.execute(
+            "SELECT COUNT(*) as matters_with_summary FROM city_matters WHERE canonical_summary IS NOT NULL AND canonical_summary != ''"
+        )
+        matters_summarized = dict(cursor.fetchone())
+
+        cursor.execute(
+            "SELECT COUNT(*) as standalone_items FROM items WHERE matter_id IS NULL AND summary IS NOT NULL AND summary != ''"
+        )
+        standalone_items = dict(cursor.fetchone())
+
+        unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
+
         return {
             "success": True,
             "timestamp": datetime.now().isoformat(),
@@ -324,6 +337,7 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
                 "agendas_summarized": summaries_stats["summaries_count"],
                 "agenda_items_processed": items_stats["items_count"],
                 "matters_tracked": matters_stats["matters_count"],
+                "unique_item_summaries": unique_summaries,
             },
         }
 
