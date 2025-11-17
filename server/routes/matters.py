@@ -100,6 +100,8 @@ async def get_city_matters(
     """Get all matters for a city with appearance counts
 
     Returns matters sorted by most recent activity
+
+    Optimized to eliminate N+1 queries by fetching all data in a single query
     """
     try:
         # Verify city exists
@@ -110,20 +112,38 @@ async def get_city_matters(
         # Track city page view
         metrics.page_views.labels(page_type='city').inc()
 
-        matters = db.conn.execute(
+        # Single optimized query: fetch matters with their timelines (eliminates N+1 problem)
+        # Uses CTE for matter filtering, then joins timeline data in one query
+        all_data = db.conn.execute(
             """
+            WITH matter_summary AS (
+                SELECT
+                    m.*,
+                    COUNT(i.id) as actual_appearance_count,
+                    MAX(mt.date) as last_seen_date
+                FROM city_matters m
+                LEFT JOIN items i ON i.matter_id = m.id
+                LEFT JOIN meetings mt ON i.meeting_id = mt.id
+                WHERE m.banana = ?
+                GROUP BY m.id
+                HAVING COUNT(i.id) >= 1
+                ORDER BY last_seen_date DESC, m.created_at DESC
+                LIMIT ? OFFSET ?
+            )
             SELECT
-                m.*,
-                COUNT(i.id) as actual_appearance_count,
-                MAX(mt.date) as last_seen_date
-            FROM city_matters m
-            LEFT JOIN items i ON i.matter_id = m.id
-            LEFT JOIN meetings mt ON i.meeting_id = mt.id
-            WHERE m.banana = ?
-            GROUP BY m.id
-            HAVING COUNT(i.id) >= 1
-            ORDER BY last_seen_date DESC, m.created_at DESC
-            LIMIT ? OFFSET ?
+                ms.*,
+                i.id as item_id,
+                i.meeting_id,
+                i.agenda_number,
+                i.summary as item_summary,
+                i.topics as item_topics,
+                m.title as meeting_title,
+                m.date as meeting_date,
+                m.banana as meeting_banana
+            FROM matter_summary ms
+            LEFT JOIN items i ON i.matter_id = ms.id
+            LEFT JOIN meetings m ON i.meeting_id = m.id
+            ORDER BY ms.last_seen_date DESC, ms.created_at DESC, m.date ASC, i.sequence ASC
             """,
             (banana, limit, offset)
         ).fetchall()
@@ -143,59 +163,44 @@ async def get_city_matters(
             (banana,)
         ).fetchone()[0]
 
-        matters_list = []
-        for matter in matters:
-            matter_dict = dict(matter)
+        # Group timeline data by matter (single pass through results)
+        matters_dict = {}
+        for row in all_data:
+            matter_id = row["id"]
 
-            # Fetch timeline for this matter (simple FK join)
-            timeline_items = db.conn.execute(
-                """
-                SELECT
-                    i.id as item_id,
-                    i.meeting_id,
-                    i.agenda_number,
-                    i.summary,
-                    i.topics,
-                    m.title as meeting_title,
-                    m.date as meeting_date,
-                    m.banana
-                FROM items i
-                JOIN meetings m ON i.meeting_id = m.id
-                WHERE i.matter_id = ?
-                ORDER BY m.date ASC, i.sequence ASC
-                """,
-                (matter_dict["id"],)
-            ).fetchall()
-
-            timeline = [
-                {
-                    "item_id": item["item_id"],
-                    "meeting_id": item["meeting_id"],
-                    "meeting_title": item["meeting_title"],
-                    "meeting_date": item["meeting_date"],
-                    "banana": item["banana"],
-                    "agenda_number": item["agenda_number"],
-                    "summary": item["summary"],
-                    "topics": json.loads(item["topics"]) if item["topics"] else []
+            # Initialize matter if not seen yet
+            if matter_id not in matters_dict:
+                matters_dict[matter_id] = {
+                    "id": matter_id,
+                    "matter_file": row["matter_file"],
+                    "matter_id": row["matter_id"],
+                    "matter_type": row["matter_type"],
+                    "title": row["title"],
+                    "sponsors": json.loads(row["sponsors"]) if row["sponsors"] else [],
+                    "canonical_summary": row["canonical_summary"],
+                    "canonical_topics": json.loads(row["canonical_topics"]) if row["canonical_topics"] else [],
+                    "first_seen": row["first_seen"],
+                    "last_seen": row["last_seen"],
+                    "appearance_count": row["actual_appearance_count"],
+                    "status": row["status"],
+                    "timeline": []
                 }
-                for item in timeline_items
-            ]
 
-            matters_list.append({
-                "id": matter_dict["id"],
-                "matter_file": matter_dict["matter_file"],
-                "matter_id": matter_dict["matter_id"],
-                "matter_type": matter_dict["matter_type"],
-                "title": matter_dict["title"],
-                "sponsors": json.loads(matter_dict["sponsors"]) if matter_dict["sponsors"] else [],
-                "canonical_summary": matter_dict["canonical_summary"],
-                "canonical_topics": json.loads(matter_dict["canonical_topics"]) if matter_dict["canonical_topics"] else [],
-                "first_seen": matter_dict["first_seen"],
-                "last_seen": matter_dict["last_seen"],
-                "appearance_count": matter_dict["actual_appearance_count"],
-                "status": matter_dict["status"],
-                "timeline": timeline
-            })
+            # Add timeline item if it exists (LEFT JOIN may have NULL item_id)
+            if row["item_id"] is not None:
+                matters_dict[matter_id]["timeline"].append({
+                    "item_id": row["item_id"],
+                    "meeting_id": row["meeting_id"],
+                    "meeting_title": row["meeting_title"],
+                    "meeting_date": row["meeting_date"],
+                    "banana": row["meeting_banana"],
+                    "agenda_number": row["agenda_number"],
+                    "summary": row["item_summary"],
+                    "topics": json.loads(row["item_topics"]) if row["item_topics"] else []
+                })
+
+        # Convert dict to list (preserves ORDER BY from query)
+        matters_list = list(matters_dict.values())
 
         return {
             "success": True,

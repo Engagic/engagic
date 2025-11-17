@@ -225,6 +225,7 @@ CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
 CREATE INDEX IF NOT EXISTS idx_items_matter_file ON items(matter_file) WHERE matter_file IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_items_matter_id ON items(matter_id) WHERE matter_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_items_meeting_id ON items(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_items_matter_meeting ON items(matter_id, meeting_id) WHERE matter_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_city_matters_banana ON city_matters(banana);
 CREATE INDEX IF NOT EXISTS idx_city_matters_matter_file ON city_matters(matter_file);
 CREATE INDEX IF NOT EXISTS idx_city_matters_first_seen ON city_matters(first_seen);
