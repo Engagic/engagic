@@ -1,3 +1,10 @@
+<script lang="ts" module>
+	// Module-level cache - persists across component instances and navigation
+	// Cleared only on full page reload
+	const MATTERS_CACHE_DURATION = 120000; // 2 minutes
+	const mattersCache = new Map<string, { data: any; timestamp: number }>();
+</script>
+
 <script lang="ts">
 	import { page } from '$app/stores';
 	import type { Meeting } from '$lib/api/index';
@@ -8,6 +15,7 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
 
 	const city_banana = $derived($page.params.city_url);
 	let showPastMeetings = $state(false);
@@ -21,10 +29,6 @@
 	const searchResults = $derived(data.searchResults);
 	const upcomingMeetings = $derived(data.upcomingMeetings || []);
 	const pastMeetings = $derived(data.pastMeetings || []);
-
-	// Client-side cache for matters data (2-minute expiration)
-	const MATTERS_CACHE_DURATION = 120000; // 2 minutes
-	const mattersCache = new Map<string, { data: any; timestamp: number }>();
 
 	// Reset matters state when city changes (client-side navigation)
 	$effect(() => {
