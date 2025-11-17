@@ -50,10 +50,11 @@ logger.info(f"Initialized shared database at {config.UNIFIED_DB_PATH}")
 app.state.db = db
 
 
-# Register middleware (order matters: metrics -> rate limiting -> logging)
+# Register middleware (execution order: metrics -> rate limiting -> logging)
+# FastAPI middleware stack: last registered runs first, so register in reverse order
 @app.middleware("http")
-async def metrics_middleware_wrapper(request, call_next):
-    return await metrics_middleware(request, call_next)
+async def log_requests_middleware(request, call_next):
+    return await log_requests(request, call_next)
 
 
 @app.middleware("http")
@@ -63,8 +64,8 @@ async def rate_limit_middleware_wrapper(request, call_next):
 
 
 @app.middleware("http")
-async def log_requests_middleware(request, call_next):
-    return await log_requests(request, call_next)
+async def metrics_middleware_wrapper(request, call_next):
+    return await metrics_middleware(request, call_next)
 
 
 # Mount routers
