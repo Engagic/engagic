@@ -34,16 +34,6 @@ async def rate_limit_middleware(
     # Use first 16 chars of SHA-256 hash for brevity
     client_ip_hash = hashlib.sha256(client_ip_raw.encode()).hexdigest()[:16]
 
-    # DEBUG: Log all IP-related headers
-    logger.info(
-        f"[DEBUG IP] X-Forwarded-User-IP: {request.headers.get('X-Forwarded-User-IP')}, "
-        f"CF-Connecting-IP: {request.headers.get('CF-Connecting-IP')}, "
-        f"X-Real-IP: {request.headers.get('X-Real-IP')}, "
-        f"X-Forwarded-For: {request.headers.get('X-Forwarded-For')}, "
-        f"client.host: {request.client.host if request.client else 'unknown'}, "
-        f"RAW: {client_ip_raw}, HASH: {client_ip_hash}"
-    )
-
     # Skip rate limiting for OPTIONS requests (CORS preflight)
     if request.method == "OPTIONS":
         response = await call_next(request)
