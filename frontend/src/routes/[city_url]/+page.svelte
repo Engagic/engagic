@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import type { Meeting } from '$lib/api/index';
-	import { getCityMatters } from '$lib/api/index';
+	import type { Meeting, SearchResult } from '$lib/api/index';
+	import { getCityMatters, searchMeetings } from '$lib/api/index';
+	import { processMeetingDates } from '$lib/utils/meetings';
 	import MeetingCard from '$lib/components/MeetingCard.svelte';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -18,11 +19,44 @@
 	let cityMatters = $state<any>(null);
 	let mattersLoading = $state(false);
 	let mattersChecked = $state(false);
+	let loading = $state(false);
 
-	// Data comes from load function - already available
-	let searchResults = $state(data.searchResults);
-	let upcomingMeetings: Meeting[] = $state(data.upcomingMeetings || []);
-	let pastMeetings: Meeting[] = $state(data.pastMeetings || []);
+	// Check for cached search results from navigation state
+	let searchResults = $state<SearchResult | null>(null);
+	let upcomingMeetings: Meeting[] = $state([]);
+	let pastMeetings: Meeting[] = $state([]);
+
+	// Fetch city data on mount (with cache check)
+	onMount(async () => {
+		// Check if we have cached results from navigation
+		const cached = $page.state.cachedSearchResults as SearchResult | undefined;
+
+		if (cached) {
+			// Use cached data - no API call needed
+			processSearchResults(cached);
+		} else {
+			// Fetch fresh data
+			loading = true;
+			try {
+				const searchQuery = `${data.cityName}, ${data.state}`;
+				const result = await searchMeetings(searchQuery);
+				processSearchResults(result);
+			} catch (err) {
+				console.error('Failed to load city data:', err);
+			} finally {
+				loading = false;
+			}
+		}
+	});
+
+	function processSearchResults(result: SearchResult) {
+		searchResults = result;
+		if (result.success && result.meetings) {
+			const { upcoming, past } = processMeetingDates(result.meetings);
+			upcomingMeetings = upcoming;
+			pastMeetings = past;
+		}
+	}
 
 	// Derived: Check if city has qualifying matters (2+ appearances)
 	const hasQualifyingMatters = $derived(() => {
@@ -97,11 +131,15 @@
 		{#if searchResults && 'city_name' in searchResults}
 			<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
 		{:else}
-			<h1 class="city-title">Loading...</h1>
+			<h1 class="city-title">{data.cityName}, {data.state}</h1>
 		{/if}
 	</div>
 
-	{#if searchResults && searchResults.success}
+	{#if loading}
+		<div class="loading-state">
+			<p>Loading meetings...</p>
+		</div>
+	{:else if searchResults && searchResults.success}
 		{#if hasQualifyingMatters()}
 			<div class="view-toggle" role="tablist" aria-label="View mode selection">
 				<button
@@ -353,6 +391,13 @@
 		background: var(--civic-blue);
 		color: white;
 		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+	}
+
+	.loading-state {
+		text-align: center;
+		padding: 4rem 2rem;
+		color: var(--civic-gray);
+		font-family: 'IBM Plex Mono', monospace;
 	}
 
 	.loading-matters {
