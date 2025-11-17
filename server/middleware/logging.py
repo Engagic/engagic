@@ -12,6 +12,10 @@ logger = logging.getLogger("engagic")
 
 async def log_requests(request: Request, call_next):
     """Log incoming requests and responses"""
+    # Skip logging for metrics endpoint (Prometheus scraping noise)
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
     request_id = str(uuid.uuid4())[:8]
     start_time = time.time()
 
