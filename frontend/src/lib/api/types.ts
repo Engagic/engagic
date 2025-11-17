@@ -155,10 +155,13 @@ export interface AnalyticsData {
 	timestamp: string;
 	real_metrics: {
 		cities_covered: number;
+		active_cities: number;
 		meetings_tracked: number;
+		meetings_with_items: number;
 		meetings_with_packet: number;
 		agendas_summarized: number;
-		active_cities: number;
+		agenda_items_processed: number;
+		matters_tracked: number;
 	};
 }
 
