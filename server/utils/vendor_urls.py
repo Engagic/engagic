@@ -2,6 +2,8 @@
 Utility to construct vendor source URLs for attribution
 """
 
+import json
+import os
 from typing import Optional
 
 
@@ -22,10 +24,13 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
     """
     vendor = vendor.lower().strip()
 
+    # Special handling for Granicus - requires city-specific view_id
+    if vendor == "granicus":
+        return _get_granicus_url(slug)
+
     vendor_patterns = {
         "legistar": f"https://{slug}.legistar.com/Calendar.aspx",
-        "primegov": f"https://{slug}.primegov.com",
-        "granicus": f"https://{slug}.granicus.com/ViewPublisher.php",
+        "primegov": f"https://{slug}.primegov.com/public/portal",
         "iqm2": f"https://{slug}.iqm2.com/Citizens/Calendar.aspx",
         "novusagenda": f"https://{slug}.novusagenda.com/agendapublic",
         "escribe": f"https://{slug}.escribemeetings.com",
@@ -38,6 +43,35 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
     }
 
     return vendor_patterns.get(vendor)
+
+
+def _get_granicus_url(slug: str) -> Optional[str]:
+    """
+    Get Granicus URL with city-specific view_id from cache.
+
+    Args:
+        slug: Granicus city slug
+
+    Returns:
+        Full URL with view_id, or base URL if view_id not found
+    """
+    view_ids_file = "/root/engagic/data/granicus_view_ids.json"
+    base_url = f"https://{slug}.granicus.com"
+
+    # Try to load cached view_ids
+    if os.path.exists(view_ids_file):
+        try:
+            with open(view_ids_file, "r") as f:
+                mappings = json.load(f)
+                view_id = mappings.get(base_url)
+                if view_id:
+                    return f"{base_url}/ViewPublisher.php?view_id={view_id}"
+        except Exception:
+            pass  # Fall through to default
+
+    # Fallback: return base URL without view_id
+    # (better than nothing, user can navigate from there)
+    return f"{base_url}/ViewPublisher.php"
 
 
 def get_vendor_display_name(vendor: str) -> str:
