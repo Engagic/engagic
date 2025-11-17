@@ -162,6 +162,7 @@ export interface AnalyticsData {
 		agendas_summarized: number;
 		agenda_items_processed: number;
 		matters_tracked: number;
+		unique_item_summaries: number;
 	};
 }
 

@@ -90,9 +90,9 @@
 				</div>
 
 				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.meetings_with_items)}</div>
-					<div class="impact-label">Item-Level Meetings</div>
-					<div class="impact-desc">Granular agenda extraction</div>
+					<div class="impact-number">{formatNumber(analytics.real_metrics.unique_item_summaries)}</div>
+					<div class="impact-label">Unique Summaries</div>
+					<div class="impact-desc">Across {formatNumber(analytics.real_metrics.meetings_with_items)} item-level meetings</div>
 				</div>
 			</div>
 		</section>
