@@ -26,6 +26,10 @@
 	let upcomingMeetings: Meeting[] = $state([]);
 	let pastMeetings: Meeting[] = $state([]);
 
+	// Client-side cache for matters data (2-minute expiration)
+	const MATTERS_CACHE_DURATION = 120000; // 2 minutes
+	const mattersCache = new Map<string, { data: any; timestamp: number }>();
+
 	// Fetch city data on mount (with cache check)
 	onMount(async () => {
 		// Check if we have cached results from navigation
@@ -65,12 +69,30 @@
 	});
 
 	async function loadCityMatters() {
-		if (cityMatters) return; // Already loaded
+		if (cityMatters) return; // Already loaded in component state
+
+		// Check cache first (2-minute expiration)
+		const cached = mattersCache.get(city_banana);
+		const now = Date.now();
+		if (cached && (now - cached.timestamp) < MATTERS_CACHE_DURATION) {
+			// Use cached data - instant load
+			cityMatters = cached.data;
+			mattersChecked = true;
+			return;
+		}
+
+		// Fetch fresh data from API
 		mattersLoading = true;
 		try {
 			const result = await getCityMatters(city_banana, 50, 0);
 			cityMatters = result;
 			mattersChecked = true;
+
+			// Store in cache with timestamp
+			mattersCache.set(city_banana, {
+				data: result,
+				timestamp: now
+			});
 
 			// If no qualifying matters, switch back to meetings view
 			if (result.total_count === 0) {
