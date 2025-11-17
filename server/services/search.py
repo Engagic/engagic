@@ -10,6 +10,7 @@ from difflib import get_close_matches
 from database.db import UnifiedDatabase
 from server.services.meeting import get_meetings_with_items
 from server.utils.geo import parse_city_state_input, get_state_abbreviation, get_state_full_name
+from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_name
 
 logger = logging.getLogger("engagic")
 
@@ -48,6 +49,8 @@ def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
             "state": city.state,
             "banana": city.banana,
             "vendor": city.vendor,
+            "vendor_display_name": get_vendor_display_name(city.vendor),
+            "source_url": get_vendor_source_url(city.vendor, city.slug),
             "meetings": meetings_with_items,
             "cached": True,
             "query": zipcode,
@@ -61,6 +64,8 @@ def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
         "state": city.state,
         "banana": city.banana,
         "vendor": city.vendor,
+        "vendor_display_name": get_vendor_display_name(city.vendor),
+        "source_url": get_vendor_source_url(city.vendor, city.slug),
         "meetings": [],
         "cached": False,
         "query": zipcode,
@@ -108,6 +113,8 @@ def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
             "state": city.state,
             "banana": city.banana,
             "vendor": city.vendor,
+            "vendor_display_name": get_vendor_display_name(city.vendor),
+            "source_url": get_vendor_source_url(city.vendor, city.slug),
             "meetings": meetings_with_items,
             "cached": True,
             "query": city_input,
@@ -121,6 +128,8 @@ def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
         "state": city.state,
         "banana": city.banana,
         "vendor": city.vendor,
+        "vendor_display_name": get_vendor_display_name(city.vendor),
+        "source_url": get_vendor_source_url(city.vendor, city.slug),
         "meetings": [],
         "cached": True,
         "query": city_input,

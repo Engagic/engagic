@@ -131,6 +131,19 @@
 		<a href="/" class="back-link">← Back to search</a>
 		{#if searchResults && 'city_name' in searchResults}
 			<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
+			{#if searchResults.source_url && searchResults.vendor_display_name}
+				<div class="source-attribution">
+					<span class="attribution-text">Data sourced from</span>
+					<a
+						href={searchResults.source_url}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="source-link"
+					>
+						{searchResults.vendor_display_name}
+					</a>
+				</div>
+			{/if}
 		{/if}
 	</div>
 
@@ -350,8 +363,35 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2rem;
 		color: var(--civic-dark);
-		margin: 0;
+		margin: 0 0 0.75rem 0;
 		font-weight: 600;
+	}
+
+	.source-attribution {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--civic-gray);
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin-top: 0.5rem;
+	}
+
+	.attribution-text {
+		opacity: 0.7;
+	}
+
+	.source-link {
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 500;
+		transition: all 0.2s ease;
+		border-bottom: 1px solid transparent;
+	}
+
+	.source-link:hover {
+		color: var(--civic-accent);
+		border-bottom-color: var(--civic-accent);
 	}
 
 	.view-toggle {

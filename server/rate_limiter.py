@@ -7,16 +7,54 @@ import sqlite3
 from pathlib import Path
 from typing import Optional, Callable, Any, Dict, Tuple
 from functools import wraps
+from enum import Enum
 
 logger = logging.getLogger("engagic")
 
 
+class RateLimitTier(str, Enum):
+    """Rate limit tiers for different user types"""
+    BASIC = "basic"
+    HACKTIVIST = "hacktivist"
+    ENTERPRISE = "enterprise"
+
+
+class TierLimits:
+    """Rate limit configuration for each tier"""
+    BASIC = {
+        "minute_limit": 30,
+        "day_limit": 300,
+        "description": "Free tier - reasonable personal use"
+    }
+    HACKTIVIST = {
+        "minute_limit": 100,
+        "day_limit": 5000,
+        "description": "Nonprofit/journalist tier - requires attribution"
+    }
+    ENTERPRISE = {
+        "minute_limit": 1000,
+        "day_limit": 100000,
+        "description": "Commercial tier - paid access"
+    }
+
+    @classmethod
+    def get_limits(cls, tier: RateLimitTier) -> Dict[str, Any]:
+        """Get limits for a tier"""
+        tier_map = {
+            RateLimitTier.BASIC: cls.BASIC,
+            RateLimitTier.HACKTIVIST: cls.HACKTIVIST,
+            RateLimitTier.ENTERPRISE: cls.ENTERPRISE,
+        }
+        return tier_map.get(tier, cls.BASIC)
+
+
 class SQLiteRateLimiter:
     """
-    Persistent rate limiter using SQLite.
+    Persistent rate limiter using SQLite with tier support.
 
     Survives restarts and works across multiple API instances.
     Stores request timestamps in database for accurate rate limiting.
+    Supports per-minute and per-day limits across multiple tiers.
     """
 
     def __init__(
@@ -27,8 +65,8 @@ class SQLiteRateLimiter:
 
         Args:
             db_path: Path to SQLite database file
-            requests_limit: Maximum requests allowed in window
-            window_seconds: Time window in seconds
+            requests_limit: Maximum requests allowed in window (backward compat)
+            window_seconds: Time window in seconds (backward compat)
         """
         self.db_path = db_path
         self.requests_limit = requests_limit
@@ -42,8 +80,9 @@ class SQLiteRateLimiter:
         self._cleanup_interval = 300  # Run cleanup every 5 minutes
 
     def _init_db(self):
-        """Initialize rate limiting table"""
+        """Initialize rate limiting tables"""
         with sqlite3.connect(self.db_path) as conn:
+            # Per-minute tracking
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS rate_limits (
                     client_ip TEXT NOT NULL,
@@ -57,21 +96,131 @@ class SQLiteRateLimiter:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_rate_limits_time ON rate_limits(timestamp)"
             )
+
+            # Per-day tracking
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS daily_rate_limits (
+                    client_ip TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    request_count INTEGER DEFAULT 0,
+                    tier TEXT DEFAULT 'basic',
+                    PRIMARY KEY (client_ip, date)
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_daily_rate_limits_ip ON daily_rate_limits(client_ip)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_daily_rate_limits_date ON daily_rate_limits(date)"
+            )
+
+            # API keys (for future use)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    api_key TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL,
+                    tier TEXT NOT NULL DEFAULT 'basic',
+                    created_at REAL NOT NULL,
+                    email TEXT,
+                    organization TEXT,
+                    notes TEXT,
+                    is_active INTEGER DEFAULT 1
+                )
+            """)
+
             conn.commit()
             logger.info(f"Initialized persistent rate limiter at {self.db_path}")
 
-    def check_rate_limit(self, client_ip: str) -> Tuple[bool, int]:
+    def get_client_tier(self, client_ip: str, api_key: Optional[str] = None) -> RateLimitTier:
         """
-        Check if client has exceeded rate limit.
+        Get tier for client (API key lookup or default to basic).
 
         Args:
             client_ip: Client IP address
+            api_key: Optional API key
+
+        Returns:
+            RateLimitTier enum
+        """
+        if api_key:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT tier FROM api_keys WHERE api_key = ? AND is_active = 1",
+                    (api_key,)
+                )
+                result = cursor.fetchone()
+                if result:
+                    return RateLimitTier(result[0])
+
+        # Default to basic tier for unauthenticated requests
+        return RateLimitTier.BASIC
+
+    def check_daily_limit(self, client_ip: str, tier: RateLimitTier) -> Tuple[bool, int]:
+        """
+        Check if client has exceeded daily limit.
+
+        Args:
+            client_ip: Client IP address
+            tier: Rate limit tier
 
         Returns:
             (is_allowed, remaining_requests)
         """
+        from datetime import datetime
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        limits = TierLimits.get_limits(tier)
+        day_limit = limits["day_limit"]
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+
+            # Get or create daily counter
+            cursor = conn.execute(
+                "SELECT request_count FROM daily_rate_limits WHERE client_ip = ? AND date = ?",
+                (client_ip, today)
+            )
+            result = cursor.fetchone()
+
+            if result:
+                current_count = result[0]
+                if current_count >= day_limit:
+                    return False, 0
+
+                # Increment counter
+                conn.execute(
+                    "UPDATE daily_rate_limits SET request_count = request_count + 1 WHERE client_ip = ? AND date = ?",
+                    (client_ip, today)
+                )
+            else:
+                # Create new daily counter
+                current_count = 0
+                conn.execute(
+                    "INSERT INTO daily_rate_limits (client_ip, date, request_count, tier) VALUES (?, ?, 1, ?)",
+                    (client_ip, today, tier.value)
+                )
+
+            conn.commit()
+            remaining = day_limit - current_count - 1
+            return True, max(0, remaining)
+
+    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
+        """
+        Check if client has exceeded rate limits (both minute and day).
+
+        Args:
+            client_ip: Client IP address
+            api_key: Optional API key for tier lookup
+
+        Returns:
+            (is_allowed, remaining_minute, limit_info)
+        """
         current_time = time.time()
         window_start = current_time - self.window_seconds
+
+        # Get client tier
+        tier = self.get_client_tier(client_ip, api_key)
+        limits = TierLimits.get_limits(tier)
+        minute_limit = limits["minute_limit"]
 
         # Periodic cleanup to prevent database bloat
         if current_time - self._last_cleanup > self._cleanup_interval:
@@ -89,10 +238,26 @@ class SQLiteRateLimiter:
             )
             request_count = cursor.fetchone()[0]
 
-            if request_count >= self.requests_limit:
-                return False, 0
+            # Check minute limit
+            if request_count >= minute_limit:
+                return False, 0, {
+                    "tier": tier.value,
+                    "limit_type": "minute",
+                    "minute_limit": minute_limit,
+                    "day_limit": limits["day_limit"]
+                }
 
-            # Add current request
+            # Check daily limit
+            is_allowed_daily, remaining_daily = self.check_daily_limit(client_ip, tier)
+            if not is_allowed_daily:
+                return False, 0, {
+                    "tier": tier.value,
+                    "limit_type": "daily",
+                    "minute_limit": minute_limit,
+                    "day_limit": limits["day_limit"]
+                }
+
+            # Add current request to minute tracker
             try:
                 conn.execute(
                     "INSERT INTO rate_limits (client_ip, timestamp) VALUES (?, ?)",
@@ -103,8 +268,14 @@ class SQLiteRateLimiter:
                 # Duplicate timestamp for same IP (extremely rare)
                 pass
 
-            remaining = self.requests_limit - request_count - 1
-            return True, max(0, remaining)
+            remaining_minute = minute_limit - request_count - 1
+            return True, max(0, remaining_minute), {
+                "tier": tier.value,
+                "remaining_minute": remaining_minute,
+                "remaining_daily": remaining_daily,
+                "minute_limit": minute_limit,
+                "day_limit": limits["day_limit"]
+            }
 
     def _cleanup_old_entries(self, cutoff_time: float):
         """Remove entries older than cutoff time"""
