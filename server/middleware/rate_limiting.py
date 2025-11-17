@@ -34,6 +34,9 @@ async def rate_limit_middleware(
     # Use first 16 chars of SHA-256 hash for brevity
     client_ip_hash = hashlib.sha256(client_ip_raw.encode()).hexdigest()[:16]
 
+    # Store hash in request state for route handlers to access
+    request.state.client_ip_hash = client_ip_hash
+
     # Skip rate limiting for OPTIONS requests (CORS preflight)
     if request.method == "OPTIONS":
         response = await call_next(request)

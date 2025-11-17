@@ -25,14 +25,16 @@ def get_db(request: Request) -> UnifiedDatabase:
 
 
 @router.post("/search")
-async def search_meetings(request: SearchRequest, db: UnifiedDatabase = Depends(get_db)):
+async def search_meetings(search_request: SearchRequest, request: Request, db: UnifiedDatabase = Depends(get_db)):
     """Single endpoint for all meeting searches - handles zipcode or city name"""
     try:
-        query = request.query.strip()
+        query = search_request.query.strip()
         if not query:
             raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-        logger.info(f"Search request: '{query}'")
+        # Get client hash from middleware (set in rate_limiting.py)
+        client_hash = getattr(request.state, 'client_ip_hash', 'unknown')
+        logger.info(f"Search request: '{query}' [user:{client_hash}]")
 
         # Special case: "new york" or "new york city" -> NYC (not the state)
         query_lower = query.lower()
