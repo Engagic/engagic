@@ -4,7 +4,7 @@ import { parseCityUrl } from '$lib/utils/utils';
 import { processMeetingDates } from '$lib/utils/meetings';
 import { error, redirect } from '@sveltejs/kit';
 
-export const load: PageServerLoad = async ({ params, setHeaders }) => {
+export const load: PageServerLoad = async ({ params, setHeaders, locals }) => {
 	const { city_url } = params;
 
 	// Check if this is a static route
@@ -18,9 +18,9 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 		throw error(404, 'Invalid city URL format');
 	}
 
-	// Fetch city data server-side
+	// Fetch city data server-side (pass client IP for rate limiting)
 	const searchQuery = `${parsed.cityName}, ${parsed.state}`;
-	const result = await searchMeetings(searchQuery);
+	const result = await searchMeetings(searchQuery, locals.clientIp);
 
 	if (!result.success) {
 		throw error(404, result.message || 'City not found');
