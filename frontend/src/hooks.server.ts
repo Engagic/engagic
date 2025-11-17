@@ -2,8 +2,9 @@ import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// Get real client IP from Cloudflare
-	// Priority: CF-Connecting-IP > X-Real-IP > X-Forwarded-For
+	// On Cloudflare Workers/Pages, client IP is in platform.cf or via getClientAddress()
 	const clientIp =
+		(event.platform as any)?.cf?.connectingIp ||  // Cloudflare Workers platform
 		event.request.headers.get('CF-Connecting-IP') ||
 		event.request.headers.get('X-Real-IP') ||
 		event.request.headers.get('X-Forwarded-For')?.split(',')[0].trim() ||
@@ -11,6 +12,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Store in locals so it's available to all server load functions
 	event.locals.clientIp = clientIp;
+
+	// DEBUG: Log what we're getting
+	console.log('[WORKER DEBUG] Client IP:', clientIp, 'Platform:', typeof (event.platform as any)?.cf);
 
 	return resolve(event);
 };
