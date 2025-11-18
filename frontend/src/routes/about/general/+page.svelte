@@ -75,15 +75,15 @@
 	.about-content {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3xl);
-		padding-bottom: var(--space-3xl);
+		gap: var(--space-xl);
+		padding-bottom: var(--space-xl);
 		color: var(--text-primary);
 	}
 
 	.section {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-lg);
+		gap: var(--space-md);
 	}
 
 	.section-heading {
@@ -222,7 +222,7 @@
 		text-decoration: underline;
 	}
 
-	@media (max-width: 640px) {
+	@media (max-width: 768px) {
 		h1.section-heading {
 			font-size: 2rem;
 		}
@@ -237,6 +237,10 @@
 
 		.highlight-section {
 			padding: var(--space-lg);
+		}
+
+		.principles-grid {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

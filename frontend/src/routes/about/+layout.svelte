@@ -5,7 +5,7 @@
 	import Footer from '$lib/components/Footer.svelte';
 </script>
 
-<PageNav pageName="about" homeNavPath="/about" homeTitle="About Engagic">
+<PageNav pageName="about" homeNavPath="/about" homeTitle="About Engagic" wideContent={true}>
 	<svelte:fragment slot="navigation">
 		<PageNavTab
 			path="/about/general"

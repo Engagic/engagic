@@ -143,11 +143,11 @@
 	}
 
 	.page-nav-content > :global(*) {
-		max-width: 800px;
+		max-width: 900px;
 	}
 
 	.page-nav-content.wide > :global(*) {
-		max-width: 1000px;
+		max-width: 1200px;
 	}
 
 	.back-button {
@@ -181,6 +181,10 @@
 			min-height: 100vh;
 		}
 
+		.home-link {
+			display: none;
+		}
+
 		.page-nav-sidebar-container {
 			width: 100%;
 			padding: var(--space-md);
@@ -207,9 +211,12 @@
 		}
 
 		.page-nav-content {
-			padding: var(--space-md) 0;
+			padding: var(--space-md);
 			padding-top: 0;
-			max-width: unset;
+		}
+
+		.page-nav-content > :global(*) {
+			max-width: 100% !important;
 		}
 
 		.page-nav-content.padding {

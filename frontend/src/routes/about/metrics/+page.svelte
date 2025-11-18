@@ -67,10 +67,6 @@
 			</div>
 		</section>
 
-		<section class="section coming-soon">
-			<h2 class="section-heading">Coming Soon</h2>
-			<p>We're working on additional metrics including top cities by items processed and highest-value contracts tracked by city.</p>
-		</section>
 	{:else if loading}
 		<div class="loading-state">
 			<div class="loading-spinner"></div>
@@ -88,15 +84,15 @@
 	.metrics-content {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3xl);
-		padding-bottom: var(--space-3xl);
+		gap: var(--space-xl);
+		padding-bottom: var(--space-xl);
 		color: var(--text-primary);
 	}
 
 	.section {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-lg);
+		gap: var(--space-md);
 	}
 
 	.section-heading {
@@ -249,7 +245,7 @@
 		transform: translateY(-2px);
 	}
 
-	@media (max-width: 640px) {
+	@media (max-width: 768px) {
 		h1.section-heading {
 			font-size: 2rem;
 		}
@@ -262,8 +258,18 @@
 			grid-template-columns: 1fr;
 		}
 
+		.metric-card {
+			padding: var(--space-lg);
+			min-height: 150px;
+		}
+
 		.metric-number {
 			font-size: 2.5rem;
+		}
+
+		.metric-value-group {
+			flex-wrap: wrap;
+			justify-content: center;
 		}
 	}
 </style>

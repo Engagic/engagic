@@ -32,7 +32,7 @@
 :root.light {
 	--civic-blue: #4f46e5;
 	--civic-green: #10b981;
-	--civic-gray: #475569;
+	--civic-gray: #334155;
 	--civic-dark: #0f172a;
 	--civic-light: #f8fafc;
 	--civic-white: #ffffff;
@@ -45,7 +45,7 @@
 	--bg-gradient-start: #f8fafc;
 	--bg-gradient-end: #e2e8f0;
 	--text-primary: #0f172a;
-	--text-secondary: #475569;
+	--text-secondary: #334155;
 	--text-link: #4f46e5;
 	--surface-primary: #ffffff;
 	--surface-secondary: #f8fafc;
@@ -78,7 +78,7 @@
 :root.dark {
 	--civic-blue: #a78bfa;
 	--civic-green: #34d399;
-	--civic-gray: #94a3b8;
+	--civic-gray: #cbd5e1;
 	--civic-dark: #f8fafc;
 	--civic-light: #1e293b;
 	--civic-white: #0f172a;
@@ -91,7 +91,7 @@
 	--bg-gradient-start: #0f172a;
 	--bg-gradient-end: #1e293b;
 	--text-primary: #f8fafc;
-	--text-secondary: #cbd5e1;
+	--text-secondary: #e2e8f0;
 	--text-link: #fb923c;
 	--surface-primary: #1e293b;
 	--surface-secondary: #334155;

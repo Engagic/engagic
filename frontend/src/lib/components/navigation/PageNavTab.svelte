@@ -115,8 +115,27 @@
 
 	/* Mobile styles */
 	@media (max-width: 750px) {
+		.page-nav-tab {
+			padding: 0.85rem 1rem;
+		}
+
+		.tab-icon {
+			width: 28px;
+			height: 28px;
+		}
+
+		.tab-icon :global(svg) {
+			width: 16px;
+			height: 16px;
+		}
+
+		.tab-title {
+			font-size: 0.9rem;
+		}
+
 		.tab-chevron {
 			opacity: 1;
+			font-size: 1rem;
 		}
 	}
 </style>

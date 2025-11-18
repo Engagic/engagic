@@ -47,4 +47,16 @@
 		color: var(--civic-accent);
 		text-decoration: underline;
 	}
+
+	@media (max-width: 768px) {
+		.footer {
+			padding: var(--space-lg) 0;
+			margin-top: var(--space-xl);
+		}
+
+		.tagline,
+		.footer-link {
+			font-size: 0.8rem;
+		}
+	}
 </style>
