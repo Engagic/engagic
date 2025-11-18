@@ -341,9 +341,9 @@ class IQM2Adapter(BaseAdapter):
                         # Extract title
                         if title_link:
                             item_title = title_link.get_text(strip=True)
-                            # Extract LegiFile ID
+                            # Extract LegiFile ID (avoid matching MeetingID=)
                             href = title_link.get("href", "")
-                            id_match = re.search(r"ID=(\d+)", href)
+                            id_match = re.search(r"[?&]ID=(\d+)", href)
                             legifile_id = id_match.group(1) if id_match else None
                         else:
                             item_title = title_cell.get_text(strip=True)
@@ -400,6 +400,15 @@ class IQM2Adapter(BaseAdapter):
 
                     # Match letter/number numbering OR empty Num cell with LegiFile link
                     if re.match(r"^[A-Z0-9]+\.\s*$", num_text) or (not num_text and title_link):
+                        # Skip section headers (have <strong> tags in title, no actual content)
+                        title_strong = title_cell.find("strong")
+                        if title_strong and not title_link:
+                            # This is a section header like "A. Expenses", skip it
+                            logger.debug(
+                                f"[iqm2:{self.slug}] Skipping section header: {title_cell.get_text(strip=True)[:40]}"
+                            )
+                            continue
+
                         # If Num cell is empty, extract matter number from title text
                         if not num_text and title_link:
                             item_title_full = title_link.get_text(strip=True)
@@ -415,7 +424,8 @@ class IQM2Adapter(BaseAdapter):
                         legifile_id = None
                         if title_link:
                             href = title_link.get("href", "")
-                            id_match = re.search(r"ID=(\d+)", href)
+                            # Match ID= parameter (avoid matching MeetingID=)
+                            id_match = re.search(r"[?&]ID=(\d+)", href)
                             if id_match:
                                 legifile_id = id_match.group(1)
 
