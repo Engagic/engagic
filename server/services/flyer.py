@@ -85,20 +85,14 @@ def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:
 
 
 def _generate_meeting_slug(meeting: Meeting) -> str:
-    """Generate meeting slug matching frontend format: {title}_{date}_{id}"""
-    title = meeting.title or "meeting"
-
-    # Format date as YYYY_MM_DD
+    """Generate meeting slug matching frontend format: {YYYY-MM-DD}-{id}"""
+    # Format date as YYYY-MM-DD (matching frontend utils.ts)
     date_slug = "undated"
     if meeting.date:
-        date_slug = meeting.date.strftime("%Y_%m_%d")
+        date_slug = meeting.date.strftime("%Y-%m-%d")
 
-    # Clean title: lowercase, alphanumeric only, underscores
-    clean_title = re.sub(r'[^a-z0-9\s]', '', title.lower())
-    clean_title = re.sub(r'\s+', '_', clean_title)[:50]
-
-    # Format: {title}_{date}_{id}
-    return f"{clean_title}_{date_slug}_{meeting.id}"
+    # Format: {date}-{id} (matches frontend generateMeetingSlug)
+    return f"{date_slug}-{meeting.id}"
 
 
 def _generate_item_anchor(item: AgendaItem) -> str:
