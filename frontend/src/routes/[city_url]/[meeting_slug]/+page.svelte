@@ -25,28 +25,41 @@
 
 	// Handle deep linking to specific items (supports both #item-5-e and #2025-5470 formats)
 	$effect(() => {
-		if (typeof window !== 'undefined' && window.location.hash) {
+		if (typeof window !== 'undefined' && window.location.hash && selectedMeeting?.items) {
 			const hash = window.location.hash.substring(1); // Remove #
 
-			if (hash && selectedMeeting?.items) {
+			if (hash) {
 				// Find the matching item using shared utility
 				const matchingItem = findItemByAnchor(selectedMeeting.items, hash);
 
 				if (matchingItem) {
+					// If item has no summary and procedural items are hidden, show them
+					if (!matchingItem.summary && !showProceduralItems) {
+						showProceduralItems = true;
+					}
+
+					// Expand the item
 					expandedItems.add(matchingItem.id);
 
-					setTimeout(() => {
-						const element = document.getElementById(hash);
-						if (element) {
-							element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-							const isDark = document.documentElement.classList.contains('dark');
-							element.style.backgroundColor = isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(14, 165, 233, 0.1)';
-							setTimeout(() => {
-								element.style.backgroundColor = '';
-								element.style.transition = 'background-color 1s ease';
-							}, 2000);
-						}
-					}, 100);
+					// Wait for DOM to render (use requestAnimationFrame for more reliable timing)
+					requestAnimationFrame(() => {
+						requestAnimationFrame(() => {
+							const element = document.getElementById(hash);
+							if (element) {
+								element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+								const isDark = document.documentElement.classList.contains('dark');
+								element.style.backgroundColor = isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(14, 165, 233, 0.1)';
+								setTimeout(() => {
+									element.style.backgroundColor = '';
+									element.style.transition = 'background-color 1s ease';
+								}, 2000);
+							} else {
+								console.warn(`Anchor element not found: #${hash}`);
+							}
+						});
+					});
+				} else {
+					console.warn(`No matching item found for hash: #${hash}`);
 				}
 			}
 		}

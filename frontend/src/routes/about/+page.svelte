@@ -72,9 +72,9 @@
 			<h2>Our Impact</h2>
 			<div class="impact-grid">
 				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.cities_covered)}</div>
-					<div class="impact-label">Cities Covered</div>
-					<div class="impact-desc">Local governments across America</div>
+					<div class="impact-number">{formatNumber(analytics.real_metrics.frequently_updated_cities)} out of {formatNumber(analytics.real_metrics.cities_covered)}</div>
+					<div class="impact-label">Frequently Updated Cities</div>
+					<div class="impact-desc">Cities with 7+ meetings with summaries</div>
 				</div>
 
 				<div class="impact-card">
