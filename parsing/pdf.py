@@ -19,6 +19,15 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
+# Browser-like headers to avoid bot detection
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Accept": "application/pdf,application/octet-stream,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
+
 # Set conservative limit for OCR on scanned PDFs
 # 100MP = ~300MB peak RAM (conservative for 2GB VPS with other services)
 # Convert PIL warnings to errors to catch decompression bombs
@@ -307,8 +316,8 @@ class PdfExtractor:
         start_time = time.time()
 
         try:
-            # Download PDF
-            response = requests.get(url, timeout=30)
+            # Download PDF with browser-like headers to avoid bot detection
+            response = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
             response.raise_for_status()
             pdf_bytes = response.content
 
