@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import requests
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("engagic")
@@ -127,3 +128,83 @@ def get_matter_key(matter_file: Optional[str], matter_id: Optional[str]) -> Opti
         'uuid-abc-123'
     """
     return matter_file or matter_id
+
+
+def combine_date_time(date_str: Optional[str], time_str: Optional[str]) -> Optional[str]:
+    """
+    Combine separate date and time strings into ISO datetime.
+
+    Generalizable utility for vendors that split date/time into separate fields
+    (Legistar: EventDate + EventTime, etc.).
+
+    Args:
+        date_str: ISO date string (e.g., "2025-11-18T00:00:00" or "2025-11-18")
+        time_str: Time string in various formats (e.g., "6:30 PM", "18:30:00", "6:30 PM EST")
+
+    Returns:
+        Combined ISO datetime string, or original date_str if time parsing fails
+
+    Example:
+        >>> combine_date_time("2025-11-18T00:00:00", "6:30 PM")
+        '2025-11-18T18:30:00'
+        >>> combine_date_time("2025-11-18", "18:30")
+        '2025-11-18T18:30:00'
+        >>> combine_date_time("2025-11-18", None)
+        '2025-11-18'
+
+    Confidence: 8/10
+    - Handles common time formats (12h/24h, with/without seconds)
+    - Falls back gracefully to date-only if time parsing fails
+    - Timezone handling is basic (strips timezone info for consistency)
+    """
+    if not date_str:
+        return None
+
+    if not time_str:
+        return date_str
+
+    try:
+        # Parse date (handle ISO datetime or date-only)
+        if 'T' in date_str:
+            date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        else:
+            date_obj = datetime.fromisoformat(date_str)
+
+        # Clean time string (remove timezone abbreviations like "EST", "PST")
+        time_clean = time_str.strip()
+        for tz in [' EST', ' PST', ' CST', ' MST', ' EDT', ' PDT', ' CDT', ' MDT']:
+            time_clean = time_clean.replace(tz, '')
+
+        # Try parsing time in common formats
+        time_obj = None
+        time_formats = [
+            '%I:%M %p',        # 6:30 PM
+            '%I:%M:%S %p',     # 6:30:00 PM
+            '%H:%M',           # 18:30
+            '%H:%M:%S',        # 18:30:00
+        ]
+
+        for fmt in time_formats:
+            try:
+                time_obj = datetime.strptime(time_clean, fmt)
+                break
+            except ValueError:
+                continue
+
+        if not time_obj:
+            logger.debug(f"Could not parse time '{time_str}', using date only")
+            return date_str
+
+        # Combine date and time
+        combined = date_obj.replace(
+            hour=time_obj.hour,
+            minute=time_obj.minute,
+            second=time_obj.second
+        )
+
+        # Return as ISO string (strip timezone for consistency)
+        return combined.replace(tzinfo=None).isoformat()
+
+    except Exception as e:
+        logger.debug(f"Error combining date/time '{date_str}' + '{time_str}': {e}")
+        return date_str

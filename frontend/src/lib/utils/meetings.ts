@@ -20,7 +20,10 @@ export function splitMeetingsByDate(meetings: Meeting[]): {
 	upcoming: Meeting[];
 	past: Meeting[];
 } {
+	// Get today's date at midnight (start of day) for date-only comparison
 	const now = new Date();
+	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
 	const upcoming: Meeting[] = [];
 	const past: Meeting[] = [];
 
@@ -39,7 +42,11 @@ export function splitMeetingsByDate(meetings: Meeting[]): {
 			continue;
 		}
 
-		if (meetingDate >= now) {
+		// Normalize meeting date to midnight for date-only comparison
+		const meetingDay = new Date(meetingDate.getFullYear(), meetingDate.getMonth(), meetingDate.getDate());
+
+		// Meeting is upcoming if it's today or later
+		if (meetingDay >= today) {
 			upcoming.push(meeting);
 		} else {
 			past.push(meeting);

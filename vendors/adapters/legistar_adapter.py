@@ -10,6 +10,7 @@ import re
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.utils.item_filters import should_skip_procedural_item
+from pipeline.utils import combine_date_time
 
 
 class LegistarAdapter(BaseAdapter):
@@ -151,10 +152,14 @@ class LegistarAdapter(BaseAdapter):
         for event in filtered_events:
             # Extract event data
             event_id = event.get("EventId")
-            event_date = event.get("EventDate")
+            event_date_str = event.get("EventDate")
+            event_time_str = event.get("EventTime")  # Separate time field
             event_name = event.get("EventBodyName", "")
             event_location = event.get("EventLocation")
             event_agenda_status = event.get("EventAgendaStatusName", "")
+
+            # Combine date and time using shared utility
+            event_date = combine_date_time(event_date_str, event_time_str)
 
             # Get agenda PDF (EventAgendaFile is the canonical agenda document)
             agenda_pdf = event.get("EventAgendaFile")
