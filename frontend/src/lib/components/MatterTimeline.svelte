@@ -210,7 +210,7 @@
 	.timeline-flow {
 		display: flex;
 		flex-direction: column;
-		gap: 0;
+		gap: 1rem;
 		position: relative;
 	}
 
@@ -265,7 +265,7 @@
 	}
 
 	.step-card.has-summary {
-		background: linear-gradient(135deg, var(--surface-secondary) 0%, rgba(16, 185, 129, 0.05) 100%);
+		background: var(--surface-secondary);
 	}
 
 	.flow-step.selected .step-card {
