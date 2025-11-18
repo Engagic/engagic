@@ -15,7 +15,7 @@
 		<div class="feature-list">
 			<div class="feature-item">
 				<h3 class="feature-heading">Monitor</h3>
-				<p>Our system continuously checks city websites for new meeting agendas and packets across 600+ cities.</p>
+				<p>Our system can continuously check city websites for new meeting agendas and packets across 600+ cities.</p>
 			</div>
 			<div class="feature-item">
 				<h3 class="feature-heading">Process</h3>
