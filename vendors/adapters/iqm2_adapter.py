@@ -375,20 +375,51 @@ class IQM2Adapter(BaseAdapter):
                         # Add matter tracking if it's a LegiFile item
                         if legifile_id:
                             current_item["matter_id"] = legifile_id
-                            # Extract matter file from title
-                            # Patterns: "COF 2025 #141 :", "CMA 2025 #235 :", "25-O-1607 :", "18492 :"
-                            # Match everything before the colon
-                            matter_match = re.match(r"^([^:]+?)\s*:", item_title)
-                            if matter_match:
-                                matter_file = matter_match.group(1).strip()
-                                current_item["matter_file"] = matter_file
-                            else:
-                                # Fallback: use legifile_id
-                                current_item["matter_file"] = legifile_id
 
-                            # TODO: Fetch additional matter metadata (matter_type, sponsors, department)
-                            # Currently disabled due to performance (229 items × 1s = 4+ minutes)
-                            # Will re-enable with async requests or batch API
+                            # Extract clean matter_file from title
+                            # Gold standard: Extract concise case number, not full title
+                            # Strategy: Prioritize case number patterns, fall back to separators
+                            #
+                            # Examples:
+                            # "DRH25-00335 / BRS Architects..." → "DRH25-00335"
+                            # "Appeal of CUP25-00022 & CVA25-00025 / Request..." → "CUP25-00022"
+                            # "COF 2025 #141 : Title..." → "COF-2025-141" (normalized)
+
+                            matter_file = None
+
+                            # Pattern 1: Direct case number extraction (most reliable)
+                            # Matches: DRH25-00335, CUP25-00022, CVA25-00025, SUB24-00012, CAR25-00017, etc.
+                            # Format: 2-5 uppercase letters + 2-digit year + dash + 4-5 digit number
+                            case_match = re.search(r'\b([A-Z]{2,5}\d{2}-\d{4,5})\b', item_title)
+                            if case_match:
+                                matter_file = case_match.group(1)
+                            else:
+                                # Pattern 2: Compound format with spaces (Cambridge-style)
+                                # "COF 2025 #141" → "COF-2025-141"
+                                compound_match = re.match(r'^([A-Z]{2,5})\s+(\d{4})\s+#(\d+)', item_title)
+                                if compound_match:
+                                    matter_file = f"{compound_match.group(1)}-{compound_match.group(2)}-{compound_match.group(3)}"
+                                else:
+                                    # Pattern 3: Fall back to separator-based extraction
+                                    if " / " in item_title:
+                                        # Extract first segment before "/"
+                                        matter_file = item_title.split(" / ", 1)[0].strip()
+                                    elif ":" in item_title:
+                                        # Extract and normalize prefix before ":"
+                                        prefix = item_title.split(":", 1)[0].strip()
+                                        matter_file = re.sub(r'\s+#\s*', '-', prefix)
+                                        matter_file = re.sub(r'\s+', '-', matter_file)
+
+                            # Fallback: use legifile_id
+                            current_item["matter_file"] = matter_file if matter_file else legifile_id
+
+                            # Fetch additional matter metadata (matter_type, sponsors)
+                            # Aligns with Legistar/PrimeGov gold standard
+                            metadata = self._fetch_matter_metadata(legifile_id)
+                            if metadata.get("matter_type"):
+                                current_item["matter_type"] = metadata["matter_type"]
+                            if metadata.get("sponsors"):
+                                current_item["sponsors"] = metadata["sponsors"]
 
                         logger.debug(
                             f"[iqm2:{self.slug}] Found item {item_number}: {item_title[:50]}"
