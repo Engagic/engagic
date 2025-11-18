@@ -1,10 +1,21 @@
 """
 IQM2 Adapter - HTML scraping for IQM2 platform (Granicus subsidiary)
 
-Cities using IQM2: Santa Monica CA, and others
+Gold standard adapter for IQM2 cities. Supports item-level processing with full
+matter tracking, attachments, metadata, and cross-meeting legislative tracking.
 
-IQM2 was acquired by Granicus and shares similar platform structure.
-Calendar page lists meetings, Detail_Meeting pages contain item-level HTML agendas.
+Cities using IQM2: Boise ID, Santa Monica CA, Cambridge MA, Buffalo NY, and 40+ others
+
+Architecture:
+- Calendar page (Citizens/Default.aspx) lists all meetings
+- Detail_Meeting pages contain item-level HTML agendas with LegiFile links
+- Detail_LegiFile pages contain matter metadata, sponsors, and attachments
+
+Parity with Legistar/PrimeGov/Granicus:
+- Item-level extraction with attachments
+- Matter tracking (matter_id, matter_file, matter_type, sponsors)
+- Clean matter_file extraction (case numbers, not verbose titles)
+- Full attachment support from Detail_LegiFile pages
 """
 
 import re
@@ -17,7 +28,13 @@ from bs4 import BeautifulSoup
 
 
 class IQM2Adapter(BaseAdapter):
-    """Adapter for cities using IQM2 platform (Granicus subsidiary)"""
+    """
+    Gold standard adapter for IQM2 platform (Granicus subsidiary).
+
+    Provides complete item-level processing with attachments, matter tracking,
+    and metadata extraction. At parity with Legistar, PrimeGov, and Granicus
+    for municipal legislative data extraction.
+    """
 
     def __init__(self, city_slug: str):
         """
@@ -207,12 +224,13 @@ class IQM2Adapter(BaseAdapter):
         - matter_type (Category field)
         - sponsors (Sponsors field)
         - department (Department field)
+        - attachments (from Attachments section)
 
         Args:
             legifile_id: LegiFile ID to fetch
 
         Returns:
-            Dict with matter_type, sponsors (list), department
+            Dict with matter_type, sponsors (list), department, attachments (list)
         """
         detail_url = f"{self.base_url}/Citizens/Detail_LegiFile.aspx?ID={legifile_id}"
 
@@ -226,7 +244,7 @@ class IQM2Adapter(BaseAdapter):
 
             metadata = {}
 
-            # Parse table rows
+            # Parse table rows for metadata
             rows = info_table.find_all("tr")
             for row in rows:
                 cells = row.find_all(["th", "td"])
@@ -247,6 +265,35 @@ class IQM2Adapter(BaseAdapter):
                         metadata["department"] = value
 
                     i += 2
+
+            # Extract attachments from Attachments section
+            # Look for divAttachments or similar container
+            attachments = []
+            attachment_links = soup.find_all("a", href=re.compile(r'FileOpen\.aspx'))
+            for link in attachment_links:
+                # Extract attachment name and URL
+                attachment_name = link.get_text(strip=True)
+                attachment_url = urljoin(detail_url, link.get("href", ""))
+
+                if attachment_name and attachment_url:
+                    # Determine file type from URL or name
+                    file_type = "pdf"
+                    if ".doc" in attachment_url.lower() or ".doc" in attachment_name.lower():
+                        file_type = "doc"
+                    elif ".xls" in attachment_url.lower() or ".xls" in attachment_name.lower():
+                        file_type = "xls"
+
+                    attachments.append({
+                        "name": attachment_name,
+                        "url": attachment_url,
+                        "type": file_type
+                    })
+
+            if attachments:
+                metadata["attachments"] = attachments
+                logger.debug(
+                    f"[iqm2:{self.slug}] Found {len(attachments)} attachments for {legifile_id}"
+                )
 
             logger.debug(
                 f"[iqm2:{self.slug}] Fetched matter metadata for {legifile_id}: {metadata}"
@@ -374,12 +421,15 @@ class IQM2Adapter(BaseAdapter):
 
                             current_item["matter_file"] = matter_file if matter_file else legifile_id
 
-                            # Fetch matter metadata
+                            # Fetch matter metadata and attachments from Detail_LegiFile page
                             metadata = self._fetch_matter_metadata(legifile_id)
                             if metadata.get("matter_type"):
                                 current_item["matter_type"] = metadata["matter_type"]
                             if metadata.get("sponsors"):
                                 current_item["sponsors"] = metadata["sponsors"]
+                            if metadata.get("attachments"):
+                                # Merge attachments from detail page with any from meeting table
+                                current_item["attachments"].extend(metadata["attachments"])
 
                         logger.debug(
                             f"[iqm2:{self.slug}] Found nested item {item_number}: {item_title[:50]}"
@@ -494,13 +544,16 @@ class IQM2Adapter(BaseAdapter):
                             # Fallback: use legifile_id
                             current_item["matter_file"] = matter_file if matter_file else legifile_id
 
-                            # Fetch additional matter metadata (matter_type, sponsors)
+                            # Fetch additional matter metadata and attachments from Detail_LegiFile page
                             # Aligns with Legistar/PrimeGov gold standard
                             metadata = self._fetch_matter_metadata(legifile_id)
                             if metadata.get("matter_type"):
                                 current_item["matter_type"] = metadata["matter_type"]
                             if metadata.get("sponsors"):
                                 current_item["sponsors"] = metadata["sponsors"]
+                            if metadata.get("attachments"):
+                                # Merge attachments from detail page with any from meeting table
+                                current_item["attachments"].extend(metadata["attachments"])
 
                         logger.debug(
                             f"[iqm2:{self.slug}] Found item {item_number}: {item_title[:50]}"
