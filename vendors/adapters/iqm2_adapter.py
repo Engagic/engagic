@@ -164,7 +164,7 @@ class IQM2Adapter(BaseAdapter):
         soup = self._fetch_html(detail_url)
 
         # Extract items from MeetingDetail table
-        items = self._parse_agenda_items(soup, meeting_id)
+        items = self._parse_agenda_items(soup, meeting_id, detail_url)
 
         # Filter procedural items (roll call, approval of minutes, etc.)
         items_before = len(items)
@@ -260,7 +260,7 @@ class IQM2Adapter(BaseAdapter):
             return {}
 
     def _parse_agenda_items(
-        self, soup: BeautifulSoup, meeting_id: str
+        self, soup: BeautifulSoup, meeting_id: str, base_url: str
     ) -> List[Dict[str, Any]]:
         """
         Parse agenda items from MeetingDetail table.
@@ -274,6 +274,7 @@ class IQM2Adapter(BaseAdapter):
         Args:
             soup: BeautifulSoup object of Detail_Meeting page
             meeting_id: Meeting ID for item IDs
+            base_url: Base URL for resolving relative links (Detail_Meeting page URL)
 
         Returns:
             List of agenda item dictionaries
@@ -313,9 +314,79 @@ class IQM2Adapter(BaseAdapter):
                     continue
 
             # Check for main agenda item (letter or number numbering: A., B., C. or 1., 2., 3.)
-            # Pattern: <td></td><td class='Num'>A. </td><td class='Title'>...</td>
-            # OR:      <td></td><td class='Num'>1. </td><td class='Title'>...</td>
-            # OR:      <td></td><td class='Num'></td><td class='Title'>COF 2025 #141: ...</td> (Cambridge pattern)
+            # Pattern 1: <td></td><td class='Num'>A. </td><td class='Title'>...</td> (top-level)
+            # Pattern 2: <td></td><td></td><td class='Num'>1. </td><td class='Title'>...</td> (nested under subsections)
+            # Pattern 3: <td></td><td class='Num'></td><td class='Title'>COF 2025 #141: ...</td> (Cambridge pattern)
+
+            # Try Pattern 2 first (nested items with 2 empty cells - Boise resolutions under "D. Resolutions")
+            if len(cells) >= 4 and not cells[0].get_text(strip=True) and not cells[1].get_text(strip=True):
+                num_cell = cells[2]
+                title_cell = cells[3]
+
+                if num_cell.get("class") == ["Num"]:
+                    num_text = num_cell.get_text(strip=True)
+
+                    # Check for numbered items (1., 2., 3., etc.)
+                    if re.match(r"^[0-9]+\.\s*$", num_text):
+                        title_link = title_cell.find("a", href=lambda x: x and "Detail_LegiFile.aspx" in x)
+
+                        # Save previous item
+                        if current_item:
+                            items.append(current_item)
+
+                        # Start new nested item
+                        item_counter += 1
+                        item_number = num_text.strip()
+
+                        # Extract title
+                        if title_link:
+                            item_title = title_link.get_text(strip=True)
+                            # Extract LegiFile ID
+                            href = title_link.get("href", "")
+                            id_match = re.search(r"ID=(\d+)", href)
+                            legifile_id = id_match.group(1) if id_match else None
+                        else:
+                            item_title = title_cell.get_text(strip=True)
+                            legifile_id = None
+
+                        current_item = {
+                            "item_id": legifile_id or f"iqm2-{self.slug}-{meeting_id}-{item_counter}",
+                            "title": item_title,
+                            "sequence": item_counter,
+                            "item_number": item_number,
+                            "section": current_section,
+                            "description": "",
+                            "attachments": [],
+                        }
+
+                        # Add matter tracking if LegiFile item
+                        if legifile_id:
+                            current_item["matter_id"] = legifile_id
+
+                            # Extract clean matter_file from title
+                            matter_file = None
+                            if " / " in item_title:
+                                matter_file = item_title.split(" / ", 1)[0].strip()
+                            elif ":" in item_title:
+                                prefix = item_title.split(":", 1)[0].strip()
+                                matter_file = re.sub(r'\s+#\s*', '-', prefix)
+                                matter_file = re.sub(r'\s+', '-', matter_file)
+
+                            current_item["matter_file"] = matter_file if matter_file else legifile_id
+
+                            # Fetch matter metadata
+                            metadata = self._fetch_matter_metadata(legifile_id)
+                            if metadata.get("matter_type"):
+                                current_item["matter_type"] = metadata["matter_type"]
+                            if metadata.get("sponsors"):
+                                current_item["sponsors"] = metadata["sponsors"]
+
+                        logger.debug(
+                            f"[iqm2:{self.slug}] Found nested item {item_number}: {item_title[:50]}"
+                        )
+                        continue
+
+            # Try Pattern 1 (top-level items with 1 empty cell)
             if len(cells) >= 3:
                 num_cell = cells[1]
                 title_cell = cells[2]
@@ -451,7 +522,7 @@ class IQM2Adapter(BaseAdapter):
                             # Extract PDF/doc link
                             pdf_link = title_cell.find("a", href=True)
                             if pdf_link:
-                                pdf_url = urljoin(self.base_url, pdf_link["href"])
+                                pdf_url = urljoin(base_url, pdf_link["href"])
                                 pdf_name = pdf_link.get_text(strip=True)
 
                                 # Determine file type from URL or name
