@@ -6,6 +6,8 @@
 	<div class="footer-links">
 		<a href="/about" class="about-link" aria-label="About engagic">About</a>
 		<span class="divider" aria-hidden="true">•</span>
+		<a href="/terms" class="terms-link" aria-label="Terms of Service">Terms</a>
+		<span class="divider" aria-hidden="true">•</span>
 		<a
 			href="https://github.com/Engagic/engagic"
 			class="github-link"
