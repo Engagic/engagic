@@ -156,6 +156,7 @@ export interface AnalyticsData {
 	real_metrics: {
 		cities_covered: number;
 		active_cities: number;
+		frequently_updated_cities: number;
 		meetings_tracked: number;
 		meetings_with_items: number;
 		meetings_with_packet: number;

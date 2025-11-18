@@ -3,6 +3,7 @@
 	import type { AgendaItem as AgendaItemType, Meeting } from '$lib/api/types';
 	import { generateFlyer } from '$lib/api/index';
 	import { generateAnchorId } from '$lib/utils/anchor';
+	import { buildItemShareLink } from '$lib/utils/utils';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	interface Props {
@@ -18,12 +19,13 @@
 
 	const isExpanded = $derived(expandedItems.has(item.id));
 	const hasSummary = $derived(!!item.summary);
+	let linkCopied = $state(false);
 
 	// Display agenda_number exactly as provided (already formatted), only add dot for sequence fallback
 	const displayNumber = $derived(item.agenda_number || `${item.sequence}.`);
 
 	// Generate anchor ID using shared utility (agenda_number > matter_file > item.id)
-	const anchorId = $derived(() => generateAnchorId(item));
+	const anchorId = $derived(generateAnchorId(item));
 
 	function toggleItem() {
 		if (expandedItems.has(item.id)) {
@@ -96,10 +98,40 @@
 		}
 	}
 
+	async function copyShareLink() {
+		if (linkCopied) return;
+
+		try {
+			const shareLink = buildItemShareLink(meeting.banana, meeting, item);
+
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				await navigator.clipboard.writeText(shareLink);
+			} else {
+				// Fallback for older browsers
+				const textArea = document.createElement('textarea');
+				textArea.value = shareLink;
+				textArea.style.position = 'fixed';
+				textArea.style.left = '-999999px';
+				document.body.appendChild(textArea);
+				textArea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textArea);
+			}
+
+			linkCopied = true;
+			setTimeout(() => {
+				linkCopied = false;
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy link:', error);
+			alert('Failed to copy link to clipboard');
+		}
+	}
+
 	const titleParts = $derived(truncateTitle(item.title));
 </script>
 
-<div class="agenda-item" id={anchorId()} data-expanded={isExpanded} data-has-summary={hasSummary}>
+<div class="agenda-item" id={anchorId} data-expanded={isExpanded} data-has-summary={hasSummary}>
 	<div
 		class="item-header-clickable"
 		role="button"
@@ -228,6 +260,17 @@
 						aria-label={flyerGenerating ? 'Generating opposition flyer' : 'Generate flyer expressing opposition to this item'}
 					>
 						{flyerGenerating ? '⏳ Generating...' : '✗ Say No'}
+					</button>
+					<button
+						class="flyer-btn flyer-btn-share"
+						disabled={linkCopied}
+						onclick={(e) => {
+							e.stopPropagation();
+							copyShareLink();
+						}}
+						aria-label={linkCopied ? 'Link copied to clipboard' : 'Copy shareable link to this agenda item'}
+					>
+						{linkCopied ? '✓ Copied!' : '🔗 Share Link'}
 					</button>
 				</div>
 			{/if}
@@ -672,6 +715,18 @@
 	.flyer-btn-no:hover {
 		background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
 		box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+		transform: translateY(-1px);
+	}
+
+	.flyer-btn-share {
+		background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+		color: white;
+		box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+	}
+
+	.flyer-btn-share:hover {
+		background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 		transform: translateY(-1px);
 	}
 

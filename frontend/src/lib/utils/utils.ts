@@ -1,4 +1,5 @@
-import type { Meeting } from '../api/types';
+import type { Meeting, AgendaItem } from '../api/types';
+import { generateAnchorId } from './anchor';
 
 export function generateCityUrl(cityName: string, state: string): string {
 	// Clean city name: remove spaces, periods, apostrophes, make lowercase
@@ -59,14 +60,21 @@ export function parseCityUrl(cityUrl: string): { cityName: string; state: string
 	// Extract state (last 2 uppercase letters)
 	const stateMatch = cityUrl.match(/([A-Z]{2})$/);
 	if (!stateMatch) return null;
-	
+
 	const state = stateMatch[1];
 	const cityPart = cityUrl.substring(0, cityUrl.length - 2);
-	
+
 	// This is basic - we'll need to look up the actual city name from the API
 	// For now, just return what we can parse
 	return {
 		cityName: cityPart,
 		state: state
 	};
+}
+
+export function buildItemShareLink(banana: string, meeting: Meeting, item: AgendaItem): string {
+	// Build shareable URL: https://engagic.org/{banana}/{meeting_slug}#{anchor}
+	const meetingSlug = generateMeetingSlug(meeting);
+	const anchor = generateAnchorId(item);
+	return `https://engagic.org/${banana}/${meetingSlug}#${anchor}`;
 }

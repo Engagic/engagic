@@ -325,12 +325,27 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
 
         unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
 
+        # Frequently updated cities (cities with at least 7 meetings with summaries)
+        cursor.execute("""
+            SELECT COUNT(*) as frequently_updated
+            FROM (
+                SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count
+                FROM meetings m
+                WHERE (m.summary IS NOT NULL AND m.summary != '')
+                   OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
+                GROUP BY m.banana
+                HAVING COUNT(DISTINCT m.id) >= 7
+            )
+        """)
+        frequently_updated_stats = dict(cursor.fetchone())
+
         return {
             "success": True,
             "timestamp": datetime.now().isoformat(),
             "real_metrics": {
                 "cities_covered": total_cities["total_cities"],
                 "active_cities": active_cities_stats["active_cities"],
+                "frequently_updated_cities": frequently_updated_stats["frequently_updated"],
                 "meetings_tracked": meetings_stats["meetings_count"],
                 "meetings_with_items": meetings_with_items_stats["meetings_with_items"],
                 "meetings_with_packet": packets_stats["packets_count"],
