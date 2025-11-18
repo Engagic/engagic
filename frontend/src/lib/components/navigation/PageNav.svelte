@@ -30,11 +30,14 @@
 <svelte:window bind:innerWidth={screenWidth} />
 
 <div id="{pageName}-page" class="page-nav-root">
-	{#if !isMobile}
-		<a href="/" class="home-link" aria-label="Return to engagic homepage">
-			<img src="/icon-64.png" alt="engagic" class="logo-icon" />
-		</a>
-	{/if}
+	<a
+		href="/"
+		class="home-link"
+		class:mobile-right={isMobile && !isHome}
+		aria-label="Return to engagic homepage"
+	>
+		<img src="/icon-64.png" alt="engagic" class="logo-icon" />
+	</a>
 
 	<div class="page-nav-sidebar-container">
 		{#if isMobile && !isHome}
@@ -182,7 +185,21 @@
 		}
 
 		.home-link {
-			display: none;
+			position: fixed;
+			top: var(--space-md);
+			left: var(--space-md);
+			z-index: 100;
+		}
+
+		.home-link.mobile-right {
+			left: auto;
+			right: var(--space-md);
+		}
+
+		.logo-icon {
+			width: 40px;
+			height: 40px;
+			border-radius: 10px;
 		}
 
 		.page-nav-sidebar-container {
