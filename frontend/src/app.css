@@ -32,7 +32,7 @@
 :root.light {
 	--civic-blue: #4f46e5;
 	--civic-green: #10b981;
-	--civic-gray: #334155;
+	--civic-gray: #475569;
 	--civic-dark: #0f172a;
 	--civic-light: #f8fafc;
 	--civic-white: #ffffff;
@@ -45,7 +45,7 @@
 	--bg-gradient-start: #f8fafc;
 	--bg-gradient-end: #e2e8f0;
 	--text-primary: #0f172a;
-	--text-secondary: #334155;
+	--text-secondary: #475569;
 	--text-link: #4f46e5;
 	--surface-primary: #ffffff;
 	--surface-secondary: #f8fafc;
@@ -78,7 +78,7 @@
 :root.dark {
 	--civic-blue: #a78bfa;
 	--civic-green: #34d399;
-	--civic-gray: #cbd5e1;
+	--civic-gray: #94a3b8;
 	--civic-dark: #f8fafc;
 	--civic-light: #1e293b;
 	--civic-white: #0f172a;
@@ -91,7 +91,7 @@
 	--bg-gradient-start: #0f172a;
 	--bg-gradient-end: #1e293b;
 	--text-primary: #f8fafc;
-	--text-secondary: #e2e8f0;
+	--text-secondary: #cbd5e1;
 	--text-link: #fb923c;
 	--surface-primary: #1e293b;
 	--surface-secondary: #334155;
@@ -138,10 +138,16 @@ body {
 	color: var(--text-primary);
 	line-height: 1.7;
 	min-height: 100vh;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
-	margin: 0;
-	padding: 0;
+	/* Safe area insets for iPhone notch/dynamic island (cobalt-inspired) */
+	padding-top: max(3rem, env(safe-area-inset-top));
+	padding-bottom: env(safe-area-inset-bottom);
+	padding-left: env(safe-area-inset-left);
+	padding-right: env(safe-area-inset-right);
 	overflow-x: hidden;
 	width: 100%;
 	transition: background var(--transition-slow), color var(--transition-slow);
@@ -477,25 +483,25 @@ body {
 }
 
 .random-meeting {
-	background: #0ea570;
-	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+	background: var(--civic-green);
+	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
 }
 
 .random-meeting:hover {
-	background: var(--civic-green);
+	background: #0ea570;
 	transform: translateY(-2px);
-	box-shadow: 0 6px 20px rgba(16, 185, 129, 0.25);
+	box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
 }
 
 .random-policy {
-	background: #7c3aed;
-	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
+	background: var(--civic-accent);
+	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
 }
 
 .random-policy:hover {
-	background: var(--civic-accent);
+	background: #7c3aed;
 	transform: translateY(-2px);
-	box-shadow: 0 6px 20px rgba(139, 92, 246, 0.25);
+	box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
 }
 
 .random-button:disabled {

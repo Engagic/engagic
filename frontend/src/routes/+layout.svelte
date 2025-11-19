@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { navigating } from '$app/stores';
 	import { themeState } from '$lib/stores/theme.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onMount } from 'svelte';
 
 	onMount(() => {
@@ -28,4 +29,6 @@
 
 <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-<slot />
+<main id="main-content">
+	<slot />
+</main>
