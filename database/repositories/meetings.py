@@ -55,6 +55,9 @@ class MeetingRepository(BaseRepository):
         conditions = []
         params = []
 
+        # Always filter out meetings with no URLs (invalid data)
+        conditions.append("(agenda_url IS NOT NULL OR packet_url IS NOT NULL)")
+
         if bananas:
             placeholders = ",".join("?" * len(bananas))
             conditions.append(f"banana IN ({placeholders})")
@@ -74,7 +77,7 @@ class MeetingRepository(BaseRepository):
             else:
                 conditions.append("summary IS NULL")
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where_clause = f"WHERE {' AND '.join(conditions)}"
 
         query = f"""
             SELECT * FROM meetings
