@@ -485,23 +485,23 @@ body {
 }
 
 .random-meeting {
-	background: var(--civic-green);
+	background: #0ea570;
 	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
 }
 
 .random-meeting:hover {
-	background: #0ea570;
+	background: var(--civic-green);
 	transform: translateY(-2px);
 	box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
 }
 
 .random-policy {
-	background: var(--civic-accent);
+	background: #7c3aed;
 	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
 }
 
 .random-policy:hover {
-	background: #7c3aed;
+	background: var(--civic-accent);
 	transform: translateY(-2px);
 	box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
 }

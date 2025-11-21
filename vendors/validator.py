@@ -97,7 +97,6 @@ class MeetingValidator:
 
         # TODO: Support List[str] packet URLs (eScribe adapter at line 117)
         # Zero cities affected currently. Fix: normalize to list, validate each URL
-        # urls = [packet_url] if isinstance(packet_url, str) else packet_url
 
         # Extract domain from URL
         if url.startswith("http"):

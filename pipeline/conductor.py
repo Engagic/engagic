@@ -60,8 +60,8 @@ class Conductor:
         # Initialize processor with its own connection (for processing_thread)
         self.processor = Processor(db=None)  # Creates own connection
         logger.info(
-            f"[Conductor] Processor initialized with dedicated connection "
-            f"({'with' if self.processor.analyzer else 'without'} LLM analyzer)"
+            "processor initialized with dedicated connection",
+            has_analyzer=self.processor.analyzer is not None
         )
 
         # Track sync status
@@ -130,10 +130,12 @@ class Conductor:
                 results = self.fetcher.sync_all()
                 self.last_full_sync = datetime.now()
 
+                succeeded_count = len([r for r in results if r.status == SyncStatus.COMPLETED])
+                failed_count = len([r for r in results if r.status == SyncStatus.FAILED])
                 logger.info(
-                    f"[Conductor] Sync cycle complete: "
-                    f"{len([r for r in results if r.status == SyncStatus.COMPLETED])} succeeded, "
-                    f"{len([r for r in results if r.status == SyncStatus.FAILED])} failed"
+                    "sync cycle complete",
+                    succeeded=succeeded_count,
+                    failed=failed_count
                 )
 
                 # Sleep for 7 days
@@ -218,7 +220,9 @@ class Conductor:
 
         if sync_result.status != SyncStatus.COMPLETED:
             logger.error(
-                f"[Conductor] Sync failed for {city_banana}: {sync_result.error_message}"
+                "sync failed for city",
+                city=city_banana,
+                error=sync_result.error_message
             )
             return {
                 "sync_status": sync_result.status.value,
@@ -228,7 +232,8 @@ class Conductor:
             }
 
         logger.info(
-            f"[Conductor] Sync complete: {sync_result.meetings_found} meetings found"
+            "sync complete",
+            meetings_found=sync_result.meetings_found
         )
 
         # Step 2: Process all queued jobs for this city

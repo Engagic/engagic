@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import type { ComponentType } from 'svelte';
 
 	interface Props {
@@ -11,7 +11,7 @@
 
 	let { path, title, icon = null, iconColor = 'blue' }: Props = $props();
 
-	let isCurrentRoute = $derived($page.url.pathname === path);
+	let isCurrentRoute = $derived(page.url.pathname === path);
 </script>
 
 <a
@@ -23,7 +23,7 @@
 	<div class="tab-content-left">
 		{#if icon}
 			<div class="tab-icon-box">
-				<svelte:component this={icon} />
+				<icon></icon>
 			</div>
 		{/if}
 		<div class="tab-title-text">

@@ -16,6 +16,7 @@ from datetime import datetime
 from database.models import City, Meeting, AgendaItem
 from database.id_generation import generate_matter_id
 from database.transaction import transaction as db_transaction
+from exceptions import DatabaseError
 from pipeline.utils import hash_attachments
 from vendors.validator import MeetingValidator
 from vendors.utils.item_filters import should_skip_procedural_item, should_skip_matter
@@ -63,8 +64,10 @@ class MeetingIngestionService:
                 validate_meeting_output(meeting_dict)
             except ValidationError as e:
                 logger.error(
-                    f"[{city.banana}] Adapter output validation failed for meeting "
-                    f"'{meeting_dict.get('title', 'Unknown')}': {e}"
+                    "adapter output validation failed for meeting",
+                    city=city.banana,
+                    meeting_title=meeting_dict.get('title', 'Unknown'),
+                    error=str(e)
                 )
                 stats['meetings_skipped'] = 1
                 stats['skip_reason'] = "schema_validation_failed"
@@ -114,18 +117,23 @@ class MeetingIngestionService:
         except ValidationError as e:
             # Pydantic validation errors are expected failures
             logger.error(
-                f"Validation error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
+                "validation error storing meeting",
+                packet_url=meeting_dict.get('packet_url', 'unknown'),
+                error=str(e)
             )
             if not stats.get('meetings_skipped'):
                 stats['meetings_skipped'] = 1
                 stats['skip_reason'] = "validation_error"
                 stats['skipped_title'] = meeting_dict.get("title", "Unknown")
             return None, stats
-        except Exception as e:
+        except (DatabaseError, KeyError, AttributeError, TypeError) as e:
             # Unexpected errors (database, etc.) should bubble up for proper error handling
             import traceback
             logger.error(
-                f"Unexpected error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}\n{traceback.format_exc()}"
+                "unexpected error storing meeting",
+                packet_url=meeting_dict.get('packet_url', 'unknown'),
+                error=str(e),
+                traceback=traceback.format_exc()
             )
             # Re-raise unexpected exceptions instead of swallowing them
             raise
@@ -174,9 +182,11 @@ class MeetingIngestionService:
         meeting_id = meeting_dict.get("meeting_id")
         if not meeting_id or not meeting_id.strip():
             logger.error(
-                f"[{city.banana}] CRITICAL: Adapter returned blank meeting_id for "
-                f"'{meeting_dict.get('title', 'Unknown')}' on {meeting_dict.get('date', 'Unknown')}. "
-                f"Adapter should use _generate_meeting_id() fallback."
+                "adapter returned blank meeting_id",
+                city=city.banana,
+                meeting_title=meeting_dict.get('title', 'Unknown'),
+                meeting_date=meeting_dict.get('date', 'Unknown'),
+                note="Adapter should use _generate_meeting_id() fallback"
             )
             stats['meetings_skipped'] = 1
             stats['skip_reason'] = "missing_meeting_id"
@@ -327,8 +337,9 @@ class MeetingIngestionService:
         # Additional check: skip if matter_type is procedural
         if should_skip_matter(item_type):
             logger.debug(
-                f"[Items] Skipping matter tracking for procedural type: "
-                f"{item_title[:40]} ({item_type})"
+                "skipping matter tracking for procedural type",
+                item_title=item_title[:40],
+                item_type=item_type
             )
             return None
 
@@ -340,7 +351,9 @@ class MeetingIngestionService:
             )
         except ValueError as e:
             logger.error(
-                f"[Items] FATAL: Invalid matter data for {item_title[:40]}: {e}"
+                "invalid matter data for item",
+                item_title=item_title[:40],
+                error=str(e)
             )
             raise ValueError(
                 f"Item '{item_title}' has invalid matter data "
@@ -390,9 +403,10 @@ class MeetingIngestionService:
                 stats['appearances_created'] = appearances_count
 
                 logger.info(
-                    f"[Items] Stored {count} items "
-                    f"({stats['items_skipped_procedural']} procedural, "
-                    f"{items_with_summaries} with preserved summaries)"
+                    "stored agenda items",
+                    count=count,
+                    procedural_skipped=stats['items_skipped_procedural'],
+                    preserved_summaries=items_with_summaries
                 )
 
     def _enqueue_if_needed(
@@ -415,14 +429,16 @@ class MeetingIngestionService:
 
         if skip_enqueue:
             logger.debug(
-                f"Skipping enqueue for {stored_meeting.title} - {skip_reason}"
+                "skipping enqueue",
+                meeting_title=stored_meeting.title,
+                reason=skip_reason
             )
             return
 
         if not (has_items or packet_url):
             logger.debug(
-                f"Meeting {stored_meeting.title} has no agenda/packet/items "
-                f"- stored for display only"
+                "meeting has no agenda/packet/items - stored for display only",
+                meeting_title=stored_meeting.title
             )
             return
 
@@ -438,12 +454,15 @@ class MeetingIngestionService:
 
             if matters_enqueued > 0:
                 logger.debug(
-                    f"Enqueued {matters_enqueued} matters for {stored_meeting.title} "
-                    f"(priority {priority})"
+                    "enqueued matters",
+                    matter_count=matters_enqueued,
+                    meeting_title=stored_meeting.title,
+                    priority=priority
                 )
             else:
                 logger.debug(
-                    f"All matters already processed for {stored_meeting.title}"
+                    "all matters already processed",
+                    meeting_title=stored_meeting.title
                 )
 
         # MONOLITH FALLBACK: No items at all, process entire packet
@@ -456,13 +475,14 @@ class MeetingIngestionService:
                     priority=priority,
                 )
             logger.debug(
-                f"Enqueued monolithic-packet processing for {stored_meeting.title} "
-                f"(priority {priority})"
+                "enqueued monolithic-packet processing",
+                meeting_title=stored_meeting.title,
+                priority=priority
             )
         else:
             logger.warning(
-                f"[DB] Meeting {stored_meeting.id} has no items or packet URL "
-                f"- skipping queue"
+                "meeting has no items or packet URL - skipping queue",
+                meeting_id=stored_meeting.id
             )
 
     def _should_skip_enqueue(

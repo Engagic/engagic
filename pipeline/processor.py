@@ -18,7 +18,7 @@ from database.db import UnifiedDatabase, Meeting
 from database.models import Matter
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
 from database.transaction import transaction
-from exceptions import ProcessingError, ExtractionError
+from exceptions import ProcessingError, ExtractionError, LLMError
 from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
@@ -503,7 +503,7 @@ class Processor:
                                 pages=result.get('page_count', 0),
                                 chars=len(result['text'])
                             )
-                    except Exception as e:
+                    except (ExtractionError, OSError, IOError) as e:
                         logger.warning("failed to extract attachment", name=att_name or att_url, error=str(e))
 
         if not item_parts:
@@ -549,7 +549,7 @@ class Processor:
                             f"Item processing failed: {error_msg}",
                             context={"item_id": item.id, "item_title": item.title[:100]}
                         )
-        except Exception as e:
+        except (ProcessingError, LLMError) as e:
             logger.error("item processing error", error=str(e), error_type=type(e).__name__)
             raise ProcessingError(
                 f"Item processing failed: {e}",
@@ -821,7 +821,7 @@ class Processor:
                     participation_fields=list(meeting.participation.keys())
                 )
 
-        except Exception as e:
+        except (ExtractionError, OSError, IOError) as e:
             logger.warning("failed to extract participation from agenda_url", error=str(e), error_type=type(e).__name__)
 
         return participation_data
@@ -975,7 +975,7 @@ class Processor:
                         cache_status=cache_status,
                         item_count=item_count
                     )
-            except Exception as e:
+            except (ExtractionError, OSError, IOError) as e:
                 logger.warning("failed to extract document", attachment=att_name or att_url, error=str(e), error_type=type(e).__name__)
 
         # Separate shared vs item-specific documents
@@ -1070,18 +1070,23 @@ class Processor:
                     })
                     item_map[item.id] = item
                     logger.debug(
-                        f"[ItemProcessing] Prepared {item.title[:50]} "
-                        f"({len(combined_text):,} chars, {total_page_count} pages)"
+                        "prepared item for batch processing",
+                        title=item.title[:50],
+                        chars=len(combined_text),
+                        pages=total_page_count
                     )
                 else:
                     logger.warning(
-                        f"[ItemProcessing] No text extracted for {item.title[:50]}"
+                        "no text extracted for item",
+                        title=item.title[:50]
                     )
                     failed_items.append(item.title)
 
-            except Exception as e:
+            except (ProcessingError, KeyError, AttributeError, TypeError) as e:
                 logger.error(
-                    f"[ItemProcessing] Error extracting text for {item.title[:50]}: {e}"
+                    "error extracting text for item",
+                    title=item.title[:50],
+                    error=str(e)
                 )
                 failed_items.append(item.title)
 
@@ -1106,7 +1111,8 @@ class Processor:
             return processed_items, failed_items
 
         logger.info(
-            f"[ItemProcessing] Submitting batch with {len(batch_requests)} items to Gemini"
+            "submitting batch to Gemini",
+            item_count=len(batch_requests)
         )
 
         # Process batch as generator - yields chunk results as they complete
@@ -1116,7 +1122,8 @@ class Processor:
             meeting_id=meeting_id
         ):
             logger.info(
-                f"[ItemProcessing] Saving {len(chunk_results)} results from completed chunk"
+                "saving results from completed chunk",
+                result_count=len(chunk_results)
             )
 
             for result in chunk_results:
@@ -1133,7 +1140,9 @@ class Processor:
                     normalized_topics = get_normalizer().normalize(raw_topics)
 
                     logger.debug(
-                        f"[TopicNormalization] {raw_topics} -> {normalized_topics}"
+                        "normalized topics",
+                        raw_topics=raw_topics,
+                        normalized_topics=normalized_topics
                     )
 
                     # Update item in database IMMEDIATELY with normalized topics
@@ -1154,7 +1163,9 @@ class Processor:
                 else:
                     failed_items.append(item.title)
                     logger.warning(
-                        f"[ItemProcessing] FAILED {item.title[:60]}: {result.get('error')}"
+                        "item processing failed",
+                        title=item.title[:60],
+                        error=result.get('error')
                     )
 
         return processed_items, failed_items
@@ -1176,8 +1187,10 @@ class Processor:
         )
 
         logger.info(
-            f"[TopicAggregation] Aggregated {len(meeting_topics)} unique topics "
-            f"from {len(processed_items)} items: {meeting_topics}"
+            "aggregated meeting topics",
+            unique_topic_count=len(meeting_topics),
+            item_count=len(processed_items),
+            topics=meeting_topics
         )
 
         return meeting_topics
@@ -1220,11 +1233,13 @@ class Processor:
 
         if not need_processing:
             logger.info(
-                f"[ItemProcessing] All {len(already_processed)} items already processed"
+                "all items already processed",
+                item_count=len(already_processed)
             )
         else:
             logger.info(
-                f"[ItemProcessing] Extracting text from {len(need_processing)} items for batch processing"
+                "extracting text from items for batch processing",
+                item_count=len(need_processing)
             )
 
             # PHASE 3: Build document cache with deduplication
@@ -1242,9 +1257,10 @@ class Processor:
 
                 shared_context = "\n\n".join(shared_parts)
                 logger.info(
-                    f"[SharedContext] Built meeting-level context: "
-                    f"{len(shared_context):,} chars (~{shared_token_count:,} tokens) "
-                    f"from {len(shared_urls)} shared documents"
+                    "built meeting-level shared context",
+                    chars=len(shared_context),
+                    estimated_tokens=shared_token_count,
+                    shared_document_count=len(shared_urls)
                 )
 
             # PHASE 5: Build batch requests from cached documents
@@ -1283,7 +1299,8 @@ class Processor:
                 if participation_data:
                     merged_participation.update(participation_data)
                     logger.info(
-                        f"[Participation] Updated meeting with info from items: {list(participation_data.keys())}"
+                        "updated meeting with participation info from items",
+                        participation_fields=list(participation_data.keys())
                     )
 
             # Update meeting with metadata only (items have their own summaries)
@@ -1299,8 +1316,10 @@ class Processor:
                 )
 
             logger.info(
-                f"[ItemProcessing] Completed: {len(processed_items)} items processed, "
-                f"{len(failed_items) if 'failed_items' in locals() else 0} failed in {processing_time:.1f}s"
+                "item processing completed",
+                processed_count=len(processed_items),
+                failed_count=len(failed_items) if 'failed_items' in locals() else 0,
+                processing_time_seconds=round(processing_time, 1)
             )
         else:
-            logger.warning("[ItemProcessing] No items could be processed")
+            logger.warning("no items could be processed")

@@ -53,7 +53,7 @@ async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching meeting {meeting_id}: {str(e)}")
+        logger.error("error fetching meeting", meeting_id=meeting_id, error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving meeting")
 
 

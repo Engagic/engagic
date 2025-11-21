@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 
 	interface Props {
 		pageTitle: string;
 		homeLink: string;
 		contentWide?: boolean;
+		navigation: import('svelte').Snippet;
+		content: import('svelte').Snippet;
 	}
 
-	let { pageTitle, homeLink, contentWide = false }: Props = $props();
+	let { pageTitle, homeLink, contentWide = false, navigation, content }: Props = $props();
 
 	let viewportWidth = $state(0);
 	let isMobileView = $derived(viewportWidth <= 768);
@@ -45,14 +47,14 @@
 
 		{#if shouldShowNavigation}
 			<nav class="sidebar-navigation" aria-label="Page navigation">
-				<slot name="navigation" />
+				{@render navigation()}
 			</nav>
 		{/if}
 	</div>
 
 	{#if shouldShowContent}
 		<main class="shell-content" class:wide={contentWide}>
-			<slot name="content" />
+			{@render content()}
 		</main>
 	{/if}
 </div>

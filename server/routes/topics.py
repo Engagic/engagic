@@ -43,7 +43,7 @@ async def get_all_topics():
             "count": len(topics_with_display)
         }
     except Exception as e:
-        logger.error(f"Error fetching topics: {str(e)}")
+        logger.error("error fetching topics", error=str(e))
         raise HTTPException(status_code=500, detail="Error fetching topics")
 
 
@@ -57,7 +57,7 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
         normalizer = get_normalizer()
         normalized_topic = normalizer.normalize_single(request.topic)
 
-        logger.info(f"Topic search: '{request.topic}' -> '{normalized_topic}', city: {request.banana}")
+        logger.info("topic search", query=request.topic, normalized=normalized_topic, city=request.banana)
 
         # Search meetings by topic using db method
         meetings = db.search_meetings_by_topic(
@@ -96,7 +96,7 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
         }
 
     except Exception as e:
-        logger.error(f"Error searching by topic '{request.topic}': {str(e)}")
+        logger.error("error searching by topic", topic=request.topic, error=str(e))
         raise HTTPException(status_code=500, detail="Error searching by topic")
 
 
@@ -126,5 +126,5 @@ async def get_popular_topics(db: UnifiedDatabase = Depends(get_db)):
         }
 
     except Exception as e:
-        logger.error(f"Error fetching popular topics: {str(e)}")
+        logger.error("error fetching popular topics", error=str(e))
         raise HTTPException(status_code=500, detail="Error fetching popular topics")

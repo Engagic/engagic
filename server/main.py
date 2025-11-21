@@ -50,7 +50,7 @@ rate_limiter = SQLiteRateLimiter(
 
 # Initialize shared database instance (reused across all requests)
 db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-logger.info(f"Initialized shared database at {config.UNIFIED_DB_PATH}")
+logger.info("initialized shared database", db_path=config.UNIFIED_DB_PATH)
 
 # Store in app state for dependency injection
 app.state.db = db
@@ -102,7 +102,7 @@ if __name__ == "__main__":
         logger.warning("Set ENGAGIC_ADMIN_TOKEN to enable admin functionality.")
 
     logger.info("Starting engagic API server...")
-    logger.info(f"Configuration: {config.summary()}")
+    logger.info("configuration", config_summary=config.summary())
 
     # Handle command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "--init-db":

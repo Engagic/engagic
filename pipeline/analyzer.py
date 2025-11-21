@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from database.db import UnifiedDatabase
 from database.transaction import transaction
 from config import config
+from exceptions import ExtractionError, LLMError
 from parsing.pdf import PdfExtractor
 from parsing.participation import parse_participation_info
 from analysis.llm.summarizer import GeminiSummarizer
@@ -169,7 +170,7 @@ class Analyzer:
                     url=url
                 )
 
-        except Exception as e:
+        except (ExtractionError, LLMError, OSError, IOError) as e:
             logger.warning("processing failed", url=url, error=str(e), error_type=type(e).__name__)
 
         # Fail fast
