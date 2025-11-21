@@ -243,6 +243,8 @@ class BaseAdapter:
 
         Returns:
             datetime object or None if parsing fails
+
+        NOTE: Returning None for empty input is intentional - graceful handling of missing dates
         """
         if not date_str:
             return None
@@ -286,6 +288,7 @@ class BaseAdapter:
             logger.warning(
                 f"[{self.vendor}:{self.slug}] Could not parse date '{date_str}': {e}"
             )
+            # NOTE: Returning None after logging warning is intentional - graceful failure for malformed dates
             return None
 
     def _generate_meeting_id(

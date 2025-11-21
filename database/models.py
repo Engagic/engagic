@@ -149,7 +149,7 @@ class Meeting:
             try:
                 packet_url = json.loads(packet_url)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize packet_url JSON: {packet_url}")
+                logger.warning("failed to deserialize packet_url JSON", packet_url=packet_url)
                 pass  # Keep as string if JSON parsing fails
 
         # Deserialize participation if it's JSON
@@ -158,7 +158,7 @@ class Meeting:
             try:
                 participation = json.loads(participation)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize participation JSON: {participation}")
+                logger.warning("failed to deserialize participation JSON", participation=participation)
                 participation = None
 
         # Deserialize topics if it's JSON
@@ -167,7 +167,7 @@ class Meeting:
             try:
                 topics = json.loads(topics)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize topics JSON: {topics}")
+                logger.warning("failed to deserialize topics JSON", topics=topics)
                 topics = None
         else:
             topics = None
@@ -293,7 +293,7 @@ class Matter:
             try:
                 sponsors = json.loads(sponsors)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize sponsors JSON: {sponsors}")
+                logger.warning("failed to deserialize sponsors JSON", sponsors=sponsors)
                 sponsors = None
         else:
             sponsors = None
@@ -303,7 +303,7 @@ class Matter:
             try:
                 canonical_topics = json.loads(canonical_topics)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize canonical_topics JSON: {canonical_topics}")
+                logger.warning("failed to deserialize canonical_topics JSON", canonical_topics=canonical_topics)
                 canonical_topics = None
         else:
             canonical_topics = None
@@ -313,7 +313,7 @@ class Matter:
             try:
                 attachments = json.loads(attachments)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize attachments JSON: {attachments}")
+                logger.warning("failed to deserialize attachments JSON", attachments=attachments)
                 attachments = None
         else:
             attachments = None
@@ -323,7 +323,7 @@ class Matter:
             try:
                 metadata = json.loads(metadata)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize metadata JSON: {metadata}")
+                logger.warning("failed to deserialize metadata JSON", metadata=metadata)
                 metadata = None
         else:
             metadata = None
@@ -442,7 +442,7 @@ class AgendaItem:
             try:
                 attachments = json.loads(attachments)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize attachments JSON: {attachments}")
+                logger.warning("failed to deserialize attachments JSON", attachments=attachments)
                 attachments = []
         else:
             attachments = []
@@ -452,7 +452,7 @@ class AgendaItem:
             try:
                 topics = json.loads(topics)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize topics JSON: {topics}")
+                logger.warning("failed to deserialize topics JSON", topics=topics)
                 topics = None
         else:
             topics = None
@@ -462,7 +462,7 @@ class AgendaItem:
             try:
                 sponsors = json.loads(sponsors)
             except json.JSONDecodeError:
-                logger.warning(f"Failed to deserialize sponsors JSON: {sponsors}")
+                logger.warning("failed to deserialize sponsors JSON", sponsors=sponsors)
                 sponsors = None
         else:
             sponsors = None

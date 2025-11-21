@@ -143,7 +143,7 @@ class Conductor:
                     time.sleep(SHUTDOWN_POLL_INTERVAL)
 
             except Exception as e:
-                logger.error(f"[Conductor] Sync loop error: {e}")
+                logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
                 # Sleep for 2 days on error
                 for _ in range(2 * 24 * 60 * 60):
                     if not self.is_running:
@@ -162,7 +162,7 @@ class Conductor:
             # Run the queue processor continuously
             self.processor.process_queue()
         except Exception as e:
-            logger.error(f"[Conductor] Processing loop error: {e}")
+            logger.error("processing loop error", error=str(e), error_type=type(e).__name__)
             # Processing loop will be restarted by daemon if it crashes
 
     def get_sync_status(self) -> Dict[str, Any]:
@@ -211,7 +211,7 @@ class Conductor:
         Returns:
             Dictionary with sync_result and processing stats
         """
-        logger.info(f"[Conductor] Starting sync-and-process for {city_banana}")
+        logger.info("starting sync-and-process", city=city_banana)
 
         # Step 1: Sync the city (fetches meetings, stores, enqueues)
         sync_result = self.force_sync_city(city_banana)
@@ -243,7 +243,7 @@ class Conductor:
                 "warning": "Analyzer not available",
             }
 
-        logger.info(f"[Conductor] Processing queued jobs for {city_banana}...")
+        logger.info("processing queued jobs", city=city_banana)
 
         with self.enable_processing():
             processing_stats = self.processor.process_city_jobs(city_banana)
@@ -264,7 +264,7 @@ class Conductor:
         Returns:
             List of sync results
         """
-        logger.info(f"[Conductor] Syncing {len(city_bananas)} cities...")
+        logger.info("syncing cities", city_count=len(city_bananas))
         results = self.fetcher.sync_cities(city_bananas)
 
         # Convert SyncResult objects to dicts
@@ -289,7 +289,7 @@ class Conductor:
         Returns:
             Summary of processing results
         """
-        logger.info(f"[Conductor] Processing queued jobs for {len(city_bananas)} cities...")
+        logger.info("processing queued jobs for cities", city_count=len(city_bananas))
 
         if not self.processor.analyzer:
             logger.warning(
@@ -310,7 +310,7 @@ class Conductor:
                 if not self.is_running:
                     break
 
-                logger.info(f"[Conductor] Processing jobs for {banana}...")
+                logger.info("processing jobs for city", city=banana)
                 stats = self.processor.process_city_jobs(banana)
 
                 total_processed += stats["processed_count"]
@@ -338,13 +338,13 @@ class Conductor:
         Returns:
             Combined sync and processing results
         """
-        logger.info(f"[Conductor] Sync and process {len(city_bananas)} cities...")
+        logger.info("sync and process cities", city_count=len(city_bananas))
 
         # Step 1: Sync all cities
         sync_results = self.sync_cities(city_bananas)
         total_meetings = sum(r["meetings_found"] for r in sync_results)
 
-        logger.info(f"[Conductor] Sync complete: {total_meetings} meetings found across {len(city_bananas)} cities")
+        logger.info("sync complete", total_meetings=total_meetings, city_count=len(city_bananas))
 
         # Step 2: Process all queued jobs for these cities
         process_results = self.process_cities(city_bananas)
@@ -539,7 +539,7 @@ def main():
 
         def signal_handler(signum, frame):
             sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
-            logger.info(f"[Fetcher] Received {sig_name}, initiating graceful shutdown...")
+            logger.info("received signal - graceful shutdown", signal=sig_name)
             conductor.is_running = False
             conductor.fetcher.is_running = False
             logger.info("[Fetcher] Shutdown complete")
@@ -562,7 +562,7 @@ def main():
 
                 succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
                 failed = len([r for r in results if r.status == SyncStatus.FAILED])
-                logger.info(f"[Fetcher] Sync cycle complete: {succeeded} succeeded, {failed} failed")
+                logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
 
                 logger.info("[Fetcher] Sleeping for 72 hours until next sync...")
                 for _ in range(72 * 60 * 60):
@@ -571,7 +571,7 @@ def main():
                     time.sleep(SHUTDOWN_POLL_INTERVAL)
 
             except Exception as e:
-                logger.error(f"[Fetcher] Sync loop error: {e}")
+                logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
                 logger.info("[Fetcher] Sleeping for 2 hours after error...")
                 for _ in range(2 * 60 * 60):
                     if not conductor.is_running:

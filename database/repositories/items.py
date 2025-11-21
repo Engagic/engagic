@@ -3,10 +3,14 @@ Agenda Item Repository - Item operations
 
 Handles all agenda item database operations including storage,
 retrieval, and updates for item-level summaries.
+
+REPOSITORY PATTERN: All methods are atomic operations.
+Transaction management is the CALLER'S responsibility.
+Use `with transaction(conn):` context manager to group operations.
 """
 
 import json
-from typing import List
+from typing import List, Optional
 
 from config import get_logger
 from database.repositories.base import BaseRepository
@@ -19,17 +23,18 @@ logger = get_logger(__name__).bind(component="database")
 class ItemRepository(BaseRepository):
     """Repository for agenda item operations"""
 
-    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem], defer_commit: bool = False) -> int:
+    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
         """
         Store agenda items for a meeting.
 
         CRITICAL: Preserves existing summaries/topics on conflict.
         Only updates structural fields (title, sequence, attachments).
 
+        NOTE: Does not commit - caller must manage transaction.
+
         Args:
             meeting_id: The meeting ID these items belong to
             items: List of AgendaItem objects
-            defer_commit: If True, skip commit (caller handles transaction)
 
         Returns:
             Number of items stored
@@ -106,17 +111,17 @@ class ItemRepository(BaseRepository):
                 error_msg = str(e)
                 if "FOREIGN KEY constraint failed" in error_msg:
                     logger.error(
-                        f"[Items] FK CONSTRAINT FAILED for item {item.id}: matter_id '{item.matter_id}' "
-                        f"does not exist in city_matters table. Matter tracking broken for this item."
+                        "FK constraint failed for item",
+                        item_id=item.id,
+                        matter_id=item.matter_id,
+                        error="matter_id does not exist in city_matters table"
                     )
                 else:
-                    logger.error(f"[Items] Failed to store item {item.id}: {e}")
+                    logger.error("failed to store item", item_id=item.id, error=str(e), error_type=type(e).__name__)
                 # Propagate error to trigger transaction rollback
                 raise
 
-        if not defer_commit:
-            self._commit()
-        logger.debug(f"Stored {stored_count} agenda items for meeting {meeting_id}")
+        logger.debug("stored agenda items", count=stored_count, meeting_id=meeting_id)
         return stored_count
 
     def get_agenda_items(self, meeting_id: str, load_matters: bool = False) -> List[AgendaItem]:
@@ -172,6 +177,8 @@ class ItemRepository(BaseRepository):
         """
         Update an agenda item with processed summary and topics.
 
+        NOTE: Does not commit - caller must manage transaction.
+
         Args:
             item_id: The agenda item ID
             summary: The processed summary
@@ -192,22 +199,22 @@ class ItemRepository(BaseRepository):
             (summary, topics_json, item_id),
         )
 
-        self._commit()
-        logger.debug(f"Updated agenda item {item_id} with summary and topics")
+        logger.debug("updated agenda item with summary and topics", item_id=item_id)
 
     def bulk_update_item_summaries(
-        self, item_ids: List[str], summary: str, topics: List[str], defer_commit: bool = False
+        self, item_ids: List[str], summary: str, topics: List[str]
     ) -> int:
         """
         Bulk update multiple agenda items with the same summary and topics.
 
         Used for matters-first processing where multiple items share a canonical summary.
 
+        NOTE: Does not commit - caller must manage transaction.
+
         Args:
             item_ids: List of agenda item IDs to update
             summary: The canonical summary to apply
             topics: List of normalized topics
-            defer_commit: If True, skip commit (caller handles transaction)
 
         Returns:
             Number of items updated
@@ -232,8 +239,89 @@ class ItemRepository(BaseRepository):
             )
             updated_count += 1
 
-        if not defer_commit:
-            self._commit()
-
-        logger.debug(f"Bulk updated {updated_count} items with canonical summary")
+        logger.debug("bulk updated items with canonical summary", count=updated_count)
         return updated_count
+
+    def get_all_items_for_matter(self, matter_id: str) -> List[AgendaItem]:
+        """
+        Get ALL agenda items across ALL meetings for a given matter.
+
+        Uses composite matter_id (FK to city_matters) for simple, fast lookup.
+
+        Args:
+            matter_id: Composite matter ID (e.g., "nashvilleTN_7a8f3b2c1d9e4f5a")
+
+        Returns:
+            List of ALL AgendaItem objects for this matter across all meetings
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        if not matter_id:
+            return []
+
+        # Simple FK lookup - matter_id is already composite hash
+        rows = self._fetch_all(
+            """
+            SELECT * FROM items
+            WHERE matter_id = ?
+            ORDER BY meeting_id, sequence
+            """,
+            (matter_id,)
+        )
+
+        return [AgendaItem.from_db_row(row) for row in rows]
+
+    def apply_canonical_summary(
+        self, items: List[AgendaItem], canonical_summary: Optional[str], canonical_topics: Optional[List[str]]
+    ) -> None:
+        """
+        Apply canonical summary from matter to all items.
+
+        NOTE: Does not commit - caller must manage transaction.
+
+        Args:
+            items: List of AgendaItem objects to update
+            canonical_summary: The canonical summary to apply (None will be stored as NULL)
+            canonical_topics: List of canonical topics (optional)
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        canonical_topics_json = json.dumps(canonical_topics) if canonical_topics else None
+
+        for item in items:
+            self._execute(
+                """
+                UPDATE items
+                SET summary = ?, topics = ?
+                WHERE id = ?
+                """,
+                (canonical_summary, canonical_topics_json, item.id),
+            )
+
+        logger.debug("applied canonical summary to items", count=len(items))
+
+    def get_agenda_items_by_ids(self, item_ids: List[str]) -> List[AgendaItem]:
+        """
+        Get multiple agenda items by IDs.
+
+        Args:
+            item_ids: List of agenda item IDs
+
+        Returns:
+            List of AgendaItem objects
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        if not item_ids:
+            return []
+
+        placeholders = ",".join("?" * len(item_ids))
+        rows = self._fetch_all(
+            f"SELECT * FROM items WHERE id IN ({placeholders})",
+            tuple(item_ids)
+        )
+
+        return [AgendaItem.from_db_row(row) for row in rows]

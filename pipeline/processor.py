@@ -17,7 +17,8 @@ from typing import List, Optional, Dict, Any
 from database.db import UnifiedDatabase, Meeting
 from database.models import Matter
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
-from exceptions import ProcessingError
+from database.transaction import transaction
+from exceptions import ProcessingError, ExtractionError
 from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
@@ -249,9 +250,10 @@ class Processor:
         """
         # Guard: Check analyzer availability first
         if not self.analyzer:
-            self.db.mark_processing_failed(
-                queue_id, "Analyzer not available", increment_retry=False
-            )
+            with transaction(self.db.conn):
+                self.db.mark_processing_failed(
+                    queue_id, "Analyzer not available", increment_retry=False
+                )
             logger.warning("skipping queue job - analyzer not available", queue_id=queue_id)
             return True
 
@@ -277,7 +279,8 @@ class Processor:
 
                 meeting = self.db.get_meeting(job.payload.meeting_id)
                 if not meeting:
-                    self.db.mark_processing_failed(queue_id, "Meeting not found in database")
+                    with transaction(self.db.conn):
+                        self.db.mark_processing_failed(queue_id, "Meeting not found in database")
                     return True
 
                 self.process_meeting(meeting)
@@ -286,13 +289,15 @@ class Processor:
                 raise ValueError(f"Unknown job type: {job_type}")
 
             # Success
-            self.db.mark_processing_complete(queue_id)
+            with transaction(self.db.conn):
+                self.db.mark_processing_complete(queue_id)
             logger.info("queue job completed", queue_id=queue_id)
             return True
 
         except Exception as e:
             error_msg = str(e)
-            self.db.mark_processing_failed(queue_id, error_msg)
+            with transaction(self.db.conn):
+                self.db.mark_processing_failed(queue_id, error_msg)
             logger.error("queue job failed", queue_id=queue_id, error=error_msg)
             return True
 
@@ -302,7 +307,8 @@ class Processor:
 
         while self.is_running:
             try:
-                job = self.db.get_next_for_processing()
+                with transaction(self.db.conn):
+                    job = self.db.get_next_for_processing()
 
                 if not job:
                     time.sleep(QUEUE_POLL_INTERVAL)
@@ -332,7 +338,8 @@ class Processor:
 
         while True:
             # Get next job for this city
-            job = self.db.get_next_for_processing(banana=city_banana)
+            with transaction(self.db.conn):
+                job = self.db.get_next_for_processing(banana=city_banana)
 
             if not job:
                 break  # No more jobs for this city
@@ -353,14 +360,16 @@ class Processor:
                     if isinstance(job.payload, MeetingJob):
                         meeting = self.db.get_meeting(job.payload.meeting_id)
                         if not meeting:
-                            self.db.mark_processing_failed(queue_id, "Meeting not found")
+                            with transaction(self.db.conn):
+                                self.db.mark_processing_failed(queue_id, "Meeting not found")
                             failed_count += 1
                             metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
                             continue
                         # Process the meeting (item-aware)
                         with metrics.processing_duration.labels(job_type="meeting").time():
                             self.process_meeting(meeting)
-                        self.db.mark_processing_complete(queue_id)
+                        with transaction(self.db.conn):
+                            self.db.mark_processing_complete(queue_id)
                         processed_count += 1
                         job_success = True
                         logger.info("processed meeting", meeting_id=job.payload.meeting_id, duration_seconds=round(time.time() - job_start_time, 1))
@@ -375,7 +384,8 @@ class Processor:
                                 job.payload.meeting_id,
                                 {"item_ids": job.payload.item_ids}
                             )
-                        self.db.mark_processing_complete(queue_id)
+                        with transaction(self.db.conn):
+                            self.db.mark_processing_complete(queue_id)
                         processed_count += 1
                         job_success = True
                         logger.info("processed matter", matter_id=job.payload.matter_id, duration_seconds=round(time.time() - job_start_time, 1))
@@ -390,7 +400,8 @@ class Processor:
 
             except Exception as e:
                 error_msg = str(e)
-                self.db.mark_processing_failed(queue_id, error_msg)
+                with transaction(self.db.conn):
+                    self.db.mark_processing_failed(queue_id, error_msg)
                 failed_count += 1
                 job_duration = time.time() - job_start_time
 
@@ -439,7 +450,7 @@ class Processor:
 
         # Check if entire item is public comments or parcel tables
         if is_public_comment_attachment(item.title):
-            logger.info(f"[SingleItemProcessing] Skipping low-value item (public comments/parcel tables): {item.title[:80]}")
+            logger.info("skipping low-value item", title=item.title[:80], reason="public_comments_or_parcel_tables")
             return None
 
         # Extract text from attachments
@@ -470,7 +481,7 @@ class Processor:
                 if att_url:
                     # Skip public comment and parcel table attachments by name
                     if att_name and is_public_comment_attachment(att_name):
-                        logger.info(f"[SingleItemProcessing] Skipping low-value attachment: {att_name}")
+                        logger.info("skipping low-value attachment", name=att_name)
                         continue
 
                     try:
@@ -479,7 +490,8 @@ class Processor:
                             # Post-extraction filter: Skip public comment compilations
                             if is_likely_public_comment_compilation(result, att_name or att_url):
                                 logger.info(
-                                    f"[SingleItemProcessing] Skipping public comment compilation: {att_name or att_url}"
+                                    "skipping public comment compilation",
+                                    name=att_name or att_url
                                 )
                                 continue
 
@@ -490,11 +502,14 @@ class Processor:
                                 f"{result.get('page_count', 0)} pages, {len(result['text']):,} chars"
                             )
                     except Exception as e:
-                        logger.warning(f"[SingleItemProcessing] Failed to extract {att_name or att_url}: {e}")
+                        logger.warning("failed to extract attachment", name=att_name or att_url, error=str(e))
 
         if not item_parts:
-            logger.warning(f"[SingleItemProcessing] No text extracted for {item.title[:50]}")
-            return None
+            logger.warning("no text extracted for item", title=item.title[:50])
+            raise ExtractionError(
+                "No text extracted from agenda item",
+                context={"item_id": item.id, "item_title": item.title[:100]}
+            )
 
         combined_text = "\n\n".join(item_parts)
 
@@ -526,18 +541,24 @@ class Processor:
                             "topics": normalized_topics,
                         }
                     else:
-                        logger.warning(
-                            f"[SingleItemProcessing] Failed: {result.get('error')}"
+                        error_msg = result.get('error', 'Unknown error')
+                        logger.warning("item processing failed", error=error_msg)
+                        raise ProcessingError(
+                            f"Item processing failed: {error_msg}",
+                            context={"item_id": item.id, "item_title": item.title[:100]}
                         )
-                        return None
         except Exception as e:
-            logger.error(f"[SingleItemProcessing] Processing error: {e}")
+            logger.error("item processing error", error=str(e), error_type=type(e).__name__)
             raise ProcessingError(
                 f"Item processing failed: {e}",
                 context={"item_id": item.id, "item_title": item.title[:100]}
             ) from e
 
-        return None
+        # If we reach here, no results were returned from batch processing
+        raise ProcessingError(
+            "No results returned from batch processing",
+            context={"item_id": item.id, "item_title": item.title[:100]}
+        )
 
     def process_matter(self, matter_id: str, meeting_id: str, metadata: Optional[Dict] = None):
         """Process a matter across all its appearances (matters-first path)
@@ -552,16 +573,16 @@ class Processor:
         """
         from pipeline.utils import hash_attachments
 
-        logger.info(f"[MatterProcessing] Processing matter {matter_id}")
+        logger.info("processing matter", matter_id=matter_id)
 
         # Validate matter_id format
         if not validate_matter_id(matter_id):
-            logger.error(f"[MatterProcessing] Invalid matter_id format: {matter_id}")
+            logger.error("invalid matter_id format", matter_id=matter_id)
             return
 
         banana = extract_banana_from_matter_id(matter_id)
         if not banana:
-            logger.error(f"[MatterProcessing] Could not extract banana from matter_id: {matter_id}")
+            logger.error("could not extract banana from matter_id", matter_id=matter_id)
             return
 
         # STRICT IMPROVEMENT: Query ALL items from database (not just from payload)
@@ -578,24 +599,12 @@ class Processor:
 
         # If no items from payload, query database directly
         if not items:
-            logger.warning(f"[MatterProcessing] No items in payload, querying database for {matter_id}")
-            # Get first item to extract matter identifiers
-            cursor = self.db.conn.execute(
-                """
-                SELECT i.matter_file, i.matter_id FROM items i
-                JOIN meetings m ON i.meeting_id = m.id
-                WHERE m.banana = ? AND (i.matter_file IS NOT NULL OR i.matter_id IS NOT NULL)
-                LIMIT 1
-                """,
-                (banana,)
-            )
-            row = cursor.fetchone()
-            if row:
-                # matter_id is already composite hash, just pass it directly
-                items = self.db._get_all_items_for_matter(matter_id)
+            logger.warning("no items in payload, querying database", matter_id=matter_id)
+            # matter_id is already composite hash, get all items directly
+            items = self.db._get_all_items_for_matter(matter_id)
 
         if not items:
-            logger.error(f"[MatterProcessing] No items found for matter {matter_id}")
+            logger.error("no items found for matter", matter_id=matter_id)
             return
 
         # Aggregate ALL attachments from ALL items (deduplicate by URL)
@@ -624,9 +633,11 @@ class Processor:
         representative_item.attachments = all_attachments
 
         logger.info(
-            f"[MatterProcessing] Matter {matter_id} has {len(items)} appearances "
-            f"across {len(set(item.meeting_id for item in items))} meetings, "
-            f"{len(all_attachments)} unique attachments (aggregated from all appearances)"
+            "matter aggregation complete",
+            matter_id=matter_id,
+            appearances=len(items),
+            meetings=len(set(item.meeting_id for item in items)),
+            unique_attachments=len(all_attachments)
         )
 
         # Process item with ALL aggregated attachments (extract PDFs and summarize)
@@ -643,18 +654,20 @@ class Processor:
             return
 
         if not result:
-            logger.warning(f"[MatterProcessing] No result for matter {matter_id}")
+            logger.warning("no result for matter", matter_id=matter_id)
             return
 
         summary = result.get("summary")
         topics = result.get("topics", [])
 
         if not summary:
-            logger.warning(f"[MatterProcessing] No summary generated for matter {matter_id}")
+            logger.warning("no summary generated for matter", matter_id=matter_id)
             return
 
         # STRICT IMPROVEMENT: Atomic update of canonical_summary + all items
         # Use transaction to ensure consistency
+        from database.transaction import transaction
+
         attachment_hash = hash_attachments(representative_item.attachments)
 
         # Fetch existing matter to preserve raw matter_id (vendor UUID/numeric ID)
@@ -663,7 +676,7 @@ class Processor:
         existing_matter = self.db.get_matter(matter_id)
         raw_matter_id = existing_matter.matter_id if existing_matter else None
 
-        try:
+        with transaction(self.db.conn):
             # Step 1: Create Matter object with canonical summary
             matter_obj = Matter(
                 id=matter_id,
@@ -683,29 +696,21 @@ class Processor:
             )
 
             # Upsert canonical summary in city_matters (via repository)
-            self.db.store_matter(matter_obj, defer_commit=True)
+            self.db.store_matter(matter_obj)
 
             # Step 2: Backfill ALL items atomically (via repository)
             item_ids = [item.id for item in items]
             self.db.items.bulk_update_item_summaries(
                 item_ids=item_ids,
                 summary=summary,
-                topics=topics,
-                defer_commit=True
+                topics=topics
             )
-
-            # Commit transaction atomically
-            self.db.conn.commit()
 
             logger.info(
-                f"[MatterProcessing] Atomically stored canonical summary and backfilled "
-                f"{len(items)} items for {matter_id}"
+                "atomically stored canonical summary and backfilled items",
+                matter_id=matter_id,
+                item_count=len(items)
             )
-
-        except Exception as e:
-            self.db.conn.rollback()
-            logger.error(f"[MatterProcessing] Failed to store summary for {matter_id}: {e}")
-            raise
 
     def process_meeting(self, meeting: Meeting):
         """Process summary for a single meeting (agenda-first: items > packet)
@@ -720,17 +725,20 @@ class Processor:
             if agenda_items:
                 # Item-level processing (HTML agenda path) - PRIMARY PATH
                 logger.info(
-                    f"[ItemProcessing] Found {len(agenda_items)} items for {meeting.title}"
+                    "found items for meeting",
+                    item_count=len(agenda_items),
+                    meeting_title=meeting.title
                 )
                 if not self.analyzer:
-                    logger.warning("[ItemProcessing] Analyzer not available")
+                    logger.warning("analyzer not available")
                     return
                 self._process_meeting_with_items(meeting, agenda_items)
 
             elif meeting.packet_url:
                 # Monolithic processing (PDF packet path) - FALLBACK PATH
                 logger.info(
-                    f"[MonolithicProcessing] No items for {meeting.title}, processing packet as single unit"
+                    "processing packet as monolithic unit - no items found",
+                    meeting_title=meeting.title
                 )
 
                 # Check cache
@@ -743,7 +751,8 @@ class Processor:
 
                 if not self.analyzer:
                     logger.warning(
-                        f"Skipping {meeting.packet_url} - analyzer not available"
+                        "skipping meeting - analyzer not available",
+                        packet_url=meeting.packet_url
                     )
                     return
 
@@ -765,7 +774,7 @@ class Processor:
                     )
 
         except Exception as e:
-            logger.error(f"Error processing summary for {meeting.packet_url}: {e}")
+            logger.error("error processing summary", packet_url=meeting.packet_url, error=str(e), error_type=type(e).__name__)
 
     # ========== Item Processing Helpers (extracted from 424-line God function) ==========
 
@@ -804,7 +813,7 @@ class Processor:
                 )
 
         except Exception as e:
-            logger.warning(f"[Participation] Failed to extract from agenda_url: {e}")
+            logger.warning("failed to extract participation from agenda_url", error=str(e), error_type=type(e).__name__)
 
         return participation_data
 
@@ -856,7 +865,7 @@ class Processor:
 
             # Check if item already has summary (from previous processing)
             if item.summary:
-                logger.debug(f"[ItemProcessing] Item already processed: {item.title[:50]}")
+                logger.debug("item already processed", title=item.title[:50])
                 already_processed.append({
                     "sequence": item.sequence,
                     "title": item.title,
@@ -917,14 +926,14 @@ class Processor:
                     url_to_items[url] = []
                 url_to_items[url].append(item.id)
 
-        logger.info(f"[DocumentCache] Collected {len(all_urls)} unique URLs across {len(need_processing)} items")
+        logger.info("collected unique URLs", url_count=len(all_urls), item_count=len(need_processing))
 
         # Second pass: Extract each unique URL once
         for att_url in all_urls:
             # Skip public comment and parcel table attachments by name
             att_name = url_to_name.get(att_url, "")
             if att_name and is_public_comment_attachment(att_name):
-                logger.info(f"[DocumentCache] Skipping low-value attachment: {att_name}")
+                logger.info("skipping low-value attachment", attachment_name=att_name)
                 continue
 
             try:
@@ -952,7 +961,7 @@ class Processor:
                         f"({cache_status}, {item_count} items)"
                     )
             except Exception as e:
-                logger.warning(f"[DocumentCache] Failed to extract {att_name or att_url}: {e}")
+                logger.warning("failed to extract document", attachment=att_name or att_url, error=str(e), error_type=type(e).__name__)
 
         # Separate shared vs item-specific documents
         shared_urls = {url for url, items in url_to_items.items() if len(items) > 1 and url in document_cache}
@@ -1094,7 +1103,7 @@ class Processor:
                 item = item_map.get(item_id)
 
                 if not item:
-                    logger.warning(f"[ItemProcessing] No item mapping for {item_id}")
+                    logger.warning("no item mapping found", item_id=item_id)
                     continue
 
                 if result["success"]:
@@ -1120,7 +1129,7 @@ class Processor:
                         "topics": normalized_topics,
                     })
 
-                    logger.info(f"[ItemProcessing] SAVED {item.title[:60]}")
+                    logger.info("item saved", title=item.title[:60])
                 else:
                     failed_items.append(item.title)
                     logger.warning(
@@ -1258,14 +1267,15 @@ class Processor:
 
             # Update meeting with metadata only (items have their own summaries)
             processing_time = time.time() - start_time
-            self.db.update_meeting_summary(
-                meeting_id=meeting.id,
-                summary=None,  # No concatenated summary - frontend composes from items
-                processing_method=f"item_level_{len(processed_items)}_items",
-                processing_time=processing_time,
-                topics=meeting_topics,
-                participation=merged_participation,
-            )
+            with transaction(self.db.conn):
+                self.db.update_meeting_summary(
+                    meeting_id=meeting.id,
+                    summary=None,  # No concatenated summary - frontend composes from items
+                    processing_method=f"item_level_{len(processed_items)}_items",
+                    processing_time=processing_time,
+                    topics=meeting_topics,
+                    participation=merged_participation,
+                )
 
             logger.info(
                 f"[ItemProcessing] Completed: {len(processed_items)} items processed, "

@@ -2,6 +2,10 @@
 Search Repository - Search and discovery operations
 
 Handles search, topic-based queries, cache lookups, and database statistics.
+
+REPOSITORY PATTERN: All methods are atomic operations.
+Transaction management is the CALLER'S responsibility.
+Use `with transaction(conn):` context manager to group operations.
 """
 
 import json
@@ -167,7 +171,6 @@ class SearchRepository(BaseRepository):
             """,
                 (lookup_url,),
             )
-            self._commit()
 
             return Meeting.from_db_row(row)
 
@@ -196,8 +199,6 @@ class SearchRepository(BaseRepository):
         """,
             (lookup_url, processing_method, processing_time),
         )
-
-        self._commit()
 
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics"""

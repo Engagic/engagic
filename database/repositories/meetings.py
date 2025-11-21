@@ -3,6 +3,10 @@ Meeting Repository - Meeting operations
 
 Handles all meeting-related database operations including lookups,
 storage, updates, and processing status management.
+
+REPOSITORY PATTERN: All methods are atomic operations.
+Transaction management is the CALLER'S responsibility.
+Use `with transaction(conn):` context manager to group operations.
 """
 
 import json
@@ -82,12 +86,13 @@ class MeetingRepository(BaseRepository):
         rows = self._fetch_all(query, tuple(params))
         return [Meeting.from_db_row(row) for row in rows]
 
-    def store_meeting(self, meeting: Meeting, defer_commit: bool = False) -> Meeting:
+    def store_meeting(self, meeting: Meeting) -> Meeting:
         """Store or update a meeting
+
+        NOTE: Does not commit - caller must manage transaction.
 
         Args:
             meeting: Meeting object to store
-            defer_commit: If True, skip commit (caller handles transaction)
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -152,8 +157,6 @@ class MeetingRepository(BaseRepository):
             ),
         )
 
-        if not defer_commit:
-            self._commit()
         result = self.get_meeting(meeting.id)
         if result is None:
             raise DatabaseConnectionError(
@@ -200,7 +203,6 @@ class MeetingRepository(BaseRepository):
             ),
         )
 
-        self._commit()
         logger.info(
             f"Updated summary for meeting {meeting_id} using {processing_method}"
         )

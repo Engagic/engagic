@@ -27,55 +27,31 @@
 	<meta name="description" content="Engagic API Terms of Service - Usage tiers, attribution requirements, and acceptable use policy" />
 </svelte:head>
 
-<div class="terms-container">
-	<header class="header">
-		<a href="/" class="logo">engagic</a>
-		<p class="tagline">civic engagement made simple</p>
-	</header>
+<article class="terms-content">
 
-	<div class="terms-header">
-		<h1>Terms of Service</h1>
-		<p class="subtitle">Last Updated: November 17, 2025</p>
-		<a href="/" class="back-link">← Back to Search</a>
-	</div>
-
-	<!-- Table of Contents (cobalt-inspired pattern) -->
-	<nav class="toc" aria-label="Table of contents">
-		<h2 class="toc-title">Quick Navigation</h2>
-		<ul class="toc-list">
-			<li><button onclick={() => scrollToSection('about')}>About Engagic</button></li>
-			<li><button onclick={() => scrollToSection('deal')}>The Deal</button></li>
-			<li><button onclick={() => scrollToSection('tiers')}>Usage Tiers</button></li>
-			<li><button onclick={() => scrollToSection('attribution')}>Attribution</button></li>
-			<li><button onclick={() => scrollToSection('acceptable-use')}>Acceptable Use</button></li>
-			<li><button onclick={() => scrollToSection('liability')}>Data Accuracy</button></li>
-			<li><button onclick={() => scrollToSection('rate-limiting')}>Rate Limiting</button></li>
-			<li><button onclick={() => scrollToSection('changes')}>Changes to Terms</button></li>
-			<li><button onclick={() => scrollToSection('license')}>Open Source License</button></li>
-			<li><button onclick={() => scrollToSection('contact')}>Contact</button></li>
-		</ul>
-	</nav>
+	<h1 class="page-heading">Terms of Service</h1>
+	<p class="last-updated">Last Updated: November 17, 2025</p>
 
 	<!-- Content Sections -->
 	<main class="terms-content">
 		<section id="about" class="terms-section">
-			<h2>1. About Engagic</h2>
+			<h2>About Engagic</h2>
 			<p>Engagic is an open-source civic technology platform (AGPL-3.0 licensed) that provides access to public meeting data from local governments across the United States. The code is free and open. The hosted API service (api.engagic.org) is provided as a public good with reasonable usage limits.</p>
 		</section>
 
 		<section id="deal" class="terms-section">
-			<h2>2. The Deal</h2>
+			<h2>The Deal</h2>
 			<p><strong>Public data stays public.</strong> We believe government meeting information should be accessible to everyone. We built this infrastructure to make that happen.</p>
 			<p><strong>The code is free.</strong> Engagic is AGPL-3.0 licensed. If you want unlimited access and can handle your own infrastructure costs (servers, LLM processing, bandwidth), clone the repo and self-host. No restrictions.</p>
 			<p><strong>The hosted API has limits.</strong> Running this service costs real money (LLM processing, server hosting, labor). We provide a free tier for reasonable personal use. Heavy usage requires partnership or payment.</p>
 		</section>
 
 		<section id="tiers" class="terms-section">
-			<h2>3. Usage Tiers</h2>
+			<h2>Usage Tiers</h2>
 
 			<div class="tier-grid">
 				<div class="tier-card tier-free">
-					<h3 class="tier-name">Free (Basic) Tier</h3>
+					<h3 class="tier-name">Resident Tier</h3>
 					<div class="tier-limits">
 						<div class="limit-item">
 							<span class="limit-value">30</span>
@@ -93,7 +69,7 @@
 				</div>
 
 				<div class="tier-card tier-hacktivist">
-					<h3 class="tier-name">Nonprofit/Journalist (Hacktivist) Tier</h3>
+					<h3 class="tier-name">Hacktivist Tier</h3>
 					<div class="tier-limits">
 						<div class="limit-item">
 							<span class="limit-value">100</span>
@@ -119,15 +95,15 @@
 				</div>
 
 				<div class="tier-card tier-enterprise">
-					<h3 class="tier-name">Commercial (Enterprise) Tier</h3>
+					<h3 class="tier-name">Enterprise Tier</h3>
 					<div class="tier-limits">
 						<div class="limit-item">
-							<span class="limit-value">1,000+</span>
+							<span class="limit-value">1k+</span>
 							<span class="limit-unit">req/min</span>
 						</div>
 						<div class="limit-divider">•</div>
 						<div class="limit-item">
-							<span class="limit-value">100,000+</span>
+							<span class="limit-value">100k+</span>
 							<span class="limit-unit">req/day</span>
 						</div>
 					</div>
@@ -146,7 +122,7 @@
 		</section>
 
 		<section id="attribution" class="terms-section">
-			<h2>4. Attribution Requirements</h2>
+			<h2>Attribution Requirements</h2>
 			<p>If you use Engagic data in a public-facing product or publication (website, app, research paper, article), you must provide <strong>clear attribution</strong>:</p>
 
 			<div class="code-block">
@@ -180,7 +156,7 @@
 		</section>
 
 		<section id="acceptable-use" class="terms-section">
-			<h2>5. Acceptable Use</h2>
+			<h2>Acceptable Use</h2>
 
 			<div class="use-policies">
 				<div class="policy-allowed">
@@ -208,7 +184,7 @@
 		</section>
 
 		<section id="liability" class="terms-section">
-			<h2>6. Data Accuracy and Liability</h2>
+			<h2>Data Accuracy and Liability</h2>
 			<p>Engagic provides meeting data <strong>AS-IS</strong> with no warranties. While we strive for accuracy:</p>
 			<ul>
 				<li>Data is sourced from official government websites but may contain errors - we make every effort to always provide the totality of attachments used to generate the summary, for each item, as well the main overall agenda.</li>
@@ -220,7 +196,7 @@
 		</section>
 
 		<section id="rate-limiting" class="terms-section">
-			<h2>7. Rate Limiting and Enforcement</h2>
+			<h2>Rate Limiting and Enforcement</h2>
 			<p>The API enforces rate limits automatically:</p>
 			<ul>
 				<li><strong>Per-minute limits:</strong> Prevent server overload</li>
@@ -237,7 +213,7 @@
 		</section>
 
 		<section id="changes" class="terms-section">
-			<h2>8. Changes to Terms</h2>
+			<h2>Changes to Terms</h2>
 			<p>We may update these terms as the project evolves. Changes will be posted at:</p>
 			<ul>
 				<li><a href="https://engagic.org/terms" target="_blank" rel="noopener">https://engagic.org/terms</a></li>
@@ -247,7 +223,7 @@
 		</section>
 
 		<section id="license" class="terms-section">
-			<h2>9. Open Source License</h2>
+			<h2>Open Source License</h2>
 			<p>The Engagic codebase is licensed under <strong>AGPL-3.0</strong>. This means:</p>
 			<ul>
 				<li>You can view, modify, and distribute the code</li>
@@ -258,7 +234,7 @@
 		</section>
 
 		<section id="contact" class="terms-section">
-			<h2>10. Contact</h2>
+			<h2>Contact</h2>
 			<p><strong>Questions, partnerships, or access requests:</strong></p>
 			<div class="contact-links">
 				<a href="mailto:hello@engagic.org" class="contact-button">
@@ -301,60 +277,27 @@
 	</main>
 
 	<Footer />
-</div>
+</article>
 
 <style>
-	.terms-container {
-		max-width: 1000px;
-		margin: 0 auto;
-		padding: 4rem 1rem;
+	.terms-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xl);
+		padding-bottom: var(--space-xl);
 		color: var(--text-primary);
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
 	}
 
-	.header {
-		text-align: center;
-		margin-bottom: 2rem;
-	}
-
-	.logo {
+	.page-heading {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 2rem;
-		font-weight: 500;
-		color: var(--civic-blue);
-		text-decoration: none;
-		display: inline-block;
-		transition: all 0.3s ease;
-	}
-
-	.logo:hover {
-		color: var(--civic-accent);
-		transform: scale(1.05);
-	}
-
-	.tagline {
-		font-family: 'IBM Plex Mono', monospace;
-		color: var(--civic-gray);
-		font-size: 0.9rem;
-		margin-bottom: 1rem;
-	}
-
-	.terms-header {
-		text-align: center;
-		margin-bottom: 3rem;
-		position: relative;
-	}
-
-	.terms-header h1 {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 3rem;
+		font-size: 2.5rem;
 		font-weight: 600;
-		color: var(--civic-blue);
-		margin-bottom: 0.5rem;
+		color: var(--text-primary);
+		margin: 0 0 var(--space-sm) 0;
+		line-height: 1.2;
 	}
 
-	.subtitle {
+	.last-updated {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1rem;
 		color: var(--civic-gray);
@@ -420,16 +363,10 @@
 		color: var(--civic-accent);
 	}
 
-	/* Content Sections */
-	.terms-content {
-		max-width: 800px;
-		margin: 0 auto;
-	}
+	/* Content Sections - removed center alignment */
 
 	.terms-section {
-		margin-bottom: 3rem;
-		padding-bottom: 2rem;
-		border-bottom: 1px solid var(--border-primary);
+		margin-bottom: 2rem;
 	}
 
 	.terms-section:last-of-type {
@@ -456,19 +393,19 @@
 
 	.terms-section p {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.05rem;
-		line-height: 1.8;
-		color: var(--text-secondary);
-		margin-bottom: 1.25rem;
+		font-size: 1.1rem;
+		line-height: 1.6;
+		color: var(--text-primary);
+		margin-bottom: 1rem;
 	}
 
 	.terms-section ul {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.05rem;
-		line-height: 1.8;
-		color: var(--text-secondary);
+		font-size: 1.1rem;
+		line-height: 1.6;
+		color: var(--text-primary);
 		margin-left: 1.5rem;
-		margin-bottom: 1.25rem;
+		margin-bottom: 1rem;
 	}
 
 	.terms-section li {
@@ -781,7 +718,6 @@
 		font-weight: 600;
 		color: var(--civic-blue);
 		margin-bottom: 1rem;
-		text-align: center;
 		scroll-margin-top: 2rem;
 	}
 
@@ -790,7 +726,6 @@
 		font-size: 1.2rem;
 		font-weight: 500;
 		color: var(--text-primary);
-		text-align: center;
 		margin-bottom: 2rem;
 	}
 
@@ -813,7 +748,6 @@
 
 	.philosophy-footer {
 		font-family: Georgia, 'Times New Roman', Times, serif;
-		text-align: center;
 		color: var(--text-secondary);
 		margin-top: 2rem;
 		padding-top: 1.5rem;
@@ -833,7 +767,6 @@
 
 	/* Back to Top */
 	.back-to-top {
-		text-align: center;
 		margin: 3rem 0 2rem;
 	}
 

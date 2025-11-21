@@ -13,7 +13,6 @@ This facade provides the same API as before but delegates to focused repositorie
 - SearchRepository: Search, topics, cache, and stats
 """
 
-import json
 import sqlite3
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -69,7 +68,7 @@ class UnifiedDatabase:
         # Initialize services
         self.ingestion = MeetingIngestionService(self)
 
-        logger.info(f"Initialized unified database at {db_path}")
+        logger.info("initialized unified database", db_path=db_path)
 
     def _connect(self):
         """Create database connection with optimizations
@@ -198,7 +197,7 @@ class UnifiedDatabase:
         return self.ingestion.ingest_meeting(meeting_dict, city)
 
     def _track_matters(
-        self, meeting: Meeting, items_data: List[Dict], agenda_items: List[AgendaItem], defer_commit: bool = False
+        self, meeting: Meeting, items_data: List[Dict], agenda_items: List[AgendaItem]
     ) -> Dict[str, int]:
         """
         Track legislative matters across meetings (Matters-First Architecture).
@@ -208,11 +207,12 @@ class UnifiedDatabase:
         2. Store in city_matters table via MatterRepository
         3. Create matter_appearance record (timeline tracking)
 
+        NOTE: Does not commit - caller must manage transaction.
+
         Args:
             meeting: Stored Meeting object
             items_data: Raw item data from adapter (with sponsors, matter_type)
             agenda_items: Stored AgendaItem objects
-            defer_commit: If True, skip commit (caller handles transaction)
 
         Returns:
             Dict with 'tracked' and 'duplicate' counts
@@ -253,7 +253,7 @@ class UnifiedDatabase:
             # Skip procedural matter types (minutes, info items, calendars)
             if matter_type and should_skip_matter(matter_type):
                 stats['skipped_procedural'] += 1
-                logger.debug(f"[Matters] Skipping procedural: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type})")
+                logger.debug("skipping procedural matter", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type)
                 continue
 
             try:
@@ -278,11 +278,11 @@ class UnifiedDatabase:
                         meeting_date=meeting.date.isoformat() if meeting.date else "",
                         attachments=agenda_item.attachments,
                         attachment_hash=attachment_hash,
-                        increment_appearance_count=not appearance_exists,
-                        defer_commit=defer_commit
+                        increment_appearance_count=not appearance_exists
                     )
                     stats['duplicate'] += 1
-                    logger.info(f"[Matters] {'New appearance' if not appearance_exists else 'Reprocess'}: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type})")
+                    appearance_status = "new appearance" if not appearance_exists else "reprocess"
+                    logger.info("matter tracking update", status=appearance_status, matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type)
                 else:
                     # Create new Matter object
                     # Store RAW vendor identifiers for reference, composite as primary key
@@ -305,16 +305,16 @@ class UnifiedDatabase:
 
                     # Store via Matter repository (single-phase INSERT with all fields)
                     try:
-                        self.store_matter(matter_obj, defer_commit=defer_commit)
+                        self.store_matter(matter_obj)
                     except Exception as e:
-                        logger.error(f"[Matters] FAILED to store matter {agenda_item.matter_file or raw_vendor_matter_id}: {e}")
+                        logger.error("failed to store matter", matter=agenda_item.matter_file or raw_vendor_matter_id, error=str(e), error_type=type(e).__name__)
                         raise
 
                     stats['tracked'] += 1
-                    logger.info(f"[Matters] New: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type}) - {len(sponsors)} sponsors")
+                    logger.info("new matter tracked", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type, sponsor_count=len(sponsors))
 
             except Exception as e:
-                logger.error(f"[Matters] Error tracking matter {matter_composite_id}: {e}")
+                logger.error("error tracking matter", matter_id=matter_composite_id, error=str(e), error_type=type(e).__name__)
                 raise  # Propagate to outer transaction handler for rollback
 
         return stats
@@ -322,14 +322,15 @@ class UnifiedDatabase:
     def _create_matter_appearances(
         self,
         meeting: Meeting,
-        agenda_items: List[AgendaItem],
-        defer_commit: bool = False
+        agenda_items: List[AgendaItem]
     ) -> int:
         """
         Create matter_appearances AFTER items are stored.
 
         CRITICAL: Must be called AFTER store_agenda_items to avoid FK constraint failures
         (matter_appearances.item_id → items.id)
+
+        NOTE: Does not commit - caller must manage transaction.
         """
         count = 0
         committee = meeting.title.split("-")[0].strip() if meeting.title else None
@@ -349,12 +350,11 @@ class UnifiedDatabase:
                     item_id=agenda_item.id,
                     appeared_at=meeting.date.isoformat() if meeting.date else "",
                     committee=committee,
-                    sequence=agenda_item.sequence,
-                    defer_commit=defer_commit
+                    sequence=agenda_item.sequence
                 )
                 count += 1
             except Exception as e:
-                logger.error(f"[Matters] Failed to create appearance for {matter_composite_id}: {e}")
+                logger.error("failed to create appearance for matter", matter_id=matter_composite_id, error=str(e), error_type=type(e).__name__)
                 raise
 
         return count
@@ -403,7 +403,7 @@ class UnifiedDatabase:
         for matter_id, matter_items in matters_map.items():
             # matter_id is already composite hash, validate it
             if not validate_matter_id(matter_id):
-                logger.error(f"[Matters] Invalid matter_id format in items: {matter_id}")
+                logger.error("invalid matter_id format in items", matter_id=matter_id)
                 continue
 
             # Filter out procedural matter types
@@ -419,7 +419,7 @@ class UnifiedDatabase:
             all_items_for_matter = self._get_all_items_for_matter(matter_id)
 
             if not all_items_for_matter:
-                logger.warning(f"[Matters] No items found for matter {first_item.matter_file or matter_id}")
+                logger.warning("no items found for matter", matter=first_item.matter_file or matter_id)
                 continue
 
             # Check if matter already processed
@@ -452,7 +452,7 @@ class UnifiedDatabase:
 
                 if stored_hash == current_hash and not items_missing_summary:
                     self._apply_canonical_summary(all_items_for_matter, existing_matter)
-                    logger.debug(f"[Matters] Unchanged attachments, reusing canonical for {first_item.matter_file or matter_id}")
+                    logger.debug("unchanged attachments, reusing canonical summary", matter=first_item.matter_file or matter_id)
                     continue  # Skip enqueue
 
             # Log reason for enqueueing
@@ -507,74 +507,17 @@ class UnifiedDatabase:
         return enqueued_count
 
     def _get_all_items_for_matter(self, matter_id: str) -> List[AgendaItem]:
-        """Get ALL agenda items across ALL meetings for a given matter.
-
-        Uses composite matter_id (FK to city_matters) for simple, fast lookup.
-
-        Args:
-            matter_id: Composite matter ID (e.g., "nashvilleTN_7a8f3b2c1d9e4f5a")
-
-        Returns:
-            List of ALL AgendaItem objects for this matter across all meetings
-        """
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
-        if not matter_id:
-            return []
-
-        # Simple FK lookup - matter_id is already composite hash
-        cursor = self.conn.execute(
-            """
-            SELECT i.* FROM items i
-            WHERE i.matter_id = ?
-            ORDER BY i.meeting_id, i.sequence
-            """,
-            (matter_id,)
-        )
-        rows = cursor.fetchall()
-
-        # Convert to AgendaItem objects
-        items = []
-        for row in rows:
-            items.append(AgendaItem(
-                id=row["id"],
-                meeting_id=row["meeting_id"],
-                title=row["title"],
-                sequence=row["sequence"],
-                attachments=json.loads(row["attachments"]) if row["attachments"] else [],
-                summary=row["summary"],
-                topics=json.loads(row["topics"]) if row["topics"] else None,
-                matter_id=row["matter_id"],
-                matter_file=row["matter_file"],
-                matter_type=row["matter_type"],
-                agenda_number=row["agenda_number"],
-                sponsors=json.loads(row["sponsors"]) if row["sponsors"] else None,
-            ))
-
-        return items
+        """Get ALL agenda items across ALL meetings for a given matter - delegates to ItemRepository"""
+        return self.items.get_all_items_for_matter(matter_id)
 
     def _apply_canonical_summary(
         self, items: List[AgendaItem], matter: Matter
     ):
-        """Apply canonical summary from matter to all items"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
+        """Apply canonical summary from matter to all items - delegates to ItemRepository
 
-        canonical_summary = matter.canonical_summary
-        canonical_topics_json = json.dumps(matter.canonical_topics) if matter.canonical_topics else None
-
-        for item in items:
-            self.conn.execute(
-                """
-                UPDATE items
-                SET summary = ?, topics = ?
-                WHERE id = ?
-                """,
-                (canonical_summary, canonical_topics_json, item.id),
-            )
-
-        self.conn.commit()
+        NOTE: Does not commit - caller must manage transaction.
+        """
+        self.items.apply_canonical_summary(items, matter.canonical_summary, matter.canonical_topics)
 
     def update_meeting_summary(
         self,
@@ -600,9 +543,9 @@ class UnifiedDatabase:
 
     # ========== Agenda Item Operations (delegate to ItemRepository) ==========
 
-    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem], defer_commit: bool = False) -> int:
+    def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
         """Store agenda items - delegates to ItemRepository"""
-        return self.items.store_agenda_items(meeting_id, items, defer_commit=defer_commit)
+        return self.items.store_agenda_items(meeting_id, items)
 
     def get_agenda_items(self, meeting_id: str, load_matters: bool = False) -> List[AgendaItem]:
         """Get agenda items for meeting - delegates to ItemRepository
@@ -623,23 +566,14 @@ class UnifiedDatabase:
         return items[0] if items else None
 
     def get_agenda_items_by_ids(self, item_ids: List[str]) -> List[AgendaItem]:
-        """Get multiple agenda items by IDs"""
-        if not item_ids:
-            return []
-
-        placeholders = ",".join("?" * len(item_ids))
-        rows = self.conn.execute(
-            f"SELECT * FROM items WHERE id IN ({placeholders})",
-            item_ids
-        ).fetchall()
-
-        return [AgendaItem.from_db_row(row) for row in rows]
+        """Get multiple agenda items by IDs - delegates to ItemRepository"""
+        return self.items.get_agenda_items_by_ids(item_ids)
 
     # ========== Matter Operations (delegate to MatterRepository) ==========
 
-    def store_matter(self, matter: Matter, defer_commit: bool = False) -> bool:
+    def store_matter(self, matter: Matter) -> bool:
         """Store or update a matter - delegates to MatterRepository"""
-        return self.matters.store_matter(matter, defer_commit=defer_commit)
+        return self.matters.store_matter(matter)
 
     def get_matter(self, matter_id: str) -> Optional[Matter]:
         """Get matter by composite ID - delegates to MatterRepository"""
@@ -822,87 +756,8 @@ class UnifiedDatabase:
         return self.search.get_stats()
 
     def validate_matter_tracking(self, meeting_id: str) -> Dict[str, int]:
-        """
-        Validate matter tracking integrity for a meeting.
-
-        Checks:
-        1. FK integrity: items.matter_id → city_matters.id
-        2. ID format: items.matter_id uses composite hash format
-        3. Timeline: matter_appearances links exist
-
-        Args:
-            meeting_id: Meeting ID to validate
-
-        Returns:
-            Dict with validation stats
-        """
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
-        from database.id_generation import validate_matter_id
-
-        # Check 1: FK integrity (items → city_matters)
-        cursor = self.conn.execute("""
-            SELECT COUNT(*) as orphaned_count
-            FROM items i
-            WHERE i.meeting_id = ?
-              AND i.matter_id IS NOT NULL
-              AND NOT EXISTS (SELECT 1 FROM city_matters cm WHERE cm.id = i.matter_id)
-        """, (meeting_id,))
-        orphaned_count = cursor.fetchone()[0]
-
-        # Check 2: ID format validation
-        cursor = self.conn.execute("""
-            SELECT matter_id FROM items
-            WHERE meeting_id = ? AND matter_id IS NOT NULL
-        """, (meeting_id,))
-        invalid_format_count = 0
-        for row in cursor.fetchall():
-            if not validate_matter_id(row[0]):
-                invalid_format_count += 1
-                logger.error(f"[Matters] Invalid matter_id format: {row[0]}")
-
-        # Check 3: Timeline tracking (matter_appearances)
-        cursor = self.conn.execute("""
-            SELECT COUNT(*) as missing_appearances
-            FROM items i
-            WHERE i.meeting_id = ?
-              AND i.matter_id IS NOT NULL
-              AND NOT EXISTS (
-                SELECT 1 FROM matter_appearances ma
-                WHERE ma.item_id = i.id AND ma.meeting_id = ?
-              )
-        """, (meeting_id, meeting_id))
-        missing_appearances = cursor.fetchone()[0]
-
-        # Total matter-tracked items
-        cursor = self.conn.execute("""
-            SELECT COUNT(*) as total
-            FROM items
-            WHERE meeting_id = ? AND matter_id IS NOT NULL
-        """, (meeting_id,))
-        total_items_with_matter = cursor.fetchone()[0]
-
-        # Report results
-        if orphaned_count > 0 or invalid_format_count > 0 or missing_appearances > 0:
-            logger.error(
-                f"[Matters] VALIDATION FAILED for meeting {meeting_id}:\n"
-                f"  - Orphaned items (no city_matters): {orphaned_count}\n"
-                f"  - Invalid matter_id format: {invalid_format_count}\n"
-                f"  - Missing matter_appearances: {missing_appearances}\n"
-                f"  - Total items with matters: {total_items_with_matter}"
-            )
-        else:
-            logger.debug(
-                f"[Matters] Validation passed: all {total_items_with_matter} items valid"
-            )
-
-        return {
-            'orphaned_count': orphaned_count,
-            'invalid_format_count': invalid_format_count,
-            'missing_appearances': missing_appearances,
-            'total_items_with_matter': total_items_with_matter,
-        }
+        """Validate matter tracking integrity for a meeting - delegates to MatterRepository"""
+        return self.matters.validate_matter_tracking(meeting_id)
 
     # ========== Utilities ==========
 
