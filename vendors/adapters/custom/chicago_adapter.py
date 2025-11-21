@@ -72,8 +72,8 @@ class ChicagoAdapter(BaseAdapter):
         start_date = start_date_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         end_date = end_date_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Build OData filter
-        filter_str = f"date ge datetime'{start_date}' and date lt datetime'{end_date}'"
+        # Build OData filter (no datetime wrapper needed per API docs)
+        filter_str = f"date ge {start_date} and date lt {end_date}"
 
         # API parameters
         params = {
@@ -139,7 +139,7 @@ class ChicagoAdapter(BaseAdapter):
                 result = {
                     "meeting_id": str(meeting_id),
                     "title": body or "City Council Meeting",
-                    "start": meeting_date,
+                    "start": meeting_date.isoformat() if meeting_date else None,
                 }
 
                 if location:
@@ -255,7 +255,7 @@ class ChicagoAdapter(BaseAdapter):
                 matter_id = item.get("matterId")
                 comment_id = item.get("commentId")
                 title = item.get("matterTitle", "").strip()
-                sequence = item.get("sort", 0)
+                sequence = int(item.get("sort") or 0)
                 record_number = item.get("recordNumber")
                 matter_type = item.get("matterType")
                 action_name = item.get("actionName")

@@ -57,6 +57,7 @@ class MeetingValidator:
         # Custom city adapters
         "menlopark": lambda slug: ["menlopark.gov"],
         "berkeley": lambda slug: ["berkeleyca.gov"],
+        "chicago": lambda slug: ["occprodstoragev1.blob.core.usgovcloudapi.net"],
     }
 
     @classmethod
