@@ -184,14 +184,10 @@ def configure_structlog(is_development: bool = False, log_level: str = "INFO"):
     ]
 
     if is_development:
-        # Development: Simple plain output without excessive padding
+        # Development: Simple key-value output without padding
         processors = shared_processors + [
             structlog.processors.format_exc_info,
-            structlog.dev.ConsoleRenderer(
-                colors=False,
-                pad_event=0,  # No padding
-                exception_formatter=structlog.dev.plain_traceback,
-            )
+            structlog.processors.KeyValueRenderer(key_order=["event"], drop_missing=True),
         ]
     else:
         # Production: JSON output for log aggregation

@@ -13,7 +13,7 @@ from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_n
 
 from config import get_logger
 
-logger = get_logger(__name__).bind(component="api")
+logger = get_logger(__name__)
 
 
 
