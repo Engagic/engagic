@@ -75,7 +75,7 @@ def hash_attachments(
                 tuples.append((url, name, metadata['content_length'], metadata['last_modified']))
             except Exception as e:
                 # Fallback to URL-only if metadata fetch fails
-                logger.debug(f"Failed to fetch metadata for {url}: {e}")
+                logger.debug("failed to fetch metadata", url=url, error=str(e))
                 tuples.append((url, name, "", ""))
 
         tuples.sort()
@@ -194,7 +194,7 @@ def combine_date_time(date_str: Optional[str], time_str: Optional[str]) -> Optio
                 continue
 
         if not time_obj:
-            logger.debug(f"Could not parse time '{time_str}', using date only")
+            logger.debug("could not parse time - using date only", time_str=time_str)
             return date_str
 
         # Combine date and time
@@ -208,5 +208,5 @@ def combine_date_time(date_str: Optional[str], time_str: Optional[str]) -> Optio
         return combined.replace(tzinfo=None).isoformat()
 
     except Exception as e:
-        logger.debug(f"Error combining date/time '{date_str}' + '{time_str}': {e}")
+        logger.debug("error combining date/time", date_str=date_str, time_str=time_str, error=str(e))
         return date_str

@@ -15,6 +15,7 @@ from datetime import datetime
 
 from database.models import City, Meeting, AgendaItem
 from database.id_generation import generate_matter_id
+from database.transaction import transaction as db_transaction
 from pipeline.utils import hash_attachments
 from vendors.validator import MeetingValidator
 from vendors.utils.item_filters import should_skip_procedural_item, should_skip_matter
@@ -110,16 +111,24 @@ class MeetingIngestionService:
 
             return stored_meeting, stats
 
-        except Exception as e:
-            import traceback
+        except ValidationError as e:
+            # Pydantic validation errors are expected failures
             logger.error(
-                f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}\n{traceback.format_exc()}"
+                f"Validation error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
             )
             if not stats.get('meetings_skipped'):
                 stats['meetings_skipped'] = 1
-                stats['skip_reason'] = "exception"
+                stats['skip_reason'] = "validation_error"
                 stats['skipped_title'] = meeting_dict.get("title", "Unknown")
             return None, stats
+        except Exception as e:
+            # Unexpected errors (database, etc.) should bubble up for proper error handling
+            import traceback
+            logger.error(
+                f"Unexpected error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}\n{traceback.format_exc()}"
+            )
+            # Re-raise unexpected exceptions instead of swallowing them
+            raise
 
     def _init_stats(self) -> Dict[str, Any]:
         """Initialize stats tracking"""
@@ -205,7 +214,7 @@ class MeetingIngestionService:
             meeting_obj.processing_method = existing_meeting.processing_method
             meeting_obj.processing_time = existing_meeting.processing_time
             meeting_obj.topics = existing_meeting.topics
-            logger.debug(f"Preserved existing summary for {meeting_obj.title}")
+            logger.debug("preserved existing summary", title=meeting_obj.title)
 
         return meeting_obj
 
@@ -224,7 +233,7 @@ class MeetingIngestionService:
             city.vendor,
             city.slug,
         ):
-            logger.warning(f"[Items] Skipping corrupted meeting: {meeting_obj.title}")
+            logger.warning("skipping corrupted meeting", title=meeting_obj.title)
             stats['meetings_skipped'] = 1
             stats['skip_reason'] = "url_validation"
             stats['skipped_title'] = meeting_obj.title or "Unknown"
@@ -288,14 +297,12 @@ class MeetingIngestionService:
                     agenda_item.topics = existing_item.topics
 
             # Log item with matter tracking
-            if agenda_item.matter_file or composite_matter_id:
-                logger.info(
-                    f"[Items] {item_title[:50]} | Matter: {agenda_item.matter_file} "
-                    f"({composite_matter_id[:24]}...)" if composite_matter_id
-                    else f"[Items] {item_title[:50]} | Matter: {agenda_item.matter_file}"
-                )
-            else:
-                logger.info(f"[Items] {item_title[:50]}")
+            log_kwargs = {"item_title": item_title[:50]}
+            if agenda_item.matter_file:
+                log_kwargs["matter_file"] = agenda_item.matter_file
+            if composite_matter_id:
+                log_kwargs["composite_matter_id"] = composite_matter_id[:24] + "..."
+            logger.info("processing item", **log_kwargs)
 
             agenda_items.append(agenda_item)
 
@@ -350,35 +357,35 @@ class MeetingIngestionService:
         """Store meeting + items + matters in single atomic transaction
 
         Transaction order:
-        1. Store meeting (defer_commit=True)
-        2. Track matters in city_matters (creates FK targets, defer_commit=True)
-        3. Store agenda items (FK targets exist now, defer_commit=True)
-        4. Create matter_appearances (defer_commit=True)
-        5. Commit once
+        1. Store meeting
+        2. Track matters in city_matters (creates FK targets)
+        3. Store agenda items (FK targets exist now)
+        4. Create matter_appearances
+        5. Automatic commit on success, rollback on exception
         """
-        try:
+        with db_transaction(self.db.conn):
             # 1. Store meeting
-            self.db.store_meeting(meeting, defer_commit=True)
+            self.db.store_meeting(meeting)
 
             # 2-4. Store items (if any)
             if agenda_items:
                 # Track matters FIRST in city_matters table (creates FK targets)
                 matters_stats = self.db._track_matters(
-                    meeting, items_data or [], agenda_items, defer_commit=True
+                    meeting, items_data or [], agenda_items
                 )
                 stats['matters_tracked'] = matters_stats.get('tracked', 0)
                 stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
 
                 # THEN store items (FK targets exist now)
                 count = self.db.store_agenda_items(
-                    meeting.id, agenda_items, defer_commit=True
+                    meeting.id, agenda_items
                 )
                 stats['items_stored'] = count
                 items_with_summaries = sum(1 for item in agenda_items if item.summary)
 
                 # FINALLY create matter_appearances
                 appearances_count = self.db._create_matter_appearances(
-                    meeting, agenda_items, defer_commit=True
+                    meeting, agenda_items
                 )
                 stats['appearances_created'] = appearances_count
 
@@ -387,14 +394,6 @@ class MeetingIngestionService:
                     f"({stats['items_skipped_procedural']} procedural, "
                     f"{items_with_summaries} with preserved summaries)"
                 )
-
-            # 5. Single commit for entire transaction
-            self.db.conn.commit()
-
-        except Exception as e:
-            self.db.conn.rollback()
-            logger.error(f"[Transaction] Rolled back meeting + items due to error: {e}")
-            raise
 
     def _enqueue_if_needed(
         self,
@@ -432,9 +431,10 @@ class MeetingIngestionService:
 
         # MATTERS-FIRST: Deduplicate summarization work across meetings
         if has_items and agenda_items:
-            matters_enqueued = self.db._enqueue_matters_first(
-                city.banana, stored_meeting, agenda_items, priority
-            )
+            with db_transaction(self.db.conn):
+                matters_enqueued = self.db._enqueue_matters_first(
+                    city.banana, stored_meeting, agenda_items, priority
+                )
 
             if matters_enqueued > 0:
                 logger.debug(
@@ -448,12 +448,13 @@ class MeetingIngestionService:
 
         # MONOLITH FALLBACK: No items at all, process entire packet
         elif packet_url:
-            self.db.enqueue_meeting_job(
-                meeting_id=stored_meeting.id,
-                source_url=packet_url,
-                banana=city.banana,
-                priority=priority,
-            )
+            with db_transaction(self.db.conn):
+                self.db.enqueue_meeting_job(
+                    meeting_id=stored_meeting.id,
+                    source_url=packet_url,
+                    banana=city.banana,
+                    priority=priority,
+                )
             logger.debug(
                 f"Enqueued monolithic-packet processing for {stored_meeting.title} "
                 f"(priority {priority})"

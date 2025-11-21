@@ -15,6 +15,7 @@ import time
 from typing import List, Dict, Any, Optional, Tuple
 
 from database.db import UnifiedDatabase
+from database.transaction import transaction
 from config import config
 from parsing.pdf import PdfExtractor
 from parsing.participation import parse_participation_info
@@ -45,7 +46,9 @@ class Analyzer:
         self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 
         logger.info(
-            "[Analyzer] Initialized with PyMuPDF extractor, Gemini summarizer"
+            "analyzer initialized",
+            pdf_extractor="pymupdf",
+            summarizer="gemini"
         )
 
     def process_agenda_with_cache(self, meeting_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,7 +69,7 @@ class Analyzer:
         # Check cache first (also increments hit count if found)
         cached_meeting = self.db.get_cached_summary(packet_url)
         if cached_meeting:
-            logger.info(f"[Cache] HIT - {city_banana}")
+            logger.info("cache hit", city=city_banana)
             return {
                 "success": True,
                 "summary": cached_meeting.summary,
@@ -77,7 +80,7 @@ class Analyzer:
             }
 
         # Process with Gemini
-        logger.info(f"[Cache] MISS - {city_banana}")
+        logger.info("cache miss", city=city_banana)
         start_time = time.time()
 
         try:
@@ -92,17 +95,17 @@ class Analyzer:
             if participation:
                 meeting_data["participation"] = participation
 
-            # Update meeting with summary and participation
+            # Update meeting with summary and participation + cache metadata
             meeting_id = meeting_data.get("meeting_id")
-            if meeting_id:
-                self.db.update_meeting_summary(
-                    meeting_id, summary, method, processing_time, participation
-                )
+            with transaction(self.db.conn):
+                if meeting_id:
+                    self.db.update_meeting_summary(
+                        meeting_id, summary, method, processing_time, participation
+                    )
+                # Store processing metadata in cache table
+                self.db.store_processing_result(packet_url, method, processing_time)
 
-            # Store processing metadata in cache table
-            self.db.store_processing_result(packet_url, method, processing_time)
-
-            logger.info(f"[Processing] SUCCESS - {city_banana}")
+            logger.info("processing success", city=city_banana)
 
             return {
                 "success": True,
@@ -117,7 +120,10 @@ class Analyzer:
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(
-                f"[Processing] FAILED - {city_banana} - {type(e).__name__}: {e}"
+                "processing failed",
+                city=city_banana,
+                error=str(e),
+                error_type=type(e).__name__
             )
             return {
                 "success": False,
@@ -146,11 +152,11 @@ class Analyzer:
                 # Parse participation info BEFORE AI summarization
                 participation = parse_participation_info(extracted_text)
                 if participation:
-                    logger.debug(f"[Participation] Extracted info: {list(participation.keys())}")
+                    logger.debug("extracted participation info", fields=list(participation.keys()))
 
                 # Summarize meeting
                 summary = self.summarizer.summarize_meeting(extracted_text)
-                logger.info(f"[Processing] SUCCESS - {url}")
+                logger.info("agenda processing success", url=url)
 
                 # Cleanup: free PDF text memory
                 del result
@@ -159,14 +165,15 @@ class Analyzer:
                 return summary, "pymupdf_gemini", participation
             else:
                 logger.warning(
-                    f"[Processing] FAILED - No text extracted or poor quality - {url}"
+                    "no text extracted or poor quality",
+                    url=url
                 )
 
         except Exception as e:
-            logger.warning(f"[Processing] FAILED - {type(e).__name__}: {str(e)} - {url}")
+            logger.warning("processing failed", url=url, error=str(e), error_type=type(e).__name__)
 
         # Fail fast
-        logger.error(f"[Analysis] REJECTED - {url}")
+        logger.error("analysis rejected", url=url)
         raise AnalysisError(
             "Document analysis failed. "
             "This PDF may be scanned or have complex formatting."

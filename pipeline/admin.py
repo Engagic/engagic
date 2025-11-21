@@ -26,7 +26,7 @@ def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> 
     Returns:
         Dictionary with text preview and stats
     """
-    logger.info(f"[Admin] Extracting text preview for {meeting_id}...")
+    logger.info("extracting text preview", meeting_id=meeting_id)
 
     db = UnifiedDatabase(config.UNIFIED_DB_PATH)
     meeting = db.get_meeting(meeting_id)
@@ -46,7 +46,7 @@ def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> 
         # Handle URL being either str or List[str]
         url = source_url[0] if isinstance(source_url, list) else source_url
 
-        logger.info(f"[Admin] Downloading PDF: {url}")
+        logger.info("downloading PDF", url=url)
         extraction_result = extractor.extract_from_url(url)
 
         if not extraction_result["success"]:
@@ -69,7 +69,7 @@ def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> 
                 f.write(f"Characters: {text_length}\n")
                 f.write("=" * 80 + "\n\n")
                 f.write(text)
-            logger.info(f"[Admin] Saved text to {output_file}")
+            logger.info("saved text to file", output_file=output_file)
 
         # Return preview (first 2000 chars)
         preview_text = text[:2000] + ("..." if len(text) > 2000 else "")
@@ -86,7 +86,7 @@ def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> 
         }
 
     except Exception as e:
-        logger.error(f"[Admin] Failed to extract text: {e}")
+        logger.error("failed to extract text", error=str(e), error_type=type(e).__name__)
         return {
             "error": str(e),
             "meeting_id": meeting_id,
@@ -104,7 +104,7 @@ def preview_items(meeting_id: str, extract_text: bool = False, output_dir: Optio
     Returns:
         Dictionary with items structure and optional text previews
     """
-    logger.info(f"[Admin] Previewing items for {meeting_id}...")
+    logger.info("previewing items", meeting_id=meeting_id)
 
     db = UnifiedDatabase(config.UNIFIED_DB_PATH)
     meeting = db.get_meeting(meeting_id)
@@ -148,7 +148,7 @@ def preview_items(meeting_id: str, extract_text: bool = False, output_dir: Optio
                     from parsing.pdf import PdfExtractor
                     extractor = PdfExtractor()
 
-                    logger.info(f"[Admin] Extracting text from {item.id} attachment...")
+                    logger.info("extracting text from attachment", item_id=item.id)
                     extraction_result = extractor.extract_from_url(att_url)
 
                     if extraction_result["success"]:
@@ -177,12 +177,12 @@ def preview_items(meeting_id: str, extract_text: bool = False, output_dir: Optio
                                 f.write(text)
 
                             item_data["saved_to"] = filepath
-                            logger.info(f"[Admin] Saved {item.id} text to {filepath}")
+                            logger.info("saved item text to file", item_id=item.id, filepath=filepath)
                     else:
                         item_data["text_error"] = extraction_result.get("error", "Failed to extract")
 
                 except Exception as e:
-                    logger.warning(f"[Admin] Failed to extract text for {item.id}: {e}")
+                    logger.warning("failed to extract item text", item_id=item.id, error=str(e), error_type=type(e).__name__)
                     item_data["text_error"] = str(e)
 
         items_preview.append(item_data)

@@ -3,6 +3,10 @@ Queue Repository - Processing queue operations
 
 Handles all job queue database operations including enqueueing,
 dequeuing, status updates, and queue management.
+
+REPOSITORY PATTERN: All methods are atomic operations.
+Transaction management is the CALLER'S responsibility.
+Use `with transaction(conn):` context manager to group operations.
 """
 
 import sqlite3
@@ -102,16 +106,15 @@ class QueueRepository(BaseRepository):
                         """,
                         (queue_id,)
                     )
-                    self._commit()
                     return queue_id
                 else:
                     # Still actively processing
-                    logger.debug(f"{job_type.capitalize()} job {job_display_id} actively processing")
+                    logger.debug("job actively processing", job_type=job_type, job_id=job_display_id)
                     return -1
 
             # If already pending, return -1 (no change needed)
             if status == "pending":
-                logger.debug(f"{job_type.capitalize()} job {job_display_id} already pending")
+                logger.debug("job already pending", job_type=job_type, job_id=job_display_id)
                 return -1
 
             # If completed/failed/dead_letter, reset to pending
@@ -134,7 +137,6 @@ class QueueRepository(BaseRepository):
                     """,
                     (job_type, payload_json, meeting_id, banana, priority, queue_id),
                 )
-                self._commit()
                 log_msg = f"Re-enqueued {job_type} job {job_display_id} (was {status}, now pending) with priority {priority}"
                 if extra_log_info:
                     log_msg += f" {extra_log_info}"
@@ -150,7 +152,6 @@ class QueueRepository(BaseRepository):
             """,
             (job_type, payload_json, meeting_id, banana, priority, source_url),
         )
-        self._commit()
         queue_id = cursor.lastrowid
         if queue_id is None:
             raise DatabaseConnectionError("Failed to get queue ID after insert")
@@ -339,13 +340,11 @@ class QueueRepository(BaseRepository):
         row = cursor.fetchone()
 
         if row:
-            self._commit()
-
             # Convert to typed QueueJob
             try:
                 return QueueJob.from_db_row(dict(row))
             except Exception as e:
-                logger.error(f"Failed to deserialize queue job {row['id']}: {e}")
+                logger.error("failed to deserialize queue job", job_id=row['id'], error=str(e), error_type=type(e).__name__)
                 # Mark as failed if deserialization fails
                 self.mark_processing_failed(row['id'], f"Deserialization error: {e}")
                 return None
@@ -365,8 +364,7 @@ class QueueRepository(BaseRepository):
             """,
             (queue_id,),
         )
-        self._commit()
-        logger.info(f"Marked queue item {queue_id} as completed")
+        logger.info("marked queue item as completed", queue_id=queue_id)
 
     def mark_processing_failed(
         self, queue_id: int, error_message: str, increment_retry: bool = True
@@ -400,15 +398,14 @@ class QueueRepository(BaseRepository):
                 """,
                 (error_message, queue_id),
             )
-            self._commit()
-            logger.warning(f"Marked queue item {queue_id} as failed (non-retryable): {error_message}")
+            logger.warning("marked queue item as failed (non-retryable)", queue_id=queue_id, error=error_message)
             return
 
         # Get current retry_count
         cursor = self._execute("SELECT retry_count, priority FROM queue WHERE id = ?", (queue_id,))
         row = cursor.fetchone()
         if not row:
-            logger.error(f"Queue item {queue_id} not found")
+            logger.error("queue item not found", queue_id=queue_id)
             return
 
         current_retry_count = row['retry_count']
@@ -432,7 +429,6 @@ class QueueRepository(BaseRepository):
                 """,
                 (new_priority, error_message, queue_id),
             )
-            self._commit()
             logger.warning(
                 f"Job {queue_id} retry scheduled (attempt {current_retry_count + 1}/3, "
                 f"priority {current_priority} -> {new_priority}): {error_message}"
@@ -451,7 +447,6 @@ class QueueRepository(BaseRepository):
                 """,
                 (error_message, queue_id),
             )
-            self._commit()
             logger.error(
                 f"Job {queue_id} moved to dead letter queue after {current_retry_count + 1} failures: {error_message}"
             )
@@ -470,8 +465,7 @@ class QueueRepository(BaseRepository):
             (max_retries,),
         )
         reset_count = self.conn.cursor().rowcount
-        self._commit()
-        logger.info(f"Reset {reset_count} failed items back to pending")
+        logger.info("reset failed items back to pending", count=reset_count)
         return reset_count
 
     def clear_queue(self) -> Dict[str, int]:
@@ -487,7 +481,6 @@ class QueueRepository(BaseRepository):
         stats = self.get_queue_stats()
 
         self._execute("DELETE FROM queue")
-        self._commit()
 
         logger.warning("Cleared entire processing queue")
         return {
@@ -612,10 +605,9 @@ class QueueRepository(BaseRepository):
                 )
                 enqueued += 1
             except sqlite3.IntegrityError:
-                logger.debug(f"Skipping already queued source: {meeting['packet_url']}")
+                logger.debug("skipping already queued source", packet_url=meeting['packet_url'])
 
-        self._commit()
-        logger.info(f"Bulk enqueued {enqueued} meetings for processing")
+        logger.info("bulk enqueued meetings for processing", count=enqueued)
         return enqueued
 
     def recover_stale_jobs(self, stale_threshold_minutes: int = 60) -> int:
@@ -670,6 +662,5 @@ class QueueRepository(BaseRepository):
                 (job["id"],)
             )
 
-        self._commit()
-        logger.info(f"Recovered {len(stale_jobs)} stale jobs")
+        logger.info("recovered stale jobs", count=len(stale_jobs))
         return len(stale_jobs)

@@ -3,10 +3,14 @@ Matter Repository - Matter operations
 
 Handles all matter database operations including storage,
 retrieval, and canonical summary management for matters-first architecture.
+
+REPOSITORY PATTERN: All methods are atomic operations.
+Transaction management is the CALLER'S responsibility.
+Use `with transaction(conn):` context manager to group operations.
 """
 
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from config import get_logger
 from database.repositories.base import BaseRepository
@@ -20,16 +24,17 @@ logger = get_logger(__name__).bind(component="database")
 class MatterRepository(BaseRepository):
     """Repository for matter operations"""
 
-    def store_matter(self, matter: Matter, defer_commit: bool = False) -> bool:
+    def store_matter(self, matter: Matter) -> bool:
         """
         Store or update a matter.
 
         CRITICAL: Preserves existing canonical_summary on conflict.
         Only updates structural fields (title, attachments, metadata).
 
+        NOTE: Does not commit - caller must manage transaction.
+
         Args:
             matter: Matter object to store
-            defer_commit: If True, skip commit (caller handles transaction)
 
         Returns:
             True if stored successfully
@@ -63,14 +68,14 @@ class MatterRepository(BaseRepository):
         sponsors_json = json.dumps(matter.sponsors) if matter.sponsors else None
 
         # Debug: Log the banana value to diagnose FK failures
-        logger.debug(f"[Matters] Inserting matter {matter.id} with banana='{matter.banana}'")
+        logger.debug("inserting matter", matter_id=matter.id, banana=matter.banana)
 
         # Sanity check: Verify city exists before insert (diagnose FK failures)
         city_check = self._fetch_one("SELECT banana FROM cities WHERE banana = ?", (matter.banana,))
         if not city_check:
-            logger.error(f"[Matters] FATAL: City '{matter.banana}' does NOT exist in cities table! FK will fail.")
+            logger.error("city does not exist in cities table - FK will fail", banana=matter.banana)
         else:
-            logger.debug(f"[Matters] City '{matter.banana}' verified in cities table")
+            logger.debug("city verified in cities table", banana=matter.banana)
 
         self._execute(
             """
@@ -115,9 +120,7 @@ class MatterRepository(BaseRepository):
             ),
         )
 
-        if not defer_commit:
-            self._commit()
-        logger.debug(f"Stored matter {matter.id}")
+        logger.debug("stored matter", matter_id=matter.id)
         return True
 
     def get_matter(self, matter_id: str) -> Optional[Matter]:
@@ -212,7 +215,7 @@ class MatterRepository(BaseRepository):
             composite_id = generate_matter_id(banana, matter_file, matter_id)
             return self.get_matter(composite_id)
         except ValueError as e:
-            logger.error(f"Failed to generate matter ID: {e}")
+            logger.error("failed to generate matter ID", error=str(e), error_type=type(e).__name__)
             return None
 
     def update_matter_summary(
@@ -244,8 +247,7 @@ class MatterRepository(BaseRepository):
             (canonical_summary, topics_json, attachment_hash, matter_id),
         )
 
-        self._commit()
-        logger.debug(f"Updated matter {matter_id} with canonical summary")
+        logger.debug("updated matter with canonical summary", matter_id=matter_id)
 
     def search_matters(
         self,
@@ -329,11 +331,12 @@ class MatterRepository(BaseRepository):
         meeting_date: str,
         attachments: Optional[list],
         attachment_hash: str,
-        increment_appearance_count: bool = False,
-        defer_commit: bool = False
+        increment_appearance_count: bool = False
     ) -> None:
         """
         Update matter tracking fields (last_seen, appearance_count, attachments).
+
+        NOTE: Does not commit - caller must manage transaction.
 
         Args:
             matter_id: Composite matter ID
@@ -341,7 +344,6 @@ class MatterRepository(BaseRepository):
             attachments: List of attachment dicts
             attachment_hash: SHA256 hash of attachments
             increment_appearance_count: Whether to increment appearance count
-            defer_commit: If True, skip commit (caller handles transaction)
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -364,9 +366,7 @@ class MatterRepository(BaseRepository):
             (meeting_date, attachments_json, attachment_hash, matter_id),
         )
 
-        if not defer_commit:
-            self._commit()
-        logger.debug(f"Updated matter tracking for {matter_id}")
+        logger.debug("updated matter tracking", matter_id=matter_id)
 
     def create_appearance(
         self,
@@ -375,11 +375,12 @@ class MatterRepository(BaseRepository):
         item_id: str,
         appeared_at: str,
         committee: Optional[str] = None,
-        sequence: Optional[int] = None,
-        defer_commit: bool = False
+        sequence: Optional[int] = None
     ) -> None:
         """
         Create a matter appearance record (INSERT OR IGNORE for idempotency).
+
+        NOTE: Does not commit - caller must manage transaction.
 
         Args:
             matter_id: Composite matter ID
@@ -388,7 +389,6 @@ class MatterRepository(BaseRepository):
             appeared_at: Date when matter appeared
             committee: Optional committee name
             sequence: Optional item sequence number
-            defer_commit: If True, skip commit (caller handles transaction)
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
@@ -403,6 +403,85 @@ class MatterRepository(BaseRepository):
             (matter_id, meeting_id, item_id, appeared_at, committee, sequence),
         )
 
-        if not defer_commit:
-            self._commit()
-        logger.debug(f"Created appearance for matter {matter_id} in meeting {meeting_id}")
+        logger.debug("created appearance for matter", matter_id=matter_id, meeting_id=meeting_id)
+
+    def validate_matter_tracking(self, meeting_id: str) -> Dict[str, int]:
+        """
+        Validate matter tracking integrity for a meeting.
+
+        Checks:
+        1. FK integrity: items.matter_id → city_matters.id
+        2. ID format: items.matter_id uses composite hash format
+        3. Timeline: matter_appearances links exist
+
+        Args:
+            meeting_id: Meeting ID to validate
+
+        Returns:
+            Dict with validation stats
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        # Check 1: FK integrity (items → city_matters)
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) as orphaned_count
+            FROM items i
+            WHERE i.meeting_id = ?
+              AND i.matter_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM city_matters cm WHERE cm.id = i.matter_id)
+        """, (meeting_id,))
+        orphaned_count = cursor.fetchone()[0]
+
+        # Check 2: ID format validation
+        cursor = self.conn.execute("""
+            SELECT matter_id FROM items
+            WHERE meeting_id = ? AND matter_id IS NOT NULL
+        """, (meeting_id,))
+        invalid_format_count = 0
+        for row in cursor.fetchall():
+            if not validate_matter_id(row[0]):
+                invalid_format_count += 1
+                logger.error("invalid matter_id format", matter_id=row[0])
+
+        # Check 3: Timeline tracking (matter_appearances)
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) as missing_appearances
+            FROM items i
+            WHERE i.meeting_id = ?
+              AND i.matter_id IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM matter_appearances ma
+                WHERE ma.item_id = i.id AND ma.meeting_id = ?
+              )
+        """, (meeting_id, meeting_id))
+        missing_appearances = cursor.fetchone()[0]
+
+        # Total matter-tracked items
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) as total
+            FROM items
+            WHERE meeting_id = ? AND matter_id IS NOT NULL
+        """, (meeting_id,))
+        total_items_with_matter = cursor.fetchone()[0]
+
+        # Report results
+        if orphaned_count > 0 or invalid_format_count > 0 or missing_appearances > 0:
+            logger.error(
+                f"[Matters] VALIDATION FAILED for meeting {meeting_id}:\n"
+                f"  - Orphaned items (no city_matters): {orphaned_count}\n"
+                f"  - Invalid matter_id format: {invalid_format_count}\n"
+                f"  - Missing matter_appearances: {missing_appearances}\n"
+                f"  - Total items with matters: {total_items_with_matter}"
+            )
+        else:
+            logger.debug(
+                f"[Matters] Validation passed: all {total_items_with_matter} items valid"
+            )
+
+        return {
+            'orphaned_count': orphaned_count,
+            'invalid_format_count': invalid_format_count,
+            'missing_appearances': missing_appearances,
+            'total_items_with_matter': total_items_with_matter,
+        }

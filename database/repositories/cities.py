@@ -3,6 +3,10 @@ City Repository - City and zipcode operations
 
 Handles all city-related database operations including lookups,
 creation, and related statistics.
+
+REPOSITORY PATTERN: All methods are atomic operations.
+Transaction management is the CALLER'S responsibility.
+Use `with transaction(conn):` context manager to group operations.
 """
 
 from typing import Optional, List, Dict
@@ -194,8 +198,7 @@ class CityRepository(BaseRepository):
                     (banana, zipcode, is_primary),
                 )
 
-        self._commit()
-        logger.info(f"Added city: {banana} ({name}, {state})")
+        logger.info("added city", banana=banana, name=name, state=state)
 
         result = self.get_city(banana=banana)
         if result is None:

@@ -836,6 +836,7 @@ class LegistarAdapter(BaseAdapter):
             )
         else:
             # No items and no packet - skip this meeting
+            # NOTE: Returning None is intentional - this is not an error, just no processable content
             logger.debug(
                 f"[legistar:{self.slug}] Meeting {meeting_id}: no items or packet available, skipping"
             )

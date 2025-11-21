@@ -76,7 +76,7 @@ class Fetcher:
 
         self.failed_cities.clear()
         cities = self.db.get_cities(status="active")
-        logger.info(f"Syncing {len(cities)} cities with rate limiting...")
+        logger.info("syncing cities with rate limiting", city_count=len(cities))
 
         # Group cities by vendor for polite crawling (only supported vendors)
         supported_vendors = {
@@ -105,8 +105,9 @@ class Fetcher:
 
         total_supported = sum(len(vendor_cities) for vendor_cities in by_vendor.values())
         logger.info(
-            f"Processing {total_supported} cities with supported adapters, "
-            f"skipping {skipped_count} unsupported"
+            "processing cities with supported adapters",
+            supported_count=total_supported,
+            skipped_count=skipped_count
         )
 
         results = []
@@ -119,7 +120,9 @@ class Fetcher:
             # Sort cities by sync priority (high activity first)
             sorted_cities = self._prioritize_cities(vendor_cities)
             logger.info(
-                f"Syncing {len(sorted_cities)} {vendor} cities (prioritized by activity)"
+                "syncing vendor cities",
+                vendor=vendor,
+                city_count=len(sorted_cities)
             )
 
             for city in sorted_cities:
@@ -128,7 +131,7 @@ class Fetcher:
 
                 # Check if city needs syncing based on frequency
                 if not self._should_sync_city(city):
-                    logger.debug(f"Skipping {city.name} - doesn't need sync yet")
+                    logger.debug("skipping city - not due for sync", city_name=city.name)
                     results.append(
                         SyncResult(
                             city_banana=city.banana,
@@ -143,7 +146,7 @@ class Fetcher:
 
                 # Sync with retry logic
                 result = self._sync_city_with_retry(city)
-                logger.info(f"Sync completed for {city.banana}: {result.status}")
+                logger.info("sync completed", city=city.banana, status=result.status.value)
                 results.append(result)
 
                 # Track failed cities
@@ -165,11 +168,14 @@ class Fetcher:
         duration = time.time() - start_time
 
         logger.info(
-            f"Polite sync completed in {duration:.1f}s: {total_meetings} meetings found, "
-            f"{total_processed} processed, {failed_count} cities failed"
+            "polite sync completed",
+            duration_seconds=round(duration, 1),
+            meetings_found=total_meetings,
+            meetings_processed=total_processed,
+            cities_failed=failed_count
         )
         if self.failed_cities:
-            logger.warning(f"Failed cities: {', '.join(sorted(self.failed_cities))}")
+            logger.warning("cities failed during sync", failed_cities=sorted(self.failed_cities))
 
         return results
 
@@ -182,13 +188,13 @@ class Fetcher:
         Returns:
             List of SyncResult objects
         """
-        logger.info(f"Syncing {len(city_bananas)} specific cities...")
+        logger.info("syncing specific cities", city_count=len(city_bananas))
         results = []
 
         for banana in city_bananas:
             city = self.db.get_city(banana=banana)
             if not city:
-                logger.warning(f"City not found: {banana}")
+                logger.warning("city not found", banana=banana)
                 results.append(
                     SyncResult(
                         city_banana=banana,
@@ -219,12 +225,12 @@ class Fetcher:
         Returns:
             List of SyncResult objects
         """
-        logger.info(f"Syncing cities for vendors: {vendor_names}")
+        logger.info("syncing cities for vendors", vendors=vendor_names)
         results = []
 
         for vendor in vendor_names:
             cities = self.db.get_cities(vendor=vendor, status="active")
-            logger.info(f"Found {len(cities)} cities for vendor {vendor}")
+            logger.info("found cities for vendor", vendor=vendor, city_count=len(cities))
 
             for city in cities:
                 if not self.is_running:
@@ -292,7 +298,7 @@ class Fetcher:
         # Use context manager to ensure session cleanup
         with adapter:
             try:
-                logger.info(f"[Sync] Starting {city.banana} ({city.vendor})")
+                logger.info("starting sync", city=city.banana, vendor=city.vendor)
                 result.status = SyncStatus.IN_PROGRESS
 
                 # Fetch meetings using unified adapter interface
@@ -315,7 +321,7 @@ class Fetcher:
                                 total_matters += 1
 
                 except Exception as e:
-                    logger.error(f"[Sync] Error fetching meetings for {city.banana}: {e}")
+                    logger.error("error fetching meetings", city=city.banana, error=str(e), error_type=type(e).__name__)
                     result.status = SyncStatus.FAILED
                     result.error_message = str(e)
                     # Record vendor failure metrics
@@ -354,7 +360,7 @@ class Fetcher:
                         )
 
                     if not self.is_running:
-                        logger.warning("[Sync] Processing stopped - is_running is False")
+                        logger.warning("processing stopped - is_running flag is false")
                         break
 
                     # Use database method to handle all transformation and storage
@@ -452,7 +458,7 @@ class Fetcher:
             is_last_attempt = attempt >= max_retries - 1
 
             if is_last_attempt:
-                logger.error(f"Final sync failure for {city_name} after {max_retries} attempts: {last_error}")
+                logger.error("final sync failure after retries", city=city_name, attempts=max_retries, error=last_error)
 
                 # Preserve structured data from last attempt if available
                 if last_result:
@@ -501,7 +507,7 @@ class Fetcher:
                 return hours_since_sync >= 168  # Sync weekly
 
         except Exception as e:
-            logger.warning(f"Error checking sync schedule for {city.banana}: {e}")
+            logger.warning("error checking sync schedule", city=city.banana, error=str(e))
             return True  # Sync on error to be safe
 
     def _prioritize_cities(self, cities: List[City]) -> List[City]:
@@ -524,7 +530,7 @@ class Fetcher:
                 return recent_meetings * 10 + min(hours_since_sync / 24, 10)
 
             except (AttributeError, TypeError) as e:
-                logger.warning(f"Failed to calculate priority for {city.banana}: {e}")
+                logger.warning("failed to calculate priority", city=city.banana, error=str(e), error_type=type(e).__name__)
                 return 100  # Medium priority on error
 
         return sorted(cities, key=get_priority, reverse=True)
