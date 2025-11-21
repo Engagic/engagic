@@ -17,7 +17,7 @@ The database uses a **Repository Pattern** with a **facade** that delegates to f
 
 ```
 ┌─────────────────────┐
-│  UnifiedDatabase    │  Facade (1497 lines)
+│  UnifiedDatabase    │  Facade (775 lines)
 │  (db.py)            │
 └──────────┬──────────┘
            │

@@ -18,8 +18,8 @@ Provides:
 
 ```
 server/
-├── main.py                 109 lines  - FastAPI app initialization
-├── rate_limiter.py         309 lines  - SQLite-based rate limiting
+├── main.py                 121 lines  - FastAPI app initialization
+├── rate_limiter.py         481 lines  - SQLite-based rate limiting
 ├── metrics.py              222 lines  - Prometheus instrumentation
 │
 ├── routes/                1271 lines  - HTTP request handlers
@@ -101,7 +101,7 @@ response = requests.post("http://localhost:8000/api/search/by-topic", json={
 
 ## Module Reference
 
-### 1. `main.py` - Application Entry Point (109 lines)
+### 1. `main.py` - Application Entry Point (121 lines)
 
 **Minimal FastAPI app initialization.** Just wiring, no business logic.
 
@@ -161,7 +161,7 @@ async def search_meetings(request: SearchRequest, db: UnifiedDatabase = Depends(
 
 ---
 
-### 2. `rate_limiter.py` - Persistent Rate Limiting (309 lines)
+### 2. `rate_limiter.py` - Persistent Rate Limiting (481 lines)
 
 **SQLite-based rate limiter that survives restarts.**
 
