@@ -237,6 +237,7 @@ class ChicagoAdapter(BaseAdapter):
         """
         items = []
         items_filtered = 0
+        item_counter = 0  # Manual counter for items without API sort values
 
         # Get agenda structure
         agenda = meeting_detail.get("agenda", {})
@@ -272,6 +273,17 @@ class ChicagoAdapter(BaseAdapter):
                     items_filtered += 1
                     logger.debug(f"[chicago:{self.slug}] Skipping procedural item: {title[:60]}")
                     continue
+
+                # Increment counter for non-filtered items
+                item_counter += 1
+
+                # Fallback: Use manual counter if API's sort field is 0 or missing
+                if sequence == 0:
+                    sequence = item_counter
+
+                # Fallback: Generate displayId if missing
+                if not display_id:
+                    display_id = str(item_counter)
 
                 # Fetch matter data (attachments + sponsors) if matterId exists
                 attachments = []

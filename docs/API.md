@@ -54,19 +54,44 @@ Set via `ENGAGIC_ADMIN_TOKEN` environment variable.
 
 ## Rate Limiting
 
-**Limit:** 30 requests per 60 seconds per IP address
+**Tiered rate limiting** balances open data access with infrastructure sustainability.
 
-**Headers:**
+### Tiers
+
+| Tier | Minute Limit | Daily Limit | Auth Required | Use Case |
+|------|--------------|-------------|---------------|----------|
+| **Free** | 30 req/min | 300 req/day | No | Personal use, exploration |
+| **Hacktivist** | 100 req/min | 5,000 req/day | Yes (attribution) | Nonprofits, journalists, researchers |
+| **Enterprise** | 1,000+ req/min | 100,000+ req/day | Yes (paid) | Commercial applications |
+
+**Self-host option:** AGPL-3.0 license - unlimited if you run your own instance
+
+### Headers
+
 ```http
 X-RateLimit-Limit: 30
 X-RateLimit-Remaining: 25
 X-RateLimit-Reset: 1698765432
+X-RateLimit-Limit-Day: 300
+X-RateLimit-Remaining-Day: 275
 ```
 
-**Rate limit exceeded response:**
+### Rate Limit Exceeded (429)
+
 ```json
 {
-  "detail": "Rate limit exceeded. Try again in X seconds."
+  "detail": "Rate limit exceeded",
+  "retry_after": 45,
+  "current_tier": "free",
+  "limits": {
+    "minute": {"limit": 30, "remaining": 0, "reset": 1698765432},
+    "day": {"limit": 300, "remaining": 150, "reset": 1698851832}
+  },
+  "upgrade_options": {
+    "hacktivist": "Email admin@motioncount.com with your use case for nonprofit/journalist tier",
+    "enterprise": "Visit https://motioncount.com for commercial pricing",
+    "self_host": "Clone https://github.com/yourusername/engagic and run unlimited"
+  }
 }
 ```
 
