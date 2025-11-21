@@ -2,18 +2,19 @@
 Monitoring and health check API routes
 """
 
-import logging
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import Response
+
+from config import config, get_logger
 from database.db import UnifiedDatabase
 from server.services.ticker import generate_ticker_item
 from server.metrics import metrics, get_metrics_text
-from config import config
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="api")
+
 
 router = APIRouter()
 

@@ -8,7 +8,8 @@ Routes, services, and utilities are organized into focused modules.
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from config import config
+
+from config import config, get_logger
 from database.db import UnifiedDatabase
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
@@ -16,13 +17,14 @@ from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters
 
+logger = get_logger(__name__).bind(component="api")
+
 # Configure structured logging
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(), logging.FileHandler(config.LOG_PATH, mode="a")],
 )
-logger = logging.getLogger("engagic")
 
 # Initialize FastAPI app
 app = FastAPI(title="engagic API", description="EGMI")

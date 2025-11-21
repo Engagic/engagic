@@ -4,7 +4,6 @@ Search Repository - Search and discovery operations
 Handles search, topic-based queries, cache lookups, and database statistics.
 """
 
-import logging
 import json
 from typing import Optional, List, Dict, Any
 
@@ -12,7 +11,10 @@ from database.repositories.base import BaseRepository
 from database.models import Meeting, AgendaItem
 from exceptions import DatabaseConnectionError
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="database")
+
 
 
 class SearchRepository(BaseRepository):

@@ -26,7 +26,6 @@ Processing approach:
 Confidence: 8/10 - PDF parsing reliable, link mapping based on page proximity
 """
 
-import logging
 from typing import Dict, Any, Iterator, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
@@ -37,7 +36,10 @@ from vendors.adapters.base_adapter import BaseAdapter
 from parsing.pdf import PdfExtractor
 from parsing.menlopark_pdf import parse_menlopark_pdf_agenda
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 
 class MenloParkAdapter(BaseAdapter):

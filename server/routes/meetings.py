@@ -2,7 +2,6 @@
 Meeting API routes
 """
 
-import logging
 import sys
 import os
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -11,7 +10,10 @@ from server.services.meeting import get_meeting_with_items
 from server.metrics import metrics
 from database.db import UnifiedDatabase
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 router = APIRouter(prefix="/api")
 

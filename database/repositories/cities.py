@@ -5,7 +5,6 @@ Handles all city-related database operations including lookups,
 creation, and related statistics.
 """
 
-import logging
 from typing import Optional, List, Dict
 from datetime import datetime
 
@@ -13,7 +12,10 @@ from database.repositories.base import BaseRepository
 from database.models import City
 from exceptions import DatabaseConnectionError
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="database")
+
 
 
 class CityRepository(BaseRepository):

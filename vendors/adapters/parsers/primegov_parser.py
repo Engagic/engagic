@@ -12,12 +12,14 @@ Handles two patterns:
 """
 
 import re
-import logging
 from typing import Dict, Any, List, Optional
 from bs4 import BeautifulSoup
 from parsing.participation import parse_participation_info
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 
 def parse_html_agenda(html: str) -> Dict[str, Any]:

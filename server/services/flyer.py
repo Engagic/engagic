@@ -6,7 +6,6 @@ Converts passive browsing into active participation.
 """
 
 import base64
-import logging
 import re
 from io import BytesIO
 from pathlib import Path
@@ -14,7 +13,10 @@ from typing import Optional, Tuple
 from importlib.resources import files
 from database.db import UnifiedDatabase, Meeting, AgendaItem
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 
 def _clean_summary_for_flyer(summary: str) -> Tuple[str, str]:

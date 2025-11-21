@@ -6,12 +6,14 @@ Contains utilities used across pipeline modules for matters-first processing.
 
 import hashlib
 import json
-import logging
+
 import requests
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="engagic")
 
 
 def hash_attachments(

@@ -83,8 +83,8 @@ class MeetingSchema(BaseModel):
         """Ensure start is ISO string, not datetime object"""
         if isinstance(v, datetime):
             raise ValueError(
-                f"Meeting 'start' must be ISO string, not datetime object. "
-                f"Use meeting_date.isoformat() in adapter."
+                "Meeting 'start' must be ISO string, not datetime object. "
+                "Use meeting_date.isoformat() in adapter."
             )
         if not isinstance(v, str):
             raise ValueError(f"Meeting 'start' must be string, got {type(v)}")

@@ -7,11 +7,13 @@ Parses text BEFORE AI summarization to extract structured contact info.
 """
 
 import re
-import logging
+
 from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="engagic")
 
 
 def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:

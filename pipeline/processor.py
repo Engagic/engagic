@@ -15,7 +15,9 @@ import time
 from typing import List, Optional, Dict, Any
 
 from database.db import UnifiedDatabase, Meeting
+from database.models import Matter
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
+from exceptions import ProcessingError
 from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
@@ -125,8 +127,10 @@ def is_likely_public_comment_compilation(
     # Legislative documents can be hundreds of pages, but 1000+ is likely a compilation
     if page_count > 1000:
         logger.info(
-            f"[PublicCommentFilter] Skipping likely compilation '{url_path}': "
-            f"{page_count} pages exceeds threshold"
+            "skipping likely compilation - excessive page count",
+            url_path=url_path,
+            page_count=page_count,
+            threshold=1000
         )
         return True
 
@@ -136,8 +140,11 @@ def is_likely_public_comment_compilation(
         ocr_ratio = ocr_pages / page_count
         if ocr_ratio > 0.3:
             logger.info(
-                f"[PublicCommentFilter] Skipping likely scanned compilation '{url_path}': "
-                f"{ocr_pages}/{page_count} pages ({ocr_ratio:.1%}) required OCR"
+                "skipping likely scanned compilation - high OCR ratio",
+                url_path=url_path,
+                ocr_pages=ocr_pages,
+                total_pages=page_count,
+                ocr_ratio=round(ocr_ratio, 2)
             )
             return True
 
@@ -148,8 +155,9 @@ def is_likely_public_comment_compilation(
         # If >20 signatures, likely public comment compilation
         if sincerely_count > 20:
             logger.info(
-                f"[PublicCommentFilter] Skipping likely comment compilation '{url_path}': "
-                f"{sincerely_count} 'Sincerely,' signatures found"
+                "skipping likely comment compilation - repetitive signatures",
+                url_path=url_path,
+                signature_count=sincerely_count
             )
             return True
 
@@ -244,7 +252,7 @@ class Processor:
             self.db.mark_processing_failed(
                 queue_id, "Analyzer not available", increment_retry=False
             )
-            logger.warning(f"[Processor] Skipping queue job {queue_id} - analyzer not available")
+            logger.warning("skipping queue job - analyzer not available", queue_id=queue_id)
             return True
 
         job_type = job.job_type
@@ -279,18 +287,18 @@ class Processor:
 
             # Success
             self.db.mark_processing_complete(queue_id)
-            logger.info(f"[Processor] Queue job {queue_id} completed successfully")
+            logger.info("queue job completed", queue_id=queue_id)
             return True
 
         except Exception as e:
             error_msg = str(e)
             self.db.mark_processing_failed(queue_id, error_msg)
-            logger.error(f"[Processor] Queue job {queue_id} failed: {error_msg}")
+            logger.error("queue job failed", queue_id=queue_id, error=error_msg)
             return True
 
     def process_queue(self):
         """Process jobs from the processing queue continuously"""
-        logger.info("[Processor] Starting queue processor...")
+        logger.info("starting queue processor")
 
         while self.is_running:
             try:
@@ -301,12 +309,12 @@ class Processor:
                     continue
 
                 queue_id = job.id
-                logger.info(f"[Processor] Processing queue job {queue_id} (type: {job.job_type})")
+                logger.info("processing queue job", queue_id=queue_id, job_type=job.job_type)
 
                 self._dispatch_and_process_job(job, queue_id)
 
             except Exception as e:
-                logger.error(f"[Processor] Queue processor error: {e}")
+                logger.error("queue processor error", error=str(e), error_type=type(e).__name__)
                 time.sleep(QUEUE_FATAL_ERROR_BACKOFF)
 
     def process_city_jobs(self, city_banana: str) -> dict:
@@ -318,7 +326,7 @@ class Processor:
         Returns:
             Dictionary with processing stats
         """
-        logger.info(f"[Processor] Processing queued jobs for {city_banana}...")
+        logger.info("processing queued jobs for city", city=city_banana)
         processed_count = 0
         failed_count = 0
 
@@ -393,8 +401,10 @@ class Processor:
                 logger.error("job processing failed", queue_id=queue_id, job_type=job_type, duration_seconds=round(job_duration, 1), error=str(e), error_type=type(e).__name__)
 
         logger.info(
-            f"[Processor] Processing complete for {city_banana}: "
-            f"{processed_count} succeeded, {failed_count} failed"
+            "processing complete for city",
+            city=city_banana,
+            succeeded=processed_count,
+            failed=failed_count
         )
 
         return {
@@ -413,16 +423,18 @@ class Processor:
         """
 
         if not self.analyzer:
-            logger.warning("[SingleItemProcessing] Analyzer not available")
-            return None
+            raise ProcessingError(
+                "Analyzer not initialized",
+                context={"component": "processor", "function": "_process_single_item"}
+            )
 
         # Skip procedural items
         if is_procedural_item(item.title):
-            logger.debug(f"[SingleItemProcessing] Skipping procedural item: {item.title[:50]}")
+            logger.debug("skipping procedural item", title=item.title[:50])
             return None
 
         if not item.attachments:
-            logger.debug(f"[SingleItemProcessing] No attachments for {item.title[:50]}")
+            logger.debug("no attachments for item", title=item.title[:50])
             return None
 
         # Check if entire item is public comments or parcel tables
@@ -520,7 +532,10 @@ class Processor:
                         return None
         except Exception as e:
             logger.error(f"[SingleItemProcessing] Processing error: {e}")
-            return None
+            raise ProcessingError(
+                f"Item processing failed: {e}",
+                context={"item_id": item.id, "item_title": item.title[:100]}
+            ) from e
 
         return None
 
@@ -535,7 +550,6 @@ class Processor:
             meeting_id: Meeting ID where matter appears
             metadata: Queue metadata with item_ids (deprecated - query from DB instead)
         """
-        import json
         from pipeline.utils import hash_attachments
 
         logger.info(f"[MatterProcessing] Processing matter {matter_id}")
@@ -546,6 +560,9 @@ class Processor:
             return
 
         banana = extract_banana_from_matter_id(matter_id)
+        if not banana:
+            logger.error(f"[MatterProcessing] Could not extract banana from matter_id: {matter_id}")
+            return
 
         # STRICT IMPROVEMENT: Query ALL items from database (not just from payload)
         # This ensures we find all appearances even if payload is incomplete
@@ -613,7 +630,17 @@ class Processor:
         )
 
         # Process item with ALL aggregated attachments (extract PDFs and summarize)
-        result = self._process_single_item(representative_item)
+        try:
+            result = self._process_single_item(representative_item)
+        except ProcessingError as e:
+            logger.error(
+                "matter processing failed",
+                matter_id=matter_id,
+                error=str(e),
+                context=e.context
+            )
+            metrics.record_error("processor", e)
+            return
 
         if not result:
             logger.warning(f"[MatterProcessing] No result for matter {matter_id}")
@@ -637,48 +664,35 @@ class Processor:
         raw_matter_id = existing_matter.matter_id if existing_matter else None
 
         try:
-            # Step 1: Upsert canonical summary in city_matters
-            self.db.conn.execute(
-                """
-                INSERT INTO city_matters (
-                    id, banana, matter_id, matter_file, matter_type, title, sponsors,
-                    canonical_summary, canonical_topics, attachments, metadata,
-                    first_seen, last_seen, appearance_count
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json_object('attachment_hash', ?),
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    canonical_summary = excluded.canonical_summary,
-                    canonical_topics = excluded.canonical_topics,
-                    metadata = json_set(COALESCE(metadata, '{}'), '$.attachment_hash', excluded.metadata->>'attachment_hash'),
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    matter_id,
-                    banana,
-                    raw_matter_id,  # Use raw vendor ID, not composite hash
-                    representative_item.matter_file,
-                    representative_item.matter_type,
-                    representative_item.title,
-                    json.dumps(representative_item.sponsors) if hasattr(representative_item, 'sponsors') and representative_item.sponsors else None,
-                    summary,
-                    json.dumps(topics),
-                    json.dumps(representative_item.attachments),
-                    attachment_hash,
-                    len(items)
-                ),
+            # Step 1: Create Matter object with canonical summary
+            matter_obj = Matter(
+                id=matter_id,
+                banana=banana,
+                matter_id=raw_matter_id,  # Raw vendor ID for reference
+                matter_file=representative_item.matter_file,
+                matter_type=representative_item.matter_type,
+                title=representative_item.title,
+                sponsors=getattr(representative_item, 'sponsors', []),
+                canonical_summary=summary,
+                canonical_topics=topics,
+                attachments=representative_item.attachments,
+                metadata={'attachment_hash': attachment_hash},
+                first_seen=None,  # Will preserve existing if matter already exists
+                last_seen=None,   # Will preserve existing if matter already exists
+                appearance_count=len(items),
             )
 
-            # Step 2: Backfill ALL items atomically
-            for item in items:
-                self.db.conn.execute(
-                    """
-                    UPDATE items
-                    SET summary = ?, topics = ?
-                    WHERE id = ?
-                    """,
-                    (summary, json.dumps(topics), item.id),
-                )
+            # Upsert canonical summary in city_matters (via repository)
+            self.db.store_matter(matter_obj, defer_commit=True)
+
+            # Step 2: Backfill ALL items atomically (via repository)
+            item_ids = [item.id for item in items]
+            self.db.items.bulk_update_item_summaries(
+                item_ids=item_ids,
+                summary=summary,
+                topics=topics,
+                defer_commit=True
+            )
 
             # Commit transaction atomically
             self.db.conn.commit()

@@ -2,14 +2,13 @@
 Request ID middleware for distributed tracing
 
 Adds correlation IDs to all requests for debugging across logs.
+Uses structlog contextvars for request-scoped logging context.
 """
 
 import uuid
-import logging
+import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-
-logger = logging.getLogger("engagic")
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -24,19 +23,21 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # Store in request state for access in routes
         request.state.request_id = request_id
 
-        # Add to logging context
-        logger_adapter = logging.LoggerAdapter(
-            logger,
-            {"request_id": request_id}
-        )
+        # Bind request_id to structlog context for ALL logs in this request
+        # This makes request_id available to all logger calls within this request context
+        structlog.contextvars.bind_contextvars(request_id=request_id)
 
-        # Process request
-        response = await call_next(request)
+        try:
+            # Process request
+            response = await call_next(request)
 
-        # Add request ID to response headers for client tracking
-        response.headers["X-Request-ID"] = request_id
+            # Add request ID to response headers for client tracking
+            response.headers["X-Request-ID"] = request_id
 
-        return response
+            return response
+        finally:
+            # Clear context after request completes (prevents context leakage)
+            structlog.contextvars.clear_contextvars()
 
 
 def get_request_id(request: Request) -> str:

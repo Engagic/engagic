@@ -8,11 +8,13 @@ Granicus structure:
 """
 
 import re
-import logging
 from typing import Dict, Any
 from bs4 import BeautifulSoup
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 
 def parse_html_agenda(html: str) -> Dict[str, Any]:

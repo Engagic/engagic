@@ -2,15 +2,16 @@
 Admin API routes
 """
 
-import logging
 import time
 import httpx
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Depends
-from server.models.requests import ProcessRequest
-from config import config
 
-logger = logging.getLogger("engagic")
+from config import config, get_logger
+from server.models.requests import ProcessRequest
+
+logger = get_logger(__name__).bind(component="api")
+
 
 router = APIRouter(prefix="/api/admin")
 
@@ -94,7 +95,6 @@ async def get_dead_letter_queue(
     Returns list of failed jobs with error messages for debugging.
     These jobs require manual intervention or code fixes.
     """
-    from fastapi import Request
     from database.db import UnifiedDatabase
 
     db: UnifiedDatabase = request.app.state.db

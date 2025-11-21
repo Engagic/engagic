@@ -12,7 +12,6 @@ Moved from: pipeline/processor.py (renamed for clarity)
 """
 
 import time
-import logging
 from typing import List, Dict, Any, Optional, Tuple
 
 from database.db import UnifiedDatabase
@@ -21,7 +20,10 @@ from parsing.pdf import PdfExtractor
 from parsing.participation import parse_participation_info
 from analysis.llm.summarizer import GeminiSummarizer
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="pipeline")
+
 
 
 class AnalysisError(Exception):

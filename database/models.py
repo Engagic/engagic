@@ -4,7 +4,7 @@ Database Models for Engagic
 Pydantic dataclasses with runtime validation for core entities.
 """
 
-import logging
+
 import sqlite3
 import json
 from typing import Optional, List, Dict, Any
@@ -12,7 +12,9 @@ from datetime import datetime
 from pydantic.dataclasses import dataclass
 from dataclasses import asdict
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="engagic")
 
 
 @dataclass
@@ -89,6 +91,36 @@ class Meeting:
     processing_time: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    def __post_init__(self):
+        """Validate meeting data after initialization"""
+        # Validate banana format
+        if not self.banana:
+            from exceptions import ValidationError
+            raise ValidationError(
+                "Meeting must have a banana (city identifier)",
+                field="banana",
+                value=self.banana
+            )
+
+        # Validate processing_status values
+        valid_statuses = {"pending", "processing", "completed", "failed"}
+        if self.processing_status not in valid_statuses:
+            from exceptions import ValidationError
+            raise ValidationError(
+                f"Invalid processing_status: {self.processing_status}. Must be one of: {valid_statuses}",
+                field="processing_status",
+                value=self.processing_status
+            )
+
+        # Validate at least one URL present (agenda_url or packet_url)
+        if not self.agenda_url and not self.packet_url:
+            from exceptions import ValidationError
+            raise ValidationError(
+                "Meeting must have at least one URL (agenda_url or packet_url)",
+                field="agenda_url",
+                value=None
+            )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
@@ -201,6 +233,45 @@ class Matter:
     metadata: Optional[Dict[str, Any]] = None  # attachment_hash, etc.
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    def __post_init__(self):
+        """Validate matter data after initialization"""
+        # Validate matter ID format (composite: banana_hash)
+        from database.id_generation import validate_matter_id
+        if not validate_matter_id(self.id):
+            from exceptions import ValidationError
+            raise ValidationError(
+                f"Invalid matter ID format: {self.id}. Must use generate_matter_id()",
+                field="id",
+                value=self.id
+            )
+
+        # Validate banana format (lowercase alphanumeric + state uppercase)
+        if not self.banana:
+            from exceptions import ValidationError
+            raise ValidationError(
+                "Matter must have a banana (city identifier)",
+                field="banana",
+                value=self.banana
+            )
+
+        # Validate appearance_count is positive
+        if self.appearance_count < 1:
+            from exceptions import ValidationError
+            raise ValidationError(
+                "Matter appearance_count must be at least 1",
+                field="appearance_count",
+                value=self.appearance_count
+            )
+
+        # Validate at least one identifier present
+        if not self.matter_file and not self.matter_id:
+            from exceptions import ValidationError
+            raise ValidationError(
+                "Matter must have at least one identifier (matter_file or matter_id)",
+                field="matter_file",
+                value=None
+            )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
@@ -321,6 +392,28 @@ class AgendaItem:
     topics: Optional[List[str]] = None  # Extracted topics
     matter: Optional["Matter"] = None  # Linked Matter object (loaded on demand)
     created_at: Optional[datetime] = None
+
+    def __post_init__(self):
+        """Validate agenda item data after initialization"""
+        # Validate matter_id format if present (composite: banana_hash)
+        if self.matter_id:
+            from database.id_generation import validate_matter_id
+            if not validate_matter_id(self.matter_id):
+                from exceptions import ValidationError
+                raise ValidationError(
+                    f"Invalid matter_id format: {self.matter_id}",
+                    field="matter_id",
+                    value=self.matter_id
+                )
+
+        # Validate sequence is non-negative
+        if self.sequence < 0:
+            from exceptions import ValidationError
+            raise ValidationError(
+                "Agenda item sequence must be non-negative",
+                field="sequence",
+                value=self.sequence
+            )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
