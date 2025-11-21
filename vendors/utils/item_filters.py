@@ -32,6 +32,19 @@ PROCEDURAL_PATTERNS = [
     r'(?i)liquor license',
     r'(?i)beer (and|&) wine license',
     r'(?i)alcoholic beverage license',
+
+    # Ceremonial items (ZERO civic value - validated against Chicago)
+    r'congratulations extended to',
+    r'tribute to (late|the late)',
+
+    # Administrative permits (no policy value)
+    r'issuance of permits? for sign',
+    r'signboard permit',
+
+    # Minor administrative items
+    r'fee waiver for',
+    r'(various )?small claims?',
+    r'time fixed for next',
 ]
 
 # Matter types to skip (administrative/procedural, not legislative)

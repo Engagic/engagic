@@ -40,8 +40,7 @@ class AgendaItemSchema(BaseModel):
     matter_type: Optional[str] = None
     agenda_number: Optional[str] = None
     sponsors: Optional[List[str]] = None
-    action_name: Optional[str] = None
-    section: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None  # Vendor-specific metadata (action_name, section, etc.)
 
     @field_validator("sequence")
     @classmethod
