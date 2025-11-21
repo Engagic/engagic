@@ -34,21 +34,24 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
         if not query:
             raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
+        # Store query in request state for middleware logging
+        request.state.search_query = query
+
         # Get client hash from middleware (set in rate_limiting.py)
         client_hash = getattr(request.state, 'client_ip_hash', 'unknown')
-        logger.info("search request", query=query, user=client_hash)
+        logger.debug("search request", query=query, user=client_hash)
 
         # Special case: "new york" or "new york city" -> NYC (not the state)
         query_lower = query.lower()
         if query_lower in ["new york", "new york city"]:
-            logger.info("nyc redirect")
+            logger.debug("nyc redirect")
             return handle_city_search("new york, ny", db)
 
         # Determine if input is zipcode, state, or city name
         is_zipcode = query.isdigit() and len(query) == 5
         is_state = is_state_query(query)
 
-        logger.info("query analysis", is_zipcode=is_zipcode, is_state=is_state)
+        logger.debug("query analysis", is_zipcode=is_zipcode, is_state=is_state)
 
         # Track search behavior metrics
         metrics.page_views.labels(page_type='search').inc()
@@ -66,7 +69,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("unexpected search error", query=query, error=str(e))
+        logger.error("search error", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )

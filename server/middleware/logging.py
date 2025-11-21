@@ -18,26 +18,31 @@ async def log_requests(request: Request, call_next):
     if request.url.path == "/metrics":
         return await call_next(request)
 
-    request_id = str(uuid.uuid4())[:8]
     start_time = time.time()
-
-    # Log incoming request
-    logger.info(
-        f"[{request_id}] {request.method} {request.url.path} - Client: {request.state.client_ip_hash}"
-    )
 
     # Process request
     try:
         response = await call_next(request)
         duration = time.time() - start_time
 
-        # Log response
+        # Build clean one-line log
+        user_hash = getattr(request.state, "client_ip_hash", "unknown")[:7]
+        path_info = f"{request.method} {request.url.path}"
+
+        # Include search query if available (set by search route)
+        search_query = getattr(request.state, "search_query", None)
+        if search_query:
+            path_info += f' "{search_query}"'
+
         logger.info(
-            f"[{request_id}] Response: {response.status_code} - Duration: {duration:.3f}s"
+            f"{path_info} user:{user_hash} → {response.status_code} ({duration:.3f}s)"
         )
         return response
 
     except Exception as e:
         duration = time.time() - start_time
-        logger.error(f"[{request_id}] Error: {str(e)} - Duration: {duration:.3f}s")
+        user_hash = getattr(request.state, "client_ip_hash", "unknown")[:7]
+        logger.error(
+            f"{request.method} {request.url.path} user:{user_hash} → ERROR ({duration:.3f}s): {str(e)}"
+        )
         raise
