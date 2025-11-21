@@ -184,10 +184,12 @@ def configure_structlog(is_development: bool = False, log_level: str = "INFO"):
     ]
 
     if is_development:
-        # Development: Human-readable colored output
+        # Development: Simple plain output without excessive padding
         processors = shared_processors + [
+            structlog.processors.format_exc_info,
             structlog.dev.ConsoleRenderer(
-                colors=True,
+                colors=False,
+                pad_event=0,  # No padding
                 exception_formatter=structlog.dev.plain_traceback,
             )
         ]
