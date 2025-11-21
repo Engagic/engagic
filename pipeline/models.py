@@ -1,11 +1,13 @@
 """
-Pipeline Job Models - Type-safe queue job definitions
+Pipeline Job Models - Type-safe queue job definitions with Pydantic validation
 
 Defines all job types that can be enqueued for processing.
 Each job type has a specific payload with required fields.
+Runtime validation catches type errors before queue insertion.
 """
 
-from dataclasses import dataclass, asdict
+from pydantic.dataclasses import dataclass
+from dataclasses import asdict
 from typing import Literal, Union, List, Dict, Any, Optional
 import json
 

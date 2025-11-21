@@ -1,7 +1,7 @@
 """
 Database Models for Engagic
 
-Dataclasses representing core entities in the unified database.
+Pydantic dataclasses with runtime validation for core entities.
 """
 
 import logging
@@ -9,7 +9,8 @@ import sqlite3
 import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from pydantic.dataclasses import dataclass
+from dataclasses import asdict
 
 logger = logging.getLogger("engagic")
 

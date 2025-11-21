@@ -19,6 +19,8 @@ from database.id_generation import generate_matter_id
 from pipeline.utils import hash_attachments
 from vendors.validator import MeetingValidator
 from vendors.utils.item_filters import should_skip_procedural_item, should_skip_matter
+from vendors.schemas import validate_meeting_output
+from pydantic import ValidationError
 
 logger = logging.getLogger("engagic")
 
@@ -53,6 +55,19 @@ class MeetingIngestionService:
         stats = self._init_stats()
 
         try:
+            # VALIDATION BOUNDARY: Validate adapter output schema
+            try:
+                validate_meeting_output(meeting_dict)
+            except ValidationError as e:
+                logger.error(
+                    f"[{city.banana}] Adapter output validation failed for meeting "
+                    f"'{meeting_dict.get('title', 'Unknown')}': {e}"
+                )
+                stats['meetings_skipped'] = 1
+                stats['skip_reason'] = "schema_validation_failed"
+                stats['skipped_title'] = meeting_dict.get("title", "Unknown")
+                return None, stats
+
             # Phase 1: Parse and validate
             meeting_date = self._parse_meeting_date(meeting_dict)
             meeting_id = self._validate_meeting_id(meeting_dict, city, stats)
@@ -93,8 +108,9 @@ class MeetingIngestionService:
             return stored_meeting, stats
 
         except Exception as e:
+            import traceback
             logger.error(
-                f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}"
+                f"Error storing meeting {meeting_dict.get('packet_url', 'unknown')}: {e}\n{traceback.format_exc()}"
             )
             if not stats.get('meetings_skipped'):
                 stats['meetings_skipped'] = 1
@@ -458,7 +474,9 @@ class MeetingIngestionService:
     def _calculate_priority(self, meeting_date: Optional[datetime]) -> int:
         """Calculate priority based on meeting date proximity"""
         if meeting_date:
-            days_from_now = (meeting_date - datetime.now()).days
+            # Handle timezone-aware dates from adapters
+            now = datetime.now(meeting_date.tzinfo) if meeting_date.tzinfo else datetime.now()
+            days_from_now = (meeting_date - now).days
             days_distance = abs(days_from_now)
         else:
             days_distance = 999
