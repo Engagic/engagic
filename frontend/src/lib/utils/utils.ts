@@ -49,11 +49,24 @@ export function generateMeetingSlug(meeting: Meeting): string {
 }
 
 export function extractMeetingIdFromSlug(slug: string): string | null {
-	// Extract the ID from the end of the slug (format: date-id)
+	// Extract the ID from the end of the slug
+	// Format: YYYY-MM-DD-{meeting_id} or undated-{meeting_id}
+	//
+	// CRITICAL: Meeting IDs can contain dashes (Chicago UUIDs: 71CAEB7D-4BC6-F011-BBD2-001DD8020E93)
+	// So we can't just take the last part after split('-')!
+	//
+	// Strategy: Remove the date prefix, return the rest
 	const parts = slug.split('-');
-	const lastPart = parts[parts.length - 1];
-	// IDs are now strings, just return the last part
-	return lastPart || null;
+
+	if (parts.length < 4) {
+		// Format: undated-{id} (2 parts minimum)
+		// Or malformed, return last part as fallback
+		return parts.length >= 2 ? parts.slice(1).join('-') : null;
+	}
+
+	// Format: YYYY-MM-DD-{id} (4+ parts)
+	// Date is first 3 parts (YYYY, MM, DD), rest is meeting ID
+	return parts.slice(3).join('-');
 }
 
 export function parseCityUrl(cityUrl: string): { cityName: string; state: string } | null {
