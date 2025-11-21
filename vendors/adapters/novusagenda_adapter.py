@@ -25,12 +25,12 @@ class NovusAgendaAdapter(BaseAdapter):
         super().__init__(city_slug, vendor="novusagenda")
         self.base_url = f"https://{self.slug}.novusagenda.com"
 
-    def fetch_meetings(self, days_forward: int = 60, days_back: int = 7) -> Iterator[Dict[str, Any]]:
+    def fetch_meetings(self, days_forward: int = 14, days_back: int = 7) -> Iterator[Dict[str, Any]]:
         """
         Scrape meetings from NovusAgenda /agendapublic page with date filtering.
 
         Args:
-            days_forward: Days to look ahead (default 60)
+            days_forward: Days to look ahead (default 14)
             days_back: Days to look back (default 7)
 
         Yields:
