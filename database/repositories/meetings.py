@@ -82,8 +82,13 @@ class MeetingRepository(BaseRepository):
         rows = self._fetch_all(query, tuple(params))
         return [Meeting.from_db_row(row) for row in rows]
 
-    def store_meeting(self, meeting: Meeting) -> Meeting:
-        """Store or update a meeting"""
+    def store_meeting(self, meeting: Meeting, defer_commit: bool = False) -> Meeting:
+        """Store or update a meeting
+
+        Args:
+            meeting: Meeting object to store
+            defer_commit: If True, skip commit (caller handles transaction)
+        """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
@@ -147,7 +152,8 @@ class MeetingRepository(BaseRepository):
             ),
         )
 
-        self._commit()
+        if not defer_commit:
+            self._commit()
         result = self.get_meeting(meeting.id)
         if result is None:
             raise DatabaseConnectionError(

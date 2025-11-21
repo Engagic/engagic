@@ -316,6 +316,9 @@ class Fetcher:
                     logger.error(f"[Sync] Error fetching meetings for {city.banana}: {e}")
                     result.status = SyncStatus.FAILED
                     result.error_message = str(e)
+                    # Record vendor failure metrics
+                    metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
+                    metrics.record_error('vendor', e)
                     return result
 
                 result.meetings_found = len(all_meetings)
@@ -380,6 +383,9 @@ class Fetcher:
                 result.status = SyncStatus.COMPLETED
                 result.duration_seconds = time.time() - start_time
 
+                # Record vendor success metrics
+                metrics.vendor_requests.labels(vendor=city.vendor, status='success').inc()
+
                 # Record metrics
                 metrics.meetings_synced.labels(city=city.banana, vendor=city.vendor).inc(processed_count)
                 metrics.items_extracted.labels(city=city.banana, vendor=city.vendor).inc(items_stored_count)
@@ -401,6 +407,10 @@ class Fetcher:
                 result.status = SyncStatus.FAILED
                 result.error_message = str(e)
                 result.duration_seconds = time.time() - start_time
+
+                # Record vendor failure metrics
+                metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
+                metrics.record_error('vendor', e)
 
                 # Record error metrics
                 metrics.record_error(component="fetcher", error=e)

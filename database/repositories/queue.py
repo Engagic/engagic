@@ -71,9 +71,46 @@ class QueueRepository(BaseRepository):
             queue_id = existing["id"]
             status = existing["status"]
 
-            # If already pending or processing, return -1 (no change needed)
-            if status in ("pending", "processing"):
-                logger.debug(f"{job_type.capitalize()} job {job_display_id} already in queue (status={status})")
+            # Check if processing job is stale (started > 1 hour ago)
+            if status == "processing":
+                stale_check = self._fetch_one(
+                    """
+                    SELECT
+                        id,
+                        (julianday('now') - julianday(started_at)) * 24 * 60 AS minutes_processing
+                    FROM queue
+                    WHERE id = ?
+                    """,
+                    (queue_id,)
+                )
+                if stale_check and stale_check["minutes_processing"] > 60:
+                    # Job stuck for >1 hour - reset to pending
+                    logger.warning(
+                        f"Stale {job_type} job {job_display_id} detected "
+                        f"(processing for {stale_check['minutes_processing']:.0f} minutes). "
+                        f"Resetting to pending for retry."
+                    )
+                    self._execute(
+                        """
+                        UPDATE queue
+                        SET status = 'pending',
+                            started_at = NULL,
+                            retry_count = retry_count + 1,
+                            error_message = 'Auto-recovered from stale processing state'
+                        WHERE id = ?
+                        """,
+                        (queue_id,)
+                    )
+                    self._commit()
+                    return queue_id
+                else:
+                    # Still actively processing
+                    logger.debug(f"{job_type.capitalize()} job {job_display_id} actively processing")
+                    return -1
+
+            # If already pending, return -1 (no change needed)
+            if status == "pending":
+                logger.debug(f"{job_type.capitalize()} job {job_display_id} already pending")
                 return -1
 
             # If completed/failed/dead_letter, reset to pending
@@ -257,42 +294,50 @@ class QueueRepository(BaseRepository):
     ) -> Optional[QueueJob]:
         """Get next typed job from processing queue based on priority and status
 
+        Uses atomic UPDATE-RETURNING to prevent race conditions when multiple
+        workers try to dequeue simultaneously.
+
         Returns:
             QueueJob with discriminated union payload, or None if queue empty
         """
         if self.conn is None:
             raise DatabaseConnectionError("Database connection not established")
 
+        # Atomic SELECT-UPDATE using UPDATE-RETURNING pattern
+        # This prevents race conditions with multiple workers
         if banana:
-            row = self._fetch_one(
+            cursor = self._execute(
                 """
-                SELECT * FROM queue
-                WHERE status = 'pending' AND banana = ?
-                ORDER BY priority DESC, created_at ASC
-                LIMIT 1
+                UPDATE queue
+                SET status = 'processing', started_at = CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT id FROM queue
+                    WHERE status = 'pending' AND banana = ?
+                    ORDER BY priority DESC, created_at ASC
+                    LIMIT 1
+                )
+                RETURNING *
                 """,
                 (banana,),
             )
         else:
-            row = self._fetch_one(
-                """
-                SELECT * FROM queue
-                WHERE status = 'pending'
-                ORDER BY priority DESC, created_at ASC
-                LIMIT 1
-                """
-            )
-
-        if row:
-            # Mark as processing
-            self._execute(
+            cursor = self._execute(
                 """
                 UPDATE queue
                 SET status = 'processing', started_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (row["id"],),
+                WHERE id = (
+                    SELECT id FROM queue
+                    WHERE status = 'pending'
+                    ORDER BY priority DESC, created_at ASC
+                    LIMIT 1
+                )
+                RETURNING *
+                """
             )
+
+        row = cursor.fetchone()
+
+        if row:
             self._commit()
 
             # Convert to typed QueueJob
@@ -571,3 +616,59 @@ class QueueRepository(BaseRepository):
         self._commit()
         logger.info(f"Bulk enqueued {enqueued} meetings for processing")
         return enqueued
+
+    def recover_stale_jobs(self, stale_threshold_minutes: int = 60) -> int:
+        """Recover stale processing jobs (stuck for >threshold minutes)
+
+        Jobs can get stuck in 'processing' state if worker crashes/restarts.
+        This method resets them to 'pending' for retry.
+
+        Args:
+            stale_threshold_minutes: Minutes before job considered stale (default 60)
+
+        Returns:
+            Number of jobs recovered
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        # Find stale jobs
+        stale_jobs = self._fetch_all(
+            f"""
+            SELECT
+                id,
+                job_type,
+                meeting_id,
+                (julianday('now') - julianday(started_at)) * 24 * 60 AS minutes_processing
+            FROM queue
+            WHERE status = 'processing'
+            AND started_at IS NOT NULL
+            AND (julianday('now') - julianday(started_at)) * 24 * 60 > ?
+            """,
+            (stale_threshold_minutes,)
+        )
+
+        if not stale_jobs:
+            return 0
+
+        # Reset stale jobs to pending
+        for job in stale_jobs:
+            logger.warning(
+                f"Recovering stale {job['job_type']} job {job['meeting_id']} "
+                f"(stuck for {job['minutes_processing']:.0f} minutes)"
+            )
+            self._execute(
+                """
+                UPDATE queue
+                SET status = 'pending',
+                    started_at = NULL,
+                    retry_count = retry_count + 1,
+                    error_message = 'Auto-recovered from stale processing state'
+                WHERE id = ?
+                """,
+                (job["id"],)
+            )
+
+        self._commit()
+        logger.info(f"Recovered {len(stale_jobs)} stale jobs")
+        return len(stale_jobs)

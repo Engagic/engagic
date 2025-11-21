@@ -81,20 +81,21 @@ class MeetingIngestionService:
             if not self._validate_meeting_urls(meeting_obj, city, stats):
                 return None, stats
 
-            stored_meeting = self.db.store_meeting(meeting_obj)
-
             # Phase 3: Process agenda items
             agenda_items = []
             items_data = meeting_dict.get("items")
             if items_data:
+                # Pre-process items to generate agenda_items list
+                # (needed before storing meeting to maintain transaction boundary)
                 agenda_items = self._process_agenda_items(
-                    items_data, stored_meeting, city, stats
+                    items_data, meeting_obj, city, stats
                 )
 
-                if agenda_items:
-                    self._store_items_atomically(
-                        stored_meeting, items_data, agenda_items, stats
-                    )
+            # Single atomic transaction: meeting + items + matters
+            self._store_meeting_and_items_atomically(
+                meeting_obj, items_data, agenda_items, stats
+            )
+            stored_meeting = meeting_obj
 
             # Phase 4: Enqueue for processing
             self._enqueue_if_needed(
@@ -340,47 +341,60 @@ class MeetingIngestionService:
                 f"(matter_id={raw_matter_id}, matter_file={raw_matter_file}): {e}"
             ) from e
 
-    def _store_items_atomically(
+    def _store_meeting_and_items_atomically(
         self,
-        stored_meeting: Meeting,
-        items_data: List[Dict[str, Any]],
+        meeting: Meeting,
+        items_data: Optional[List[Dict[str, Any]]],
         agenda_items: List[AgendaItem],
         stats: Dict[str, Any]
     ):
-        """Store items atomically: track matters → store items → create appearances"""
+        """Store meeting + items + matters in single atomic transaction
+
+        Transaction order:
+        1. Store meeting (defer_commit=True)
+        2. Track matters in city_matters (creates FK targets, defer_commit=True)
+        3. Store agenda items (FK targets exist now, defer_commit=True)
+        4. Create matter_appearances (defer_commit=True)
+        5. Commit once
+        """
         try:
-            # Track matters FIRST in city_matters table (creates FK targets)
-            matters_stats = self.db._track_matters(
-                stored_meeting, items_data, agenda_items, defer_commit=True
-            )
-            stats['matters_tracked'] = matters_stats.get('tracked', 0)
-            stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
+            # 1. Store meeting
+            self.db.store_meeting(meeting, defer_commit=True)
 
-            # THEN store items (FK targets exist now)
-            count = self.db.store_agenda_items(
-                stored_meeting.id, agenda_items, defer_commit=True
-            )
-            stats['items_stored'] = count
-            items_with_summaries = sum(1 for item in agenda_items if item.summary)
+            # 2-4. Store items (if any)
+            if agenda_items:
+                # Track matters FIRST in city_matters table (creates FK targets)
+                matters_stats = self.db._track_matters(
+                    meeting, items_data or [], agenda_items, defer_commit=True
+                )
+                stats['matters_tracked'] = matters_stats.get('tracked', 0)
+                stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
 
-            # FINALLY create matter_appearances
-            appearances_count = self.db._create_matter_appearances(
-                stored_meeting, agenda_items, defer_commit=True
-            )
-            stats['appearances_created'] = appearances_count
+                # THEN store items (FK targets exist now)
+                count = self.db.store_agenda_items(
+                    meeting.id, agenda_items, defer_commit=True
+                )
+                stats['items_stored'] = count
+                items_with_summaries = sum(1 for item in agenda_items if item.summary)
 
-            # Commit transaction atomically
+                # FINALLY create matter_appearances
+                appearances_count = self.db._create_matter_appearances(
+                    meeting, agenda_items, defer_commit=True
+                )
+                stats['appearances_created'] = appearances_count
+
+                logger.info(
+                    f"[Items] Stored {count} items "
+                    f"({stats['items_skipped_procedural']} procedural, "
+                    f"{items_with_summaries} with preserved summaries)"
+                )
+
+            # 5. Single commit for entire transaction
             self.db.conn.commit()
-
-            logger.info(
-                f"[Items] Stored {count} items "
-                f"({stats['items_skipped_procedural']} procedural, "
-                f"{items_with_summaries} with preserved summaries)"
-            )
 
         except Exception as e:
             self.db.conn.rollback()
-            logger.error(f"[Items] Transaction rolled back due to error: {e}")
+            logger.error(f"[Transaction] Rolled back meeting + items due to error: {e}")
             raise
 
     def _enqueue_if_needed(

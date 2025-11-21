@@ -13,6 +13,7 @@ from database.db import UnifiedDatabase
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
+from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters
 
 # Configure structured logging
@@ -34,6 +35,9 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
+
+# Request ID middleware (must be early in stack for tracing)
+app.add_middleware(RequestIDMiddleware)
 
 # Initialize global instances
 rate_limiter = SQLiteRateLimiter(
