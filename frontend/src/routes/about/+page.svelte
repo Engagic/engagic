@@ -1,16 +1,18 @@
 <script lang="ts">
 	import { getAnalytics, type AnalyticsData } from '$lib/api/index';
 	import { onMount } from 'svelte';
+	import { fade, fly } from 'svelte/transition';
 	import Footer from '$lib/components/Footer.svelte';
 
 	let analytics: AnalyticsData | null = $state(null);
 	let loading = $state(true);
 	let errorMessage = $state('');
+	let mounted = $state(false);
 
 	onMount(async () => {
+		mounted = true;
 		try {
 			analytics = await getAnalytics();
-			console.log('Analytics loaded:', analytics);
 		} catch (err) {
 			console.error('Failed to load analytics:', err);
 			errorMessage = err instanceof Error ? err.message : 'Failed to load analytics';
@@ -27,18 +29,6 @@
 		}
 		return num.toLocaleString();
 	}
-
-	// Snapshot: Preserve scroll position during navigation
-	export const snapshot = {
-		capture: () => ({
-			scrollY: typeof window !== 'undefined' ? window.scrollY : 0
-		}),
-		restore: (values: { scrollY: number }) => {
-			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
-				setTimeout(() => window.scrollTo(0, values.scrollY), 0);
-			}
-		}
-	};
 </script>
 
 <svelte:head>
@@ -46,343 +36,380 @@
 	<meta name="description" content="Learn about Engagic's mission to make local government meetings accessible through AI-powered summaries" />
 </svelte:head>
 
-<div class="about-container">
-	<header class="header">
-		<a href="/" class="logo">engagic</a>
-		<p class="tagline">civic engagement made simple</p>
-	</header>
+<div class="page">
+	<a href="/" class="home-logo">
+		<img src="/icon-64.png" alt="engagic" />
+	</a>
 
-	<div class="about-header">
-		<h1>About Engagic</h1>
-		<p class="subtitle">Making Democracy Accessible</p>
-		<a href="/" class="back-link">← Back to Search</a>
-	</div>
-
-	<section class="mission-section">
-		<h2>What We Do</h2>
-		<div class="mission-content">
-			<p>We automatically find and summarize your local government meetings using AI.</p>
-			<p>No more digging through 50-page PDFs to see what your city council is up to. Just search your zip code or city and get the important stuff in plain English.</p>
-			<p>Democracy works better when everyone can participate. But government meetings are often hard to find, harder to understand, and buried in bureaucratic language. We're changing that.</p>
+	{#if mounted}
+		<div class="hero" in:fade={{ duration: 400 }}>
+			<h1>About Engagic</h1>
+			<p class="tagline">Making democracy accessible, one meeting at a time</p>
 		</div>
-	</section>
 
-	{#if !loading && analytics}
-		<section class="impact-section">
-			<h2>Our Impact</h2>
-			<div class="impact-grid">
-				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.frequently_updated_cities)} out of {formatNumber(analytics.real_metrics.cities_covered)}</div>
-					<div class="impact-label">Frequently Updated Cities</div>
-					<div class="impact-desc">Cities with 7+ meetings with summaries</div>
+		<div class="content">
+			<section class="mission" in:fly={{ y: 20, duration: 400, delay: 100 }}>
+				<h2>What We Do</h2>
+				<div class="mission-text">
+					<p>We automatically find and summarize your local government meetings using AI.</p>
+					<p>No more digging through 50-page PDFs to see what your city council is up to. Just search your zip code or city and get the important stuff in plain English.</p>
+					<p>Democracy works better when everyone can participate. But government meetings are often hard to find, harder to understand, and buried in bureaucratic language. We're changing that.</p>
 				</div>
+			</section>
 
-				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.meetings_tracked)}</div>
-					<div class="impact-label">Meetings Tracked</div>
-					<div class="impact-desc">City council sessions monitored</div>
-				</div>
+			{#if !loading && analytics}
+				<section class="metrics" in:fly={{ y: 20, duration: 400, delay: 200 }}>
+					<h2>Our Impact</h2>
+					<div class="metrics-grid">
+						<div class="metric-card">
+							<div class="metric-value">{formatNumber(analytics.real_metrics.frequently_updated_cities)}</div>
+							<div class="metric-label">Active Cities</div>
+							<div class="metric-desc">With 7+ summarized meetings</div>
+						</div>
 
-				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.matters_tracked)}</div>
-					<div class="impact-label">Legislative Matters</div>
-					<div class="impact-desc">Across {formatNumber(analytics.real_metrics.agenda_items_processed)} agenda items</div>
-				</div>
+						<div class="metric-card">
+							<div class="metric-value">{formatNumber(analytics.real_metrics.meetings_tracked)}</div>
+							<div class="metric-label">Meetings Tracked</div>
+							<div class="metric-desc">City council sessions monitored</div>
+						</div>
 
-				<div class="impact-card">
-					<div class="impact-number">{formatNumber(analytics.real_metrics.unique_item_summaries)}</div>
-					<div class="impact-label">Unique Summaries</div>
-					<div class="impact-desc">Across {formatNumber(analytics.real_metrics.meetings_with_items)} item-level meetings</div>
+						<div class="metric-card">
+							<div class="metric-value">{formatNumber(analytics.real_metrics.matters_tracked)}</div>
+							<div class="metric-label">Legislative Matters</div>
+							<div class="metric-desc">{formatNumber(analytics.real_metrics.agenda_items_processed)} agenda items</div>
+						</div>
+
+						<div class="metric-card">
+							<div class="metric-value">{formatNumber(analytics.real_metrics.unique_item_summaries)}</div>
+							<div class="metric-label">AI Summaries</div>
+							<div class="metric-desc">Unique item analyses</div>
+						</div>
+					</div>
+				</section>
+			{:else if loading}
+				<section class="metrics" in:fade>
+					<h2>Our Impact</h2>
+					<div class="loading">Loading metrics...</div>
+				</section>
+			{/if}
+
+			<section class="how" in:fly={{ y: 20, duration: 400, delay: 300 }}>
+				<h2>How It Works</h2>
+				<div class="steps">
+					<div class="step">
+						<div class="step-icon">1</div>
+						<h3>We Monitor</h3>
+						<p>Our system continuously checks city websites for new meeting agendas and packets</p>
+					</div>
+
+					<div class="step">
+						<div class="step-icon">2</div>
+						<h3>AI Processes</h3>
+						<p>Advanced AI reads through dense government documents and extracts what matters</p>
+					</div>
+
+					<div class="step">
+						<div class="step-icon">3</div>
+						<h3>You Get Clarity</h3>
+						<p>Clean, readable summaries that highlight budget items, public hearings, and key decisions</p>
+					</div>
 				</div>
-			</div>
-		</section>
-	{:else if loading}
-		<section class="impact-section">
-			<h2>Our Impact</h2>
-			<div class="loading-placeholder">Loading impact metrics...</div>
-		</section>
-	{:else if errorMessage}
-		<section class="impact-section">
-			<h2>Our Impact</h2>
-			<div class="loading-placeholder" style="color: #e74c3c;">{errorMessage}</div>
-		</section>
+			</section>
+
+			<section class="principles" in:fly={{ y: 20, duration: 400, delay: 400 }}>
+				<h2>Our Principles</h2>
+				<div class="principles-grid">
+					<div class="principle-card">
+						<div class="principle-icon">🔓</div>
+						<h3>Open Source</h3>
+						<p>All our code is publicly available and auditable. Democracy should be transparent.</p>
+					</div>
+
+					<div class="principle-card">
+						<div class="principle-icon">⚖️</div>
+						<h3>No Agenda</h3>
+						<p>We don't editorialize or take political positions. We just make information accessible.</p>
+					</div>
+
+					<div class="principle-card">
+						<div class="principle-icon">🔒</div>
+						<h3>Privacy First</h3>
+						<p>We don't track users or collect personal data. Civic engagement shouldn't require surveillance.</p>
+					</div>
+				</div>
+			</section>
+		</div>
+
+		<Footer />
 	{/if}
-
-	<section class="how-section">
-		<h2>How It Works</h2>
-		<div class="how-steps">
-			<div class="step">
-				<div class="step-number">1</div>
-				<div class="step-content">
-					<h3>We Monitor</h3>
-					<p>Our system continuously checks city websites for new meeting agendas and packets</p>
-				</div>
-			</div>
-			
-			<div class="step">
-				<div class="step-number">2</div>
-				<div class="step-content">
-					<h3>AI Processes</h3>
-					<p>Advanced AI reads through dense government documents and extracts what matters</p>
-				</div>
-			</div>
-			
-			<div class="step">
-				<div class="step-number">3</div>
-				<div class="step-content">
-					<h3>You Get Clarity</h3>
-					<p>Clean, readable summaries that highlight budget items, public hearings, and key decisions</p>
-				</div>
-			</div>
-		</div>
-	</section>
-
-	<section class="principles-section">
-		<h2>Our Principles</h2>
-		<div class="principles-grid">
-			<div class="principle">
-				<h3>Open Source</h3>
-				<p>All our code is publicly available and auditable. Democracy should be transparent.</p>
-			</div>
-			
-			<div class="principle">
-				<h3>No Agenda</h3>
-				<p>We don't editorialize or take political positions. We just make information accessible.</p>
-			</div>
-			
-			<div class="principle">
-				<h3>Privacy First</h3>
-				<p>We don't track users or collect personal data. Civic engagement shouldn't require surveillance.</p>
-			</div>
-		</div>
-	</section>
-
-	<Footer />
 </div>
 
 <style>
-	.about-container {
-		max-width: 1000px;
-		margin: 0 auto;
-		padding: 4rem 1rem;
-		color: var(--civic-dark);
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
+	.page {
+		min-height: 100vh;
+		background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
 	}
 
-	.header {
+	.home-logo {
+		position: fixed;
+		top: 2rem;
+		left: 2rem;
+		z-index: 100;
+		transition: transform 0.2s ease;
+	}
+
+	.home-logo:hover {
+		transform: scale(1.05);
+	}
+
+	.home-logo img {
+		width: 48px;
+		height: 48px;
+		border-radius: 12px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	}
+
+	.hero {
 		text-align: center;
-		margin-bottom: 2rem;
+		padding: 8rem 2rem 4rem;
 	}
 
-	.about-header {
-		text-align: center;
-		margin-bottom: 4rem;
-		position: relative;
-	}
-
-	.about-header h1 {
+	.hero h1 {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 3rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		margin-bottom: 0.5rem;
+		font-size: clamp(2.5rem, 5vw, 4rem);
+		font-weight: 700;
+		background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+		margin-bottom: 1rem;
 	}
 
-	.subtitle {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.25rem;
-		color: var(--civic-gray);
-		margin-bottom: 2rem;
-	}
-
-	.back-link {
-		position: absolute;
-		top: 0;
-		left: 0;
-		color: var(--civic-blue);
-		text-decoration: none;
+	.tagline {
+		font-size: clamp(1rem, 2vw, 1.25rem);
+		color: #64748b;
 		font-weight: 500;
 	}
 
-	.back-link:hover {
-		text-decoration: underline;
+	.content {
+		max-width: 1100px;
+		margin: 0 auto;
+		padding: 0 2rem 4rem;
 	}
 
 	section {
-		margin-bottom: 4rem;
+		margin-bottom: 6rem;
 	}
 
 	h2 {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 2rem;
-		font-weight: 600;
-		color: var(--civic-dark);
-		margin-bottom: 2rem;
+		font-size: clamp(1.75rem, 3vw, 2.5rem);
+		font-weight: 700;
+		color: #1e293b;
 		text-align: center;
+		margin-bottom: 3rem;
 	}
 
-	.mission-content {
+	/* Mission Section */
+	.mission-text {
+		max-width: 700px;
 		margin: 0 auto;
 		text-align: center;
 	}
 
-	.mission-content p {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.1rem;
+	.mission-text p {
+		font-size: 1.125rem;
 		line-height: 1.8;
-		color: var(--civic-gray);
+		color: #475569;
 		margin-bottom: 1.5rem;
 	}
 
-	.impact-grid {
+	/* Metrics Section */
+	.metrics-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 2rem;
-		margin-top: 2rem;
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		gap: 1.5rem;
 	}
 
-	.impact-card {
+	.metric-card {
+		background: white;
+		padding: 2rem;
+		border-radius: 16px;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 		text-align: center;
-		padding: 2rem 1rem;
-		background: var(--civic-white);
-		border-radius: 12px;
-		border: 1px solid var(--civic-border);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		transition: all 0.3s ease;
+		border: 1px solid rgba(0, 0, 0, 0.05);
 	}
 
-	.impact-number {
+	.metric-card:hover {
+		transform: translateY(-4px);
+		box-shadow: 0 12px 24px rgba(79, 70, 229, 0.15);
+		border-color: rgba(79, 70, 229, 0.2);
+	}
+
+	.metric-value {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 3rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-weight: 700;
+		background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
 		margin-bottom: 0.5rem;
 	}
 
-	.impact-label {
+	.metric-label {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.1rem;
+		font-size: 1.125rem;
 		font-weight: 600;
-		color: var(--civic-dark);
+		color: #1e293b;
 		margin-bottom: 0.5rem;
 	}
 
-	.impact-desc {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 0.9rem;
-		color: var(--civic-gray);
-		line-height: 1.5;
+	.metric-desc {
+		font-size: 0.875rem;
+		color: #64748b;
 	}
 
-	.loading-placeholder {
+	.loading {
 		text-align: center;
-		color: var(--civic-gray);
-		font-style: italic;
-		padding: 2rem;
+		color: #64748b;
+		padding: 3rem;
 	}
 
-	.how-steps {
+	/* How It Works Section */
+	.steps {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: 2rem;
+		max-width: 900px;
 		margin: 0 auto;
 	}
 
 	.step {
-		display: flex;
-		gap: 2rem;
-		margin-bottom: 3rem;
-		align-items: flex-start;
+		text-align: center;
+		padding: 2rem;
+		background: white;
+		border-radius: 16px;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+		transition: all 0.3s ease;
 	}
 
-	.step-number {
-		width: 60px;
-		height: 60px;
-		background: var(--civic-blue);
+	.step:hover {
+		transform: translateY(-4px);
+		box-shadow: 0 12px 24px rgba(79, 70, 229, 0.15);
+	}
+
+	.step-icon {
+		width: 64px;
+		height: 64px;
+		margin: 0 auto 1.5rem;
+		background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
 		color: white;
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 1.5rem;
-		font-weight: 500;
-		flex-shrink: 0;
-	}
-
-	.step-content h3 {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.3rem;
-		font-weight: 600;
-		color: var(--civic-dark);
-		margin-bottom: 0.5rem;
+		font-size: 1.75rem;
+		font-weight: 700;
+		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 	}
 
-	.step-content p {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		color: var(--civic-gray);
+	.step h3 {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #1e293b;
+		margin-bottom: 0.75rem;
+	}
+
+	.step p {
+		color: #64748b;
 		line-height: 1.7;
 	}
 
+	/* Principles Section */
 	.principles-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 		gap: 2rem;
-		margin-top: 2rem;
 	}
 
-	.principle {
+	.principle-card {
 		text-align: center;
-		padding: 2rem;
+		padding: 2.5rem 2rem;
+		background: white;
+		border-radius: 16px;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+		transition: all 0.3s ease;
 	}
 
-	.principle h3 {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.3rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+	.principle-card:hover {
+		transform: translateY(-4px);
+		box-shadow: 0 12px 24px rgba(79, 70, 229, 0.15);
+	}
+
+	.principle-icon {
+		font-size: 3rem;
 		margin-bottom: 1rem;
 	}
 
-	.principle p {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		color: var(--civic-gray);
+	.principle-card h3 {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #1e293b;
+		margin-bottom: 0.75rem;
+	}
+
+	.principle-card p {
+		color: #64748b;
 		line-height: 1.7;
 	}
 
-
-	@media (max-width: 640px) {
-		.about-container {
-			padding: 1rem 0.5rem;
+	@media (max-width: 768px) {
+		.home-logo {
+			top: 1rem;
+			left: 1rem;
 		}
 
-		.about-header h1 {
-			font-size: 2rem;
+		.home-logo img {
+			width: 40px;
+			height: 40px;
 		}
 
-		.back-link {
-			position: static;
-			display: block;
-			margin-bottom: 1rem;
+		.hero {
+			padding: 6rem 1.5rem 3rem;
 		}
 
-		.impact-grid {
+		.content {
+			padding: 0 1.5rem 3rem;
+		}
+
+		section {
+			margin-bottom: 4rem;
+		}
+
+		.metrics-grid {
 			grid-template-columns: repeat(2, 1fr);
 			gap: 1rem;
 		}
 
-		.impact-card {
-			padding: 1.5rem 0.5rem;
+		.metric-card {
+			padding: 1.5rem 1rem;
 		}
 
-		.impact-number {
+		.metric-value {
 			font-size: 2rem;
 		}
 
-		.step {
-			flex-direction: column;
-			text-align: center;
-			gap: 1rem;
+		.steps {
+			grid-template-columns: 1fr;
 		}
 
-		.step-number {
-			margin: 0 auto;
+		.principles-grid {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

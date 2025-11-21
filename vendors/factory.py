@@ -12,6 +12,7 @@ from vendors.adapters.novusagenda_adapter import NovusAgendaAdapter
 from vendors.adapters.primegov_adapter import PrimeGovAdapter
 
 from vendors.adapters.custom.berkeley_adapter import BerkeleyAdapter
+from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
 
 logger = logging.getLogger("engagic")
@@ -26,6 +27,7 @@ VENDOR_ADAPTERS = {
     "novusagenda": NovusAgendaAdapter,
     "primegov": PrimeGovAdapter,
     "berkeley": BerkeleyAdapter,
+    "chicago": ChicagoAdapter,
     "menlopark": MenloParkAdapter,
 }
 
