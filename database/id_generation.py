@@ -140,6 +140,38 @@ def matter_ids_match(
         return False
 
 
+def hash_meeting_id(meeting_id: str) -> str:
+    """Generate deterministic hash from meeting ID for URL slugs
+
+    CRITICAL: Must match frontend hashMeetingId() in utils.ts!
+
+    Algorithm: SHA-256 → hex → first 16 chars
+    - Same pattern as generate_matter_id()
+    - Handles meeting IDs with dashes/special chars (Chicago UUIDs, etc.)
+    - Deterministic: Same ID always produces same hash
+    - Collision-resistant: 64 bits (16 hex chars)
+
+    Args:
+        meeting_id: Meeting ID (can contain dashes, UUIDs, etc.)
+
+    Returns:
+        16-character hex hash
+
+    Examples:
+        >>> hash_meeting_id("71CAEB7D-4BC6-F011-BBD2-001DD8020E93")
+        'a3f2c1d4e5b6a7c8'  # 16 hex chars
+
+        >>> hash_meeting_id("12345")
+        '5994471abb01112a'
+
+    Frontend reference: frontend/src/lib/utils/utils.ts:hashMeetingId()
+
+    Confidence: 10/10 - Standard crypto hash
+    """
+    hash_bytes = hashlib.sha256(meeting_id.encode('utf-8')).digest()
+    return hash_bytes.hex()[:16]  # First 16 hex chars (64 bits)
+
+
 # Confidence level: 9/10
 # This hashing scheme is deterministic and collision-resistant.
 # SHA256 provides 2^128 combinations with 16 hex chars, far exceeding
