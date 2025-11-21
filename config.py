@@ -30,8 +30,10 @@ class Config:
 
     def __init__(self):
         # Database configuration - unified database (Phase 1 refactor)
-        # Default to repo-relative path for portability (VPS overrides via env vars)
-        default_data_dir = os.path.join(os.getcwd(), "data")
+        # Default to VPS path if it exists, otherwise repo-relative for local dev
+        vps_path = "/root/engagic/data"
+        local_path = os.path.join(os.getcwd(), "data")
+        default_data_dir = vps_path if os.path.exists(vps_path) else local_path
         self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", default_data_dir)
         self.UNIFIED_DB_PATH = os.getenv(
             "ENGAGIC_UNIFIED_DB", f"{self.DB_DIR}/engagic.db"

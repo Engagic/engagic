@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 
 	interface Props {
@@ -14,7 +14,7 @@
 
 	let viewportWidth = $state(0);
 	let isMobileView = $derived(viewportWidth <= 768);
-	let isAtHomeRoute = $derived($page.url.pathname === homeLink);
+	let isAtHomeRoute = $derived(page && $page.url.pathname === homeLink);
 
 	// Mobile: show navigation list only when at home route
 	// Desktop: always show sidebar
