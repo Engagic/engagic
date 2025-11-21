@@ -34,6 +34,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
 from vendors.adapters.base_adapter import BaseAdapter
+from vendors.utils.item_filters import should_skip_procedural_item
 
 logger = logging.getLogger("engagic")
 
@@ -234,6 +235,7 @@ class ChicagoAdapter(BaseAdapter):
             }]
         """
         items = []
+        items_filtered = 0
 
         # Get agenda structure
         agenda = meeting_detail.get("agenda", {})
@@ -262,6 +264,12 @@ class ChicagoAdapter(BaseAdapter):
                 item_id = matter_id or comment_id
                 if not item_id:
                     logger.debug(f"[chicago:{self.slug}] Item missing ID, skipping: {title[:60]}")
+                    continue
+
+                # Skip procedural items (adapter-level filtering)
+                if should_skip_procedural_item(title, matter_type or ""):
+                    items_filtered += 1
+                    logger.debug(f"[chicago:{self.slug}] Skipping procedural item: {title[:60]}")
                     continue
 
                 # Fetch matter data (attachments + sponsors) if matterId exists
@@ -301,7 +309,10 @@ class ChicagoAdapter(BaseAdapter):
 
                 items.append(item_data)
 
-        logger.debug(f"[chicago:{self.slug}] Extracted {len(items)} items from agenda")
+        if items_filtered > 0:
+            logger.info(f"[chicago:{self.slug}] Filtered {items_filtered} procedural items")
+
+        logger.debug(f"[chicago:{self.slug}] Extracted {len(items)} substantive items from agenda")
         return items
 
     def _fetch_matter_data(self, matter_id: str) -> Dict[str, Any]:

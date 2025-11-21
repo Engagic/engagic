@@ -249,11 +249,8 @@ class MeetingIngestionService:
             item_title = item_data.get("title", "")
             item_type = item_data.get("matter_type", "")
 
-            # Check if procedural (skip for processing but log)
+            # Check if procedural (for matter tracking only)
             is_procedural = should_skip_procedural_item(item_title, item_type)
-            if is_procedural:
-                stats['items_skipped_procedural'] += 1
-                logger.info(f"[Items] Procedural (skipped): {item_title[:60]}")
 
             # Generate composite matter_id for FK relationship
             composite_matter_id = self._generate_composite_matter_id(
