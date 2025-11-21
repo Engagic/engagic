@@ -9,7 +9,7 @@ from database.db import UnifiedDatabase, Meeting
 
 from config import get_logger
 
-logger = get_logger(__name__).bind(component="api")
+logger = get_logger(__name__)
 
 
 def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, Any]:
