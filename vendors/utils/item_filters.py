@@ -7,9 +7,13 @@ ALL adapters should use this to filter out:
 - Public comment periods
 - Adjournments
 - Appointments/confirmations without substantive discussion
+- Ceremonial items (birthdays, retirements, congratulations)
 
 Confidence: 8/10
-Patterns validated against Legistar, applicable to all vendors
+Patterns validated against Legistar and Chicago, applicable to all vendors
+
+Note: Ceremonial patterns updated to catch Chicago-specific items like
+"Congratulations to X on retirement" and birthday recognitions.
 """
 
 import re
@@ -34,8 +38,13 @@ PROCEDURAL_PATTERNS = [
     r'(?i)alcoholic beverage license',
 
     # Ceremonial items (ZERO civic value - validated against Chicago)
-    r'congratulations extended to',
-    r'tribute to (late|the late)',
+    # Confidence: 9/10 - These have no legislative/policy impact
+    r'(?i)congratulations (to|extended to|for)',  # Broader: catches all congratulations
+    r'(?i)tribute to (late|the late)',
+    r'(?i)\bon (his|her|their) retirement\b',  # "on his/her/their retirement"
+    r'(?i)retirement of',  # "Retirement of John Doe"
+    r'(?i)happy birthday',
+    r'(?i)birthday (wishes|greetings|recognition|celebration)',
 
     # Administrative permits (no policy value)
     r'issuance of permits? for sign',
