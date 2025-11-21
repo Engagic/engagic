@@ -5,11 +5,11 @@ Handles all job queue database operations including enqueueing,
 dequeuing, status updates, and queue management.
 """
 
-import logging
 import sqlite3
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+from config import get_logger
 from database.repositories.base import BaseRepository
 from exceptions import DatabaseConnectionError
 from pipeline.models import (
@@ -19,7 +19,8 @@ from pipeline.models import (
     serialize_payload
 )
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="database")
+
 
 
 class QueueRepository(BaseRepository):
@@ -634,7 +635,7 @@ class QueueRepository(BaseRepository):
 
         # Find stale jobs
         stale_jobs = self._fetch_all(
-            f"""
+            """
             SELECT
                 id,
                 job_type,

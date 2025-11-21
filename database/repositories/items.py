@@ -5,15 +5,15 @@ Handles all agenda item database operations including storage,
 retrieval, and updates for item-level summaries.
 """
 
-import logging
 import json
 from typing import List
 
+from config import get_logger
 from database.repositories.base import BaseRepository
 from database.models import AgendaItem
 from exceptions import DatabaseConnectionError
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="database")
 
 
 class ItemRepository(BaseRepository):
@@ -194,3 +194,46 @@ class ItemRepository(BaseRepository):
 
         self._commit()
         logger.debug(f"Updated agenda item {item_id} with summary and topics")
+
+    def bulk_update_item_summaries(
+        self, item_ids: List[str], summary: str, topics: List[str], defer_commit: bool = False
+    ) -> int:
+        """
+        Bulk update multiple agenda items with the same summary and topics.
+
+        Used for matters-first processing where multiple items share a canonical summary.
+
+        Args:
+            item_ids: List of agenda item IDs to update
+            summary: The canonical summary to apply
+            topics: List of normalized topics
+            defer_commit: If True, skip commit (caller handles transaction)
+
+        Returns:
+            Number of items updated
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        if not item_ids:
+            return 0
+
+        topics_json = json.dumps(topics) if topics else None
+        updated_count = 0
+
+        for item_id in item_ids:
+            self._execute(
+                """
+                UPDATE items
+                SET summary = ?, topics = ?
+                WHERE id = ?
+                """,
+                (summary, topics_json, item_id),
+            )
+            updated_count += 1
+
+        if not defer_commit:
+            self._commit()
+
+        logger.debug(f"Bulk updated {updated_count} items with canonical summary")
+        return updated_count

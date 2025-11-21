@@ -10,6 +10,7 @@ Coordinates:
 Refactored: Extracted fetcher and processor logic into separate modules
 """
 
+
 import logging
 import signal
 import sys
@@ -24,7 +25,9 @@ from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
 from pipeline.processor import Processor
 from config import config
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="engagic")
 
 # Shutdown polling interval (seconds)
 SHUTDOWN_POLL_INTERVAL = 1

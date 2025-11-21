@@ -2,12 +2,14 @@
 Request/response logging middleware
 """
 
-import logging
+
 import time
 import uuid
 from fastapi import Request
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="engagic")
 
 
 async def log_requests(request: Request, call_next):

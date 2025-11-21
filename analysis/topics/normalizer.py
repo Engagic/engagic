@@ -11,7 +11,10 @@ import os
 from typing import List, Optional
 from importlib.resources import files
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="analyzer")
+
 
 # Set up dedicated logger for unknown topics (taxonomy improvement)
 unknown_topics_logger = logging.getLogger("engagic.unknown_topics")

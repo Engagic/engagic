@@ -4,7 +4,6 @@ Search service layer
 Business logic for handling different search types
 """
 
-import logging
 from typing import Dict, Any
 from difflib import get_close_matches
 from database.db import UnifiedDatabase
@@ -12,7 +11,10 @@ from server.services.meeting import get_meetings_with_items
 from server.utils.geo import parse_city_state_input, get_state_abbreviation, get_state_full_name
 from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_name
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 
 def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:

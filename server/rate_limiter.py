@@ -2,14 +2,16 @@
 
 import time
 import random
-import logging
 import sqlite3
 from pathlib import Path
 from typing import Optional, Callable, Any, Dict, Tuple
 from functools import wraps
 from enum import Enum
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 
 class RateLimitTier(str, Enum):

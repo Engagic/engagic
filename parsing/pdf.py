@@ -10,7 +10,6 @@ Legislative formatting detection (strikethrough/underline):
 """
 
 import io
-import logging
 import time
 import warnings
 import requests
@@ -18,6 +17,10 @@ from typing import Dict, Any, List, Tuple
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
+
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="parser")
 
 # Browser-like headers to avoid bot detection
 DEFAULT_HEADERS = {
@@ -34,7 +37,6 @@ DEFAULT_HEADERS = {
 Image.MAX_IMAGE_PIXELS = 100000000
 warnings.simplefilter('error', Image.DecompressionBombWarning)
 
-logger = logging.getLogger("engagic")
 
 
 def _detect_horizontal_lines(page: fitz.Page) -> List[Tuple[float, float, float]]:

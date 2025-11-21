@@ -2,14 +2,16 @@
 Ticker service for generating news ticker items from meetings
 """
 
-import logging
 import re
 from typing import Dict, Any, Optional
 from datetime import datetime
 
 from database.db import UnifiedDatabase
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 
 def extract_excerpt(summary: str, prefer_middle: bool = True) -> str:

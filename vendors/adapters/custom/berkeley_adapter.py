@@ -18,7 +18,6 @@ HTML structure (verified Nov 2025):
 Confidence: 9/10 - Verified working with item-level extraction
 """
 
-import logging
 import re
 from typing import Dict, Any, List, Iterator, Optional
 from datetime import datetime, timedelta
@@ -28,7 +27,10 @@ from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter import BaseAdapter
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 
 class BerkeleyAdapter(BaseAdapter):

@@ -4,11 +4,13 @@ Meeting validation layer to prevent data corruption.
 Validates that packet URLs match configured vendor/slug before storing meetings.
 """
 
-import logging
 from urllib.parse import urlparse
 from typing import Optional, Dict, Any
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 # Confidence: 9/10 - Simple domain validation logic
 

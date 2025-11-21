@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from database.db import UnifiedDatabase, City
+from exceptions import VendorError
 from vendors.factory import get_adapter
 from vendors.rate_limiter import RateLimiter
 from config import config, get_logger
@@ -279,12 +280,13 @@ class Fetcher:
         if city.vendor == "legistar" and city.slug == "nyc":
             kwargs["api_token"] = config.NYC_LEGISTAR_TOKEN
 
-        adapter = get_adapter(city.vendor, city.slug, **kwargs)
-
-        if not adapter:
+        try:
+            adapter = get_adapter(city.vendor, city.slug, **kwargs)
+        except VendorError as e:
             result.status = SyncStatus.SKIPPED
-            result.error_message = f"Unsupported vendor: {city.vendor}"
-            logger.debug(f"Skipping {city.banana} - unsupported vendor: {city.vendor}")
+            result.error_message = str(e)
+            logger.warning("vendor not supported", city=city.banana, vendor=city.vendor, error=str(e))
+            metrics.record_error("vendor", e)
             return result
 
         # Use context manager to ensure session cleanup

@@ -1,7 +1,7 @@
 """Adapter factory - get the right adapter for each vendor"""
 
-import logging
-
+from config import get_logger
+from exceptions import VendorError
 from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
 from vendors.adapters.civicplus_adapter import CivicPlusAdapter
 from vendors.adapters.escribe_adapter import EscribeAdapter
@@ -15,7 +15,7 @@ from vendors.adapters.custom.berkeley_adapter import BerkeleyAdapter
 from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="vendor")
 
 VENDOR_ADAPTERS = {
     "civicclerk": CivicClerkAdapter,
@@ -41,15 +41,21 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
         **kwargs: Additional adapter-specific arguments (e.g., api_token)
 
     Returns:
-        Adapter instance or None if vendor not supported
+        Adapter instance
+
+    Raises:
+        VendorError: If vendor is not supported
 
     Custom city adapters (1:1, high value):
         - berkeley: Berkeley City Council (Drupal CMS)
         - menlopark: Menlo Park City Council (simple table)
     """
     if vendor not in VENDOR_ADAPTERS:
-        logger.debug(f"Unsupported vendor: {vendor} for city {city_slug}")
-        return None
+        raise VendorError(
+            f"Unsupported vendor: {vendor}",
+            vendor=vendor,
+            city_slug=city_slug
+        )
 
     adapter_cls = VENDOR_ADAPTERS[vendor]
 

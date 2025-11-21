@@ -5,16 +5,16 @@ Handles all meeting-related database operations including lookups,
 storage, updates, and processing status management.
 """
 
-import logging
 import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from config import get_logger
 from database.repositories.base import BaseRepository
 from database.models import Meeting
 from exceptions import DatabaseConnectionError
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="database")
 
 
 class MeetingRepository(BaseRepository):

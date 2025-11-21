@@ -5,13 +5,15 @@ Handles matter tracking, timelines, and cross-meeting aggregation
 """
 
 import json
-import logging
 import random
 from fastapi import APIRouter, HTTPException, Depends, Request
 from server.metrics import metrics
 from database.db import UnifiedDatabase
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 router = APIRouter(prefix="/api")
 

@@ -14,13 +14,13 @@ This facade provides the same API as before but delegates to focused repositorie
 """
 
 import json
-import logging
 import sqlite3
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
 from importlib.resources import files
 
+from config import get_logger
 from database.models import City, Meeting, AgendaItem, Matter
 from exceptions import DatabaseConnectionError
 from database.repositories.cities import CityRepository
@@ -32,7 +32,7 @@ from database.repositories.search import SearchRepository
 from database.services.meeting_ingestion import MeetingIngestionService
 from pipeline.utils import hash_attachments
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="database")
 
 
 class UnifiedDatabase:
@@ -268,34 +268,18 @@ class UnifiedDatabase:
 
                 if existing_matter:
                     # Check if this meeting_id is already counted for this matter
-                    appearance_exists = self.conn.execute(
-                        """
-                        SELECT COUNT(*) FROM matter_appearances
-                        WHERE matter_id = ? AND meeting_id = ?
-                        """,
-                        (matter_composite_id, meeting.id)
-                    ).fetchone()[0] > 0
-
-                    # Only increment appearance_count if this is a NEW meeting
-                    increment_sql = "appearance_count + 1" if not appearance_exists else "appearance_count"
+                    appearance_exists = self.matters.check_appearance_exists(
+                        matter_composite_id, meeting.id
+                    )
 
                     # Update last_seen and appearance_count (only if new meeting)
-                    self.conn.execute(
-                        f"""
-                        UPDATE city_matters
-                        SET last_seen = ?,
-                            appearance_count = {increment_sql},
-                            attachments = ?,
-                            metadata = json_set(COALESCE(metadata, '{{}}'), '$.attachment_hash', ?),
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                    """,
-                        (
-                            meeting.date,
-                            json.dumps(agenda_item.attachments) if agenda_item.attachments else None,
-                            attachment_hash,
-                            matter_composite_id,
-                        ),
+                    self.matters.update_matter_tracking(
+                        matter_id=matter_composite_id,
+                        meeting_date=meeting.date.isoformat() if meeting.date else "",
+                        attachments=agenda_item.attachments,
+                        attachment_hash=attachment_hash,
+                        increment_appearance_count=not appearance_exists,
+                        defer_commit=defer_commit
                     )
                     stats['duplicate'] += 1
                     logger.info(f"[Matters] {'New appearance' if not appearance_exists else 'Reprocess'}: {agenda_item.matter_file or raw_vendor_matter_id} ({matter_type})")
@@ -359,29 +343,19 @@ class UnifiedDatabase:
                 continue
 
             try:
-                self.conn.execute(
-                    """
-                    INSERT OR IGNORE INTO matter_appearances (
-                        matter_id, meeting_id, item_id, appeared_at,
-                        committee, sequence
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        matter_composite_id,
-                        meeting.id,
-                        agenda_item.id,
-                        meeting.date,
-                        committee,
-                        agenda_item.sequence,
-                    ),
+                self.matters.create_appearance(
+                    matter_id=matter_composite_id,
+                    meeting_id=meeting.id,
+                    item_id=agenda_item.id,
+                    appeared_at=meeting.date.isoformat() if meeting.date else "",
+                    committee=committee,
+                    sequence=agenda_item.sequence,
+                    defer_commit=defer_commit
                 )
                 count += 1
             except Exception as e:
                 logger.error(f"[Matters] Failed to create appearance for {matter_composite_id}: {e}")
                 raise
-
-        if not defer_commit:
-            self.conn.commit()
 
         return count
 
@@ -531,19 +505,6 @@ class UnifiedDatabase:
                 )
 
         return enqueued_count
-
-    def _get_matter(self, matter_id: str) -> Optional[Dict[str, Any]]:
-        """Get matter by ID for deduplication checks"""
-        if self.conn is None:
-            raise DatabaseConnectionError("Database connection not established")
-
-        cursor = self.conn.execute(
-            "SELECT * FROM city_matters WHERE id = ?", (matter_id,)
-        )
-        row = cursor.fetchone()
-        if row:
-            return dict(row)
-        return None
 
     def _get_all_items_for_matter(self, matter_id: str) -> List[AgendaItem]:
         """Get ALL agenda items across ALL meetings for a given matter.

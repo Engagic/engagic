@@ -5,16 +5,16 @@ Handles all matter database operations including storage,
 retrieval, and canonical summary management for matters-first architecture.
 """
 
-import logging
 import json
 from typing import List, Optional
 
+from config import get_logger
 from database.repositories.base import BaseRepository
 from database.models import Matter
 from exceptions import DatabaseConnectionError
 from database.id_generation import generate_matter_id, validate_matter_id
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__).bind(component="database")
 
 
 class MatterRepository(BaseRepository):
@@ -298,3 +298,111 @@ class MatterRepository(BaseRepository):
 
         rows = self._fetch_all(query, tuple(params))
         return [Matter.from_db_row(row) for row in rows]
+
+    def check_appearance_exists(self, matter_id: str, meeting_id: str) -> bool:
+        """
+        Check if a matter already has an appearance record for a specific meeting.
+
+        Args:
+            matter_id: Composite matter ID
+            meeting_id: Meeting identifier
+
+        Returns:
+            True if appearance record exists, False otherwise
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        count = self._fetch_one(
+            """
+            SELECT COUNT(*) FROM matter_appearances
+            WHERE matter_id = ? AND meeting_id = ?
+            """,
+            (matter_id, meeting_id),
+        )
+
+        return count[0] > 0 if count else False
+
+    def update_matter_tracking(
+        self,
+        matter_id: str,
+        meeting_date: str,
+        attachments: Optional[list],
+        attachment_hash: str,
+        increment_appearance_count: bool = False,
+        defer_commit: bool = False
+    ) -> None:
+        """
+        Update matter tracking fields (last_seen, appearance_count, attachments).
+
+        Args:
+            matter_id: Composite matter ID
+            meeting_date: Date when matter appeared
+            attachments: List of attachment dicts
+            attachment_hash: SHA256 hash of attachments
+            increment_appearance_count: Whether to increment appearance count
+            defer_commit: If True, skip commit (caller handles transaction)
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        attachments_json = json.dumps(attachments) if attachments else None
+
+        # Build dynamic SQL for appearance count
+        increment_sql = "appearance_count + 1" if increment_appearance_count else "appearance_count"
+
+        self._execute(
+            f"""
+            UPDATE city_matters
+            SET last_seen = ?,
+                appearance_count = {increment_sql},
+                attachments = ?,
+                metadata = json_set(COALESCE(metadata, '{{}}'), '$.attachment_hash', ?),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (meeting_date, attachments_json, attachment_hash, matter_id),
+        )
+
+        if not defer_commit:
+            self._commit()
+        logger.debug(f"Updated matter tracking for {matter_id}")
+
+    def create_appearance(
+        self,
+        matter_id: str,
+        meeting_id: str,
+        item_id: str,
+        appeared_at: str,
+        committee: Optional[str] = None,
+        sequence: Optional[int] = None,
+        defer_commit: bool = False
+    ) -> None:
+        """
+        Create a matter appearance record (INSERT OR IGNORE for idempotency).
+
+        Args:
+            matter_id: Composite matter ID
+            meeting_id: Meeting identifier
+            item_id: Agenda item identifier
+            appeared_at: Date when matter appeared
+            committee: Optional committee name
+            sequence: Optional item sequence number
+            defer_commit: If True, skip commit (caller handles transaction)
+        """
+        if self.conn is None:
+            raise DatabaseConnectionError("Database connection not established")
+
+        self._execute(
+            """
+            INSERT OR IGNORE INTO matter_appearances (
+                matter_id, meeting_id, item_id, appeared_at,
+                committee, sequence
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (matter_id, meeting_id, item_id, appeared_at, committee, sequence),
+        )
+
+        if not defer_commit:
+            self._commit()
+        logger.debug(f"Created appearance for matter {matter_id} in meeting {meeting_id}")

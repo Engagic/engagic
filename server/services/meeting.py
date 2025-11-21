@@ -7,6 +7,10 @@ Handles meeting retrieval with items attached
 from typing import Dict, Any, List
 from database.db import UnifiedDatabase, Meeting
 
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, Any]:
     """Convert meeting to dict with items attached

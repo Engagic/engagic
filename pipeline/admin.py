@@ -5,13 +5,15 @@ Standalone utilities for previewing and extracting text from meetings and items.
 These are debugging tools, not core orchestration logic.
 """
 
-import logging
+
 from typing import Dict, Any, Optional
 
 from config import config
 from database.db import UnifiedDatabase
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="engagic")
 
 
 def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> Dict[str, Any]:

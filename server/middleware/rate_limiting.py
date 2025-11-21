@@ -3,12 +3,14 @@ Rate limiting middleware
 """
 
 import hashlib
-import logging
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from server.rate_limiter import SQLiteRateLimiter
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="engagic")
 
 
 async def rate_limit_middleware(

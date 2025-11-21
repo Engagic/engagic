@@ -2,11 +2,13 @@
 
 import time
 import random
-import logging
 import threading
 from collections import defaultdict
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 
 class RateLimiter:

@@ -7,11 +7,13 @@ Two main functions:
 """
 
 import re
-import logging
 from typing import Dict, Any, List
 from bs4 import BeautifulSoup
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 
 def parse_legislation_attachments(html: str, base_url: str) -> List[Dict[str, Any]]:

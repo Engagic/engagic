@@ -4,14 +4,16 @@ Flyer generation API routes
 Enables civic action through printable flyers
 """
 
-import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import HTMLResponse
 from server.models.requests import FlyerRequest
 from server.services.flyer import generate_meeting_flyer
 from database.db import UnifiedDatabase
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="api")
+
 
 router = APIRouter(prefix="/api")
 

@@ -18,4 +18,8 @@ from vendors.adapters.custom.berkeley_adapter import BerkeleyAdapter
 from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
 
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 __all__ = ["BerkeleyAdapter", "ChicagoAdapter", "MenloParkAdapter"]

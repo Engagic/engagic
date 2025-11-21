@@ -28,15 +28,16 @@ Processing approach:
 Confidence: 9/10 - Well-documented API, clear structure, proven pattern
 """
 
-import logging
 from typing import Dict, Any, List, Iterator, Optional
 from datetime import datetime, timedelta
-from urllib.parse import urljoin
 
 from vendors.adapters.base_adapter import BaseAdapter
 from vendors.utils.item_filters import should_skip_procedural_item
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
 
 
 class ChicagoAdapter(BaseAdapter):

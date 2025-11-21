@@ -10,7 +10,6 @@ Handles the complex orchestration of:
 5. Queue enqueuing with priority calculation
 """
 
-import logging
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
@@ -22,7 +21,10 @@ from vendors.utils.item_filters import should_skip_procedural_item, should_skip_
 from vendors.schemas import validate_meeting_output
 from pydantic import ValidationError
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="database")
+
 
 
 class MeetingIngestionService:
