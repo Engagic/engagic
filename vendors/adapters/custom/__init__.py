@@ -15,6 +15,7 @@ Pattern:
 """
 
 from vendors.adapters.custom.berkeley_adapter import BerkeleyAdapter
+from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
 
-__all__ = ["BerkeleyAdapter", "MenloParkAdapter"]
+__all__ = ["BerkeleyAdapter", "ChicagoAdapter", "MenloParkAdapter"]
