@@ -10,7 +10,7 @@ from server.rate_limiter import SQLiteRateLimiter
 
 from config import get_logger
 
-logger = get_logger(__name__).bind(component="engagic")
+logger = get_logger(__name__)
 
 
 async def rate_limit_middleware(

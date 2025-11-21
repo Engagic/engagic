@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Header, Depends, Request
 from config import config, get_logger
 from server.models.requests import ProcessRequest
 
-logger = get_logger(__name__).bind(component="api")
+logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/api/admin")

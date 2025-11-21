@@ -13,7 +13,7 @@ from database.db import UnifiedDatabase
 from server.services.ticker import generate_ticker_item
 from server.metrics import metrics, get_metrics_text
 
-logger = get_logger(__name__).bind(component="api")
+logger = get_logger(__name__)
 
 
 router = APIRouter()

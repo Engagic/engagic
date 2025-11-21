@@ -17,7 +17,7 @@ from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters
 
-logger = get_logger(__name__).bind(component="api")
+logger = get_logger(__name__)
 
 # Configure structured logging
 logging.basicConfig(
