@@ -1,35 +1,15 @@
 <script lang="ts">
-	import { getMatterTimeline } from '$lib/api/index';
 	import type { MatterTimelineResponse, MatterTimelineAppearance } from '$lib/api/types';
 	import { generateAnchorId } from '$lib/utils/anchor';
-	import { onMount } from 'svelte';
 
 	interface Props {
-		matterId?: string;
+		timelineData: MatterTimelineResponse;
 		matterFile?: string;
-		timelineData?: MatterTimelineResponse;
 	}
 
-	let { matterId, matterFile, timelineData }: Props = $props();
+	let { timelineData, matterFile }: Props = $props();
 
-	let timeline = $state<MatterTimelineResponse | null>(timelineData || null);
-	let loading = $state(!timelineData);
-	let error = $state('');
 	let expandedAppearances = $state<Set<number>>(new Set());
-
-	onMount(async () => {
-		// Only fetch if timeline data wasn't provided as a prop
-		if (!timelineData && matterId) {
-			try {
-				const result = await getMatterTimeline(matterId);
-				timeline = result;
-				loading = false;
-			} catch (err) {
-				error = err instanceof Error ? err.message : 'Failed to load matter timeline';
-				loading = false;
-			}
-		}
-	});
 
 	function formatDate(dateStr: string): string {
 		if (!dateStr) return '';
@@ -71,7 +51,7 @@
 		return generateAnchorId({
 			id: appearance.item_id,
 			agenda_number: appearance.agenda_number,
-			matter_file: timeline?.matter?.matter_file || matterFile || undefined
+			matter_file: timelineData.matter?.matter_file || matterFile || undefined
 		});
 	}
 
@@ -89,26 +69,22 @@
 	}
 </script>
 
-{#if loading}
-	<div class="timeline-loading">Loading matter timeline...</div>
-{:else if error}
-	<div class="timeline-error">{error}</div>
-{:else if timeline && timeline.timeline.length > 0}
+{#if timelineData.timeline.length > 0}
 	<div class="matter-timeline">
 		<div class="timeline-header">
 			<div class="timeline-title">
 				{#if matterFile}
 					<span class="matter-id">{matterFile}</span>
 				{/if}
-				<span class="appearance-count">{timeline.appearance_count} appearance{timeline.appearance_count === 1 ? '' : 's'}</span>
+				<span class="appearance-count">{timelineData.appearance_count} appearance{timelineData.appearance_count === 1 ? '' : 's'}</span>
 			</div>
 			<div class="timeline-subtitle">Legislative Journey</div>
 		</div>
 
 		<div class="timeline-flow">
-			{#each timeline.timeline as appearance, index}
+			{#each timelineData.timeline as appearance, index}
 				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
-				{@const status = inferStatus(index, timeline.timeline.length)}
+				{@const status = inferStatus(index, timelineData.timeline.length)}
 				{@const isExpanded = expandedAppearances.has(index)}
 
 				<div class="flow-step" class:selected={isExpanded}>
