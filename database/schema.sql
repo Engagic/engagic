@@ -236,8 +236,9 @@ CREATE INDEX IF NOT EXISTS idx_matter_appearances_item ON matter_appearances(ite
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_date ON matter_appearances(appeared_at);
 CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(content_hash);
 CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status);
-CREATE INDEX IF NOT EXISTS idx_queue_priority ON queue(priority DESC);
 CREATE INDEX IF NOT EXISTS idx_queue_city ON queue(banana);
+-- Composite index for get_next_for_processing() query (covers status, priority, created_at)
+CREATE INDEX IF NOT EXISTS idx_queue_processing ON queue(status, priority DESC, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_tenant_coverage_city ON tenant_coverage(banana);
 CREATE INDEX IF NOT EXISTS idx_tracked_items_tenant ON tracked_items(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tracked_items_city ON tracked_items(banana);

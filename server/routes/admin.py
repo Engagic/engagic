@@ -84,6 +84,77 @@ async def force_process_meeting(
     }
 
 
+@router.get("/dead-letter-queue")
+async def get_dead_letter_queue(
+    request,
+    is_admin: bool = Depends(verify_admin_token)
+):
+    """Get jobs in dead letter queue (failed after 3 retries)
+
+    Returns list of failed jobs with error messages for debugging.
+    These jobs require manual intervention or code fixes.
+    """
+    from fastapi import Request
+    from database.db import UnifiedDatabase
+
+    db: UnifiedDatabase = request.app.state.db
+
+    try:
+        # Get dead letter jobs from queue
+        dead_jobs = db.conn.execute("""
+            SELECT
+                id,
+                job_type,
+                meeting_id,
+                banana,
+                source_url,
+                error_message,
+                retry_count,
+                created_at,
+                started_at,
+                failed_at
+            FROM queue
+            WHERE status = 'dead_letter'
+            ORDER BY failed_at DESC
+            LIMIT 100
+        """).fetchall()
+
+        jobs_list = []
+        for job in dead_jobs:
+            jobs_list.append({
+                "queue_id": job["id"],
+                "type": job["job_type"],
+                "meeting_id": job["meeting_id"],
+                "city": job["banana"],
+                "source_url": job["source_url"],
+                "error": job["error_message"],
+                "retries": job["retry_count"],
+                "created": job["created_at"],
+                "failed": job["failed_at"],
+            })
+
+        # Alert if too many failures
+        alert_threshold = 50
+        needs_attention = len(jobs_list) > alert_threshold
+
+        return {
+            "success": True,
+            "count": len(jobs_list),
+            "alert": needs_attention,
+            "alert_threshold": alert_threshold,
+            "message": f"Found {len(jobs_list)} jobs in dead letter queue" +
+                      (" - NEEDS ATTENTION!" if needs_attention else ""),
+            "jobs": jobs_list,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch dead letter queue: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch dead letter queue: {str(e)}"
+        )
+
+
 @router.get("/prometheus-query")
 async def prometheus_query(
     query: str,

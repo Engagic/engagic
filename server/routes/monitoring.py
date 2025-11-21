@@ -127,11 +127,31 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
 
     try:
         # Database health check
+        db.conn.execute("SELECT 1").fetchone()
         stats = db.get_stats()
         health_status["checks"]["databases"] = {
             "status": "healthy",
             "cities": stats["active_cities"],
             "meetings": stats["total_meetings"],
+        }
+
+        # Queue health check (detect backlog)
+        queue_stats = db.get_queue_stats()
+        pending_count = queue_stats.get("pending_count", 0)
+        dead_letter_count = queue_stats.get("dead_letter_count", 0)
+
+        queue_status = "healthy"
+        if pending_count > 10000:
+            queue_status = "backlogged"
+            health_status["status"] = "degraded"
+        elif dead_letter_count > 50:
+            queue_status = "degraded"
+            health_status["status"] = "degraded"
+
+        health_status["checks"]["queue"] = {
+            "status": queue_status,
+            "pending": pending_count,
+            "dead_letter": dead_letter_count,
         }
 
         # Add basic stats
@@ -142,7 +162,7 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
         }
     except Exception as e:
         health_status["checks"]["databases"] = {"status": "unhealthy", "error": str(e)}
-        health_status["status"] = "degraded"
+        health_status["status"] = "unhealthy"
 
     # LLM analyzer check
     health_status["checks"]["llm_analyzer"] = {
