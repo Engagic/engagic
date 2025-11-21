@@ -5,7 +5,7 @@ Admin API routes
 import time
 import httpx
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Header, Depends, Request
 
 from config import config, get_logger
 from server.models.requests import ProcessRequest
@@ -87,7 +87,7 @@ async def force_process_meeting(
 
 @router.get("/dead-letter-queue")
 async def get_dead_letter_queue(
-    request,
+    request: Request,
     is_admin: bool = Depends(verify_admin_token)
 ):
     """Get jobs in dead letter queue (failed after 3 retries)
