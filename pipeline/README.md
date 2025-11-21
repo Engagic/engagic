@@ -37,7 +37,7 @@ The pipeline consists of **6 focused modules** with clear responsibilities:
 
 ## Module Reference
 
-### 1. `conductor.py` - Orchestration (800 lines)
+### 1. `conductor.py` - Orchestration (617 lines)
 
 **Entry point for all pipeline operations.** Coordinates sync and processing loops.
 
@@ -94,7 +94,7 @@ engagic-daemon --status
 
 ---
 
-### 2. `fetcher.py` - City Sync & Vendor Routing (520 lines)
+### 2. `fetcher.py` - City Sync & Vendor Routing (553 lines)
 
 **Fetches meetings from vendor platforms.** Handles rate limiting, retry logic, and database storage.
 
@@ -168,7 +168,7 @@ class SyncResult:
 
 ---
 
-### 3. `processor.py` - Queue Processing & Item Assembly (1178 lines)
+### 3. `processor.py` - Queue Processing & Item Assembly (1325 lines)
 
 **Processes jobs from the queue.** Extracts text from PDFs, assembles items, orchestrates LLM analysis.
 
@@ -303,7 +303,7 @@ for chunk_results in analyzer.process_batch_items(batch_requests):
 
 ---
 
-### 4. `analyzer.py` - LLM Analysis Orchestration (218 lines)
+### 4. `analyzer.py` - LLM Analysis Orchestration (227 lines)
 
 **Coordinates PDF extraction and LLM analysis.** Thin wrapper around parsing and analysis modules.
 

@@ -8,7 +8,7 @@ Complete reference for the Engagic public API endpoints.
 **Base URL (Local):** `http://localhost:8000`
 
 **Version:** v1
-**Last Updated:** November 11, 2025
+**Last Updated:** November 20, 2025
 
 ---
 
