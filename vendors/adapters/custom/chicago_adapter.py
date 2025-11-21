@@ -256,6 +256,7 @@ class ChicagoAdapter(BaseAdapter):
                 record_number = item.get("recordNumber")
                 matter_type = item.get("matterType")
                 action_name = item.get("actionName")
+                display_id = item.get("displayId")
 
                 # Use matterId or commentId as item_id
                 item_id = matter_id or comment_id
@@ -263,10 +264,13 @@ class ChicagoAdapter(BaseAdapter):
                     logger.debug(f"[chicago:{self.slug}] Item missing ID, skipping: {title[:60]}")
                     continue
 
-                # Fetch matter attachments if matterId exists
+                # Fetch matter data (attachments + sponsors) if matterId exists
                 attachments = []
+                sponsors = []
                 if matter_id:
-                    attachments = self._fetch_matter_attachments(matter_id)
+                    matter_data = self._fetch_matter_data(matter_id)
+                    attachments = matter_data["attachments"]
+                    sponsors = matter_data["sponsors"]
 
                 item_data = {
                     "item_id": str(item_id),
@@ -275,32 +279,40 @@ class ChicagoAdapter(BaseAdapter):
                     "attachments": attachments,
                 }
 
-                # Add optional fields
+                # Add optional fields (following AgendaItem schema)
                 if matter_id:
                     item_data["matter_id"] = str(matter_id)
                 if record_number:
                     item_data["matter_file"] = record_number
                 if matter_type:
                     item_data["matter_type"] = matter_type
-                if action_name:
-                    item_data["action_name"] = action_name
-                if group_title:
-                    item_data["section"] = group_title
+                if display_id:
+                    item_data["agenda_number"] = display_id
+                if sponsors:
+                    item_data["sponsors"] = sponsors
+
+                # Chicago-specific metadata (not in schema but useful)
+                if action_name or group_title:
+                    item_data["metadata"] = {}
+                    if action_name:
+                        item_data["metadata"]["action_name"] = action_name
+                    if group_title:
+                        item_data["metadata"]["section"] = group_title
 
                 items.append(item_data)
 
         logger.debug(f"[chicago:{self.slug}] Extracted {len(items)} items from agenda")
         return items
 
-    def _fetch_matter_attachments(self, matter_id: str) -> List[Dict[str, Any]]:
+    def _fetch_matter_data(self, matter_id: str) -> Dict[str, Any]:
         """
-        Fetch attachments for a specific matter.
+        Fetch matter data including attachments and sponsors.
 
         Args:
             matter_id: Chicago matter ID
 
         Returns:
-            List of attachments: [{'name': str, 'url': str, 'type': str}]
+            Dict with 'attachments' and 'sponsors' keys
         """
         matter_url = f"{self.base_url}/matter/{matter_id}"
 
@@ -308,13 +320,13 @@ class ChicagoAdapter(BaseAdapter):
             response = self._get(matter_url)
         except Exception as e:
             logger.debug(f"[chicago:{self.slug}] Network error fetching matter {matter_id}: {e}")
-            return []
+            return {"attachments": [], "sponsors": []}
 
         try:
             matter_data = response.json()
         except ValueError as e:
             logger.debug(f"[chicago:{self.slug}] Invalid JSON in matter {matter_id}: {e}")
-            return []
+            return {"attachments": [], "sponsors": []}
 
         # Extract attachments
         raw_attachments = matter_data.get("attachments", [])
@@ -345,8 +357,16 @@ class ChicagoAdapter(BaseAdapter):
                 "type": file_type,
             })
 
-        logger.debug(f"[chicago:{self.slug}] Matter {matter_id}: found {len(attachments)} attachments")
-        return attachments
+        # Extract sponsors
+        raw_sponsors = matter_data.get("sponsors", [])
+        sponsors = []
+        for sponsor in raw_sponsors:
+            sponsor_name = sponsor.get("sponsorName")
+            if sponsor_name:
+                sponsors.append(sponsor_name)
+
+        logger.debug(f"[chicago:{self.slug}] Matter {matter_id}: {len(attachments)} attachments, {len(sponsors)} sponsors")
+        return {"attachments": attachments, "sponsors": sponsors}
 
     def _parse_iso_date(self, date_str: str) -> Optional[datetime]:
         """
