@@ -173,9 +173,9 @@
 	}
 
 	.contact-card p {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-secondary);
+		color: var(--text-primary);
 		margin: 0;
 	}
 
@@ -198,16 +198,16 @@
 	}
 
 	.guideline p {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-secondary);
+		color: var(--text-primary);
 		margin: 0;
 	}
 
 	.guideline ul {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-secondary);
+		color: var(--text-primary);
 		margin: 0;
 		padding-left: var(--space-lg);
 	}
@@ -217,9 +217,9 @@
 	}
 
 	.note {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-secondary);
+		color: var(--text-primary);
 		background: var(--surface-secondary);
 		border-left: 3px solid var(--civic-blue);
 		padding: var(--space-md);

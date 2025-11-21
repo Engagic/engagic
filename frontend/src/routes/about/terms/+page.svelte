@@ -293,7 +293,7 @@
 		font-size: 2.5rem;
 		font-weight: 600;
 		color: var(--text-primary);
-		margin: 0 0 var(--space-sm) 0;
+		margin: 0;
 		line-height: 1.2;
 	}
 
@@ -301,7 +301,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1rem;
 		color: var(--civic-gray);
-		margin-bottom: 2rem;
+		margin: 0;
 	}
 
 	.back-link {
@@ -366,19 +366,18 @@
 	/* Content Sections - removed center alignment */
 
 	.terms-section {
-		margin-bottom: 2rem;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
 	}
 
-	.terms-section:last-of-type {
-		border-bottom: none;
-	}
 
 	.terms-section h2 {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.8rem;
 		font-weight: 600;
 		color: var(--civic-dark);
-		margin-bottom: 1.5rem;
+		margin: 0;
 		scroll-margin-top: 2rem;
 	}
 
@@ -387,29 +386,28 @@
 		font-size: 1.3rem;
 		font-weight: 600;
 		color: var(--civic-blue);
-		margin-top: 1.5rem;
-		margin-bottom: 1rem;
+		margin: 0;
 	}
 
 	.terms-section p {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.1rem;
-		line-height: 1.6;
+		line-height: 1.7;
 		color: var(--text-primary);
-		margin-bottom: 1rem;
+		margin: 0;
 	}
 
 	.terms-section ul {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.1rem;
-		line-height: 1.6;
+		line-height: 1.7;
 		color: var(--text-primary);
-		margin-left: 1.5rem;
-		margin-bottom: 1rem;
+		margin: 0;
+		padding-left: 1.5rem;
 	}
 
 	.terms-section li {
-		margin-bottom: 0.5rem;
+		margin: 0;
 	}
 
 	.terms-section a {
@@ -427,7 +425,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 		gap: 1.5rem;
-		margin-top: 2rem;
 	}
 
 	.tier-card {

@@ -100,7 +100,9 @@ class Fetcher:
             else:
                 skipped_count += 1
                 logger.debug(
-                    f"Skipping city {city.name} with unsupported vendor: {vendor}"
+                    "skipping city with unsupported vendor",
+                    city_name=city.name,
+                    vendor=vendor
                 )
 
         total_supported = sum(len(vendor_cities) for vendor_cities in by_vendor.values())
@@ -157,7 +159,9 @@ class Fetcher:
             if vendor_cities:
                 vendor_break = 30 + random.uniform(0, 10)  # 30-40 seconds
                 logger.info(
-                    f"Completed {vendor} cities, taking {vendor_break:.1f}s break..."
+                    "completed vendor cities - taking break",
+                    vendor=vendor,
+                    break_seconds=round(vendor_break, 1)
                 )
                 time.sleep(vendor_break)
 
@@ -320,7 +324,7 @@ class Fetcher:
                             if item.get("matter_file") or item.get("matter_id"):
                                 total_matters += 1
 
-                except Exception as e:
+                except (VendorError, ValueError, KeyError) as e:
                     logger.error("error fetching meetings", city=city.banana, error=str(e), error_type=type(e).__name__)
                     result.status = SyncStatus.FAILED
                     result.error_message = str(e)
@@ -333,13 +337,18 @@ class Fetcher:
 
                 # Log what we found with detailed breakdown
                 logger.info(
-                    f"[Sync] {city.banana}: Found {len(all_meetings)} meetings, "
-                    f"{total_items} items ({total_matters} with matter tracking)"
+                    "found meetings for city",
+                    city=city.banana,
+                    meeting_count=len(all_meetings),
+                    total_items=total_items,
+                    matters_with_tracking=total_matters
                 )
                 logger.info(
-                    f"[Sync] {city.banana}: Breakdown: {len(meetings_with_items)} item-level, "
-                    f"{len(meetings_with_agenda_url)} with HTML agenda, "
-                    f"{len(meetings_with_packet_url)} with PDF packet"
+                    "meeting breakdown",
+                    city=city.banana,
+                    item_level_count=len(meetings_with_items),
+                    html_agenda_count=len(meetings_with_agenda_url),
+                    pdf_packet_count=len(meetings_with_packet_url)
                 )
 
                 # Store ALL meetings and enqueue for processing
@@ -350,13 +359,18 @@ class Fetcher:
                 skipped_meetings = 0
 
                 logger.info(
-                    f"[Sync] {city.banana}: Storing {len(all_meetings)} meetings..."
+                    "storing meetings",
+                    city=city.banana,
+                    meeting_count=len(all_meetings)
                 )
                 for i, meeting_dict in enumerate(all_meetings):
                     # Progress update every 10 meetings
                     if (i + 1) % 10 == 0:
                         logger.info(
-                            f"[Sync] {city.banana}: Progress {i + 1}/{len(all_meetings)} meetings"
+                            "storage progress",
+                            city=city.banana,
+                            progress=i + 1,
+                            total=len(all_meetings)
                         )
 
                     if not self.is_running:
@@ -372,12 +386,14 @@ class Fetcher:
                         if skipped:
                             skipped_meetings += skipped
                             logger.warning(
-                                f"[Sync] Skipped meeting '{skipped_title}' "
-                                f"({reason or 'unknown reason'})"
+                                "skipped meeting",
+                                meeting_title=skipped_title,
+                                reason=reason or 'unknown reason'
                             )
                         else:
                             logger.warning(
-                                f"[Sync] Failed to store meeting '{skipped_title}' without skip metadata"
+                                "failed to store meeting without skip metadata",
+                                meeting_title=skipped_title
                             )
                         continue
 
@@ -472,8 +488,12 @@ class Fetcher:
             # Wait before retry
             wait_time = wait_times[attempt] + random.uniform(0, 2)
             logger.warning(
-                f"Sync failed for {city_name} (attempt {attempt + 1}/{max_retries}), "
-                f"retrying in {wait_time:.1f}s: {last_error}"
+                "sync failed - retrying",
+                city=city_name,
+                attempt=attempt + 1,
+                max_retries=max_retries,
+                wait_seconds=round(wait_time, 1),
+                error=last_error
             )
             time.sleep(wait_time)
 

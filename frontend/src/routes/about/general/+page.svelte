@@ -100,9 +100,9 @@
 	}
 
 	.about-content p {
-		font-size: 1.125rem;
-		line-height: 1.75;
-		color: var(--text-secondary);
+		font-size: 1.1rem;
+		line-height: 1.7;
+		color: var(--text-primary);
 		margin: 0;
 	}
 
@@ -129,7 +129,7 @@
 	}
 
 	.feature-item p {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
 	}
 
@@ -163,7 +163,7 @@
 	}
 
 	.principle p {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
 	}
 
@@ -190,7 +190,7 @@
 	}
 
 	.use-case-list p {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
 		padding: var(--space-md);
 		background: var(--surface-primary);
@@ -204,7 +204,7 @@
 	}
 
 	.contact-footer {
-		font-size: 1.0625rem;
+		font-size: 1.1rem;
 		line-height: 1.7;
 		padding-top: var(--space-lg);
 		border-top: 1px solid var(--border-primary);
@@ -232,7 +232,7 @@
 		}
 
 		.about-content p {
-			font-size: 1rem;
+			font-size: 1.05rem;
 		}
 
 		.highlight-section {

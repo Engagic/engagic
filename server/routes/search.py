@@ -36,7 +36,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
 
         # Get client hash from middleware (set in rate_limiting.py)
         client_hash = getattr(request.state, 'client_ip_hash', 'unknown')
-        logger.info(f"Search request: '{query}' [user:{client_hash}]")
+        logger.info("search request", query=query, user=client_hash)
 
         # Special case: "new york" or "new york city" -> NYC (not the state)
         query_lower = query.lower()
@@ -48,7 +48,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
         is_zipcode = query.isdigit() and len(query) == 5
         is_state = is_state_query(query)
 
-        logger.info(f"Query analysis - is_zipcode: {is_zipcode}, is_state: {is_state}")
+        logger.info("query analysis", is_zipcode=is_zipcode, is_state=is_state)
 
         # Track search behavior metrics
         metrics.page_views.labels(page_type='search').inc()
@@ -66,7 +66,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected search error for '{query}': {str(e)}")
+        logger.error("unexpected search error", query=query, error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
