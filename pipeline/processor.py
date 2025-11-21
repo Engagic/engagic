@@ -498,8 +498,10 @@ class Processor:
                             item_parts.append(f"=== {att_name or att_url} ===\n{result['text']}")
                             total_page_count += result.get("page_count", 0)
                             logger.debug(
-                                f"[SingleItemProcessing] Extracted '{att_name or att_url}': "
-                                f"{result.get('page_count', 0)} pages, {len(result['text']):,} chars"
+                                "extracted attachment text",
+                                attachment=att_name or att_url,
+                                pages=result.get('page_count', 0),
+                                chars=len(result['text'])
                             )
                     except Exception as e:
                         logger.warning("failed to extract attachment", name=att_name or att_url, error=str(e))
@@ -745,7 +747,8 @@ class Processor:
                 cached = self.db.get_cached_summary(meeting.packet_url)
                 if cached:
                     logger.debug(
-                        f"Meeting {meeting.packet_url} already processed, skipping"
+                        "meeting already processed - skipping",
+                        packet_url=meeting.packet_url
                     )
                     return
 
@@ -766,11 +769,15 @@ class Processor:
                 result = self.analyzer.process_agenda_with_cache(meeting_data)
                 if result.get("success"):
                     logger.info(
-                        f"Processed {meeting.packet_url} in {result['processing_time']:.1f}s"
+                        "processed packet",
+                        packet_url=meeting.packet_url,
+                        processing_time_seconds=round(result['processing_time'], 1)
                     )
                 else:
                     logger.error(
-                        f"Failed to process {meeting.packet_url}: {result.get('error')}"
+                        "failed to process packet",
+                        packet_url=meeting.packet_url,
+                        error=result.get('error')
                     )
 
         except Exception as e:
@@ -790,7 +797,7 @@ class Processor:
 
             # Handle PDF agendas (Legistar, etc.)
             if agenda_url_lower.endswith('.pdf') or '.ashx' in agenda_url_lower:
-                logger.debug("[Participation] Extracting text from agenda_url PDF for participation info")
+                logger.debug("extracting text from agenda_url PDF for participation info")
                 agenda_result = self.analyzer.pdf_extractor.extract_from_url(meeting.agenda_url)
                 if agenda_result.get("success") and agenda_result.get("text"):
                     # Parse only first 5000 chars (participation info is at the top)
@@ -799,7 +806,8 @@ class Processor:
                     if agenda_participation:
                         participation_data.update(agenda_participation)
                         logger.info(
-                            f"[Participation] Found info in agenda_url PDF: {list(agenda_participation.keys())}"
+                            "found participation info in agenda_url PDF",
+                            participation_fields=list(agenda_participation.keys())
                         )
                     # Free memory immediately
                     del agenda_result
@@ -809,7 +817,8 @@ class Processor:
             elif meeting.participation:
                 participation_data.update(meeting.participation)
                 logger.debug(
-                    f"[Participation] Using existing participation from adapter: {list(meeting.participation.keys())}"
+                    "using existing participation from adapter",
+                    participation_fields=list(meeting.participation.keys())
                 )
 
         except Exception as e:
@@ -826,13 +835,15 @@ class Processor:
             # Skip procedural items (low informational value)
             if is_procedural_item(item.title):
                 logger.debug(
-                    f"[ItemProcessing] Skipping procedural item: {item.title[:50]}"
+                    "skipping procedural item",
+                    title=item.title[:50]
                 )
                 continue
 
             if not item.attachments:
                 logger.debug(
-                    f"[ItemProcessing] Skipping item without attachments: {item.title[:50]}"
+                    "skipping item without attachments",
+                    title=item.title[:50]
                 )
                 continue
 
@@ -843,8 +854,9 @@ class Processor:
                 if matter and matter.canonical_summary:
                     # Reuse canonical summary from matter
                     logger.debug(
-                        f"[MattersDedupe] Reusing canonical summary for {item.title[:50]} "
-                        f"(matter: {item.matter_file or item.matter_id})"
+                        "reusing canonical summary from matter",
+                        title=item.title[:50],
+                        matter=item.matter_file or item.matter_id
                     )
 
                     # Update item with canonical summary if not already set
@@ -883,7 +895,7 @@ class Processor:
         Returns:
             tuple of (document_cache, item_attachments, shared_urls)
         """
-        logger.info("[DocumentCache] Building meeting-level document cache...")
+        logger.info("building meeting-level document cache")
         document_cache = {}  # url -> {text, page_count, name}
         item_attachments = {}  # item_id -> list of URLs (after version filtering)
 
@@ -942,7 +954,8 @@ class Processor:
                     # Post-extraction filter: Skip public comment compilations
                     if is_likely_public_comment_compilation(result, att_name or att_url):
                         logger.info(
-                            f"[DocumentCache] Skipping public comment compilation: {att_name or att_url}"
+                            "skipping public comment compilation",
+                            attachment=att_name or att_url
                         )
                         continue
 
@@ -955,10 +968,12 @@ class Processor:
                     item_count = len(url_to_items[att_url])
                     cache_status = "shared" if item_count > 1 else "unique"
                     logger.info(
-                        f"[DocumentCache] Extracted '{att_name or att_url}': "
-                        f"{result.get('page_count', 0)} pages, "
-                        f"{len(result['text']):,} chars "
-                        f"({cache_status}, {item_count} items)"
+                        "extracted document",
+                        attachment=att_name or att_url,
+                        pages=result.get('page_count', 0),
+                        chars=len(result['text']),
+                        cache_status=cache_status,
+                        item_count=item_count
                     )
             except Exception as e:
                 logger.warning("failed to extract document", attachment=att_name or att_url, error=str(e), error_type=type(e).__name__)
@@ -969,8 +984,10 @@ class Processor:
         unique_count = len([url for url in all_urls if url not in shared_urls and url in document_cache])
 
         logger.info(
-            f"[DocumentCache] Cached {len(document_cache)} documents: "
-            f"{shared_count} shared, {unique_count} item-specific"
+            "cached documents",
+            total_cached=len(document_cache),
+            shared_count=shared_count,
+            unique_count=unique_count
         )
 
         return document_cache, item_attachments, shared_urls
@@ -1001,7 +1018,9 @@ class Processor:
 
                 if item_is_low_value:
                     logger.info(
-                        f"[ItemFilter] Skipping entire item (public comments/parcel tables): {item.title[:80]}"
+                        "skipping entire item - low value content",
+                        title=item.title[:80],
+                        reason="public_comments_or_parcel_tables"
                     )
                     continue
 
@@ -1036,7 +1055,9 @@ class Processor:
                         item_participation = parse_participation_info(combined_text)
                         if item_participation:
                             logger.debug(
-                                f"[Participation] Found in item {item.sequence}: {list(item_participation.keys())}"
+                                "found participation info in item",
+                                sequence=item.sequence,
+                                participation_fields=list(item_participation.keys())
                             )
                             participation_data.update(item_participation)
 
