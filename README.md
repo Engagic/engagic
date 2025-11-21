@@ -11,7 +11,7 @@ Live at **[engagic.org](https://engagic.org)**
 ```
 engagic/
 ├── vendors/            # Fetch from civic tech vendors
-│   ├── adapters/       # 8 vendor adapters (Legistar, PrimeGov, Granicus, CivicClerk, CivicPlus, eScribe, iqm2, NovusAgenda) and 2 bespoke (Berkeley, Menlo Park)
+│   ├── adapters/       # 11 vendor adapters (Legistar, PrimeGov, Granicus, IQM2, NovusAgenda, eScribe, CivicClerk, CivicPlus, Berkeley, Chicago, Menlo Park)
 │   ├── factory.py      # Adapter dispatcher
 │   ├── rate_limiter.py # Vendor-aware rate limiting
 │   └── validator.py    # Meeting validation
@@ -41,7 +41,7 @@ engagic/
 
 ### Core Components
 
-**vendors/** - Adapters for 6 civic tech platforms (BaseAdapter pattern, 94% success rate)
+**vendors/** - Adapters for 11 civic tech platforms (BaseAdapter pattern, 94% success rate)
 - Legistar (110 cities, API-based item extraction)
 - PrimeGov (64 cities, HTML agenda parsing)
 - Granicus (467 cities, 200+ with HTML item extraction)
