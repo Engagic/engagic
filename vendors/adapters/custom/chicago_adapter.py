@@ -88,9 +88,14 @@ class ChicagoAdapter(BaseAdapter):
 
         try:
             response = self._get(api_url, params=params)
-            response_data = response.json()
         except Exception as e:
-            logger.error(f"[chicago:{self.slug}] Failed to fetch meetings: {e}")
+            logger.error(f"[chicago:{self.slug}] Network error fetching meetings: {e}")
+            return
+
+        try:
+            response_data = response.json()
+        except ValueError as e:
+            logger.error(f"[chicago:{self.slug}] Invalid JSON response: {e}")
             return
 
         # Extract meetings from response
@@ -106,13 +111,13 @@ class ChicagoAdapter(BaseAdapter):
                 location = meeting.get("location")
 
                 if not meeting_id or not date_str:
-                    logger.warning(f"[chicago:{self.slug}] Meeting missing ID or date, skipping")
+                    logger.warning(f"[chicago:{self.slug}] Meeting {meeting.get('meetingId')}: missing ID or date")
                     continue
 
                 # Parse date
                 meeting_date = self._parse_iso_date(date_str)
                 if not meeting_date:
-                    logger.warning(f"[chicago:{self.slug}] Could not parse date: {date_str}")
+                    logger.warning(f"[chicago:{self.slug}] Meeting {meeting_id}: invalid date '{date_str}'")
                     continue
 
                 # Fetch full meeting detail to get agenda structure
@@ -125,15 +130,11 @@ class ChicagoAdapter(BaseAdapter):
                 items = self._extract_agenda_items(meeting_detail)
 
                 # Get agenda file URL (prefer 'Agenda' type, fallback to first file)
-                agenda_url = None
                 files = meeting_detail.get("files", [])
-                for file in files:
-                    if file.get("attachmentType") == "Agenda":
-                        agenda_url = file.get("path")
-                        break
-                # Fallback to first file if no Agenda type found
-                if not agenda_url and files:
-                    agenda_url = files[0].get("path")
+                agenda_url = next(
+                    (f.get("path") for f in files if f.get("attachmentType") == "Agenda"),
+                    files[0].get("path") if files else None
+                )
 
                 # Build meeting data
                 result = {
@@ -148,23 +149,14 @@ class ChicagoAdapter(BaseAdapter):
                 # Architecture: items extracted → agenda_url, no items → packet_url
                 if items:
                     if agenda_url:
-                        result["agenda_url"] = agenda_url  # Source document
+                        result["agenda_url"] = agenda_url
                     result["items"] = items
-                    logger.info(
-                        f"[chicago:{self.slug}] Meeting {meeting_id} ({body}): "
-                        f"extracted {len(items)} items"
-                    )
+                    logger.info(f"[chicago:{self.slug}] Meeting {meeting_id}: {len(items)} items extracted")
                 elif agenda_url:
-                    result["packet_url"] = agenda_url  # Fallback for monolithic processing
-                    logger.info(
-                        f"[chicago:{self.slug}] Meeting {meeting_id} ({body}): "
-                        f"no items, using packet URL"
-                    )
+                    result["packet_url"] = agenda_url
+                    logger.info(f"[chicago:{self.slug}] Meeting {meeting_id}: fallback to packet URL")
                 else:
-                    logger.debug(
-                        f"[chicago:{self.slug}] Meeting {meeting_id} ({body}): "
-                        f"no items or agenda file, skipping"
-                    )
+                    logger.debug(f"[chicago:{self.slug}] Meeting {meeting_id}: no data, skipping")
                     continue
 
                 # Add video/transcript links if available
@@ -201,9 +193,14 @@ class ChicagoAdapter(BaseAdapter):
 
         try:
             response = self._get(detail_url)
-            return response.json()
         except Exception as e:
-            logger.warning(f"[chicago:{self.slug}] Failed to fetch meeting detail {meeting_id}: {e}")
+            logger.warning(f"[chicago:{self.slug}] Network error fetching meeting detail {meeting_id}: {e}")
+            return None
+
+        try:
+            return response.json()
+        except ValueError as e:
+            logger.warning(f"[chicago:{self.slug}] Invalid JSON in meeting detail {meeting_id}: {e}")
             return None
 
     def _extract_agenda_items(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -309,9 +306,14 @@ class ChicagoAdapter(BaseAdapter):
 
         try:
             response = self._get(matter_url)
-            matter_data = response.json()
         except Exception as e:
-            logger.debug(f"[chicago:{self.slug}] Failed to fetch matter {matter_id}: {e}")
+            logger.debug(f"[chicago:{self.slug}] Network error fetching matter {matter_id}: {e}")
+            return []
+
+        try:
+            matter_data = response.json()
+        except ValueError as e:
+            logger.debug(f"[chicago:{self.slug}] Invalid JSON in matter {matter_id}: {e}")
             return []
 
         # Extract attachments
@@ -368,9 +370,3 @@ class ChicagoAdapter(BaseAdapter):
         except Exception as e:
             logger.warning(f"[chicago:{self.slug}] Could not parse date '{date_str}': {e}")
             return None
-
-
-# Confidence: 9/10 - Well-documented API, clear structure, proven pattern from Legistar
-# TODO: Test with real Chicago data to verify assumptions
-# TODO: Consider adding vote fetching if needed (endpoint available)
-# TODO: May need to handle pagination if >500 meetings in range
