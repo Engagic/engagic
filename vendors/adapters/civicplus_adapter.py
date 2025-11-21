@@ -10,6 +10,7 @@ This adapter handles:
 
 import re
 import requests
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
@@ -104,16 +105,23 @@ class CivicPlusAdapter(BaseAdapter):
         logger.warning(f"[civicplus:{self.slug}] Could not find agenda page")
         return None
 
-    def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
+    def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """
         Fetch meetings from CivicPlus site with date filtering.
 
-        Uses AgendaCenter Search endpoint to limit results to recent meetings only.
-        Default: today to 2 weeks forward.
+        Scrapes AgendaCenter HTML and filters by date range.
+
+        Args:
+            days_back: Days to look backward (default 7)
+            days_forward: Days to look forward (default 14)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url
         """
+        # Calculate date range
+        today = datetime.now()
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
         agenda_url = self._find_agenda_url()
         if not agenda_url:
             logger.error(
@@ -132,23 +140,57 @@ class CivicPlusAdapter(BaseAdapter):
                 f"[civicplus:{self.slug}] Found {len(meeting_links)} meeting links"
             )
 
+            meetings_in_range = 0
             for link_data in meeting_links:
                 # For ViewFile links, we can yield directly without scraping
                 if '/ViewFile/Agenda/' in link_data['url']:
                     # Extract meeting info from the link itself
                     meeting = self._create_meeting_from_viewfile_link(link_data)
-                    if meeting:
+                    if meeting and self._is_meeting_in_range(meeting, start_date, end_date):
+                        meetings_in_range += 1
                         yield meeting
                 else:
                     # For other links, scrape the page for PDFs
                     meeting = self._scrape_meeting_page(
                         link_data["url"], link_data["title"]
                     )
-                    if meeting:
+                    if meeting and self._is_meeting_in_range(meeting, start_date, end_date):
+                        meetings_in_range += 1
                         yield meeting
+
+            logger.info(
+                f"[civicplus:{self.slug}] Filtered to {meetings_in_range} meetings "
+                f"in date range ({start_date.date()} to {end_date.date()})"
+            )
 
         except Exception as e:
             logger.error(f"[civicplus:{self.slug}] Failed to fetch meetings: {e}")
+
+    def _is_meeting_in_range(
+        self, meeting: Dict[str, Any], start_date: datetime, end_date: datetime
+    ) -> bool:
+        """
+        Check if meeting date is within range.
+
+        Args:
+            meeting: Meeting dict with 'start' field
+            start_date: Start of date range
+            end_date: End of date range
+
+        Returns:
+            True if meeting is within range, False otherwise
+        """
+        meeting_start = meeting.get("start")
+        if not meeting_start:
+            # If no date, include it anyway (defensive)
+            return True
+
+        try:
+            meeting_date = datetime.fromisoformat(meeting_start)
+            return start_date <= meeting_date <= end_date
+        except (ValueError, AttributeError):
+            # If date parsing fails, include it anyway (defensive)
+            return True
 
     def _extract_meeting_links(
         self, soup: BeautifulSoup, base_url: str

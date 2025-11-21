@@ -4,7 +4,8 @@ PrimeGov Adapter - Thin wrapper for PrimeGov municipal calendar API
 Cities using PrimeGov: Palo Alto CA, Mountain View CA, Sunnyvale CA, and many others
 """
 
-from typing import Dict, Any, Iterator
+from datetime import datetime, timedelta
+from typing import Dict, Any, Iterator, List
 from urllib.parse import urlencode
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.adapters.parsers.primegov_parser import parse_html_agenda
@@ -42,21 +43,83 @@ class PrimeGovAdapter(BaseAdapter):
         )
         return f"{self.base_url}/Public/CompiledDocument?{query}"
 
-    def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
+    def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """
-        Fetch upcoming meetings from PrimeGov API.
+        Fetch meetings from PrimeGov API within date range.
+
+        Combines ListUpcomingMeetings (future) and ListArchivedMeetings (past)
+        to capture the full window.
+
+        Args:
+            days_back: Days to look backward (default 7)
+            days_forward: Days to look forward (default 14)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url
         """
-        # Fetch from PrimeGov API
-        api_url = f"{self.base_url}/api/v2/PublicPortal/ListUpcomingMeetings"
-        response = self._get(api_url)
-        meetings = response.json()
+        # Calculate date range
+        today = datetime.now()
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
 
-        logger.info(f"[primegov:{self.slug}] Retrieved {len(meetings)} meetings")
+        # Fetch upcoming meetings (future)
+        upcoming_url = f"{self.base_url}/api/v2/PublicPortal/ListUpcomingMeetings"
+        upcoming_response = self._get(upcoming_url)
+        upcoming_meetings = upcoming_response.json()
 
-        for meeting in meetings:
+        # Fetch archived meetings for current year (past)
+        # Note: If date range spans multiple years, fetch both years
+        archived_meetings: List[Dict[str, Any]] = []
+        years_to_fetch = set([start_date.year, today.year])
+        for year in years_to_fetch:
+            archived_url = f"{self.base_url}/api/v2/PublicPortal/ListArchivedMeetings?year={year}"
+            archived_response = self._get(archived_url)
+            archived_meetings.extend(archived_response.json())
+
+        # Combine and deduplicate by meeting ID
+        all_meetings = upcoming_meetings + archived_meetings
+        seen_ids = set()
+        unique_meetings = []
+        for meeting in all_meetings:
+            meeting_id = meeting.get("id")
+            if meeting_id not in seen_ids:
+                seen_ids.add(meeting_id)
+                unique_meetings.append(meeting)
+
+        logger.info(
+            f"[primegov:{self.slug}] Retrieved {len(upcoming_meetings)} upcoming, "
+            f"{len(archived_meetings)} archived ({len(unique_meetings)} unique)"
+        )
+
+        # Filter meetings to date range and process
+        meetings_in_range = []
+        for meeting in unique_meetings:
+            # Parse meeting datetime
+            date_str = meeting.get("dateTime", "")
+            if not date_str:
+                continue
+
+            try:
+                meeting_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                # Remove timezone for comparison
+                meeting_date = meeting_date.replace(tzinfo=None)
+
+                # Check if within range
+                if start_date <= meeting_date <= end_date:
+                    meetings_in_range.append(meeting)
+            except (ValueError, AttributeError):
+                # If date parsing fails, include it anyway (defensive)
+                logger.debug(
+                    f"[primegov:{self.slug}] Failed to parse date: {date_str}, including anyway"
+                )
+                meetings_in_range.append(meeting)
+
+        logger.info(
+            f"[primegov:{self.slug}] Filtered to {len(meetings_in_range)} meetings "
+            f"in date range ({start_date.date()} to {end_date.date()})"
+        )
+
+        for meeting in meetings_in_range:
             title = meeting.get("title", "")
 
             # Skip SAP (Spanish Audio/Video) broadcast duplicates
@@ -81,6 +144,21 @@ class PrimeGovAdapter(BaseAdapter):
 
             # Parse meeting status from title and datetime
             meeting_status = self._parse_meeting_status(title, date_time)
+
+            # PrimeGov-specific: Check meetingState field
+            # meetingState: 3 = cancelled/recess
+            meeting_state = meeting.get("meetingState")
+            if meeting_state == 3 and not meeting_status:
+                meeting_status = "cancelled"
+
+            # PrimeGov-specific: Check document names for cancellation/recess notices
+            if not meeting_status:
+                doc_list = meeting.get("documentList", [])
+                for doc in doc_list:
+                    doc_name = doc.get("templateName", "").lower()
+                    if "cancel" in doc_name or "recess" in doc_name:
+                        meeting_status = "cancelled"
+                        break
 
             result = {
                 "meeting_id": str(meeting["id"]),
