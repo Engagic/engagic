@@ -30,7 +30,9 @@ class Config:
 
     def __init__(self):
         # Database configuration - unified database (Phase 1 refactor)
-        self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", "/root/engagic/data")
+        # Default to repo-relative path for portability (VPS overrides via env vars)
+        default_data_dir = os.path.join(os.getcwd(), "data")
+        self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", default_data_dir)
         self.UNIFIED_DB_PATH = os.getenv(
             "ENGAGIC_UNIFIED_DB", f"{self.DB_DIR}/engagic.db"
         )
@@ -40,7 +42,9 @@ class Config:
         self.MEETINGS_DB_PATH = f"{self.DB_DIR}/meetings.db"
         self.ANALYTICS_DB_PATH = f"{self.DB_DIR}/analytics.db"
 
-        self.LOG_PATH = os.getenv("ENGAGIC_LOG_PATH", "/root/engagic/engagic.log")
+        # Default log path to repo-relative
+        default_log_path = os.path.join(os.getcwd(), "engagic.log")
+        self.LOG_PATH = os.getenv("ENGAGIC_LOG_PATH", default_log_path)
 
         # API configuration
         self.API_HOST = os.getenv("ENGAGIC_HOST", "0.0.0.0")
@@ -114,19 +118,22 @@ class Config:
         if not any([self.ANTHROPIC_API_KEY, self.GEMINI_API_KEY, self.LLM_API_KEY]):
             logger.warning("No LLM API key configured - AI features will be disabled")
 
-        db_dir = os.path.dirname(self.UNIFIED_DB_PATH)
-        if db_dir and not os.path.exists(db_dir):
-            logger.info(f"Creating database directory: {db_dir}")
-            os.makedirs(db_dir, exist_ok=True)
-
-        if not os.path.exists(os.path.dirname(self.LOG_PATH)):
-            logger.warning(
-                f"Log directory does not exist: {os.path.dirname(self.LOG_PATH)}"
-            )
-
     def get_api_key(self) -> Optional[str]:
         """Get the appropriate API key for LLM services - prioritize Gemini"""
         return self.GEMINI_API_KEY or self.LLM_API_KEY or self.ANTHROPIC_API_KEY
+
+    def ensure_data_dir(self) -> str:
+        """Lazily create data directory if it doesn't exist
+
+        Returns:
+            Path to the data directory
+
+        Note: Only creates directories when actually needed, not at import time
+        """
+        if not os.path.exists(self.DB_DIR):
+            logger.info("creating data directory", path=self.DB_DIR)
+            os.makedirs(self.DB_DIR, exist_ok=True)
+        return self.DB_DIR
 
     def is_development(self) -> bool:
         """Check if running in development mode"""

@@ -11,23 +11,33 @@ import os
 from typing import List, Optional
 from importlib.resources import files
 
-from config import get_logger
+from config import get_logger, config
 
 logger = get_logger(__name__).bind(component="analyzer")
 
 
-# Set up dedicated logger for unknown topics (taxonomy improvement)
-unknown_topics_logger = logging.getLogger("engagic.unknown_topics")
-if not unknown_topics_logger.handlers:
-    log_dir = os.getenv("ENGAGIC_DB_DIR", "/root/engagic/data")
-    unknown_topics_file = os.path.join(log_dir, "unknown_topics.log")
+def _get_unknown_topics_logger() -> logging.Logger:
+    """Lazily initialize unknown topics logger with proper directory handling
 
-    # Create file handler
-    handler = logging.FileHandler(unknown_topics_file, mode='a')
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-    unknown_topics_logger.addHandler(handler)
-    unknown_topics_logger.setLevel(logging.INFO)
-    unknown_topics_logger.propagate = False  # Don't propagate to parent logger
+    Defers file creation until first use to avoid import-time crashes.
+    Uses config.DB_DIR to respect environment configuration.
+    """
+    logger = logging.getLogger("engagic.unknown_topics")
+
+    # Only initialize once
+    if not logger.handlers:
+        # Use configured DB directory, ensure it exists
+        log_file = os.path.join(config.DB_DIR, "unknown_topics.log")
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+        # Create file handler
+        handler = logging.FileHandler(log_file, mode='a')
+        handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+    return logger
 
 
 class TopicNormalizer:
@@ -146,13 +156,13 @@ class TopicNormalizer:
         """
         Track unknown topics for taxonomy improvement
 
-        Logs to dedicated file: /root/engagic/data/unknown_topics.log
+        Logs to dedicated file: {config.DB_DIR}/unknown_topics.log
 
         Args:
             topic: Unknown topic string (lowercased)
         """
         # Log to dedicated file for taxonomy analysis
-        unknown_topics_logger.info(topic)
+        _get_unknown_topics_logger().info(topic)
 
     def normalize_single(self, topic: str) -> str:
         """
