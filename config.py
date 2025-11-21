@@ -175,11 +175,10 @@ def configure_structlog(is_development: bool = False, log_level: str = "INFO"):
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
     # Shared processors for all modes
+    # Note: No timestamp processor - systemd/journald already provides timestamps
     shared_processors = [
         structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.StackInfoRenderer(),
     ]
