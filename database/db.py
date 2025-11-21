@@ -262,8 +262,6 @@ class UnifiedDatabase:
 
                 # Compute attachment hash for deduplication
                 # Uses fast URL-only mode by default
-                # For better change detection (at cost of latency), use:
-                # attachment_hash = hash_attachments(agenda_item.attachments, include_metadata=True)
                 attachment_hash = hash_attachments(agenda_item.attachments)
 
                 if existing_matter:

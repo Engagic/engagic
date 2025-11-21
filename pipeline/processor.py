@@ -508,7 +508,7 @@ class Processor:
 
         if not item_parts:
             logger.warning("no text extracted for item", title=item.title[:50])
-            raise ExtractionError(
+            raise ProcessingError(
                 "No text extracted from agenda item",
                 context={"item_id": item.id, "item_title": item.title[:100]}
             )

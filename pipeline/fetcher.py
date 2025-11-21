@@ -79,15 +79,12 @@ class Fetcher:
         logger.info("syncing cities with rate limiting", city_count=len(cities))
 
         # Group cities by vendor for polite crawling (only supported vendors)
+        # Temporarily disabled: granicus (VPS timeout issues), civicclerk, civicplus
         supported_vendors = {
             "primegov",
             "legistar",
             "novusagenda",  # Item-level processing enabled
             "iqm2",  # Item-level processing enabled
-            # Temporarily disabled vendors
-            # "granicus",  # VPS timeout issues
-            # "civicclerk",
-            # "civicplus",
         }
 
         by_vendor = {}

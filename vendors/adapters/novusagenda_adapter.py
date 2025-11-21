@@ -56,7 +56,6 @@ class NovusAgendaAdapter(BaseAdapter):
             # Extract meeting data
             date_str = cells[0].get_text(strip=True)
             meeting_type = cells[1].get_text(strip=True)
-            # location = cells[2].get_text(strip=True)  # Available if needed
 
             # Parse and filter by date (format: MM/DD/YY)
             try:
