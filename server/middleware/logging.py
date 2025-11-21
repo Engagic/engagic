@@ -9,7 +9,7 @@ from fastapi import Request
 
 from config import get_logger
 
-logger = get_logger(__name__).bind(component="engagic")
+logger = get_logger(__name__)
 
 
 async def log_requests(request: Request, call_next):
