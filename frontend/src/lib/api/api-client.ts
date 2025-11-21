@@ -13,6 +13,9 @@ import type {
 } from './types';
 import { ApiError, NetworkError } from './types';
 
+// Request deduplication: Prevent duplicate concurrent calls
+const inflightRequests = new Map<string, Promise<any>>();
+
 // Retry logic for failed requests
 async function fetchWithRetry(
 	url: string,
@@ -200,14 +203,30 @@ export const apiClient = {
 	},
 
 	async getMatterTimeline(matterId: string, clientIp?: string): Promise<MatterTimelineResponse> {
-		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/matters/${matterId}/timeline`,
-			{},
-			config.maxRetries,
-			clientIp
-		);
+		const cacheKey = `timeline:${matterId}`;
 
-		return response.json();
+		// Return existing in-flight request if one exists
+		if (inflightRequests.has(cacheKey)) {
+			return inflightRequests.get(cacheKey)!;
+		}
+
+		// Create and track new request
+		const request = (async () => {
+			try {
+				const response = await fetchWithRetry(
+					`${config.apiBaseUrl}/api/matters/${matterId}/timeline`,
+					{},
+					config.maxRetries,
+					clientIp
+				);
+				return response.json();
+			} finally {
+				inflightRequests.delete(cacheKey);
+			}
+		})();
+
+		inflightRequests.set(cacheKey, request);
+		return request;
 	},
 
 	async getCityMatters(banana: string, limit: number = 50, offset: number = 0, clientIp?: string): Promise<GetCityMattersResponse> {
