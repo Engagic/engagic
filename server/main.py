@@ -18,6 +18,8 @@ from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard
+from userland.auth import init_jwt
+from userland.database.db import UserlandDB
 
 logger = get_logger(__name__)
 
@@ -55,13 +57,11 @@ db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 logger.info("initialized shared database", db_path=config.UNIFIED_DB_PATH)
 
 # Initialize userland database for auth and user features
-from userland.database.db import UserlandDB
 userland_db_path = os.getenv('USERLAND_DB', str(config.DB_DIR) + '/userland.db')
 userland_db = UserlandDB(userland_db_path, silent=True)
 logger.info("initialized userland database", db_path=userland_db_path)
 
 # Initialize JWT for authentication
-from userland.auth import init_jwt
 jwt_secret = os.getenv('USERLAND_JWT_SECRET')
 if not jwt_secret:
     logger.warning("WARNING: USERLAND_JWT_SECRET not set. Auth features will not work.")
