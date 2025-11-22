@@ -19,15 +19,15 @@ def backfill_canonical_summaries():
     conn.row_factory = sqlite3.Row
 
     # Find matters where items have summaries but canonical_summary is NULL
+    # CRITICAL: Join on composite matter_id to prevent cross-city collisions
     matters_to_backfill = conn.execute("""
         SELECT
             m.id,
             m.matter_file,
-            m.matter_id,
             m.banana,
             COUNT(i.id) as item_count
         FROM city_matters m
-        JOIN items i ON (i.matter_file = m.matter_file OR i.matter_id = m.matter_id)
+        JOIN items i ON i.matter_id = m.id
         WHERE (m.canonical_summary IS NULL OR m.canonical_summary = '')
         AND i.summary IS NOT NULL
         GROUP BY m.id
@@ -43,14 +43,15 @@ def backfill_canonical_summaries():
 
         # Get the first item with a summary as the representative summary
         # (This matches the logic where we pick a representative item)
+        # CRITICAL: Query by composite matter_id to prevent cross-city collisions
         item = conn.execute("""
             SELECT summary, topics
             FROM items
-            WHERE (matter_file = ? OR matter_id = ?)
+            WHERE matter_id = ?
             AND summary IS NOT NULL
             ORDER BY sequence ASC
             LIMIT 1
-        """, (matter['matter_file'], matter['matter_id'])).fetchone()
+        """, (matter_id,)).fetchone()
 
         if not item:
             continue

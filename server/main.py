@@ -15,7 +15,7 @@ from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
-from server.routes import search, meetings, topics, admin, monitoring, flyer, matters
+from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate
 
 logger = get_logger(__name__)
 
@@ -82,6 +82,7 @@ app.include_router(topics.router)      # Topic endpoints
 app.include_router(admin.router)       # Admin endpoints
 app.include_router(flyer.router)       # Flyer generation endpoints
 app.include_router(matters.router)     # Matter timeline and tracking endpoints
+app.include_router(donate.router)      # Donation and payment endpoints
 
 
 if __name__ == "__main__":

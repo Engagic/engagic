@@ -326,12 +326,19 @@ class MeetingIngestionService:
         item_title: str,
         is_procedural: bool
     ) -> Optional[str]:
-        """Generate composite matter_id for FK relationship (or None if procedural)"""
+        """Generate composite matter_id for FK relationship (or None if procedural)
+
+        Fallback hierarchy:
+        1. matter_file (preferred) - Stable vendor identifier
+        2. matter_id (vendor UUID) - May be unstable for some vendors
+        3. title (normalized) - For cities without stable vendor IDs
+        4. None - Procedural items or generic titles
+        """
         raw_matter_id = item_data.get("matter_id")
         raw_matter_file = item_data.get("matter_file")
 
-        # Skip matter tracking for procedural items
-        if is_procedural or not (raw_matter_id or raw_matter_file):
+        # Skip matter tracking for explicitly procedural items
+        if is_procedural:
             return None
 
         # Additional check: skip if matter_type is procedural
@@ -343,6 +350,31 @@ class MeetingIngestionService:
             )
             return None
 
+        # If no vendor IDs, try title-based fallback
+        if not raw_matter_file and not raw_matter_id:
+            try:
+                composite_id = generate_matter_id(
+                    banana=city.banana,
+                    title=item_title
+                )
+                if composite_id is None:
+                    # Generic title excluded from deduplication
+                    logger.debug(
+                        "generic title excluded from matter tracking",
+                        item_title=item_title[:60]
+                    )
+                    return None
+                logger.debug(
+                    "using title-based matter ID",
+                    item_title=item_title[:60],
+                    matter_id=composite_id[:20] + "..."
+                )
+                return composite_id
+            except ValueError:
+                # No valid identifier available
+                return None
+
+        # Use vendor IDs (original behavior)
         try:
             return generate_matter_id(
                 banana=city.banana,

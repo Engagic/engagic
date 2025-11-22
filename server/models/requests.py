@@ -117,3 +117,15 @@ class FlyerRequest(BaseModel):
         if len(sanitized) > 100:
             raise ValueError("User name too long (max 100 characters)")
         return sanitized
+
+
+class DonateRequest(BaseModel):
+    amount: int
+
+    @validator("amount")
+    def validate_amount(cls, v):
+        if v < 100:
+            raise ValueError("Donation amount must be at least $1.00 (100 cents)")
+        if v > 1000000:
+            raise ValueError("Donation amount cannot exceed $10,000.00 (1,000,000 cents)")
+        return v
