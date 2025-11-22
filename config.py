@@ -63,6 +63,16 @@ class Config:
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Google Gemini API
         self.LLM_API_KEY = os.getenv("LLM_API_KEY")  # Fallback
 
+        # Payment processing
+        self.STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+        self.STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
+
+        # Frontend URL for payment redirects
+        self.FRONTEND_URL = os.getenv(
+            "ENGAGIC_FRONTEND_URL",
+            "https://engagic.org"
+        )
+
         # CORS settings
         self.ALLOWED_ORIGINS = self._parse_origins(
             os.getenv(
