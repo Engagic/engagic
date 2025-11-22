@@ -1,0 +1,359 @@
+"""
+Weekly Digest Script
+
+Runs every Sunday at 9am. Sends users a digest of:
+1. Upcoming meetings this week (all meetings for their city)
+2. Keyword matches (items mentioning their keywords)
+
+Usage:
+    python3 -m userland.scripts.weekly_digest
+
+Cron:
+    0 9 * * 0 cd /root/engagic && .venv/bin/python -m userland.scripts.weekly_digest
+"""
+
+import os
+import sys
+import logging
+from datetime import datetime, timedelta
+from typing import List, Dict, Any
+
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
+from userland.database.db import UserlandDB
+from userland.email.emailer import EmailService
+
+logging.basicConfig(
+    level=os.getenv('LOG_LEVEL', 'INFO'),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("engagic.weekly_digest")
+
+
+def get_upcoming_meetings(city_banana: str, engagic_db_path: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
+    """
+    Get upcoming meetings for a city in the next N days.
+
+    Reads from engagic.db (read-only).
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(f"file:{engagic_db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    query = """
+        SELECT
+            id,
+            city_banana,
+            title,
+            date,
+            source_url,
+            agenda_url
+        FROM meetings
+        WHERE city_banana = ?
+            AND date >= ?
+            AND date <= ?
+        ORDER BY date ASC
+    """
+
+    cursor = conn.execute(query, (city_banana, today.isoformat(), end_date.isoformat()))
+    meetings = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return meetings
+
+
+def find_keyword_matches(
+    city_banana: str,
+    keywords: List[str],
+    engagic_db_path: str,
+    days_ahead: int = 7
+) -> List[Dict[str, Any]]:
+    """
+    Find items in upcoming meetings that mention user's keywords.
+
+    Returns list of matches with meeting and item details.
+    """
+    if not keywords:
+        return []
+
+    import sqlite3
+
+    conn = sqlite3.connect(f"file:{engagic_db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    matches = []
+
+    for keyword in keywords:
+        # Search in agenda items
+        query = """
+            SELECT
+                ai.id as item_id,
+                ai.meeting_id,
+                ai.title as item_title,
+                ai.summary,
+                ai.position,
+                m.title as meeting_title,
+                m.date as meeting_date,
+                m.source_url,
+                m.agenda_url
+            FROM agenda_items ai
+            JOIN meetings m ON ai.meeting_id = m.id
+            WHERE m.city_banana = ?
+                AND m.date >= ?
+                AND m.date <= ?
+                AND (
+                    ai.title LIKE ?
+                    OR ai.summary LIKE ?
+                )
+            ORDER BY m.date ASC, ai.position ASC
+            LIMIT 50
+        """
+
+        keyword_pattern = f"%{keyword}%"
+        cursor = conn.execute(
+            query,
+            (city_banana, today.isoformat(), end_date.isoformat(), keyword_pattern, keyword_pattern)
+        )
+
+        for row in cursor.fetchall():
+            matches.append({
+                'keyword': keyword,
+                'item_id': row['item_id'],
+                'meeting_id': row['meeting_id'],
+                'item_title': row['item_title'],
+                'item_summary': row['summary'],
+                'item_position': row['position'],
+                'meeting_title': row['meeting_title'],
+                'meeting_date': row['meeting_date'],
+                'source_url': row['source_url'],
+                'agenda_url': row['agenda_url']
+            })
+
+    conn.close()
+    return matches
+
+
+def build_digest_email(
+    user_name: str,
+    city_name: str,
+    upcoming_meetings: List[Dict[str, Any]],
+    keyword_matches: List[Dict[str, Any]],
+    app_url: str
+) -> str:
+    """Build HTML email for weekly digest"""
+
+    # Format meeting dates
+    def format_date(date_str: str) -> str:
+        date_obj = datetime.fromisoformat(date_str)
+        return date_obj.strftime("%a, %b %d")
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb;">
+    <div style="background: white; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h1 style="font-size: 24px; font-weight: 600; color: #111827; margin: 0 0 8px 0;">
+            This week in {city_name}
+        </h1>
+        <p style="color: #6b7280; margin: 0 0 32px 0; font-size: 14px;">
+            Your weekly civic update from Engagic
+        </p>
+"""
+
+    # Upcoming meetings section
+    if upcoming_meetings:
+        html += """
+        <div style="margin-bottom: 40px;">
+            <h2 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
+                📅 Upcoming Meetings This Week
+            </h2>
+"""
+        for meeting in upcoming_meetings:
+            html += f"""
+            <div style="margin-bottom: 16px; padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #0891b2;">
+                <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">
+                    {format_date(meeting['date'])} - {meeting['title']}
+                </div>
+                <a href="{app_url}/cities/{meeting['city_banana']}" style="color: #0891b2; text-decoration: none; font-size: 14px; font-weight: 500;">
+                    View agenda →
+                </a>
+            </div>
+"""
+        html += """
+        </div>
+"""
+    else:
+        html += """
+        <div style="margin-bottom: 40px;">
+            <h2 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">
+                📅 Upcoming Meetings This Week
+            </h2>
+            <p style="color: #6b7280; font-size: 14px;">No meetings scheduled for this week.</p>
+        </div>
+"""
+
+    # Keyword matches section
+    if keyword_matches:
+        # Group by meeting
+        meetings_map: Dict[str, Any] = {}
+        for match in keyword_matches:
+            mid = match['meeting_id']
+            if mid not in meetings_map:
+                meetings_map[mid] = {
+                    'title': match['meeting_title'],
+                    'date': match['meeting_date'],
+                    'city_banana': city_name.lower().replace(' ', ''),
+                    'items': []
+                }
+            meetings_map[mid]['items'].append(match)
+
+        html += """
+        <div style="margin-bottom: 32px;">
+            <h2 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
+                🔍 Your Keywords Mentioned
+            </h2>
+"""
+        for meeting_id, meeting_data in meetings_map.items():
+            html += f"""
+            <div style="margin-bottom: 24px; padding: 16px; background: #fef3c7; border-radius: 8px; border-left: 3px solid #f59e0b;">
+                <div style="font-weight: 600; color: #111827; margin-bottom: 12px;">
+                    {meeting_data['title']} ({format_date(meeting_data['date'])})
+                </div>
+"""
+            for item in meeting_data['items']:
+                summary_preview = item['item_summary'][:150] + '...' if item['item_summary'] and len(item['item_summary']) > 150 else item['item_summary'] or ''
+                html += f"""
+                <div style="margin-bottom: 12px; padding-left: 12px;">
+                    <div style="margin-bottom: 4px;">
+                        <span style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">
+                            {item['keyword']}
+                        </span>
+                        <span style="color: #111827; font-weight: 500; margin-left: 8px;">
+                            Item {item['item_position']}: {item['item_title']}
+                        </span>
+                    </div>
+                    {f'<p style="color: #6b7280; font-size: 13px; margin: 4px 0 0 0; line-height: 1.5;">{summary_preview}</p>' if summary_preview else ''}
+                </div>
+"""
+            html += f"""
+                <a href="{app_url}/cities/{meeting_data['city_banana']}" style="color: #f59e0b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                    View full meeting →
+                </a>
+            </div>
+"""
+        html += """
+        </div>
+"""
+
+    # Footer
+    html += f"""
+        <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; text-align: center;">
+            <p style="color: #9ca3af; font-size: 12px; margin: 0 0 8px 0;">
+                You're receiving this because you're watching {city_name}
+            </p>
+            <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                <a href="{app_url}/dashboard" style="color: #0891b2; text-decoration: none;">Manage subscription</a> |
+                <a href="{app_url}/unsubscribe" style="color: #9ca3af; text-decoration: none;">Unsubscribe</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+    return html
+
+
+def send_weekly_digest():
+    """Main function: Send weekly digests to all active users"""
+
+    userland_db_path = os.getenv('USERLAND_DB', '/root/engagic/data/userland.db')
+    engagic_db_path = os.getenv('ENGAGIC_UNIFIED_DB', '/root/engagic/data/engagic.db')
+    app_url = os.getenv('APP_URL', 'https://engagic.org')
+
+    logger.info("Starting weekly digest process...")
+
+    db = UserlandDB(userland_db_path, silent=True)
+    email_service = EmailService()
+
+    # Get all active alerts
+    active_alerts = db.get_active_alerts()
+    logger.info(f"Found {len(active_alerts)} active alerts")
+
+    sent_count = 0
+    error_count = 0
+
+    for alert in active_alerts:
+        try:
+            # Get user
+            user = db.get_user(alert.user_id)
+            if not user:
+                logger.warning(f"User not found for alert {alert.id}")
+                continue
+
+            # Get primary city (first city in alert)
+            if not alert.cities or len(alert.cities) == 0:
+                logger.warning(f"Alert {alert.id} has no cities configured")
+                continue
+
+            primary_city = alert.cities[0]
+            logger.info(f"Processing digest for {user.email} ({primary_city})...")
+
+            # Get upcoming meetings
+            upcoming_meetings = get_upcoming_meetings(primary_city, engagic_db_path, days_ahead=7)
+
+            # Get keyword matches
+            keywords = alert.criteria.get('keywords', [])
+            keyword_matches = find_keyword_matches(primary_city, keywords, engagic_db_path, days_ahead=7)
+
+            # Skip if no content
+            if not upcoming_meetings and not keyword_matches:
+                logger.info(f"No content for {user.email}, skipping")
+                continue
+
+            # Build email
+            city_name = primary_city  # TODO: Get actual city name from engagic.db
+            html = build_digest_email(
+                user_name=user.name,
+                city_name=city_name,
+                upcoming_meetings=upcoming_meetings,
+                keyword_matches=keyword_matches,
+                app_url=app_url
+            )
+
+            # Send email
+            subject = f"This week in {city_name}"
+            if keyword_matches:
+                subject += f" - {len(keyword_matches)} keyword matches"
+
+            email_service.send_email(
+                to_email=user.email,
+                subject=subject,
+                html_body=html
+            )
+
+            sent_count += 1
+            logger.info(f"Sent digest to {user.email}")
+
+        except Exception as e:
+            error_count += 1
+            logger.error(f"Failed to send digest for alert {alert.id}: {e}")
+            continue
+
+    logger.info(f"Weekly digest complete: {sent_count} sent, {error_count} errors")
+    return sent_count, error_count
+
+
+if __name__ == "__main__":
+    send_weekly_digest()
