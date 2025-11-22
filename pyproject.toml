@@ -26,6 +26,7 @@ dependencies = [
     "anthropic>=0.64.0",
     "beautifulsoup4>=4.13.5",
     "click>=8.1.0",
+    "email-validator>=2.0.0",
     "fastapi>=0.116.1",
     "google-genai",
     "lxml",
@@ -51,6 +52,7 @@ dependencies = [
     "maturin",
     "python-levenshtein>=0.27.1",
     "feedparser>=6.0.12",
+    "pydantic>=2.11.7",
 ]
 
 [project.scripts]

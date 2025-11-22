@@ -1,5 +1,21 @@
-"""Userland server module"""
+"""Userland server module - Pydantic models for auth and dashboard endpoints"""
 
-from userland.server.main import app
+from userland.server.models import (
+    SignupRequest,
+    LoginRequest,
+    AlertUpdateRequest,
+    MagicLinkResponse,
+    TokenResponse,
+    UserResponse,
+    ErrorResponse,
+)
 
-__all__ = ["app"]
+__all__ = [
+    "SignupRequest",
+    "LoginRequest",
+    "AlertUpdateRequest",
+    "MagicLinkResponse",
+    "TokenResponse",
+    "UserResponse",
+    "ErrorResponse",
+]
