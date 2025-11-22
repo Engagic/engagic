@@ -17,6 +17,7 @@ class AttachmentSchema(BaseModel):
     name: str
     url: str
     type: str  # pdf, doc, spreadsheet, unknown
+    history_id: Optional[str] = None  # PrimeGov-specific identifier for downloading
 
     @field_validator("url")
     @classmethod
