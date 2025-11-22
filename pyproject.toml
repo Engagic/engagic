@@ -11,7 +11,7 @@ database = ["schema.sql", "migrations/*.sql"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["vendors*", "parsing*", "analysis*", "pipeline*", "database*", "server*"]
+include = ["vendors*", "parsing*", "analysis*", "pipeline*", "database*", "server*", "userland*"]
 exclude = ["tests*", "scripts*", "docs*", "frontend*"]
 
 [project]
@@ -26,6 +26,7 @@ dependencies = [
     "anthropic>=0.64.0",
     "beautifulsoup4>=4.13.5",
     "click>=8.1.0",
+    "email-validator>=2.0.0",
     "fastapi>=0.116.1",
     "google-genai",
     "lxml",
@@ -36,6 +37,7 @@ dependencies = [
     "psutil",
     "pymupdf>=1.26.4",
     "pypdf2>=3.0.1",
+    "python-jose[cryptography]>=3.3.0",
     "pytesseract>=0.3.10",
     "python-dateutil>=2.8.2",
     "qrcode>=8.0",
@@ -50,6 +52,7 @@ dependencies = [
     "maturin",
     "python-levenshtein>=0.27.1",
     "feedparser>=6.0.12",
+    "pydantic>=2.11.7",
 ]
 
 [project.scripts]
@@ -62,7 +65,7 @@ premium = [
 ]
 
 [tool.pyright]
-include = ["vendors", "parsing", "analysis", "pipeline", "database", "server"]
+include = ["vendors", "parsing", "analysis", "pipeline", "database", "server", "userland"]
 exclude = ["**/__pycache__", ".venv", "venv", "scripts", "docs", "motioncount"]
 typeCheckingMode = "basic"  # or "standard" or "strict"
 pythonVersion = "3.13"

@@ -6,6 +6,8 @@ Routes, services, and utilities are organized into focused modules.
 """
 
 import logging
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,7 +17,9 @@ from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
-from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate
+from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard
+from userland.auth import init_jwt
+from userland.database.db import UserlandDB
 
 logger = get_logger(__name__)
 
@@ -52,8 +56,23 @@ rate_limiter = SQLiteRateLimiter(
 db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 logger.info("initialized shared database", db_path=config.UNIFIED_DB_PATH)
 
+# Initialize userland database for auth and user features
+userland_db_path = os.getenv('USERLAND_DB', str(config.DB_DIR) + '/userland.db')
+userland_db = UserlandDB(userland_db_path, silent=True)
+logger.info("initialized userland database", db_path=userland_db_path)
+
+# Initialize JWT for authentication
+jwt_secret = os.getenv('USERLAND_JWT_SECRET')
+if not jwt_secret:
+    logger.warning("WARNING: USERLAND_JWT_SECRET not set. Auth features will not work.")
+    logger.warning("Generate with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")
+else:
+    init_jwt(jwt_secret)
+    logger.info("JWT authentication initialized")
+
 # Store in app state for dependency injection
 app.state.db = db
+app.state.userland_db = userland_db
 
 
 # Register middleware (execution order: metrics -> rate limiting -> logging)
@@ -83,6 +102,8 @@ app.include_router(admin.router)       # Admin endpoints
 app.include_router(flyer.router)       # Flyer generation endpoints
 app.include_router(matters.router)     # Matter timeline and tracking endpoints
 app.include_router(donate.router)      # Donation and payment endpoints
+app.include_router(auth.router)        # Authentication endpoints (userland)
+app.include_router(dashboard.router)   # User dashboard and alerts (userland)
 
 
 if __name__ == "__main__":

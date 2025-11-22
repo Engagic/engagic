@@ -12,6 +12,7 @@
 	import MeetingCard from '$lib/components/MeetingCard.svelte';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import WatchCityModal from '$lib/components/WatchCityModal.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -24,6 +25,7 @@
 	let cityMatters = $state<any>(null);
 	let mattersLoading = $state(false);
 	let mattersChecked = $state(false);
+	let showWatchModal = $state(false);
 
 	// Data comes from server-side load function - reactive to navigation
 	const searchResults = $derived(data.searchResults);
@@ -130,7 +132,12 @@
 	<div class="city-header">
 		<a href="/" class="back-link">← Back to search</a>
 		{#if searchResults && 'city_name' in searchResults}
-			<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
+			<div class="city-title-row">
+				<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
+				<button class="watch-city-btn" onclick={() => showWatchModal = true}>
+					Get weekly updates
+				</button>
+			</div>
 			{#if searchResults.source_url && searchResults.vendor_display_name}
 				<div class="source-attribution">
 					<span class="attribution-text">Data sourced from</span>
@@ -146,6 +153,15 @@
 			{/if}
 		{/if}
 	</div>
+
+	{#if searchResults && 'city_name' in searchResults}
+		<WatchCityModal
+			cityName={searchResults.city_name}
+			cityBanana={city_banana}
+			bind:open={showWatchModal}
+			onClose={() => showWatchModal = false}
+		/>
+	{/if}
 
 	{#if searchResults && searchResults.success}
 		{#if hasQualifyingMatters()}
@@ -359,12 +375,45 @@
 		text-decoration: underline;
 	}
 
+	.city-title-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.75rem;
+	}
+
 	.city-title {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2rem;
 		color: var(--civic-dark);
-		margin: 0 0 0.75rem 0;
+		margin: 0;
 		font-weight: 600;
+	}
+
+	.watch-city-btn {
+		padding: 0.75rem 1.5rem;
+		font-size: 0.9375rem;
+		font-weight: 600;
+		background: var(--civic-blue);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s;
+		white-space: nowrap;
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	.watch-city-btn:hover {
+		background: var(--civic-accent);
+		transform: translateY(-2px);
+		box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+	}
+
+	.watch-city-btn:active {
+		transform: translateY(0);
 	}
 
 	.source-attribution {

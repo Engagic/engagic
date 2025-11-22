@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.0.0",
+    "date-fns": "^3.0.0",
     "marked": "^16.4.1"
   },
   "type": "module"

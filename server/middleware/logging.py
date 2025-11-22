@@ -4,7 +4,6 @@ Request/response logging middleware
 
 
 import time
-import uuid
 from fastapi import Request
 
 from config import get_logger

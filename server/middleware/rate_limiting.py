@@ -44,8 +44,15 @@ async def rate_limit_middleware(
         response = await call_next(request)
         return response
 
-    # Check rate limit for API endpoints
-    if request.url.path.startswith("/api/"):
+    # Apply rate limiting to ALL requests (not just /api/)
+    # Scanners bypass /api/ check by hitting root, /login.php, etc.
+    should_rate_limit = True
+
+    # Optional: Whitelist monitoring endpoints (uncomment if needed)
+    # if request.url.path in ["/health", "/metrics"]:
+    #     should_rate_limit = False
+
+    if should_rate_limit:
         # Get API key from header (optional, for future use)
         api_key = request.headers.get("X-API-Key")
 
