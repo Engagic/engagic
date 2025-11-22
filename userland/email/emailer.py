@@ -337,21 +337,6 @@ class EmailService:
         canonical_summary = criteria.get("canonical_summary", "")
         keyword = criteria.get("keyword", "")
 
-        # Format dates
-        first_seen = criteria.get("first_seen", "")
-        last_seen = criteria.get("last_seen", "")
-        try:
-            first_dt = datetime.fromisoformat(first_seen)
-            first_seen_str = first_dt.strftime("%B %d, %Y")
-        except (ValueError, TypeError):
-            first_seen_str = first_seen
-
-        try:
-            last_dt = datetime.fromisoformat(last_seen)
-            last_seen_str = last_dt.strftime("%B %d, %Y")
-        except (ValueError, TypeError):
-            last_seen_str = last_seen
-
         # Build sponsor list
         sponsor_str = ", ".join(sponsors) if sponsors else "None listed"
         if len(sponsor_str) > 100:
