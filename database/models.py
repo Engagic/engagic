@@ -113,15 +113,6 @@ class Meeting:
                 value=self.processing_status
             )
 
-        # Validate at least one URL present (agenda_url or packet_url)
-        if not self.agenda_url and not self.packet_url:
-            from exceptions import ValidationError
-            raise ValidationError(
-                "Meeting must have at least one URL (agenda_url or packet_url)",
-                field="agenda_url",
-                value=None
-            )
-
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
         data = asdict(self)
