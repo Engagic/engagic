@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
 
 	const API_URL = import.meta.env.VITE_API_URL || 'https://api.engagic.org';
 
+	let donationType: 'one-time' | 'monthly' = 'one-time';
 	let selectedAmount: number | null = null;
 	let customAmount = '';
 	let loading = false;
 	let errorMessage = '';
-	let successMessage = '';
 	let showSuccess = false;
 	let showCanceled = false;
 
@@ -69,6 +68,15 @@
 			return;
 		}
 
+		if (donationType === 'monthly') {
+			// Liberapay: construct URL with custom amount
+			const dollars = (selectedAmount / 100).toFixed(2);
+			const liberapayUrl = `https://liberapay.com/engagic/donate?currency=USD&period=monthly&amount=${dollars}`;
+			window.location.href = liberapayUrl;
+			return;
+		}
+
+		// Stripe one-time donation
 		loading = true;
 		errorMessage = '';
 
@@ -101,160 +109,108 @@
 </script>
 
 <svelte:head>
-	<title>Support Engagic - Donations</title>
+	<title>Support Engagic</title>
 	<meta name="description" content="Support civic infrastructure that keeps democracy accessible" />
-	<script src="https://liberapay.com/engagic/widgets/button.js"></script>
 </svelte:head>
 
 <article class="about-content">
 	{#if showSuccess}
 		<div class="alert alert-success">
-			<h3>Thank you for your support!</h3>
-			<p>Your donation helps keep civic infrastructure open and accessible. You should receive a receipt via email shortly.</p>
+			<strong>Thank you for your generosity!</strong> Your donation helps keep civic infrastructure open and accessible.
 		</div>
 	{/if}
 
 	{#if showCanceled}
 		<div class="alert alert-info">
-			<p>Donation canceled. No charges were made. Feel free to try again when you're ready.</p>
+			Payment canceled. No charges were made.
 		</div>
 	{/if}
 
 	<section class="section">
-		<h1 class="section-heading">Support Open Civic Infrastructure</h1>
-		<p>Engagic is free to use because democracy shouldn't have a paywall. But infrastructure costs money.</p>
-		<p>We process thousands of government meetings, extract structured data, run AI summaries, and serve hundreds of thousands of API requests - all on donated resources.</p>
-	</section>
-
-	<section class="section highlight-section">
-		<h2 class="section-heading">What Your Support Funds</h2>
-		<div class="cost-list">
-			<div class="cost-item">
-				<span class="cost-label">Server Infrastructure</span>
-				<span class="cost-detail">Processing pipeline, API hosting, database storage</span>
-			</div>
-			<div class="cost-item">
-				<span class="cost-label">AI Processing Costs</span>
-				<span class="cost-detail">Gemini API calls for meeting summarization</span>
-			</div>
-			<div class="cost-item">
-				<span class="cost-label">Data Bandwidth</span>
-				<span class="cost-detail">Fetching PDFs, serving API responses, CDN costs</span>
-			</div>
-			<div class="cost-item">
-				<span class="cost-label">Development Time</span>
-				<span class="cost-detail">New city adapters, feature improvements, maintenance</span>
-			</div>
+		<h1 class="section-heading">Support Engagic</h1>
+		<p>Democracy shouldn't have a paywall. Help us keep it free.</p>
+		<div class="what-it-funds">
+			<span>Server infrastructure</span>
+			<span>AI processing</span>
+			<span>Data bandwidth</span>
+			<span>Development</span>
 		</div>
 	</section>
 
 	<section class="section">
-		<h2 class="section-heading">Ways to Support</h2>
+		<div class="donation-card">
+			<div class="toggle-container">
+				<button
+					class="toggle-button"
+					class:active={donationType === 'one-time'}
+					on:click={() => { donationType = 'one-time'; errorMessage = ''; }}
+				>
+					One-Time
+				</button>
+				<button
+					class="toggle-button"
+					class:active={donationType === 'monthly'}
+					on:click={() => { donationType = 'monthly'; errorMessage = ''; }}
+				>
+					Monthly
+				</button>
+			</div>
 
-		<div class="donation-options">
-			<div class="donation-card">
-				<h3 class="donation-heading">One-Time Donation</h3>
-				<p>Help cover immediate infrastructure costs. Every dollar goes directly to keeping the platform running.</p>
+			{#if donationType === 'monthly'}
+				<p class="card-subtitle">Sustainable funding makes the biggest impact</p>
+			{:else}
+				<p class="card-subtitle">Every dollar keeps democracy accessible</p>
+			{/if}
 
-				<div class="amount-selector">
-					<div class="preset-amounts">
-						{#each presetAmounts as preset}
-							<button
-								class="amount-button"
-								class:selected={selectedAmount === preset.value}
-								on:click={() => selectPresetAmount(preset.value)}
-								disabled={loading}
-							>
-								{preset.label}
-							</button>
-						{/each}
-					</div>
-
-					<div class="custom-amount">
-						<label for="custom-amount" class="custom-amount-label">Or enter custom amount:</label>
-						<div class="custom-amount-input-wrapper">
-							<span class="currency-symbol">$</span>
-							<input
-								id="custom-amount"
-								type="text"
-								placeholder="25.00"
-								value={customAmount}
-								on:input={handleCustomAmountInput}
-								disabled={loading}
-								class="custom-amount-input"
-							/>
-						</div>
-					</div>
-
-					{#if errorMessage}
-						<div class="error-message">{errorMessage}</div>
-					{/if}
-
+			<div class="preset-amounts">
+				{#each presetAmounts as preset}
 					<button
-						class="donate-button primary"
-						on:click={handleDonate}
-						disabled={!selectedAmount || loading}
+						class="amount-button"
+						class:selected={selectedAmount === preset.value}
+						on:click={() => selectPresetAmount(preset.value)}
+						disabled={loading}
 					>
-						{#if loading}
-							Processing...
-						{:else}
-							Donate via Stripe
-						{/if}
+						{preset.label}
 					</button>
+				{/each}
+			</div>
+
+			<div class="custom-amount">
+				<div class="input-wrapper">
+					<span class="currency">$</span>
+					<input
+						type="text"
+						placeholder="Custom amount"
+						value={customAmount}
+						on:input={handleCustomAmountInput}
+						disabled={loading}
+					/>
 				</div>
 			</div>
 
-			<div class="donation-card">
-				<h3 class="donation-heading">Monthly Support</h3>
-				<p>Sustainable funding helps us plan capacity and add more cities. Recurring support makes the biggest impact.</p>
-				<div class="button-group">
-					<div class="liberapay-wrapper">
-						<noscript>
-							<a href="https://liberapay.com/engagic/donate">
-								<img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg" />
-							</a>
-						</noscript>
-					</div>
-				</div>
-			</div>
+			{#if errorMessage}
+				<div class="error">{errorMessage}</div>
+			{/if}
 
-			<div class="donation-card">
-				<h3 class="donation-heading">Institutional Support</h3>
-				<p>Universities, foundations, or civic organizations interested in supporting large-scale civic infrastructure.</p>
-				<div class="button-group">
-					<a href="mailto:billing@engagic.org" class="donate-button">
-						Contact Us
-					</a>
-				</div>
-			</div>
+			<button
+				class="donate-button"
+				on:click={handleDonate}
+				disabled={!selectedAmount || loading}
+			>
+				{#if loading}
+					Processing...
+				{:else if donationType === 'monthly'}
+					Donate via Liberapay
+				{:else}
+					Donate via Stripe
+				{/if}
+			</button>
 		</div>
 	</section>
 
 	<section class="section">
-		<h2 class="section-heading">Other Ways to Help</h2>
-		<div class="feature-list">
-			<div class="feature-item">
-				<h3 class="feature-heading">Contribute Code</h3>
-				<p>We're open source (AGPL-3.0). Add city adapters, fix bugs, improve performance. <a href="https://github.com/Engagic/engagic" target="_blank" rel="noopener">Check out the repo</a>.</p>
-			</div>
-			<div class="feature-item">
-				<h3 class="feature-heading">Spread the Word</h3>
-				<p>Tell your local activists, journalists, and city council members. The more people use it, the more accountability we create.</p>
-			</div>
-			<div class="feature-item">
-				<h3 class="feature-heading">Report Issues</h3>
-				<p>Found a bug? Meeting data incorrect? <a href="https://github.com/Engagic/engagic/issues" target="_blank" rel="noopener">File an issue</a> and help us improve.</p>
-			</div>
-		</div>
-	</section>
-
-	<section class="section transparency-section">
-		<h2 class="section-heading">Financial Transparency</h2>
-		<p class="philosophy-lead">We believe in full transparency. Monthly cost breakdowns and sponsor acknowledgments coming soon.</p>
-		<p>Current estimated monthly operating cost: <strong>$XXX/month</strong></p>
-		<p>Current monthly support: <strong>$XXX/month</strong></p>
 		<p class="contact-footer">
-			Questions about where the money goes? <a href="mailto:billing@engagic.org">billing@engagic.org</a>
+			Questions? <a href="mailto:billing@engagic.org">billing@engagic.org</a>
 		</p>
 	</section>
 </article>
@@ -266,33 +222,6 @@
 		gap: var(--space-xl);
 		padding-bottom: var(--space-xl);
 		color: var(--text-primary);
-	}
-
-	.alert {
-		padding: var(--space-lg);
-		border-radius: var(--radius-md);
-		margin-bottom: var(--space-lg);
-	}
-
-	.alert-success {
-		background: var(--surface-secondary);
-		border: 2px solid var(--civic-green);
-	}
-
-	.alert-success h3 {
-		color: var(--civic-green);
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.25rem;
-		margin: 0 0 var(--space-sm) 0;
-	}
-
-	.alert-info {
-		background: var(--surface-secondary);
-		border: 2px solid var(--civic-blue);
-	}
-
-	.alert p {
-		margin: 0;
 	}
 
 	.section {
@@ -321,62 +250,48 @@
 		margin: 0;
 	}
 
-	.highlight-section {
+	.alert {
+		padding: var(--space-md) var(--space-lg);
+		border-radius: var(--radius-md);
+		font-size: 1rem;
+		text-align: center;
+		margin-bottom: var(--space-md);
+	}
+
+	.alert-success {
+		background: #e8f5e9;
+		border: 2px solid var(--civic-green);
+		color: #2e7d32;
+	}
+
+	.alert-info {
 		background: var(--surface-secondary);
 		border: 2px solid var(--civic-blue);
-		border-radius: var(--radius-lg);
-		padding: var(--space-2xl);
-		gap: var(--space-xl);
-	}
-
-	.transparency-section {
-		background: var(--surface-secondary);
-		border: 2px solid var(--civic-green);
-		border-radius: var(--radius-lg);
-		padding: var(--space-2xl);
-		gap: var(--space-lg);
-	}
-
-	.cost-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-md);
-	}
-
-	.cost-item {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-xs);
-		padding: var(--space-md);
-		background: var(--surface-primary);
-		border-radius: var(--radius-sm);
-		border-left: 3px solid var(--civic-blue);
-	}
-
-	.cost-label {
-		font-family: 'IBM Plex Mono', monospace;
-		font-weight: 600;
-		font-size: 1.1rem;
 		color: var(--text-primary);
 	}
 
-	.cost-detail {
-		font-size: 1rem;
+	.what-it-funds {
+		display: flex;
+		gap: var(--space-lg);
+		flex-wrap: wrap;
+		font-size: 0.9rem;
 		color: var(--civic-gray);
-		line-height: 1.6;
+		font-family: 'IBM Plex Mono', monospace;
+		padding-top: var(--space-xs);
 	}
 
-	.donation-options {
-		display: grid;
-		gap: var(--space-lg);
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	.what-it-funds span {
+		opacity: 0.7;
 	}
 
 	.donation-card {
+		max-width: 600px;
+		margin: 0 auto;
+		width: 100%;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
-		padding: var(--space-xl);
+		gap: var(--space-lg);
+		padding: var(--space-2xl);
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
 		border-radius: var(--radius-lg);
@@ -388,24 +303,49 @@
 		box-shadow: 0 4px 16px var(--shadow-md);
 	}
 
-	.donation-heading {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		margin: 0;
+	.toggle-container {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--space-sm);
+		padding: 4px;
+		background: var(--surface-secondary);
+		border-radius: var(--radius-md);
 	}
 
-	.amount-selector {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-md);
-		margin-top: var(--space-sm);
+	.toggle-button {
+		padding: var(--space-md);
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1rem;
+		font-weight: 600;
+		border-radius: var(--radius-sm);
+		border: none;
+		background: transparent;
+		color: var(--text-secondary);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.toggle-button.active {
+		background: var(--civic-blue);
+		color: var(--civic-white);
+	}
+
+	.toggle-button:not(.active):hover {
+		background: var(--surface-primary);
+		color: var(--text-primary);
+	}
+
+	.card-subtitle {
+		font-size: 0.95rem;
+		color: var(--civic-gray);
+		text-align: center;
+		line-height: 1.4;
+		margin-top: -var(--space-md);
 	}
 
 	.preset-amounts {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+		grid-template-columns: repeat(5, 1fr);
 		gap: var(--space-sm);
 	}
 
@@ -414,7 +354,6 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1rem;
 		font-weight: 600;
-		text-align: center;
 		border-radius: var(--radius-md);
 		border: 2px solid var(--border-primary);
 		background: var(--surface-primary);
@@ -436,40 +375,31 @@
 	}
 
 	.amount-button:disabled {
-		opacity: 0.6;
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
 	.custom-amount {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-xs);
+		margin-top: -var(--space-sm);
 	}
 
-	.custom-amount-label {
-		font-size: 0.95rem;
-		color: var(--civic-gray);
-		font-family: 'IBM Plex Mono', monospace;
-	}
-
-	.custom-amount-input-wrapper {
+	.input-wrapper {
 		position: relative;
-		display: flex;
-		align-items: center;
 	}
 
-	.currency-symbol {
+	.currency {
 		position: absolute;
 		left: var(--space-md);
+		top: 50%;
+		transform: translateY(-50%);
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1rem;
 		color: var(--text-primary);
 		pointer-events: none;
 	}
 
-	.custom-amount-input {
+	.custom-amount input {
 		width: 100%;
-		padding: var(--space-md) var(--space-md) var(--space-md) var(--space-lg);
+		padding: var(--space-md) var(--space-md) var(--space-md) var(--space-xl);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1rem;
 		border: 2px solid var(--border-primary);
@@ -479,17 +409,17 @@
 		transition: border-color var(--transition-fast);
 	}
 
-	.custom-amount-input:focus {
+	.custom-amount input:focus {
 		outline: none;
 		border-color: var(--civic-blue);
 	}
 
-	.custom-amount-input:disabled {
-		opacity: 0.6;
+	.custom-amount input:disabled {
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
-	.error-message {
+	.error {
 		padding: var(--space-sm) var(--space-md);
 		background: #fee;
 		border: 1px solid #fcc;
@@ -497,105 +427,34 @@
 		color: #c33;
 		font-size: 0.9rem;
 		font-family: 'IBM Plex Mono', monospace;
-	}
-
-	.button-group {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-sm);
-		margin-top: var(--space-sm);
-	}
-
-	.liberapay-wrapper {
-		display: flex;
-		justify-content: center;
-		padding: var(--space-md) 0;
+		text-align: center;
+		margin-top: -var(--space-sm);
 	}
 
 	.donate-button {
-		display: inline-block;
-		padding: var(--space-md) var(--space-lg);
+		width: 100%;
+		padding: var(--space-lg);
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1rem;
+		font-size: 1.1rem;
 		font-weight: 600;
-		text-align: center;
-		text-decoration: none;
 		border-radius: var(--radius-md);
-		border: 2px solid var(--border-primary);
-		background: var(--surface-primary);
-		color: var(--text-primary);
-		transition: all var(--transition-fast);
+		border: none;
+		background: var(--civic-blue);
+		color: var(--civic-white);
 		cursor: pointer;
+		transition: all var(--transition-fast);
 	}
 
 	.donate-button:hover:not(:disabled) {
-		border-color: var(--civic-blue);
-		background: var(--civic-blue);
-		color: var(--civic-white);
+		background: var(--civic-accent);
 		transform: translateY(-2px);
 		box-shadow: 0 4px 12px var(--shadow-md);
 	}
 
-	.donate-button.primary {
-		background: var(--civic-blue);
-		color: var(--civic-white);
-		border-color: var(--civic-blue);
-	}
-
-	.donate-button.primary:hover:not(:disabled) {
-		background: var(--civic-accent);
-		border-color: var(--civic-accent);
-	}
-
 	.donate-button:disabled {
-		opacity: 0.6;
+		opacity: 0.5;
 		cursor: not-allowed;
 		transform: none;
-	}
-
-	.feature-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-lg);
-		padding-left: var(--space-md);
-		border-left: 2px solid var(--border-primary);
-	}
-
-	.feature-item {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-xs);
-	}
-
-	.feature-heading {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		margin: 0;
-	}
-
-	.feature-item p {
-		font-size: 1.1rem;
-		line-height: 1.7;
-	}
-
-	.feature-item a {
-		color: var(--civic-blue);
-		text-decoration: none;
-		font-weight: 600;
-	}
-
-	.feature-item a:hover {
-		text-decoration: underline;
-	}
-
-	.philosophy-lead {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.15rem;
-		font-weight: 500;
-		color: var(--text-primary);
-		line-height: 1.6;
 	}
 
 	.contact-footer {
@@ -603,6 +462,7 @@
 		line-height: 1.7;
 		padding-top: var(--space-lg);
 		border-top: 1px solid var(--border-primary);
+		text-align: center;
 	}
 
 	.contact-footer a {
@@ -630,21 +490,17 @@
 			font-size: 1.05rem;
 		}
 
-		.highlight-section,
-		.transparency-section {
-			padding: var(--space-lg);
+		.what-it-funds {
+			font-size: 0.85rem;
+			gap: var(--space-md);
 		}
 
 		.donation-card {
-			padding: var(--space-lg);
-		}
-
-		.donation-options {
-			grid-template-columns: 1fr;
+			padding: var(--space-xl);
 		}
 
 		.preset-amounts {
-			grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+			grid-template-columns: repeat(3, 1fr);
 		}
 	}
 </style>
