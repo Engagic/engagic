@@ -15,11 +15,6 @@
 	let viewportWidth = $state(0);
 	let isMobileView = $derived(viewportWidth <= 768);
 	let isAtHomeRoute = $derived(page && $page.url.pathname === homeLink);
-
-	// Mobile: show navigation list only when at home route
-	// Desktop: always show sidebar
-	let shouldShowNavigation = $derived(!isMobileView || isAtHomeRoute);
-	let shouldShowContent = $derived(!isMobileView || !isAtHomeRoute);
 </script>
 
 <svelte:window bind:innerWidth={viewportWidth} />
@@ -45,18 +40,14 @@
 			<h2 class="page-title-heading">{pageTitle}</h2>
 		</div>
 
-		{#if shouldShowNavigation}
-			<nav class="sidebar-navigation" aria-label="Page navigation">
-				{@render navigation()}
-			</nav>
-		{/if}
+		<nav class="sidebar-navigation" aria-label="Page navigation">
+			{@render navigation()}
+		</nav>
 	</div>
 
-	{#if shouldShowContent}
-		<main class="shell-content" class:wide={contentWide}>
-			{@render content()}
-		</main>
-	{/if}
+	<main class="shell-content" class:wide={contentWide}>
+		{@render content()}
+	</main>
 </div>
 
 <style>
