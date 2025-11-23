@@ -196,22 +196,25 @@ class EmailService:
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Engagic Alert: {meeting_title}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f8f9fa; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8f9fa;">
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
         <tr>
             <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #dee2e6; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <!-- Header -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <!-- Header with Logo -->
                     <tr>
-                        <td style="padding: 40px 40px 32px 40px; background-color: #0891b2; border-radius: 6px 6px 0 0;">
-                            <h1 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #ffffff; line-height: 1.3;">
+                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
+                            <div style="margin-bottom: 16px;">
+                                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
+                            </div>
+                            <h1 style="margin: 0 0 12px 0; font-size: 24px; font-weight: 600; color: #ffffff; line-height: 1.3; font-family: 'IBM Plex Mono', monospace;">
                                 {meeting_title}
                             </h1>
-                            <p style="margin: 0 0 8px 0; font-size: 15px; color: #ffffff; opacity: 0.9;">
+                            <p style="margin: 0 0 8px 0; font-size: 15px; color: #ffffff; opacity: 0.95; font-family: Georgia, serif;">
                                 {city} • {date_str}
                             </p>
-                            <p style="margin: 0; font-size: 12px; color: #ffffff; opacity: 0.8;">
-                                ✓ Official Source
+                            <p style="margin: 0; font-size: 12px; color: #ffffff; opacity: 0.85; font-family: Georgia, serif;">
+                                Official Source
                             </p>
                         </td>
                     </tr>
@@ -219,10 +222,10 @@ class EmailService:
                     <!-- Alert Name -->
                     <tr>
                         <td style="padding: 24px 40px 16px 40px;">
-                            <p style="margin: 0; font-size: 13px; color: #868e96; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+                            <p style="margin: 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                                 Alert: {alert.name}
                             </p>
-                            <p style="margin: 8px 0 0 0; font-size: 15px; color: #495057;">
+                            <p style="margin: 8px 0 0 0; font-size: 15px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
                                 Matched <strong>{item_count} {item_word}</strong> in this meeting
                             </p>
                         </td>
@@ -247,19 +250,19 @@ class EmailService:
                     <!-- Item {i+1} -->
                     <tr>
                         <td style="padding: 0 40px 24px 40px;">
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-left: 3px solid #0891b2; background-color: #f8f9fa;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-left: 4px solid #4f46e5; background-color: #f8fafc; border-radius: 6px;">
                                 <tr>
-                                    <td style="padding: 20px;">
-                                        <p style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #0a0a0a; line-height: 1.4;">
+                                    <td style="padding: 24px;">
+                                        <p style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #0f172a; line-height: 1.5; font-family: 'IBM Plex Mono', monospace;">
                                             {item_title}
                                         </p>
-                                        <p style="margin: 0 0 12px 0; font-size: 13px; color: #868e96;">
-                                            Matched: <strong style="color: #495057;">"{keyword}"</strong>
+                                        <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
+                                            Matched: <strong style="color: #475569;">"{keyword}"</strong>
                                         </p>
-                                        <p style="margin: 0 0 16px 0; font-size: 14px; color: #495057; line-height: 1.6;">
+                                        <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569; line-height: 1.7; font-family: Georgia, serif;">
                                             {context}
                                         </p>
-                                        <a href="{url}" style="display: inline-block; padding: 10px 20px; background-color: #0891b2; color: #ffffff; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 13px;">
+                                        <a href="{url}" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
                                             View Official Item
                                         </a>
                                     </td>
@@ -274,16 +277,16 @@ class EmailService:
                     <!-- Meeting Match {i+1} -->
                     <tr>
                         <td style="padding: 0 40px 24px 40px;">
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-left: 3px solid #0891b2; background-color: #f8f9fa;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-left: 4px solid #4f46e5; background-color: #f8fafc; border-radius: 6px;">
                                 <tr>
-                                    <td style="padding: 20px;">
-                                        <p style="margin: 0 0 12px 0; font-size: 13px; color: #868e96;">
-                                            Matched: <strong style="color: #495057;">"{keyword}"</strong>
+                                    <td style="padding: 24px;">
+                                        <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
+                                            Matched: <strong style="color: #475569;">"{keyword}"</strong>
                                         </p>
-                                        <p style="margin: 0 0 16px 0; font-size: 14px; color: #495057; line-height: 1.6;">
+                                        <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569; line-height: 1.7; font-family: Georgia, serif;">
                                             {context}
                                         </p>
-                                        <a href="{url}" style="display: inline-block; padding: 10px 20px; background-color: #0891b2; color: #ffffff; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 13px;">
+                                        <a href="{url}" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
                                             View Official Meeting
                                         </a>
                                     </td>
@@ -297,18 +300,18 @@ class EmailService:
         html += f"""
                     <!-- Footer -->
                     <tr>
-                        <td style="padding: 32px 40px; border-top: 1px solid #dee2e6;">
-                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #495057;">
+                        <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
                                 You're receiving this because you subscribed to <strong>{alert.name}</strong> alerts.
                             </p>
-                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #868e96;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #0891b2; text-decoration: none; font-weight: 600;">support the project</a>.
+                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #4f46e5; text-decoration: none; font-weight: 600;">support the project</a>.
                             </p>
-                            <p style="margin: 0 0 8px 0; font-size: 12px; color: #868e96;">
-                                Questions? Visit <a href="https://engagic.org" style="color: #0891b2; text-decoration: none;">engagic.org</a>
+                            <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
+                                Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
                             </p>
-                            <p style="margin: 0; font-size: 12px;">
-                                <a href="https://engagic.org/dashboard" style="color: #868e96; text-decoration: underline;">Manage your alerts</a>
+                            <p style="margin: 0; font-size: 12px; font-family: Georgia, serif;">
+                                <a href="https://engagic.org/dashboard" style="color: #64748b; text-decoration: underline;">Manage your alerts</a>
                             </p>
                         </td>
                     </tr>
@@ -357,14 +360,14 @@ class EmailService:
 
             timeline_html += f"""
                 <tr>
-                    <td style="padding: 8px 16px; border-bottom: 1px solid #dee2e6;">
-                        <p style="margin: 0; font-size: 13px; color: #0a0a0a; font-weight: 600;">{date_str}</p>
+                    <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
+                        <p style="margin: 0; font-size: 13px; color: #0f172a; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">{date_str}</p>
                     </td>
-                    <td style="padding: 8px 16px; border-bottom: 1px solid #dee2e6;">
-                        <p style="margin: 0; font-size: 13px; color: #495057;">{committee}</p>
+                    <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
+                        <p style="margin: 0; font-size: 13px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">{committee}</p>
                     </td>
-                    <td style="padding: 8px 16px; border-bottom: 1px solid #dee2e6;">
-                        <p style="margin: 0; font-size: 13px; color: #495057;">{action}</p>
+                    <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
+                        <p style="margin: 0; font-size: 13px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">{action}</p>
                     </td>
                 </tr>
             """
@@ -386,22 +389,25 @@ class EmailService:
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Engagic Alert: {matter_file}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f8f9fa; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8f9fa;">
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
         <tr>
             <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #dee2e6; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <!-- Header -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <!-- Header with Logo -->
                     <tr>
-                        <td style="padding: 40px 40px 32px 40px; background-color: #0891b2; border-radius: 6px 6px 0 0;">
-                            <h1 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #ffffff; line-height: 1.3;">
+                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
+                            <div style="margin-bottom: 16px;">
+                                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
+                            </div>
+                            <h1 style="margin: 0 0 12px 0; font-size: 24px; font-weight: 600; color: #ffffff; line-height: 1.3; font-family: 'IBM Plex Mono', monospace;">
                                 {matter_file}
                             </h1>
-                            <p style="margin: 0 0 8px 0; font-size: 15px; color: #ffffff; opacity: 0.9;">
+                            <p style="margin: 0 0 8px 0; font-size: 15px; color: #ffffff; opacity: 0.95; font-family: Georgia, serif;">
                                 {matter_type} • {city}
                             </p>
-                            <p style="margin: 0; font-size: 12px; color: #ffffff; opacity: 0.8;">
-                                ✓ Official Source
+                            <p style="margin: 0; font-size: 12px; color: #ffffff; opacity: 0.85; font-family: Georgia, serif;">
+                                Official Source
                             </p>
                         </td>
                     </tr>
@@ -409,10 +415,10 @@ class EmailService:
                     <!-- Alert Name -->
                     <tr>
                         <td style="padding: 24px 40px 16px 40px;">
-                            <p style="margin: 0; font-size: 13px; color: #868e96; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+                            <p style="margin: 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                                 Alert: {alert.name}
                             </p>
-                            <p style="margin: 8px 0 0 0; font-size: 15px; color: #495057;">
+                            <p style="margin: 8px 0 0 0; font-size: 15px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
                                 Matched: <strong>"{keyword}"</strong>
                             </p>
                         </td>
@@ -421,10 +427,10 @@ class EmailService:
                     <!-- Matter Title -->
                     <tr>
                         <td style="padding: 0 40px 24px 40px;">
-                            <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: #0a0a0a; line-height: 1.4;">
+                            <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: #0f172a; line-height: 1.5; font-family: 'IBM Plex Mono', monospace;">
                                 {title}
                             </h2>
-                            <p style="margin: 0; font-size: 14px; color: #495057;">
+                            <p style="margin: 0; font-size: 14px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
                                 <strong>Sponsors:</strong> {sponsor_str}
                             </p>
                         </td>
@@ -433,13 +439,13 @@ class EmailService:
                     <!-- Summary -->
                     <tr>
                         <td style="padding: 0 40px 24px 40px;">
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-left: 3px solid #0891b2; background-color: #f8f9fa;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-left: 4px solid #4f46e5; background-color: #f8fafc; border-radius: 6px;">
                                 <tr>
-                                    <td style="padding: 20px;">
-                                        <p style="margin: 0 0 8px 0; font-size: 13px; color: #868e96; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+                                    <td style="padding: 24px;">
+                                        <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                                             Summary
                                         </p>
-                                        <p style="margin: 0; font-size: 14px; color: #495057; line-height: 1.6;">
+                                        <p style="margin: 0; font-size: 14px; color: #475569; line-height: 1.7; font-family: Georgia, serif;">
                                             {canonical_summary}
                                         </p>
                                     </td>
@@ -451,14 +457,14 @@ class EmailService:
                     <!-- Timeline -->
                     <tr>
                         <td style="padding: 0 40px 24px 40px;">
-                            <p style="margin: 0 0 12px 0; font-size: 13px; color: #868e96; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">
+                            <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                                 Legislative Timeline ({appearance_count} appearance{"s" if appearance_count != 1 else ""})
                             </p>
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border: 1px solid #dee2e6; border-radius: 4px;">
-                                <tr style="background-color: #f8f9fa;">
-                                    <th style="padding: 12px 16px; text-align: left; font-size: 12px; color: #495057; font-weight: 600; border-bottom: 2px solid #dee2e6;">Date</th>
-                                    <th style="padding: 12px 16px; text-align: left; font-size: 12px; color: #495057; font-weight: 600; border-bottom: 2px solid #dee2e6;">Committee</th>
-                                    <th style="padding: 12px 16px; text-align: left; font-size: 12px; color: #495057; font-weight: 600; border-bottom: 2px solid #dee2e6;">Action</th>
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border: 1px solid #e2e8f0; border-radius: 6px;">
+                                <tr style="background-color: #f8fafc;">
+                                    <th style="padding: 12px 16px; text-align: left; font-size: 12px; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; font-family: 'IBM Plex Mono', monospace;">Date</th>
+                                    <th style="padding: 12px 16px; text-align: left; font-size: 12px; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; font-family: 'IBM Plex Mono', monospace;">Committee</th>
+                                    <th style="padding: 12px 16px; text-align: left; font-size: 12px; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; font-family: 'IBM Plex Mono', monospace;">Action</th>
                                 </tr>
                                 {timeline_html}
                             </table>
@@ -468,7 +474,7 @@ class EmailService:
                     <!-- CTA Button -->
                     <tr>
                         <td style="padding: 0 40px 32px 40px;" align="center">
-                            <a href="{url}" style="display: inline-block; padding: 12px 32px; background-color: #0891b2; color: #ffffff; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 14px;">
+                            <a href="{url}" style="display: inline-block; padding: 12px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; font-family: 'IBM Plex Mono', monospace;">
                                 View Official Matter Details
                             </a>
                         </td>
@@ -476,18 +482,18 @@ class EmailService:
 
                     <!-- Footer -->
                     <tr>
-                        <td style="padding: 32px 40px; border-top: 1px solid #dee2e6;">
-                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #495057;">
+                        <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
                                 You're receiving this because you subscribed to <strong>{alert.name}</strong> alerts.
                             </p>
-                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #868e96;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #0891b2; text-decoration: none; font-weight: 600;">support the project</a>.
+                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #4f46e5; text-decoration: none; font-weight: 600;">support the project</a>.
                             </p>
-                            <p style="margin: 0 0 8px 0; font-size: 12px; color: #868e96;">
-                                Questions? Visit <a href="https://engagic.org" style="color: #0891b2; text-decoration: none;">engagic.org</a>
+                            <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
+                                Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
                             </p>
-                            <p style="margin: 0; font-size: 12px;">
-                                <a href="https://engagic.org/dashboard" style="color: #868e96; text-decoration: underline;">Manage your alerts</a>
+                            <p style="margin: 0; font-size: 12px; font-family: Georgia, serif;">
+                                <a href="https://engagic.org/dashboard" style="color: #64748b; text-decoration: underline;">Manage your alerts</a>
                             </p>
                         </td>
                     </tr>

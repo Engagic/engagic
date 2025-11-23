@@ -2,20 +2,20 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { authState } from '$lib/stores/auth.svelte';
-	import { getDashboard, type Alert, type AlertMatch } from '$lib/api/dashboard';
+	import { getDashboard, type Digest, type DigestMatch } from '$lib/api/dashboard';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
 	let stats = $state({
-		active_alerts: 0,
+		active_digests: 0,
 		total_matches: 0,
 		matches_this_week: 0,
 		cities_tracked: 0
 	});
 
-	let alerts = $state<Alert[]>([]);
-	let recentMatches = $state<AlertMatch[]>([]);
+	let digests = $state<Digest[]>([]);
+	let recentMatches = $state<DigestMatch[]>([]);
 
 	onMount(async () => {
 		// Check auth
@@ -27,7 +27,7 @@
 		try {
 			const data = await getDashboard(authState.accessToken!);
 			stats = data.stats;
-			alerts = data.alerts;
+			digests = data.digests;
 			recentMatches = data.recent_matches;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load dashboard';
@@ -94,8 +94,8 @@
 			<!-- Stats -->
 			<div class="stats-grid">
 				<div class="stat-card">
-					<div class="stat-value">{stats.active_alerts}</div>
-					<div class="stat-label">Active Alerts</div>
+					<div class="stat-value">{stats.active_digests}</div>
+					<div class="stat-label">Active Digests</div>
 				</div>
 				<div class="stat-card">
 					<div class="stat-value">{stats.matches_this_week}</div>
@@ -111,30 +111,30 @@
 				</div>
 			</div>
 
-			<!-- Alerts Configuration -->
+			<!-- Digests Configuration -->
 			<section class="section">
-				<h2>Your Alerts</h2>
-				{#if alerts.length > 0}
-					{#each alerts as alert}
-						<div class="alert-card">
-							<div class="alert-header">
-								<h3>{alert.name}</h3>
-								<span class="alert-frequency">{alert.frequency}</span>
+				<h2>Your Digests</h2>
+				{#if digests.length > 0}
+					{#each digests as digest}
+						<div class="digest-card">
+							<div class="digest-header">
+								<h3>{digest.name}</h3>
+								<span class="digest-frequency">{digest.frequency}</span>
 							</div>
-							<div class="alert-details">
-								<div class="alert-section">
+							<div class="digest-details">
+								<div class="digest-section">
 									<strong>Cities:</strong>
-									{#if alert.cities.length > 0}
-										<span>{alert.cities.join(', ')}</span>
+									{#if digest.cities.length > 0}
+										<span>{digest.cities.join(', ')}</span>
 									{:else}
 										<span class="empty">None yet</span>
 									{/if}
 								</div>
-								<div class="alert-section">
+								<div class="digest-section">
 									<strong>Keywords:</strong>
-									{#if alert.criteria.keywords.length > 0}
+									{#if digest.criteria.keywords.length > 0}
 										<div class="keywords">
-											{#each alert.criteria.keywords as keyword}
+											{#each digest.criteria.keywords as keyword}
 												<span class="keyword-tag">{keyword}</span>
 											{/each}
 										</div>
@@ -146,7 +146,7 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="empty-state">No alerts configured yet</p>
+					<p class="empty-state">No digests configured yet</p>
 				{/if}
 			</section>
 
@@ -175,7 +175,7 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="empty-state">No matches yet. Add cities and keywords to start getting alerts!</p>
+					<p class="empty-state">No matches yet. Add cities and keywords to start getting digests!</p>
 				{/if}
 			</section>
 		{/if}
@@ -303,7 +303,7 @@
 		margin: 0 0 1rem 0;
 	}
 
-	.alert-card {
+	.digest-card {
 		background: var(--color-bg-primary);
 		border: 1px solid var(--color-border);
 		border-radius: 8px;
@@ -311,7 +311,7 @@
 		margin-bottom: 1rem;
 	}
 
-	.alert-header {
+	.digest-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -325,7 +325,7 @@
 		margin: 0;
 	}
 
-	.alert-frequency {
+	.digest-frequency {
 		font-size: 0.8125rem;
 		padding: 0.25rem 0.75rem;
 		background: var(--color-bg-secondary);
@@ -335,17 +335,17 @@
 		text-transform: capitalize;
 	}
 
-	.alert-details {
+	.digest-details {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
 	}
 
-	.alert-section {
+	.digest-section {
 		font-size: 0.875rem;
 	}
 
-	.alert-section strong {
+	.digest-section strong {
 		color: var(--color-text-primary);
 		margin-right: 0.5rem;
 	}
@@ -450,7 +450,7 @@
 			grid-template-columns: repeat(2, 1fr);
 		}
 
-		.alert-header {
+		.digest-header {
 			flex-direction: column;
 			align-items: flex-start;
 			gap: 0.5rem;

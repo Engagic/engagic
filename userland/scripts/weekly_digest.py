@@ -161,13 +161,16 @@ def build_digest_email(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb;">
-    <div style="background: white; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <h1 style="font-size: 24px; font-weight: 600; color: #111827; margin: 0 0 8px 0;">
+<body style="font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc;">
+    <div style="background: white; border-radius: 11px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 2px solid #e2e8f0;">
+        <div style="margin-bottom: 24px;">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #4f46e5; letter-spacing: -0.02em;">engagic</span>
+        </div>
+        <h1 style="font-size: 24px; font-weight: 600; color: #0f172a; margin: 0 0 12px 0; font-family: 'IBM Plex Mono', monospace;">
             This week in {city_name}
         </h1>
-        <p style="color: #6b7280; margin: 0 0 32px 0; font-size: 14px;">
-            Your weekly civic update from Engagic
+        <p style="color: #64748b; margin: 0 0 32px 0; font-size: 14px; font-family: Georgia, serif; line-height: 1.7;">
+            Your weekly civic update from engagic
         </p>
 """
 
@@ -175,17 +178,17 @@ def build_digest_email(
     if upcoming_meetings:
         html += """
         <div style="margin-bottom: 40px;">
-            <h2 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
-                📅 Upcoming Meetings This Week
+            <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-family: 'IBM Plex Mono', monospace;">
+                Upcoming Meetings This Week
             </h2>
 """
         for meeting in upcoming_meetings:
             html += f"""
-            <div style="margin-bottom: 16px; padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #0891b2;">
-                <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">
+            <div style="margin-bottom: 16px; padding: 20px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
+                <div style="font-weight: 600; color: #0f172a; margin-bottom: 8px; font-family: 'IBM Plex Mono', monospace; line-height: 1.5;">
                     {format_date(meeting['date'])} - {meeting['title']}
                 </div>
-                <a href="{app_url}/cities/{meeting['city_banana']}" style="color: #0891b2; text-decoration: none; font-size: 14px; font-weight: 500;">
+                <a href="{app_url}/cities/{meeting['city_banana']}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                     View agenda →
                 </a>
             </div>
@@ -196,10 +199,10 @@ def build_digest_email(
     else:
         html += """
         <div style="margin-bottom: 40px;">
-            <h2 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">
-                📅 Upcoming Meetings This Week
+            <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0 0 16px 0; font-family: 'IBM Plex Mono', monospace;">
+                Upcoming Meetings This Week
             </h2>
-            <p style="color: #6b7280; font-size: 14px;">No meetings scheduled for this week.</p>
+            <p style="color: #64748b; font-size: 14px; font-family: Georgia, serif; line-height: 1.7;">No meetings scheduled for this week.</p>
         </div>
 """
 
@@ -220,34 +223,34 @@ def build_digest_email(
 
         html += """
         <div style="margin-bottom: 32px;">
-            <h2 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
-                🔍 Your Keywords Mentioned
+            <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-family: 'IBM Plex Mono', monospace;">
+                Your Keywords Mentioned
             </h2>
 """
         for meeting_id, meeting_data in meetings_map.items():
             html += f"""
-            <div style="margin-bottom: 24px; padding: 16px; background: #fef3c7; border-radius: 8px; border-left: 3px solid #f59e0b;">
-                <div style="font-weight: 600; color: #111827; margin-bottom: 12px;">
+            <div style="margin-bottom: 24px; padding: 20px; background: #fef3c7; border-radius: 6px; border-left: 4px solid #eab308;">
+                <div style="font-weight: 600; color: #0f172a; margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace; line-height: 1.5;">
                     {meeting_data['title']} ({format_date(meeting_data['date'])})
                 </div>
 """
             for item in meeting_data['items']:
                 summary_preview = item['item_summary'][:150] + '...' if item['item_summary'] and len(item['item_summary']) > 150 else item['item_summary'] or ''
                 html += f"""
-                <div style="margin-bottom: 12px; padding-left: 12px;">
-                    <div style="margin-bottom: 4px;">
-                        <span style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">
+                <div style="margin-bottom: 16px; padding-left: 12px;">
+                    <div style="margin-bottom: 8px;">
+                        <span style="background: #eab308; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                             {item['keyword']}
                         </span>
-                        <span style="color: #111827; font-weight: 500; margin-left: 8px;">
+                        <span style="color: #0f172a; font-weight: 500; margin-left: 8px; font-family: Georgia, serif;">
                             Item {item['item_position']}: {item['item_title']}
                         </span>
                     </div>
-                    {f'<p style="color: #6b7280; font-size: 13px; margin: 4px 0 0 0; line-height: 1.5;">{summary_preview}</p>' if summary_preview else ''}
+                    {f'<p style="color: #475569; font-size: 13px; margin: 4px 0 0 0; line-height: 1.7; font-family: Georgia, serif;">{summary_preview}</p>' if summary_preview else ''}
                 </div>
 """
             html += f"""
-                <a href="{app_url}/cities/{meeting_data['city_banana']}" style="color: #f59e0b; text-decoration: none; font-size: 14px; font-weight: 500;">
+                <a href="{app_url}/cities/{meeting_data['city_banana']}" style="color: #eab308; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                     View full meeting →
                 </a>
             </div>
@@ -258,13 +261,13 @@ def build_digest_email(
 
     # Footer
     html += f"""
-        <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; text-align: center;">
-            <p style="color: #9ca3af; font-size: 12px; margin: 0 0 8px 0;">
+        <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e2e8f0; text-align: center;">
+            <p style="color: #64748b; font-size: 12px; margin: 0 0 12px 0; font-family: Georgia, serif; line-height: 1.7;">
                 You're receiving this because you're watching {city_name}
             </p>
-            <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-                <a href="{app_url}/dashboard" style="color: #0891b2; text-decoration: none;">Manage subscription</a> |
-                <a href="{app_url}/unsubscribe" style="color: #9ca3af; text-decoration: none;">Unsubscribe</a>
+            <p style="color: #64748b; font-size: 12px; margin: 0; font-family: Georgia, serif;">
+                <a href="{app_url}/dashboard" style="color: #4f46e5; text-decoration: none; font-weight: 600;">Manage subscription</a> |
+                <a href="{app_url}/unsubscribe" style="color: #64748b; text-decoration: none;">Unsubscribe</a>
             </p>
         </div>
     </div>
