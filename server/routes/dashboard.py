@@ -51,7 +51,7 @@ async def get_dashboard(
     total_matches = db.get_match_count(user_id=user.id)
 
     stats = {
-        "active_alerts": len(active_alerts),
+        "active_digests": len(active_alerts),
         "total_matches": total_matches,
         "matches_this_week": matches_this_week,
         "cities_tracked": len(all_cities),
@@ -87,7 +87,7 @@ async def get_dashboard(
 
     logger.info("dashboard loaded", user_id=user.id, alerts=len(active_alerts))
 
-    return {"stats": stats, "alerts": alert_configs, "recent_matches": recent_matches}
+    return {"stats": stats, "digests": alert_configs, "recent_matches": recent_matches}
 
 
 @router.get("/stats")
