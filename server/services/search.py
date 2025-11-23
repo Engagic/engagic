@@ -35,8 +35,8 @@ def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
             "meetings": [],
         }
 
-    # Get cached meetings
-    meetings = db.get_meetings(bananas=[city.banana], limit=50)
+    # Get cached meetings (include cancelled - frontend shows status badge)
+    meetings = db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
     if meetings:
         logger.info(
@@ -249,8 +249,8 @@ def handle_ambiguous_city_search(
         # Only one match - proceed with this city
         city = cities[0]
 
-        # Get meetings for this city
-        meetings = db.get_meetings(bananas=[city.banana], limit=50)
+        # Get meetings for this city (include cancelled - frontend shows status badge)
+        meetings = db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
         if meetings:
             logger.info(
