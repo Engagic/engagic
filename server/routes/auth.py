@@ -9,7 +9,6 @@ import os
 import secrets
 from datetime import datetime, timedelta
 from typing import Literal
-from urllib.parse import urlencode, urljoin
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
@@ -22,7 +21,6 @@ from userland.auth.jwt import (
 )
 from userland.database.db import UserlandDB
 from userland.database.models import Alert, User
-from userland.email.emailer import EmailService
 from userland.server.models import (
     LoginRequest,
     MagicLinkResponse,
@@ -138,110 +136,18 @@ async def signup(signup_request: SignupRequest, db: UserlandDB = Depends(get_use
 
     token = generate_magic_link_token(user_id)
 
-    # Send magic link email
-    try:
-        email_service = EmailService()
-        app_url = os.getenv("APP_URL", "https://engagic.org")
-        query = urlencode({'token': token})
-        magic_link = urljoin(app_url, f"/auth/verify?{query}")
+    # Send magic link email (use shared transactional template)
+    from userland.email.transactional import send_magic_link
 
-        # Send simple magic link email
-        import requests
+    success = send_magic_link(
+        email=signup_request.email,
+        token=token,
+        user_name=name,
+        is_signup=True
+    )
 
-        response = requests.post(
-            email_service.api_url,
-            auth=("api", email_service.api_key),
-            data={
-                "from": email_service.from_email,
-                "to": signup_request.email,
-                "subject": "Engagic Login Link",
-                "html": f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Welcome to Engagic</title>
-    <style>
-        @media (prefers-color-scheme: dark) {{
-            body, table {{ background-color: #1a1a1a !important; }}
-            td[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
-            table[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
-            td[style*="background-color: #f8fafc"],
-            table[style*="background-color: #f8fafc"] {{ background-color: #1a1a1a !important; }}
-            p[style*="color: #0f172a"] {{ color: #e2e8f0 !important; }}
-            p[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
-            a[style*="color: #4f46e5"] {{ color: #a78bfa !important; }}
-            td[style*="border: 2px solid #e2e8f0"],
-            table[style*="border: 2px solid #e2e8f0"],
-            td[style*="border-top: 1px solid #e2e8f0"] {{ border-color: #334155 !important; }}
-            td[style*="background-color: #4f46e5"] {{ background-color: #4f46e5 !important; }}
-        }}
-    </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
-                            <div style="margin-bottom: 16px;">
-                                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
-                            </div>
-                            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff; line-height: 1.3; font-family: 'IBM Plex Mono', monospace;">
-                                Welcome to Engagic!
-                            </h1>
-                        </td>
-                    </tr>
-
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 32px 40px;">
-                            <p style="margin: 0 0 24px 0; font-size: 16px; color: #0f172a; font-family: Georgia, serif; line-height: 1.7;">
-                                Click the button below to verify your account and start tracking civic meetings in your city.
-                            </p>
-
-                            <!-- CTA Button -->
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                <tr>
-                                    <td style="border-radius: 6px; background-color: #4f46e5;">
-                                        <a href="{magic_link}" style="display: inline-block; padding: 14px 28px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px;">
-                                            Verify Account &amp; Log In
-                                        </a>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <p style="margin: 24px 0 0 0; font-size: 14px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
-                                Or copy and paste this link into your browser:<br>
-                                <a href="{magic_link}" style="color: #4f46e5; word-break: break-all;">{magic_link}</a>
-                            </p>
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style="padding: 24px 40px; border-top: 1px solid #e2e8f0;">
-                            <p style="margin: 0; font-size: 13px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
-                                This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>
-                """,
-            },
-        )
-        response.raise_for_status()
-    except requests.RequestException as e:
-        logger.error("email delivery failed", error=str(e), email=signup_request.email)
+    if not success:
+        logger.error("email delivery failed", email=signup_request.email)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Email delivery failed. Please try again or contact support.",
@@ -271,109 +177,18 @@ async def login(login_request: LoginRequest, db: UserlandDB = Depends(get_userla
 
     token = generate_magic_link_token(user.id)
 
-    # Send magic link email
-    try:
-        email_service = EmailService()
-        app_url = os.getenv("APP_URL", "https://engagic.org")
-        query = urlencode({'token': token})
-        magic_link = urljoin(app_url, f"/auth/verify?{query}")
+    # Send magic link email (use shared transactional template)
+    from userland.email.transactional import send_magic_link
 
-        import requests
+    success = send_magic_link(
+        email=login_request.email,
+        token=token,
+        user_name=user.name,
+        is_signup=False
+    )
 
-        response = requests.post(
-            email_service.api_url,
-            auth=("api", email_service.api_key),
-            data={
-                "from": email_service.from_email,
-                "to": login_request.email,
-                "subject": "Engagic Login Link",
-                "html": f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Log In to Engagic</title>
-    <style>
-        @media (prefers-color-scheme: dark) {{
-            body, table {{ background-color: #1a1a1a !important; }}
-            td[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
-            table[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
-            td[style*="background-color: #f8fafc"],
-            table[style*="background-color: #f8fafc"] {{ background-color: #1a1a1a !important; }}
-            p[style*="color: #0f172a"] {{ color: #e2e8f0 !important; }}
-            p[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
-            a[style*="color: #4f46e5"] {{ color: #a78bfa !important; }}
-            td[style*="border: 2px solid #e2e8f0"],
-            table[style*="border: 2px solid #e2e8f0"],
-            td[style*="border-top: 1px solid #e2e8f0"] {{ border-color: #334155 !important; }}
-            td[style*="background-color: #4f46e5"] {{ background-color: #4f46e5 !important; }}
-        }}
-    </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
-                            <div style="margin-bottom: 16px;">
-                                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
-                            </div>
-                            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff; line-height: 1.3; font-family: 'IBM Plex Mono', monospace;">
-                                Welcome back!
-                            </h1>
-                        </td>
-                    </tr>
-
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 32px 40px;">
-                            <p style="margin: 0 0 24px 0; font-size: 16px; color: #0f172a; font-family: Georgia, serif; line-height: 1.7;">
-                                Click the button below to log in to your Engagic account.
-                            </p>
-
-                            <!-- CTA Button -->
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                <tr>
-                                    <td style="border-radius: 6px; background-color: #4f46e5;">
-                                        <a href="{magic_link}" style="display: inline-block; padding: 14px 28px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px;">
-                                            Log In to Engagic
-                                        </a>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <p style="margin: 24px 0 0 0; font-size: 14px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
-                                Or copy and paste this link into your browser:<br>
-                                <a href="{magic_link}" style="color: #4f46e5; word-break: break-all;">{magic_link}</a>
-                            </p>
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style="padding: 24px 40px; border-top: 1px solid #e2e8f0;">
-                            <p style="margin: 0; font-size: 13px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
-                                This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>
-                """,
-            },
-        )
-        response.raise_for_status()
-    except requests.RequestException as e:
-        logger.error("email delivery failed", error=str(e), email=login_request.email)
+    if not success:
+        logger.error("email delivery failed", email=login_request.email)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Email delivery failed. Please try again or contact support.",
