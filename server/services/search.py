@@ -101,8 +101,8 @@ def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
             "meetings": [],
         }
 
-    # Get cached meetings
-    meetings = db.get_meetings(bananas=[city.banana], limit=50)
+    # Get cached meetings (include cancelled - frontend shows status badge)
+    meetings = db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")

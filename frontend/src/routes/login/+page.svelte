@@ -203,7 +203,7 @@
 		font-size: 1rem;
 		font-family: system-ui, -apple-system, sans-serif;
 		color: var(--civic-dark);
-		background: white;
+		background: var(--civic-white);
 		border: 2px solid var(--civic-border);
 		border-radius: 8px;
 		transition: all 0.2s;
