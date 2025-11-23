@@ -23,7 +23,6 @@ from typing import Dict, Any, Optional, List
 from database.sync_bridge import SyncDatabase
 from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
 from pipeline.processor import Processor
-from config import config
 
 from config import get_logger
 

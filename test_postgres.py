@@ -153,7 +153,7 @@ async def test_item_operations(db, meeting):
         summary="Approved 5-0 with conditions on parking requirements.",
         topics=["Housing", "Zoning", "Parking"]
     )
-    print(f"✅ Updated item with summary and topics")
+    print("✅ Updated item with summary and topics")
 
     return test_items
 
@@ -221,7 +221,7 @@ async def main():
     print("PostgreSQL Database Layer Test Suite")
     print("=" * 60)
 
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Host: {config.POSTGRES_HOST}")
     print(f"  Port: {config.POSTGRES_PORT}")
     print(f"  Database: {config.POSTGRES_DB}")
@@ -236,7 +236,7 @@ async def main():
 
         city = await test_city_operations(db)
         meeting = await test_meeting_operations(db, city)
-        items = await test_item_operations(db, meeting)
+        await test_item_operations(db, meeting)  # Items queried by meeting_id in later tests
         await test_queue_operations(db, meeting)
         await test_meeting_update(db, meeting)
         await test_search(db, meeting)

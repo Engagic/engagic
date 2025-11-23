@@ -13,11 +13,10 @@ import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from database.db_postgres import Database
 from database.models import City, Meeting, AgendaItem
-from config import Config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -294,28 +293,9 @@ class SQLitePostgresMigrator:
                 logger.info(f"Progress: {i}/{len(jobs)} jobs")
 
             try:
-                # Parse metadata JSON
-                metadata = None
-                if job.get("processing_metadata"):
-                    if isinstance(job["processing_metadata"], str):
-                        metadata = json.loads(job["processing_metadata"])
-                    else:
-                        metadata = job["processing_metadata"]
-
-                # Convert timestamps
-                started_at = None
-                if job.get("started_at"):
-                    try:
-                        started_at = datetime.fromisoformat(job["started_at"].replace("Z", "+00:00"))
-                    except (ValueError, AttributeError):
-                        pass
-
-                completed_at = None
-                if job.get("completed_at"):
-                    try:
-                        completed_at = datetime.fromisoformat(job["completed_at"].replace("Z", "+00:00"))
-                    except (ValueError, AttributeError):
-                        pass
+                # Note: Intentionally NOT migrating processing_metadata, started_at, completed_at
+                # These represent processing state which we discard during migration
+                # All jobs are re-queued fresh in 'pending' status
 
                 if not self.dry_run:
                     # Parse payload if JSON string
