@@ -167,26 +167,31 @@
 - Added `zipcodes` field to `City` model
 - JSONB compatibility (removed manual serialization)
 
-### 🔧 In Progress (Current Blockers)
+### ✅ Completed (Local Testing)
 
-**Local Testing (95% complete)**
+**Local Testing (100% complete)**
 - PostgreSQL installed ✅
 - Database/user created ✅
 - Schema loaded ✅
 - Dependencies installed ✅
-- Test suite running ⚠️ (fixing JSONB serialization bug)
+- All 8 tests passing ✅
+- **Tested against production data** ✅ (pulled latest `engagic.db` from VPS)
 
-**Issue:** asyncpg handles JSONB automatically, but code was double-serializing with `json.dumps()`
-**Fix:** Removed all `json.dumps()` calls for JSONB columns (in progress)
-**Status:** Running `uv run test_postgres.py` to verify
+**JSONB Serialization (Resolved)**
+- **Discovery:** PostgreSQL JSONB columns require manual JSON serialization - asyncpg does NOT auto-serialize
+- **Solution:**
+  - **WRITE**: Use `json.dumps()` to convert Python dicts/lists → JSON strings → JSONB storage
+  - **READ**: Use defensive `json.loads()` to convert JSON strings → Python dicts/lists
+  - **None handling**: Convert `None` → empty lists `[]` for Pydantic validation
+- **Applied to:** `store_meeting`, `get_meeting`, `get_meetings_for_city`, `store_agenda_items`, `get_agenda_items`, `enqueue_job`, `store_matter`, `search_meetings_fulltext`
 
 ### 📋 Next Steps (Immediate)
 
-1. **Finish Local Testing** (today)
-   - Verify all 8 tests pass
-   - Fix any remaining serialization issues
+1. ~~**Finish Local Testing** (today)~~ ✅ **COMPLETE**
+   - ✅ All 8 tests passing
+   - ✅ JSONB serialization resolved
 
-2. **VPS Setup** (tomorrow)
+2. **VPS Setup** (next)
    - Install PostgreSQL on VPS
    - Create database/user
    - Load schema
@@ -293,10 +298,10 @@ CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
 ## Risks & Mitigations
 
 ### Risk 1: Breaking Changes in Pipeline/Server
-**Likelihood:** Medium
+**Likelihood:** Low (reduced from Medium after production data testing)
 **Impact:** High (sync/process/API all affected)
 **Mitigation:**
-- Comprehensive test suite before VPS deployment
+- ✅ Comprehensive test suite validated against production data
 - Parallel run (keep SQLite as backup during transition)
 - Incremental rollout (test single city first)
 
@@ -328,8 +333,8 @@ CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
 
 ## Success Criteria
 
-### Week 1-2 (Database Layer) ✅
-- [ ] All 8 tests pass locally
+### Week 1-2 (Database Layer) 🔄 IN PROGRESS
+- [x] All 8 tests pass locally
 - [ ] PostgreSQL running on VPS
 - [ ] Schema loaded successfully
 - [ ] Data migrated with 100% integrity
@@ -356,9 +361,13 @@ CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
 
 1. **"Move fast and true"** = Write correct code from the start, test thoroughly before merging
 2. **Pragmatic over perfect** = Skip LiteLLM/Redis/async until scale demands it
-3. **asyncpg JSONB handling** = No `json.dumps()` needed, let driver handle it
+3. **asyncpg JSONB handling** = Requires MANUAL serialization (`json.dumps()` on write, `json.loads()` on read)
+   - Original assumption: asyncpg auto-handles JSONB ❌
+   - Reality: PostgreSQL JSONB stores JSON text, asyncpg needs explicit conversion ✅
+   - Defensive deserialization: Check `isinstance(val, str)` before `json.loads()`, handle `None` → `[]`
 4. **Matter tracking is policy modeling** = Not just cost savings, it's core feature
 5. **Documentation matters** = CLAUDE.md discipline pays off in migration clarity
+6. **Test-driven migration** = Comprehensive test suite caught all edge cases before VPS deployment
 
 ---
 
@@ -371,6 +380,6 @@ CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
 
 ---
 
-**Last Updated:** 2025-11-22 23:30 PST
-**Next Review:** After local tests pass (expected: tonight)
+**Last Updated:** 2025-11-22 (Local Testing Complete ✅)
+**Next Milestone:** VPS Setup + Data Migration
 **Go-Live Target:** 2025-12-06 (2 weeks from start)
