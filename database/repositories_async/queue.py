@@ -25,8 +25,6 @@ class QueueRepository(BaseRepository):
     - Atomic dequeue with row-level locking
     - Mark jobs complete/failed with retry logic
     - Queue statistics for monitoring
-
-    Confidence: 9/10 (standard queue pattern with PostgreSQL-specific optimizations)
     """
 
     async def enqueue_job(
@@ -349,8 +347,13 @@ class QueueRepository(BaseRepository):
                     error_message,
                 )
                 logger.warning(
-                    f"Job {queue_id} retry scheduled (attempt {current_retry_count + 1}/3, "
-                    f"priority {current_priority} -> {new_priority}): {error_message}"
+                    "job retry scheduled",
+                    queue_id=queue_id,
+                    attempt=current_retry_count + 1,
+                    max_attempts=3,
+                    priority_old=current_priority,
+                    priority_new=new_priority,
+                    error=error_message
                 )
             else:
                 # Move to dead letter queue
@@ -368,7 +371,10 @@ class QueueRepository(BaseRepository):
                     error_message,
                 )
                 logger.error(
-                    f"Job {queue_id} moved to dead letter queue after {current_retry_count + 1} failures: {error_message}"
+                    "job moved to dead letter queue",
+                    queue_id=queue_id,
+                    total_failures=current_retry_count + 1,
+                    error=error_message
                 )
 
     async def get_queue_stats(self) -> dict:

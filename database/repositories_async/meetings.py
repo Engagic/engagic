@@ -25,8 +25,6 @@ class MeetingRepository(BaseRepository):
     - Retrieve meetings (by ID, city, packet URL)
     - Update summaries with processing metadata
     - Random meeting retrieval for testing
-
-    Confidence: 9/10 (standard CRUD with PostgreSQL-specific features)
     """
 
     async def store_meeting(self, meeting: Meeting) -> None:
@@ -182,18 +180,27 @@ class MeetingRepository(BaseRepository):
                 offset,
             )
 
+            if not rows:
+                return []
+
+            # Batch fetch all topics for all meetings (fix N+1 query)
+            meeting_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT meeting_id, topic FROM meeting_topics WHERE meeting_id = ANY($1::text[])",
+                meeting_ids,
+            )
+
+            # Build topic map: meeting_id -> [topics]
+            topics_by_meeting = {}
+            for topic_row in topic_rows:
+                meeting_id = topic_row["meeting_id"]
+                if meeting_id not in topics_by_meeting:
+                    topics_by_meeting[meeting_id] = []
+                topics_by_meeting[meeting_id].append(topic_row["topic"])
+
             meetings = []
             for row in rows:
-                # Fetch topics for each meeting
-                topic_rows = await conn.fetch(
-                    """
-                    SELECT topic
-                    FROM meeting_topics
-                    WHERE meeting_id = $1
-                    """,
-                    row["id"],
-                )
-                topics = [r["topic"] for r in topic_rows]
+                topics = topics_by_meeting.get(row["id"], [])
 
                 # Deserialize JSONB participation
                 participation = self._deserialize_jsonb(row["participation"])
@@ -428,24 +435,3 @@ class MeetingRepository(BaseRepository):
                 processing_time=row["processing_time"],
                 topics=topics,
             )
-
-    @staticmethod
-    def _deserialize_jsonb(value):
-        """Defensive JSONB deserialization
-
-        Handles both JSONB (dict) and legacy string-stored JSON.
-
-        Args:
-            value: JSONB field value from database
-
-        Returns:
-            Deserialized value or None
-        """
-        if value is None:
-            return None
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                return None
-        return value
