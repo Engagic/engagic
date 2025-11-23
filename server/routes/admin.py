@@ -101,23 +101,24 @@ async def get_dead_letter_queue(
 
     try:
         # Get dead letter jobs from queue
-        dead_jobs = db.conn.execute("""
-            SELECT
-                id,
-                job_type,
-                meeting_id,
-                banana,
-                source_url,
-                error_message,
-                retry_count,
-                created_at,
-                started_at,
-                failed_at
-            FROM queue
-            WHERE status = 'dead_letter'
-            ORDER BY failed_at DESC
-            LIMIT 100
-        """).fetchall()
+        async with db.pool.acquire() as conn:
+            dead_jobs = await conn.fetch("""
+                SELECT
+                    id,
+                    job_type,
+                    meeting_id,
+                    banana,
+                    source_url,
+                    error_message,
+                    retry_count,
+                    created_at,
+                    started_at,
+                    failed_at
+                FROM queue
+                WHERE status = 'dead_letter'
+                ORDER BY failed_at DESC
+                LIMIT 100
+            """)
 
         jobs_list = []
         for job in dead_jobs:
@@ -129,8 +130,8 @@ async def get_dead_letter_queue(
                 "source_url": job["source_url"],
                 "error": job["error_message"],
                 "retries": job["retry_count"],
-                "created": job["created_at"],
-                "failed": job["failed_at"],
+                "created": str(job["created_at"]),
+                "failed": str(job["failed_at"]) if job["failed_at"] else None,
             })
 
         # Alert if too many failures

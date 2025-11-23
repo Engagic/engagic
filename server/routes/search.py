@@ -45,7 +45,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
         query_lower = query.lower()
         if query_lower in ["new york", "new york city"]:
             logger.debug("nyc redirect")
-            return handle_city_search("new york, ny", db)
+            return await handle_city_search("new york, ny", db)
 
         # Determine if input is zipcode, state, or city name
         is_zipcode = query.isdigit() and len(query) == 5
@@ -58,13 +58,13 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
 
         if is_zipcode:
             metrics.search_queries.labels(query_type='zipcode').inc()
-            return handle_zipcode_search(query, db)
+            return await handle_zipcode_search(query, db)
         elif is_state:
             metrics.search_queries.labels(query_type='state').inc()
-            return handle_state_search(query, db)
+            return await handle_state_search(query, db)
         else:
             metrics.search_queries.labels(query_type='city_name').inc()
-            return handle_city_search(query, db)
+            return await handle_city_search(query, db)
 
     except HTTPException:
         raise
