@@ -195,15 +195,44 @@ class EmailService:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Engagic Alert: {meeting_title}</title>
+    <style>
+        @media (prefers-color-scheme: dark) {{
+            /* Override backgrounds */
+            body, table {{ background-color: #1a1a1a !important; }}
+            td[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
+            td[style*="background-color: #f8fafc"],
+            table[style*="background-color: #f8fafc"] {{ background-color: #0f172a !important; }}
+
+            /* Override text colors */
+            p[style*="color: #0f172a"],
+            span[style*="color: #0f172a"],
+            div[style*="color: #0f172a"] {{ color: #e2e8f0 !important; }}
+
+            p[style*="color: #475569"],
+            span[style*="color: #475569"] {{ color: #cbd5e1 !important; }}
+
+            p[style*="color: #64748b"],
+            span[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
+
+            /* Override borders */
+            td[style*="border: 2px solid #e2e8f0"],
+            table[style*="border: 2px solid #e2e8f0"] {{ border-color: #334155 !important; }}
+
+            td[style*="border-left: 4px solid"] {{ border-color: #4f46e5 !important; }}
+
+            /* Keep buttons visible */
+            a[style*="background-color: #4f46e5"] {{ background-color: #4f46e5 !important; color: #ffffff !important; }}
+        }}
+    </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;" class="email-wrapper">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;" class="email-wrapper">
         <tr>
             <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" class="email-container">
                     <!-- Header with Logo -->
                     <tr>
-                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
+                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;" class="header-bg">
                             <div style="margin-bottom: 16px;">
                                 <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
                             </div>
@@ -388,6 +417,36 @@ class EmailService:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Engagic Alert: {matter_file}</title>
+    <style>
+        @media (prefers-color-scheme: dark) {{
+            /* Override backgrounds */
+            body, table {{ background-color: #1a1a1a !important; }}
+            td[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
+            td[style*="background-color: #f8fafc"],
+            table[style*="background-color: #f8fafc"] {{ background-color: #0f172a !important; }}
+
+            /* Override text colors */
+            p[style*="color: #0f172a"],
+            span[style*="color: #0f172a"],
+            div[style*="color: #0f172a"] {{ color: #e2e8f0 !important; }}
+
+            p[style*="color: #475569"],
+            span[style*="color: #475569"] {{ color: #cbd5e1 !important; }}
+
+            p[style*="color: #64748b"],
+            span[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
+
+            /* Override borders */
+            td[style*="border: 2px solid #e2e8f0"],
+            table[style*="border: 2px solid #e2e8f0"],
+            td[style*="border-bottom: 1px solid #e2e8f0"] {{ border-color: #334155 !important; }}
+
+            td[style*="border-left: 4px solid"] {{ border-color: #4f46e5 !important; }}
+
+            /* Keep buttons visible */
+            a[style*="background-color: #4f46e5"] {{ background-color: #4f46e5 !important; color: #ffffff !important; }}
+        }}
+    </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">

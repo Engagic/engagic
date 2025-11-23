@@ -108,8 +108,10 @@ def match_alert(
                 if "## Summary" in summary:
                     summary = summary.split("## Summary", 1)[1].split("##", 1)[0].strip()
 
-                # Build URL
-                url = f"https://engagic.org/{row['banana']}/{meeting_id}#item-{item_id}"
+                # Build URL with proper meeting slug: /{city_banana}/{YYYY-MM-DD}-{meeting_id}#item-{item_id}
+                meeting_date = row['date']  # Should be YYYY-MM-DD format from database
+                meeting_slug = f"{meeting_date}-{meeting_id}"
+                url = f"https://engagic.org/{row['banana']}/{meeting_slug}#item-{item_id}"
 
                 # Create match
                 match = AlertMatch(
@@ -254,7 +256,10 @@ def match_matters_for_alert(
             if latest:
                 item_id = latest['item_id']
                 meeting_id = latest['meeting_id']
-                url = f"https://engagic.org/{row['banana']}/{meeting_id}#item-{item_id}"
+                # Build URL with proper meeting slug: /{city_banana}/{YYYY-MM-DD}-{meeting_id}#item-{item_id}
+                meeting_date = latest['appeared_at']  # Should be YYYY-MM-DD format
+                meeting_slug = f"{meeting_date}-{meeting_id}"
+                url = f"https://engagic.org/{row['banana']}/{meeting_slug}#item-{item_id}"
 
             # Create match
             match = AlertMatch(
