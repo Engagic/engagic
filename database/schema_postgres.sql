@@ -94,25 +94,6 @@ CREATE TABLE IF NOT EXISTS matter_topics (
     PRIMARY KEY (matter_id, topic)
 );
 
--- Matter Appearances: Timeline tracking for matters across meetings
--- Junction table linking matters to meetings via agenda items
-CREATE TABLE IF NOT EXISTS matter_appearances (
-    id BIGSERIAL PRIMARY KEY,  -- PostgreSQL auto-increment
-    matter_id TEXT NOT NULL,
-    meeting_id TEXT NOT NULL,
-    item_id TEXT NOT NULL,
-    appeared_at TIMESTAMP NOT NULL,
-    committee TEXT,
-    action TEXT,
-    vote_tally TEXT,
-    sequence INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE,
-    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
-    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
-    UNIQUE(matter_id, meeting_id, item_id)
-);
-
 -- Agenda items: Individual items within meetings
 -- matter_id stores COMPOSITE HASHED ID matching city_matters.id
 -- CRITICAL: matter_id references city_matters.id which includes city_banana
@@ -141,6 +122,25 @@ CREATE TABLE IF NOT EXISTS item_topics (
     topic TEXT NOT NULL,
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
     PRIMARY KEY (item_id, topic)
+);
+
+-- Matter Appearances: Timeline tracking for matters across meetings
+-- Junction table linking matters to meetings via agenda items
+CREATE TABLE IF NOT EXISTS matter_appearances (
+    id BIGSERIAL PRIMARY KEY,  -- PostgreSQL auto-increment
+    matter_id TEXT NOT NULL,
+    meeting_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    appeared_at TIMESTAMP NOT NULL,
+    committee TEXT,
+    action TEXT,
+    vote_tally TEXT,
+    sequence INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE,
+    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+    UNIQUE(matter_id, meeting_id, item_id)
 );
 
 -- Processing cache: Track PDF processing for cost optimization
