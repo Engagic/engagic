@@ -10,6 +10,15 @@ PROJECT_DIR="/root/engagic"
 API_SERVICE="engagic-api"
 PROMETHEUS_SERVICE="prometheus"
 
+# Source environment variables
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a
+    source "$PROJECT_DIR/.env"
+    set +a
+else
+    echo "Warning: .env file not found at $PROJECT_DIR/.env"
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -51,6 +60,9 @@ Commands:
   restart-prometheus    Restart Prometheus service
   logs-prometheus       Stream Prometheus logs
   status-prometheus     Check Prometheus status
+
+  Testing:
+  test-emails       Send test emails to ibansadowski12@gmail.com
 
   System:
   status            Show status of all services
@@ -122,6 +134,13 @@ cmd_status_prometheus() {
     sudo systemctl status $PROMETHEUS_SERVICE
 }
 
+# Testing Commands
+cmd_test_emails() {
+    log_info "Sending test emails to ibansadowski12@gmail.com..."
+    cd $PROJECT_DIR
+    uv run userland/scripts/test_emails.py ibansadowski12@gmail.com
+}
+
 # System Commands
 cmd_status() {
     log_info "Service Status:"
@@ -182,6 +201,11 @@ main() {
             ;;
         status-prometheus)
             cmd_status_prometheus
+            ;;
+
+        # Testing
+        test-emails)
+            cmd_test_emails
             ;;
 
         # System
