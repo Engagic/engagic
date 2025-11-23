@@ -58,7 +58,7 @@ logger.info("initialized shared database", db_path=config.UNIFIED_DB_PATH)
 
 # Initialize userland database for auth and user features
 userland_db_path = os.getenv('USERLAND_DB', str(config.DB_DIR) + '/userland.db')
-userland_db = UserlandDB(userland_db_path, silent=True)
+userland_db = UserlandDB(userland_db_path, silent=False)
 logger.info("initialized userland database", db_path=userland_db_path)
 
 # Initialize JWT for authentication
