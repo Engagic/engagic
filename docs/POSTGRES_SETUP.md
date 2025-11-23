@@ -297,6 +297,114 @@ psql engagic < database/schema_postgres.sql
 
 ---
 
+## VPS Performance Tuning (2GB RAM)
+
+PostgreSQL defaults are designed for servers with 4GB+ RAM. For optimal performance on a 2GB VPS, apply these tuning parameters.
+
+### Automated Tuning (Recommended)
+
+We provide a tuning script that automatically configures PostgreSQL for 2GB VPS:
+
+```bash
+# Run tuning script
+sudo ./scripts/tune_postgres.sh
+```
+
+The script will:
+1. Backup current configuration
+2. Apply memory-optimized settings
+3. Enable slow query logging
+4. Restart PostgreSQL
+5. Verify connection
+
+### Manual Tuning
+
+If you prefer manual configuration, edit `/etc/postgresql/16/main/postgresql.conf`:
+
+```ini
+# Memory Configuration (2GB VPS)
+shared_buffers = 512MB              # 25% of RAM
+effective_cache_size = 1536MB       # 75% of RAM
+work_mem = 16MB                     # For sorts/joins
+maintenance_work_mem = 128MB        # For VACUUM/INDEX
+
+# Connection Settings
+max_connections = 100               # Align with asyncpg pool max_size
+
+# Query Optimizer
+random_page_cost = 1.1              # SSD-optimized (default: 4.0 for HDD)
+
+# Write-Ahead Log (WAL)
+wal_buffers = 16MB
+checkpoint_completion_target = 0.9  # Spread checkpoints over longer time
+
+# Logging (Slow Query Tracking)
+logging_collector = on
+log_min_duration_statement = 1000   # Log queries > 1 second
+```
+
+Restart PostgreSQL:
+```bash
+sudo systemctl restart postgresql
+```
+
+### Verify Settings
+
+```bash
+# Check memory settings
+sudo -u postgres psql -c "SHOW shared_buffers; SHOW effective_cache_size; SHOW work_mem; SHOW maintenance_work_mem;" engagic
+
+# Check active connections
+sudo -u postgres psql -c "SELECT count(*) FROM pg_stat_activity;" engagic
+
+# Monitor slow queries
+sudo tail -f /var/log/postgresql/postgresql-16-main.log
+```
+
+### Connection Pool Sizing
+
+Engagic uses asyncpg with configurable connection pooling. For 2GB VPS:
+
+```bash
+# Recommended pool settings (in .env or environment)
+ENGAGIC_POSTGRES_POOL_MIN_SIZE=5    # Minimum idle connections
+ENGAGIC_POSTGRES_POOL_MAX_SIZE=20   # Maximum concurrent connections
+```
+
+**Resource calculation:**
+- 20 connections × 15MB avg = 300MB max
+- Leaves ~1.7GB for OS, Python, and queries
+- Safe for 2GB VPS with API + background daemon
+
+**Monitoring:**
+```bash
+# Watch connection count in real-time
+watch -n 2 "sudo -u postgres psql -c 'SELECT count(*), state FROM pg_stat_activity GROUP BY state;' engagic"
+```
+
+### Advanced: Enable pg_stat_statements
+
+Track query performance with PostgreSQL's statistics extension:
+
+```bash
+# Enable extension
+sudo -u postgres psql engagic -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
+
+# View top 10 slowest queries
+sudo -u postgres psql engagic -c "
+SELECT
+    calls,
+    total_exec_time::int,
+    mean_exec_time::int,
+    query
+FROM pg_stat_statements
+ORDER BY mean_exec_time DESC
+LIMIT 10;
+"
+```
+
+---
+
 ## Migration from SQLite
 
 See `MIGRATION.md` for SQLite → PostgreSQL data migration steps.

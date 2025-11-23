@@ -1,13 +1,13 @@
 # Engagic Database Schema
 
-Quick reference for the Engagic unified SQLite database schema and SQL queries.
+Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 
 **For repository pattern implementation and code examples, see:** [../database/README.md](../database/README.md)
 
-**Database:** SQLite 3.x with WAL mode
-**Location:** `/root/engagic/data/engagic.db` (production)
-**Code:** Repository Pattern (database/db.py facade → 6 focused repositories)
-**Last Updated:** November 11, 2025
+**Database:** PostgreSQL 16 with asyncpg
+**Location:** `/root/engagic` (VPS production)
+**Code:** Async Repository Pattern (database/db_postgres.py → 6 focused async repositories)
+**Last Updated:** November 23, 2025 (PostgreSQL migration complete)
 
 ---
 
@@ -37,13 +37,112 @@ Quick reference for the Engagic unified SQLite database schema and SQL queries.
 
 ### Database Philosophy
 
-**Single Source of Truth:** One unified database replaces the previous 3-database architecture.
+**Single Source of Truth:** One unified PostgreSQL database replaces the previous SQLite architecture.
 
-**JSON for Flexibility:** Complex structures (topics, attachments, participation) stored as JSON TEXT columns for rapid iteration without schema migrations.
+**Hybrid Normalization Strategy:** Topics normalized for efficient querying, complex structures (attachments, sponsors) stored as JSONB for flexibility.
 
 **Foreign Keys Enforced:** Referential integrity with CASCADE deletes.
 
-**WAL Mode:** Write-Ahead Logging for better concurrency.
+**Connection Pooling:** asyncpg connection pool (5-20 connections) for true concurrent read/write operations.
+
+---
+
+## Design Decisions
+
+### JSONB vs Normalization Strategy
+
+Engagic uses a **hybrid approach** balancing query performance and schema flexibility:
+
+#### Normalized Tables (Separate Tables)
+
+✅ **When to normalize:**
+- Fields queried in WHERE clauses (filtering)
+- Aggregation queries (COUNT, GROUP BY)
+- Simple one-to-many relationships
+
+**Topics (3 normalized tables):**
+- `meeting_topics` (meeting_id, topic) - PRIMARY KEY (meeting_id, topic)
+- `item_topics` (item_id, topic) - PRIMARY KEY (item_id, topic)
+- `matter_topics` (matter_id, topic) - PRIMARY KEY (matter_id, topic)
+
+**Why normalized:**
+- Fast filtering: `SELECT * FROM meetings WHERE id IN (SELECT meeting_id FROM meeting_topics WHERE topic = 'Housing')`
+- Efficient aggregation: `SELECT topic, COUNT(*) FROM meeting_topics GROUP BY topic`
+- GIN indexes on topic columns for full-text search
+
+**Zipcodes (many-to-many):**
+- `zipcodes` (banana, zipcode, is_primary) - PRIMARY KEY (banana, zipcode)
+
+**Why normalized:**
+- Search by zipcode (user feature)
+- Many-to-many relationship (cities have multiple zipcodes)
+
+#### JSONB Fields (Not Normalized)
+
+❌ **When to use JSONB:**
+- Complex nested structures (objects within arrays)
+- Variable schemas (metadata varies by vendor)
+- Rarely queried fields (displayed but not filtered)
+
+**Attachments (JSONB in 2 tables):**
+- `items.attachments` - JSONB array: `[{url, title, pages}]`
+- `city_matters.attachments` - JSONB array
+
+**Why JSONB:**
+- Complex structure: Each attachment has 3 fields (url, title, pages)
+- Display-only: Shown to users but rarely filtered
+- No query pattern: "Show all items with PDF attachment" not a current requirement
+
+**Sponsors (JSONB in 2 tables):**
+- `items.sponsors` - JSONB array: `["Council Member Smith", "Mayor Jones"]`
+- `city_matters.sponsors` - JSONB array
+
+**Why JSONB:**
+- Simple array of strings
+- Display-only: Listed on meeting pages but not filterable
+- No query pattern: "Show all items by sponsor X" not implemented
+
+**Participation (JSONB in 1 table):**
+- `meetings.participation` - JSONB object: `{email, phone, zoom}`
+
+**Why JSONB:**
+- Semi-structured data (3 optional fields)
+- Display-only: Contact info shown to users
+- No filtering: Never queried, just displayed
+
+**Metadata (JSONB in 2 tables):**
+- `city_matters.metadata` - Vendor-specific data
+- `tracked_items.metadata` - Future tenant feature
+
+**Why JSONB:**
+- Intentionally flexible (varies by vendor)
+- Not queried (internal debugging/diagnostics)
+
+### Trade-offs
+
+**Normalized:**
+- ✅ Fast queries (indexed lookups)
+- ✅ Aggregation-friendly (GROUP BY, COUNT)
+- ❌ More tables (6+ additional tables)
+- ❌ Complex joins for display
+
+**JSONB:**
+- ✅ Flexible schema (no migrations for new fields)
+- ✅ Simple queries (single SELECT)
+- ❌ Slow filtering (full table scan without GIN index)
+- ❌ No relational integrity (can't enforce foreign keys)
+
+### Future Considerations
+
+**If query patterns change:**
+- Add GIN indexes on JSONB fields for filtering (e.g., `CREATE INDEX idx_items_sponsors ON items USING gin(sponsors)`)
+- Or normalize additional fields if filtering becomes critical
+
+**Current ratio:**
+- 64% JSONB (7 columns)
+- 36% Normalized (4 relationships)
+
+This ratio reflects display-heavy workload (users browse meetings) vs search-heavy (filter by topic is primary use case).
 
 ---
 
