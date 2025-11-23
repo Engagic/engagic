@@ -157,13 +157,67 @@ async def signup(signup_request: SignupRequest, db: UserlandDB = Depends(get_use
                 "subject": "Engagic Login Link",
                 "html": f"""
 <!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style="font-family: sans-serif; padding: 20px;">
-    <h2>Welcome to Engagic!</h2>
-    <p>Click the link below to log in:</p>
-    <p><a href="{magic_link}" style="background: #0891b2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Log In to Engagic</a></p>
-    <p style="color: #666; font-size: 12px; margin-top: 32px;">This link expires in 15 minutes.</p>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Welcome to Engagic</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
+                            <div style="margin-bottom: 16px;">
+                                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
+                            </div>
+                            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff; line-height: 1.3; font-family: 'IBM Plex Mono', monospace;">
+                                Welcome to Engagic!
+                            </h1>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 32px 40px;">
+                            <p style="margin: 0 0 24px 0; font-size: 16px; color: #0f172a; font-family: Georgia, serif; line-height: 1.7;">
+                                Click the button below to verify your account and start tracking civic meetings in your city.
+                            </p>
+
+                            <!-- CTA Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td style="border-radius: 6px; background-color: #4f46e5;">
+                                        <a href="{magic_link}" style="display: inline-block; padding: 14px 28px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px;">
+                                            Verify Account &amp; Log In
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 24px 0 0 0; font-size: 14px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
+                                Or copy and paste this link into your browser:<br>
+                                <a href="{magic_link}" style="color: #4f46e5; word-break: break-all;">{magic_link}</a>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 24px 40px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; font-size: 13px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
+                                This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
                 """,
@@ -219,13 +273,67 @@ async def login(login_request: LoginRequest, db: UserlandDB = Depends(get_userla
                 "subject": "Engagic Login Link",
                 "html": f"""
 <!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style="font-family: sans-serif; padding: 20px;">
-    <h2>Welcome back!</h2>
-    <p>Click the link below to log in:</p>
-    <p><a href="{magic_link}" style="background: #0891b2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Log In to Engagic</a></p>
-    <p style="color: #666; font-size: 12px; margin-top: 32px;">This link expires in 15 minutes.</p>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Log In to Engagic</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
+                            <div style="margin-bottom: 16px;">
+                                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
+                            </div>
+                            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff; line-height: 1.3; font-family: 'IBM Plex Mono', monospace;">
+                                Welcome back!
+                            </h1>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 32px 40px;">
+                            <p style="margin: 0 0 24px 0; font-size: 16px; color: #0f172a; font-family: Georgia, serif; line-height: 1.7;">
+                                Click the button below to log in to your Engagic account.
+                            </p>
+
+                            <!-- CTA Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td style="border-radius: 6px; background-color: #4f46e5;">
+                                        <a href="{magic_link}" style="display: inline-block; padding: 14px 28px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px;">
+                                            Log In to Engagic
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 24px 0 0 0; font-size: 14px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
+                                Or copy and paste this link into your browser:<br>
+                                <a href="{magic_link}" style="color: #4f46e5; word-break: break-all;">{magic_link}</a>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 24px 40px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; font-size: 13px; color: #64748b; font-family: Georgia, serif; line-height: 1.6;">
+                                This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
                 """,
