@@ -8,6 +8,10 @@ Provides reusable components with consistent styling and full dark mode support.
 # Dark mode CSS (universal across all email templates)
 DARK_MODE_CSS = """
     <style>
+        :root {
+            color-scheme: light dark;
+            supported-color-schemes: light dark;
+        }
         @media (prefers-color-scheme: dark) {
             body, table { background-color: #1a1a1a !important; }
             td[style*="background-color: #ffffff"],
@@ -64,6 +68,8 @@ def email_wrapper_start(title: str = "Engagic") -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
     <title>{title}</title>
 {DARK_MODE_CSS}
 </head>
