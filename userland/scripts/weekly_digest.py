@@ -23,6 +23,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from userland.database.db import UserlandDB
 from userland.email.emailer import EmailService
+from database.db import UnifiedDatabase
+from database.search_utils import search_summaries
+from config import config
 
 logging.basicConfig(
     level=os.getenv('LOG_LEVEL', 'INFO'),
@@ -31,116 +34,88 @@ logging.basicConfig(
 logger = logging.getLogger("engagic.weekly_digest")
 
 
-def get_upcoming_meetings(city_banana: str, engagic_db_path: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
+def get_upcoming_meetings(city_banana: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
     """
     Get upcoming meetings for a city in the next N days.
 
-    Reads from engagic.db (read-only).
+    Uses UnifiedDatabase repository pattern (not raw SQL).
     """
-    import sqlite3
+    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+    try:
+        today = datetime.now().date()
+        end_date = today + timedelta(days=days_ahead)
 
-    conn = sqlite3.connect(f"file:{engagic_db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
+        meetings = db.get_meetings(
+            bananas=[city_banana],
+            start_date=datetime.combine(today, datetime.min.time()),
+            end_date=datetime.combine(end_date, datetime.max.time()),
+            limit=50
+        )
 
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+        # Convert Meeting objects to dicts with necessary fields
+        result = []
+        for meeting in meetings:
+            result.append({
+                'id': meeting.id,
+                'banana': meeting.banana,
+                'title': meeting.title,
+                'date': meeting.date.isoformat() if meeting.date else None,
+                'agenda_url': meeting.agenda_url,
+                'packet_url': meeting.packet_url
+            })
 
-    query = """
-        SELECT
-            id,
-            city_banana,
-            title,
-            date,
-            source_url,
-            agenda_url
-        FROM meetings
-        WHERE city_banana = ?
-            AND date >= ?
-            AND date <= ?
-            AND (status IS NULL OR status NOT IN ('cancelled', 'postponed'))
-        ORDER BY date ASC
-    """
-
-    cursor = conn.execute(query, (city_banana, today.isoformat(), end_date.isoformat()))
-    meetings = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-
-    return meetings
+        return result
+    finally:
+        db.close()
 
 
 def find_keyword_matches(
     city_banana: str,
     keywords: List[str],
-    engagic_db_path: str,
     days_ahead: int = 7
 ) -> List[Dict[str, Any]]:
     """
     Find items in upcoming meetings that mention user's keywords.
 
-    Returns list of matches with meeting and item details.
+    Uses search_summaries() from database layer + date post-filter.
     """
     if not keywords:
         return []
 
-    import sqlite3
-
-    conn = sqlite3.connect(f"file:{engagic_db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-
     today = datetime.now().date()
     end_date = today + timedelta(days=days_ahead)
 
-    matches = []
-
+    all_matches = []
     for keyword in keywords:
-        # Search in agenda items
-        query = """
-            SELECT
-                ai.id as item_id,
-                ai.meeting_id,
-                ai.title as item_title,
-                ai.summary,
-                ai.position,
-                m.title as meeting_title,
-                m.date as meeting_date,
-                m.source_url,
-                m.agenda_url
-            FROM agenda_items ai
-            JOIN meetings m ON ai.meeting_id = m.id
-            WHERE m.city_banana = ?
-                AND m.date >= ?
-                AND m.date <= ?
-                AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
-                AND (
-                    ai.title LIKE ?
-                    OR ai.summary LIKE ?
-                )
-            ORDER BY m.date ASC, ai.position ASC
-            LIMIT 50
-        """
-
-        keyword_pattern = f"%{keyword}%"
-        cursor = conn.execute(
-            query,
-            (city_banana, today.isoformat(), end_date.isoformat(), keyword_pattern, keyword_pattern)
+        matches = search_summaries(
+            search_term=keyword,
+            city_banana=city_banana,
+            db_path=config.UNIFIED_DB_PATH
         )
 
-        for row in cursor.fetchall():
-            matches.append({
-                'keyword': keyword,
-                'item_id': row['item_id'],
-                'meeting_id': row['meeting_id'],
-                'item_title': row['item_title'],
-                'item_summary': row['summary'],
-                'item_position': row['position'],
-                'meeting_title': row['meeting_title'],
-                'meeting_date': row['meeting_date'],
-                'source_url': row['source_url'],
-                'agenda_url': row['agenda_url']
-            })
+        # Post-filter by date range (search_summaries doesn't support date filtering)
+        for match in matches:
+            if match.get('type') == 'item' and match.get('date'):
+                try:
+                    match_date = datetime.fromisoformat(match['date']).date()
+                    if today <= match_date <= end_date:
+                        # Normalize field names for email template
+                        all_matches.append({
+                            'keyword': keyword,
+                            'item_id': match['item_id'],
+                            'meeting_id': match['meeting_id'],
+                            'item_title': match['item_title'],
+                            'item_summary': match.get('summary', ''),
+                            'item_position': match.get('agenda_number', match.get('sequence', '?')),
+                            'meeting_title': match['meeting_title'],
+                            'meeting_date': match['date'],
+                            'agenda_url': match.get('agenda_url'),
+                            'banana': match['banana']
+                        })
+                except (ValueError, TypeError):
+                    continue
 
-    conn.close()
-    return matches
+    return all_matches
 
 
 def build_digest_email(
@@ -220,7 +195,7 @@ def build_digest_email(
             # Build meeting slug: YYYY-MM-DD-meeting_id
             meeting_date_obj = datetime.fromisoformat(meeting['date'])
             meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting['id']}"
-            meeting_url = f"{app_url}/{meeting['city_banana']}/{meeting_slug}"
+            meeting_url = f"{app_url}/{meeting['banana']}/{meeting_slug}"
 
             html += f"""
             <div style="margin-bottom: 16px; padding: 20px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
@@ -255,7 +230,7 @@ def build_digest_email(
                 meetings_map[mid] = {
                     'title': match['meeting_title'],
                     'date': match['meeting_date'],
-                    'city_banana': city_name.lower().replace(' ', ''),
+                    'banana': match['banana'],
                     'items': []
                 }
             meetings_map[mid]['items'].append(match)
@@ -270,7 +245,7 @@ def build_digest_email(
             # Build meeting slug: YYYY-MM-DD-meeting_id
             meeting_date_obj = datetime.fromisoformat(meeting_data['date'])
             meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting_id}"
-            meeting_url = f"{app_url}/{meeting_data['city_banana']}/{meeting_slug}"
+            meeting_url = f"{app_url}/{meeting_data['banana']}/{meeting_slug}"
 
             html += f"""
             <div style="margin-bottom: 24px; padding: 20px; background: #f3e8ff; border-radius: 6px; border-left: 4px solid #8B5CF6;">
@@ -329,7 +304,6 @@ def send_weekly_digest():
     """Main function: Send weekly digests to all active users"""
 
     userland_db_path = os.getenv('USERLAND_DB', '/root/engagic/data/userland.db')
-    engagic_db_path = os.getenv('ENGAGIC_UNIFIED_DB', '/root/engagic/data/engagic.db')
     app_url = os.getenv('APP_URL', 'https://engagic.org')
 
     logger.info("Starting weekly digest process...")
@@ -360,12 +334,12 @@ def send_weekly_digest():
             primary_city = alert.cities[0]
             logger.info(f"Processing digest for {user.email} ({primary_city})...")
 
-            # Get upcoming meetings
-            upcoming_meetings = get_upcoming_meetings(primary_city, engagic_db_path, days_ahead=7)
+            # Get upcoming meetings (uses UnifiedDatabase)
+            upcoming_meetings = get_upcoming_meetings(primary_city, days_ahead=7)
 
-            # Get keyword matches
+            # Get keyword matches (uses search_summaries)
             keywords = alert.criteria.get('keywords', [])
-            keyword_matches = find_keyword_matches(primary_city, keywords, engagic_db_path, days_ahead=7)
+            keyword_matches = find_keyword_matches(primary_city, keywords, days_ahead=7)
 
             # Skip if no content
             if not upcoming_meetings and not keyword_matches:
