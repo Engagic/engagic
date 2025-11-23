@@ -210,7 +210,7 @@ def item_card(
                                         </p>""" if keyword else ""
 
     button_html = f"""
-                                        <a href="{url}" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
+                                        <a href="{url}" style="display: inline-block; padding: 12px 28px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 7px; font-weight: 600; font-size: 14px; font-family: 'IBM Plex Mono', monospace; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);">
                                             {button_text}
                                         </a>""" if url else ""
 
@@ -250,7 +250,7 @@ def simple_button(url: str, text: str, centered: bool = True) -> str:
     return f"""
                     <tr>
                         <td style="padding: 0 40px 32px 40px;"{align_attr}>
-                            <a href="{url}" style="display: inline-block; padding: 12px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; font-family: 'IBM Plex Mono', monospace;">
+                            <a href="{url}" style="display: inline-block; padding: 12px 28px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 7px; font-weight: 600; font-size: 14px; font-family: 'IBM Plex Mono', monospace; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);">
                                 {text}
                             </a>
                         </td>
