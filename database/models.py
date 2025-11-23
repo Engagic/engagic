@@ -5,8 +5,6 @@ Pydantic dataclasses with runtime validation for core entities.
 """
 
 
-import sqlite3
-import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic.dataclasses import dataclass
@@ -41,25 +39,6 @@ class City:
             data["updated_at"] = self.updated_at.isoformat()
         return data
 
-    @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> "City":
-        """Create City from database row"""
-        row_dict = dict(row)
-        return cls(
-            banana=row_dict["banana"],
-            name=row_dict["name"],
-            state=row_dict["state"],
-            vendor=row_dict["vendor"],
-            slug=row_dict["slug"],
-            county=row_dict.get("county"),
-            status=row_dict.get("status", "active"),
-            created_at=datetime.fromisoformat(row_dict["created_at"])
-            if row_dict.get("created_at")
-            else None,
-            updated_at=datetime.fromisoformat(row_dict["updated_at"])
-            if row_dict.get("updated_at")
-            else None,
-        )
 
 
 @dataclass
@@ -95,16 +74,7 @@ class Meeting:
 
     def __post_init__(self):
         """Validate meeting data after initialization"""
-        # Validate banana format
-        if not self.banana:
-            from exceptions import ValidationError
-            raise ValidationError(
-                "Meeting must have a banana (city identifier)",
-                field="banana",
-                value=self.banana
-            )
-
-        # Validate processing_status values
+        # Validate processing_status enum (Pydantic doesn't enforce sets automatically)
         valid_statuses = {"pending", "processing", "completed", "failed"}
         if self.processing_status not in valid_statuses:
             from exceptions import ValidationError
@@ -130,63 +100,6 @@ class Meeting:
 
         return data
 
-    @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> "Meeting":
-        """Create Meeting from database row"""
-        row_dict = dict(row)
-
-        # Deserialize packet_url if it's a JSON list
-        packet_url = row_dict.get("packet_url")
-        if packet_url and packet_url.startswith("["):
-            try:
-                packet_url = json.loads(packet_url)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize packet_url JSON", packet_url=packet_url)
-                pass  # Keep as string if JSON parsing fails
-
-        # Deserialize participation if it's JSON
-        participation = row_dict.get("participation")
-        if participation:
-            try:
-                participation = json.loads(participation)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize participation JSON", participation=participation)
-                participation = None
-
-        # Deserialize topics if it's JSON
-        topics = row_dict.get("topics")
-        if topics:
-            try:
-                topics = json.loads(topics)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize topics JSON", topics=topics)
-                topics = None
-        else:
-            topics = None
-
-        return cls(
-            id=row_dict["id"],
-            banana=row_dict["banana"],
-            title=row_dict["title"],
-            date=datetime.fromisoformat(row_dict["date"])
-            if row_dict.get("date")
-            else None,
-            agenda_url=row_dict.get("agenda_url"),
-            packet_url=packet_url,
-            summary=row_dict.get("summary"),
-            participation=participation,
-            status=row_dict.get("status"),
-            topics=topics,
-            processing_status=row_dict.get("processing_status", "pending"),
-            processing_method=row_dict.get("processing_method"),
-            processing_time=row_dict.get("processing_time"),
-            created_at=datetime.fromisoformat(row_dict["created_at"])
-            if row_dict.get("created_at")
-            else None,
-            updated_at=datetime.fromisoformat(row_dict["updated_at"])
-            if row_dict.get("updated_at")
-            else None,
-        )
 
 
 @dataclass
@@ -274,81 +187,6 @@ class Matter:
             data["updated_at"] = self.updated_at.isoformat()
         return data
 
-    @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> "Matter":
-        """Create Matter from database row"""
-        row_dict = dict(row)
-
-        # Deserialize JSON fields
-        sponsors = row_dict.get("sponsors")
-        if sponsors:
-            try:
-                sponsors = json.loads(sponsors)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize sponsors JSON", sponsors=sponsors)
-                sponsors = None
-        else:
-            sponsors = None
-
-        canonical_topics = row_dict.get("canonical_topics")
-        if canonical_topics:
-            try:
-                canonical_topics = json.loads(canonical_topics)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize canonical_topics JSON", canonical_topics=canonical_topics)
-                canonical_topics = None
-        else:
-            canonical_topics = None
-
-        attachments = row_dict.get("attachments")
-        if attachments:
-            try:
-                attachments = json.loads(attachments)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize attachments JSON", attachments=attachments)
-                attachments = None
-        else:
-            attachments = None
-
-        metadata = row_dict.get("metadata")
-        if metadata:
-            try:
-                metadata = json.loads(metadata)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize metadata JSON", metadata=metadata)
-                metadata = None
-        else:
-            metadata = None
-
-        return cls(
-            id=row_dict["id"],
-            banana=row_dict["banana"],
-            matter_file=row_dict.get("matter_file"),
-            matter_id=row_dict.get("matter_id"),
-            matter_type=row_dict.get("matter_type"),
-            title=row_dict.get("title"),
-            sponsors=sponsors,
-            canonical_summary=row_dict.get("canonical_summary"),
-            canonical_topics=canonical_topics,
-            first_seen=datetime.fromisoformat(row_dict["first_seen"])
-            if row_dict.get("first_seen")
-            else None,
-            last_seen=datetime.fromisoformat(row_dict["last_seen"])
-            if row_dict.get("last_seen")
-            else None,
-            appearance_count=row_dict.get("appearance_count", 1),
-            status=row_dict.get("status", "active"),
-            attachments=attachments,
-            metadata=metadata,
-            created_at=datetime.fromisoformat(row_dict["created_at"])
-            if row_dict.get("created_at")
-            else None,
-            updated_at=datetime.fromisoformat(row_dict["updated_at"])
-            if row_dict.get("updated_at")
-            else None,
-        )
-
-
 @dataclass
 class AgendaItem:
     """Agenda item entity - individual items within a meeting
@@ -423,57 +261,3 @@ class AgendaItem:
 
         return data
 
-    @classmethod
-    def from_db_row(cls, row: sqlite3.Row) -> "AgendaItem":
-        """Create AgendaItem from database row"""
-        row_dict = dict(row)
-
-        # Deserialize JSON fields
-        attachments = row_dict.get("attachments")
-        if attachments:
-            try:
-                attachments = json.loads(attachments)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize attachments JSON", attachments=attachments)
-                attachments = []
-        else:
-            attachments = []
-
-        topics = row_dict.get("topics")
-        if topics:
-            try:
-                topics = json.loads(topics)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize topics JSON", topics=topics)
-                topics = None
-        else:
-            topics = None
-
-        sponsors = row_dict.get("sponsors")
-        if sponsors:
-            try:
-                sponsors = json.loads(sponsors)
-            except json.JSONDecodeError:
-                logger.warning("failed to deserialize sponsors JSON", sponsors=sponsors)
-                sponsors = None
-        else:
-            sponsors = None
-
-        return cls(
-            id=row_dict["id"],
-            meeting_id=row_dict["meeting_id"],
-            title=row_dict["title"],
-            sequence=row_dict["sequence"],
-            attachments=attachments,
-            attachment_hash=row_dict.get("attachment_hash"),
-            matter_id=row_dict.get("matter_id"),
-            matter_file=row_dict.get("matter_file"),
-            matter_type=row_dict.get("matter_type"),
-            agenda_number=row_dict.get("agenda_number"),
-            sponsors=sponsors,
-            summary=row_dict.get("summary"),
-            topics=topics,
-            created_at=datetime.fromisoformat(row_dict["created_at"])
-            if row_dict.get("created_at")
-            else None,
-        )

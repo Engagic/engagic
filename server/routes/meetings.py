@@ -59,21 +59,9 @@ async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
 
 @router.post("/process-agenda")
 async def process_agenda(request: ProcessRequest, db: UnifiedDatabase = Depends(get_db)):
-    """Get cached agenda summary - no longer processes on-demand"""
+    """Check if agenda has been processed - no longer processes on-demand"""
     try:
-        # Check for cached summary
-        cached_summary = await db.get_cached_summary(request.packet_url)
-
-        if cached_summary:
-            return {
-                "success": True,
-                "summary": cached_summary.summary,
-                "processing_time_seconds": cached_summary.processing_time or 0,
-                "cached": True,
-                "meeting_data": cached_summary.to_dict(),
-            }
-
-        # No cached summary available
+        # No cache - summary not yet available
         return {
             "success": False,
             "message": "Summary not yet available - processing in background",
