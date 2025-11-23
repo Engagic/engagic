@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from userland.database.db import UserlandDB
 from userland.email.emailer import EmailService
+from userland.email.templates import DARK_MODE_CSS
 from database.db import UnifiedDatabase
 from database.search_utils import search_summaries
 from config import config
@@ -170,43 +171,6 @@ def build_digest_email(
         date_obj = datetime.fromisoformat(date_str)
         return date_obj.strftime("%a, %b %d")
 
-    # Dark mode CSS for professional email rendering
-    dark_mode_css = """
-    <style>
-        @media (prefers-color-scheme: dark) {
-            body, table { background-color: #1a1a1a !important; }
-
-            td[style*="background-color: #ffffff"] { background-color: #1e293b !important; }
-            table[style*="background-color: #ffffff"] { background-color: #1e293b !important; }
-
-            td[style*="background-color: #f8fafc"],
-            table[style*="background-color: #f8fafc"],
-            div[style*="background: #f8fafc"] { background-color: #0f172a !important; }
-
-            td[style*="background-color: #4f46e5"] { background-color: #4f46e5 !important; }
-
-            p[style*="color: #0f172a"],
-            h1[style*="color: #0f172a"],
-            h2[style*="color: #0f172a"] { color: #e2e8f0 !important; }
-
-            p[style*="color: #475569"],
-            span[style*="color: #475569"] { color: #cbd5e1 !important; }
-
-            p[style*="color: #64748b"],
-            span[style*="color: #64748b"] { color: #94a3b8 !important; }
-
-            td[style*="border: 2px solid #e2e8f0"],
-            table[style*="border: 2px solid #e2e8f0"],
-            td[style*="border-top: 1px solid #e2e8f0"] { border-color: #334155 !important; }
-
-            div[style*="border-left: 3px solid #4f46e5"],
-            div[style*="border-left: 4px solid #4f46e5"] { border-color: #4f46e5 !important; }
-
-            a[style*="background-color: #4f46e5"] { background-color: #4f46e5 !important; color: #ffffff !important; }
-        }
-    </style>
-"""
-
     # Header with branding
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -215,7 +179,7 @@ def build_digest_email(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>This week in {city_name}</title>
-{dark_mode_css}
+{DARK_MODE_CSS}
 </head>
 <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">

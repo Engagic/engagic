@@ -14,6 +14,11 @@ from userland.settings import (
     MAILGUN_FROM_EMAIL,
     APP_URL,
 )
+from userland.email.templates import (
+    DARK_MODE_CSS,
+    email_wrapper_start,
+    email_wrapper_end,
+)
 
 logger = logging.getLogger("userland")
 
@@ -51,46 +56,7 @@ def send_magic_link(
         message = "Click the button below to access your digest dashboard:"
 
     subject = "Engagic Login Link"
-    html = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Your Engagic Login Link</title>
-    <style>
-        @media (prefers-color-scheme: dark) {{
-            body, table {{ background-color: #1a1a1a !important; }}
-            td[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
-            table[style*="background-color: #ffffff"] {{ background-color: #1e293b !important; }}
-            td[style*="background-color: #f8fafc"],
-            table[style*="background-color: #f8fafc"] {{ background-color: #1a1a1a !important; }}
-
-            p[style*="color: #0f172a"],
-            h1[style*="color: #0f172a"] {{ color: #e2e8f0 !important; }}
-
-            p[style*="color: #475569"] {{ color: #cbd5e1 !important; }}
-
-            p[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
-
-            p[style*="color: #94a3b8"] {{ color: #64748b !important; }}
-
-            td[style*="border-top: 1px solid #e2e8f0"],
-            td[style*="border: 2px solid #e2e8f0"],
-            table[style*="border: 2px solid #e2e8f0"] {{ border-color: #334155 !important; }}
-
-            a[style*="background-color: #4f46e5"] {{ background-color: #4f46e5 !important; color: #ffffff !important; }}
-
-            a[style*="color: #4f46e5"] {{ color: #a78bfa !important; }}
-        }}
-    </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Courier New', monospace;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    html = f"""{email_wrapper_start("Your Engagic Login Link")}
                     <!-- Header -->
                     <tr>
                         <td style="padding: 40px 40px 24px 40px; text-align: center;">
@@ -141,13 +107,7 @@ def send_magic_link(
                             </p>
                         </td>
                     </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>
-    """
+{email_wrapper_end()}"""
 
     text = f"""
     {greeting.replace('<strong>', '').replace('</strong>', '')}
