@@ -798,6 +798,9 @@ class Database:
         """Get meeting statistics for multiple cities
 
         Returns dict with city-level meeting counts and summary stats.
+        Adapted for item-level processing (PostgreSQL):
+        - meetings_with_packet: Counts meetings with agenda_url OR packet_url
+        - summarized_meetings: Counts meetings that have items with summaries
         """
         stats = {}
 
@@ -806,8 +809,14 @@ class Database:
                 result = await conn.fetchrow("""
                     SELECT
                         COUNT(*) as total_meetings,
-                        COUNT(CASE WHEN packet_url IS NOT NULL THEN 1 END) as meetings_with_packet,
-                        COUNT(CASE WHEN summary IS NOT NULL THEN 1 END) as summarized_meetings
+                        COUNT(CASE WHEN (packet_url IS NOT NULL OR agenda_url IS NOT NULL) THEN 1 END) as meetings_with_packet,
+                        COUNT(DISTINCT CASE
+                            WHEN EXISTS (
+                                SELECT 1 FROM items
+                                WHERE items.meeting_id = meetings.id
+                                AND items.summary IS NOT NULL
+                            ) THEN meetings.id
+                        END) as summarized_meetings
                     FROM meetings
                     WHERE banana = $1
                 """, banana)
