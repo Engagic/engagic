@@ -130,6 +130,33 @@ class SQLiteRateLimiter:
                 )
             """)
 
+            # Violation tracking for progressive penalties
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS rate_limit_violations (
+                    client_ip TEXT NOT NULL,
+                    violation_time REAL NOT NULL,
+                    violation_type TEXT NOT NULL,
+                    PRIMARY KEY (client_ip, violation_time)
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_violations_ip ON rate_limit_violations(client_ip)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_violations_time ON rate_limit_violations(violation_time)"
+            )
+
+            # Temporary bans (stores REAL IPs for nginx blocking)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS temp_bans (
+                    client_ip TEXT PRIMARY KEY,
+                    real_ip TEXT,
+                    ban_until REAL NOT NULL,
+                    ban_reason TEXT,
+                    violation_count INTEGER DEFAULT 0
+                )
+            """)
+
             conn.commit()
             logger.info(f"Initialized persistent rate limiter at {self.db_path}")
 
@@ -156,6 +183,104 @@ class SQLiteRateLimiter:
 
         # Default to basic tier for unauthenticated requests
         return RateLimitTier.BASIC
+
+    def check_temp_ban(self, client_ip: str) -> Tuple[bool, Optional[float]]:
+        """
+        Check if client is temporarily banned.
+
+        Returns:
+            (is_banned, ban_until_timestamp)
+        """
+        current_time = time.time()
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT ban_until FROM temp_bans WHERE client_ip = ?",
+                (client_ip,)
+            )
+            result = cursor.fetchone()
+
+            if result:
+                ban_until = result[0]
+                if current_time < ban_until:
+                    return True, ban_until
+                else:
+                    # Ban expired, clean up
+                    conn.execute("DELETE FROM temp_bans WHERE client_ip = ?", (client_ip,))
+                    conn.commit()
+                    return False, None
+
+            return False, None
+
+    def record_violation(self, client_ip: str, violation_type: str, real_ip: Optional[str] = None):
+        """Record a rate limit violation and implement progressive penalties."""
+        current_time = time.time()
+
+        with sqlite3.connect(self.db_path) as conn:
+            # Record the violation
+            try:
+                conn.execute(
+                    "INSERT INTO rate_limit_violations (client_ip, violation_time, violation_type) VALUES (?, ?, ?)",
+                    (client_ip, current_time, violation_type)
+                )
+                conn.commit()
+            except sqlite3.IntegrityError:
+                pass  # Duplicate timestamp, ignore
+
+            # Count violations in last hour
+            one_hour_ago = current_time - 3600
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM rate_limit_violations WHERE client_ip = ? AND violation_time > ?",
+                (client_ip, one_hour_ago)
+            )
+            violations_1h = cursor.fetchone()[0]
+
+            # Count violations in last 24 hours
+            one_day_ago = current_time - 86400
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM rate_limit_violations WHERE client_ip = ? AND violation_time > ?",
+                (client_ip, one_day_ago)
+            )
+            violations_24h = cursor.fetchone()[0]
+
+            # Progressive penalties
+            ban_duration = None
+            ban_reason = None
+
+            if violations_24h >= 100:
+                ban_duration = 604800  # 7 days
+                ban_reason = f"100+ violations in 24 hours (total: {violations_24h})"
+            elif violations_1h >= 50:
+                ban_duration = 86400  # 24 hours
+                ban_reason = f"50+ violations in 1 hour (total: {violations_1h})"
+            elif violations_1h >= 10:
+                ban_duration = 3600  # 1 hour
+                ban_reason = f"10+ violations in 1 hour (total: {violations_1h})"
+
+            if ban_duration:
+                ban_until = current_time + ban_duration
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO temp_bans (client_ip, real_ip, ban_until, ban_reason, violation_count)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (client_ip, real_ip, ban_until, ban_reason, violations_1h)
+                )
+                conn.commit()
+                logger.warning(
+                    f"Temporary ban imposed on {client_ip[:16]} (real IP: {real_ip}) - {ban_reason} - banned until {ban_until}"
+                )
+
+                # Export blocked IPs for nginx
+                self.export_blocked_ips()
+
+            # Cleanup old violations (keep last 7 days)
+            cleanup_cutoff = current_time - 604800
+            conn.execute(
+                "DELETE FROM rate_limit_violations WHERE violation_time < ?",
+                (cleanup_cutoff,)
+            )
+            conn.commit()
 
     def check_daily_limit(self, client_ip: str, tier: RateLimitTier) -> Tuple[bool, int]:
         """
@@ -205,7 +330,40 @@ class SQLiteRateLimiter:
             remaining = day_limit - current_count - 1
             return True, max(0, remaining)
 
-    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
+    def export_blocked_ips(self):
+        """Export currently banned real IPs to nginx-compatible format"""
+        current_time = time.time()
+        nginx_conf_file = Path(self.db_path).parent / "blocked_ips_nginx.conf"
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT real_ip FROM temp_bans WHERE ban_until > ? AND real_ip IS NOT NULL",
+                    (current_time,)
+                )
+                blocked_ips = [row[0] for row in cursor.fetchall()]
+
+            # Write nginx geo format
+            with open(nginx_conf_file, 'w') as f:
+                f.write("# Auto-generated blocked IPs - DO NOT EDIT MANUALLY\n")
+                for ip in blocked_ips:
+                    f.write(f"{ip} 1;\n")
+
+            logger.info(f"Exported {len(blocked_ips)} blocked IPs to {nginx_conf_file}")
+
+            # Reload nginx if IPs were blocked/unblocked
+            if blocked_ips:
+                import subprocess
+                try:
+                    subprocess.run(["nginx", "-t"], check=True, capture_output=True)
+                    subprocess.run(["systemctl", "reload", "nginx"], check=True)
+                    logger.info("Nginx reloaded with updated blocklist")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Failed to reload nginx: {e}")
+        except Exception as e:
+            logger.error(f"Failed to export blocked IPs: {e}")
+
+    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
         """
         Check if client has exceeded rate limits (both minute and day).
 
@@ -218,6 +376,18 @@ class SQLiteRateLimiter:
         """
         current_time = time.time()
         window_start = current_time - self.window_seconds
+
+        # Check for temporary ban first
+        is_banned, ban_until = self.check_temp_ban(client_ip)
+        if is_banned and ban_until is not None:
+            remaining_seconds = int(ban_until - current_time)
+            return False, 0, {
+                "tier": "banned",
+                "limit_type": "temp_ban",
+                "ban_until": ban_until,
+                "remaining_seconds": remaining_seconds,
+                "message": f"Temporarily banned for excessive rate limit violations. Ban lifts in {remaining_seconds}s."
+            }
 
         # Get client tier
         tier = self.get_client_tier(client_ip, api_key)
@@ -242,6 +412,7 @@ class SQLiteRateLimiter:
 
             # Check minute limit
             if request_count >= minute_limit:
+                self.record_violation(client_ip, "minute", real_ip)
                 return False, 0, {
                     "tier": tier.value,
                     "limit_type": "minute",
@@ -252,6 +423,7 @@ class SQLiteRateLimiter:
             # Check daily limit
             is_allowed_daily, remaining_daily = self.check_daily_limit(client_ip, tier)
             if not is_allowed_daily:
+                self.record_violation(client_ip, "daily", real_ip)
                 return False, 0, {
                     "tier": tier.value,
                     "limit_type": "daily",

@@ -48,22 +48,48 @@ async def rate_limit_middleware(
     # Scanners bypass /api/ check by hitting root, /login.php, etc.
     should_rate_limit = True
 
-    # Optional: Whitelist monitoring endpoints (uncomment if needed)
-    # if request.url.path in ["/health", "/metrics"]:
-    #     should_rate_limit = False
+    # Whitelist monitoring endpoints
+    if request.url.path in ["/health", "/metrics"]:
+        should_rate_limit = False
 
     if should_rate_limit:
         # Get API key from header (optional, for future use)
         api_key = request.headers.get("X-API-Key")
 
-        is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(client_ip_hash, api_key)
+        is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(client_ip_hash, api_key, client_ip_raw)
 
         if not is_allowed:
             limit_type = limit_info.get("limit_type", "unknown")
             tier = limit_info.get("tier", "basic")
+
+            # Log endpoint being accessed for debugging
+            endpoint = f"{request.method} {request.url.path}"
             logger.warning(
-                f"Rate limit exceeded for {client_ip_hash} (hashed) - tier: {tier}, limit: {limit_type}"
+                f"Rate limit exceeded for {client_ip_hash} (hashed) - tier: {tier}, limit: {limit_type}, endpoint: {endpoint}"
             )
+
+            # Handle temp ban separately
+            if limit_type == "temp_ban":
+                remaining_seconds = limit_info.get("remaining_seconds", 0)
+                ban_message = limit_info.get("message", "Temporarily banned")
+
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": "Temporarily banned",
+                        "message": ban_message,
+                        "ban_remaining_seconds": remaining_seconds,
+                        "reason": "Excessive rate limit violations - progressive penalty applied"
+                    },
+                    headers={
+                        "Retry-After": str(remaining_seconds),
+                        "X-Ban-Until": str(limit_info.get("ban_until", 0)),
+                        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+                        "Access-Control-Allow-Credentials": "true",
+                        "Access-Control-Allow-Methods": "*",
+                        "Access-Control-Allow-Headers": "*",
+                    }
+                )
 
             # Construct graduated messaging based on limit type
             if limit_type == "daily":
