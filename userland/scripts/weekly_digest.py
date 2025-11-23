@@ -18,7 +18,7 @@ import os
 import sys
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -162,6 +162,7 @@ def build_digest_email(
     Build HTML email for weekly digest.
 
     Clean format: Upcoming meetings first, then keyword matches.
+    Uses shared template components with full dark mode support.
     """
 
     # Format meeting dates
@@ -169,27 +170,70 @@ def build_digest_email(
         date_obj = datetime.fromisoformat(date_str)
         return date_obj.strftime("%a, %b %d")
 
-    # Header
+    # Dark mode CSS for professional email rendering
+    dark_mode_css = """
+    <style>
+        @media (prefers-color-scheme: dark) {
+            body, table { background-color: #1a1a1a !important; }
+
+            td[style*="background-color: #ffffff"] { background-color: #1e293b !important; }
+            table[style*="background-color: #ffffff"] { background-color: #1e293b !important; }
+
+            td[style*="background-color: #f8fafc"],
+            table[style*="background-color: #f8fafc"],
+            div[style*="background: #f8fafc"] { background-color: #0f172a !important; }
+
+            td[style*="background-color: #4f46e5"] { background-color: #4f46e5 !important; }
+
+            p[style*="color: #0f172a"],
+            h1[style*="color: #0f172a"],
+            h2[style*="color: #0f172a"] { color: #e2e8f0 !important; }
+
+            p[style*="color: #475569"],
+            span[style*="color: #475569"] { color: #cbd5e1 !important; }
+
+            p[style*="color: #64748b"],
+            span[style*="color: #64748b"] { color: #94a3b8 !important; }
+
+            td[style*="border: 2px solid #e2e8f0"],
+            table[style*="border: 2px solid #e2e8f0"],
+            td[style*="border-top: 1px solid #e2e8f0"] { border-color: #334155 !important; }
+
+            div[style*="border-left: 3px solid #4f46e5"],
+            div[style*="border-left: 4px solid #4f46e5"] { border-color: #4f46e5 !important; }
+
+            a[style*="background-color: #4f46e5"] { background-color: #4f46e5 !important; color: #ffffff !important; }
+        }
+    </style>
+"""
+
+    # Header with branding
     html = f"""<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>This week in {city_name}</title>
+{dark_mode_css}
 </head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: system-ui, -apple-system, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
         <tr>
             <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 
-                    <!-- Header -->
+                    <!-- Branded Header -->
                     <tr>
-                        <td style="padding: 32px 32px 24px 32px;">
-                            <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 600; color: #0f172a;">
+                        <td style="padding: 32px 40px 24px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
+                            <div style="margin-bottom: 16px;">
+                                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">engagic</span>
+                            </div>
+                            <h1 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #ffffff; line-height: 1.3; font-family: 'IBM Plex Mono', monospace;">
                                 This week in {city_name}
                             </h1>
-                            <p style="margin: 0; font-size: 14px; color: #64748b;">
-                                Your weekly civic update from engagic
+                            <p style="margin: 0; font-size: 14px; color: #ffffff; opacity: 0.9; font-family: Georgia, serif;">
+                                Your weekly civic digest
                             </p>
                         </td>
                     </tr>
@@ -199,8 +243,8 @@ def build_digest_email(
     if upcoming_meetings:
         html += """
                     <tr>
-                        <td style="padding: 0 32px 24px 32px;">
-                            <h2 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em;">
+                        <td style="padding: 0 40px 24px 40px;">
+                            <h2 style="margin: 0 0 16px 0; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'IBM Plex Mono', monospace;">
                                 Upcoming Meetings This Week
                             </h2>
 """
@@ -210,11 +254,11 @@ def build_digest_email(
             meeting_url = f"{app_url}/{meeting['banana']}/{meeting_slug}"
 
             html += f"""
-                            <div style="margin-bottom: 12px; padding: 16px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #4f46e5;">
-                                <p style="margin: 0 0 8px 0; font-size: 15px; font-weight: 600; color: #0f172a;">
+                            <div style="margin-bottom: 12px; padding: 16px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
+                                <p style="margin: 0 0 8px 0; font-size: 15px; font-weight: 600; color: #0f172a; font-family: 'IBM Plex Mono', monospace;">
                                     {format_date(meeting['date'])} - {meeting['title']}
                                 </p>
-                                <a href="{meeting_url}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 500;">
+                                <a href="{meeting_url}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                                     View agenda →
                                 </a>
                             </div>
@@ -228,9 +272,9 @@ def build_digest_email(
     if keyword_matches:
         html += f"""
                     <tr>
-                        <td style="padding: 0 32px 24px 32px; border-top: 1px solid #e2e8f0;">
-                            <h2 style="margin: 24px 0 16px 0; font-size: 16px; font-weight: 600; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em;">
-                                Your Keywords: {', '.join(keywords)}
+                        <td style="padding: 0 40px 24px 40px; border-top: 1px solid #e2e8f0;">
+                            <h2 style="margin: 24px 0 16px 0; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'IBM Plex Mono', monospace;">
+                                Your Keywords: {', '.join(keywords).upper()}
                             </h2>
 """
         for match in keyword_matches:
@@ -239,20 +283,28 @@ def build_digest_email(
             meeting_url = f"{app_url}/{match['banana']}/{meeting_slug}"
             item_url = f"{meeting_url}#item-{match['item_id']}"
 
-            summary = match['item_summary'][:250] + '...' if len(match['item_summary']) > 250 else match['item_summary']
+            # Use context field (keyword-highlighted text) instead of summary
+            context = match.get('context', match.get('item_summary', ''))
+            if len(context) > 300:
+                context = context[:297] + "..."
+
+            keyword = match.get('keyword', '')
 
             html += f"""
-                            <div style="margin-bottom: 20px; padding: 20px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #4f46e5;">
-                                <p style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #0f172a;">
+                            <div style="margin-bottom: 20px; padding: 24px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
+                                <p style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #0f172a; line-height: 1.5; font-family: 'IBM Plex Mono', monospace;">
                                     {match['item_title']}
                                 </p>
-                                <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b;">
+                                <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
                                     {match['meeting_title']} • {format_date(match['meeting_date'])}
                                 </p>
-                                <p style="margin: 0 0 16px 0; font-size: 14px; color: #475569; line-height: 1.6;">
-                                    {summary}
+                                <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
+                                    Matched: <strong style="color: #475569;">"{keyword}"</strong>
                                 </p>
-                                <a href="{item_url}" style="display: inline-block; padding: 10px 20px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">
+                                <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569; line-height: 1.7; font-family: Georgia, serif;">
+                                    {context}
+                                </p>
+                                <a href="{item_url}" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
                                     View Item
                                 </a>
                             </div>
@@ -265,12 +317,18 @@ def build_digest_email(
     # Footer
     html += f"""
                     <tr>
-                        <td style="padding: 24px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
-                            <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b;">
+                        <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
                                 You're receiving this because you're watching {city_name}
                             </p>
-                            <p style="margin: 0; font-size: 13px;">
-                                <a href="{app_url}/dashboard" style="color: #4f46e5; text-decoration: none; font-weight: 500;">Manage subscription</a>
+                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
+                            </p>
+                            <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
+                                Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
+                            </p>
+                            <p style="margin: 0; font-size: 12px; font-family: Georgia, serif;">
+                                <a href="{app_url}/dashboard" style="color: #64748b; text-decoration: underline;">Manage subscription</a>
                                 <span style="margin: 0 8px; color: #cbd5e1;">|</span>
                                 <a href="{app_url}/unsubscribe" style="color: #64748b; text-decoration: none;">Unsubscribe</a>
                             </p>
