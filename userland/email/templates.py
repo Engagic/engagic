@@ -26,6 +26,9 @@ DARK_MODE_CSS = """
             p[style*="color: #64748b"],
             span[style*="color: #64748b"] { color: #94a3b8 !important; }
 
+            p[style*="color: #334155"],
+            span[style*="color: #334155"] { color: #cbd5e1 !important; }
+
             td[style*="border: 2px solid #e2e8f0"],
             table[style*="border: 2px solid #e2e8f0"],
             td[style*="border-top: 1px solid #e2e8f0"],
