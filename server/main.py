@@ -46,8 +46,30 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown: Close connection pool
-    await db.close()
-    logger.info("closed PostgreSQL connection pool")
+    try:
+        # Log connection count before closing
+        active_connections = db.pool.get_size()
+        logger.info(
+            "closing connection pool",
+            active_connections=active_connections,
+            min_size=db.pool.get_min_size(),
+            max_size=db.pool.get_max_size(),
+        )
+
+        await db.close()
+        logger.info("closed PostgreSQL connection pool")
+
+        # Warn if connections were active during shutdown (potential leaks)
+        if active_connections > 0:
+            logger.warning(
+                "connection pool had active connections on shutdown",
+                count=active_connections,
+            )
+
+    except Exception as e:
+        # Don't crash on shutdown - log and continue
+        logger.error("error closing connection pool", error=str(e), exc_info=True)
+        # Don't re-raise - allow shutdown to proceed gracefully
 
 
 # Initialize FastAPI app with lifespan

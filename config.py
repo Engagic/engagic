@@ -51,8 +51,8 @@ class Config:
         self.POSTGRES_DB = os.getenv("ENGAGIC_POSTGRES_DB", "engagic")
         self.POSTGRES_USER = os.getenv("ENGAGIC_POSTGRES_USER", "engagic")
         self.POSTGRES_PASSWORD = os.getenv("ENGAGIC_POSTGRES_PASSWORD", "")
-        self.POSTGRES_POOL_MIN_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MIN_SIZE", "10"))
-        self.POSTGRES_POOL_MAX_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MAX_SIZE", "100"))
+        self.POSTGRES_POOL_MIN_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MIN_SIZE", "5"))
+        self.POSTGRES_POOL_MAX_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MAX_SIZE", "20"))
 
         # Default log path to repo-relative
         default_log_path = os.path.join(os.getcwd(), "engagic.log")
