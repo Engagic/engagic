@@ -189,7 +189,7 @@ def main():
 
         # Execute reset
         deleted = reset_queue(args.dsn, status)
-        print(f"✅ Deleted {deleted} queue items")
+        print(f"Deleted {deleted} queue items")
         return
 
     # No action specified

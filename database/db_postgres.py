@@ -576,7 +576,7 @@ class Database:
         await self.queue.enqueue_job(
             source_url=source_url,
             job_type="meeting",
-            payload={"meeting_id": stored_meeting.id, "banana": stored_meeting.banana},
+            payload={"meeting_id": stored_meeting.id, "source_url": source_url},
             meeting_id=stored_meeting.id,
             banana=stored_meeting.banana,
             priority=priority,
