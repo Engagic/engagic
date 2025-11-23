@@ -1,14 +1,14 @@
 # PostgreSQL Migration: Assessment → Plan → Progress
 
 **Date:** 2025-11-23
-**Status:** Week 1-2 ~95% Complete - API Live on PostgreSQL! 🎉
+**Status:** Week 1-2 ~98% Complete - API Fully Async on PostgreSQL! 🎉
 **Timeline:** 5 weeks total (Week 1-2 nearly done)
 
 ---
 
 ## 🎯 Progress Summary
 
-**COMPLETED (Days 1-2):**
+**COMPLETED (Days 1-3):**
 - ✅ PostgreSQL schema design (17 tables, topic normalization, FTS)
 - ✅ Database layer rewrite (1,080 lines async code)
 - ✅ Local testing (8/8 tests passing on production data)
@@ -17,14 +17,17 @@
 - ✅ Data migration (830 cities, 7,281 meetings, 7,493 items)
 - ✅ API deployment (async with connection pool 10-100)
 - ✅ API live: `systemctl status engagic-api` → **active (running)**
+- ✅ Fixed API method return formats (get_stats, get_queue_stats)
+- ✅ Converted all server endpoints to async PostgreSQL (monitoring, matters)
+- ✅ Eliminated all SQLite syntax remnants from API layer
 
-**REMAINING (Day 3 - Final 5%):**
-- ❌ Fix 3 minor API issues (get_queue_stats, /health, rate limiter)
+**REMAINING (Day 3 - Final 2%):**
+- ❌ VPS testing of all API endpoints
 - ❌ Full pipeline test (sync → process → verify)
 - ❌ 24-48hr production validation
 - ❌ Archive SQLite backup
 
-**Next:** Fix API issues (30 min), then full pipeline test (1-2 hrs)
+**Next:** Deploy to VPS, test endpoints, run full pipeline test (1-2 hrs)
 
 ---
 
@@ -233,39 +236,96 @@
 - API running on PostgreSQL: `http://engagic:8000` ✅
 - systemd service: `engagic-api.service` active ✅
 
-### 🔧 In Progress (Final 5%)
+### ✅ Completed (Day 3 - API Async Conversion)
 
-**Minor Issues to Fix**
-1. ❌ Missing `get_queue_stats()` method - Prometheus metrics failing
-2. ❌ `/health` endpoint returns 404 - needs implementation
-3. ❌ Rate limiter hit during testing - reset needed
+**API Method Fixes**
+1. ✅ Fixed `get_stats()` method - Returns correct format matching SQLite API
+   - Changed keys: `cities` → `active_cities`, `meetings` → `total_meetings`
+   - Added `summarized_meetings`, `pending_meetings`, `summary_rate`
+   - File: `database/db_postgres.py`
+
+2. ✅ Fixed `get_queue_stats()` method - Returns correct format for Prometheus
+   - Changed from `{status: count}` → `{status}_count` format
+   - Added `avg_processing_seconds` calculation using `EXTRACT(EPOCH)`
+   - Set defaults to 0 for all statuses (pending, processing, completed, failed, dead_letter)
+   - File: `database/db_postgres.py`
+
+**Server Endpoint Conversions (SQLite → PostgreSQL Async)**
+3. ✅ Fixed `/api/health` endpoint
+   - Replaced `db.conn.execute("SELECT 1")` with async pool connection
+   - File: `server/routes/monitoring.py`
+
+4. ✅ Fixed `/api/analytics` endpoint
+   - Converted 10 synchronous cursor queries to async PostgreSQL
+   - Added required `AS subquery` aliases for PostgreSQL
+   - File: `server/routes/monitoring.py`
+
+5. ✅ Fixed all matter endpoints (4 endpoints, 8 queries total)
+   - `/matters/{matter_id}/timeline` - 1 query converted
+   - `/city/{banana}/matters` - 2 queries (CTE + count) converted
+   - `/state/{state_code}/matters` - 3 queries converted
+   - `/random-matter` - 2 queries converted
+   - Changed all `?` placeholders → `$1, $2, $3` (PostgreSQL params)
+   - Added missing GROUP BY columns (PostgreSQL requirement)
+   - File: `server/routes/matters.py`
+
+**Verification**
+- ✅ Zero `db.conn` usages remaining in server code
+- ✅ All modified files pass `python3 -m py_compile`
+- ✅ Pure async chain: FastAPI → routes → services → PostgreSQL (no shims)
+
+### 🔧 In Progress (Final 2%)
 
 **Validation Needed**
-4. ⏳ Full pipeline test (sync city → process queue → verify results)
-5. ⏳ Performance comparison (SQLite vs PostgreSQL)
-6. ⏳ Monitor production logs for 24-48 hours
+1. ⏳ VPS deployment and endpoint testing
+2. ⏳ Full pipeline test (sync city → process queue → verify results)
+3. ⏳ Performance comparison (SQLite vs PostgreSQL)
+4. ⏳ Monitor production logs for 24-48 hours
 
-### 📋 Next Steps (Immediate - Day 2)
+### 📋 Next Steps (Immediate - Day 3)
 
-1. **Fix API Issues** (30 min)
-   - Add `get_queue_stats()` to `Database` class
-   - Implement `/health` endpoint
-   - Reset rate limiter: `rm /root/engagic/data/rate_limits.db`
+1. **Deploy to VPS** (5 min)
+   ```bash
+   git add -A
+   git commit -m "Complete async PostgreSQL conversion - eliminate all SQLite remnants"
+   git push
+   # On VPS:
+   cd /root/engagic && git pull
+   systemctl restart engagic-api
+   ```
 
-2. **Full Pipeline Test** (1-2 hours)
+2. **Test All Endpoints** (15 min)
+   ```bash
+   # Health & monitoring
+   curl http://localhost:8000/api/health
+   curl http://localhost:8000/api/stats
+   curl http://localhost:8000/api/queue-stats
+   curl http://localhost:8000/metrics
+   curl http://localhost:8000/api/analytics
+
+   # Matter endpoints
+   curl http://localhost:8000/api/city/paloaltoCA/matters
+   curl http://localhost:8000/api/state/CA/matters
+   curl http://localhost:8000/random-matter
+
+   # Search (already working from previous fix)
+   curl -X POST http://localhost:8000/api/search -H "Content-Type: application/json" -d '{"query": "94301"}'
+   ```
+
+3. **Full Pipeline Test** (1-2 hours)
    - Sync 1 city (Palo Alto) on VPS
-   - Verify meetings/items stored correctly
+   - Verify meetings/items stored correctly in PostgreSQL
    - Process queue jobs
    - Check topic normalization
    - Test full-text search
 
-3. **Production Validation** (24-48 hours)
-   - Monitor API logs for errors
+4. **Production Validation** (24-48 hours)
+   - Monitor API logs for errors: `journalctl -u engagic-api -f`
    - Check query performance (slow query log)
    - Verify concurrent request handling
    - Compare response times vs SQLite baseline
 
-4. **Cleanup & Archive** (15 min)
+5. **Cleanup & Archive** (15 min)
    - Backup SQLite database: `cp engagic.db engagic_sqlite_backup_2025-11-23.db`
    - Document any migration quirks
    - Update CLAUDE.md with PostgreSQL architecture
@@ -437,6 +497,6 @@ CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
 
 ---
 
-**Last Updated:** 2025-11-22 (Local Testing Complete ✅)
-**Next Milestone:** VPS Setup + Data Migration
-**Go-Live Target:** 2025-12-06 (2 weeks from start)
+**Last Updated:** 2025-11-23 (Day 3 - API Async Conversion Complete ✅)
+**Next Milestone:** VPS Testing + Full Pipeline Validation
+**Go-Live Target:** 2025-11-24 (Week 1-2 complete, ahead of schedule)
