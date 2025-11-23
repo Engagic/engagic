@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import get_logger, config
+from database.id_generation import generate_matter_id
 from database.models import City, Meeting, AgendaItem
 from database.repositories_async import (
     CityRepository,
@@ -21,6 +22,7 @@ from database.repositories_async import (
     SearchRepository,
 )
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
+from pipeline.utils import hash_attachments
 
 logger = get_logger(__name__).bind(component="database_postgres")
 
@@ -164,7 +166,6 @@ class Database:
         }
 
         try:
-            # Phase 1: Parse and validate
             meeting_date = self._parse_meeting_date(meeting_dict)
             meeting_id = meeting_dict.get("meeting_id")
 
@@ -179,7 +180,6 @@ class Database:
                 stats['skipped_title'] = meeting_dict.get("title", "Unknown")
                 return None, stats
 
-            # Phase 2: Create Meeting object
             meeting_obj = Meeting(
                 id=meeting_id,
                 banana=city.banana,
@@ -203,7 +203,6 @@ class Database:
                 meeting_obj.topics = existing_meeting.topics
                 logger.debug("preserved existing summary", title=meeting_obj.title)
 
-            # Phase 3: Process agenda items (if present)
             agenda_items = []
             items_data = meeting_dict.get("items")
             if items_data:
@@ -211,7 +210,6 @@ class Database:
                     items_data, meeting_obj, stats
                 )
 
-            # Phase 4: Store meeting + items atomically
             async with self.pool.acquire() as conn:
                 async with conn.transaction():
                     await self.meetings.store_meeting(meeting_obj)
@@ -220,7 +218,6 @@ class Database:
                         stored_count = await self.items.store_agenda_items(meeting_obj.id, agenda_items)
                         stats['items_stored'] = stored_count
 
-            # Phase 5: Enqueue for processing (if not already processed)
             await self._enqueue_if_needed_async(
                 meeting_obj, meeting_date, agenda_items, items_data, stats
             )
@@ -271,26 +268,39 @@ class Database:
         """Process agenda items: preserve summaries if already processed"""
         agenda_items = []
 
-        # Build map of existing items to preserve summaries
         existing_items = await self.items.get_agenda_items(stored_meeting.id)
         existing_items_map = {item.id: item for item in existing_items}
 
         for item_data in items_data:
             item_id = f"{stored_meeting.id}_{item_data['item_id']}"
 
-            # Parse attachments/sponsors
             item_attachments = item_data.get("attachments", [])
             sponsors = item_data.get("sponsors", [])
+
+            attachment_hash = hash_attachments(item_attachments) if item_attachments else None
+
+            matter_file = item_data.get("matter_file")
+            matter_id_vendor = item_data.get("matter_id")
+            title = item_data.get("title", "")
+
+            matter_id = None
+            if matter_file or matter_id_vendor or title:
+                matter_id = generate_matter_id(
+                    banana=stored_meeting.banana,
+                    matter_file=matter_file,
+                    matter_id=matter_id_vendor,
+                    title=title
+                )
 
             agenda_item = AgendaItem(
                 id=item_id,
                 meeting_id=stored_meeting.id,
-                title=item_data.get("title", ""),
+                title=title,
                 sequence=item_data.get("sequence", 0),
                 attachments=item_attachments,
-                attachment_hash=None,  # TODO: Compute hash for change detection
-                matter_id=None,  # TODO: Matter tracking for PostgreSQL
-                matter_file=item_data.get("matter_file"),
+                attachment_hash=attachment_hash,
+                matter_id=matter_id,
+                matter_file=matter_file,
                 matter_type=item_data.get("matter_type"),
                 agenda_number=item_data.get("agenda_number"),
                 sponsors=sponsors,
@@ -298,7 +308,6 @@ class Database:
                 topics=None,
             )
 
-            # Preserve existing summary if already processed
             if item_id in existing_items_map:
                 existing_item = existing_items_map[item_id]
                 if existing_item.summary:

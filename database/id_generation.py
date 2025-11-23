@@ -147,7 +147,7 @@ def generate_matter_id(
     matter_file: Optional[str] = None,
     matter_id: Optional[str] = None,
     title: Optional[str] = None
-) -> str:
+) -> Optional[str]:
     """Generate deterministic matter ID from inputs with fallback hierarchy
 
     Fallback hierarchy (most stable to least):

@@ -26,8 +26,6 @@ class ItemRepository(BaseRepository):
     - Matter-based queries (get all items for a matter)
     - Bulk updates for canonical summaries
     - Topic-based filtering
-
-    Confidence: 9/10 (standard CRUD with PostgreSQL-specific optimizations)
     """
 
     async def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
@@ -131,16 +129,28 @@ class ItemRepository(BaseRepository):
                 meeting_id,
             )
 
+            if not rows:
+                return []
+
+            # Batch fetch all topics for all items (fix N+1 query)
+            item_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
+                item_ids,
+            )
+
+            # Build topic map: item_id -> [topics]
+            topics_by_item = {}
+            for topic_row in topic_rows:
+                item_id = topic_row["item_id"]
+                if item_id not in topics_by_item:
+                    topics_by_item[item_id] = []
+                topics_by_item[item_id].append(topic_row["topic"])
+
             items = []
             for row in rows:
-                # Fetch normalized topics
-                topic_rows = await conn.fetch(
-                    "SELECT topic FROM item_topics WHERE item_id = $1",
-                    row["id"],
-                )
-                topics = [r["topic"] for r in topic_rows]
+                topics = topics_by_item.get(row["id"], [])
 
-                # Defensive JSONB deserialization
                 attachments = self._deserialize_jsonb(row["attachments"], default=[])
                 sponsors = self._deserialize_jsonb(row["sponsors"], default=[])
 
@@ -196,7 +206,6 @@ class ItemRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            # Defensive JSONB deserialization
             attachments = self._deserialize_jsonb(row["attachments"], default=[])
             sponsors = self._deserialize_jsonb(row["sponsors"], default=[])
 
@@ -320,7 +329,6 @@ class ItemRepository(BaseRepository):
                 )
                 topics = [r["topic"] for r in topic_rows]
 
-                # Defensive JSONB deserialization
                 attachments = self._deserialize_jsonb(row["attachments"], default=[])
                 sponsors = self._deserialize_jsonb(row["sponsors"], default=[])
 
@@ -461,25 +469,3 @@ class ItemRepository(BaseRepository):
                 )
 
             return items
-
-    @staticmethod
-    def _deserialize_jsonb(value, default=None):
-        """Defensive JSONB deserialization
-
-        Handles both JSONB (dict/list) and legacy string-stored JSON.
-
-        Args:
-            value: JSONB field value from database
-            default: Default value if null or invalid
-
-        Returns:
-            Deserialized value or default
-        """
-        if value is None:
-            return default
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                return default
-        return value

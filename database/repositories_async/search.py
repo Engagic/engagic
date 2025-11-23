@@ -6,7 +6,6 @@ Handles search operations using PostgreSQL features:
 - Popular topics aggregation
 """
 
-import json
 from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
@@ -23,8 +22,6 @@ class SearchRepository(BaseRepository):
     - Full-text search on meetings (PostgreSQL FTS)
     - Topic-based meeting search
     - Popular topics aggregation
-
-    Confidence: 9/10 (leverages PostgreSQL FTS and normalized topic tables)
     """
 
     async def search_meetings_fulltext(
@@ -199,24 +196,3 @@ class SearchRepository(BaseRepository):
         """, limit)
 
         return [{"topic": row["topic"], "count": row["count"]} for row in rows]
-
-    @staticmethod
-    def _deserialize_jsonb(value):
-        """Defensive JSONB deserialization
-
-        Handles both JSONB (dict) and legacy string-stored JSON.
-
-        Args:
-            value: JSONB field value from database
-
-        Returns:
-            Deserialized value or None
-        """
-        if value is None:
-            return None
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                return None
-        return value

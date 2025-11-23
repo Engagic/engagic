@@ -25,8 +25,6 @@ class MatterRepository(BaseRepository):
     - Retrieve matters by ID
     - Update summaries with topic normalization
     - Attachment hash tracking for change detection
-
-    Confidence: 9/10 (standard CRUD with matter-specific deduplication logic)
     """
 
     async def store_matter(self, matter: Matter) -> None:
@@ -132,7 +130,6 @@ class MatterRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            # Deserialize JSONB fields (defensive handling)
             canonical_topics_jsonb = row["canonical_topics"]
             if isinstance(canonical_topics_jsonb, str):
                 canonical_topics_jsonb = json.loads(canonical_topics_jsonb)

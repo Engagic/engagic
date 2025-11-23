@@ -25,8 +25,6 @@ class CityRepository(BaseRepository):
     - Retrieve cities with filtering
     - Meeting frequency statistics
     - Last sync timestamp queries
-
-    Confidence: 9/10 (standard CRUD with PostgreSQL-specific features)
     """
 
     async def add_city(self, city: City) -> None:
