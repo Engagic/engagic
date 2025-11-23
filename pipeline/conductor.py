@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from database.db import UnifiedDatabase
+from database.sync_bridge import SyncDatabase
 from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
 from pipeline.processor import Processor
 from config import config
@@ -40,27 +40,24 @@ class Conductor:
         """Initialize the conductor
 
         Args:
-            unified_db_path: Database path (or uses config default)
+            unified_db_path: Ignored (PostgreSQL uses DSN from config, not file path)
         """
-        # Use config path if not provided
-        db_path = unified_db_path or config.UNIFIED_DB_PATH
-
-        # Conductor's own connection (for status queries, admin commands)
-        self.db = UnifiedDatabase(db_path)
+        # PostgreSQL connection (shared pool - thread-safe)
+        # NOTE: Unlike SQLite, PostgreSQL pool can be shared across threads
+        self.db = SyncDatabase()
         self.is_running = False
         self.sync_thread = None
         self.processing_thread = None
 
-        # Initialize fetcher with its own connection (for sync_thread)
-        # CRITICAL: Each background thread needs its own SQLite connection
-        # to avoid "database is locked" errors and race conditions
-        self.fetcher = Fetcher(db=None)  # Creates own connection
-        logger.info("[Conductor] Fetcher initialized with dedicated connection")
+        # Initialize fetcher (shares connection pool via SyncDatabase)
+        # NOTE: PostgreSQL pool is thread-safe, no need for per-thread connections
+        self.fetcher = Fetcher(db=None)  # Creates own SyncDatabase instance
+        logger.info("fetcher initialized with shared PostgreSQL pool")
 
-        # Initialize processor with its own connection (for processing_thread)
-        self.processor = Processor(db=None)  # Creates own connection
+        # Initialize processor (shares connection pool via SyncDatabase)
+        self.processor = Processor(db=None)  # Creates own SyncDatabase instance
         logger.info(
-            "processor initialized with dedicated connection",
+            "processor initialized with shared PostgreSQL pool",
             has_analyzer=self.processor.analyzer is not None
         )
 
