@@ -14,8 +14,8 @@ Moved from: pipeline/conductor.py (refactored)
 import time
 from typing import List, Optional, Dict, Any
 
-from database.db import UnifiedDatabase, Meeting
-from database.models import Matter
+from database.sync_bridge import SyncDatabase
+from database.models import Meeting, Matter
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
 from database.transaction import transaction
 from exceptions import ProcessingError, ExtractionError, LLMError
@@ -170,16 +170,16 @@ class Processor:
 
     def __init__(
         self,
-        db: Optional[UnifiedDatabase] = None,
+        db: Optional[SyncDatabase] = None,
         analyzer: Optional[Analyzer] = None,
     ):
         """Initialize the processor
 
         Args:
-            db: Database instance (or creates new one)
+            db: Database instance (or creates new one with PostgreSQL pool)
             analyzer: LLM analyzer instance (or creates new one if API key available)
         """
-        self.db = db or UnifiedDatabase(config.UNIFIED_DB_PATH)
+        self.db = db or SyncDatabase()
         self.is_running = True  # Control flag for external stop
 
         # Initialize analyzer if not provided

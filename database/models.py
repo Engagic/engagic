@@ -28,6 +28,7 @@ class City:
     slug: str  # cityofpaloalto (vendor-specific)
     county: Optional[str] = None
     status: str = "active"
+    zipcodes: Optional[List[str]] = None  # Associated ZIP codes
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

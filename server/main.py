@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import config, get_logger
-from database.db import UnifiedDatabase
+from database.sync_bridge import SyncDatabase
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
@@ -52,9 +52,10 @@ rate_limiter = SQLiteRateLimiter(
     window_seconds=config.RATE_LIMIT_WINDOW,
 )
 
-# Initialize shared database instance (reused across all requests)
-db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-logger.info("initialized shared database", db_path=config.UNIFIED_DB_PATH)
+# Initialize shared database instance with PostgreSQL connection pool
+# NOTE: PostgreSQL pool is shared across all requests (thread-safe)
+db = SyncDatabase()
+logger.info("initialized shared PostgreSQL database with connection pool")
 
 # Initialize userland database for auth and user features
 userland_db_path = os.getenv('USERLAND_DB', str(config.DB_DIR) + '/userland.db')

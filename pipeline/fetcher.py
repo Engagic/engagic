@@ -18,7 +18,8 @@ from typing import List, Optional, Set
 from dataclasses import dataclass
 from enum import Enum
 
-from database.db import UnifiedDatabase, City
+from database.sync_bridge import SyncDatabase
+from database.models import City
 from exceptions import VendorError
 from vendors.factory import get_adapter
 from vendors.rate_limiter import RateLimiter
@@ -54,13 +55,13 @@ class SyncResult:
 class Fetcher:
     """City sync and meeting fetching orchestrator"""
 
-    def __init__(self, db: Optional[UnifiedDatabase] = None):
+    def __init__(self, db: Optional[SyncDatabase] = None):
         """Initialize the fetcher
 
         Args:
-            db: Database instance (or creates new one)
+            db: Database instance (or creates new one with PostgreSQL pool)
         """
-        self.db = db or UnifiedDatabase(config.UNIFIED_DB_PATH)
+        self.db = db or SyncDatabase()
         self.rate_limiter = RateLimiter()
         self.failed_cities: Set[str] = set()
         self.is_running = True  # Control flag for external stop
