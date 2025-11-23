@@ -38,7 +38,7 @@ class MatterRepository(BaseRepository):
             matter: Matter object with canonical summary and topics
         """
         async with self.transaction() as conn:
-            # Upsert matter row (asyncpg handles JSONB serialization automatically)
+            # Upsert matter row (JSONB columns require json.dumps() - see ASYNCPG_JSONB_HANDLING.md)
             await conn.execute(
                 """
                 INSERT INTO city_matters (
@@ -47,7 +47,7 @@ class MatterRepository(BaseRepository):
                     attachments, metadata, first_seen, last_seen,
                     appearance_count, status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                VALUES ($1, $2, $3::text, $4::text, $5::text, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT (id) DO UPDATE SET
                     matter_file = EXCLUDED.matter_file,
                     matter_type = EXCLUDED.matter_type,
@@ -234,8 +234,8 @@ class MatterRepository(BaseRepository):
                     """
                     UPDATE city_matters
                     SET last_seen = $2,
-                        attachments = $3,
-                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4),
+                        attachments = $3::jsonb,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
                         appearance_count = appearance_count + 1,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = $1
@@ -250,8 +250,8 @@ class MatterRepository(BaseRepository):
                     """
                     UPDATE city_matters
                     SET last_seen = $2,
-                        attachments = $3,
-                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4),
+                        attachments = $3::jsonb,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = $1
                     """,

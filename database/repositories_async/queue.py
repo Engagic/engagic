@@ -173,8 +173,11 @@ class QueueRepository(BaseRepository):
                 row["id"],
             )
 
-            # Parse payload (JSONB column, already deserialized by asyncpg)
+            # Parse payload (JSONB column - asyncpg returns JSON string)
             payload_data = row["payload"]
+            if isinstance(payload_data, str):
+                payload_data = json.loads(payload_data)
+
             if row["job_type"] == "meeting":
                 payload = MeetingJob.from_dict(payload_data)
             elif row["job_type"] == "matter":
@@ -191,8 +194,8 @@ class QueueRepository(BaseRepository):
                 status="processing",
                 retry_count=row.get("retry_count", 0),
                 error_message=None,
-                created_at=row.get("created_at"),
-                started_at=row.get("started_at")
+                created_at=row.get("created_at").isoformat() if row.get("created_at") else None,
+                started_at=row.get("started_at").isoformat() if row.get("started_at") else None
             )
 
     async def mark_job_complete(self, queue_id: int) -> None:
