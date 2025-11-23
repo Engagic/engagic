@@ -7,7 +7,7 @@ Handles CRUD operations for cities:
 - Get last sync timestamp
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional
 from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
@@ -111,6 +111,48 @@ class CityRepository(BaseRepository):
                 zipcodes=zipcodes,
             )
 
+    async def get_city_by_zipcode(self, zipcode: str) -> Optional[City]:
+        """Get city by zipcode lookup
+
+        Args:
+            zipcode: ZIP code to search for
+
+        Returns:
+            City object or None
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT c.banana, c.name, c.state, c.vendor, c.slug, c.county, c.status
+                FROM cities c
+                INNER JOIN zipcodes z ON c.banana = z.banana
+                WHERE z.zipcode = $1
+                LIMIT 1
+                """,
+                zipcode,
+            )
+
+            if not row:
+                return None
+
+            # Fetch all zipcodes for this city
+            zip_rows = await conn.fetch(
+                "SELECT zipcode FROM zipcodes WHERE banana = $1",
+                row["banana"]
+            )
+            zipcodes = [str(r["zipcode"]) for r in zip_rows]
+
+            return City(
+                banana=row["banana"],
+                name=row["name"],
+                state=row["state"],
+                vendor=row["vendor"],
+                slug=row["slug"],
+                county=row["county"],
+                status=row["status"],
+                zipcodes=zipcodes,
+            )
+
     async def get_all_cities(self, status: str = "active") -> List[City]:
         """Get all cities with given status
 
@@ -180,7 +222,7 @@ class CityRepository(BaseRepository):
             List of City objects matching filters
         """
         conditions = ["status = $1"]
-        params = [status]
+        params: List[Any] = [status]
         param_counter = 2
 
         if state:
