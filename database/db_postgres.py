@@ -299,7 +299,7 @@ class Database:
                     meeting.agenda_url,
                     meeting.packet_url,
                     meeting.summary,
-                    json.dumps(meeting.participation) if meeting.participation else None,  # JSONB: serialize on write, asyncpg deserializes on read
+                    json.dumps(meeting.participation) if meeting.participation else None,
                     meeting.status,
                     meeting.processing_status or "pending",
                     meeting.processing_method,
@@ -361,6 +361,11 @@ class Database:
             )
             topics = [r["topic"] for r in topic_rows]
 
+            # Deserialize JSONB columns if needed (asyncpg sometimes returns as string)
+            participation = row["participation"]
+            if isinstance(participation, str):
+                participation = json.loads(participation)
+
             return Meeting(
                 id=row["id"],
                 banana=row["banana"],
@@ -369,7 +374,7 @@ class Database:
                 agenda_url=row["agenda_url"],
                 packet_url=row["packet_url"],
                 summary=row["summary"],
-                participation=row["participation"],  # Already deserialized by asyncpg
+                participation=participation,
                 status=row["status"],
                 processing_status=row["processing_status"],
                 processing_method=row["processing_method"],
@@ -423,6 +428,11 @@ class Database:
                 )
                 topics = [r["topic"] for r in topic_rows]
 
+                # Deserialize JSONB columns if needed
+                participation = row["participation"]
+                if isinstance(participation, str):
+                    participation = json.loads(participation)
+
                 meetings.append(
                     Meeting(
                         id=row["id"],
@@ -432,7 +442,7 @@ class Database:
                         agenda_url=row["agenda_url"],
                         packet_url=row["packet_url"],
                         summary=row["summary"],
-                        participation=row["participation"],
+                        participation=participation,
                         status=row["status"],
                         processing_status=row["processing_status"],
                         processing_method=row["processing_method"],
@@ -485,7 +495,7 @@ class Database:
                 meeting_id,
                 banana,
                 job_type,
-                json.dumps(payload),  # JSONB: serialize on write, asyncpg deserializes on read
+                json.dumps(payload),
                 priority,
             )
 
@@ -655,15 +665,15 @@ class Database:
                         item.meeting_id,
                         item.title,
                         item.sequence,
-                        json.dumps(item.attachments) if item.attachments else None,  # JSONB
+                        json.dumps(item.attachments) if item.attachments else None,
                         item.attachment_hash,
                         item.matter_id,
                         item.matter_file,
                         item.matter_type,
                         item.agenda_number,
-                        json.dumps(item.sponsors) if item.sponsors else None,  # JSONB
+                        json.dumps(item.sponsors) if item.sponsors else None,
                         item.summary,
-                        json.dumps(item.topics) if item.topics else None,  # JSONB
+                        json.dumps(item.topics) if item.topics else None,
                     )
 
                     # Handle topics (normalize to item_topics table)
@@ -719,21 +729,40 @@ class Database:
                 )
                 topics = [r["topic"] for r in topic_rows]
 
+                # Defensive deserialization for JSONB columns (handles old string-stored data)
+                attachments = row["attachments"]
+                if isinstance(attachments, str):
+                    attachments = json.loads(attachments)
+                if attachments is None:
+                    attachments = []
+
+                sponsors = row["sponsors"]
+                if isinstance(sponsors, str):
+                    sponsors = json.loads(sponsors)
+                if sponsors is None:
+                    sponsors = []
+
+                topics_jsonb = row["topics"]
+                if isinstance(topics_jsonb, str):
+                    topics_jsonb = json.loads(topics_jsonb)
+                if topics_jsonb is None:
+                    topics_jsonb = []
+
                 items.append(
                     AgendaItem(
                         id=row["id"],
                         meeting_id=row["meeting_id"],
                         title=row["title"],
                         sequence=row["sequence"],
-                        attachments=row["attachments"],  # asyncpg deserializes JSONB
+                        attachments=attachments,
                         attachment_hash=row["attachment_hash"],
                         matter_id=row["matter_id"],
                         matter_file=row["matter_file"],
                         matter_type=row["matter_type"],
                         agenda_number=row["agenda_number"],
-                        sponsors=row["sponsors"],
+                        sponsors=sponsors,
                         summary=row["summary"],
-                        topics=topics or row["topics"],  # Prefer normalized, fallback to JSONB
+                        topics=topics or topics_jsonb,  # Prefer normalized, fallback to JSONB
                     )
                 )
 
@@ -842,11 +871,11 @@ class Database:
                     matter.matter_file,
                     matter.matter_type,
                     matter.title,
-                    matter.sponsors,  # asyncpg handles JSONB automatically
+                    json.dumps(matter.sponsors) if matter.sponsors else None,
                     matter.canonical_summary,
-                    matter.canonical_topics,  # asyncpg handles JSONB automatically
-                    matter.attachments,  # asyncpg handles JSONB automatically
-                    matter.metadata,  # asyncpg handles JSONB automatically
+                    json.dumps(matter.canonical_topics) if matter.canonical_topics else None,
+                    json.dumps(matter.attachments) if matter.attachments else None,
+                    json.dumps(matter.metadata) if matter.metadata else None,
                     matter.first_seen,
                     matter.last_seen,
                     matter.appearance_count or 1,
@@ -1143,6 +1172,11 @@ class Database:
                 )
                 topics = [r["topic"] for r in topic_rows]
 
+                # Deserialize JSONB columns if needed
+                participation = row["participation"]
+                if isinstance(participation, str):
+                    participation = json.loads(participation)
+
                 meetings.append(
                     Meeting(
                         id=row["id"],
@@ -1152,7 +1186,7 @@ class Database:
                         agenda_url=row["agenda_url"],
                         packet_url=row["packet_url"],
                         summary=row["summary"],
-                        participation=row["participation"],
+                        participation=participation,
                         status=row["status"],
                         processing_status=row["processing_status"],
                         processing_method=row["processing_method"],
