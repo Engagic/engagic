@@ -4,7 +4,7 @@ Topic search API routes
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from server.models.requests import TopicSearchRequest
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def get_db(request: Request) -> UnifiedDatabase:
+def get_db(request: Request) -> Database:
     """Dependency to get shared database instance from app state"""
     return request.app.state.db
 
@@ -48,7 +48,7 @@ async def get_all_topics():
 
 
 @router.post("/search/by-topic")
-async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Depends(get_db)):
+async def search_by_topic(request: TopicSearchRequest, db: Database = Depends(get_db)):
     """Search meetings by topic (Phase 1 - Topic Extraction)"""
     try:
         from analysis.topics.normalizer import get_normalizer
@@ -101,7 +101,7 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
 
 
 @router.get("/topics/popular")
-async def get_popular_topics(db: UnifiedDatabase = Depends(get_db)):
+async def get_popular_topics(db: Database = Depends(get_db)):
     """Get most common topics across all meetings (for UI suggestions)"""
     try:
         # Get popular topics using db method

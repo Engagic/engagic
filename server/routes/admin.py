@@ -95,9 +95,9 @@ async def get_dead_letter_queue(
     Returns list of failed jobs with error messages for debugging.
     These jobs require manual intervention or code fixes.
     """
-    from database.db import UnifiedDatabase
+    from database.db_postgres import Database
 
-    db: UnifiedDatabase = request.app.state.db
+    db: Database = request.app.state.db
 
     try:
         # Get dead letter jobs from queue

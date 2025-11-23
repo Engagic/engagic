@@ -8,7 +8,7 @@ import json
 import random
 from fastapi import APIRouter, HTTPException, Depends, Request
 from server.metrics import metrics
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -18,13 +18,13 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def get_db(request: Request) -> UnifiedDatabase:
+def get_db(request: Request) -> Database:
     """Dependency to get shared database instance from app state"""
     return request.app.state.db
 
 
 @router.get("/matters/{matter_id}/timeline")
-async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_db)):
+async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
     """Get timeline of a matter across multiple meetings
 
     Returns all appearances of this matter with meeting context
@@ -98,7 +98,7 @@ async def get_city_matters(
     banana: str,
     limit: int = 50,
     offset: int = 0,
-    db: UnifiedDatabase = Depends(get_db)
+    db: Database = Depends(get_db)
 ):
     """Get all matters for a city with appearance counts
 
@@ -229,7 +229,7 @@ async def get_state_matters(
     state_code: str,
     topic: str | None = None,
     limit: int = 100,
-    db: UnifiedDatabase = Depends(get_db)
+    db: Database = Depends(get_db)
 ):
     """Get matters across all cities in a state
 
@@ -375,7 +375,7 @@ async def get_state_matters(
 
 
 @router.get("/random-matter")
-async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
+async def get_random_matter(db: Database = Depends(get_db)):
     """Get a random high-quality matter (2+ appearances)
 
     Returns a random matter with its timeline for showcasing legislative tracking

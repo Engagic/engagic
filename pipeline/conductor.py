@@ -641,8 +641,11 @@ def main():
     @click.option("--output-file", "-o", help="Output file for extracted text")
     def extract_text(meeting_id, output_file):
         """Extract text from meeting PDF for manual review"""
-        from pipeline.admin import extract_text_preview
-        result = extract_text_preview(meeting_id, output_file=output_file)
+        async def run():
+            from pipeline.admin import extract_text_preview
+            return await extract_text_preview(meeting_id, output_file=output_file)
+
+        result = asyncio.run(run())
         click.echo(json.dumps(result, indent=2))
 
     @cli.command("preview-items")
@@ -651,8 +654,11 @@ def main():
     @click.option("--output-dir", "-o", help="Output directory for item texts")
     def preview_items(meeting_id, extract_text, output_dir):
         """Preview items for a meeting"""
-        from pipeline.admin import preview_items as preview_items_func
-        result = preview_items_func(meeting_id, extract_text=extract_text, output_dir=output_dir)
+        async def run():
+            from pipeline.admin import preview_items as preview_items_func
+            return await preview_items_func(meeting_id, extract_text=extract_text, output_dir=output_dir)
+
+        result = asyncio.run(run())
         click.echo(json.dumps(result, indent=2))
 
     cli()
