@@ -1,18 +1,11 @@
 """
 Weekly Digest Script
 
-TERMINOLOGY NOTE: "Digest" and "Alert" refer to the SAME system.
-- Alerts table stores user subscriptions (cities + keywords + frequency)
-- frequency='weekly' → Weekly digest (this script)
-- frequency='daily' → Daily alerts (userland/scripts/send_alerts.py)
+Runs every Sunday at 9am. Sends users a digest of:
+1. Keyword matches (items mentioning their keywords)
+2. Upcoming meetings this week (all meetings for their city)
 
-This script runs every Sunday at 9am and sends users a digest of:
-1. Upcoming meetings this week (all meetings for their city)
-2. Keyword matches (items mentioning their keywords, with item-level anchor links)
-
-IMPORTANT: Cancelled and postponed meetings are filtered out at multiple levels:
-- get_upcoming_meetings() uses MeetingRepository with exclude_cancelled=True
-- find_keyword_matches() post-filters cancelled/postponed meetings from search results
+Note: "Alert" in the codebase = Weekly Digest Subscription (not real-time alerts)
 
 Usage:
     python3 -m userland.scripts.weekly_digest
@@ -25,7 +18,7 @@ import os
 import sys
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -43,10 +36,23 @@ logging.basicConfig(
 logger = logging.getLogger("engagic.weekly_digest")
 
 
+def get_city_name(city_banana: str) -> str:
+    """Get formatted city name from banana (e.g., 'paloaltoCA' -> 'Palo Alto, CA')"""
+    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+    try:
+        city = db.get_city(city_banana)
+        if city:
+            return f"{city.name}, {city.state}"
+        return city_banana  # Fallback
+    finally:
+        db.close()
+
+
 def get_upcoming_meetings(city_banana: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
     """
     Get upcoming meetings for a city in the next N days.
 
+    FILTERS OUT cancelled/postponed meetings.
     Uses UnifiedDatabase repository pattern (not raw SQL).
     """
     db = UnifiedDatabase(config.UNIFIED_DB_PATH)
@@ -61,16 +67,21 @@ def get_upcoming_meetings(city_banana: str, days_ahead: int = 7) -> List[Dict[st
             limit=50
         )
 
-        # Convert Meeting objects to dicts with necessary fields
+        # Filter out cancelled/postponed meetings
         result = []
         for meeting in meetings:
+            # Skip cancelled or postponed meetings
+            if meeting.status and meeting.status.lower() in ['cancelled', 'postponed']:
+                continue
+
             result.append({
                 'id': meeting.id,
                 'banana': meeting.banana,
                 'title': meeting.title,
                 'date': meeting.date.isoformat() if meeting.date else None,
                 'agenda_url': meeting.agenda_url,
-                'packet_url': meeting.packet_url
+                'packet_url': meeting.packet_url,
+                'status': meeting.status
             })
 
         return result
@@ -86,8 +97,8 @@ def find_keyword_matches(
     """
     Find items in upcoming meetings that mention user's keywords.
 
+    FILTERS OUT cancelled/postponed meetings.
     Uses search_summaries() from database layer + date/status post-filter.
-    Excludes cancelled and postponed meetings.
     """
     if not keywords:
         return []
@@ -95,209 +106,240 @@ def find_keyword_matches(
     today = datetime.now().date()
     end_date = today + timedelta(days=days_ahead)
 
-    # Get database connection to check meeting status
-    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-    try:
-        all_matches = []
-        for keyword in keywords:
-            matches = search_summaries(
-                search_term=keyword,
-                city_banana=city_banana,
-                db_path=config.UNIFIED_DB_PATH
-            )
+    all_matches = []
+    for keyword in keywords:
+        matches = search_summaries(
+            search_term=keyword,
+            city_banana=city_banana,
+            db_path=config.UNIFIED_DB_PATH
+        )
 
-            # Post-filter by date range and meeting status
-            for match in matches:
-                if match.get('type') == 'item' and match.get('date'):
-                    try:
-                        match_date = datetime.fromisoformat(match['date']).date()
-                        if today <= match_date <= end_date:
-                            # Check if meeting is cancelled/postponed
-                            meeting = db.get_meeting(match['meeting_id'])
-                            if meeting and meeting.status in ('cancelled', 'postponed'):
-                                continue  # Skip cancelled/postponed meetings
+        # Post-filter by date range AND status (search_summaries doesn't do this)
+        for match in matches:
+            if match.get('type') == 'item' and match.get('date'):
+                try:
+                    match_date = datetime.fromisoformat(match['date']).date()
 
-                            # Normalize field names for email template
-                            all_matches.append({
-                                'keyword': keyword,
-                                'item_id': match['item_id'],
-                                'meeting_id': match['meeting_id'],
-                                'item_title': match['item_title'],
-                                'item_summary': match.get('summary', ''),
-                                'item_position': match.get('agenda_number', match.get('sequence', '?')),
-                                'meeting_title': match['meeting_title'],
-                                'meeting_date': match['date'],
-                                'agenda_url': match.get('agenda_url'),
-                                'banana': match['banana']
-                            })
-                    except (ValueError, TypeError):
+                    # Skip if outside date range
+                    if not (today <= match_date <= end_date):
                         continue
 
-        return all_matches
-    finally:
-        db.close()
+                    # Skip cancelled/postponed meetings
+                    meeting_status = match.get('status', '')
+                    if meeting_status and meeting_status.lower() in ['cancelled', 'postponed']:
+                        continue
+
+                    # Normalize field names for email template
+                    all_matches.append({
+                        'keyword': keyword,
+                        'item_id': match['item_id'],
+                        'meeting_id': match['meeting_id'],
+                        'item_title': match['item_title'],
+                        'item_summary': match.get('summary', ''),
+                        'item_position': match.get('agenda_number', match.get('sequence', '?')),
+                        'meeting_title': match['meeting_title'],
+                        'meeting_date': match['date'],
+                        'agenda_url': match.get('agenda_url'),
+                        'banana': match['banana'],
+                        'context': match.get('context', '')
+                    })
+                except (ValueError, TypeError):
+                    continue
+
+    return all_matches
 
 
 def build_digest_email(
     user_name: str,
     city_name: str,
-    upcoming_meetings: List[Dict[str, Any]],
+    city_banana: str,
     keyword_matches: List[Dict[str, Any]],
+    keywords: List[str],
+    upcoming_meetings: List[Dict[str, Any]],
     app_url: str
 ) -> str:
-    """Build HTML email for weekly digest"""
+    """
+    Build HTML email for weekly digest.
+
+    Format: Similar to old alert digest (better information display)
+    with item-level anchor links to specific items.
+    """
 
     # Format meeting dates
     def format_date(date_str: str) -> str:
         date_obj = datetime.fromisoformat(date_str)
-        return date_obj.strftime("%a, %b %d")
+        return date_obj.strftime("%b %d, %Y")
 
+    # Header
     html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        @media (prefers-color-scheme: dark) {{
-            /* Override backgrounds */
-            body {{ background: #1a1a1a !important; }}
-            div[style*="background: white"],
-            div[style*="background: #f8fafc"] {{ background: #1e293b !important; }}
-            div[style*="background: #f3e8ff"] {{ background: #1e1b4b !important; }}
-
-            /* Override text colors */
-            h1[style*="color: #0f172a"],
-            h2[style*="color: #0f172a"],
-            div[style*="color: #0f172a"],
-            span[style*="color: #0f172a"] {{ color: #e2e8f0 !important; }}
-
-            p[style*="color: #64748b"],
-            span[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
-
-            p[style*="color: #475569"] {{ color: #cbd5e1 !important; }}
-
-            /* Override borders */
-            div[style*="border: 2px solid #e2e8f0"],
-            div[style*="border-bottom: 2px solid #e2e8f0"] {{ border-color: #334155 !important; }}
-
-            div[style*="border-left: 4px solid #4f46e5"] {{ border-color: #4f46e5 !important; }}
-            div[style*="border-left: 4px solid #8B5CF6"] {{ border-color: #8B5CF6 !important; }}
-
-            /* Keep links visible */
-            a[style*="color: #4f46e5"],
-            a[style*="color: #8B5CF6"] {{ color: #a78bfa !important; }}
-            span[style*="color: #4f46e5"] {{ color: #818cf8 !important; }}
-        }}
-    </style>
 </head>
-<body style="font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc;">
-    <div style="background: white; border-radius: 11px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 2px solid #e2e8f0;">
-        <div style="margin-bottom: 24px;">
-            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: #4f46e5; letter-spacing: -0.02em;">engagic</span>
-        </div>
-        <h1 style="font-size: 24px; font-weight: 600; color: #0f172a; margin: 0 0 12px 0; font-family: 'IBM Plex Mono', monospace;">
-            This week in {city_name}
-        </h1>
-        <p style="color: #64748b; margin: 0 0 32px 0; font-size: 14px; font-family: Georgia, serif; line-height: 1.7;">
-            Your weekly civic update from engagic
-        </p>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', monospace;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 40px 40px 24px 40px; text-align: center;">
+                            <h1 style="margin: 0; font-size: 32px; font-weight: 700; color: #0f172a;">
+                                engagic
+                            </h1>
+                            <p style="margin: 8px 0 0 0; font-size: 14px; color: #64748b; font-family: Georgia, serif;">
+                                Statewide Municipal Intelligence
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Digest Info -->
+                    <tr>
+                        <td style="padding: 0 40px 32px 40px; border-bottom: 1px solid #e2e8f0;">
+                            <p style="margin: 0; font-size: 15px; color: #475569; font-family: Georgia, serif;">
+                                Your digest: <strong>{', '.join(keywords) if keywords else 'all items'}</strong><br>
+                                Found <strong>{len(keyword_matches)} item{'s' if len(keyword_matches) != 1 else ''}</strong> in {city_name}
+                            </p>
+                        </td>
+                    </tr>
 """
 
-    # Upcoming meetings section
-    if upcoming_meetings:
-        html += """
-        <div style="margin-bottom: 40px;">
-            <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-family: 'IBM Plex Mono', monospace;">
-                Upcoming Meetings This Week
-            </h2>
-"""
-        for meeting in upcoming_meetings:
-            # Build meeting slug: YYYY-MM-DD-meeting_id
-            meeting_date_obj = datetime.fromisoformat(meeting['date'])
-            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting['id']}"
-            meeting_url = f"{app_url}/{meeting['banana']}/{meeting_slug}"
+    # Keyword Matches Section
+    if keyword_matches:
+        # Group by meeting
+        meetings_map: Dict[str, Any] = {}
+        for match in keyword_matches:
+            mid = match['meeting_id']
+            if mid not in meetings_map:
+                meetings_map[mid] = {
+                    'title': match['meeting_title'],
+                    'date': match['meeting_date'],
+                    'banana': match['banana'],
+                    'agenda_url': match.get('agenda_url'),
+                    'items': []
+                }
+            meetings_map[mid]['items'].append(match)
+
+        for meeting_id, meeting_data in meetings_map.items():
+            # Build meeting slug and URL
+            meeting_date_obj = datetime.fromisoformat(meeting_data['date'])
+            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting_id}"
+            meeting_url = f"{app_url}/{meeting_data['banana']}/{meeting_slug}"
 
             html += f"""
-            <div style="margin-bottom: 16px; padding: 20px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
-                <div style="font-weight: 600; color: #0f172a; margin-bottom: 8px; font-family: 'IBM Plex Mono', monospace; line-height: 1.5;">
-                    {format_date(meeting['date'])} - {meeting['title']}
-                </div>
-                <a href="{meeting_url}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
-                    View agenda →
-                </a>
-            </div>
+                    <!-- Meeting: {meeting_data['title']} -->
+                    <tr>
+                        <td style="padding: 32px 40px; border-bottom: 1px solid #e2e8f0;">
+                            <div style="margin-bottom: 16px;">
+                                <span style="display: inline-block; padding: 4px 12px; background-color: #f1f5f9; color: #475569; border-radius: 6px; font-size: 12px; font-weight: 600;">
+                                    {meeting_data['title'].upper()}
+                                </span>
+                                <span style="margin-left: 8px; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
+                                    {format_date(meeting_data['date'])}
+                                </span>
+                            </div>
 """
-        html += """
-        </div>
+
+            for item in meeting_data['items']:
+                # Build item anchor link
+                item_url = f"{meeting_url}#item-{item['item_id']}"
+                summary_preview = item['item_summary'][:200] + '...' if item['item_summary'] and len(item['item_summary']) > 200 else item['item_summary'] or ''
+
+                html += f"""
+                            <h3 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: #0f172a; font-family: Georgia, serif;">
+                                <a href="{item_url}" style="color: #0f172a; text-decoration: none;">
+                                    {item['item_title']}
+                                </a>
+                            </h3>
+
+                            <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #475569; font-family: Georgia, serif;">
+                                {summary_preview}
+                            </p>
+
+                            <p style="margin: 0 0 20px 0; font-size: 13px;">
+                                <strong style="color: #4f46e5;">Keywords matched:</strong> {item['keyword']}
+                            </p>
+"""
+
+            # Add "View full agenda" link if available
+            if meeting_data.get('agenda_url'):
+                html += f"""
+                            <p style="margin: 0; font-size: 14px;">
+                                <a href="{meeting_url}" style="color: #4f46e5; text-decoration: none; font-weight: 600;">
+                                    View full agenda →
+                                </a>
+                            </p>
+"""
+
+            html += """
+                        </td>
+                    </tr>
 """
     else:
         html += """
-        <div style="margin-bottom: 40px;">
-            <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0 0 16px 0; font-family: 'IBM Plex Mono', monospace;">
-                Upcoming Meetings This Week
-            </h2>
-            <p style="color: #64748b; font-size: 14px; font-family: Georgia, serif; line-height: 1.7;">No meetings scheduled for this week.</p>
-        </div>
+                    <tr>
+                        <td style="padding: 32px 40px; border-bottom: 1px solid #e2e8f0;">
+                            <p style="color: #64748b; font-size: 14px; font-family: Georgia, serif;">
+                                No keyword matches found this week.
+                            </p>
+                        </td>
+                    </tr>
 """
 
-    # Keyword matches section (Alert-style cards with keyword badges)
-    if keyword_matches:
-        html += """
-        <div style="margin-bottom: 32px;">
-            <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-family: 'IBM Plex Mono', monospace;">
-                Your Keywords Mentioned
-            </h2>
-"""
-        for match in keyword_matches:
-            # Build meeting slug and URLs
-            meeting_date_obj = datetime.fromisoformat(match['meeting_date'])
-            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{match['meeting_id']}"
-            meeting_url = f"{app_url}/{match['banana']}/{meeting_slug}"
-            item_url = f"{meeting_url}#item-{match['item_id']}"
+    # Upcoming Meetings Section (if any meetings without matches)
+    if upcoming_meetings:
+        # Get meeting IDs that already showed in keyword matches
+        matched_meeting_ids = set(match['meeting_id'] for match in keyword_matches)
 
-            # Truncate context to 300 chars (like alert emails)
-            context = match['item_summary'][:300] + '...' if match['item_summary'] and len(match['item_summary']) > 300 else match['item_summary'] or ''
+        # Filter to only show meetings that weren't already shown
+        unmatched_meetings = [m for m in upcoming_meetings if m['id'] not in matched_meeting_ids]
 
-            html += f"""
-            <div style="margin-bottom: 20px; padding: 24px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
-                <p style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #0f172a; line-height: 1.5; font-family: 'IBM Plex Mono', monospace;">
-                    {match['item_title']}
-                </p>
-                <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
-                    <span style="background: #4f46e5; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
-                        {match['keyword']}
-                    </span>
-                    <span style="margin-left: 8px;">{match['meeting_title']} ({format_date(match['meeting_date'])})</span>
-                </p>
-                <p style="margin: 0 0 16px 0; font-size: 14px; color: #475569; line-height: 1.7; font-family: Georgia, serif;">
-                    {context}
-                </p>
-                <div style="display: flex; gap: 12px;">
-                    <a href="{item_url}" style="display: inline-block; padding: 10px 20px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
-                        View Item
-                    </a>
-                    <a href="{meeting_url}" style="display: inline-block; padding: 10px 20px; color: #4f46e5; text-decoration: none; border: 2px solid #4f46e5; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
-                        Full Agenda
-                    </a>
-                </div>
-            </div>
+        if unmatched_meetings:
+            html += """
+                    <tr>
+                        <td style="padding: 32px 40px 16px 40px;">
+                            <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'IBM Plex Mono', monospace;">
+                                Other Upcoming Meetings
+                            </h2>
+                        </td>
+                    </tr>
 """
-        html += """
-        </div>
+            for meeting in unmatched_meetings:
+                meeting_date_obj = datetime.fromisoformat(meeting['date'])
+                meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting['id']}"
+                meeting_url = f"{app_url}/{meeting['banana']}/{meeting_slug}"
+
+                html += f"""
+                    <tr>
+                        <td style="padding: 0 40px 16px 40px;">
+                            <p style="margin: 0; font-size: 14px; font-family: Georgia, serif; color: #475569;">
+                                {format_date(meeting['date'])} - <a href="{meeting_url}" style="color: #4f46e5; text-decoration: none; font-weight: 600;">{meeting['title']}</a>
+                            </p>
+                        </td>
+                    </tr>
 """
 
     # Footer
     html += f"""
-        <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e2e8f0; text-align: center;">
-            <p style="color: #64748b; font-size: 12px; margin: 0 0 12px 0; font-family: Georgia, serif; line-height: 1.7;">
-                You're receiving this because you're watching {city_name}
-            </p>
-            <p style="color: #64748b; font-size: 12px; margin: 0; font-family: Georgia, serif;">
-                <a href="{app_url}/dashboard" style="color: #4f46e5; text-decoration: none; font-weight: 600;">Manage subscription</a> |
-                <a href="{app_url}/unsubscribe" style="color: #64748b; text-decoration: none;">Unsubscribe</a>
-            </p>
-        </div>
-    </div>
+                    <tr>
+                        <td style="padding: 32px 40px; text-align: center;">
+                            <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
+                                <a href="{app_url}/dashboard" style="color: #4f46e5; text-decoration: none; font-weight: 600;">View Dashboard</a>
+                                <span style="margin: 0 8px; color: #cbd5e1;">•</span>
+                                <a href="{app_url}/settings" style="color: #64748b; text-decoration: none;">Manage Digests</a>
+                            </p>
+                            <p style="margin: 0; font-size: 12px; color: #94a3b8; font-family: Georgia, serif;">
+                                Engagic – Statewide Municipal Intelligence
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
 """
@@ -306,7 +348,11 @@ def build_digest_email(
 
 
 def send_weekly_digest():
-    """Main function: Send weekly digests to all active users"""
+    """
+    Main function: Send weekly digests to all active users.
+
+    Note: This queries "alerts" but they represent weekly digest subscriptions.
+    """
 
     userland_db_path = os.getenv('USERLAND_DB', '/root/engagic/data/userland.db')
     app_url = os.getenv('APP_URL', 'https://engagic.org')
@@ -316,7 +362,7 @@ def send_weekly_digest():
     db = UserlandDB(userland_db_path, silent=True)
     email_service = EmailService()
 
-    # Get all active alerts
+    # Get all active alerts (weekly digest subscriptions)
     active_alerts = db.get_active_alerts()
     logger.info(f"Found {len(active_alerts)} active alerts")
 
@@ -339,39 +385,36 @@ def send_weekly_digest():
             primary_city = alert.cities[0]
             logger.info(f"Processing digest for {user.email} ({primary_city})...")
 
-            # Get upcoming meetings (uses UnifiedDatabase)
-            upcoming_meetings = get_upcoming_meetings(primary_city, days_ahead=7)
+            # Get actual city name (not banana)
+            city_name = get_city_name(primary_city)
 
             # Get keyword matches (uses search_summaries)
             keywords = alert.criteria.get('keywords', [])
             keyword_matches = find_keyword_matches(primary_city, keywords, days_ahead=7)
 
+            # Get upcoming meetings (uses UnifiedDatabase)
+            upcoming_meetings = get_upcoming_meetings(primary_city, days_ahead=7)
+
             # Skip if no content
-            if not upcoming_meetings and not keyword_matches:
+            if not keyword_matches and not upcoming_meetings:
                 logger.info(f"No content for {user.email}, skipping")
                 continue
-
-            # Resolve city_banana to "City, State" format (e.g., "Palo Alto, CA")
-            engagic_db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-            try:
-                city = engagic_db.get_city(banana=primary_city)
-                city_name = f"{city.name}, {city.state}" if city else primary_city
-            finally:
-                engagic_db.close()
 
             # Build email
             html = build_digest_email(
                 user_name=user.name,
                 city_name=city_name,
-                upcoming_meetings=upcoming_meetings,
+                city_banana=primary_city,
                 keyword_matches=keyword_matches,
+                keywords=keywords,
+                upcoming_meetings=upcoming_meetings,
                 app_url=app_url
             )
 
             # Send email
             subject = f"This week in {city_name}"
             if keyword_matches:
-                subject += f" - {len(keyword_matches)} keyword matches"
+                subject += f" - {len(keyword_matches)} keyword match{'es' if len(keyword_matches) > 1 else ''}"
 
             email_service.send_email(
                 to_email=user.email,
