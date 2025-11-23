@@ -1,9 +1,18 @@
 """
 Weekly Digest Script
 
-Runs every Sunday at 9am. Sends users a digest of:
+TERMINOLOGY NOTE: "Digest" and "Alert" refer to the SAME system.
+- Alerts table stores user subscriptions (cities + keywords + frequency)
+- frequency='weekly' → Weekly digest (this script)
+- frequency='daily' → Daily alerts (userland/scripts/send_alerts.py)
+
+This script runs every Sunday at 9am and sends users a digest of:
 1. Upcoming meetings this week (all meetings for their city)
-2. Keyword matches (items mentioning their keywords)
+2. Keyword matches (items mentioning their keywords, with item-level anchor links)
+
+IMPORTANT: Cancelled and postponed meetings are filtered out at multiple levels:
+- get_upcoming_meetings() uses MeetingRepository with exclude_cancelled=True
+- find_keyword_matches() post-filters cancelled/postponed meetings from search results
 
 Usage:
     python3 -m userland.scripts.weekly_digest
@@ -77,7 +86,8 @@ def find_keyword_matches(
     """
     Find items in upcoming meetings that mention user's keywords.
 
-    Uses search_summaries() from database layer + date post-filter.
+    Uses search_summaries() from database layer + date/status post-filter.
+    Excludes cancelled and postponed meetings.
     """
     if not keywords:
         return []
@@ -85,37 +95,47 @@ def find_keyword_matches(
     today = datetime.now().date()
     end_date = today + timedelta(days=days_ahead)
 
-    all_matches = []
-    for keyword in keywords:
-        matches = search_summaries(
-            search_term=keyword,
-            city_banana=city_banana,
-            db_path=config.UNIFIED_DB_PATH
-        )
+    # Get database connection to check meeting status
+    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+    try:
+        all_matches = []
+        for keyword in keywords:
+            matches = search_summaries(
+                search_term=keyword,
+                city_banana=city_banana,
+                db_path=config.UNIFIED_DB_PATH
+            )
 
-        # Post-filter by date range (search_summaries doesn't support date filtering)
-        for match in matches:
-            if match.get('type') == 'item' and match.get('date'):
-                try:
-                    match_date = datetime.fromisoformat(match['date']).date()
-                    if today <= match_date <= end_date:
-                        # Normalize field names for email template
-                        all_matches.append({
-                            'keyword': keyword,
-                            'item_id': match['item_id'],
-                            'meeting_id': match['meeting_id'],
-                            'item_title': match['item_title'],
-                            'item_summary': match.get('summary', ''),
-                            'item_position': match.get('agenda_number', match.get('sequence', '?')),
-                            'meeting_title': match['meeting_title'],
-                            'meeting_date': match['date'],
-                            'agenda_url': match.get('agenda_url'),
-                            'banana': match['banana']
-                        })
-                except (ValueError, TypeError):
-                    continue
+            # Post-filter by date range and meeting status
+            for match in matches:
+                if match.get('type') == 'item' and match.get('date'):
+                    try:
+                        match_date = datetime.fromisoformat(match['date']).date()
+                        if today <= match_date <= end_date:
+                            # Check if meeting is cancelled/postponed
+                            meeting = db.get_meeting(match['meeting_id'])
+                            if meeting and meeting.status in ('cancelled', 'postponed'):
+                                continue  # Skip cancelled/postponed meetings
 
-    return all_matches
+                            # Normalize field names for email template
+                            all_matches.append({
+                                'keyword': keyword,
+                                'item_id': match['item_id'],
+                                'meeting_id': match['meeting_id'],
+                                'item_title': match['item_title'],
+                                'item_summary': match.get('summary', ''),
+                                'item_position': match.get('agenda_number', match.get('sequence', '?')),
+                                'meeting_title': match['meeting_title'],
+                                'meeting_date': match['date'],
+                                'agenda_url': match.get('agenda_url'),
+                                'banana': match['banana']
+                            })
+                    except (ValueError, TypeError):
+                        continue
+
+        return all_matches
+    finally:
+        db.close()
 
 
 def build_digest_email(
@@ -220,61 +240,46 @@ def build_digest_email(
         </div>
 """
 
-    # Keyword matches section
+    # Keyword matches section (Alert-style cards with keyword badges)
     if keyword_matches:
-        # Group by meeting
-        meetings_map: Dict[str, Any] = {}
-        for match in keyword_matches:
-            mid = match['meeting_id']
-            if mid not in meetings_map:
-                meetings_map[mid] = {
-                    'title': match['meeting_title'],
-                    'date': match['meeting_date'],
-                    'banana': match['banana'],
-                    'items': []
-                }
-            meetings_map[mid]['items'].append(match)
-
         html += """
         <div style="margin-bottom: 32px;">
             <h2 style="font-size: 16px; font-weight: 600; color: #0f172a; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-family: 'IBM Plex Mono', monospace;">
                 Your Keywords Mentioned
             </h2>
 """
-        for meeting_id, meeting_data in meetings_map.items():
-            # Build meeting slug: YYYY-MM-DD-meeting_id
-            meeting_date_obj = datetime.fromisoformat(meeting_data['date'])
-            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting_id}"
-            meeting_url = f"{app_url}/{meeting_data['banana']}/{meeting_slug}"
+        for match in keyword_matches:
+            # Build meeting slug and URLs
+            meeting_date_obj = datetime.fromisoformat(match['meeting_date'])
+            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{match['meeting_id']}"
+            meeting_url = f"{app_url}/{match['banana']}/{meeting_slug}"
+            item_url = f"{meeting_url}#item-{match['item_id']}"
+
+            # Truncate context to 300 chars (like alert emails)
+            context = match['item_summary'][:300] + '...' if match['item_summary'] and len(match['item_summary']) > 300 else match['item_summary'] or ''
 
             html += f"""
-            <div style="margin-bottom: 24px; padding: 20px; background: #f3e8ff; border-radius: 6px; border-left: 4px solid #8B5CF6;">
-                <div style="font-weight: 600; color: #0f172a; margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace; line-height: 1.5;">
-                    {meeting_data['title']} ({format_date(meeting_data['date'])})
+            <div style="margin-bottom: 20px; padding: 24px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
+                <p style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #0f172a; line-height: 1.5; font-family: 'IBM Plex Mono', monospace;">
+                    {match['item_title']}
+                </p>
+                <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif;">
+                    <span style="background: #4f46e5; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
+                        {match['keyword']}
+                    </span>
+                    <span style="margin-left: 8px;">{match['meeting_title']} ({format_date(match['meeting_date'])})</span>
+                </p>
+                <p style="margin: 0 0 16px 0; font-size: 14px; color: #475569; line-height: 1.7; font-family: Georgia, serif;">
+                    {context}
+                </p>
+                <div style="display: flex; gap: 12px;">
+                    <a href="{item_url}" style="display: inline-block; padding: 10px 20px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
+                        View Item
+                    </a>
+                    <a href="{meeting_url}" style="display: inline-block; padding: 10px 20px; color: #4f46e5; text-decoration: none; border: 2px solid #4f46e5; border-radius: 6px; font-weight: 600; font-size: 13px; font-family: 'IBM Plex Mono', monospace;">
+                        Full Agenda
+                    </a>
                 </div>
-"""
-            for item in meeting_data['items']:
-                # Build item anchor: #item-{item_id}
-                item_url = f"{meeting_url}#item-{item['item_id']}"
-                summary_preview = item['item_summary'][:150] + '...' if item['item_summary'] and len(item['item_summary']) > 150 else item['item_summary'] or ''
-
-                html += f"""
-                <div style="margin-bottom: 16px; padding-left: 12px;">
-                    <div style="margin-bottom: 8px;">
-                        <span style="background: #8B5CF6; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
-                            {item['keyword']}
-                        </span>
-                        <a href="{item_url}" style="color: #0f172a; font-weight: 500; margin-left: 8px; font-family: Georgia, serif; text-decoration: none;">
-                            Item {item['item_position']}: {item['item_title']}
-                        </a>
-                    </div>
-                    {f'<p style="color: #475569; font-size: 13px; margin: 4px 0 0 0; line-height: 1.7; font-family: Georgia, serif;">{summary_preview}</p>' if summary_preview else ''}
-                </div>
-"""
-            html += f"""
-                <a href="{meeting_url}" style="color: #8B5CF6; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
-                    View full meeting →
-                </a>
             </div>
 """
         html += """
@@ -346,8 +351,15 @@ def send_weekly_digest():
                 logger.info(f"No content for {user.email}, skipping")
                 continue
 
+            # Resolve city_banana to "City, State" format (e.g., "Palo Alto, CA")
+            engagic_db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+            try:
+                city = engagic_db.get_city(banana=primary_city)
+                city_name = f"{city.name}, {city.state}" if city else primary_city
+            finally:
+                engagic_db.close()
+
             # Build email
-            city_name = primary_city  # TODO: Get actual city name from engagic.db
             html = build_digest_email(
                 user_name=user.name,
                 city_name=city_name,
