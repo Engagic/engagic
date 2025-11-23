@@ -788,6 +788,9 @@ class Processor:
 
             # Handle PDF agendas (Legistar, etc.)
             if agenda_url_lower.endswith('.pdf') or '.ashx' in agenda_url_lower:
+                if not self.analyzer:
+                    logger.warning("analyzer not initialized, skipping participation extraction")
+                    return participation_data
                 logger.debug("extracting text from agenda_url PDF for participation info")
                 agenda_result = self.analyzer.pdf_extractor.extract_from_url(meeting.agenda_url)
                 if agenda_result.get("success") and agenda_result.get("text"):
@@ -894,6 +897,7 @@ class Processor:
         all_urls = set()
         url_to_items = {}  # url -> list of item IDs that reference this URL
         url_to_name = {}  # url -> attachment name
+        url_to_text = {}  # url -> extracted text (populated during extraction)
 
         for item in need_processing:
             # Collect this item's attachment URLs
@@ -930,6 +934,10 @@ class Processor:
                 url_to_items[url].append(item.id)
 
         logger.info("collected unique URLs", url_count=len(all_urls), item_count=len(need_processing))
+
+        if not self.analyzer:
+            logger.error("analyzer not initialized, cannot extract attachments")
+            return url_to_text, item_attachments, all_urls
 
         # Second pass: Extract each unique URL once
         for att_url in all_urls:
@@ -1099,6 +1107,10 @@ class Processor:
         failed_items = []
 
         if not batch_requests:
+            return processed_items, failed_items
+
+        if not self.analyzer:
+            logger.error("analyzer not initialized, cannot process batch")
             return processed_items, failed_items
 
         logger.info(

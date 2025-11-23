@@ -385,7 +385,10 @@ async def get_ticker_items(db: Database = Depends(get_db)):
             meeting = await db.get_random_meeting_with_items()
 
             if meeting:
-                ticker_item = await generate_ticker_item(meeting, db)
+                # Convert Meeting object to dict for ticker generation
+                from dataclasses import asdict
+                meeting_dict = asdict(meeting)
+                ticker_item = await generate_ticker_item(meeting_dict, db)
                 if ticker_item:
                     ticker_items.append(ticker_item)
 

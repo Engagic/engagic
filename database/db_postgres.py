@@ -456,14 +456,17 @@ class Database:
         self,
         banana: Optional[str] = None,
         name: Optional[str] = None,
-        state: Optional[str] = None
+        state: Optional[str] = None,
+        zipcode: Optional[str] = None
     ) -> Optional[City]:
-        """Get city by banana or name+state
+        """Get city by banana, name+state, or zipcode
 
         Facade method for server routes - delegates to CityRepository.
         """
         if banana:
             return await self.cities.get_city(banana)
+        elif zipcode:
+            return await self.cities.get_city_by_zipcode(zipcode)
         elif name and state:
             cities = await self.cities.get_cities(name=name, state=state, limit=1)
             return cities[0] if cities else None
