@@ -22,6 +22,40 @@ import re
 from typing import Optional
 
 
+def _strip_reading_prefixes(text: str) -> str:
+    """Strip reading prefixes from ordinance/resolution titles
+
+    Handles variations: "FIRST READ:", "FIRST READING:", "REINTRODUCED FIRST READING:", etc.
+    This allows different readings of the same ordinance to be identified as the same matter.
+
+    Args:
+        text: Title text that may contain reading prefix
+
+    Returns:
+        Text with reading prefix removed
+
+    Examples:
+        >>> _strip_reading_prefixes("FIRST READING: Ordinance 2025-123")
+        'Ordinance 2025-123'
+
+        >>> _strip_reading_prefixes("REINTRODUCED SECOND READ: Resolution")
+        'Resolution'
+    """
+    reading_prefixes = [
+        r'^FIRST\s+READ(?:ING)?:\s*',
+        r'^SECOND\s+READ(?:ING)?:\s*',
+        r'^THIRD\s+READ(?:ING)?:\s*',
+        r'^FINAL\s+READ(?:ING)?:\s*',
+        r'^REINTRODUCED\s+(?:FIRST\s+)?(?:SECOND\s+)?READ(?:ING)?:\s*',
+    ]
+
+    result = text
+    for pattern in reading_prefixes:
+        result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+
+    return result
+
+
 def normalize_title_for_matter_id(title: str) -> Optional[str]:
     """Normalize title for matter identification (title-based fallback)
 
@@ -96,17 +130,7 @@ def normalize_title_for_matter_id(title: str) -> Optional[str]:
         return None
 
     # Strip reading prefixes (ordinance lifecycle tracking)
-    # Handles: "FIRST READ:", "FIRST READING:", "REINTRODUCED FIRST READING:", etc.
-    reading_prefixes = [
-        r'^FIRST\s+READ(?:ING)?:\s*',
-        r'^SECOND\s+READ(?:ING)?:\s*',
-        r'^THIRD\s+READ(?:ING)?:\s*',
-        r'^FINAL\s+READ(?:ING)?:\s*',
-        r'^REINTRODUCED\s+(?:FIRST\s+)?(?:SECOND\s+)?READ(?:ING)?:\s*',
-    ]
-
-    for pattern in reading_prefixes:
-        normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+    normalized = _strip_reading_prefixes(normalized)
 
     # Final normalization
     normalized = re.sub(r'\s+', ' ', normalized.strip().lower())

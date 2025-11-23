@@ -112,13 +112,39 @@
 6. Full system test
 
 ### Week 3: Matter Tracking Optimization
-**Goal:** Keep legislative timelines, improve code readability
+**Goal:** Improve maintainability of legislative timeline tracking
 
-1. Simplify ID generation (90 → 40 lines)
-2. Document fallback hierarchy clearly
-3. Extract tracking logic into `MatterTracker` class
-4. Add tests for all 3 fallback paths
-5. Write `MATTERS_ARCHITECTURE.md`
+**Why Matter Tracking Exists:**
+- Track ordinances across readings (FIRST → SECOND → FINAL)
+- Model policy evolution through time (not just cost optimization)
+- Enable "What happened to Ordinance 2025-123?" queries
+- Legislative timelines are core product value
+
+**Actual Work (3-4 hours):**
+1. **Write comprehensive tests** for 3 fallback paths
+   - matter_file (Legistar, LA-style PrimeGov) - preferred, stable
+   - matter_id (vendor UUID) - fallback for unstable vendors
+   - title normalization (Palo Alto-style PrimeGov) - last resort
+   - Edge cases: reading prefixes, generic titles, cross-city collision
+
+2. **Write MATTERS_ARCHITECTURE.md**
+   - Document "why" (legislative timelines, policy modeling)
+   - Explain fallback hierarchy rationale
+   - Integration points (ingestion service, database)
+   - Edge case handling (attachment hashing, title normalization)
+
+3. **Minor readability improvements**
+   - Extract helper functions where beneficial
+   - Add docstring examples for common patterns
+   - Better variable naming if needed
+
+4. **Integration test**
+   - Full flow: vendor data → ingestion → deduplication
+   - Verify: 1 canonical matter, 2 appearances, cached summary
+   - Test attachment hash change detection
+
+**Status:** `id_generation.py` already well-documented (308 lines, clear comments)
+**Not Changing:** Feature scope, deduplication logic (works correctly, keeps timelines)
 
 ### Week 4-5: Declarative Adapter Proof of Concept
 **Goal:** Prove YAML adapters work, migrate 2 vendors
