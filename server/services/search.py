@@ -221,8 +221,8 @@ async def handle_ambiguous_city_search(
         all_cities = await db.get_cities()  # Gets all active cities
         city_names = [city.name.lower() for city in all_cities]
 
-        # Find close matches (cutoff=0.7 means 70% similarity required)
-        close_matches = get_close_matches(city_name.lower(), city_names, n=5, cutoff=0.7)
+        # Find close matches (cutoff=0.8 means 80% similarity required)
+        close_matches = get_close_matches(city_name.lower(), city_names, n=5, cutoff=0.8)
 
         if close_matches:
             # Get cities matching the fuzzy results
