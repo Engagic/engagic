@@ -697,11 +697,12 @@ class Database:
 
         logger.debug("stored agenda items", count=len(items))
 
-    async def get_agenda_items(self, meeting_id: str) -> List[AgendaItem]:
+    async def get_agenda_items(self, meeting_id: str, load_matters: bool = False) -> List[AgendaItem]:
         """Get all agenda items for a meeting
 
         Args:
             meeting_id: Meeting identifier
+            load_matters: If True, eagerly load Matter objects for items
 
         Returns:
             List of AgendaItem objects with denormalized topics
@@ -1196,3 +1197,218 @@ class Database:
                 )
 
             return meetings
+
+    # ==================
+    # STATS & MONITORING
+    # ==================
+
+    async def get_stats(self) -> dict:
+        """Get database statistics for monitoring"""
+        async with self.pool.acquire() as conn:
+            result = await conn.fetchrow("""
+                SELECT
+                    (SELECT COUNT(*) FROM cities) as cities,
+                    (SELECT COUNT(*) FROM meetings) as meetings,
+                    (SELECT COUNT(*) FROM items) as items,
+                    (SELECT COUNT(*) FROM city_matters) as matters,
+                    (SELECT COUNT(*) FROM queue WHERE status = 'pending') as pending_jobs,
+                    (SELECT COUNT(*) FROM queue WHERE status = 'failed') as failed_jobs
+            """)
+            return dict(result)
+
+    async def get_queue_stats(self) -> dict:
+        """Get queue statistics for Prometheus"""
+        async with self.pool.acquire() as conn:
+            stats = await conn.fetch("""
+                SELECT status, COUNT(*) as count
+                FROM queue
+                GROUP BY status
+            """)
+            return {row["status"]: row["count"] for row in stats}
+
+    async def get_random_meeting_with_items(self) -> Optional[Meeting]:
+        """Get a random meeting that has items and a summary"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT m.*
+                FROM meetings m
+                WHERE m.summary IS NOT NULL
+                AND EXISTS (SELECT 1 FROM items WHERE meeting_id = m.id)
+                ORDER BY RANDOM()
+                LIMIT 1
+            """)
+
+            if not row:
+                return None
+
+            # Parse participation
+            participation = None
+            if row["participation"]:
+                if isinstance(row["participation"], str):
+                    participation = json.loads(row["participation"])
+                else:
+                    participation = row["participation"]
+
+            # Get topics
+            topic_rows = await conn.fetch(
+                "SELECT topic FROM meeting_topics WHERE meeting_id = $1",
+                row["id"]
+            )
+            topics = [t["topic"] for t in topic_rows] if topic_rows else []
+
+            return Meeting(
+                id=row["id"],
+                banana=row["banana"],
+                title=row["title"],
+                date=row["date"],
+                agenda_url=row["agenda_url"],
+                packet_url=row["packet_url"],
+                summary=row["summary"],
+                participation=participation,
+                status=row["status"],
+                processing_status=row["processing_status"],
+                processing_method=row["processing_method"],
+                processing_time=row["processing_time"],
+                topics=topics,
+            )
+
+    # ==================
+    # TOPIC SEARCH
+    # ==================
+
+    async def search_meetings_by_topic(
+        self,
+        topic: str,
+        banana: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Meeting]:
+        """Search meetings by topic, optionally filtered by city"""
+        async with self.pool.acquire() as conn:
+            if banana:
+                rows = await conn.fetch("""
+                    SELECT DISTINCT m.*
+                    FROM meetings m
+                    JOIN meeting_topics mt ON m.id = mt.meeting_id
+                    WHERE mt.topic = $1 AND m.banana = $2
+                    ORDER BY m.date DESC
+                    LIMIT $3
+                """, topic, banana, limit)
+            else:
+                rows = await conn.fetch("""
+                    SELECT DISTINCT m.*
+                    FROM meetings m
+                    JOIN meeting_topics mt ON m.id = mt.meeting_id
+                    WHERE mt.topic = $1
+                    ORDER BY m.date DESC
+                    LIMIT $2
+                """, topic, limit)
+
+            meetings = []
+            for row in rows:
+                # Parse participation
+                participation = None
+                if row["participation"]:
+                    if isinstance(row["participation"], str):
+                        participation = json.loads(row["participation"])
+                    else:
+                        participation = row["participation"]
+
+                # Get topics
+                topic_rows = await conn.fetch(
+                    "SELECT topic FROM meeting_topics WHERE meeting_id = $1",
+                    row["id"]
+                )
+                topics = [t["topic"] for t in topic_rows] if topic_rows else []
+
+                meetings.append(Meeting(
+                    id=row["id"],
+                    banana=row["banana"],
+                    title=row["title"],
+                    date=row["date"],
+                    agenda_url=row["agenda_url"],
+                    packet_url=row["packet_url"],
+                    summary=row["summary"],
+                    participation=participation,
+                    status=row["status"],
+                    processing_status=row["processing_status"],
+                    processing_method=row["processing_method"],
+                    processing_time=row["processing_time"],
+                    topics=topics,
+                ))
+
+            return meetings
+
+    async def get_items_by_topic(self, meeting_id: str, topic: str) -> List[AgendaItem]:
+        """Get agenda items for a meeting filtered by topic"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT DISTINCT i.*
+                FROM items i
+                JOIN item_topics it ON i.id = it.item_id
+                WHERE i.meeting_id = $1 AND it.topic = $2
+                ORDER BY i.sequence
+            """, meeting_id, topic)
+
+            items = []
+            for row in rows:
+                # Parse JSON fields
+                attachments = []
+                if row["attachments"]:
+                    if isinstance(row["attachments"], str):
+                        attachments = json.loads(row["attachments"])
+                    else:
+                        attachments = row["attachments"]
+
+                sponsors = []
+                if row["sponsors"]:
+                    if isinstance(row["sponsors"], str):
+                        sponsors = json.loads(row["sponsors"])
+                    else:
+                        sponsors = row["sponsors"]
+
+                # Get topics
+                topic_rows = await conn.fetch(
+                    "SELECT topic FROM item_topics WHERE item_id = $1",
+                    row["id"]
+                )
+                topics = [t["topic"] for t in topic_rows] if topic_rows else []
+
+                items.append(AgendaItem(
+                    id=row["id"],
+                    meeting_id=row["meeting_id"],
+                    title=row["title"],
+                    sequence=row["sequence"],
+                    attachments=attachments,
+                    summary=row["summary"],
+                    topics=topics,
+                    matter_id=row["matter_id"],
+                    matter_file=row["matter_file"],
+                    matter_type=row["matter_type"],
+                    agenda_number=row["agenda_number"],
+                    sponsors=sponsors,
+                ))
+
+            return items
+
+    async def get_popular_topics(self, limit: int = 20) -> List[dict]:
+        """Get most popular topics across all meetings"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT topic, COUNT(*) as count
+                FROM meeting_topics
+                GROUP BY topic
+                ORDER BY count DESC
+                LIMIT $1
+            """, limit)
+
+            return [{"topic": row["topic"], "count": row["count"]} for row in rows]
+
+    # ==================
+    # CACHE (STUB - Not Used in PostgreSQL)
+    # ==================
+
+    async def get_cached_summary(self, packet_url: str) -> Optional[dict]:
+        """Get cached summary (stub for compatibility)"""
+        # Cache table exists but isn't actively used in current flow
+        # Return None to indicate no cache hit
+        return None

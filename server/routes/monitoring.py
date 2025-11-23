@@ -129,7 +129,7 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
     try:
         # Database health check
         db.conn.execute("SELECT 1").fetchone()
-        stats = db.get_stats()
+        stats = await db.get_stats()
         health_status["checks"]["databases"] = {
             "status": "healthy",
             "cities": stats["active_cities"],
@@ -137,7 +137,7 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
         }
 
         # Queue health check (detect backlog)
-        queue_stats = db.get_queue_stats()
+        queue_stats = await db.get_queue_stats()
         pending_count = queue_stats.get("pending_count", 0)
         dead_letter_count = queue_stats.get("dead_letter_count", 0)
 
@@ -197,7 +197,7 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
 async def get_stats(db: UnifiedDatabase = Depends(get_db)):
     """Get system statistics"""
     try:
-        stats = db.get_stats()
+        stats = await db.get_stats()
 
         return {
             "status": "healthy",
@@ -222,7 +222,7 @@ async def get_stats(db: UnifiedDatabase = Depends(get_db)):
 async def get_queue_stats(db: UnifiedDatabase = Depends(get_db)):
     """Get processing queue statistics (Phase 4)"""
     try:
-        queue_stats = db.get_queue_stats()
+        queue_stats = await db.get_queue_stats()
 
         return {
             "status": "healthy",
@@ -247,7 +247,7 @@ async def get_queue_stats(db: UnifiedDatabase = Depends(get_db)):
 async def get_metrics(db: UnifiedDatabase = Depends(get_db)):
     """Basic metrics endpoint for monitoring"""
     try:
-        stats = db.get_stats()
+        stats = await db.get_stats()
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -279,7 +279,7 @@ async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
     """
     try:
         # Update queue size gauges with current stats
-        queue_stats = db.get_queue_stats()
+        queue_stats = await db.get_queue_stats()
         metrics.update_queue_sizes(queue_stats)
 
         # Return Prometheus text format
@@ -402,7 +402,7 @@ async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
 
         # Fetch 15 random meetings with items
         for i in range(15):
-            meeting = db.get_random_meeting_with_items()
+            meeting = await db.get_random_meeting_with_items()
 
             if meeting:
                 ticker_item = generate_ticker_item(meeting, db)
