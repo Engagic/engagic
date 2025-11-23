@@ -11,7 +11,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
 from importlib.resources import files
-from database.db import UnifiedDatabase, Meeting, AgendaItem
+from database.db_postgres import Database
+from database.models import Meeting, AgendaItem
 
 from config import get_logger
 
@@ -120,13 +121,13 @@ def _generate_item_anchor(item: AgendaItem) -> str:
     return f"item-{item.id}"
 
 
-def generate_meeting_flyer(
+async def generate_meeting_flyer(
     meeting: Meeting,
     item: Optional[AgendaItem],
     position: str,
     custom_message: Optional[str],
     user_name: Optional[str],
-    db: UnifiedDatabase,
+    db: Database,
     dark_mode: bool = False,
 ) -> str:
     """Generate print-ready HTML flyer
@@ -147,7 +148,7 @@ def generate_meeting_flyer(
     template = files("server.services").joinpath("flyer_template.html").read_text(encoding='utf-8')
 
     # Get city info
-    city = db.get_city(banana=meeting.banana)
+    city = await db.get_city(banana=meeting.banana)
     city_name = city.name if city else "Unknown City"
     state = city.state if city else ""
     city_display = f"{city_name}{', ' + state if state else ''}"

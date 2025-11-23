@@ -5,14 +5,15 @@ Handles meeting retrieval with items attached
 """
 
 from typing import Dict, Any, List
-from database.db import UnifiedDatabase, Meeting
+from database.db_postgres import Database
+from database.models import Meeting
 
 from config import get_logger
 
 logger = get_logger(__name__)
 
 
-async def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, Any]:
+async def get_meeting_with_items(meeting: Meeting, db: Database) -> Dict[str, Any]:
     """Convert meeting to dict with items attached
 
     This pattern is used in 5+ places throughout the API,
@@ -39,7 +40,7 @@ async def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[
 
 
 async def get_meetings_with_items(
-    meetings: List[Meeting], db: UnifiedDatabase
+    meetings: List[Meeting], db: Database
 ) -> List[Dict[str, Any]]:
     """Batch version of get_meeting_with_items"""
     import asyncio

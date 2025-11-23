@@ -438,3 +438,172 @@ class Database:
             stats['summary_rate'] = f"{summarized / total * 100:.1f}%" if total > 0 else "0%"
 
             return stats
+
+    # ==================
+    # FACADE METHODS (Server API Convenience)
+    # ==================
+
+    async def get_city(
+        self,
+        banana: Optional[str] = None,
+        name: Optional[str] = None,
+        state: Optional[str] = None
+    ) -> Optional[City]:
+        """Get city by banana or name+state
+
+        Facade method for server routes - delegates to CityRepository.
+        """
+        if banana:
+            return await self.cities.get_city(banana)
+        elif name and state:
+            cities = await self.cities.get_cities(name=name, state=state, limit=1)
+            return cities[0] if cities else None
+        return None
+
+    async def get_cities(
+        self,
+        state: Optional[str] = None,
+        name: Optional[str] = None,
+        vendor: Optional[str] = None,
+        status: str = "active",
+        limit: Optional[int] = None
+    ) -> List[City]:
+        """Get cities with optional filtering
+
+        Facade method for server routes - delegates to CityRepository.
+        """
+        return await self.cities.get_cities(
+            state=state,
+            name=name,
+            vendor=vendor,
+            status=status,
+            limit=limit
+        )
+
+    async def get_meeting(self, meeting_id: str) -> Optional[Meeting]:
+        """Get meeting by ID
+
+        Facade method for server routes - delegates to MeetingRepository.
+        """
+        return await self.meetings.get_meeting(meeting_id)
+
+    async def get_meetings(
+        self,
+        bananas: Optional[List[str]] = None,
+        limit: int = 50,
+        exclude_cancelled: bool = False
+    ) -> List[Meeting]:
+        """Get meetings for multiple cities
+
+        Facade method for server routes - delegates to MeetingRepository.
+        """
+        if not bananas:
+            return await self.meetings.get_recent_meetings(limit=limit)
+
+        all_meetings = []
+        for banana in bananas:
+            meetings = await self.meetings.get_meetings_for_city(banana, limit=limit)
+            all_meetings.extend(meetings)
+
+        # Sort by date descending and apply limit
+        all_meetings.sort(key=lambda m: m.date if m.date else datetime.min, reverse=True)
+        return all_meetings[:limit]
+
+    async def get_agenda_items(
+        self,
+        meeting_id: str,
+        load_matters: bool = False
+    ) -> List[AgendaItem]:
+        """Get agenda items for meeting
+
+        Facade method for server routes - delegates to ItemRepository.
+        """
+        items = await self.items.get_agenda_items(meeting_id)
+
+        if load_matters and items:
+            # Load matter data for items that have matter_id
+            for item in items:
+                if item.matter_id:
+                    matter = await self.matters.get_matter(item.matter_id)
+                    if matter:
+                        # Attach matter to item (extend model if needed)
+                        item.matter = matter
+
+        return items
+
+    async def search_meetings_by_topic(
+        self,
+        topic: str,
+        city_banana: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Meeting]:
+        """Search meetings by topic
+
+        Facade method for server routes - delegates to SearchRepository.
+        """
+        return await self.search.search_meetings_by_topic(topic, city_banana, limit)
+
+    async def get_popular_topics(self, limit: int = 20) -> List[dict]:
+        """Get popular topics
+
+        Facade method for server routes - delegates to SearchRepository.
+        """
+        return await self.search.get_popular_topics(limit)
+
+    async def get_items_by_topic(
+        self,
+        meeting_id: str,
+        topic: str
+    ) -> List[AgendaItem]:
+        """Get agenda items filtered by topic
+
+        Facade method for server routes - delegates to ItemRepository.
+        """
+        return await self.items.get_items_by_topic(meeting_id, topic)
+
+    async def get_random_meeting_with_items(self) -> Optional[Meeting]:
+        """Get random meeting that has agenda items
+
+        Facade method for server routes - delegates to MeetingRepository.
+        """
+        return await self.meetings.get_random_meeting_with_items()
+
+    async def get_matter(self, matter_id: str) -> Optional[Any]:
+        """Get matter by ID
+
+        Facade method for server routes - delegates to MatterRepository.
+        """
+        return await self.matters.get_matter(matter_id)
+
+    async def get_queue_stats(self) -> dict:
+        """Get queue statistics
+
+        Facade method for server routes - delegates to QueueRepository.
+        """
+        return await self.queue.get_queue_stats()
+
+    async def get_city_meeting_stats(self, bananas: List[str]) -> dict:
+        """Get meeting statistics for multiple cities
+
+        Returns dict with city-level meeting counts and summary stats.
+        """
+        stats = {}
+
+        for banana in bananas:
+            async with self.pool.acquire() as conn:
+                result = await conn.fetchrow("""
+                    SELECT
+                        COUNT(*) as total_meetings,
+                        COUNT(CASE WHEN packet_url IS NOT NULL THEN 1 END) as meetings_with_packet,
+                        COUNT(CASE WHEN summary IS NOT NULL THEN 1 END) as summarized_meetings
+                    FROM meetings
+                    WHERE banana = $1
+                """, banana)
+
+                stats[banana] = {
+                    "total_meetings": result['total_meetings'],
+                    "meetings_with_packet": result['meetings_with_packet'],
+                    "summarized_meetings": result['summarized_meetings'],
+                }
+
+        return stats

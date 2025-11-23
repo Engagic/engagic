@@ -11,7 +11,7 @@ from server.services.search import (
 )
 from server.utils.geo import is_state_query
 from server.metrics import metrics
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -21,13 +21,13 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def get_db(request: Request) -> UnifiedDatabase:
+def get_db(request: Request) -> Database:
     """Dependency to get shared database instance from app state"""
     return request.app.state.db
 
 
 @router.post("/search")
-async def search_meetings(search_request: SearchRequest, request: Request, db: UnifiedDatabase = Depends(get_db)):
+async def search_meetings(search_request: SearchRequest, request: Request, db: Database = Depends(get_db)):
     """Single endpoint for all meeting searches - handles zipcode or city name"""
     try:
         query = search_request.query.strip()

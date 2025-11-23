@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import Response
 
 from config import config, get_logger
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 from server.services.ticker import generate_ticker_item
 from server.metrics import metrics, get_metrics_text
 
@@ -24,7 +24,7 @@ _ticker_cache_time: float = 0
 TICKER_CACHE_TTL = 300  # 5 minutes
 
 
-def get_db(request: Request) -> UnifiedDatabase:
+def get_db(request: Request) -> Database:
     """Dependency to get shared database instance from app state"""
     return request.app.state.db
 
@@ -115,7 +115,7 @@ async def root():
 
 
 @router.get("/api/health")
-async def health_check(db: UnifiedDatabase = Depends(get_db)):
+async def health_check(db: Database = Depends(get_db)):
     """Health check endpoint"""
     analyzer = get_analyzer()
 
@@ -196,7 +196,7 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.get("/api/stats")
-async def get_stats(db: UnifiedDatabase = Depends(get_db)):
+async def get_stats(db: Database = Depends(get_db)):
     """Get system statistics"""
     try:
         stats = await db.get_stats()
@@ -221,7 +221,7 @@ async def get_stats(db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.get("/api/queue-stats")
-async def get_queue_stats(db: UnifiedDatabase = Depends(get_db)):
+async def get_queue_stats(db: Database = Depends(get_db)):
     """Get processing queue statistics (Phase 4)"""
     try:
         queue_stats = await db.get_queue_stats()
@@ -246,7 +246,7 @@ async def get_queue_stats(db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.get("/api/metrics")
-async def get_metrics(db: UnifiedDatabase = Depends(get_db)):
+async def get_metrics(db: Database = Depends(get_db)):
     """Basic metrics endpoint for monitoring"""
     try:
         stats = await db.get_stats()
@@ -273,7 +273,7 @@ async def get_metrics(db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.get("/metrics")
-async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
+async def prometheus_metrics(db: Database = Depends(get_db)):
     """Prometheus metrics endpoint
 
     Returns metrics in Prometheus text format for scraping.
@@ -292,7 +292,7 @@ async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.get("/api/analytics")
-async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
+async def get_analytics(db: Database = Depends(get_db)):
     """Get comprehensive analytics for public dashboard"""
     try:
         # Get stats using async PostgreSQL
@@ -365,7 +365,7 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.get("/api/ticker")
-async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
+async def get_ticker_items(db: Database = Depends(get_db)):
     """Get pre-generated ticker items for homepage news ticker (cached for 5 minutes)"""
     global _ticker_cache, _ticker_cache_time
 
@@ -385,7 +385,7 @@ async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
             meeting = await db.get_random_meeting_with_items()
 
             if meeting:
-                ticker_item = generate_ticker_item(meeting, db)
+                ticker_item = await generate_ticker_item(meeting, db)
                 if ticker_item:
                     ticker_items.append(ticker_item)
 

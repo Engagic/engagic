@@ -14,9 +14,6 @@ Moved from: pipeline/processor.py (renamed for clarity)
 import time
 from typing import List, Dict, Any, Optional, Tuple
 
-from database.db import UnifiedDatabase
-from database.transaction import transaction
-from config import config
 from exceptions import ExtractionError, LLMError
 from parsing.pdf import PdfExtractor
 from parsing.participation import parse_participation_info
@@ -44,7 +41,6 @@ class Analyzer:
         """
         self.pdf_extractor = PdfExtractor()
         self.summarizer = GeminiSummarizer(api_key=api_key)
-        self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
 
         logger.info(
             "analyzer initialized",
@@ -75,23 +71,8 @@ class Analyzer:
             # Process the agenda (returns summary, method, participation)
             summary, method, participation = self.process_agenda(packet_url)
 
-            # Store in database
             processing_time = time.time() - start_time
-            meeting_data["processed_summary"] = summary
-            meeting_data["processing_time_seconds"] = processing_time
-            meeting_data["processing_method"] = method
-            if participation:
-                meeting_data["participation"] = participation
-
-            # Update meeting with summary and participation + cache metadata
             meeting_id = meeting_data.get("meeting_id")
-            with transaction(self.db.conn):
-                if meeting_id:
-                    self.db.update_meeting_summary(
-                        meeting_id, summary, method, processing_time, participation
-                    )
-                # Store processing metadata in cache table
-                self.db.store_processing_result(packet_url, method, processing_time)
 
             logger.info("processing success", city=city_banana)
 
@@ -99,10 +80,10 @@ class Analyzer:
                 "success": True,
                 "summary": summary,
                 "processing_time": processing_time,
-                "cached": False,
-                "meeting_data": meeting_data,
-                "meeting_id": meeting_id,
                 "processing_method": method,
+                "participation": participation,
+                "cached": False,
+                "meeting_id": meeting_id,
             }
 
         except Exception as e:

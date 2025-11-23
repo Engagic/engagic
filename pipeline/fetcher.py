@@ -76,7 +76,7 @@ class Fetcher:
         logger.info("Starting polite city sync...")
 
         self.failed_cities.clear()
-        cities = await self.db.get_cities(status="active")
+        cities = await self.db.cities.get_all_cities(status="active")
         logger.info("syncing cities with rate limiting", city_count=len(cities))
 
         # Group cities by vendor for polite crawling (only supported vendors)
@@ -194,7 +194,7 @@ class Fetcher:
         results = []
 
         for banana in city_bananas:
-            city = await self.db.get_city(banana=banana)
+            city = await self.db.cities.get_city(banana=banana)
             if not city:
                 logger.warning("city not found", banana=banana)
                 results.append(
@@ -231,7 +231,7 @@ class Fetcher:
         results = []
 
         for vendor in vendor_names:
-            cities = await self.db.get_cities(vendor=vendor, status="active")
+            cities = await self.db.cities.get_cities(vendor=vendor, status="active")
             logger.info("found cities for vendor", vendor=vendor, city_count=len(cities))
 
             for city in cities:
@@ -506,8 +506,8 @@ class Fetcher:
         """Determine if city needs syncing based on activity patterns"""
         try:
             # Check recent meeting frequency
-            recent_meetings = await self.db.get_city_meeting_frequency(city.banana, days=30)
-            last_sync = await self.db.get_city_last_sync(city.banana)
+            recent_meetings = await self.db.cities.get_city_meeting_frequency(city.banana, days=30)
+            last_sync = await self.db.cities.get_city_last_sync(city.banana)
 
             if not last_sync:
                 return True  # Never synced before
@@ -534,10 +534,10 @@ class Fetcher:
         async def get_priority(city: City) -> float:
             try:
                 # Get recent activity
-                recent_meetings = await self.db.get_city_meeting_frequency(
+                recent_meetings = await self.db.cities.get_city_meeting_frequency(
                     city.banana, days=30
                 )
-                last_sync = await self.db.get_city_last_sync(city.banana)
+                last_sync = await self.db.cities.get_city_last_sync(city.banana)
 
                 if not last_sync:
                     return 1000  # Never synced gets highest priority

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import HTMLResponse
 from server.models.requests import FlyerRequest
 from server.services.flyer import generate_meeting_flyer
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def get_db(request: Request) -> UnifiedDatabase:
+def get_db(request: Request) -> Database:
     """Dependency to get shared database instance from app state"""
     return request.app.state.db
 
@@ -26,7 +26,7 @@ def get_db(request: Request) -> UnifiedDatabase:
 @router.post("/flyer/generate")
 async def generate_flyer(
     request: FlyerRequest,
-    db: UnifiedDatabase = Depends(get_db)
+    db: Database = Depends(get_db)
 ):
     """Generate printable civic action flyer
 
@@ -58,7 +58,7 @@ async def generate_flyer(
                 raise HTTPException(status_code=404, detail="Agenda item not found")
 
         # Generate flyer HTML
-        html = generate_meeting_flyer(
+        html = await generate_meeting_flyer(
             meeting=meeting,
             item=item,
             position=request.position,

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from server.models.requests import ProcessRequest
 from server.services.meeting import get_meeting_with_items
 from server.metrics import metrics
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -18,13 +18,13 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def get_db(request: Request) -> UnifiedDatabase:
+def get_db(request: Request) -> Database:
     """Dependency to get shared database instance from app state"""
     return request.app.state.db
 
 
 @router.get("/meeting/{meeting_id}")
-async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
+async def get_meeting(meeting_id: str, db: Database = Depends(get_db)):
     """Get a single meeting by ID - optimized endpoint to avoid fetching all city meetings"""
     try:
         # Fetch the specific meeting using db method
@@ -58,7 +58,7 @@ async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.post("/process-agenda")
-async def process_agenda(request: ProcessRequest, db: UnifiedDatabase = Depends(get_db)):
+async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)):
     """Check if agenda has been processed - no longer processes on-demand"""
     try:
         # No cache - summary not yet available
@@ -121,7 +121,7 @@ async def get_random_best_meeting():
 
 
 @router.get("/random-meeting-with-items")
-async def get_random_meeting_with_items(db: UnifiedDatabase = Depends(get_db)):
+async def get_random_meeting_with_items(db: Database = Depends(get_db)):
     """Get a random meeting that has high-quality item-level summaries"""
     try:
         result = await db.get_random_meeting_with_items()

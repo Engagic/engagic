@@ -749,6 +749,15 @@ class Processor:
                 }
                 result = self.analyzer.process_agenda_with_cache(meeting_data)
                 if result.get("success"):
+                    # Store monolithic summary in database
+                    await self.db.meetings.update_meeting_summary(
+                        meeting_id=meeting.id,
+                        summary=result.get("summary"),
+                        processing_method=result.get("processing_method") or "pymupdf_gemini",
+                        processing_time=result.get("processing_time") or 0.0,
+                        topics=None,  # Topics extracted from summary by topic normalizer
+                        participation=result.get("participation"),
+                    )
                     logger.info(
                         "processed packet",
                         packet_url=meeting.packet_url,

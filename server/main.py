@@ -144,10 +144,18 @@ if __name__ == "__main__":
     # Handle command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "--init-db":
         logger.info("Initializing databases...")
-        from database.db import UnifiedDatabase
-        db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-        _ = db.get_stats()
-        logger.info("Databases initialized successfully")
+        import asyncio
+        from database.db_postgres import Database
+
+        async def init_db():
+            db = await Database.create()
+            try:
+                _ = await db.get_stats()
+                logger.info("Database initialized successfully")
+            finally:
+                await db.close()
+
+        asyncio.run(init_db())
         sys.exit(0)
 
     uvicorn.run(

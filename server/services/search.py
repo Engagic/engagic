@@ -6,7 +6,7 @@ Business logic for handling different search types
 
 from typing import Dict, Any
 from difflib import get_close_matches
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 from server.services.meeting import get_meetings_with_items
 from server.utils.geo import parse_city_state_input, get_state_abbreviation, get_state_full_name
 from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_name
@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 
 
-async def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
+async def handle_zipcode_search(zipcode: str, db: Database) -> Dict[str, Any]:
     """Handle zipcode search with cache-first approach
 
     Returns city data with banana field which serves as the city_url.
@@ -76,7 +76,7 @@ async def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, 
     }
 
 
-async def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
+async def handle_city_search(city_input: str, db: Database) -> Dict[str, Any]:
     """Handle city name search with cache-first approach and ambiguous city handling
 
     Returns city data with banana field which serves as the city_url.
@@ -140,7 +140,7 @@ async def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, 
     }
 
 
-async def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
+async def handle_state_search(state_input: str, db: Database) -> Dict[str, Any]:
     """Handle state search - return list of cities in that state"""
     # Normalize state input
     state_abbr = get_state_abbreviation(state_input)
@@ -208,7 +208,7 @@ async def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str
 
 
 async def handle_ambiguous_city_search(
-    city_name: str, original_input: str, db: UnifiedDatabase
+    city_name: str, original_input: str, db: Database
 ) -> Dict[str, Any]:
     """Handle city search when no state is provided - check for ambiguous matches"""
 

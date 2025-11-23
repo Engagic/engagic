@@ -334,6 +334,54 @@ class MeetingRepository(BaseRepository):
 
         logger.info("updated meeting summary", meeting_id=meeting_id, topic_count=len(topics) if topics else 0)
 
+    async def get_recent_meetings(self, limit: int = 50) -> List[Meeting]:
+        """Get most recent meetings across all cities
+
+        Args:
+            limit: Maximum number of meetings to return
+
+        Returns:
+            List of Meeting objects sorted by date descending
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT m.*
+                FROM meetings m
+                WHERE m.date IS NOT NULL
+                ORDER BY m.date DESC
+                LIMIT $1
+            """, limit)
+
+            meetings = []
+            for row in rows:
+                # Deserialize JSONB participation
+                participation = self._deserialize_jsonb(row["participation"])
+
+                # Get normalized topics
+                topic_rows = await conn.fetch(
+                    "SELECT topic FROM meeting_topics WHERE meeting_id = $1",
+                    row["id"]
+                )
+                topics = [t["topic"] for t in topic_rows]
+
+                meetings.append(Meeting(
+                    id=row["id"],
+                    banana=row["banana"],
+                    title=row["title"],
+                    date=row["date"],
+                    agenda_url=row["agenda_url"],
+                    packet_url=row["packet_url"],
+                    summary=row["summary"],
+                    participation=participation,
+                    status=row["status"],
+                    processing_status=row["processing_status"],
+                    processing_method=row["processing_method"],
+                    processing_time=row["processing_time"],
+                    topics=topics,
+                ))
+
+            return meetings
+
     async def get_random_meeting_with_items(self) -> Optional[Meeting]:
         """Get a random meeting that has items and a summary
 
