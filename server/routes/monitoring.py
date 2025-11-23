@@ -127,8 +127,10 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
     }
 
     try:
-        # Database health check
-        db.conn.execute("SELECT 1").fetchone()
+        # Database health check (async PostgreSQL)
+        async with db.pool.acquire() as conn:
+            await conn.fetchrow("SELECT 1")
+
         stats = await db.get_stats()
         health_status["checks"]["databases"] = {
             "status": "healthy",
@@ -293,72 +295,50 @@ async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
 async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
     """Get comprehensive analytics for public dashboard"""
     try:
-        # Get stats directly from unified database
-        if db.conn is None:
-            raise HTTPException(
-                status_code=500, detail="Database connection not established"
+        # Get stats using async PostgreSQL
+        async with db.pool.acquire() as conn:
+            # City stats
+            total_cities = await conn.fetchrow("SELECT COUNT(*) as total_cities FROM cities")
+            active_cities_stats = await conn.fetchrow("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
+
+            # Meeting stats
+            meetings_stats = await conn.fetchrow("SELECT COUNT(*) as meetings_count FROM meetings")
+            meetings_with_items_stats = await conn.fetchrow(
+                "SELECT COUNT(*) as meetings_with_items FROM meetings WHERE id IN (SELECT DISTINCT meeting_id FROM items)"
             )
-        cursor = db.conn.cursor()
-
-        # City stats
-        cursor.execute("SELECT COUNT(*) as total_cities FROM cities")
-        total_cities = dict(cursor.fetchone())
-
-        cursor.execute("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
-        active_cities_stats = dict(cursor.fetchone())
-
-        # Meeting stats
-        cursor.execute("SELECT COUNT(*) as meetings_count FROM meetings")
-        meetings_stats = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as meetings_with_items FROM meetings WHERE id IN (SELECT DISTINCT meeting_id FROM items)"
-        )
-        meetings_with_items_stats = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''"
-        )
-        packets_stats = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''"
-        )
-        summaries_stats = dict(cursor.fetchone())
-
-        # Item-level stats (matters-first architecture)
-        cursor.execute("SELECT COUNT(*) as items_count FROM items")
-        items_stats = dict(cursor.fetchone())
-
-        cursor.execute("SELECT COUNT(*) as matters_count FROM city_matters")
-        matters_stats = dict(cursor.fetchone())
-
-        # Unique summaries = deduplicated matters + standalone items with summaries
-        cursor.execute(
-            "SELECT COUNT(*) as matters_with_summary FROM city_matters WHERE canonical_summary IS NOT NULL AND canonical_summary != ''"
-        )
-        matters_summarized = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as standalone_items FROM items WHERE matter_id IS NULL AND summary IS NOT NULL AND summary != ''"
-        )
-        standalone_items = dict(cursor.fetchone())
-
-        unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
-
-        # Frequently updated cities (cities with at least 7 meetings with summaries)
-        cursor.execute("""
-            SELECT COUNT(*) as frequently_updated
-            FROM (
-                SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count
-                FROM meetings m
-                WHERE (m.summary IS NOT NULL AND m.summary != '')
-                   OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
-                GROUP BY m.banana
-                HAVING COUNT(DISTINCT m.id) >= 7
+            packets_stats = await conn.fetchrow(
+                "SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''"
             )
-        """)
-        frequently_updated_stats = dict(cursor.fetchone())
+            summaries_stats = await conn.fetchrow(
+                "SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''"
+            )
+
+            # Item-level stats (matters-first architecture)
+            items_stats = await conn.fetchrow("SELECT COUNT(*) as items_count FROM items")
+            matters_stats = await conn.fetchrow("SELECT COUNT(*) as matters_count FROM city_matters")
+
+            # Unique summaries = deduplicated matters + standalone items with summaries
+            matters_summarized = await conn.fetchrow(
+                "SELECT COUNT(*) as matters_with_summary FROM city_matters WHERE canonical_summary IS NOT NULL AND canonical_summary != ''"
+            )
+            standalone_items = await conn.fetchrow(
+                "SELECT COUNT(*) as standalone_items FROM items WHERE matter_id IS NULL AND summary IS NOT NULL AND summary != ''"
+            )
+
+            unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
+
+            # Frequently updated cities (cities with at least 7 meetings with summaries)
+            frequently_updated_stats = await conn.fetchrow("""
+                SELECT COUNT(*) as frequently_updated
+                FROM (
+                    SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count
+                    FROM meetings m
+                    WHERE (m.summary IS NOT NULL AND m.summary != '')
+                       OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
+                    GROUP BY m.banana
+                    HAVING COUNT(DISTINCT m.id) >= 7
+                ) AS subquery
+            """)
 
         return {
             "success": True,

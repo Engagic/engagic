@@ -1203,28 +1203,69 @@ class Database:
     # ==================
 
     async def get_stats(self) -> dict:
-        """Get database statistics for monitoring"""
+        """Get database statistics for monitoring
+
+        Returns format matching SQLite UnifiedDatabase for API compatibility:
+        - active_cities: Count of cities with status='active'
+        - total_meetings: Total meeting count
+        - summarized_meetings: Meetings with summary
+        - pending_meetings: Meetings with processing_status='pending'
+        - summary_rate: Percentage string like "75.3%"
+        """
         async with self.pool.acquire() as conn:
             result = await conn.fetchrow("""
                 SELECT
-                    (SELECT COUNT(*) FROM cities) as cities,
-                    (SELECT COUNT(*) FROM meetings) as meetings,
-                    (SELECT COUNT(*) FROM items) as items,
-                    (SELECT COUNT(*) FROM city_matters) as matters,
-                    (SELECT COUNT(*) FROM queue WHERE status = 'pending') as pending_jobs,
-                    (SELECT COUNT(*) FROM queue WHERE status = 'failed') as failed_jobs
+                    (SELECT COUNT(*) FROM cities WHERE status = 'active') as active_cities,
+                    (SELECT COUNT(*) FROM meetings) as total_meetings,
+                    (SELECT COUNT(*) FROM meetings WHERE summary IS NOT NULL) as summarized_meetings,
+                    (SELECT COUNT(*) FROM meetings WHERE processing_status = 'pending') as pending_meetings
             """)
-            return dict(result)
+
+            stats = dict(result)
+
+            # Calculate summary rate
+            total = stats['total_meetings']
+            summarized = stats['summarized_meetings']
+            stats['summary_rate'] = f"{summarized / total * 100:.1f}%" if total > 0 else "0%"
+
+            return stats
 
     async def get_queue_stats(self) -> dict:
-        """Get queue statistics for Prometheus"""
+        """Get queue statistics for Prometheus
+
+        Returns format matching SQLite UnifiedDatabase for API compatibility:
+        - {status}_count for each status (pending, processing, completed, failed, dead_letter)
+        - avg_processing_seconds: Average processing time in seconds
+        """
         async with self.pool.acquire() as conn:
-            stats = await conn.fetch("""
+            # Count by status
+            status_rows = await conn.fetch("""
                 SELECT status, COUNT(*) as count
                 FROM queue
                 GROUP BY status
             """)
-            return {row["status"]: row["count"] for row in stats}
+
+            # Build stats dict with {status}_count keys
+            stats = {}
+            for row in status_rows:
+                stats[f"{row['status']}_count"] = row['count']
+
+            # Ensure all statuses have defaults
+            for status in ['pending', 'processing', 'completed', 'failed', 'dead_letter']:
+                stats.setdefault(f"{status}_count", 0)
+
+            # Average processing time (completed jobs only)
+            avg_row = await conn.fetchrow("""
+                SELECT AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) as avg_seconds
+                FROM queue
+                WHERE status = 'completed'
+                AND completed_at IS NOT NULL
+                AND started_at IS NOT NULL
+            """)
+
+            stats['avg_processing_seconds'] = float(avg_row['avg_seconds']) if avg_row['avg_seconds'] else 0.0
+
+            return stats
 
     async def get_random_meeting_with_items(self) -> Optional[Meeting]:
         """Get a random meeting that has items and a summary"""
