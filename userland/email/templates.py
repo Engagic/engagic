@@ -23,10 +23,12 @@ DARK_MODE_CSS = """
             h2[style*="color: #0f172a"] { color: #e2e8f0 !important; }
 
             p[style*="color: #475569"],
-            span[style*="color: #475569"] { color: #cbd5e1 !important; }
+            span[style*="color: #475569"],
+            div[style*="color: #475569"] { color: #cbd5e1 !important; }
 
             p[style*="color: #64748b"],
-            span[style*="color: #64748b"] { color: #94a3b8 !important; }
+            span[style*="color: #64748b"],
+            div[style*="color: #64748b"] { color: #94a3b8 !important; }
 
             p[style*="color: #334155"],
             span[style*="color: #334155"],
