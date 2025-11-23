@@ -5,6 +5,7 @@ Database class handles only orchestration and high-level operations.
 """
 
 import asyncpg
+import json
 import traceback
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -98,12 +99,22 @@ class Database:
         if dsn is None:
             dsn = config.get_postgres_dsn()
 
+        async def init_connection(conn):
+            """Initialize connection with JSONB codec for automatic serialization"""
+            await conn.set_type_codec(
+                'jsonb',
+                encoder=json.dumps,
+                decoder=json.loads,
+                schema='pg_catalog'
+            )
+
         try:
             pool = await asyncpg.create_pool(
                 dsn,
                 min_size=min_size,
                 max_size=max_size,
                 command_timeout=60,
+                init=init_connection,
             )
             logger.info("connection pool created", min_size=min_size, max_size=max_size)
             return cls(pool)

@@ -1,12 +1,35 @@
 # Asyncpg JSONB Handling - Critical Documentation
 
 **Date**: 2025-11-23
-**Issue**: Misunderstanding of asyncpg JSONB behavior
-**Impact**: Broke PostgreSQL migration, spent hours debugging
+**Updated**: 2025-11-23 (migrated to automatic codec)
+**Status**: MIGRATED TO AUTOMATIC CODEC - Manual serialization no longer needed
 
-## The Discovery
+## The Migration
 
-**Asyncpg requires JSON STRINGS for JSONB columns, NOT native Python dicts/lists.**
+**We now use asyncpg's type codec for automatic JSONB serialization/deserialization.**
+
+Previously, asyncpg required manual JSON string conversion. We've now configured automatic codec registration at connection pool initialization, eliminating all manual json.dumps()/json.loads() calls.
+
+## Current Approach (Automatic Codec)
+
+Connection pool is configured with JSONB codec:
+
+```python
+async def init_connection(conn):
+    await conn.set_type_codec(
+        'jsonb',
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema='pg_catalog'
+    )
+
+pool = await asyncpg.create_pool(
+    dsn,
+    init=init_connection,  # Registers codec on each connection
+)
+```
+
+With this configuration, Python dicts/lists are automatically serialized to JSONB and vice versa.
 
 ### Test Results
 
@@ -30,38 +53,32 @@ await conn.execute("INSERT INTO test (data) VALUES ($1)", test_json_string)
 # ✓ SUCCESS!
 ```
 
-## Correct Pattern
+## New Pattern (With Codec - November 2025)
 
 ### Storing JSONB Data
 
 ```python
-import json
-
-# Always serialize to JSON string before passing to asyncpg
+# Native Python dicts/lists are automatically serialized
 await conn.execute(
     "INSERT INTO table (jsonb_col) VALUES ($1)",
-    json.dumps(data_dict) if data_dict else None
+    data_dict  # No json.dumps() needed
 )
 ```
 
 ### Retrieving JSONB Data
 
 ```python
-# Asyncpg returns JSONB as JSON strings, must deserialize
+# JSONB automatically deserialized to Python dicts/lists
 row = await conn.fetchrow("SELECT jsonb_col FROM table")
-data_dict = json.loads(row["jsonb_col"]) if row["jsonb_col"] else None
+data_dict = row["jsonb_col"]  # Already a Python dict/list
 ```
 
-### Safe Deserialization Helper
+### Default Value Handling
 
 ```python
-def safe_json_loads(value):
-    """Handle JSONB fields that might be None or already deserialized"""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return json.loads(value)
-    return value  # Already deserialized
+# Simple or operator for defaults
+attachments = row["attachments"] or []
+participation = row["participation"]  # Can be None
 ```
 
 ## Why This Matters
@@ -103,6 +120,43 @@ All use `json.dumps()` on write, `safe_json_loads()` on read.
 2. **Test externalities** - verify assumptions about third-party libraries
 3. **Read error messages carefully** - "expected str, got dict" was the correct message
 4. **Document immediately** - this cost hours to discover, prevent future issues
+
+## Migration Summary (November 2025)
+
+### What Changed
+
+**Before (Manual Serialization):**
+- Required `json.dumps()` on every JSONB write (21 locations)
+- Required `json.loads()` or `_deserialize_jsonb()` on every read (23 locations)
+- Helper functions: `_deserialize_jsonb()` (32 lines), `safe_json_loads()` (6 lines)
+- Total boilerplate: ~100 lines across 10 files
+
+**After (Automatic Codec):**
+- Added `init_connection()` function with codec registration (8 lines in db_postgres.py)
+- Removed all manual json.dumps()/json.loads() calls
+- Deleted helper functions entirely
+- Net reduction: 37 lines of code
+
+### Files Modified
+
+1. **database/db_postgres.py** - Added codec registration
+2. **database/repositories_async/base.py** - Deleted `_deserialize_jsonb()`
+3. **database/repositories_async/items.py** - Removed 16 serialization calls
+4. **database/repositories_async/meetings.py** - Removed 7 serialization calls
+5. **database/repositories_async/matters.py** - Removed 13 serialization calls, deleted `safe_json_loads()`
+6. **database/repositories_async/queue.py** - Removed 2 serialization calls
+7. **database/repositories_async/search.py** - Removed 2 deserialization calls
+8. **pipeline/models.py** - Removed defensive isinstance() check
+9. **server/routes/matters.py** - Removed 5 json.loads() calls
+10. **scripts/fix_jsonb_data.py** - Updated table names for PostgreSQL schema
+
+### Benefits
+
+- Cleaner, more Pythonic code (work with native dicts/lists)
+- Reduced cognitive overhead (no manual serialization tracking)
+- Fewer lines of code to maintain
+- Better performance (codec handles serialization at C level)
+- Eliminated error-prone manual serialization
 
 ## References
 

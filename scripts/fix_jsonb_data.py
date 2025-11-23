@@ -40,16 +40,16 @@ async def check_text_strings(db: Database) -> dict:
               AND jsonb_typeof(participation) IS NULL
         """)
 
-        # Check agenda_items.attachments
-        counts['agenda_items.attachments'] = await conn.fetchval("""
-            SELECT COUNT(*) FROM agenda_items
+        # Check items.attachments
+        counts['items.attachments'] = await conn.fetchval("""
+            SELECT COUNT(*) FROM items
             WHERE attachments IS NOT NULL
               AND jsonb_typeof(attachments) IS NULL
         """)
 
-        # Check agenda_items.sponsors
-        counts['agenda_items.sponsors'] = await conn.fetchval("""
-            SELECT COUNT(*) FROM agenda_items
+        # Check items.sponsors
+        counts['items.sponsors'] = await conn.fetchval("""
+            SELECT COUNT(*) FROM items
             WHERE sponsors IS NOT NULL
               AND jsonb_typeof(sponsors) IS NULL
         """)
@@ -107,23 +107,23 @@ async def fix_jsonb_data(db: Database) -> dict:
             """)
             results['meetings.participation'] = int(result.split()[-1])
 
-            # Fix agenda_items.attachments
+            # Fix items.attachments
             result = await conn.execute("""
-                UPDATE agenda_items
+                UPDATE items
                 SET attachments = attachments::jsonb
                 WHERE attachments IS NOT NULL
                   AND jsonb_typeof(attachments) IS NULL
             """)
-            results['agenda_items.attachments'] = int(result.split()[-1])
+            results['items.attachments'] = int(result.split()[-1])
 
-            # Fix agenda_items.sponsors
+            # Fix items.sponsors
             result = await conn.execute("""
-                UPDATE agenda_items
+                UPDATE items
                 SET sponsors = sponsors::jsonb
                 WHERE sponsors IS NOT NULL
                   AND jsonb_typeof(sponsors) IS NULL
             """)
-            results['agenda_items.sponsors'] = int(result.split()[-1])
+            results['items.sponsors'] = int(result.split()[-1])
 
             # Fix city_matters.attachments
             result = await conn.execute("""
