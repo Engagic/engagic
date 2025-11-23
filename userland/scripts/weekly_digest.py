@@ -162,6 +162,38 @@ def build_digest_email(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        @media (prefers-color-scheme: dark) {{
+            /* Override backgrounds */
+            body {{ background: #1a1a1a !important; }}
+            div[style*="background: white"],
+            div[style*="background: #f8fafc"] {{ background: #1e293b !important; }}
+            div[style*="background: #f3e8ff"] {{ background: #1e1b4b !important; }}
+
+            /* Override text colors */
+            h1[style*="color: #0f172a"],
+            h2[style*="color: #0f172a"],
+            div[style*="color: #0f172a"],
+            span[style*="color: #0f172a"] {{ color: #e2e8f0 !important; }}
+
+            p[style*="color: #64748b"],
+            span[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
+
+            p[style*="color: #475569"] {{ color: #cbd5e1 !important; }}
+
+            /* Override borders */
+            div[style*="border: 2px solid #e2e8f0"],
+            div[style*="border-bottom: 2px solid #e2e8f0"] {{ border-color: #334155 !important; }}
+
+            div[style*="border-left: 4px solid #4f46e5"] {{ border-color: #4f46e5 !important; }}
+            div[style*="border-left: 4px solid #8B5CF6"] {{ border-color: #8B5CF6 !important; }}
+
+            /* Keep links visible */
+            a[style*="color: #4f46e5"],
+            a[style*="color: #8B5CF6"] {{ color: #a78bfa !important; }}
+            span[style*="color: #4f46e5"] {{ color: #818cf8 !important; }}
+        }}
+    </style>
 </head>
 <body style="font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc;">
     <div style="background: white; border-radius: 11px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 2px solid #e2e8f0;">
