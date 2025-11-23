@@ -149,7 +149,7 @@ def footer_section(
 
     donation_html = """
                             <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/about/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
                             </p>""" if show_donation else ""
 
     return f"""

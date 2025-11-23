@@ -15,6 +15,7 @@ Cron:
 """
 
 import os
+import re
 import sys
 import logging
 from datetime import datetime, timedelta
@@ -35,6 +36,44 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("engagic.weekly_digest")
+
+
+def generate_anchor_id(item: Dict[str, Any]) -> str:
+    """
+    Generate item anchor ID matching frontend logic.
+
+    Priority hierarchy:
+    1. agenda_number (meeting-specific position, e.g., "5-E" → "item-5-e")
+    2. matter_file (legislative file number, e.g., "BL2025-1005" → "bl2025-1005")
+    3. item_id (fallback unique identifier)
+
+    Args:
+        item: Dict with optional agenda_number, matter_file, and item_id
+
+    Returns:
+        Anchor ID string suitable for URL fragments
+    """
+    # Priority 1: agenda_number (meeting-specific position)
+    if item.get('agenda_number'):
+        normalized = item['agenda_number'].lower()
+        normalized = re.sub(r'[^a-z0-9]', '-', normalized)  # Replace non-alphanumeric with hyphens
+        normalized = re.sub(r'-+', '-', normalized)         # Collapse multiple hyphens
+        normalized = normalized.strip('-')                   # Trim leading/trailing hyphens
+        return f"item-{normalized}"
+
+    # Priority 2: matter_file (legislative identifier)
+    if item.get('matter_file'):
+        normalized = item['matter_file'].lower()
+        normalized = re.sub(r'[^a-z0-9-]', '-', normalized)  # Keep hyphens, replace others
+        return normalized
+
+    # Priority 3: item ID (fallback) - extract just the sequence part
+    item_id = item.get('item_id', '')
+    if '_' in item_id:
+        # Extract sequence from composite ID (city_meeting_sequence)
+        sequence = item_id.split('_')[-1]
+        return f"item-{sequence}"
+    return f"item-{item_id}"
 
 
 def get_city_name(city_banana: str) -> str:
@@ -142,7 +181,10 @@ def find_keyword_matches(
                         'meeting_date': match['date'],
                         'agenda_url': match.get('agenda_url'),
                         'banana': match['banana'],
-                        'context': match.get('context', '')
+                        'context': match.get('context', ''),
+                        # Fields needed for proper anchor generation
+                        'agenda_number': match.get('agenda_number'),
+                        'matter_file': match.get('matter_file')
                     })
                 except (ValueError, TypeError):
                     continue
@@ -245,7 +287,10 @@ def build_digest_email(
             meeting_date_obj = datetime.fromisoformat(match['meeting_date'])
             meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{match['meeting_id']}"
             meeting_url = f"{app_url}/{match['banana']}/{meeting_slug}"
-            item_url = f"{meeting_url}#item-{match['item_id']}"
+
+            # Generate proper anchor matching frontend logic
+            anchor = generate_anchor_id(match)
+            item_url = f"{meeting_url}#{anchor}"
 
             # Use context field (keyword-highlighted text) instead of summary
             context = match.get('context', match.get('item_summary', ''))
@@ -286,7 +331,7 @@ def build_digest_email(
                                 You're receiving this because you're watching {city_name}
                             </p>
                             <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/about/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
                             </p>
                             <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
                                 Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
