@@ -374,13 +374,13 @@ class SQLiteRateLimiter:
         Returns:
             (is_allowed, remaining_minute, limit_info)
         """
-        # Whitelist localhost and internal IPs (bypass rate limiting for testing/admin)
-        WHITELISTED_IPS = {'127.0.0.1', '::1', 'localhost'}
-        if client_ip in WHITELISTED_IPS:
+        # Whitelist localhost and server's own IP (bypass rate limiting for testing/admin)
+        WHITELISTED_IPS = {'127.0.0.1', '::1', 'localhost', '165.232.158.241'}
+        if real_ip and real_ip in WHITELISTED_IPS:
             return True, 999999, {
                 "tier": "admin",
                 "limit_type": "whitelisted",
-                "message": "Localhost/admin IP - rate limiting bypassed"
+                "message": "Whitelisted IP - rate limiting bypassed"
             }
 
         current_time = time.time()
