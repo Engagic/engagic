@@ -49,10 +49,12 @@ def send_magic_link(
     name = user_name or email.split('@')[0]
 
     if is_signup:
-        greeting = f"Welcome to Engagic, <strong>{name}</strong>"
+        header_title = f"Welcome to Engagic, {name}"
+        header_subtitle = "Your login link is ready"
         message = "Click the button below to verify your email and access your digest dashboard:"
     else:
-        greeting = f"Welcome back, <strong>{name}</strong>"
+        header_title = f"Welcome back, {name}"
+        header_subtitle = "Your login link is ready"
         message = "Click the button below to access your digest dashboard:"
 
     subject = "Engagic Login Link"
@@ -60,20 +62,23 @@ def send_magic_link(
                     <!-- Header -->
                     <tr>
                         <td style="padding: 32px 40px 28px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
-                            <div style="margin-bottom: 0; text-align: center;">
+                            <div style="margin-bottom: 20px;">
                                 <div style="display: inline-block; padding: 6px 14px; background-color: rgba(255, 255, 255, 0.15); border-radius: 6px; backdrop-filter: blur(10px);">
                                     <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: 0.02em;">engagic</span>
                                 </div>
                             </div>
+                            <h1 style="margin: 0 0 10px 0; font-size: 26px; font-weight: 700; color: #ffffff; line-height: 1.3; letter-spacing: -0.02em; font-family: 'IBM Plex Mono', monospace;">
+                                {header_title}
+                            </h1>
+                            <p style="margin: 0; font-size: 15px; color: #ffffff; opacity: 0.92; font-family: Georgia, serif; line-height: 1.5;">
+                                {header_subtitle}
+                            </p>
                         </td>
                     </tr>
 
                     <!-- Content -->
                     <tr>
-                        <td style="padding: 0 40px 40px 40px;">
-                            <p style="margin: 0 0 24px 0; font-size: 18px; line-height: 1.6; color: #0f172a; font-family: Georgia, serif;">
-                                {greeting}
-                            </p>
+                        <td style="padding: 32px 40px 24px 40px;">
                             <p style="margin: 0 0 32px 0; font-size: 15px; line-height: 1.6; color: #475569; font-family: Georgia, serif;">
                                 {message}
                             </p>
@@ -112,7 +117,8 @@ def send_magic_link(
 {email_wrapper_end()}"""
 
     text = f"""
-    {greeting.replace('<strong>', '').replace('</strong>', '')}
+    {header_title}
+    {header_subtitle}
 
     Click this link to access your digest dashboard:
     {magic_link}
@@ -120,7 +126,8 @@ def send_magic_link(
     This link expires in 15 minutes. If you didn't request this, you can safely ignore it.
 
     --
-    Engagic - Statewide Municipal Intelligence
+    Engagic is free and open-source. If you find it valuable, please support the project.
+    https://engagic.org/about/donate
     """
 
     try:
