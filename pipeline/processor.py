@@ -17,7 +17,6 @@ from typing import List, Optional, Dict, Any
 from database.db_postgres import Database
 from database.models import Meeting, Matter
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
-from database.transaction import transaction
 from exceptions import ProcessingError, ExtractionError, LLMError
 from pipeline.analyzer import Analyzer
 from analysis.topics.normalizer import get_normalizer
@@ -250,10 +249,9 @@ class Processor:
         """
         # Guard: Check analyzer availability first
         if not self.analyzer:
-            async with transaction(self.db.pool):
-                await self.db.mark_processing_failed(
-                    queue_id, "Analyzer not available", increment_retry=False
-                )
+            await self.db.mark_processing_failed(
+                queue_id, "Analyzer not available", increment_retry=False
+            )
             logger.warning("skipping queue job - analyzer not available", queue_id=queue_id)
             return True
 
@@ -279,8 +277,7 @@ class Processor:
 
                 meeting = await self.db.get_meeting(job.payload.meeting_id)
                 if not meeting:
-                    async with transaction(self.db.pool):
-                        await self.db.mark_processing_failed(queue_id, "Meeting not found in database")
+                    await self.db.mark_processing_failed(queue_id, "Meeting not found in database")
                     return True
 
                 await self.process_meeting(meeting)
@@ -289,15 +286,13 @@ class Processor:
                 raise ValueError(f"Unknown job type: {job_type}")
 
             # Success
-            async with transaction(self.db.pool):
-                await self.db.mark_processing_complete(queue_id)
+            await self.db.mark_processing_complete(queue_id)
             logger.info("queue job completed", queue_id=queue_id)
             return True
 
         except Exception as e:
             error_msg = str(e)
-            async with transaction(self.db.pool):
-                await self.db.mark_processing_failed(queue_id, error_msg)
+            await self.db.mark_processing_failed(queue_id, error_msg)
             logger.error("queue job failed", queue_id=queue_id, error=error_msg)
             return True
 
@@ -307,8 +302,7 @@ class Processor:
 
         while self.is_running:
             try:
-                async with transaction(self.db.pool):
-                    job = await self.db.get_next_for_processing()
+                job = await self.db.get_next_for_processing()
 
                 if not job:
                     time.sleep(QUEUE_POLL_INTERVAL)
@@ -338,8 +332,7 @@ class Processor:
 
         while True:
             # Get next job for this city
-            async with transaction(self.db.pool):
-                job = await self.db.get_next_for_processing(banana=city_banana)
+            job = await self.db.get_next_for_processing(banana=city_banana)
 
             if not job:
                 break  # No more jobs for this city
@@ -360,16 +353,14 @@ class Processor:
                     if isinstance(job.payload, MeetingJob):
                         meeting = await self.db.get_meeting(job.payload.meeting_id)
                         if not meeting:
-                            async with transaction(self.db.pool):
-                                await self.db.mark_processing_failed(queue_id, "Meeting not found")
+                            await self.db.mark_processing_failed(queue_id, "Meeting not found")
                             failed_count += 1
                             metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
                             continue
                         # Process the meeting (item-aware)
                         with metrics.processing_duration.labels(job_type="meeting").time():
                             await self.process_meeting(meeting)
-                        async with transaction(self.db.pool):
-                            await self.db.mark_processing_complete(queue_id)
+                        await self.db.mark_processing_complete(queue_id)
                         processed_count += 1
                         job_success = True
                         logger.info("processed meeting", meeting_id=job.payload.meeting_id, duration_seconds=round(time.time() - job_start_time, 1))
@@ -384,8 +375,7 @@ class Processor:
                                 job.payload.meeting_id,
                                 {"item_ids": job.payload.item_ids}
                             )
-                        async with transaction(self.db.pool):
-                            await self.db.mark_processing_complete(queue_id)
+                        await self.db.mark_processing_complete(queue_id)
                         processed_count += 1
                         job_success = True
                         logger.info("processed matter", matter_id=job.payload.matter_id, duration_seconds=round(time.time() - job_start_time, 1))
@@ -400,8 +390,7 @@ class Processor:
 
             except Exception as e:
                 error_msg = str(e)
-                async with transaction(self.db.pool):
-                    await self.db.mark_processing_failed(queue_id, error_msg)
+                await self.db.mark_processing_failed(queue_id, error_msg)
                 failed_count += 1
                 job_duration = time.time() - job_start_time
 
@@ -667,8 +656,8 @@ class Processor:
             return
 
         # STRICT IMPROVEMENT: Atomic update of canonical_summary + all items
-        # Use transaction to ensure consistency
-        from database.transaction import transaction
+        # Database methods handle atomicity internally via asyncpg connections
+        from pipeline.utils import hash_attachments
 
         attachment_hash = hash_attachments(representative_item.attachments)
 
@@ -678,41 +667,40 @@ class Processor:
         existing_matter = await self.db.get_matter(matter_id)
         raw_matter_id = existing_matter.matter_id if existing_matter else None
 
-        async with transaction(self.db.pool):
-            # Step 1: Create Matter object with canonical summary
-            matter_obj = Matter(
-                id=matter_id,
-                banana=banana,
-                matter_id=raw_matter_id,  # Raw vendor ID for reference
-                matter_file=representative_item.matter_file,
-                matter_type=representative_item.matter_type,
-                title=representative_item.title,
-                sponsors=getattr(representative_item, 'sponsors', []),
-                canonical_summary=summary,
-                canonical_topics=topics,
-                attachments=representative_item.attachments,
-                metadata={'attachment_hash': attachment_hash},
-                first_seen=None,  # Will preserve existing if matter already exists
-                last_seen=None,   # Will preserve existing if matter already exists
-                appearance_count=len(items),
-            )
+        # Step 1: Create Matter object with canonical summary
+        matter_obj = Matter(
+            id=matter_id,
+            banana=banana,
+            matter_id=raw_matter_id,  # Raw vendor ID for reference
+            matter_file=representative_item.matter_file,
+            matter_type=representative_item.matter_type,
+            title=representative_item.title,
+            sponsors=getattr(representative_item, 'sponsors', []),
+            canonical_summary=summary,
+            canonical_topics=topics,
+            attachments=representative_item.attachments,
+            metadata={'attachment_hash': attachment_hash},
+            first_seen=None,  # Will preserve existing if matter already exists
+            last_seen=None,   # Will preserve existing if matter already exists
+            appearance_count=len(items),
+        )
 
-            # Upsert canonical summary in city_matters (via repository)
-            await self.db.store_matter(matter_obj)
+        # Upsert canonical summary in city_matters (via repository)
+        await self.db.store_matter(matter_obj)
 
-            # Step 2: Backfill ALL items atomically (via repository)
-            item_ids = [item.id for item in items]
-            await self.db.items.bulk_update_item_summaries(
-                item_ids=item_ids,
-                summary=summary,
-                topics=topics
-            )
+        # Step 2: Backfill ALL items atomically (via repository)
+        item_ids = [item.id for item in items]
+        await self.db.items.bulk_update_item_summaries(
+            item_ids=item_ids,
+            summary=summary,
+            topics=topics
+        )
 
-            logger.info(
-                "atomically stored canonical summary and backfilled items",
-                matter_id=matter_id,
-                item_count=len(items)
-            )
+        logger.info(
+            "atomically stored canonical summary and backfilled items",
+            matter_id=matter_id,
+            item_count=len(items)
+        )
 
     async def process_meeting(self, meeting: Meeting):
         """Process summary for a single meeting (agenda-first: items > packet)
@@ -1305,15 +1293,14 @@ class Processor:
 
             # Update meeting with metadata only (items have their own summaries)
             processing_time = time.time() - start_time
-            async with transaction(self.db.pool):
-                await self.db.update_meeting_summary(
-                    meeting_id=meeting.id,
-                    summary=None,  # No concatenated summary - frontend composes from items
-                    processing_method=f"item_level_{len(processed_items)}_items",
-                    processing_time=processing_time,
-                    topics=meeting_topics,
-                    participation=merged_participation,
-                )
+            await self.db.update_meeting_summary(
+                meeting_id=meeting.id,
+                summary=None,  # No concatenated summary - frontend composes from items
+                processing_method=f"item_level_{len(processed_items)}_items",
+                processing_time=processing_time,
+                topics=meeting_topics,
+                participation=merged_participation,
+            )
 
             logger.info(
                 "item processing completed",
