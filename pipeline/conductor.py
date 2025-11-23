@@ -11,6 +11,7 @@ Refactored: Extracted fetcher and processor logic into separate modules
 """
 
 
+import asyncio
 import logging
 import signal
 import sys
@@ -20,11 +21,11 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from database.sync_bridge import SyncDatabase
+from database.db_postgres import Database
 from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
 from pipeline.processor import Processor
 
-from config import get_logger
+from config import config, get_logger
 
 logger = get_logger(__name__).bind(component="engagic")
 
@@ -35,28 +36,24 @@ SHUTDOWN_POLL_INTERVAL = 1
 class Conductor:
     """Lightweight orchestrator for sync and processing loops"""
 
-    def __init__(self, unified_db_path: Optional[str] = None):
+    def __init__(self, db: Database):
         """Initialize the conductor
 
         Args:
-            unified_db_path: Ignored (PostgreSQL uses DSN from config, not file path)
+            db: PostgreSQL database instance
         """
-        # PostgreSQL connection (shared pool - thread-safe)
-        # NOTE: Unlike SQLite, PostgreSQL pool can be shared across threads
-        self.db = SyncDatabase()
+        self.db = db
         self.is_running = False
         self.sync_thread = None
         self.processing_thread = None
 
-        # Initialize fetcher (shares connection pool via SyncDatabase)
-        # NOTE: PostgreSQL pool is thread-safe, no need for per-thread connections
-        self.fetcher = Fetcher(db=None)  # Creates own SyncDatabase instance
-        logger.info("fetcher initialized with shared PostgreSQL pool")
+        # Initialize fetcher and processor with database
+        self.fetcher = Fetcher(db=db)
+        logger.info("fetcher initialized")
 
-        # Initialize processor (shares connection pool via SyncDatabase)
-        self.processor = Processor(db=None)  # Creates own SyncDatabase instance
+        self.processor = Processor(db=db)
         logger.info(
-            "processor initialized with shared PostgreSQL pool",
+            "processor initialized",
             has_analyzer=self.processor.analyzer is not None
         )
 
@@ -119,11 +116,11 @@ class Conductor:
         logger.info("[Conductor] Background daemon stopped")
 
     def _sync_loop(self):
-        """Main sync loop - runs every 7 days"""
+        """Main sync loop - runs every 7 days (thread wrapper for async code)"""
         while self.is_running:
             try:
-                # Run full sync
-                results = self.fetcher.sync_all()
+                # Run full sync (async method)
+                results = asyncio.run(self.fetcher.sync_all())
                 self.last_full_sync = datetime.now()
 
                 succeeded_count = len([r for r in results if r.status == SyncStatus.COMPLETED])
@@ -149,7 +146,7 @@ class Conductor:
                     time.sleep(1)
 
     def _processing_loop(self):
-        """Processing loop - continuously processes jobs from the queue"""
+        """Processing loop - continuously processes jobs from the queue (thread wrapper for async code)"""
         if not self.processor.analyzer:
             logger.warning(
                 "[Conductor] Analyzer not available - processing loop will not run"
@@ -157,15 +154,15 @@ class Conductor:
             return
 
         try:
-            # Run the queue processor continuously
-            self.processor.process_queue()
+            # Run the queue processor continuously (async method)
+            asyncio.run(self.processor.process_queue())
         except Exception as e:
             logger.error("processing loop error", error=str(e), error_type=type(e).__name__)
             # Processing loop will be restarted by daemon if it crashes
 
-    def get_sync_status(self) -> Dict[str, Any]:
+    async def get_sync_status(self) -> Dict[str, Any]:
         """Get current sync status"""
-        stats = self.db.get_stats()
+        stats = await self.db.get_stats()
         return {
             "is_running": self.is_running,
             "last_full_sync": (
@@ -179,7 +176,7 @@ class Conductor:
             "failed_count": len(self.fetcher.failed_cities),
         }
 
-    def force_sync_city(self, city_banana: str) -> SyncResult:
+    async def force_sync_city(self, city_banana: str) -> SyncResult:
         """Force sync a specific city
 
         Args:
@@ -189,7 +186,7 @@ class Conductor:
             SyncResult object
         """
         with self.enable_processing():
-            result = self.fetcher.sync_city(city_banana)
+            result = await self.fetcher.sync_city(city_banana)
 
             # Update failed cities tracking
             if result.status == SyncStatus.FAILED:
@@ -200,7 +197,7 @@ class Conductor:
 
             return result
 
-    def sync_and_process_city(self, city_banana: str) -> Dict[str, Any]:
+    async def sync_and_process_city(self, city_banana: str) -> Dict[str, Any]:
         """Sync a city and immediately process all its queued jobs
 
         Args:
@@ -212,7 +209,7 @@ class Conductor:
         logger.info("starting sync-and-process", city=city_banana)
 
         # Step 1: Sync the city (fetches meetings, stores, enqueues)
-        sync_result = self.force_sync_city(city_banana)
+        sync_result = await self.force_sync_city(city_banana)
 
         if sync_result.status != SyncStatus.COMPLETED:
             logger.error(
@@ -247,7 +244,7 @@ class Conductor:
         logger.info("processing queued jobs", city=city_banana)
 
         with self.enable_processing():
-            processing_stats = self.processor.process_city_jobs(city_banana)
+            processing_stats = await self.processor.process_city_jobs(city_banana)
 
             return {
                 "sync_status": sync_result.status.value,
@@ -256,7 +253,7 @@ class Conductor:
                 "failed_count": processing_stats["failed_count"],
             }
 
-    def sync_cities(self, city_bananas: List[str]) -> List[Dict[str, Any]]:
+    async def sync_cities(self, city_bananas: List[str]) -> List[Dict[str, Any]]:
         """Sync multiple cities (fetches meetings, enqueues for processing)
 
         Args:
@@ -266,7 +263,7 @@ class Conductor:
             List of sync results
         """
         logger.info("syncing cities", city_count=len(city_bananas))
-        results = self.fetcher.sync_cities(city_bananas)
+        results = await self.fetcher.sync_cities(city_bananas)
 
         # Convert SyncResult objects to dicts
         return [
@@ -281,7 +278,7 @@ class Conductor:
             for r in results
         ]
 
-    def process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
+    async def process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
         """Process queued meetings for multiple cities (no sync, just process)
 
         Args:
@@ -312,7 +309,7 @@ class Conductor:
                     break
 
                 logger.info("processing jobs for city", city=banana)
-                stats = self.processor.process_city_jobs(banana)
+                stats = await self.processor.process_city_jobs(banana)
 
                 total_processed += stats["processed_count"]
                 total_failed += stats["failed_count"]
@@ -330,7 +327,7 @@ class Conductor:
                 "city_results": city_results,
             }
 
-    def sync_and_process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
+    async def sync_and_process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
         """Sync multiple cities and immediately process all their meetings
 
         Args:
@@ -342,13 +339,13 @@ class Conductor:
         logger.info("sync and process cities", city_count=len(city_bananas))
 
         # Step 1: Sync all cities
-        sync_results = self.sync_cities(city_bananas)
+        sync_results = await self.sync_cities(city_bananas)
         total_meetings = sum(r["meetings_found"] for r in sync_results)
 
         logger.info("sync complete", total_meetings=total_meetings, city_count=len(city_bananas))
 
         # Step 2: Process all queued jobs for these cities
-        process_results = self.process_cities(city_bananas)
+        process_results = await self.process_cities(city_bananas)
 
         return {
             "sync_results": sync_results,
@@ -358,7 +355,7 @@ class Conductor:
             "total_failed": process_results["failed_count"],
         }
 
-    def preview_queue(self, city_banana: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
+    async def preview_queue(self, city_banana: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
         """Preview queued jobs without processing them
 
         Args:
@@ -374,13 +371,13 @@ class Conductor:
         jobs = []
         if city_banana:
             # Get jobs for specific city
-            job = self.db.queue.get_next_for_processing(banana=city_banana)
+            job = await self.db.queue.get_next_for_processing(banana=city_banana)
             if job:
                 jobs.append(job)
         else:
             # Get all pending jobs (need to implement this query)
             # For now, just show stats
-            stats = self.db.queue.get_queue_stats()
+            stats = await self.db.queue.get_queue_stats()
             return stats
 
         previews = []
@@ -394,7 +391,7 @@ class Conductor:
             else:
                 continue
 
-            meeting = self.db.meetings.get_meeting(meeting_id)
+            meeting = await self.db.meetings.get_meeting(meeting_id)
             if meeting:
                 previews.append({
                     "queue_id": job.id,
@@ -414,30 +411,8 @@ class Conductor:
 
 
 
-# Global instance
-_conductor = None
-
-
-def get_conductor() -> Conductor:
-    """Get global conductor instance"""
-    global _conductor
-    if _conductor is None:
-        _conductor = Conductor()
-    return _conductor
-
-
-def start_conductor():
-    """Start the global conductor"""
-    conductor = get_conductor()
-    conductor.start()
-
-
-def stop_conductor():
-    """Stop the global conductor"""
-    global _conductor
-    if _conductor:
-        _conductor.stop()
-        _conductor = None
+# Global instance management removed - CLI commands create their own instances
+# TODO: If needed for daemon mode, implement using asyncio.run()
 
 
 def _parse_city_list(arg: str) -> List[str]:
@@ -477,114 +452,188 @@ def main():
     @click.argument("banana")
     def sync_city(banana):
         """Sync specific city by city_banana"""
-        conductor = Conductor()
-        result = conductor.force_sync_city(banana)
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                result = await conductor.force_sync_city(banana)
+                return result
+            finally:
+                await db.close()
+
+        result = asyncio.run(run())
         click.echo(f"Sync result: {result}")
 
     @cli.command("sync-and-process-city")
     @click.argument("banana")
     def sync_and_process_city(banana):
         """Sync city and immediately process all its meetings"""
-        conductor = Conductor()
-        result = conductor.sync_and_process_city(banana)
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                result = await conductor.sync_and_process_city(banana)
+                return result
+            finally:
+                await db.close()
+
+        result = asyncio.run(run())
         click.echo(json.dumps(result, indent=2))
 
     @cli.command("sync-cities")
     @click.argument("cities")
     def sync_cities(cities):
         """Sync multiple cities (comma-separated bananas or @file path)"""
-        conductor = Conductor()
         city_list = _parse_city_list(cities)
         click.echo(f"Syncing {len(city_list)} cities: {', '.join(city_list)}")
-        results = conductor.sync_cities(city_list)
+
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                results = await conductor.sync_cities(city_list)
+                return results
+            finally:
+                await db.close()
+
+        results = asyncio.run(run())
         click.echo(json.dumps(results, indent=2))
 
     @cli.command("process-cities")
     @click.argument("cities")
     def process_cities(cities):
         """Process queued jobs for multiple cities (comma-separated bananas or @file path)"""
-        conductor = Conductor()
         city_list = _parse_city_list(cities)
         click.echo(f"Processing queued jobs for {len(city_list)} cities: {', '.join(city_list)}")
-        results = conductor.process_cities(city_list)
+
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                results = await conductor.process_cities(city_list)
+                return results
+            finally:
+                await db.close()
+
+        results = asyncio.run(run())
         click.echo(json.dumps(results, indent=2))
 
     @cli.command("sync-and-process-cities")
     @click.argument("cities")
     def sync_and_process_cities(cities):
         """Sync and process multiple cities (comma-separated bananas or @file path)"""
-        conductor = Conductor()
         city_list = _parse_city_list(cities)
         click.echo(f"Syncing and processing {len(city_list)} cities: {', '.join(city_list)}")
-        results = conductor.sync_and_process_cities(city_list)
+
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                results = await conductor.sync_and_process_cities(city_list)
+                return results
+            finally:
+                await db.close()
+
+        results = asyncio.run(run())
         click.echo(json.dumps(results, indent=2))
 
     @cli.command("full-sync")
     def full_sync():
         """Run full sync once"""
-        conductor = Conductor()
-        results = conductor.fetcher.sync_all()
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                results = await conductor.fetcher.sync_all()
+                return results
+            finally:
+                await db.close()
+
+        results = asyncio.run(run())
         click.echo(f"Full sync complete: {len(results)} cities processed")
 
     @cli.command("status")
     def status():
         """Show sync status"""
-        conductor = Conductor()
-        sync_status = conductor.get_sync_status()
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                sync_status = await conductor.get_sync_status()
+                return sync_status
+            finally:
+                await db.close()
+
+        sync_status = asyncio.run(run())
         click.echo(f"Status: {sync_status}")
 
     @cli.command("fetcher")
     def fetcher():
         """Run as fetcher service (auto sync only, no processing)"""
-        conductor = Conductor()
-
-        def signal_handler(signum, frame):
-            sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
-            logger.info("received signal - graceful shutdown", signal=sig_name)
-            conductor.is_running = False
-            conductor.fetcher.is_running = False
-            logger.info("[Fetcher] Shutdown complete")
-            sys.exit(0)
-
-        signal.signal(signal.SIGTERM, signal_handler)
-        signal.signal(signal.SIGINT, signal_handler)
-
-        logger.info("[Fetcher] Starting fetcher service (sync only, no processing)")
-        logger.info("[Fetcher] Sync interval: 72 hours")
-
-        conductor.is_running = True
-        conductor.fetcher.is_running = True
-
-        while conductor.is_running:
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
             try:
-                logger.info("[Fetcher] Starting city sync cycle...")
-                results = conductor.fetcher.sync_all()
-                conductor.last_full_sync = datetime.now()
+                conductor = Conductor(db)
 
-                succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
-                failed = len([r for r in results if r.status == SyncStatus.FAILED])
-                logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
+                def signal_handler(signum, frame):
+                    sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+                    logger.info("received signal - graceful shutdown", signal=sig_name)
+                    conductor.is_running = False
+                    conductor.fetcher.is_running = False
+                    logger.info("[Fetcher] Shutdown complete")
+                    sys.exit(0)
 
-                logger.info("[Fetcher] Sleeping for 72 hours until next sync...")
-                for _ in range(72 * 60 * 60):
-                    if not conductor.is_running:
-                        break
-                    time.sleep(SHUTDOWN_POLL_INTERVAL)
+                signal.signal(signal.SIGTERM, signal_handler)
+                signal.signal(signal.SIGINT, signal_handler)
 
-            except Exception as e:
-                logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
-                logger.info("[Fetcher] Sleeping for 2 hours after error...")
-                for _ in range(2 * 60 * 60):
-                    if not conductor.is_running:
-                        break
-                    time.sleep(SHUTDOWN_POLL_INTERVAL)
+                logger.info("[Fetcher] Starting fetcher service (sync only, no processing)")
+                logger.info("[Fetcher] Sync interval: 72 hours")
+
+                conductor.is_running = True
+                conductor.fetcher.is_running = True
+
+                while conductor.is_running:
+                    try:
+                        logger.info("[Fetcher] Starting city sync cycle...")
+                        results = await conductor.fetcher.sync_all()
+                        conductor.last_full_sync = datetime.now()
+
+                        succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
+                        failed = len([r for r in results if r.status == SyncStatus.FAILED])
+                        logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
+
+                        logger.info("[Fetcher] Sleeping for 72 hours until next sync...")
+                        for _ in range(72 * 60 * 60):
+                            if not conductor.is_running:
+                                break
+                            time.sleep(SHUTDOWN_POLL_INTERVAL)
+
+                    except Exception as e:
+                        logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
+                        logger.info("[Fetcher] Sleeping for 2 hours after error...")
+                        for _ in range(2 * 60 * 60):
+                            if not conductor.is_running:
+                                break
+                            time.sleep(SHUTDOWN_POLL_INTERVAL)
+            finally:
+                await db.close()
+
+        asyncio.run(run())
 
     @cli.command("preview-queue")
     @click.argument("banana", required=False)
     def preview_queue(banana):
         """Preview queued jobs (optionally specify city_banana)"""
-        conductor = Conductor()
-        result = conductor.preview_queue(city_banana=banana)
+        async def run():
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+                result = await conductor.preview_queue(city_banana=banana)
+                return result
+            finally:
+                await db.close()
+
+        result = asyncio.run(run())
         click.echo(json.dumps(result, indent=2))
 
     @cli.command("extract-text")
