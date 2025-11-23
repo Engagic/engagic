@@ -37,6 +37,7 @@ class MeetingRepository(BaseRepository):
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         has_summary: Optional[bool] = None,
+        exclude_cancelled: bool = True,
         limit: int = 50,
     ) -> List[Meeting]:
         """
@@ -47,6 +48,7 @@ class MeetingRepository(BaseRepository):
             start_date: Filter by date >= start_date
             end_date: Filter by date <= end_date
             has_summary: Filter by whether summary exists
+            exclude_cancelled: Exclude cancelled/postponed meetings (default: True)
             limit: Maximum results
         """
         if self.conn is None:
@@ -57,6 +59,10 @@ class MeetingRepository(BaseRepository):
 
         # Always filter out meetings with no URLs (invalid data)
         conditions.append("(agenda_url IS NOT NULL OR packet_url IS NOT NULL)")
+
+        # Filter out cancelled/postponed meetings by default
+        if exclude_cancelled:
+            conditions.append("(status IS NULL OR status NOT IN ('cancelled', 'postponed'))")
 
         if bananas:
             placeholders = ",".join("?" * len(bananas))
