@@ -253,6 +253,112 @@ class Database:
 
             return cities
 
+    async def get_cities(
+        self,
+        state: Optional[str] = None,
+        vendor: Optional[str] = None,
+        name: Optional[str] = None,
+        status: str = "active",
+        limit: Optional[int] = None,
+    ) -> List[City]:
+        """Batch city lookup with filters
+
+        Args:
+            state: Filter by state (e.g., "CA")
+            vendor: Filter by vendor (e.g., "primegov")
+            name: Filter by exact name match
+            status: Filter by status (default: "active")
+            limit: Maximum number of results
+
+        Returns:
+            List of City objects matching filters
+        """
+        conditions = ["status = $1"]
+        params = [status]
+        param_counter = 2
+
+        if state:
+            conditions.append(f"state = ${param_counter}")
+            params.append(state)
+            param_counter += 1
+
+        if vendor:
+            conditions.append(f"vendor = ${param_counter}")
+            params.append(vendor)
+            param_counter += 1
+
+        if name:
+            conditions.append(f"name = ${param_counter}")
+            params.append(name)
+            param_counter += 1
+
+        where_clause = " AND ".join(conditions)
+        limit_clause = f"LIMIT ${param_counter}" if limit else ""
+        if limit:
+            params.append(limit)
+
+        query = f"""
+            SELECT banana, name, state, vendor, slug, county, status
+            FROM cities
+            WHERE {where_clause}
+            ORDER BY state, name
+            {limit_clause}
+        """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+
+            cities = []
+            for row in rows:
+                # Fetch zipcodes for this city
+                zipcodes_rows = await conn.fetch(
+                    """
+                    SELECT zipcode
+                    FROM zipcodes
+                    WHERE banana = $1
+                    """,
+                    row["banana"],
+                )
+                zipcodes = [r["zipcode"] for r in zipcodes_rows]
+
+                cities.append(
+                    City(
+                        banana=row["banana"],
+                        name=row["name"],
+                        state=row["state"],
+                        vendor=row["vendor"],
+                        slug=row["slug"],
+                        county=row["county"],
+                        status=row["status"],
+                        zipcodes=zipcodes,
+                    )
+                )
+
+            return cities
+
+    async def get_city_meeting_frequency(self, banana: str, days: int = 30) -> int:
+        """Get count of meetings for a city in the last N days
+
+        Args:
+            banana: City banana identifier
+            days: Number of days to look back (default: 30)
+
+        Returns:
+            Count of meetings in the last N days
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) as count
+                FROM meetings
+                WHERE banana = $1
+                AND date >= NOW() - INTERVAL '1 day' * $2
+                """,
+                banana,
+                days
+            )
+            return row["count"] if row else 0
+
     # ==================
     # MEETING OPERATIONS
     # ==================
