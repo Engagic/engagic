@@ -57,7 +57,8 @@ class SyncDatabase:
         asyncio.run(self._db.close())
 
     def init_schema(self):
-        """Initialize database schema"""        asyncio.run(self._db.init_schema())
+        """Initialize database schema"""
+        asyncio.run(self._db.init_schema())
 
     # ==================
     # CITY OPERATIONS

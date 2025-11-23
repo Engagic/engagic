@@ -7,12 +7,13 @@ Routes, services, and utilities are organized into focused modules.
 
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import config, get_logger
-from database.sync_bridge import SyncDatabase
+from database.db_postgres import Database
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
@@ -30,8 +31,27 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(), logging.FileHandler(config.LOG_PATH, mode="a")],
 )
 
-# Initialize FastAPI app
-app = FastAPI(title="engagic API", description="EGMI")
+
+# Lifespan context manager for database initialization
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize and cleanup async database connection pool"""
+    # Startup: Create PostgreSQL connection pool
+    db = await Database.create()
+    logger.info("initialized PostgreSQL database with async connection pool")
+
+    # Store in app state
+    app.state.db = db
+
+    yield
+
+    # Shutdown: Close connection pool
+    await db.close()
+    logger.info("closed PostgreSQL connection pool")
+
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(title="engagic API", description="EGMI", lifespan=lifespan)
 
 # CORS configuration
 app.add_middleware(
@@ -45,19 +65,14 @@ app.add_middleware(
 # Request ID middleware (must be early in stack for tracing)
 app.add_middleware(RequestIDMiddleware)
 
-# Initialize global instances
+# Initialize global instances (non-async)
 rate_limiter = SQLiteRateLimiter(
     db_path=str(config.UNIFIED_DB_PATH).replace("engagic.db", "rate_limits.db"),
     requests_limit=config.RATE_LIMIT_REQUESTS,
     window_seconds=config.RATE_LIMIT_WINDOW,
 )
 
-# Initialize shared database instance with PostgreSQL connection pool
-# NOTE: PostgreSQL pool is shared across all requests (thread-safe)
-db = SyncDatabase()
-logger.info("initialized shared PostgreSQL database with connection pool")
-
-# Initialize userland database for auth and user features
+# Initialize userland database for auth and user features (SQLite, sync)
 userland_db_path = os.getenv('USERLAND_DB', str(config.DB_DIR) + '/userland.db')
 userland_db = UserlandDB(userland_db_path, silent=False)
 logger.info("initialized userland database", db_path=userland_db_path)
@@ -71,8 +86,7 @@ else:
     init_jwt(jwt_secret)
     logger.info("JWT authentication initialized")
 
-# Store in app state for dependency injection
-app.state.db = db
+# Store userland_db in app state (main db initialized in lifespan)
 app.state.userland_db = userland_db
 
 
