@@ -60,7 +60,7 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
         logger.info("topic search", query=request.topic, normalized=normalized_topic, city=request.banana)
 
         # Search meetings by topic using db method
-        meetings = db.search_meetings_by_topic(
+        meetings = await db.search_meetings_by_topic(
             topic=normalized_topic,
             city_banana=request.banana,
             limit=request.limit
@@ -70,7 +70,7 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
         results = []
         for meeting in meetings:
             # Get items with this topic using db method
-            matching_items = db.get_items_by_topic(meeting.id, normalized_topic)
+            matching_items = await db.get_items_by_topic(meeting.id, normalized_topic)
 
             results.append({
                 "meeting": meeting.to_dict(),
@@ -105,7 +105,7 @@ async def get_popular_topics(db: UnifiedDatabase = Depends(get_db)):
     """Get most common topics across all meetings (for UI suggestions)"""
     try:
         # Get popular topics using db method
-        topic_counts = db.get_popular_topics(limit=20)
+        topic_counts = await db.get_popular_topics(limit=20)
 
         from analysis.topics.normalizer import get_normalizer
         normalizer = get_normalizer()

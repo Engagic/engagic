@@ -28,7 +28,7 @@ async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
     """Get a single meeting by ID - optimized endpoint to avoid fetching all city meetings"""
     try:
         # Fetch the specific meeting using db method
-        meeting = db.get_meeting(meeting_id)
+        meeting = await db.get_meeting(meeting_id)
 
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
@@ -37,10 +37,10 @@ async def get_meeting(meeting_id: str, db: UnifiedDatabase = Depends(get_db)):
         metrics.page_views.labels(page_type='meeting').inc()
 
         # Build response with meeting data
-        meeting_dict = get_meeting_with_items(meeting, db)
+        meeting_dict = await get_meeting_with_items(meeting, db)
 
         # Get city info for context
-        city = db.get_city(banana=meeting.banana)
+        city = await db.get_city(banana=meeting.banana)
 
         return {
             "success": True,
@@ -62,7 +62,7 @@ async def process_agenda(request: ProcessRequest, db: UnifiedDatabase = Depends(
     """Get cached agenda summary - no longer processes on-demand"""
     try:
         # Check for cached summary
-        cached_summary = db.get_cached_summary(request.packet_url)
+        cached_summary = await db.get_cached_summary(request.packet_url)
 
         if cached_summary:
             return {
@@ -136,7 +136,7 @@ async def get_random_best_meeting():
 async def get_random_meeting_with_items(db: UnifiedDatabase = Depends(get_db)):
     """Get a random meeting that has high-quality item-level summaries"""
     try:
-        result = db.get_random_meeting_with_items()
+        result = await db.get_random_meeting_with_items()
 
         if not result:
             raise HTTPException(

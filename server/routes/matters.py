@@ -31,7 +31,7 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
     """
     try:
         # Get the canonical matter record
-        matter = db.get_matter(matter_id)
+        matter = await db.get_matter(matter_id)
 
         if not matter:
             raise HTTPException(status_code=404, detail="Matter not found")
@@ -107,7 +107,7 @@ async def get_city_matters(
     """
     try:
         # Verify city exists
-        city = db.get_city(banana=banana)
+        city = await db.get_city(banana=banana)
         if not city:
             raise HTTPException(status_code=404, detail="City not found")
 

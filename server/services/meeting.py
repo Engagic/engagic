@@ -12,7 +12,7 @@ from config import get_logger
 logger = get_logger(__name__)
 
 
-def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, Any]:
+async def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, Any]:
     """Convert meeting to dict with items attached
 
     This pattern is used in 5+ places throughout the API,
@@ -25,7 +25,7 @@ def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, A
     matter timeline (e.g., "this bill appeared 3 times").
     """
     meeting_dict = meeting.to_dict()
-    items = db.get_agenda_items(meeting.id, load_matters=True)
+    items = await db.get_agenda_items(meeting.id, load_matters=True)
     if items:
         items_with_summaries = [item for item in items if item.summary]
         if items_with_summaries:
@@ -38,8 +38,9 @@ def get_meeting_with_items(meeting: Meeting, db: UnifiedDatabase) -> Dict[str, A
     return meeting_dict
 
 
-def get_meetings_with_items(
+async def get_meetings_with_items(
     meetings: List[Meeting], db: UnifiedDatabase
 ) -> List[Dict[str, Any]]:
     """Batch version of get_meeting_with_items"""
-    return [get_meeting_with_items(m, db) for m in meetings]
+    import asyncio
+    return await asyncio.gather(*[get_meeting_with_items(m, db) for m in meetings])
