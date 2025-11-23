@@ -9,6 +9,7 @@ Handles CRUD operations for matters (recurring legislative items):
 
 import json
 from typing import List, Optional
+from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
 from database.models import Matter
@@ -37,7 +38,7 @@ class MatterRepository(BaseRepository):
             matter: Matter object with canonical summary and topics
         """
         async with self.transaction() as conn:
-            # Upsert matter row
+            # Upsert matter row (asyncpg handles JSONB serialization automatically)
             await conn.execute(
                 """
                 INSERT INTO city_matters (
@@ -130,9 +131,13 @@ class MatterRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            canonical_topics_jsonb = row["canonical_topics"]
-            if isinstance(canonical_topics_jsonb, str):
-                canonical_topics_jsonb = json.loads(canonical_topics_jsonb)
+            # Deserialize JSONB fields (asyncpg returns JSON strings for JSONB columns)
+            def safe_json_loads(value):
+                if value is None:
+                    return None
+                if isinstance(value, str):
+                    return json.loads(value)
+                return value
 
             return Matter(
                 id=row["id"],
@@ -141,11 +146,11 @@ class MatterRepository(BaseRepository):
                 matter_file=row["matter_file"],
                 matter_type=row["matter_type"],
                 title=row["title"],
-                sponsors=row["sponsors"],
+                sponsors=safe_json_loads(row["sponsors"]),
                 canonical_summary=row["canonical_summary"],
-                canonical_topics=topics or canonical_topics_jsonb,  # Prefer normalized
-                attachments=row["attachments"],
-                metadata=row["metadata"],
+                canonical_topics=topics or safe_json_loads(row["canonical_topics"]),
+                attachments=safe_json_loads(row["attachments"]),
+                metadata=safe_json_loads(row["metadata"]),
                 first_seen=row["first_seen"],
                 last_seen=row["last_seen"],
                 appearance_count=row["appearance_count"],
@@ -204,3 +209,115 @@ class MatterRepository(BaseRepository):
                     )
 
         logger.debug("updated matter with canonical summary", matter_id=matter_id)
+
+    async def update_matter_tracking(
+        self,
+        matter_id: str,
+        meeting_date: Optional[datetime],
+        attachments: Optional[List],
+        attachment_hash: str,
+        increment_appearance_count: bool = False
+    ) -> None:
+        """Update matter tracking fields (last_seen, appearance_count, attachments)
+
+        Args:
+            matter_id: Composite matter ID
+            meeting_date: Datetime when matter appeared
+            attachments: List of attachment dicts
+            attachment_hash: SHA256 hash of attachments
+            increment_appearance_count: Whether to increment appearance count
+        """
+        async with self.transaction() as conn:
+            # Build dynamic SQL for appearance count
+            if increment_appearance_count:
+                await conn.execute(
+                    """
+                    UPDATE city_matters
+                    SET last_seen = $2,
+                        attachments = $3,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4),
+                        appearance_count = appearance_count + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $1
+                    """,
+                    matter_id,
+                    meeting_date,
+                    json.dumps(attachments) if attachments else None,
+                    attachment_hash,
+                )
+            else:
+                await conn.execute(
+                    """
+                    UPDATE city_matters
+                    SET last_seen = $2,
+                        attachments = $3,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $1
+                    """,
+                    matter_id,
+                    meeting_date,
+                    json.dumps(attachments) if attachments else None,
+                    attachment_hash,
+                )
+
+        logger.debug("updated matter tracking", matter_id=matter_id, increment=increment_appearance_count)
+
+    async def check_appearance_exists(self, matter_id: str, meeting_id: str) -> bool:
+        """Check if a matter already has an appearance record for a specific meeting
+
+        Args:
+            matter_id: Composite matter ID
+            meeting_id: Meeting identifier
+
+        Returns:
+            True if appearance record exists, False otherwise
+        """
+        async with self.pool.acquire() as conn:
+            count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM matter_appearances
+                WHERE matter_id = $1 AND meeting_id = $2
+                """,
+                matter_id,
+                meeting_id,
+            )
+            return count > 0
+
+    async def create_appearance(
+        self,
+        matter_id: str,
+        meeting_id: str,
+        item_id: str,
+        appeared_at: Optional[datetime],
+        committee: Optional[str] = None,
+        sequence: Optional[int] = None
+    ) -> None:
+        """Create a matter appearance record
+
+        Args:
+            matter_id: Composite matter ID
+            meeting_id: Meeting identifier
+            item_id: Item identifier
+            appeared_at: Datetime when matter appeared
+            committee: Committee name (extracted from meeting title)
+            sequence: Item sequence in meeting
+        """
+        async with self.transaction() as conn:
+            await conn.execute(
+                """
+                INSERT INTO matter_appearances (
+                    matter_id, meeting_id, item_id, appeared_at, committee, sequence
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (matter_id, meeting_id, item_id) DO NOTHING
+                """,
+                matter_id,
+                meeting_id,
+                item_id,
+                appeared_at,
+                committee,
+                sequence,
+            )
+
+        logger.debug("created matter appearance", matter_id=matter_id, meeting_id=meeting_id)

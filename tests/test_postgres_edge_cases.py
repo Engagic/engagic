@@ -13,13 +13,12 @@ import asyncio
 import sys
 import os
 from datetime import datetime
-from typing import Optional
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.db_postgres import Database
-from database.models import City, Meeting, AgendaItem, Matter
+from database.models import Meeting, AgendaItem, Matter
 from config import config, get_logger
 
 logger = get_logger(__name__)

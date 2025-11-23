@@ -12,7 +12,7 @@ from pathlib import Path
 
 from config import get_logger, config
 from database.id_generation import generate_matter_id
-from database.models import City, Meeting, AgendaItem
+from database.models import City, Meeting, AgendaItem, Matter
 from database.repositories_async import (
     CityRepository,
     MeetingRepository,
@@ -212,11 +212,27 @@ class Database:
 
             async with self.pool.acquire() as conn:
                 async with conn.transaction():
+                    # 1. Store meeting
                     await self.meetings.store_meeting(meeting_obj)
 
                     if agenda_items:
+                        # 2. Track matters (creates/updates city_matters records)
+                        matters_stats = await self._track_matters_async(
+                            meeting_obj, items_data or [], agenda_items
+                        )
+                        stats['matters_tracked'] = matters_stats.get('tracked', 0)
+                        stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
+                        stats['items_skipped_procedural'] = matters_stats.get('skipped_procedural', 0)
+
+                        # 3. Store items (FK targets exist now)
                         stored_count = await self.items.store_agenda_items(meeting_obj.id, agenda_items)
                         stats['items_stored'] = stored_count
+
+                        # 4. Create matter appearances (timeline tracking)
+                        appearances_count = await self._create_matter_appearances_async(
+                            meeting_obj, agenda_items
+                        )
+                        stats['appearances_created'] = appearances_count
 
             await self._enqueue_if_needed_async(
                 meeting_obj, meeting_date, agenda_items, items_data, stats
@@ -265,7 +281,10 @@ class Database:
         stored_meeting: Meeting,
         stats: Dict[str, Any]
     ) -> List[AgendaItem]:
-        """Process agenda items: preserve summaries if already processed"""
+        """Process agenda items: preserve summaries if already processed
+
+        NOTE: Does NOT create matters - that's handled by _track_matters_async
+        """
         agenda_items = []
 
         existing_items = await self.items.get_agenda_items(stored_meeting.id)
@@ -318,6 +337,187 @@ class Database:
             agenda_items.append(agenda_item)
 
         return agenda_items
+
+    async def _track_matters_async(
+        self,
+        meeting: Meeting,
+        items_data: List[Dict[str, Any]],
+        agenda_items: List[AgendaItem]
+    ) -> Dict[str, int]:
+        """Track legislative matters across meetings (Matters-First Architecture)
+
+        For each agenda item with a matter_file:
+        1. Create/update Matter object with attachments
+        2. Store in city_matters table via MatterRepository
+        3. Update appearance tracking
+
+        Args:
+            meeting: Stored Meeting object
+            items_data: Raw item data from adapter (with sponsors, matter_type)
+            agenda_items: Stored AgendaItem objects
+
+        Returns:
+            Dict with 'tracked', 'duplicate', and 'skipped_procedural' counts
+        """
+        from vendors.utils.item_filters import should_skip_matter
+
+        stats = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0}
+
+        if not items_data or not agenda_items:
+            return stats
+
+        # Build map from item_id to raw data for sponsor/type lookup
+        items_map = {item["item_id"]: item for item in items_data}
+
+        for agenda_item in agenda_items:
+            # Skip items without matter tracking
+            if not agenda_item.matter_id:
+                continue
+
+            # Defensive validation
+            from database.id_generation import validate_matter_id
+            if not validate_matter_id(agenda_item.matter_id):
+                logger.error(
+                    "invalid matter_id format",
+                    item_id=agenda_item.id,
+                    matter_id=agenda_item.matter_id
+                )
+                continue
+
+            matter_composite_id = agenda_item.matter_id
+
+            # Get raw vendor data for storing in city_matters table
+            item_id_short = agenda_item.id.rsplit("_", 1)[1]
+            raw_item = items_map.get(item_id_short, {})
+            sponsors = raw_item.get("sponsors", [])
+            matter_type = raw_item.get("matter_type")
+            raw_vendor_matter_id = raw_item.get("matter_id")
+
+            # Skip procedural matter types
+            if matter_type and should_skip_matter(matter_type):
+                stats['skipped_procedural'] += 1
+                logger.debug(
+                    "skipping procedural matter",
+                    matter=agenda_item.matter_file or raw_vendor_matter_id,
+                    matter_type=matter_type
+                )
+                continue
+
+            try:
+                # Check if matter exists
+                existing_matter = await self.matters.get_matter(matter_composite_id)
+
+                # Compute attachment hash for deduplication
+                attachment_hash = hash_attachments(agenda_item.attachments)
+
+                if existing_matter:
+                    # Check if this meeting_id is already counted for this matter
+                    appearance_exists = await self.matters.check_appearance_exists(
+                        matter_composite_id, meeting.id
+                    )
+
+                    # Update last_seen and appearance_count
+                    await self.matters.update_matter_tracking(
+                        matter_id=matter_composite_id,
+                        meeting_date=meeting.date,  # Pass datetime directly
+                        attachments=agenda_item.attachments,
+                        attachment_hash=attachment_hash,
+                        increment_appearance_count=not appearance_exists
+                    )
+                    stats['duplicate'] += 1
+                    appearance_status = "new appearance" if not appearance_exists else "reprocess"
+                    logger.info(
+                        "matter tracking update",
+                        status=appearance_status,
+                        matter=agenda_item.matter_file or raw_vendor_matter_id,
+                        matter_type=matter_type
+                    )
+                else:
+                    # Create new Matter object
+                    matter_obj = Matter(
+                        id=matter_composite_id,
+                        banana=meeting.banana,
+                        matter_id=raw_vendor_matter_id,
+                        matter_file=agenda_item.matter_file,
+                        matter_type=matter_type,
+                        title=agenda_item.title,
+                        sponsors=sponsors,
+                        canonical_summary=None,
+                        canonical_topics=None,
+                        attachments=agenda_item.attachments,
+                        metadata={'attachment_hash': attachment_hash},
+                        first_seen=meeting.date,
+                        last_seen=meeting.date,
+                        appearance_count=1,
+                    )
+
+                    await self.matters.store_matter(matter_obj)
+                    stats['tracked'] += 1
+                    logger.info(
+                        "new matter tracked",
+                        matter=agenda_item.matter_file or raw_vendor_matter_id,
+                        matter_type=matter_type,
+                        sponsor_count=len(sponsors)
+                    )
+
+            except Exception as e:
+                logger.error(
+                    "error tracking matter",
+                    matter_id=matter_composite_id,
+                    error=str(e),
+                    error_type=type(e).__name__
+                )
+                raise
+
+        return stats
+
+    async def _create_matter_appearances_async(
+        self,
+        meeting: Meeting,
+        agenda_items: List[AgendaItem]
+    ) -> int:
+        """Create matter_appearances after items are stored
+
+        CRITICAL: Must be called AFTER store_agenda_items to avoid FK constraint failures
+
+        Args:
+            meeting: Stored Meeting object
+            agenda_items: List of stored agenda items
+
+        Returns:
+            Number of appearances created
+        """
+        count = 0
+        committee = meeting.title.split("-")[0].strip() if meeting.title else None
+
+        for agenda_item in agenda_items:
+            if not (agenda_item.matter_id or agenda_item.matter_file):
+                continue
+
+            matter_composite_id = agenda_item.matter_id
+            if not matter_composite_id:
+                continue
+
+            try:
+                await self.matters.create_appearance(
+                    matter_id=matter_composite_id,
+                    meeting_id=meeting.id,
+                    item_id=agenda_item.id,
+                    appeared_at=meeting.date,  # Pass datetime directly, not ISO string
+                    committee=committee,
+                    sequence=agenda_item.sequence
+                )
+                count += 1
+            except Exception as e:
+                logger.error(
+                    "failed to create appearance for matter",
+                    matter_id=matter_composite_id,
+                    error=str(e),
+                    error_type=type(e).__name__
+                )
+                raise
+
+        return count
 
     async def _enqueue_if_needed_async(
         self,

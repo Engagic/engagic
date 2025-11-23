@@ -237,7 +237,7 @@ class LoadTests:
                 self._log_test(
                     test_name,
                     True,
-                    f"10 workers dequeued 10 unique jobs (no duplicates)"
+                    "10 workers dequeued 10 unique jobs (no duplicates)"
                 )
             else:
                 self._log_test(

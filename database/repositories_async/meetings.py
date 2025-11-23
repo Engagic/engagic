@@ -36,6 +36,14 @@ class MeetingRepository(BaseRepository):
         Args:
             meeting: Meeting object with all fields
         """
+        # Debug: Check participation type
+        if meeting.participation:
+            logger.debug(
+                "storing meeting with participation",
+                participation_type=type(meeting.participation).__name__,
+                participation_value=str(meeting.participation)[:100]
+            )
+
         async with self.transaction() as conn:
             # Upsert meeting row
             await conn.execute(

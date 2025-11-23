@@ -371,8 +371,6 @@ class ItemRepository(BaseRepository):
         if not item_ids:
             return 0
 
-        topics_json = json.dumps(topics) if topics else None
-
         async with self.transaction() as conn:
             # Bulk update items (single query)
             result = await conn.execute(
@@ -382,7 +380,7 @@ class ItemRepository(BaseRepository):
                 WHERE id = ANY($3::text[])
                 """,
                 summary,
-                topics_json,
+                json.dumps(topics) if topics else None,
                 item_ids,
             )
 
