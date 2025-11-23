@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 
 
-def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
+async def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
     """Handle zipcode search with cache-first approach
 
     Returns city data with banana field which serves as the city_url.
@@ -25,7 +25,7 @@ def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
     Frontend uses: /{banana} for routing.
     """
     # Check database - CACHED ONLY
-    city = db.get_city(zipcode=zipcode)
+    city = await db.get_city(zipcode=zipcode)
     if not city:
         return {
             "success": False,
@@ -36,14 +36,14 @@ def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
         }
 
     # Get cached meetings (include cancelled - frontend shows status badge)
-    meetings = db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
+    meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
     if meetings:
         logger.info(
             f"Found {len(meetings)} cached meetings for {city.name}, {city.state}"
         )
 
-        meetings_with_items = get_meetings_with_items(meetings, db)
+        meetings_with_items = await get_meetings_with_items(meetings, db)
 
         return {
             "success": True,
@@ -76,7 +76,7 @@ def handle_zipcode_search(zipcode: str, db: UnifiedDatabase) -> Dict[str, Any]:
     }
 
 
-def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
+async def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
     """Handle city name search with cache-first approach and ambiguous city handling
 
     Returns city data with banana field which serves as the city_url.
@@ -88,10 +88,10 @@ def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
 
     if not state:
         # No state provided - check for ambiguous cities
-        return handle_ambiguous_city_search(city_name, city_input, db)
+        return await handle_ambiguous_city_search(city_name, city_input, db)
 
     # Check database - CACHED ONLY
-    city = db.get_city(name=city_name, state=state)
+    city = await db.get_city(name=city_name, state=state)
     if not city:
         return {
             "success": False,
@@ -102,12 +102,12 @@ def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
         }
 
     # Get cached meetings (include cancelled - frontend shows status badge)
-    meetings = db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
+    meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
     if meetings:
         logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
 
-        meetings_with_items = get_meetings_with_items(meetings, db)
+        meetings_with_items = await get_meetings_with_items(meetings, db)
 
         return {
             "success": True,
@@ -140,7 +140,7 @@ def handle_city_search(city_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
     }
 
 
-def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
+async def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]:
     """Handle state search - return list of cities in that state"""
     # Normalize state input
     state_abbr = get_state_abbreviation(state_input)
@@ -156,7 +156,7 @@ def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]
         }
 
     # Get all cities in this state
-    cities = db.get_cities(state=state_abbr)
+    cities = await db.get_cities(state=state_abbr)
 
     if not cities:
         return {
@@ -184,7 +184,7 @@ def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]
         )
 
     # Get meeting stats for all cities in one query
-    stats = db.get_city_meeting_stats(bananas)
+    stats = await db.get_city_meeting_stats(bananas)
 
     # Add stats to each city option
     for option in city_options:
@@ -207,18 +207,18 @@ def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]
     }
 
 
-def handle_ambiguous_city_search(
+async def handle_ambiguous_city_search(
     city_name: str, original_input: str, db: UnifiedDatabase
 ) -> Dict[str, Any]:
     """Handle city search when no state is provided - check for ambiguous matches"""
 
     # Look for all cities with this name (exact match)
-    cities = db.get_cities(name=city_name)
+    cities = await db.get_cities(name=city_name)
 
     # If no exact match, try fuzzy matching to handle typos
     if not cities:
         # Get all active city names from database
-        all_cities = db.get_cities()  # Gets all active cities
+        all_cities = await db.get_cities()  # Gets all active cities
         city_names = [city.name.lower() for city in all_cities]
 
         # Find close matches (cutoff=0.7 means 70% similarity required)
@@ -228,7 +228,7 @@ def handle_ambiguous_city_search(
             # Get cities matching the fuzzy results
             fuzzy_cities = []
             for match in close_matches:
-                matched_cities = db.get_cities(name=match.title())
+                matched_cities = await db.get_cities(name=match.title())
                 fuzzy_cities.extend(matched_cities)
 
             if fuzzy_cities:
@@ -250,14 +250,14 @@ def handle_ambiguous_city_search(
         city = cities[0]
 
         # Get meetings for this city (include cancelled - frontend shows status badge)
-        meetings = db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
+        meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
         if meetings:
             logger.info(
                 f"Found {len(meetings)} cached meetings for {city.name}, {city.state}"
             )
 
-            meetings_with_items = get_meetings_with_items(meetings, db)
+            meetings_with_items = await get_meetings_with_items(meetings, db)
 
             return {
                 "success": True,
@@ -303,7 +303,7 @@ def handle_ambiguous_city_search(
         )
 
     # Get meeting stats for all cities in one query
-    stats = db.get_city_meeting_stats(bananas)
+    stats = await db.get_city_meeting_stats(bananas)
 
     # Add stats to each city option
     for option in city_options:
