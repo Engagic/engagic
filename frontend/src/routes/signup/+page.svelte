@@ -51,7 +51,7 @@
 	<title>Sign Up - Engagic</title>
 	<meta
 		name="description"
-		content="Create a free Engagic account. Get alerts when your city discusses topics you care about."
+		content="Create a free Engagic account. Get weekly digests when your city discusses topics you care about."
 	/>
 </svelte:head>
 
@@ -73,7 +73,7 @@
 		{:else}
 			<div class="card">
 				<h1>Get Started</h1>
-				<p class="subtitle">Free civic alerts for everyone. Set up your account in 30 seconds.</p>
+				<p class="subtitle">Free civic digests for everyone. Set up your account in 30 seconds.</p>
 
 				<form onsubmit={(e) => {e.preventDefault(); handleSubmit();}}>
 					<div class="field">
@@ -132,7 +132,7 @@
 <style>
 	.page {
 		min-height: 100vh;
-		background: var(--color-bg-primary);
+		background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -145,11 +145,11 @@
 	}
 
 	.card {
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
+		background: var(--civic-white);
+		border: 1px solid var(--civic-border);
 		border-radius: 12px;
 		padding: 2.5rem;
-		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 	}
 
 	.success-state {
@@ -180,32 +180,32 @@
 		font-size: 1.875rem;
 		font-weight: bold;
 		margin: 0 0 0.75rem 0;
-		color: var(--color-text-primary);
+		color: var(--civic-dark);
 		letter-spacing: -0.02em;
 	}
 
 	.subtitle {
 		font-size: 1rem;
-		color: var(--color-text-secondary);
+		color: var(--civic-gray);
 		margin: 0 0 2rem 0;
 		line-height: 1.5;
 	}
 
 	.message {
 		font-size: 1.125rem;
-		color: var(--color-text-secondary);
+		color: var(--civic-gray);
 		margin: 0 0 1rem 0;
 		line-height: 1.6;
 	}
 
 	.message strong {
-		color: var(--color-primary);
+		color: var(--civic-blue);
 		font-weight: 600;
 	}
 
 	.hint {
 		font-size: 0.875rem;
-		color: var(--color-text-tertiary);
+		color: var(--civic-gray);
 		margin: 0;
 		line-height: 1.6;
 	}
@@ -218,7 +218,7 @@
 		display: block;
 		font-size: 0.875rem;
 		font-weight: 600;
-		color: var(--color-text-primary);
+		color: var(--civic-dark);
 		margin-bottom: 0.5rem;
 	}
 
@@ -227,28 +227,27 @@
 		padding: 0.75rem 1rem;
 		font-size: 1rem;
 		font-family: system-ui, -apple-system, sans-serif;
-		color: var(--color-text-primary);
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
+		color: var(--civic-dark);
+		background: white;
+		border: 2px solid var(--civic-border);
 		border-radius: 8px;
 		transition: all 0.2s;
 	}
 
 	.input:focus {
 		outline: none;
-		border: 2px solid var(--color-primary);
-		padding: calc(0.75rem - 1px) calc(1rem - 1px);
-		box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+		border: 2px solid var(--civic-blue);
+		box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 	}
 
 	.input:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		background: var(--color-bg-secondary);
+		background: var(--civic-light);
 	}
 
 	.input::placeholder {
-		color: var(--color-text-tertiary);
+		color: #9ca3af;
 	}
 
 	.error-banner {
@@ -267,7 +266,7 @@
 		padding: 1rem 1.5rem;
 		font-size: 1rem;
 		font-weight: 600;
-		background: var(--color-primary);
+		background: var(--civic-blue);
 		color: white;
 		border: none;
 		border-radius: 8px;
@@ -277,9 +276,9 @@
 	}
 
 	.btn-primary:hover:not(:disabled) {
-		background: var(--color-primary-hover);
+		background: var(--civic-accent);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 	}
 
 	.btn-primary:active:not(:disabled) {
@@ -296,18 +295,18 @@
 		text-align: center;
 		margin-top: 1.5rem;
 		font-size: 0.875rem;
-		color: var(--color-text-secondary);
+		color: var(--civic-gray);
 	}
 
 	.footer-text a {
-		color: var(--color-primary);
+		color: var(--civic-blue);
 		text-decoration: none;
 		font-weight: 600;
 		transition: color 0.2s;
 	}
 
 	.footer-text a:hover {
-		color: var(--color-primary-hover);
+		color: var(--civic-accent);
 		text-decoration: underline;
 	}
 
@@ -315,7 +314,7 @@
 		text-align: center;
 		margin-top: 1rem;
 		font-size: 0.8125rem;
-		color: var(--color-text-tertiary);
+		color: var(--civic-gray);
 		font-style: italic;
 	}
 

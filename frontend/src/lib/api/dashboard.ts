@@ -1,13 +1,13 @@
 /**
  * Dashboard API Client
  *
- * Handles dashboard data, alerts, and activity feed.
+ * Handles dashboard data, digests, and activity feed.
  */
 
 import { config } from './config';
 import { ApiError, NetworkError } from './types';
 
-export interface Alert {
+export interface Digest {
 	id: string;
 	user_id: string;
 	name: string;
@@ -20,7 +20,7 @@ export interface Alert {
 	created_at: string;
 }
 
-export interface AlertMatch {
+export interface DigestMatch {
 	id: string;
 	alert_id: string;
 	meeting_id: string;
@@ -43,7 +43,7 @@ export interface AlertMatch {
 }
 
 export interface DashboardStats {
-	active_alerts: number;
+	active_digests: number;
 	total_matches: number;
 	matches_this_week: number;
 	cities_tracked: number;
@@ -51,8 +51,8 @@ export interface DashboardStats {
 
 export interface DashboardData {
 	stats: DashboardStats;
-	alerts: Alert[];
-	recent_matches: AlertMatch[];
+	digests: Digest[];
+	recent_matches: DigestMatch[];
 }
 
 async function fetchDashboard(
@@ -98,60 +98,60 @@ export async function getDashboard(accessToken: string): Promise<DashboardData> 
 	return response.json();
 }
 
-export async function updateAlert(
+export async function updateDigest(
 	accessToken: string,
-	alertId: string,
-	updates: Partial<Alert>
-): Promise<Alert> {
-	const response = await fetchDashboard(`/api/dashboard/alerts/${alertId}`, accessToken, {
+	digestId: string,
+	updates: Partial<Digest>
+): Promise<Digest> {
+	const response = await fetchDashboard(`/api/dashboard/alerts/${digestId}`, accessToken, {
 		method: 'PATCH',
 		body: JSON.stringify(updates)
 	});
 	return response.json();
 }
 
-export async function addKeywordToAlert(
+export async function addKeywordToDigest(
 	accessToken: string,
-	alertId: string,
+	digestId: string,
 	keyword: string
-): Promise<Alert> {
-	const response = await fetchDashboard(`/api/dashboard/alerts/${alertId}/keywords`, accessToken, {
+): Promise<Digest> {
+	const response = await fetchDashboard(`/api/dashboard/alerts/${digestId}/keywords`, accessToken, {
 		method: 'POST',
 		body: JSON.stringify({ keyword })
 	});
 	return response.json();
 }
 
-export async function removeKeywordFromAlert(
+export async function removeKeywordFromDigest(
 	accessToken: string,
-	alertId: string,
+	digestId: string,
 	keyword: string
-): Promise<Alert> {
-	const response = await fetchDashboard(`/api/dashboard/alerts/${alertId}/keywords`, accessToken, {
+): Promise<Digest> {
+	const response = await fetchDashboard(`/api/dashboard/alerts/${digestId}/keywords`, accessToken, {
 		method: 'DELETE',
 		body: JSON.stringify({ keyword })
 	});
 	return response.json();
 }
 
-export async function addCityToAlert(
+export async function addCityToDigest(
 	accessToken: string,
-	alertId: string,
+	digestId: string,
 	cityBanana: string
-): Promise<Alert> {
-	const response = await fetchDashboard(`/api/dashboard/alerts/${alertId}/cities`, accessToken, {
+): Promise<Digest> {
+	const response = await fetchDashboard(`/api/dashboard/alerts/${digestId}/cities`, accessToken, {
 		method: 'POST',
 		body: JSON.stringify({ city_banana: cityBanana })
 	});
 	return response.json();
 }
 
-export async function removeCityFromAlert(
+export async function removeCityFromDigest(
 	accessToken: string,
-	alertId: string,
+	digestId: string,
 	cityBanana: string
-): Promise<Alert> {
-	const response = await fetchDashboard(`/api/dashboard/alerts/${alertId}/cities`, accessToken, {
+): Promise<Digest> {
+	const response = await fetchDashboard(`/api/dashboard/alerts/${digestId}/cities`, accessToken, {
 		method: 'DELETE',
 		body: JSON.stringify({ city_banana: cityBanana })
 	});

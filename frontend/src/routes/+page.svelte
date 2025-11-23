@@ -259,8 +259,7 @@
 {/if}
 
 <div class="container">
-	<div class="main-content">
-		<header class="header">
+	<header class="header">
 			<div class="logo-container">
 				<img src="/icon-192.png" alt="" class="logo-icon" />
 				<a href="/" class="logo">engagic</a>
@@ -363,7 +362,6 @@
 			Searching for meetings...
 		</div>
 	{/if}
-	</div>
 
 	<Footer />
 </div>

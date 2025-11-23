@@ -1,10 +1,13 @@
 <script>
 	import '../app.css';
-	import { navigating } from '$app/stores';
+	import { navigating, page } from '$app/stores';
 	import { themeState } from '$lib/stores/theme.svelte';
 	import { authState } from '$lib/stores/auth.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onMount } from 'svelte';
+
+	// Only show nav on homepage
+	const showNav = $derived($page.url.pathname === '/');
 
 	onMount(() => {
 		document.documentElement.classList.add(themeState.effectiveTheme);
@@ -30,23 +33,23 @@
 
 <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-<nav class="main-nav">
-	<div class="nav-container">
-		<a href="/" class="logo">Engagic</a>
-		<div class="nav-links">
-			{#if authState.isAuthenticated}
-				<a href="/dashboard" class="nav-link">Dashboard</a>
-				<span class="nav-divider">|</span>
-				<ThemeToggle />
-			{:else}
-				<a href="/login" class="nav-link">Log In</a>
-				<a href="/signup" class="nav-link-primary">Sign Up</a>
-				<span class="nav-divider">|</span>
-				<ThemeToggle />
-			{/if}
+{#if showNav}
+	<nav class="main-nav">
+		<div class="nav-container">
+			<a href="/" class="nav-logo">Engagic</a>
+			<div class="nav-links">
+				{#if authState.isAuthenticated}
+					<a href="/dashboard" class="nav-link">Dashboard</a>
+					<ThemeToggle />
+				{:else}
+					<a href="/login" class="nav-link">Log In</a>
+					<a href="/signup" class="nav-link-primary">Sign Up</a>
+					<ThemeToggle />
+				{/if}
+			</div>
 		</div>
-	</div>
-</nav>
+	</nav>
+{/if}
 
 <main id="main-content">
 	<slot />
@@ -54,12 +57,13 @@
 
 <style>
 	.main-nav {
-		background: var(--color-bg-primary);
-		border-bottom: 1px solid var(--color-border);
+		background: var(--surface-primary);
+		border-bottom: 1px solid var(--border-primary);
 		padding: 1rem 0;
 		position: sticky;
 		top: 0;
 		z-index: 100;
+		transition: background var(--transition-normal), border-color var(--transition-normal);
 	}
 
 	.nav-container {
@@ -71,54 +75,63 @@
 		align-items: center;
 	}
 
-	.logo {
+	.nav-logo {
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.25rem;
-		font-weight: bold;
-		color: var(--color-primary);
+		font-weight: 600;
+		color: var(--civic-blue);
 		text-decoration: none;
-		transition: opacity 0.2s;
+		transition: color var(--transition-normal);
 	}
 
-	.logo:hover {
-		opacity: 0.8;
+	.nav-logo:hover {
+		color: var(--civic-accent);
 	}
 
 	.nav-links {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
+		gap: 1.5rem;
 	}
 
 	.nav-link {
-		color: var(--color-text-secondary);
+		font-family: 'IBM Plex Mono', monospace;
+		color: var(--text-secondary);
 		text-decoration: none;
-		font-size: 0.875rem;
+		font-size: 0.9rem;
 		font-weight: 500;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
+		padding: 0.5rem 0.75rem;
+		border-radius: var(--radius-sm);
 	}
 
 	.nav-link:hover {
-		color: var(--color-primary);
+		color: var(--civic-blue);
+		background: var(--surface-hover);
 	}
 
 	.nav-link-primary {
-		padding: 0.5rem 1rem;
-		background: var(--color-primary);
-		color: white;
+		font-family: 'IBM Plex Mono', monospace;
+		padding: 0.6rem 1.25rem;
+		background: var(--civic-blue);
+		color: var(--civic-white);
 		text-decoration: none;
-		font-size: 0.875rem;
+		font-size: 0.9rem;
 		font-weight: 600;
-		border-radius: 6px;
-		transition: all 0.2s;
+		border-radius: var(--radius-md);
+		transition: all var(--transition-fast);
+		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
 	}
 
 	.nav-link-primary:hover {
-		background: var(--color-primary-hover);
+		background: var(--civic-accent);
 		transform: translateY(-1px);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 	}
 
-	.nav-divider {
-		color: var(--color-border);
+	.nav-link-primary:active {
+		transform: translateY(0);
+		box-shadow: 0 1px 4px rgba(79, 70, 229, 0.2);
 	}
 
 	@media (max-width: 640px) {
@@ -126,12 +139,22 @@
 			padding: 0 1rem;
 		}
 
+		.nav-logo {
+			font-size: 1.1rem;
+		}
+
 		.nav-links {
-			gap: 0.75rem;
+			gap: 1rem;
+		}
+
+		.nav-link {
+			font-size: 0.85rem;
+			padding: 0.4rem 0.6rem;
 		}
 
 		.nav-link-primary {
-			padding: 0.4rem 0.75rem;
+			padding: 0.5rem 1rem;
+			font-size: 0.85rem;
 		}
 	}
 </style>

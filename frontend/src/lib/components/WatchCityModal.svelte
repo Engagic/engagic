@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { signup } from '$lib/api/auth';
 	import { authState } from '$lib/stores/auth.svelte';
-	import { getDashboard, addCityToAlert } from '$lib/api/dashboard';
+	import { getDashboard, addCityToDigest } from '$lib/api/dashboard';
 
 	interface Props {
 		cityName: string;
@@ -36,14 +36,14 @@
 	async function handleSubmit() {
 		error = '';
 
-		// If already logged in, just add city to existing alert
+		// If already logged in, just add city to existing digest
 		if (authState.isAuthenticated) {
 			loading = true;
 			try {
 				const dashboardData = await getDashboard(authState.accessToken!);
 
-				if (dashboardData.alerts.length > 0) {
-					await addCityToAlert(authState.accessToken!, dashboardData.alerts[0].id, cityBanana);
+				if (dashboardData.digests.length > 0) {
+					await addCityToDigest(authState.accessToken!, dashboardData.digests[0].id, cityBanana);
 					success = true;
 					setTimeout(() => {
 						onClose();
@@ -69,10 +69,7 @@
 			return;
 		}
 
-		if (!name.trim()) {
-			error = 'Name is required';
-			return;
-		}
+		// Name is optional - skip validation
 
 		const keywords = parseKeywords(keywordsInput);
 		if (keywords.length > 3) {
@@ -146,14 +143,13 @@
 				<form onsubmit={(e) => {e.preventDefault(); handleSubmit();}}>
 					{#if !authState.isAuthenticated}
 						<div class="field">
-							<label for="name">Name</label>
+							<label for="name">Name (optional)</label>
 							<input
 								id="name"
 								type="text"
 								bind:value={name}
 								placeholder="Your name"
 								disabled={loading}
-								required
 								class="input"
 								autocomplete="name"
 							/>
@@ -208,7 +204,7 @@
 	.modal-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: rgba(0, 0, 0, 0.75);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -217,8 +213,8 @@
 	}
 
 	.modal {
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
+		background: var(--civic-white);
+		border: 1px solid var(--civic-border);
 		border-radius: 12px;
 		padding: 2rem;
 		max-width: 480px;
@@ -226,7 +222,7 @@
 		max-height: 90vh;
 		overflow-y: auto;
 		position: relative;
-		box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
 	}
 
 	.close-btn {
@@ -236,7 +232,7 @@
 		background: transparent;
 		border: none;
 		font-size: 2rem;
-		color: var(--color-text-tertiary);
+		color: var(--civic-gray);
 		cursor: pointer;
 		padding: 0;
 		width: 32px;
@@ -246,7 +242,7 @@
 	}
 
 	.close-btn:hover {
-		color: var(--color-text-primary);
+		color: var(--civic-dark);
 	}
 
 	.modal-header {
@@ -256,13 +252,13 @@
 	h2 {
 		font-size: 1.5rem;
 		font-weight: bold;
-		color: var(--color-text-primary);
+		color: var(--civic-dark);
 		margin: 0 0 0.75rem 0;
 	}
 
 	.subtitle {
 		font-size: 0.9375rem;
-		color: var(--color-text-secondary);
+		color: var(--civic-gray);
 		margin: 0 0 0.5rem 0;
 	}
 
@@ -277,7 +273,7 @@
 
 	.features li {
 		font-size: 0.875rem;
-		color: var(--color-text-secondary);
+		color: var(--civic-gray);
 		padding-left: 1.5rem;
 		position: relative;
 	}
@@ -286,7 +282,7 @@
 		content: '✓';
 		position: absolute;
 		left: 0;
-		color: var(--color-primary);
+		color: var(--civic-blue);
 		font-weight: bold;
 	}
 
@@ -298,7 +294,7 @@
 		display: block;
 		font-size: 0.875rem;
 		font-weight: 600;
-		color: var(--color-text-primary);
+		color: var(--civic-dark);
 		margin-bottom: 0.5rem;
 	}
 
@@ -307,30 +303,29 @@
 		padding: 0.75rem 1rem;
 		font-size: 1rem;
 		font-family: system-ui, -apple-system, sans-serif;
-		color: var(--color-text-primary);
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
+		color: var(--civic-dark);
+		background: white;
+		border: 2px solid var(--civic-border);
 		border-radius: 8px;
 		transition: all 0.2s;
 	}
 
 	.input:focus {
 		outline: none;
-		border: 2px solid var(--color-primary);
-		padding: calc(0.75rem - 1px) calc(1rem - 1px);
-		box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+		border: 2px solid var(--civic-blue);
+		box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 	}
 
 	.input:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		background: var(--color-bg-secondary);
+		background: var(--civic-light);
 	}
 
 	.hint-text {
 		display: block;
 		font-size: 0.8125rem;
-		color: var(--color-text-tertiary);
+		color: var(--civic-gray);
 		margin-top: 0.375rem;
 	}
 
@@ -350,7 +345,7 @@
 		padding: 1rem 1.5rem;
 		font-size: 1rem;
 		font-weight: 600;
-		background: var(--color-primary);
+		background: var(--civic-blue);
 		color: white;
 		border: none;
 		border-radius: 8px;
@@ -360,9 +355,9 @@
 	}
 
 	.btn-primary:hover:not(:disabled) {
-		background: var(--color-primary-hover);
+		background: var(--civic-accent);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 	}
 
 	.btn-primary:disabled {
@@ -375,7 +370,7 @@
 		text-align: center;
 		margin-top: 1rem;
 		font-size: 0.8125rem;
-		color: var(--color-text-tertiary);
+		color: var(--civic-gray);
 		font-style: italic;
 	}
 
@@ -401,18 +396,18 @@
 
 	.message {
 		font-size: 1rem;
-		color: var(--color-text-secondary);
+		color: var(--civic-gray);
 		margin: 0.75rem 0;
 	}
 
 	.message strong {
-		color: var(--color-primary);
+		color: var(--civic-blue);
 		font-weight: 600;
 	}
 
 	.hint {
 		font-size: 0.875rem;
-		color: var(--color-text-tertiary);
+		color: var(--civic-gray);
 		margin: 0.5rem 0 0 0;
 	}
 

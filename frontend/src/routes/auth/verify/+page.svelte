@@ -58,7 +58,7 @@
 <style>
 	.page {
 		min-height: 100vh;
-		background: var(--color-bg-primary);
+		background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -71,11 +71,11 @@
 	}
 
 	.card {
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
+		background: var(--civic-white);
+		border: 1px solid var(--civic-border);
 		border-radius: 12px;
 		padding: 2.5rem;
-		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 		text-align: center;
 	}
 
@@ -90,8 +90,8 @@
 	.spinner {
 		width: 48px;
 		height: 48px;
-		border: 4px solid var(--color-border);
-		border-top-color: var(--color-primary);
+		border: 4px solid var(--civic-border);
+		border-top-color: var(--civic-blue);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}
@@ -118,13 +118,13 @@
 		font-size: 1.875rem;
 		font-weight: bold;
 		margin: 0;
-		color: var(--color-text-primary);
+		color: var(--civic-dark);
 		letter-spacing: -0.02em;
 	}
 
 	p {
 		font-size: 1rem;
-		color: var(--color-text-secondary);
+		color: var(--civic-gray);
 		margin: 0;
 		line-height: 1.5;
 	}
@@ -154,25 +154,25 @@
 	}
 
 	.btn-primary {
-		background: var(--color-primary);
+		background: var(--civic-blue);
 		color: white;
 		border: none;
 	}
 
 	.btn-primary:hover {
-		background: var(--color-primary-hover);
+		background: var(--civic-accent);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 	}
 
 	.btn-secondary {
 		background: transparent;
-		color: var(--color-primary);
-		border: 1px solid var(--color-primary);
+		color: var(--civic-blue);
+		border: 1px solid var(--civic-blue);
 	}
 
 	.btn-secondary:hover {
-		background: rgba(14, 165, 233, 0.1);
+		background: rgba(79, 70, 229, 0.1);
 	}
 
 	@media (max-width: 640px) {
