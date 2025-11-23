@@ -67,21 +67,8 @@ class Analyzer:
 
         city_banana = meeting_data.get("city_banana", "unknown")
 
-        # Check cache first (also increments hit count if found)
-        cached_meeting = self.db.get_cached_summary(packet_url)
-        if cached_meeting:
-            logger.info("cache hit", city=city_banana)
-            return {
-                "success": True,
-                "summary": cached_meeting.summary,
-                "processing_time": cached_meeting.processing_time or 0,
-                "cached": True,
-                "meeting_data": cached_meeting.to_dict(),
-                "processing_method": cached_meeting.processing_method or "cached",
-            }
-
         # Process with Gemini
-        logger.info("cache miss", city=city_banana)
+        logger.info("processing meeting", city=city_banana)
         start_time = time.time()
 
         try:

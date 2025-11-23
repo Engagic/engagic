@@ -11,12 +11,8 @@ Tests the complete matter tracking lifecycle:
 This validates that the 3-tier fallback system works end-to-end.
 """
 
-import asyncio
 import hashlib
-import json
-import tempfile
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
 import pytest
 

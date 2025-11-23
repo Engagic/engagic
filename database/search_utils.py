@@ -5,7 +5,7 @@ Search utilities for finding text in meeting and item summaries.
 import re
 from datetime import datetime
 from typing import List, Dict, Optional
-from database.db import UnifiedDatabase
+from database.sync_bridge import SyncDatabase as UnifiedDatabase
 from config import config
 
 def strip_markdown(text: str) -> str:
@@ -32,7 +32,7 @@ def strip_markdown(text: str) -> str:
 
     # Bold/italic (nested patterns: **bold**, __bold__, *italic*, _italic_)
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # **bold**
-    text = re.sub(r'__(.+?)__', r'\1', text)      # __bold__
+    text = re.sub(r'__(.+?)__', r'\1', text)      # __bold**
     text = re.sub(r'\*(.+?)\*', r'\1', text)      # *italic*
     text = re.sub(r'_(.+?)_', r'\1', text)        # _italic_
 
@@ -44,6 +44,36 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
 
     return text
+
+def _extract_context(text: str, search_term: str, case_sensitive: bool, radius: int = 150) -> str:
+    """Extract context around search term match
+
+    Args:
+        text: Text to search (already stripped of markdown)
+        search_term: Term to find
+        case_sensitive: Whether to match case
+        radius: Characters to show before/after match
+
+    Returns:
+        Context string with ellipsis if truncated
+    """
+    if case_sensitive:
+        match_pos = text.find(search_term)
+    else:
+        match_pos = text.lower().find(search_term.lower())
+
+    if match_pos != -1:
+        start = max(0, match_pos - radius)
+        end = min(len(text), match_pos + len(search_term) + radius)
+        context = text[start:end]
+        if start > 0:
+            context = "..." + context
+        if end < len(text):
+            context = context + "..."
+    else:
+        context = text[:300]
+
+    return context
 
 def slugify(text: str) -> str:
     """Convert text to URL-friendly slug"""
@@ -184,25 +214,8 @@ def search_summaries(
             if not meeting:
                 continue
     
-            # Strip markdown for context search
             clean_summary = strip_markdown(meeting.summary or '')
-    
-            # Find context around the match
-            if case_sensitive:
-                match_pos = clean_summary.find(search_term)
-            else:
-                match_pos = clean_summary.lower().find(search_term.lower())
-    
-            if match_pos != -1:
-                start = max(0, match_pos - 150)
-                end = min(len(clean_summary), match_pos + len(search_term) + 150)
-                context = clean_summary[start:end]
-                if start > 0:
-                    context = "..." + context
-                if end < len(clean_summary):
-                    context = context + "..."
-            else:
-                context = clean_summary[:300]
+            context = _extract_context(clean_summary, search_term, case_sensitive)
     
             url = build_engagic_url(banana, meeting.date.isoformat() if meeting.date else None, meeting.id)
     
@@ -255,25 +268,8 @@ def search_summaries(
             if not item:
                 continue
     
-            # Strip markdown for context search
             clean_summary = strip_markdown(item.summary or '')
-    
-            # Find context around the match
-            if case_sensitive:
-                match_pos = clean_summary.find(search_term)
-            else:
-                match_pos = clean_summary.lower().find(search_term.lower())
-    
-            if match_pos != -1:
-                start = max(0, match_pos - 150)
-                end = min(len(clean_summary), match_pos + len(search_term) + 150)
-                context = clean_summary[start:end]
-                if start > 0:
-                    context = "..." + context
-                if end < len(clean_summary):
-                    context = context + "..."
-            else:
-                context = clean_summary[:300]
+            context = _extract_context(clean_summary, search_term, case_sensitive)
     
             url = build_engagic_url(banana, meeting.date.isoformat() if meeting.date else None, meeting.id)
     

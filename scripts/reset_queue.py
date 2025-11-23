@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Reset processing queue - clear pending items for fresh processing runs
 
+PostgreSQL version - uses async database
+
 Use cases:
 - Changed processing logic and need to requeue everything
 - Want to clear stuck/failed jobs
@@ -8,69 +10,108 @@ Use cases:
 """
 
 import argparse
-import sqlite3
+import asyncio
+import sys
+import os
 from typing import Dict, Any
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-def get_queue_stats(db_path: str) -> Dict[str, Any]:
+from database.db_postgres import Database
+from config import config
+
+
+async def get_queue_stats_async(db: Database) -> Dict[str, Any]:
     """Get current queue statistics"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    stats = await db.queue.get_queue_stats()
 
-    # Overall status counts
-    cursor.execute("SELECT status, COUNT(*) FROM queue GROUP BY status")
-    status_counts = dict(cursor.fetchall())
-
-    # Breakdown by city and status
-    cursor.execute("""
-        SELECT
-            c.name,
-            q.status,
-            COUNT(*) as count
-        FROM queue q
-        JOIN cities c ON q.banana = c.banana
-        GROUP BY c.banana, q.status
-        ORDER BY c.name, q.status
-    """)
+    # Get city breakdown
+    async with db.pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT
+                c.name,
+                q.status,
+                COUNT(*) as count
+            FROM queue q
+            JOIN cities c ON q.banana = c.banana
+            GROUP BY c.name, q.status
+            ORDER BY c.name, q.status
+        """)
 
     city_breakdown = {}
-    for city, status, count in cursor.fetchall():
+    for row in rows:
+        city = row['name']
+        status = row['status']
+        count = row['count']
         if city not in city_breakdown:
             city_breakdown[city] = {}
         city_breakdown[city][status] = count
 
-    conn.close()
-
     return {
-        'status_counts': status_counts,
+        'status_counts': {
+            'pending': stats.get('pending_count', 0),
+            'processing': stats.get('processing_count', 0),
+            'completed': stats.get('completed_count', 0),
+            'failed': stats.get('failed_count', 0),
+            'dead_letter': stats.get('dead_letter_count', 0),
+        },
         'city_breakdown': city_breakdown,
-        'total': sum(status_counts.values())
+        'total': sum([
+            stats.get('pending_count', 0),
+            stats.get('processing_count', 0),
+            stats.get('completed_count', 0),
+            stats.get('failed_count', 0),
+            stats.get('dead_letter_count', 0),
+        ])
     }
 
 
-def reset_queue(db_path: str, status: str = None) -> int:
+async def reset_queue_async(db: Database, status: str = None) -> int:
     """Delete queue items by status
 
     Args:
-        db_path: Path to database
-        status: Status to delete (pending, completed, failed). If None, delete all.
+        db: Database instance
+        status: Status to delete (pending, completed, failed, dead_letter). If None, delete all.
 
     Returns:
         Number of items deleted
     """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    async with db.pool.acquire() as conn:
+        if status:
+            result = await conn.execute(
+                "DELETE FROM queue WHERE status = $1",
+                status
+            )
+        else:
+            result = await conn.execute("DELETE FROM queue")
 
-    if status:
-        cursor.execute("DELETE FROM queue WHERE status = ?", (status,))
-    else:
-        cursor.execute("DELETE FROM queue")
-
-    deleted = cursor.rowcount
-    conn.commit()
-    conn.close()
-
+    # Parse result like "DELETE 42" -> 42
+    deleted = int(result.split()[-1]) if result else 0
     return deleted
+
+
+def get_queue_stats(dsn: str = None) -> Dict[str, Any]:
+    """Sync wrapper for get_queue_stats_async"""
+    async def _run():
+        db = await Database.create(dsn or config.get_postgres_dsn())
+        try:
+            return await get_queue_stats_async(db)
+        finally:
+            await db.close()
+
+    return asyncio.run(_run())
+
+
+def reset_queue(dsn: str = None, status: str = None) -> int:
+    """Sync wrapper for reset_queue_async"""
+    async def _run():
+        db = await Database.create(dsn or config.get_postgres_dsn())
+        try:
+            return await reset_queue_async(db, status)
+        finally:
+            await db.close()
+
+    return asyncio.run(_run())
 
 
 def main():
@@ -78,98 +119,82 @@ def main():
         description="Manage processing queue - view stats or reset"
     )
     parser.add_argument(
-        '--db',
-        default='/root/engagic/data/engagic.db',
-        help='Path to database (default: /root/engagic/data/engagic.db)'
+        "--dsn",
+        help="PostgreSQL DSN (defaults to config)",
+        default=None,
     )
     parser.add_argument(
-        '--stats',
-        action='store_true',
-        help='Show queue statistics (default action)'
+        "--stats",
+        action="store_true",
+        help="Show queue statistics",
     )
     parser.add_argument(
-        '--reset',
-        choices=['pending', 'completed', 'failed', 'all'],
-        help='Delete queue items by status'
+        "--reset",
+        choices=["pending", "completed", "failed", "dead_letter", "all"],
+        help="Reset queue items by status",
     )
     parser.add_argument(
-        '--confirm',
-        action='store_true',
-        help='Required for --reset operations'
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompt",
     )
 
     args = parser.parse_args()
 
-    # Default to stats if no action specified
-    if not args.reset:
-        args.stats = True
-
-    # Show stats
     if args.stats:
-        stats = get_queue_stats(args.db)
+        # Show statistics
+        stats = get_queue_stats(args.dsn)
 
-        print("=" * 80)
-        print("QUEUE STATISTICS")
-        print("=" * 80)
-        print()
+        print("\n=== Queue Statistics ===")
+        print(f"Total items: {stats['total']}")
+        print("\nBy status:")
+        for status, count in stats['status_counts'].items():
+            if count > 0:
+                print(f"  {status:12} {count:6}")
 
-        print("Overall Status:")
-        print("-" * 40)
-        for status, count in sorted(stats['status_counts'].items()):
-            print(f"  {status:<15} {count:>6}")
-        print(f"  {'TOTAL':<15} {stats['total']:>6}")
-        print()
+        if stats['city_breakdown']:
+            print("\nBy city:")
+            for city, status_counts in stats['city_breakdown'].items():
+                total_city = sum(status_counts.values())
+                print(f"\n  {city} ({total_city} items):")
+                for status, count in status_counts.items():
+                    print(f"    {status:12} {count:6}")
 
-        print("Breakdown by City:")
-        print("-" * 80)
-        print(f"{'City':<25} {'Pending':<10} {'Completed':<12} {'Failed':<10}")
-        print("-" * 80)
+        return
 
-        for city in sorted(stats['city_breakdown'].keys()):
-            city_stats = stats['city_breakdown'][city]
-            pending = city_stats.get('pending', 0)
-            completed = city_stats.get('completed', 0)
-            failed = city_stats.get('failed', 0)
-            print(f"{city:<25} {pending:<10} {completed:<12} {failed:<10}")
-
-        print("=" * 80)
-
-    # Reset queue
     if args.reset:
-        if not args.confirm:
-            print()
-            print("ERROR: --reset requires --confirm flag")
-            print()
-            stats = get_queue_stats(args.db)
-            status_to_delete = args.reset if args.reset != 'all' else None
+        # Reset queue
+        status = None if args.reset == "all" else args.reset
 
-            if status_to_delete:
-                count = stats['status_counts'].get(status_to_delete, 0)
-                print(f"Would delete {count} items with status '{status_to_delete}'")
-            else:
-                print(f"Would delete ALL {stats['total']} items from queue")
+        # Get current stats
+        stats = get_queue_stats(args.dsn)
 
-            print()
-            print("Re-run with --confirm to proceed:")
-            print(f"  python scripts/reset_queue.py --reset {args.reset} --confirm")
-            print()
-            return 1
+        if status:
+            count_to_delete = stats['status_counts'].get(status, 0)
+            status_msg = f"'{status}' items"
+        else:
+            count_to_delete = stats['total']
+            status_msg = "ALL items"
 
-        # Perform deletion
-        status_to_delete = None if args.reset == 'all' else args.reset
-        deleted = reset_queue(args.db, status_to_delete)
+        if count_to_delete == 0:
+            print(f"No {status_msg} to delete.")
+            return
 
-        print()
-        print(f"Deleted {deleted} items from queue")
-        print()
+        # Confirmation
+        if not args.yes:
+            response = input(f"Delete {count_to_delete} {status_msg}? (yes/no): ")
+            if response.lower() != "yes":
+                print("Cancelled.")
+                return
 
-        # Show new stats
-        new_stats = get_queue_stats(args.db)
-        print(f"Remaining items: {new_stats['total']}")
-        print()
+        # Execute reset
+        deleted = reset_queue(args.dsn, status)
+        print(f"✅ Deleted {deleted} queue items")
+        return
 
-    return 0
+    # No action specified
+    parser.print_help()
 
 
-if __name__ == '__main__':
-    exit(main())
+if __name__ == "__main__":
+    main()

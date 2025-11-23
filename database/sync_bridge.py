@@ -97,17 +97,27 @@ class SyncDatabase:
     def add_city(self, city: City) -> None:
         """Add a city (sync wrapper)"""
         self._ensure_initialized()
-        self._loop.run_until_complete(self._db.add_city(city))
+        self._loop.run_until_complete(self._db.cities.add_city(city))
 
     def get_city(self, banana: str) -> Optional[City]:
         """Get a city by banana (sync wrapper)"""
         self._ensure_initialized()
-        return self._loop.run_until_complete(self._db.get_city(banana))
+        return self._loop.run_until_complete(self._db.cities.get_city(banana))
 
     def get_all_cities(self, status: str = "active") -> List[City]:
         """Get all cities (sync wrapper)"""
         self._ensure_initialized()
-        return self._loop.run_until_complete(self._db.get_all_cities(status))
+        return self._loop.run_until_complete(self._db.cities.get_all_cities(status))
+
+    def get_cities(self, status: str = "active", limit: int = 1000) -> List[City]:
+        """Alias for get_all_cities (compatibility)"""
+        return self.get_all_cities(status)
+
+    def get_city_zipcodes(self, banana: str) -> List[str]:
+        """Get zipcodes for a city (sync wrapper)"""
+        self._ensure_initialized()
+        city = self._loop.run_until_complete(self._db.cities.get_city(banana))
+        return city.zipcodes if city and city.zipcodes else []
 
     # ==================
     # MEETING OPERATIONS
@@ -116,12 +126,12 @@ class SyncDatabase:
     def store_meeting(self, meeting: Meeting) -> None:
         """Store meeting (sync wrapper)"""
         self._ensure_initialized()
-        self._loop.run_until_complete(self._db.store_meeting(meeting))
+        self._loop.run_until_complete(self._db.meetings.store_meeting(meeting))
 
     def get_meeting(self, meeting_id: str) -> Optional[Meeting]:
         """Get meeting (sync wrapper)"""
         self._ensure_initialized()
-        return self._loop.run_until_complete(self._db.get_meeting(meeting_id))
+        return self._loop.run_until_complete(self._db.meetings.get_meeting(meeting_id))
 
     def get_meetings_for_city(
         self,
@@ -131,7 +141,29 @@ class SyncDatabase:
     ) -> List[Meeting]:
         """Get meetings for city (sync wrapper)"""
         self._ensure_initialized()
-        return self._loop.run_until_complete(self._db.get_meetings_for_city(banana, limit, offset))
+        return self._loop.run_until_complete(self._db.meetings.get_meetings_for_city(banana, limit, offset))
+
+    def get_meetings(self, bananas: List[str] = None, limit: int = 50) -> List[Meeting]:
+        """Get meetings (compatibility wrapper)"""
+        self._ensure_initialized()
+        if bananas:
+            # Get meetings for multiple cities
+            all_meetings = []
+            for banana in bananas:
+                meetings = self._loop.run_until_complete(
+                    self._db.meetings.get_meetings_for_city(banana, limit=limit)
+                )
+                all_meetings.extend(meetings)
+            return all_meetings[:limit]
+        else:
+            # Get recent meetings across all cities
+            return self._loop.run_until_complete(
+                self._db.meetings.get_recent_meetings(limit=limit)
+            )
+
+    def get_agenda_items(self, meeting_id: str) -> List[AgendaItem]:
+        """Alias for get_items_for_meeting (compatibility)"""
+        return self.get_items_for_meeting(meeting_id)
 
     # ==================
     # QUEUE OPERATIONS
@@ -167,7 +199,21 @@ class SyncDatabase:
     def mark_job_failed(self, queue_id: int, error_message: str) -> None:
         """Mark job failed (sync wrapper)"""
         self._ensure_initialized()
-        self._loop.run_until_complete(self._db.mark_job_failed(queue_id, error_message))
+        self._loop.run_until_complete(self._db.queue.mark_job_failed(queue_id, error_message))
+
+    def get_queue_stats(self) -> dict:
+        """Get queue statistics (sync wrapper)"""
+        self._ensure_initialized()
+        return self._loop.run_until_complete(self._db.queue.get_queue_stats())
+
+    # ==================
+    # STATS OPERATIONS
+    # ==================
+
+    def get_stats(self) -> dict:
+        """Get database statistics (sync wrapper)"""
+        self._ensure_initialized()
+        return self._loop.run_until_complete(self._db.get_stats())
 
     # ==================
     # SEARCH OPERATIONS

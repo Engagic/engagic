@@ -2,6 +2,8 @@
 """
 Database viewer and editor for the engagic database schema
 Clean interface for managing cities, zipcodes, meetings, and queue
+
+PostgreSQL version - uses SyncDatabase wrapper
 """
 
 import sys
@@ -9,15 +11,14 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from database.db import UnifiedDatabase
+from database.sync_bridge import SyncDatabase
 from database.search_utils import search_summaries
-from config import Config
+from config import config
 
 
 class DatabaseViewer:
     def __init__(self):
-        config = Config()
-        self.db = UnifiedDatabase(config.UNIFIED_DB_PATH)
+        self.db = SyncDatabase(dsn=config.get_postgres_dsn())
 
     def show_cities_table(self, limit=50):
         """Display cities table with zipcode counts"""
@@ -176,21 +177,9 @@ class DatabaseViewer:
         if avg_time > 0:
             print(f"Avg time:    {avg_time:.1f}s")
 
-        # Show pending items
-        conn = self.db.conn
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, packet_url, meeting_id, banana, status, priority, retry_count
-            FROM queue
-            WHERE status IN ('pending', 'processing', 'failed')
-            ORDER BY priority DESC, created_at ASC
-            LIMIT ?
-        """,
-            (limit,),
-        )
-
-        rows = cursor.fetchall()
+        # TODO: Queue item details disabled for PostgreSQL migration
+        # Would need async query support in SyncDatabase
+        rows = []
 
         if rows:
             print(f"\n=== QUEUE ITEMS (showing {len(rows)}) ===")
