@@ -62,7 +62,8 @@ def send_magic_link(
                     <!-- Header -->
                     <tr>
                         <td style="padding: 32px 40px 28px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
-                            <div style="margin-bottom: 20px;">
+                            <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 16px;">
+                                <img src="https://engagic.org/icon-192.png" alt="Engagic" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);" />
                                 <div style="display: inline-block; padding: 6px 14px; background-color: rgba(255, 255, 255, 0.15); border-radius: 6px; backdrop-filter: blur(10px);">
                                     <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: 0.02em;">engagic</span>
                                 </div>
