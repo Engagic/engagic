@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from database.db_postgres import Database
+from database.models import City, Meeting, AgendaItem
 from config import Config
 
 logging.basicConfig(
@@ -115,17 +116,20 @@ class SQLitePostgresMigrator:
                     else:
                         zipcodes = city["zipcodes"]
 
+                # Create City model object
+                city_obj = City(
+                    banana=city["banana"],
+                    name=city["name"],
+                    state=city["state"],
+                    vendor=city["vendor"],
+                    slug=city["slug"],
+                    county=city.get("county"),
+                    zipcodes=zipcodes if zipcodes else None,
+                    status=city.get("status", "active")
+                )
+
                 if not self.dry_run:
-                    await self.pg_db.add_city(
-                        banana=city["banana"],
-                        name=city["name"],
-                        state=city["state"],
-                        vendor=city["vendor"],
-                        slug=city["slug"],
-                        county=city.get("county"),
-                        zipcodes=zipcodes,
-                        status=city.get("status", "active")
-                    )
+                    await self.pg_db.add_city(city_obj)
 
                 self.stats.cities += 1
                 self.stats.zipcodes += len(zipcodes)
@@ -171,22 +175,25 @@ class SQLitePostgresMigrator:
                     except (ValueError, AttributeError):
                         pass
 
+                # Create Meeting model object
+                meeting_obj = Meeting(
+                    id=meeting["id"],
+                    banana=meeting["banana"],
+                    title=meeting["title"],
+                    date=date,
+                    agenda_url=meeting.get("agenda_url"),
+                    packet_url=meeting.get("packet_url"),
+                    summary=meeting.get("summary"),
+                    topics=topics if topics else None,
+                    participation=participation,
+                    status=meeting.get("status"),
+                    processing_status=meeting.get("processing_status", "pending"),
+                    processing_method=meeting.get("processing_method"),
+                    processing_time=meeting.get("processing_time")
+                )
+
                 if not self.dry_run:
-                    await self.pg_db.store_meeting(
-                        meeting_id=meeting["id"],
-                        banana=meeting["banana"],
-                        title=meeting["title"],
-                        date=date,
-                        agenda_url=meeting.get("agenda_url"),
-                        packet_url=meeting.get("packet_url"),
-                        summary=meeting.get("summary"),
-                        topics=topics,
-                        participation=participation,
-                        status=meeting.get("status"),
-                        processing_status=meeting.get("processing_status", "pending"),
-                        processing_method=meeting.get("processing_method"),
-                        processing_time=meeting.get("processing_time")
-                    )
+                    await self.pg_db.store_meeting(meeting_obj)
 
                 self.stats.meetings += 1
                 self.stats.meeting_topics += len(topics)
@@ -217,7 +224,7 @@ class SQLitePostgresMigrator:
         processed = 0
         for meeting_id, meeting_items in items_by_meeting.items():
             try:
-                # Convert items to expected format
+                # Convert items to AgendaItem objects
                 items_to_store = []
                 for item in meeting_items:
                     # Parse JSON fields
@@ -242,24 +249,26 @@ class SQLitePostgresMigrator:
                         else:
                             sponsors = item["sponsors"]
 
-                    items_to_store.append({
-                        "id": item["id"],
-                        "title": item["title"],
-                        "sequence": item["sequence"],
-                        "attachments": attachments,
-                        "summary": item.get("summary"),
-                        "topics": topics,
-                        "matter_id": item.get("matter_id"),
-                        "matter_file": item.get("matter_file"),
-                        "matter_type": item.get("matter_type"),
-                        "agenda_number": item.get("agenda_number"),
-                        "sponsors": sponsors
-                    })
-
+                    # Create AgendaItem model object
+                    agenda_item = AgendaItem(
+                        id=item["id"],
+                        meeting_id=item["meeting_id"],
+                        title=item["title"],
+                        sequence=item["sequence"],
+                        attachments=attachments,
+                        summary=item.get("summary"),
+                        topics=topics if topics else None,
+                        matter_id=item.get("matter_id"),
+                        matter_file=item.get("matter_file"),
+                        matter_type=item.get("matter_type"),
+                        agenda_number=item.get("agenda_number"),
+                        sponsors=sponsors if sponsors else None
+                    )
+                    items_to_store.append(agenda_item)
                     self.stats.item_topics += len(topics)
 
                 if not self.dry_run:
-                    await self.pg_db.store_agenda_items(meeting_id, items_to_store)
+                    await self.pg_db.store_agenda_items(items_to_store)
 
                 self.stats.items += len(items_to_store)
                 processed += 1
@@ -309,10 +318,21 @@ class SQLitePostgresMigrator:
                         pass
 
                 if not self.dry_run:
-                    # Note: enqueue_job expects specific parameters, so we'll insert directly
-                    # This is a simplified migration - real queue jobs should be re-enqueued
+                    # Parse payload if JSON string
+                    payload = {}
+                    if job.get("payload"):
+                        if isinstance(job["payload"], str):
+                            try:
+                                payload = json.loads(job["payload"])
+                            except json.JSONDecodeError:
+                                payload = {}
+                        else:
+                            payload = job["payload"]
+
                     await self.pg_db.enqueue_job(
                         source_url=job["source_url"],
+                        job_type=job.get("job_type", "meeting"),  # Default to meeting
+                        payload=payload,
                         meeting_id=job.get("meeting_id"),
                         banana=job.get("banana"),
                         priority=job.get("priority", 0)
