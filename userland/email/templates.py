@@ -10,8 +10,10 @@ DARK_MODE_CSS = """
     <style>
         @media (prefers-color-scheme: dark) {
             body, table { background-color: #1a1a1a !important; }
-            td[style*="background-color: #ffffff"] { background-color: #1e293b !important; }
+            td[style*="background-color: #ffffff"],
+            div[style*="background: #ffffff"] { background-color: #1e293b !important; }
             td[style*="background-color: #f8fafc"],
+            div[style*="background: #f8fafc"],
             table[style*="background-color: #f8fafc"] { background-color: #0f172a !important; }
 
             p[style*="color: #0f172a"],
@@ -27,7 +29,8 @@ DARK_MODE_CSS = """
             span[style*="color: #64748b"] { color: #94a3b8 !important; }
 
             p[style*="color: #334155"],
-            span[style*="color: #334155"] { color: #cbd5e1 !important; }
+            span[style*="color: #334155"],
+            div[style*="color: #334155"] { color: #e2e8f0 !important; }
 
             td[style*="border: 2px solid #e2e8f0"],
             table[style*="border: 2px solid #e2e8f0"],
