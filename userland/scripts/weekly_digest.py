@@ -38,6 +38,38 @@ logging.basicConfig(
 logger = logging.getLogger("engagic.weekly_digest")
 
 
+def highlight_keywords(text: str, keywords: List[str]) -> str:
+    """
+    Highlight all occurrences of keywords in text with HTML strong tags.
+
+    Case-insensitive matching, preserves original case in output.
+
+    Args:
+        text: Plain text to search
+        keywords: List of keywords to highlight
+
+    Returns:
+        HTML string with keywords wrapped in <strong> tags
+    """
+    if not text or not keywords:
+        return text
+
+    # Build regex pattern that matches any keyword (case-insensitive)
+    # Use word boundaries to avoid partial word matches
+    escaped_keywords = [re.escape(kw) for kw in keywords]
+    pattern = r'\b(' + '|'.join(escaped_keywords) + r')\b'
+
+    # Replace with highlighted version
+    highlighted = re.sub(
+        pattern,
+        r'<strong style="color: #4f46e5; font-weight: 600;">\1</strong>',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    return highlighted
+
+
 def generate_anchor_id(item: Dict[str, Any]) -> str:
     """
     Generate item anchor ID matching frontend logic.
@@ -189,7 +221,19 @@ def find_keyword_matches(
                 except (ValueError, TypeError):
                     continue
 
-    return all_matches
+    # Deduplicate by item_id and aggregate matched keywords
+    deduplicated = {}
+    for match in all_matches:
+        item_id = match['item_id']
+        if item_id not in deduplicated:
+            deduplicated[item_id] = match.copy()
+            deduplicated[item_id]['matched_keywords'] = [match['keyword']]
+        else:
+            # Item already exists, just add this keyword if not already present
+            if match['keyword'] not in deduplicated[item_id]['matched_keywords']:
+                deduplicated[item_id]['matched_keywords'].append(match['keyword'])
+
+    return list(deduplicated.values())
 
 
 def build_digest_email(
@@ -301,7 +345,12 @@ def build_digest_email(
             if len(context) > 300:
                 context = context[:297] + "..."
 
-            keyword = match.get('keyword', '')
+            # Get all matched keywords (from deduplicated list) or fallback to single keyword
+            matched_keywords = match.get('matched_keywords', [match.get('keyword', '')])
+            keywords_display = '", "'.join(matched_keywords)
+
+            # Highlight all matched keywords in the context text
+            context = highlight_keywords(context, matched_keywords)
 
             html += f"""
                             <div style="margin-bottom: 24px; padding: 24px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; box-shadow: 0 2px 4px rgba(0,0,0,0.06);">
@@ -312,7 +361,7 @@ def build_digest_email(
                                     {match['meeting_title']} • {format_date(match['meeting_date'])}
                                 </p>
                                 <p style="margin: 0 0 14px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
-                                    Matched: <strong style="color: #4f46e5; font-weight: 600;">"{keyword}"</strong>
+                                    Matched: <strong style="color: #4f46e5; font-weight: 600;">"{keywords_display}"</strong>
                                 </p>
                                 <p style="margin: 0 0 20px 0; font-size: 14px; color: #334155; line-height: 1.7; font-family: Georgia, serif;">
                                     {context}

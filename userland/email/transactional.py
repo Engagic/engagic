@@ -59,10 +59,12 @@ def send_magic_link(
     html = f"""{email_wrapper_start("Your Engagic Login Link")}
                     <!-- Header -->
                     <tr>
-                        <td style="padding: 40px 40px 24px 40px; text-align: center;">
-                            <h1 style="margin: 0; font-size: 32px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em;">
-                                engagic
-                            </h1>
+                        <td style="padding: 32px 40px 28px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
+                            <div style="margin-bottom: 0; text-align: center;">
+                                <div style="display: inline-block; padding: 6px 14px; background-color: rgba(255, 255, 255, 0.15); border-radius: 6px; backdrop-filter: blur(10px);">
+                                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: 0.02em;">engagic</span>
+                                </div>
+                            </div>
                         </td>
                     </tr>
 
@@ -80,7 +82,7 @@ def send_magic_link(
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <tr>
                                     <td align="center" style="padding: 0 0 32px 0;">
-                                        <a href="{magic_link}" style="display: inline-block; padding: 16px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: 'IBM Plex Mono', monospace;">
+                                        <a href="{magic_link}" style="display: inline-block; padding: 12px 28px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 7px; font-weight: 600; font-size: 14px; font-family: 'IBM Plex Mono', monospace; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);">
                                             Access Dashboard
                                         </a>
                                     </td>
@@ -102,8 +104,8 @@ def send_magic_link(
                     <!-- Footer -->
                     <tr>
                         <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0; text-align: center;">
-                            <p style="margin: 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
-                                Engagic – Statewide Municipal Intelligence
+                            <p style="margin: 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/about/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
                             </p>
                         </td>
                     </tr>
