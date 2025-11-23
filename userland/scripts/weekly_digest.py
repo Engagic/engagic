@@ -229,7 +229,7 @@ def build_digest_email(
 """
         for meeting_id, meeting_data in meetings_map.items():
             html += f"""
-            <div style="margin-bottom: 24px; padding: 20px; background: #fef3c7; border-radius: 6px; border-left: 4px solid #eab308;">
+            <div style="margin-bottom: 24px; padding: 20px; background: #f3e8ff; border-radius: 6px; border-left: 4px solid #8B5CF6;">
                 <div style="font-weight: 600; color: #0f172a; margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace; line-height: 1.5;">
                     {meeting_data['title']} ({format_date(meeting_data['date'])})
                 </div>
@@ -239,7 +239,7 @@ def build_digest_email(
                 html += f"""
                 <div style="margin-bottom: 16px; padding-left: 12px;">
                     <div style="margin-bottom: 8px;">
-                        <span style="background: #eab308; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
+                        <span style="background: #8B5CF6; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                             {item['keyword']}
                         </span>
                         <span style="color: #0f172a; font-weight: 500; margin-left: 8px; font-family: Georgia, serif;">
@@ -250,7 +250,7 @@ def build_digest_email(
                 </div>
 """
             html += f"""
-                <a href="{app_url}/cities/{meeting_data['city_banana']}" style="color: #eab308; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
+                <a href="{app_url}/cities/{meeting_data['city_banana']}" style="color: #8B5CF6; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                     View full meeting →
                 </a>
             </div>

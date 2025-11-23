@@ -305,13 +305,13 @@ class EmailService:
                                 You're receiving this because you subscribed to <strong>{alert.name}</strong> alerts.
                             </p>
                             <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #4f46e5; text-decoration: none; font-weight: 600;">support the project</a>.
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
                             </p>
                             <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
                                 Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
                             </p>
                             <p style="margin: 0; font-size: 12px; font-family: Georgia, serif;">
-                                <a href="https://engagic.org/dashboard" style="color: #64748b; text-decoration: underline;">Manage your alerts</a>
+                                <a href="https://engagic.org/dashboard" style="color: #64748b; text-decoration: underline;">Manage your digests</a>
                             </p>
                         </td>
                     </tr>
@@ -487,13 +487,13 @@ class EmailService:
                                 You're receiving this because you subscribed to <strong>{alert.name}</strong> alerts.
                             </p>
                             <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #4f46e5; text-decoration: none; font-weight: 600;">support the project</a>.
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
                             </p>
                             <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
                                 Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
                             </p>
                             <p style="margin: 0; font-size: 12px; font-family: Georgia, serif;">
-                                <a href="https://engagic.org/dashboard" style="color: #64748b; text-decoration: underline;">Manage your alerts</a>
+                                <a href="https://engagic.org/dashboard" style="color: #64748b; text-decoration: underline;">Manage your digests</a>
                             </p>
                         </td>
                     </tr>
