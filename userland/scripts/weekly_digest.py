@@ -57,6 +57,7 @@ def get_upcoming_meetings(city_banana: str, engagic_db_path: str, days_ahead: in
         WHERE city_banana = ?
             AND date >= ?
             AND date <= ?
+            AND (status IS NULL OR status NOT IN ('cancelled', 'postponed'))
         ORDER BY date ASC
     """
 
@@ -109,6 +110,7 @@ def find_keyword_matches(
             WHERE m.city_banana = ?
                 AND m.date >= ?
                 AND m.date <= ?
+                AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
                 AND (
                     ai.title LIKE ?
                     OR ai.summary LIKE ?
@@ -183,12 +185,17 @@ def build_digest_email(
             </h2>
 """
         for meeting in upcoming_meetings:
+            # Build meeting slug: YYYY-MM-DD-meeting_id
+            meeting_date_obj = datetime.fromisoformat(meeting['date'])
+            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting['id']}"
+            meeting_url = f"{app_url}/{meeting['city_banana']}/{meeting_slug}"
+
             html += f"""
             <div style="margin-bottom: 16px; padding: 20px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #4f46e5;">
                 <div style="font-weight: 600; color: #0f172a; margin-bottom: 8px; font-family: 'IBM Plex Mono', monospace; line-height: 1.5;">
                     {format_date(meeting['date'])} - {meeting['title']}
                 </div>
-                <a href="{app_url}/cities/{meeting['city_banana']}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
+                <a href="{meeting_url}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                     View agenda →
                 </a>
             </div>
@@ -228,6 +235,11 @@ def build_digest_email(
             </h2>
 """
         for meeting_id, meeting_data in meetings_map.items():
+            # Build meeting slug: YYYY-MM-DD-meeting_id
+            meeting_date_obj = datetime.fromisoformat(meeting_data['date'])
+            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting_id}"
+            meeting_url = f"{app_url}/{meeting_data['city_banana']}/{meeting_slug}"
+
             html += f"""
             <div style="margin-bottom: 24px; padding: 20px; background: #f3e8ff; border-radius: 6px; border-left: 4px solid #8B5CF6;">
                 <div style="font-weight: 600; color: #0f172a; margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace; line-height: 1.5;">
@@ -235,22 +247,25 @@ def build_digest_email(
                 </div>
 """
             for item in meeting_data['items']:
+                # Build item anchor: #item-{item_id}
+                item_url = f"{meeting_url}#item-{item['item_id']}"
                 summary_preview = item['item_summary'][:150] + '...' if item['item_summary'] and len(item['item_summary']) > 150 else item['item_summary'] or ''
+
                 html += f"""
                 <div style="margin-bottom: 16px; padding-left: 12px;">
                     <div style="margin-bottom: 8px;">
                         <span style="background: #8B5CF6; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                             {item['keyword']}
                         </span>
-                        <span style="color: #0f172a; font-weight: 500; margin-left: 8px; font-family: Georgia, serif;">
+                        <a href="{item_url}" style="color: #0f172a; font-weight: 500; margin-left: 8px; font-family: Georgia, serif; text-decoration: none;">
                             Item {item['item_position']}: {item['item_title']}
-                        </span>
+                        </a>
                     </div>
                     {f'<p style="color: #475569; font-size: 13px; margin: 4px 0 0 0; line-height: 1.7; font-family: Georgia, serif;">{summary_preview}</p>' if summary_preview else ''}
                 </div>
 """
             html += f"""
-                <a href="{app_url}/cities/{meeting_data['city_banana']}" style="color: #8B5CF6; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
+                <a href="{meeting_url}" style="color: #8B5CF6; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace;">
                     View full meeting →
                 </a>
             </div>

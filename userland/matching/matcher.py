@@ -76,6 +76,7 @@ def match_alert(
                 JOIN cities c ON m.banana = c.banana
                 WHERE m.banana = ?
                   AND m.date >= ?
+                  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
                   AND i.summary LIKE ?
                 ORDER BY m.date DESC
             """
@@ -229,6 +230,7 @@ def match_matters_for_alert(
                 FROM matter_appearances ma
                 JOIN meetings m ON ma.meeting_id = m.id
                 WHERE ma.matter_id = ?
+                  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
                 ORDER BY ma.appeared_at
             """
             appearances = conn.execute(timeline_query, (matter_id,)).fetchall()
