@@ -38,7 +38,7 @@ class MatterRepository(BaseRepository):
             matter: Matter object with canonical summary and topics
         """
         async with self.transaction() as conn:
-            # Upsert matter row (JSONB columns require json.dumps() - see ASYNCPG_JSONB_HANDLING.md)
+            # Upsert matter row
             await conn.execute(
                 """
                 INSERT INTO city_matters (
@@ -68,11 +68,11 @@ class MatterRepository(BaseRepository):
                 matter.matter_file,
                 matter.matter_type,
                 matter.title,
-                json.dumps(matter.sponsors) if matter.sponsors else None,
+                matter.sponsors,
                 matter.canonical_summary,
-                json.dumps(matter.canonical_topics) if matter.canonical_topics else None,
-                json.dumps(matter.attachments) if matter.attachments else None,
-                json.dumps(matter.metadata) if matter.metadata else None,
+                matter.canonical_topics,
+                matter.attachments,
+                matter.metadata,
                 matter.first_seen,
                 matter.last_seen,
                 matter.appearance_count or 1,
@@ -131,14 +131,6 @@ class MatterRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            # Deserialize JSONB fields (asyncpg returns JSON strings for JSONB columns)
-            def safe_json_loads(value):
-                if value is None:
-                    return None
-                if isinstance(value, str):
-                    return json.loads(value)
-                return value
-
             return Matter(
                 id=row["id"],
                 banana=row["banana"],
@@ -146,11 +138,11 @@ class MatterRepository(BaseRepository):
                 matter_file=row["matter_file"],
                 matter_type=row["matter_type"],
                 title=row["title"],
-                sponsors=safe_json_loads(row["sponsors"]),
+                sponsors=row["sponsors"],
                 canonical_summary=row["canonical_summary"],
-                canonical_topics=topics or safe_json_loads(row["canonical_topics"]),
-                attachments=safe_json_loads(row["attachments"]),
-                metadata=safe_json_loads(row["metadata"]),
+                canonical_topics=topics or row["canonical_topics"],
+                attachments=row["attachments"],
+                metadata=row["metadata"],
                 first_seen=row["first_seen"],
                 last_seen=row["last_seen"],
                 appearance_count=row["appearance_count"],
@@ -242,7 +234,7 @@ class MatterRepository(BaseRepository):
                     """,
                     matter_id,
                     meeting_date,
-                    json.dumps(attachments) if attachments else None,
+                    attachments,
                     attachment_hash,
                 )
             else:
@@ -257,7 +249,7 @@ class MatterRepository(BaseRepository):
                     """,
                     matter_id,
                     meeting_date,
-                    json.dumps(attachments) if attachments else None,
+                    attachments,
                     attachment_hash,
                 )
 

@@ -74,7 +74,7 @@ class MeetingRepository(BaseRepository):
                 meeting.agenda_url,
                 meeting.packet_url,
                 meeting.summary,
-                json.dumps(meeting.participation) if meeting.participation else None,
+                meeting.participation,
                 meeting.status,
                 meeting.processing_status or "pending",
                 meeting.processing_method,
@@ -137,7 +137,7 @@ class MeetingRepository(BaseRepository):
             topics = [r["topic"] for r in topic_rows]
 
             # Deserialize JSONB participation
-            participation = self._deserialize_jsonb(row["participation"])
+            participation = row["participation"]
 
             return Meeting(
                 id=row["id"],
@@ -211,7 +211,7 @@ class MeetingRepository(BaseRepository):
                 topics = topics_by_meeting.get(row["id"], [])
 
                 # Deserialize JSONB participation
-                participation = self._deserialize_jsonb(row["participation"])
+                participation = row["participation"]
 
                 meetings.append(
                     Meeting(
@@ -273,7 +273,7 @@ class MeetingRepository(BaseRepository):
             topics = [r["topic"] for r in topic_rows]
 
             # Deserialize JSONB participation
-            participation = self._deserialize_jsonb(row["participation"])
+            participation = row["participation"]
 
             return Meeting(
                 id=row["id"],
@@ -327,7 +327,7 @@ class MeetingRepository(BaseRepository):
                 summary,
                 processing_method,
                 processing_time,
-                json.dumps(participation) if participation else None,
+                participation,
             )
 
             # Normalize topics to meeting_topics table
@@ -370,7 +370,7 @@ class MeetingRepository(BaseRepository):
             meetings = []
             for row in rows:
                 # Deserialize JSONB participation
-                participation = self._deserialize_jsonb(row["participation"])
+                participation = row["participation"]
 
                 # Get normalized topics
                 topic_rows = await conn.fetch(
@@ -419,7 +419,7 @@ class MeetingRepository(BaseRepository):
                 return None
 
             # Deserialize JSONB participation
-            participation = self._deserialize_jsonb(row["participation"])
+            participation = row["participation"]
 
             # Get normalized topics
             topic_rows = await conn.fetch(

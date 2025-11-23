@@ -66,7 +66,7 @@ class QueueRepository(BaseRepository):
             meeting_id,
             banana,
             job_type,
-            json.dumps(payload),
+            payload,
             priority,
         )
 
@@ -173,10 +173,8 @@ class QueueRepository(BaseRepository):
                 row["id"],
             )
 
-            # Parse payload (JSONB column - asyncpg returns JSON string)
+            # Get payload (JSONB automatically deserialized by codec)
             payload_data = row["payload"]
-            if isinstance(payload_data, str):
-                payload_data = json.loads(payload_data)
 
             if row["job_type"] == "meeting":
                 payload = MeetingJob.from_dict(payload_data)

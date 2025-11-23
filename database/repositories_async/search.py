@@ -88,7 +88,7 @@ class SearchRepository(BaseRepository):
                 topics = [r["topic"] for r in topic_rows]
 
                 # Deserialize JSONB participation
-                participation = self._deserialize_jsonb(row["participation"])
+                participation = row["participation"]
 
                 meetings.append(
                     Meeting(
@@ -151,7 +151,7 @@ class SearchRepository(BaseRepository):
             meetings = []
             for row in rows:
                 # Deserialize JSONB participation
-                participation = self._deserialize_jsonb(row["participation"])
+                participation = row["participation"]
 
                 # Get normalized topics
                 topic_rows = await conn.fetch(

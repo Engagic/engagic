@@ -8,7 +8,6 @@ All repositories inherit from BaseRepository and share:
 """
 
 import asyncpg
-import json
 from typing import Any, List, Optional
 from contextlib import asynccontextmanager
 
@@ -82,37 +81,3 @@ class BaseRepository:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 yield conn
-
-    @staticmethod
-    def _deserialize_jsonb(value: Any, default: Any = None) -> Any:
-        """JSONB deserialization with error raising (not defensive)
-
-        asyncpg automatically deserializes JSONB columns to dict/list.
-        If value is a string, that indicates a data integrity issue - raise error.
-
-        Args:
-            value: JSONB field value from database (should be dict/list or None)
-            default: Default value if None
-
-        Returns:
-            Deserialized value or default
-
-        Raises:
-            ValueError: If value is a string (indicates data corruption)
-            json.JSONDecodeError: If string parsing attempted and fails
-        """
-        if value is None:
-            return default
-
-        # asyncpg auto-deserializes JSONB to dict/list
-        # If we get a string, data is corrupted or schema mismatch
-        if isinstance(value, str):
-            logger.error(
-                "jsonb field returned string (expected dict/list)",
-                value_preview=value[:100],
-                value_type=type(value).__name__
-            )
-            # Attempt parse with error raised on failure
-            return json.loads(value)
-
-        return value

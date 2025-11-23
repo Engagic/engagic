@@ -71,15 +71,15 @@ class ItemRepository(BaseRepository):
                     item.meeting_id,
                     item.title,
                     item.sequence,
-                    json.dumps(item.attachments) if item.attachments else None,
+                    item.attachments,
                     item.attachment_hash,
                     item.matter_id,
                     item.matter_file,
                     item.matter_type,
                     item.agenda_number,
-                    json.dumps(item.sponsors) if item.sponsors else None,
+                    item.sponsors,
                     item.summary,
-                    json.dumps(item.topics) if item.topics else None,
+                    item.topics,
                 )
                 stored_count += 1
 
@@ -151,8 +151,8 @@ class ItemRepository(BaseRepository):
             for row in rows:
                 topics = topics_by_item.get(row["id"], [])
 
-                attachments = self._deserialize_jsonb(row["attachments"], default=[])
-                sponsors = self._deserialize_jsonb(row["sponsors"], default=[])
+                attachments = row["attachments"] or []
+                sponsors = row["sponsors"] or []
 
                 items.append(
                     AgendaItem(
@@ -206,8 +206,8 @@ class ItemRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            attachments = self._deserialize_jsonb(row["attachments"], default=[])
-            sponsors = self._deserialize_jsonb(row["sponsors"], default=[])
+            attachments = row["attachments"] or []
+            sponsors = row["sponsors"] or []
 
             return AgendaItem(
                 id=row["id"],
@@ -329,8 +329,8 @@ class ItemRepository(BaseRepository):
                 )
                 topics = [r["topic"] for r in topic_rows]
 
-                attachments = self._deserialize_jsonb(row["attachments"], default=[])
-                sponsors = self._deserialize_jsonb(row["sponsors"], default=[])
+                attachments = row["attachments"] or []
+                sponsors = row["sponsors"] or []
 
                 items.append(
                     AgendaItem(
@@ -380,7 +380,7 @@ class ItemRepository(BaseRepository):
                 WHERE id = ANY($3::text[])
                 """,
                 summary,
-                json.dumps(topics) if topics else None,
+                topics,
                 item_ids,
             )
 
@@ -438,8 +438,8 @@ class ItemRepository(BaseRepository):
             items = []
             for row in rows:
                 # Parse JSONB fields
-                attachments = self._deserialize_jsonb(row["attachments"], default=[])
-                sponsors = self._deserialize_jsonb(row["sponsors"], default=[])
+                attachments = row["attachments"] or []
+                sponsors = row["sponsors"] or []
 
                 # Get normalized topics
                 topic_rows = await conn.fetch(

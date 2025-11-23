@@ -76,7 +76,7 @@ async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
                 "banana": item["banana"],
                 "agenda_number": item["agenda_number"],
                 "summary": item["summary"],
-                "topics": json.loads(item["topics"]) if item["topics"] else []
+                "topics": item["topics"] or []
             })
 
         return {
@@ -180,9 +180,9 @@ async def get_city_matters(
                     "matter_id": row["matter_id"],
                     "matter_type": row["matter_type"],
                     "title": row["title"],
-                    "sponsors": json.loads(row["sponsors"]) if row["sponsors"] else [],
+                    "sponsors": row["sponsors"] or [],
                     "canonical_summary": row["canonical_summary"],
-                    "canonical_topics": json.loads(row["canonical_topics"]) if row["canonical_topics"] else [],
+                    "canonical_topics": row["canonical_topics"] or [],
                     "first_seen": row["first_seen"],
                     "last_seen": row["last_seen"],
                     "appearance_count": row["actual_appearance_count"],
@@ -200,7 +200,7 @@ async def get_city_matters(
                     "banana": row["meeting_banana"],
                     "agenda_number": row["agenda_number"],
                     "summary": row["item_summary"],
-                    "topics": json.loads(row["item_topics"]) if row["item_topics"] else []
+                    "topics": row["item_topics"] or []
                 })
 
         # Convert dict to list (preserves ORDER BY from query)
@@ -334,13 +334,13 @@ async def get_state_matters(
             # Aggregate by topics
             if matter.get("canonical_topics"):
                 try:
-                    topics = json.loads(matter["canonical_topics"])
+                    topics = matter["canonical_topics"]
                     for t in topics:
                         if t not in topic_aggregation:
                             topic_aggregation[t] = 0
                         topic_aggregation[t] += 1
-                except (json.JSONDecodeError, TypeError, KeyError) as e:
-                    logger.debug(f"Invalid topics JSON: {e}")
+                except (TypeError, KeyError) as e:
+                    logger.debug(f"Invalid topics: {e}")
 
         cities_list = [
             {
