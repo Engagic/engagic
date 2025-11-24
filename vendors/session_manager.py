@@ -1,5 +1,9 @@
 """Session Manager for HTTP Connection Pooling
 
+DEPRECATED: This sync session manager is deprecated. Use session_manager_async.py instead.
+Scheduled for removal after async adapter migration complete.
+For new code, use AsyncSessionManager with httpx.
+
 Maintains shared HTTP sessions across vendor adapters to maximize connection reuse.
 Instead of creating N sessions for N cities, creates 1 session per vendor type.
 

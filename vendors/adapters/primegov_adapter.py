@@ -1,6 +1,10 @@
 """
 PrimeGov Adapter - Thin wrapper for PrimeGov municipal calendar API
 
+DEPRECATED: This sync adapter is deprecated. Use AsyncPrimeGovAdapter instead.
+Scheduled for removal after async migration complete.
+For new code, use: from vendors.factory import get_async_adapter
+
 Cities using PrimeGov: Palo Alto CA, Mountain View CA, Sunnyvale CA, and many others
 """
 

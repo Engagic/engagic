@@ -1,6 +1,10 @@
 """
 Granicus Adapter - HTML scraping for Granicus/Legistar platform
 
+DEPRECATED: This sync adapter is deprecated. Use AsyncGranicusAdapter instead.
+Scheduled for removal after async migration complete.
+For new code, use: from vendors.factory import get_async_adapter
+
 Cities using Granicus: Cambridge MA, Santa Monica CA, and many others
 
 Complex adapter because Granicus doesn't provide a clean API - requires:
