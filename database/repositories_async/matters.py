@@ -7,7 +7,6 @@ Handles CRUD operations for matters (recurring legislative items):
 - Timeline tracking (first_seen, last_seen, appearance_count)
 """
 
-import json
 from typing import List, Optional
 from datetime import datetime
 

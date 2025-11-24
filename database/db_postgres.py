@@ -22,6 +22,7 @@ from database.repositories_async import (
     QueueRepository,
     SearchRepository,
 )
+from database.repositories_async.userland import UserlandRepository
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
 
@@ -56,6 +57,7 @@ class Database:
     matters: MatterRepository
     queue: QueueRepository
     search: SearchRepository
+    userland: UserlandRepository
 
     def __init__(self, pool: asyncpg.Pool):
         """Initialize with connection pool and repositories
@@ -71,6 +73,7 @@ class Database:
         self.matters = MatterRepository(pool)
         self.queue = QueueRepository(pool)
         self.search = SearchRepository(pool)
+        self.userland = UserlandRepository(pool)
 
         logger.info("database initialized with repositories", pool_size=f"{pool._minsize}-{pool._maxsize}")
 
@@ -78,15 +81,15 @@ class Database:
     async def create(
         cls,
         dsn: Optional[str] = None,
-        min_size: int = 10,
-        max_size: int = 100
+        min_size: int = config.POSTGRES_POOL_MIN_SIZE,
+        max_size: int = config.POSTGRES_POOL_MAX_SIZE
     ) -> "Database":
         """Create database with connection pool
 
         Args:
             dsn: PostgreSQL connection string (defaults to config.get_postgres_dsn())
-            min_size: Minimum pool size (default: 10)
-            max_size: Maximum pool size (default: 100)
+            min_size: Minimum pool size (default: config.POSTGRES_POOL_MIN_SIZE)
+            max_size: Maximum pool size (default: config.POSTGRES_POOL_MAX_SIZE)
 
         Returns:
             Initialized Database instance
@@ -129,11 +132,13 @@ class Database:
         logger.info("connection pool closed")
 
     async def init_schema(self):
-        """Initialize database schema from schema_postgres.sql
+        """Initialize database schema from SQL files
 
+        Loads both main schema (public) and userland schema.
         Creates all tables, indexes, and constraints.
         Safe to call multiple times (uses IF NOT EXISTS).
         """
+        # Load main schema (public)
         schema_path = Path(__file__).parent / "schema_postgres.sql"
         if not schema_path.exists():
             raise FileNotFoundError(f"Schema file not found: {schema_path}")
@@ -143,7 +148,19 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute(schema_sql)
 
-        logger.info("schema initialized")
+        logger.info("main schema initialized")
+
+        # Load userland schema (authentication, alerts)
+        userland_schema_path = Path(__file__).parent / "schema_userland.sql"
+        if not userland_schema_path.exists():
+            raise FileNotFoundError(f"Userland schema file not found: {userland_schema_path}")
+
+        userland_schema_sql = userland_schema_path.read_text()
+
+        async with self.pool.acquire() as conn:
+            await conn.execute(userland_schema_sql)
+
+        logger.info("userland schema initialized")
 
     # ==================
     # ORCHESTRATION METHODS

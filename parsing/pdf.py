@@ -19,6 +19,7 @@ import pytesseract
 from PIL import Image
 
 from config import get_logger
+from exceptions import ExtractionError
 
 logger = get_logger(__name__).bind(component="parser")
 
@@ -324,76 +325,76 @@ class PdfExtractor:
             pdf_bytes = response.content
 
             # Extract with PyMuPDF (with OCR fallback for scanned pages)
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            text_parts = []
-            all_links = []
-            ocr_pages = 0
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                text_parts = []
+                all_links = []
+                ocr_pages = 0
 
-            # Check for legislative legend once (if formatting detection enabled)
-            use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
-            if use_formatting:
-                logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
-
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-
-                # Extract text (with or without legislative formatting detection)
+                # Check for legislative legend once (if formatting detection enabled)
+                use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
                 if use_formatting:
-                    page_text = _extract_text_with_formatting(page, page_num + 1)
-                else:
-                    page_text = page.get_text()  # type: ignore[attr-defined]
+                    logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
 
-                initial_char_count = len(page_text.strip())
+                for page_num in range(len(doc)):
+                    page = doc[page_num]
 
-                # If page has minimal text, assume scanned/image-based PDF
-                if initial_char_count < self.ocr_threshold:
-                    original_text = page_text  # Save original before OCR
-                    initial_sample = original_text.strip()[:100].replace('\n', ' ')
-                    logger.info(
-                        f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
-                        f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
-                        f"Original: '{initial_sample}'"
-                    )
-
-                    ocr_result = self._ocr_page(page)
-                    ocr_char_count = len(ocr_result.strip())
-                    ocr_sample = ocr_result.strip()[:100].replace('\n', ' ')
-
-                    # Calculate quality metrics for logging
-                    letters = sum(1 for c in ocr_result if c.isalpha())
-                    letter_ratio = letters / len(ocr_result) if len(ocr_result) > 0 else 0
-                    word_count = len(ocr_result.split())
-
-                    logger.info(
-                        f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
-                        f"{word_count} words, {letter_ratio:.1%} letters. "
-                        f"Sample: '{ocr_sample}'"
-                    )
-
-                    # Decide whether to use OCR or keep original
-                    if self._is_ocr_better(original_text, ocr_result, page_num + 1):
-                        page_text = ocr_result
-                        ocr_pages += 1
+                    # Extract text (with or without legislative formatting detection)
+                    if use_formatting:
+                        page_text = _extract_text_with_formatting(page, page_num + 1)
                     else:
-                        page_text = original_text
+                        page_text = page.get_text()  # type: ignore[attr-defined]
 
-                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
+                    initial_char_count = len(page_text.strip())
 
-                # Extract links if requested
-                if extract_links:
-                    page_links = page.get_links()  # type: ignore[attr-defined]
-                    for link in page_links:
-                        # Only external links (URIs), skip internal page references
-                        if 'uri' in link and link['uri']:
-                            all_links.append({
-                                'page': page_num + 1,
-                                'url': link['uri'],
-                                'rect': link.get('from', None),  # Rectangle coordinates on page
-                            })
+                    # If page has minimal text, assume scanned/image-based PDF
+                    if initial_char_count < self.ocr_threshold:
+                        original_text = page_text  # Save original before OCR
+                        initial_sample = original_text.strip()[:100].replace('\n', ' ')
+                        logger.info(
+                            f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
+                            f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
+                            f"Original: '{initial_sample}'"
+                        )
 
-            full_text = "\n\n".join(text_parts)
-            page_count = len(doc)
-            doc.close()
+                        ocr_result = self._ocr_page(page)
+                        ocr_char_count = len(ocr_result.strip())
+                        ocr_sample = ocr_result.strip()[:100].replace('\n', ' ')
+
+                        # Calculate quality metrics for logging
+                        letters = sum(1 for c in ocr_result if c.isalpha())
+                        letter_ratio = letters / len(ocr_result) if len(ocr_result) > 0 else 0
+                        word_count = len(ocr_result.split())
+
+                        logger.info(
+                            f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
+                            f"{word_count} words, {letter_ratio:.1%} letters. "
+                            f"Sample: '{ocr_sample}'"
+                        )
+
+                        # Decide whether to use OCR or keep original
+                        if self._is_ocr_better(original_text, ocr_result, page_num + 1):
+                            page_text = ocr_result
+                            ocr_pages += 1
+                        else:
+                            page_text = original_text
+
+                    text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
+
+                    # Extract links if requested
+                    if extract_links:
+                        page_links = page.get_links()  # type: ignore[attr-defined]
+                        for link in page_links:
+                            # Only external links (URIs), skip internal page references
+                            if 'uri' in link and link['uri']:
+                                all_links.append({
+                                    'page': page_num + 1,
+                                    'url': link['uri'],
+                                    'rect': link.get('from', None),  # Rectangle coordinates on page
+                                })
+
+                full_text = "\n\n".join(text_parts)
+                page_count = len(doc)
+                # Context manager handles doc.close() automatically
 
             extraction_time = time.time() - start_time
 
@@ -424,12 +425,13 @@ class PdfExtractor:
 
         except Exception as e:
             extraction_time = time.time() - start_time
-            logger.error(f"[PyMuPDF] Failed for {url}: {e}")
-            return {
-                "success": False,
-                "error": f"PyMuPDF extraction failed: {str(e)}",
-                "extraction_time": extraction_time,
-            }
+            logger.error("[PyMuPDF] extraction failed", url=url[:100], error=str(e), error_type=type(e).__name__, extraction_time=round(extraction_time, 2))
+            raise ExtractionError(
+                f"PDF extraction failed after {extraction_time:.1f}s",
+                document_url=url,
+                document_type="pdf",
+                original_error=e
+            ) from e
 
     def extract_from_bytes(self, pdf_bytes: bytes, extract_links: bool = False) -> Dict[str, Any]:
         """Extract text and optionally links from PDF bytes
@@ -444,60 +446,60 @@ class PdfExtractor:
 
         try:
             # Extract with PyMuPDF (with OCR fallback for scanned pages)
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            text_parts = []
-            all_links = []
-            ocr_pages = 0
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                text_parts = []
+                all_links = []
+                ocr_pages = 0
 
-            # Check for legislative legend once (if formatting detection enabled)
-            use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
-            if use_formatting:
-                logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
-
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-
-                # Extract text (with or without legislative formatting detection)
+                # Check for legislative legend once (if formatting detection enabled)
+                use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
                 if use_formatting:
-                    page_text = _extract_text_with_formatting(page, page_num + 1)
-                else:
-                    page_text = page.get_text()  # type: ignore[attr-defined]
+                    logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
 
-                initial_char_count = len(page_text.strip())
+                for page_num in range(len(doc)):
+                    page = doc[page_num]
 
-                # If page has minimal text, assume scanned/image-based PDF
-                if initial_char_count < self.ocr_threshold:
-                    original_text = page_text  # Save original before OCR
-                    initial_sample = original_text.strip()[:100].replace('\n', ' ')
-                    logger.info(
-                        f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
-                        f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
-                        f"Original: '{initial_sample}'"
-                    )
-
-                    ocr_result = self._ocr_page(page)
-                    ocr_char_count = len(ocr_result.strip())
-                    ocr_sample = ocr_result.strip()[:100].replace('\n', ' ')
-
-                    # Calculate quality metrics for logging
-                    letters = sum(1 for c in ocr_result if c.isalpha())
-                    letter_ratio = letters / len(ocr_result) if len(ocr_result) > 0 else 0
-                    word_count = len(ocr_result.split())
-
-                    logger.info(
-                        f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
-                        f"{word_count} words, {letter_ratio:.1%} letters. "
-                        f"Sample: '{ocr_sample}'"
-                    )
-
-                    # Decide whether to use OCR or keep original
-                    if self._is_ocr_better(original_text, ocr_result, page_num + 1):
-                        page_text = ocr_result
-                        ocr_pages += 1
+                    # Extract text (with or without legislative formatting detection)
+                    if use_formatting:
+                        page_text = _extract_text_with_formatting(page, page_num + 1)
                     else:
-                        page_text = original_text
+                        page_text = page.get_text()  # type: ignore[attr-defined]
 
-                text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
+                    initial_char_count = len(page_text.strip())
+
+                    # If page has minimal text, assume scanned/image-based PDF
+                    if initial_char_count < self.ocr_threshold:
+                        original_text = page_text  # Save original before OCR
+                        initial_sample = original_text.strip()[:100].replace('\n', ' ')
+                        logger.info(
+                            f"[PyMuPDF] Page {page_num + 1}: OCR triggered "
+                            f"({initial_char_count} chars < {self.ocr_threshold} threshold). "
+                            f"Original: '{initial_sample}'"
+                        )
+
+                        ocr_result = self._ocr_page(page)
+                        ocr_char_count = len(ocr_result.strip())
+                        ocr_sample = ocr_result.strip()[:100].replace('\n', ' ')
+
+                        # Calculate quality metrics for logging
+                        letters = sum(1 for c in ocr_result if c.isalpha())
+                        letter_ratio = letters / len(ocr_result) if len(ocr_result) > 0 else 0
+                        word_count = len(ocr_result.split())
+
+                        logger.info(
+                            f"[PyMuPDF] Page {page_num + 1}: OCR produced {ocr_char_count} chars, "
+                            f"{word_count} words, {letter_ratio:.1%} letters. "
+                            f"Sample: '{ocr_sample}'"
+                        )
+
+                        # Decide whether to use OCR or keep original
+                        if self._is_ocr_better(original_text, ocr_result, page_num + 1):
+                            page_text = ocr_result
+                            ocr_pages += 1
+                        else:
+                            page_text = original_text
+
+                    text_parts.append(f"--- PAGE {page_num + 1} ---\n{page_text}")
 
                 # Extract links if requested
                 if extract_links:
@@ -510,9 +512,9 @@ class PdfExtractor:
                                 'rect': link.get('from', None),
                             })
 
-            full_text = "\n\n".join(text_parts)
-            page_count = len(doc)
-            doc.close()
+                full_text = "\n\n".join(text_parts)
+                page_count = len(doc)
+                # Context manager handles doc.close() automatically
 
             extraction_time = time.time() - start_time
 
@@ -543,12 +545,12 @@ class PdfExtractor:
 
         except Exception as e:
             extraction_time = time.time() - start_time
-            logger.error(f"[PyMuPDF] Extraction from bytes failed: {e}")
-            return {
-                "success": False,
-                "error": f"PyMuPDF extraction failed: {str(e)}",
-                "extraction_time": extraction_time,
-            }
+            logger.error("[PyMuPDF] extraction from bytes failed", error=str(e), error_type=type(e).__name__, extraction_time=round(extraction_time, 2))
+            raise ExtractionError(
+                f"PDF extraction from bytes failed after {extraction_time:.1f}s",
+                document_type="pdf",
+                original_error=e
+            ) from e
 
     def validate_text(self, text: str) -> bool:
         """Validate text quality - basic check for now"""

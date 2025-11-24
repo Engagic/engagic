@@ -5,11 +5,12 @@ Monitoring and health check API routes
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 
 from config import config, get_logger
 from database.db_postgres import Database
+from server.dependencies import get_db
 from server.services.ticker import generate_ticker_item
 from server.metrics import metrics, get_metrics_text
 
@@ -22,11 +23,6 @@ router = APIRouter()
 _ticker_cache: Optional[Dict[str, Any]] = None
 _ticker_cache_time: float = 0
 TICKER_CACHE_TTL = 300  # 5 minutes
-
-
-def get_db(request: Request) -> Database:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
 
 
 def get_analyzer():

@@ -20,6 +20,7 @@ from google.genai import types
 
 from config import get_logger
 from server.metrics import metrics
+from exceptions import LLMError
 
 logger = get_logger(__name__).bind(component="analyzer")
 
@@ -163,7 +164,12 @@ class GeminiSummarizer:
             )
             metrics.record_error(component="analyzer", error=e)
             logger.error("meeting summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__)
-            raise
+            raise LLMError(
+                f"Meeting summarization failed after {duration:.1f}s",
+                model=model_display,
+                prompt_type=prompt_type,
+                original_error=e
+            ) from e
 
     def summarize_item(self, item_title: str, text: str, page_count: Optional[int] = None) -> Tuple[str, List[str]]:
         """Summarize a single agenda item and extract topics (adaptive based on size)
@@ -263,7 +269,12 @@ class GeminiSummarizer:
             )
             metrics.record_error(component="analyzer", error=e)
             logger.error("item summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__, prompt_type=prompt_type)
-            raise
+            raise LLMError(
+                f"Item summarization failed after {duration:.1f}s",
+                model=model_display,
+                prompt_type=f"item_{prompt_type}",
+                original_error=e
+            ) from e
 
     def summarize_batch(
         self,

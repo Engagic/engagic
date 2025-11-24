@@ -2,8 +2,9 @@
 Topic search API routes
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from server.models.requests import TopicSearchRequest
+from server.dependencies import get_db
 from database.db_postgres import Database
 
 from config import get_logger
@@ -12,11 +13,6 @@ logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/api")
-
-
-def get_db(request: Request) -> Database:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
 
 
 @router.get("/topics")

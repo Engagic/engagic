@@ -7,7 +7,6 @@ Handles job queue management with PostgreSQL optimizations:
 - Priority-based processing
 """
 
-import json
 from typing import Optional, Dict, Any
 
 from database.repositories_async.base import BaseRepository

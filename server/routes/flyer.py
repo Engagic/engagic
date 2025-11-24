@@ -4,10 +4,11 @@ Flyer generation API routes
 Enables civic action through printable flyers
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from server.models.requests import FlyerRequest
 from server.services.flyer import generate_meeting_flyer
+from server.dependencies import get_db
 from database.db_postgres import Database
 
 from config import get_logger
@@ -16,11 +17,6 @@ logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/api")
-
-
-def get_db(request: Request) -> Database:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
 
 
 @router.post("/flyer/generate")
