@@ -13,41 +13,25 @@ from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from database.db_postgres import DatabaseManager
-from database.repositories.cities_repository import CitiesRepository
-from database.repositories.meetings_repository import MeetingsRepository
-from database.repositories.agenda_items_repository import AgendaItemsRepository
-from database.repositories.queue_repository import QueueRepository
-from config import Config
+from database.db_postgres import Database
 
 
 class DatabaseViewer:
     def __init__(self):
-        self.config = Config()
-        self.db_manager = None
-        self.cities_repo = None
-        self.meetings_repo = None
-        self.items_repo = None
-        self.queue_repo = None
+        self.db = None
 
     async def initialize(self):
-        """Initialize async database connection and repositories"""
-        self.db_manager = DatabaseManager(self.config)
-        await self.db_manager.initialize()
-
-        self.cities_repo = CitiesRepository(self.db_manager)
-        self.meetings_repo = MeetingsRepository(self.db_manager)
-        self.items_repo = AgendaItemsRepository(self.db_manager)
-        self.queue_repo = QueueRepository(self.db_manager)
+        """Initialize async database connection"""
+        self.db = await Database.create()
 
     async def close(self):
         """Close database connections"""
-        if self.db_manager:
-            await self.db_manager.close()
+        if self.db:
+            await self.db.close()
 
     async def show_cities_table(self, limit: int = 50):
         """Display cities table with zipcode counts"""
-        cities = await self.cities_repo.get_all_cities(limit=limit)
+        cities = await self.db.cities.get_all_cities(limit=limit)
 
         print(f"\n=== CITIES TABLE (showing {len(cities)}) ===")
         print(
@@ -57,7 +41,7 @@ class DatabaseViewer:
 
         for city in cities:
             # Get zipcode count
-            async with self.db_manager.pool.acquire() as conn:
+            async with self.db.pool.acquire() as conn:
                 zipcode_count = await conn.fetchval(
                     "SELECT COUNT(*) FROM zipcodes WHERE banana = $1",
                     city['banana']
@@ -71,7 +55,7 @@ class DatabaseViewer:
 
     async def show_zipcodes_table(self, limit: int = 50):
         """Display zipcodes table with city information"""
-        async with self.db_manager.pool.acquire() as conn:
+        async with self.db.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
                 SELECT z.zipcode, z.banana, z.is_primary, c.name, c.state
@@ -103,7 +87,7 @@ class DatabaseViewer:
         """Display meetings table with city information"""
         if city_filter:
             # Search for matching cities
-            all_cities = await self.cities_repo.get_all_cities(limit=1000)
+            all_cities = await self.db.cities.get_all_cities(limit=1000)
             matching_bananas = [
                 c['banana']
                 for c in all_cities
@@ -118,7 +102,7 @@ class DatabaseViewer:
             # Get meetings for matching cities
             meetings = []
             for banana in matching_bananas[:10]:  # Limit cities to avoid too many queries
-                city_meetings = await self.meetings_repo.get_meetings_by_city(
+                city_meetings = await self.db.meetings.get_meetings_by_city(
                     banana, limit=limit
                 )
                 meetings.extend(city_meetings)
@@ -128,7 +112,7 @@ class DatabaseViewer:
             meetings = meetings[:limit]
         else:
             # Get recent meetings across all cities
-            meetings = await self.meetings_repo.get_recent_meetings(limit=limit)
+            meetings = await self.db.meetings.get_recent_meetings(limit=limit)
 
         if not meetings:
             print("No meetings found.")
@@ -141,7 +125,7 @@ class DatabaseViewer:
         print("-" * 105)
 
         for meeting in meetings:
-            city = await self.cities_repo.get_city(meeting['banana'])
+            city = await self.db.cities.get_city(meeting['banana'])
             city_display = (
                 f"{city['name'][:15]}, {city['state']}" if city else meeting['banana'][:19]
             )
@@ -157,7 +141,7 @@ class DatabaseViewer:
                     date_str = meeting['date'].strftime("%Y-%m-%d")
 
             # Get item count
-            items = await self.items_repo.get_items_by_meeting(meeting['id'])
+            items = await self.db.items.get_items_by_meeting(meeting['id'])
             item_count = str(len(items)) if items else "0"
 
             status = meeting.get('status', '-')[:9]
@@ -170,11 +154,11 @@ class DatabaseViewer:
     async def show_agenda_items_table(self, limit: int = 20):
         """Display recent agenda items across all meetings"""
         # Get recent meetings
-        meetings = await self.meetings_repo.get_recent_meetings(limit=50)
+        meetings = await self.db.meetings.get_recent_meetings(limit=50)
 
         all_items = []
         for meeting in meetings:
-            items = await self.items_repo.get_items_by_meeting(meeting['id'])
+            items = await self.db.items.get_items_by_meeting(meeting['id'])
             for item in items:
                 all_items.append({'item': item, 'meeting': meeting})
                 if len(all_items) >= limit:
@@ -204,7 +188,7 @@ class DatabaseViewer:
 
     async def show_queue_table(self, limit: int = 50):
         """Display processing queue"""
-        stats = await self.queue_repo.get_queue_stats()
+        stats = await self.db.queue.get_queue_stats()
 
         print("\n=== PROCESSING QUEUE STATISTICS ===")
         print(f"Pending:     {stats.get('pending_count', 0)}")
@@ -213,7 +197,7 @@ class DatabaseViewer:
         print(f"Failed:      {stats.get('failed_count', 0)}")
 
         # Show pending/processing/failed items
-        async with self.db_manager.pool.acquire() as conn:
+        async with self.db.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
                 SELECT id, job_type, job_data, status, priority, retry_count, created_at
@@ -288,11 +272,11 @@ class DatabaseViewer:
                 'status': 'active'
             }
 
-            await self.cities_repo.upsert_city(city_data)
+            await self.db.cities.upsert_city(city_data)
 
             # Add zipcodes if provided
             if zipcodes:
-                async with self.db_manager.pool.acquire() as conn:
+                async with self.db.pool.acquire() as conn:
                     for i, zipcode in enumerate(zipcodes):
                         is_primary = i == 0  # First zipcode is primary
                         await conn.execute(
@@ -331,7 +315,7 @@ class DatabaseViewer:
                         return False
 
                     # Get current city
-                    city = await self.cities_repo.get_city(banana)
+                    city = await self.db.cities.get_city(banana)
                     if not city:
                         print(f"No city found with banana {banana}")
                         continue
@@ -339,7 +323,7 @@ class DatabaseViewer:
                     current_banana = banana
                 else:
                     # Refresh city data
-                    city = await self.cities_repo.get_city(current_banana)
+                    city = await self.db.cities.get_city(current_banana)
                     if not city:
                         print(f"City {current_banana} no longer exists")
                         current_banana = None
@@ -388,7 +372,7 @@ class DatabaseViewer:
 
                     if new_banana != current_banana:
                         # Need to update banana and all foreign keys
-                        async with self.db_manager.pool.acquire() as conn:
+                        async with self.db.pool.acquire() as conn:
                             async with conn.transaction():
                                 # Update city
                                 await conn.execute(
@@ -413,10 +397,10 @@ class DatabaseViewer:
                         print(f"Updated city and banana: {current_banana} → {new_banana}")
                         current_banana = new_banana
                     else:
-                        await self.cities_repo.upsert_city(city)
+                        await self.db.cities.upsert_city(city)
                         print(f"Updated {field} = '{new_value}'")
                 else:
-                    await self.cities_repo.upsert_city(city)
+                    await self.db.cities.upsert_city(city)
                     print(f"Updated {field} = '{new_value}'")
 
             except KeyboardInterrupt:
@@ -444,7 +428,7 @@ class DatabaseViewer:
         results = []
 
         # Search cities
-        all_cities = await self.cities_repo.get_all_cities(limit=1000)
+        all_cities = await self.db.cities.get_all_cities(limit=1000)
         for city in all_cities:
             if (
                 query.lower() in city['name'].lower()
@@ -462,7 +446,7 @@ class DatabaseViewer:
                 })
 
         # Search zipcodes
-        async with self.db_manager.pool.acquire() as conn:
+        async with self.db.pool.acquire() as conn:
             zipcode_rows = await conn.fetch(
                 """
                 SELECT z.zipcode, z.banana, z.is_primary, c.name, c.state
@@ -485,7 +469,7 @@ class DatabaseViewer:
         # Search meetings (title and banana)
         for city in all_cities:
             if query.lower() in city['banana'].lower():
-                meetings = await self.meetings_repo.get_meetings_by_city(city['banana'], limit=10)
+                meetings = await self.db.meetings.get_meetings_by_city(city['banana'], limit=10)
                 for meeting in meetings:
                     date_str = ''
                     if meeting.get('date'):
@@ -522,7 +506,7 @@ class DatabaseViewer:
     async def show_statistics(self):
         """Show database statistics"""
         # Get counts
-        async with self.db_manager.pool.acquire() as conn:
+        async with self.db.pool.acquire() as conn:
             city_count = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE status = 'active'")
             meeting_count = await conn.fetchval("SELECT COUNT(*) FROM meetings")
             item_count = await conn.fetchval("SELECT COUNT(*) FROM agenda_items")
@@ -565,7 +549,7 @@ class DatabaseViewer:
                 print(f"  {vendor['vendor']:<15} {vendor['count']:>4} cities ({percentage:.1f}%)")
 
         # Queue stats
-        queue_stats = await self.queue_repo.get_queue_stats()
+        queue_stats = await self.db.queue.get_queue_stats()
         if any(queue_stats.values()):
             print("\nProcessing queue:")
             print(f"  Pending:    {queue_stats.get('pending_count', 0)}")
@@ -590,7 +574,7 @@ class DatabaseViewer:
 
         try:
             # Search meetings
-            async with self.db_manager.pool.acquire() as conn:
+            async with self.db.pool.acquire() as conn:
                 meeting_results = await conn.fetch(
                     """
                     SELECT m.id, m.banana, m.title, m.date, m.summary, m.agenda_url, m.packet_url,
