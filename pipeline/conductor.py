@@ -5,9 +5,8 @@ Coordinates:
 - Sync loop (via Fetcher)
 - Processing loop (via Processor)
 - Admin commands (force sync, status)
-- Background daemon management
 
-Refactored: Extracted fetcher and processor logic into separate modules
+Pure async architecture - no threading, uses asyncio.create_task()
 """
 
 
@@ -15,15 +14,13 @@ import asyncio
 import logging
 import signal
 import sys
-import time
-import threading
 from contextlib import contextmanager
-from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from database.db_postgres import Database
 from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
 from pipeline.processor import Processor
+from pipeline.click_types import BANANA
 
 from config import config, get_logger
 
@@ -44,8 +41,6 @@ class Conductor:
         """
         self.db = db
         self.is_running = False
-        self.sync_thread = None
-        self.processing_thread = None
 
         # Initialize fetcher and processor with database
         self.fetcher = Fetcher(db=db)
@@ -56,9 +51,6 @@ class Conductor:
             "processor initialized",
             has_analyzer=self.processor.analyzer is not None
         )
-
-        # Track sync status
-        self.last_full_sync = None
 
     @contextmanager
     def enable_processing(self):
@@ -74,100 +66,11 @@ class Conductor:
             self.fetcher.is_running = old_state
             self.processor.is_running = old_state
 
-    def start(self):
-        """Start background processing threads"""
-        if self.is_running:
-            logger.warning("[Conductor] Already running")
-            return
-
-        logger.info("[Conductor] Starting background daemon...")
-        self.is_running = True
-
-        # Propagate running state to components
-        self.fetcher.is_running = True
-        self.processor.is_running = True
-
-        # Start sync thread (runs every 7 days)
-        self.sync_thread = threading.Thread(target=self._sync_loop, daemon=True)
-        self.sync_thread.start()
-
-        # Start processing thread (continuously processes jobs from the queue)
-        self.processing_thread = threading.Thread(
-            target=self._processing_loop, daemon=True
-        )
-        self.processing_thread.start()
-
-        logger.info("[Conductor] Background daemon started")
-
-    def stop(self):
-        """Stop background processing"""
-        logger.info("[Conductor] Stopping background daemon...")
-        self.is_running = False
-
-        # Propagate stop to components
-        self.fetcher.is_running = False
-        self.processor.is_running = False
-
-        if self.sync_thread:
-            self.sync_thread.join(timeout=30)
-        if self.processing_thread:
-            self.processing_thread.join(timeout=30)
-
-        logger.info("[Conductor] Background daemon stopped")
-
-    def _sync_loop(self):
-        """Main sync loop - runs every 7 days (thread wrapper for async code)"""
-        while self.is_running:
-            try:
-                # Run full sync (async method)
-                results = asyncio.run(self.fetcher.sync_all())
-                self.last_full_sync = datetime.now()
-
-                succeeded_count = len([r for r in results if r.status == SyncStatus.COMPLETED])
-                failed_count = len([r for r in results if r.status == SyncStatus.FAILED])
-                logger.info(
-                    "sync cycle complete",
-                    succeeded=succeeded_count,
-                    failed=failed_count
-                )
-
-                # Sleep for 7 days
-                for _ in range(7 * 24 * 60 * 60):  # 7 days in seconds
-                    if not self.is_running:
-                        break
-                    time.sleep(SHUTDOWN_POLL_INTERVAL)
-
-            except Exception as e:
-                logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
-                # Sleep for 2 days on error
-                for _ in range(2 * 24 * 60 * 60):
-                    if not self.is_running:
-                        break
-                    time.sleep(1)
-
-    def _processing_loop(self):
-        """Processing loop - continuously processes jobs from the queue (thread wrapper for async code)"""
-        if not self.processor.analyzer:
-            logger.warning(
-                "[Conductor] Analyzer not available - processing loop will not run"
-            )
-            return
-
-        try:
-            # Run the queue processor continuously (async method)
-            asyncio.run(self.processor.process_queue())
-        except Exception as e:
-            logger.error("processing loop error", error=str(e), error_type=type(e).__name__)
-            # Processing loop will be restarted by daemon if it crashes
-
     async def get_sync_status(self) -> Dict[str, Any]:
         """Get current sync status"""
         stats = await self.db.get_stats()
         return {
             "is_running": self.is_running,
-            "last_full_sync": (
-                self.last_full_sync.isoformat() if self.last_full_sync else None
-            ),
             "active_cities": stats.get("active_cities", 0),
             "total_meetings": stats.get("total_meetings", 0),
             "summarized_meetings": stats.get("summarized_meetings", 0),
@@ -449,7 +352,7 @@ def main():
             click.echo(ctx.get_help())
 
     @cli.command("sync-city")
-    @click.argument("banana")
+    @click.argument("banana", type=BANANA)
     def sync_city(banana):
         """Sync specific city by city_banana"""
         async def run():
@@ -465,7 +368,7 @@ def main():
         click.echo(f"Sync result: {result}")
 
     @cli.command("sync-and-process-city")
-    @click.argument("banana")
+    @click.argument("banana", type=BANANA)
     def sync_and_process_city(banana):
         """Sync city and immediately process all its meetings"""
         async def run():
@@ -596,7 +499,6 @@ def main():
                     try:
                         logger.info("[Fetcher] Starting city sync cycle...")
                         results = await conductor.fetcher.sync_all()
-                        conductor.last_full_sync = datetime.now()
 
                         succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
                         failed = len([r for r in results if r.status == SyncStatus.FAILED])
@@ -606,7 +508,7 @@ def main():
                         for _ in range(72 * 60 * 60):
                             if not conductor.is_running:
                                 break
-                            time.sleep(SHUTDOWN_POLL_INTERVAL)
+                            await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
 
                     except Exception as e:
                         logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
@@ -614,14 +516,14 @@ def main():
                         for _ in range(2 * 60 * 60):
                             if not conductor.is_running:
                                 break
-                            time.sleep(SHUTDOWN_POLL_INTERVAL)
+                            await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
             finally:
                 await db.close()
 
         asyncio.run(run())
 
     @cli.command("preview-queue")
-    @click.argument("banana", required=False)
+    @click.argument("banana", type=BANANA, required=False)
     def preview_queue(banana):
         """Preview queued jobs (optionally specify city_banana)"""
         async def run():
@@ -660,6 +562,93 @@ def main():
 
         result = asyncio.run(run())
         click.echo(json.dumps(result, indent=2))
+
+    @cli.command("daemon")
+    def daemon():
+        """Run as combined daemon (sync + processing)
+
+        Pure async architecture using asyncio.create_task() for concurrent loops.
+        Shares single event loop and connection pool.
+        """
+        async def run():
+
+            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            try:
+                conductor = Conductor(db)
+
+                def signal_handler(signum, frame):
+                    sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+                    logger.info("received signal - graceful shutdown", signal=sig_name)
+                    conductor.is_running = False
+                    conductor.fetcher.is_running = False
+                    conductor.processor.is_running = False
+                    logger.info("[Daemon] Shutdown initiated")
+
+                signal.signal(signal.SIGTERM, signal_handler)
+                signal.signal(signal.SIGINT, signal_handler)
+
+                logger.info("[Daemon] Starting combined daemon (sync + processing)")
+                logger.info("[Daemon] Sync interval: 72 hours")
+
+                conductor.is_running = True
+                conductor.fetcher.is_running = True
+                conductor.processor.is_running = True
+
+                # Define sync loop as async task
+                async def sync_task():
+                    """Sync loop - runs every 72 hours"""
+                    while conductor.is_running:
+                        try:
+                            logger.info("[Daemon] Starting city sync cycle...")
+                            results = await conductor.fetcher.sync_all()
+
+                            succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
+                            failed = len([r for r in results if r.status == SyncStatus.FAILED])
+                            logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
+
+                            logger.info("[Daemon] Sleeping for 72 hours until next sync...")
+                            for _ in range(72 * 60 * 60):
+                                if not conductor.is_running:
+                                    break
+                                await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
+
+                        except Exception as e:
+                            logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
+                            logger.info("[Daemon] Sleeping for 2 hours after error...")
+                            for _ in range(2 * 60 * 60):
+                                if not conductor.is_running:
+                                    break
+                                await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
+
+                # Define processing loop as async task
+                async def processing_task():
+                    """Processing loop - continuously processes queue"""
+                    if not conductor.processor.analyzer:
+                        logger.warning("[Daemon] Analyzer not available - processing disabled")
+                        return
+
+                    try:
+                        logger.info("[Daemon] Starting processing loop...")
+                        await conductor.processor.process_queue()
+                    except Exception as e:
+                        logger.error("processing loop error", error=str(e), error_type=type(e).__name__)
+
+                # Run both tasks concurrently (single event loop, shared connection pool)
+                sync_loop = asyncio.create_task(sync_task())
+                processing_loop = asyncio.create_task(processing_task())
+
+                # Wait for both tasks (or until shutdown signal)
+                try:
+                    await asyncio.gather(sync_loop, processing_loop)
+                except asyncio.CancelledError:
+                    logger.info("[Daemon] Tasks cancelled")
+
+                logger.info("[Daemon] Shutdown complete")
+
+            finally:
+                await db.close()
+
+        asyncio.run(run())
 
     cli()
 

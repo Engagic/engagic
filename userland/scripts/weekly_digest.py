@@ -14,6 +14,7 @@ Cron:
     0 9 * * 0 cd /root/engagic && .venv/bin/python -m userland.scripts.weekly_digest
 """
 
+import asyncio
 import os
 import re
 import sys
@@ -24,12 +25,9 @@ from typing import List, Dict, Any
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from userland.database.db import UserlandDB
+from database.db_postgres import Database
 from userland.email.emailer import EmailService
 from userland.email.templates import DARK_MODE_CSS
-from database.db import UnifiedDatabase
-from database.search_utils import search_summaries
-from config import config
 
 logging.basicConfig(
     level=os.getenv('LOG_LEVEL', 'INFO'),
@@ -108,60 +106,53 @@ def generate_anchor_id(item: Dict[str, Any]) -> str:
     return f"item-{item_id}"
 
 
-def get_city_name(city_banana: str) -> str:
+async def get_city_name(db: Database, city_banana: str) -> str:
     """Get formatted city name from banana (e.g., 'paloaltoCA' -> 'Palo Alto, CA')"""
-    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-    try:
-        city = db.get_city(city_banana)
-        if city:
-            return f"{city.name}, {city.state}"
-        return city_banana  # Fallback
-    finally:
-        db.close()
+    city = await db.cities.get_city(city_banana)
+    if city:
+        return f"{city.name}, {city.state}"
+    return city_banana  # Fallback
 
 
-def get_upcoming_meetings(city_banana: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
+async def get_upcoming_meetings(db: Database, city_banana: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
     """
     Get upcoming meetings for a city in the next N days.
 
     FILTERS OUT cancelled/postponed meetings.
-    Uses UnifiedDatabase repository pattern (not raw SQL).
+    Uses Database repository pattern (async PostgreSQL).
     """
-    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-    try:
-        today = datetime.now().date()
-        end_date = today + timedelta(days=days_ahead)
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
 
-        meetings = db.get_meetings(
-            bananas=[city_banana],
-            start_date=datetime.combine(today, datetime.min.time()),
-            end_date=datetime.combine(end_date, datetime.max.time()),
-            limit=50
-        )
+    async with db.pool.acquire() as conn:
+        query = """
+            SELECT id, banana, title, date, agenda_url, packet_url, status
+            FROM meetings
+            WHERE banana = $1
+              AND date >= $2
+              AND date <= $3
+              AND (status IS NULL OR status NOT IN ('cancelled', 'postponed'))
+            ORDER BY date ASC
+            LIMIT 50
+        """
+        rows = await conn.fetch(query, city_banana, today, end_date)
 
-        # Filter out cancelled/postponed meetings
-        result = []
-        for meeting in meetings:
-            # Skip cancelled or postponed meetings
-            if meeting.status and meeting.status.lower() in ['cancelled', 'postponed']:
-                continue
-
-            result.append({
-                'id': meeting.id,
-                'banana': meeting.banana,
-                'title': meeting.title,
-                'date': meeting.date.isoformat() if meeting.date else None,
-                'agenda_url': meeting.agenda_url,
-                'packet_url': meeting.packet_url,
-                'status': meeting.status
-            })
-
-        return result
-    finally:
-        db.close()
+    return [
+        {
+            'id': row['id'],
+            'banana': row['banana'],
+            'title': row['title'],
+            'date': str(row['date']),
+            'agenda_url': row['agenda_url'],
+            'packet_url': row['packet_url'],
+            'status': row['status']
+        }
+        for row in rows
+    ]
 
 
-def find_keyword_matches(
+async def find_keyword_matches(
+    db: Database,
     city_banana: str,
     keywords: List[str],
     days_ahead: int = 7
@@ -170,7 +161,7 @@ def find_keyword_matches(
     Find items in upcoming meetings that mention user's keywords.
 
     FILTERS OUT cancelled/postponed meetings.
-    Uses search_summaries() from database layer + date/status post-filter.
+    Uses direct async SQL queries for efficient searching.
     """
     if not keywords:
         return []
@@ -179,47 +170,61 @@ def find_keyword_matches(
     end_date = today + timedelta(days=days_ahead)
 
     all_matches = []
-    for keyword in keywords:
-        matches = search_summaries(
-            search_term=keyword,
-            city_banana=city_banana,
-            db_path=config.UNIFIED_DB_PATH
-        )
 
-        # Post-filter by date range AND status (search_summaries doesn't do this)
-        for match in matches:
-            if match.get('type') == 'item' and match.get('date'):
-                try:
-                    match_date = datetime.fromisoformat(match['date']).date()
+    async with db.pool.acquire() as conn:
+        for keyword in keywords:
+            # Search for keyword in item summaries
+            query = """
+                SELECT i.id as item_id, i.meeting_id, i.title as item_title,
+                       i.summary, i.agenda_number, i.matter_file, i.sequence,
+                       m.title as meeting_title, m.date, m.banana,
+                       m.agenda_url, m.status
+                FROM items i
+                JOIN meetings m ON i.meeting_id = m.id
+                WHERE m.banana = $1
+                  AND m.date >= $2
+                  AND m.date <= $3
+                  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
+                  AND i.summary LIKE $4
+                ORDER BY m.date ASC
+            """
 
-                    # Skip if outside date range
-                    if not (today <= match_date <= end_date):
-                        continue
+            rows = await conn.fetch(query, city_banana, today, end_date, f"%{keyword}%")
 
-                    # Skip cancelled/postponed meetings
-                    meeting_status = match.get('status', '')
-                    if meeting_status and meeting_status.lower() in ['cancelled', 'postponed']:
-                        continue
+            for row in rows:
+                # Extract context around keyword
+                summary = row['summary'] or ""
+                keyword_lower = keyword.lower()
+                summary_lower = summary.lower()
 
-                    # Normalize field names for email template
-                    all_matches.append({
-                        'keyword': keyword,
-                        'item_id': match['item_id'],
-                        'meeting_id': match['meeting_id'],
-                        'item_title': match['item_title'],
-                        'item_summary': match.get('summary', ''),
-                        'item_position': match.get('agenda_number', match.get('sequence', '?')),
-                        'meeting_title': match['meeting_title'],
-                        'meeting_date': match['date'],
-                        'agenda_url': match.get('agenda_url'),
-                        'banana': match['banana'],
-                        'context': match.get('context', ''),
-                        # Fields needed for proper anchor generation
-                        'agenda_number': match.get('agenda_number'),
-                        'matter_file': match.get('matter_file')
-                    })
-                except (ValueError, TypeError):
-                    continue
+                # Find keyword position and extract context
+                context = ""
+                if keyword_lower in summary_lower:
+                    pos = summary_lower.index(keyword_lower)
+                    start = max(0, pos - 150)
+                    end = min(len(summary), pos + 150)
+                    context = summary[start:end].strip()
+                    if start > 0:
+                        context = "..." + context
+                    if end < len(summary):
+                        context = context + "..."
+
+                all_matches.append({
+                    'keyword': keyword,
+                    'item_id': row['item_id'],
+                    'meeting_id': row['meeting_id'],
+                    'item_title': row['item_title'],
+                    'item_summary': summary,
+                    'item_position': row['agenda_number'] or row['sequence'] or '?',
+                    'meeting_title': row['meeting_title'],
+                    'meeting_date': str(row['date']),
+                    'agenda_url': row['agenda_url'],
+                    'banana': row['banana'],
+                    'context': context,
+                    # Fields needed for proper anchor generation
+                    'agenda_number': row['agenda_number'],
+                    'matter_file': row['matter_file']
+                })
 
     # Deduplicate by item_id and aggregate matched keywords
     deduplicated = {}
@@ -409,92 +414,94 @@ def build_digest_email(
     return html
 
 
-def send_weekly_digest():
+async def send_weekly_digest():
     """
     Main function: Send weekly digests to all active users.
 
     Note: This queries "alerts" but they represent weekly digest subscriptions.
     """
 
-    userland_db_path = os.getenv('USERLAND_DB', '/root/engagic/data/userland.db')
     app_url = os.getenv('APP_URL', 'https://engagic.org')
 
     logger.info("Starting weekly digest process...")
 
-    db = UserlandDB(userland_db_path, silent=True)
-    email_service = EmailService()
+    db = await Database.create()
+    try:
+        email_service = EmailService()
 
-    # Get all active alerts (weekly digest subscriptions)
-    active_alerts = db.get_active_alerts()
-    logger.info(f"Found {len(active_alerts)} active alerts")
+        # Get all active alerts (weekly digest subscriptions)
+        active_alerts = await db.userland.get_active_alerts()
+        logger.info(f"Found {len(active_alerts)} active alerts")
 
-    sent_count = 0
-    error_count = 0
+        sent_count = 0
+        error_count = 0
 
-    for alert in active_alerts:
-        try:
-            # Get user
-            user = db.get_user(alert.user_id)
-            if not user:
-                logger.warning(f"User not found for alert {alert.id}")
+        for alert in active_alerts:
+            try:
+                # Get user
+                user = await db.userland.get_user(alert.user_id)
+                if not user:
+                    logger.warning(f"User not found for alert {alert.id}")
+                    continue
+
+                # Get primary city (first city in alert)
+                if not alert.cities or len(alert.cities) == 0:
+                    logger.warning(f"Alert {alert.id} has no cities configured")
+                    continue
+
+                primary_city = alert.cities[0]
+                logger.info(f"Processing digest for {user.email} ({primary_city})...")
+
+                # Get actual city name (not banana)
+                city_name = await get_city_name(db, primary_city)
+
+                # Get keyword matches (direct SQL queries)
+                keywords = alert.criteria.get('keywords', [])
+                keyword_matches = await find_keyword_matches(db, primary_city, keywords, days_ahead=10)
+
+                # Get upcoming meetings (direct SQL queries)
+                upcoming_meetings = await get_upcoming_meetings(db, primary_city, days_ahead=10)
+
+                # Skip if no content
+                if not keyword_matches and not upcoming_meetings:
+                    logger.info(f"No content for {user.email}, skipping")
+                    continue
+
+                # Build email
+                html = build_digest_email(
+                    user_name=user.name,
+                    city_name=city_name,
+                    city_banana=primary_city,
+                    keyword_matches=keyword_matches,
+                    keywords=keywords,
+                    upcoming_meetings=upcoming_meetings,
+                    app_url=app_url
+                )
+
+                # Send email
+                subject = f"This week in {city_name}"
+                if keyword_matches:
+                    subject += f" - {len(keyword_matches)} keyword match{'es' if len(keyword_matches) > 1 else ''}"
+
+                email_service.send_email(
+                    to_email=user.email,
+                    subject=subject,
+                    html_body=html
+                )
+
+                sent_count += 1
+                logger.info(f"Sent digest to {user.email}")
+
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Failed to send digest for alert {alert.id}: {e}")
                 continue
 
-            # Get primary city (first city in alert)
-            if not alert.cities or len(alert.cities) == 0:
-                logger.warning(f"Alert {alert.id} has no cities configured")
-                continue
-
-            primary_city = alert.cities[0]
-            logger.info(f"Processing digest for {user.email} ({primary_city})...")
-
-            # Get actual city name (not banana)
-            city_name = get_city_name(primary_city)
-
-            # Get keyword matches (uses search_summaries)
-            keywords = alert.criteria.get('keywords', [])
-            keyword_matches = find_keyword_matches(primary_city, keywords, days_ahead=10)
-
-            # Get upcoming meetings (uses UnifiedDatabase)
-            upcoming_meetings = get_upcoming_meetings(primary_city, days_ahead=10)
-
-            # Skip if no content
-            if not keyword_matches and not upcoming_meetings:
-                logger.info(f"No content for {user.email}, skipping")
-                continue
-
-            # Build email
-            html = build_digest_email(
-                user_name=user.name,
-                city_name=city_name,
-                city_banana=primary_city,
-                keyword_matches=keyword_matches,
-                keywords=keywords,
-                upcoming_meetings=upcoming_meetings,
-                app_url=app_url
-            )
-
-            # Send email
-            subject = f"This week in {city_name}"
-            if keyword_matches:
-                subject += f" - {len(keyword_matches)} keyword match{'es' if len(keyword_matches) > 1 else ''}"
-
-            email_service.send_email(
-                to_email=user.email,
-                subject=subject,
-                html_body=html
-            )
-
-            sent_count += 1
-            logger.info(f"Sent digest to {user.email}")
-
-        except Exception as e:
-            error_count += 1
-            logger.error(f"Failed to send digest for alert {alert.id}: {e}")
-            continue
-
-    logger.info(f"Weekly digest complete: {sent_count} sent, {error_count} errors")
-    return sent_count, error_count
+        logger.info(f"Weekly digest complete: {sent_count} sent, {error_count} errors")
+        return sent_count, error_count
+    finally:
+        await db.close()
 
 
 if __name__ == "__main__":
-    send_weekly_digest()
+    asyncio.run(send_weekly_digest())

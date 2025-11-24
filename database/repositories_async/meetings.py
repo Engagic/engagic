@@ -7,7 +7,6 @@ Handles CRUD operations for meetings:
 - JSONB for participation data
 """
 
-import json
 from typing import List, Optional, Dict, Any
 
 from database.repositories_async.base import BaseRepository

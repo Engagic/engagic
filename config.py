@@ -54,6 +54,10 @@ class Config:
         self.POSTGRES_POOL_MIN_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MIN_SIZE", "5"))
         self.POSTGRES_POOL_MAX_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MAX_SIZE", "20"))
 
+        # Userland database configuration (for auth and user features - SQLite)
+        self.USERLAND_DB_PATH = os.getenv("USERLAND_DB", f"{self.DB_DIR}/userland.db")
+        self.USERLAND_JWT_SECRET = os.getenv("USERLAND_JWT_SECRET")
+
         # Default log path to repo-relative
         default_log_path = os.path.join(os.getcwd(), "engagic.log")
         self.LOG_PATH = os.getenv("ENGAGIC_LOG_PATH", default_log_path)

@@ -13,13 +13,14 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from config import get_logger
+from database.db_postgres import Database
+from server.dependencies import get_db
 from userland.auth.jwt import (
     generate_access_token,
     generate_magic_link_token,
     generate_refresh_token,
     verify_token,
 )
-from userland.database.db import UserlandDB
 from userland.database.models import Alert, User
 from userland.server.models import (
     LoginRequest,
@@ -31,11 +32,6 @@ from userland.server.models import (
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-
-def get_userland_db(request: Request) -> UserlandDB:
-    """Dependency to get shared userland database instance from app state"""
-    return request.app.state.userland_db
 
 
 def hash_token(token: str) -> str:
@@ -81,8 +77,8 @@ async def get_current_user(request: Request) -> User:
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
 
-    db = request.app.state.userland_db
-    user = db.get_user(user_id)
+    db: Database = request.app.state.db
+    user = await db.userland.get_user(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -92,7 +88,7 @@ async def get_current_user(request: Request) -> User:
 
 
 @router.post("/signup", response_model=MagicLinkResponse)
-async def signup(signup_request: SignupRequest, db: UserlandDB = Depends(get_userland_db)):
+async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
     """
     Create user account and send magic link.
 
@@ -103,7 +99,7 @@ async def signup(signup_request: SignupRequest, db: UserlandDB = Depends(get_use
     4. Generate magic link token
     5. Send email with magic link
     """
-    existing = db.get_user_by_email(signup_request.email)
+    existing = await db.userland.get_user_by_email(signup_request.email)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
@@ -113,7 +109,7 @@ async def signup(signup_request: SignupRequest, db: UserlandDB = Depends(get_use
     name = signup_request.name or signup_request.email.split("@")[0]
 
     user = User(id=user_id, name=name, email=signup_request.email)
-    db.create_user(user)
+    await db.userland.create_user(user)
 
     # Create default alert if city provided (keywords optional)
     alert_cities = []
@@ -132,7 +128,7 @@ async def signup(signup_request: SignupRequest, db: UserlandDB = Depends(get_use
             frequency="weekly",
             active=True,
         )
-        db.create_alert(alert)
+        await db.userland.create_alert(alert)
 
     token = generate_magic_link_token(user_id)
 
@@ -159,7 +155,7 @@ async def signup(signup_request: SignupRequest, db: UserlandDB = Depends(get_use
 
 
 @router.post("/login", response_model=MagicLinkResponse)
-async def login(login_request: LoginRequest, db: UserlandDB = Depends(get_userland_db)):
+async def login(login_request: LoginRequest, db: Database = Depends(get_db)):
     """
     Send magic link to existing user.
 
@@ -168,7 +164,7 @@ async def login(login_request: LoginRequest, db: UserlandDB = Depends(get_userla
     2. Generate magic link token
     3. Send email with magic link
     """
-    user = db.get_user_by_email(login_request.email)
+    user = await db.userland.get_user_by_email(login_request.email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -229,22 +225,22 @@ async def verify_magic_link(token: str, response: Response, request: Request):
 
     # Security: Check if magic link has already been used (prevent replay attacks)
     token_hash = hash_token(token)
-    db = request.app.state.userland_db
+    db: Database = request.app.state.db
 
-    if db.is_magic_link_used(token_hash):
+    if await db.userland.is_magic_link_used(token_hash):
         logger.warning("magic link reuse attempt", user_id=user_id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="This magic link has already been used. Request a new one.",
         )
 
-    user = db.get_user(user_id)
+    user = await db.userland.get_user(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    db.update_last_login(user_id)
+    await db.userland.update_last_login(user_id)
 
     access_token = generate_access_token(user_id)
     refresh_token = generate_refresh_token(user_id)
@@ -269,7 +265,7 @@ async def verify_magic_link(token: str, response: Response, request: Request):
 
     # Mark magic link as used
     token_expiry = datetime.now() + timedelta(minutes=15)
-    db.mark_magic_link_used(token_hash, user_id, token_expiry)
+    await db.userland.mark_magic_link_used(token_hash, user_id, token_expiry)
 
     logger.info("magic link verified", email=user.email, user_id=user_id)
 
@@ -312,8 +308,8 @@ async def refresh_access_token(request: Request, response: Response):
         )
 
     # Get user for response
-    db = request.app.state.userland_db
-    user = db.get_user(user_id)
+    db: Database = request.app.state.db
+    user = await db.userland.get_user(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"

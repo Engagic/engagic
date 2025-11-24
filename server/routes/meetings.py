@@ -4,10 +4,11 @@ Meeting API routes
 
 import sys
 import os
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from server.models.requests import ProcessRequest
 from server.services.meeting import get_meeting_with_items
 from server.metrics import metrics
+from server.dependencies import get_db
 from database.db_postgres import Database
 
 from config import get_logger
@@ -16,11 +17,6 @@ logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/api")
-
-
-def get_db(request: Request) -> Database:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
 
 
 @router.get("/meeting/{meeting_id}")

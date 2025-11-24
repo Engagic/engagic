@@ -6,7 +6,6 @@ Routes, services, and utilities are organized into focused modules.
 """
 
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -20,7 +19,6 @@ from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard
 from userland.auth import init_jwt
-from userland.database.db import UserlandDB
 
 logger = get_logger(__name__)
 
@@ -94,22 +92,13 @@ rate_limiter = SQLiteRateLimiter(
     window_seconds=config.RATE_LIMIT_WINDOW,
 )
 
-# Initialize userland database for auth and user features (SQLite, sync)
-userland_db_path = os.getenv('USERLAND_DB', str(config.DB_DIR) + '/userland.db')
-userland_db = UserlandDB(userland_db_path, silent=False)
-logger.info("initialized userland database", db_path=userland_db_path)
-
 # Initialize JWT for authentication
-jwt_secret = os.getenv('USERLAND_JWT_SECRET')
-if not jwt_secret:
+if not config.USERLAND_JWT_SECRET:
     logger.warning("WARNING: USERLAND_JWT_SECRET not set. Auth features will not work.")
     logger.warning("Generate with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")
 else:
-    init_jwt(jwt_secret)
+    init_jwt(config.USERLAND_JWT_SECRET)
     logger.info("JWT authentication initialized")
-
-# Store userland_db in app state (main db initialized in lifespan)
-app.state.userland_db = userland_db
 
 
 # Register middleware (execution order: metrics -> rate limiting -> logging)

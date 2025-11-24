@@ -5,10 +5,12 @@ Admin API routes
 import time
 import httpx
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi import APIRouter, HTTPException, Header, Depends
 
 from config import config, get_logger
 from server.models.requests import ProcessRequest
+from server.dependencies import get_db
+from database.db_postgres import Database
 
 logger = get_logger(__name__)
 
@@ -87,7 +89,7 @@ async def force_process_meeting(
 
 @router.get("/dead-letter-queue")
 async def get_dead_letter_queue(
-    request: Request,
+    db: Database = Depends(get_db),
     is_admin: bool = Depends(verify_admin_token)
 ):
     """Get jobs in dead letter queue (failed after 3 retries)
@@ -95,9 +97,6 @@ async def get_dead_letter_queue(
     Returns list of failed jobs with error messages for debugging.
     These jobs require manual intervention or code fixes.
     """
-    from database.db_postgres import Database
-
-    db: Database = request.app.state.db
 
     try:
         # Get dead letter jobs from queue
