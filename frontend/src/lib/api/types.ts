@@ -167,19 +167,6 @@ export interface AnalyticsData {
 	};
 }
 
-export interface TickerItem {
-	city: string;
-	date: string;
-	excerpt: string;
-	url: string;
-}
-
-export interface TickerResponse {
-	success: boolean;
-	items: TickerItem[];
-	count: number;
-}
-
 // Flyer generation types (mirrors backend Pydantic models)
 export type FlyerPosition = 'support' | 'oppose' | 'more_info';
 

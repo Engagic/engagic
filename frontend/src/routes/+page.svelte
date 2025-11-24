@@ -22,7 +22,6 @@
 
 	// Data now comes from load function - already available on mount
 	let analytics = $state(data.analytics);
-	let tickerItems = $state(data.tickerItems || []);
 
 	const stats = $derived(analytics ? [
 		{ label: 'cities tracked', value: analytics.real_metrics.cities_covered.toLocaleString() },
@@ -241,22 +240,6 @@
 	<title>engagic - civic engagement made simple</title>
 	<meta name="description" content="Find your local government meetings and agendas" />
 </svelte:head>
-
-{#if tickerItems.length > 0}
-	<div class="news-ticker">
-		<div class="ticker-content">
-			{#each [...tickerItems, ...tickerItems] as item}
-				<a href={item.url} class="ticker-item">
-					<span class="ticker-city">{item.city}</span>
-					<span class="ticker-separator">•</span>
-					<span class="ticker-date">{item.date}</span>
-					<span class="ticker-separator">•</span>
-					<span class="ticker-excerpt">{item.excerpt}</span>
-				</a>
-			{/each}
-		</div>
-	</div>
-{/if}
 
 <div class="container">
 	<header class="header">

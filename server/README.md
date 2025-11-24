@@ -31,9 +31,8 @@ server/
 │   ├── monitoring.py       (340 lines)
 │   └── matters.py          (430 lines)
 │
-├── services/                894 lines  - Business logic (+ 369 HTML)
+├── services/                717 lines  - Business logic (+ 369 HTML)
 │   ├── meeting.py           (41 lines)
-│   ├── ticker.py           (177 lines)
 │   ├── search.py           (315 lines)
 │   ├── flyer.py            (361 lines)
 │   └── flyer_template.html (369 lines)
@@ -546,16 +545,6 @@ async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
     queue_stats = db.get_queue_stats()
     metrics.update_queue_sizes(queue_stats)
     return Response(content=get_metrics_text(), media_type="text/plain")
-
-@router.get("/api/ticker")
-async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
-    """Get ticker items for homepage news ticker"""
-    ticker_items = []
-    for i in range(15):
-        meeting = db.get_random_meeting_with_items()
-        if meeting:
-            ticker_items.append(generate_ticker_item(meeting, db))
-    return {"success": True, "items": ticker_items}
 ```
 
 ---
@@ -905,56 +894,6 @@ def generate_meeting_flyer(
 
 ---
 
-### 4. `services/ticker.py` (177 lines)
-
-**Generate homepage ticker items.**
-
-```python
-def generate_ticker_item(meeting_dict: Dict[str, Any], db: UnifiedDatabase) -> Dict[str, Any]:
-    """Generate a ticker item from a meeting
-
-    Args:
-        meeting_dict: Meeting dict with items
-        db: Database instance
-
-    Returns:
-        Ticker item dict with headline and link
-    """
-    city = db.get_city(banana=meeting_dict["banana"])
-
-    # Extract most interesting item
-    items = meeting_dict.get("items", [])
-    if items:
-        # Prioritize items with high-interest topics
-        high_interest_topics = ["housing", "zoning", "development", "transportation", "environment"]
-        interesting_items = [
-            item for item in items
-            if any(topic in (item.get("topics") or []) for topic in high_interest_topics)
-        ]
-
-        if interesting_items:
-            item = interesting_items[0]
-            headline = f"{city.name}: {item['title'][:100]}"
-        else:
-            item = items[0]
-            headline = f"{city.name}: {item['title'][:100]}"
-    else:
-        headline = f"{city.name}: {meeting_dict['title'][:100]}"
-
-    return {
-        "headline": headline,
-        "meeting_id": meeting_dict["id"],
-        "city_name": city.name,
-        "state": city.state,
-        "meeting_date": meeting_dict.get("date"),
-        "topics": meeting_dict.get("topics", [])
-    }
-```
-
-**Use case:** Homepage "news ticker" showing recent civic activity across all cities.
-
----
-
 ## Middleware (92 lines)
 
 **Cross-cutting concerns applied to all requests.**
@@ -1252,7 +1191,6 @@ GET    /api/queue-stats               Processing queue statistics
 GET    /api/metrics                   Basic metrics (JSON)
 GET    /metrics                       Prometheus metrics (text format)
 GET    /api/analytics                 Public dashboard analytics
-GET    /api/ticker                    Homepage ticker items
 ```
 
 ### Flyer

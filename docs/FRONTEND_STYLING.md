@@ -450,31 +450,6 @@ margin-bottom: 4rem;  /* 64px */
 - Disappears when page loads
 - Controlled by SvelteKit's `$navigating` store
 
-### Ticker Scroll Animation
-
-```css
-.ticker-content {
-  display: flex;
-  animation: scroll 48s linear infinite;
-  white-space: nowrap;
-}
-
-@keyframes scroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-.news-ticker:hover .ticker-content {
-  animation-play-state: paused;  /* Pause on hover */
-}
-```
-
-**Technique:**
-- Duplicate items: `[A, B, C, A, B, C]`
-- Scroll from 0% → -50% (one full set)
-- Loop infinitely
-- 48s duration = slow, readable scroll
-
 ### Svelte Transitions
 
 **Component-level animations:**

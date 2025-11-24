@@ -101,11 +101,8 @@ import { apiClient } from '$lib/api/api-client';
 import { getAnalytics } from '$lib/api/index';
 
 export const load: PageLoad = async ({ setHeaders }) => {
-  // Fetch analytics and ticker in parallel
-  const [analyticsResult, tickerResult] = await Promise.allSettled([
-    getAnalytics(),
-    apiClient.getTicker()
-  ]);
+  // Fetch analytics data
+  const analytics = await getAnalytics();
 
   // Cache for 5 minutes (analytics doesn't change often)
   setHeaders({
@@ -113,16 +110,12 @@ export const load: PageLoad = async ({ setHeaders }) => {
   });
 
   return {
-    analytics: analyticsResult.status === 'fulfilled' ? analyticsResult.value : null,
-    tickerItems: tickerResult.status === 'fulfilled' && tickerResult.value.success
-      ? tickerResult.value.items
-      : []
+    analytics
   };
 };
 ```
 
 **Key features:**
-- `Promise.allSettled` - Fetch both concurrently
 - `setHeaders` - Add cache-control headers
 - Returns data object → passed to `+page.svelte`
 
@@ -175,7 +168,6 @@ export const load: PageLoad = async ({ params, url, setHeaders }) => {
 
   // Access data
   console.log(data.analytics);
-  console.log(data.tickerItems);
 </script>
 
 <div>

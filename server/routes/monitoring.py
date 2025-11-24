@@ -2,27 +2,19 @@
 Monitoring and health check API routes
 """
 
-import time
 from datetime import datetime
-from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 
 from config import config, get_logger
 from database.db_postgres import Database
 from server.dependencies import get_db
-from server.services.ticker import generate_ticker_item
 from server.metrics import metrics, get_metrics_text
 
 logger = get_logger(__name__)
 
 
 router = APIRouter()
-
-# In-memory cache for ticker data (5 minute TTL)
-_ticker_cache: Optional[Dict[str, Any]] = None
-_ticker_cache_time: float = 0
-TICKER_CACHE_TTL = 300  # 5 minutes
 
 
 @router.get("/")
@@ -343,53 +335,6 @@ async def get_analytics(db: Database = Depends(get_db)):
 
     except Exception as e:
         logger.error("analytics endpoint failed", error=str(e))
-        raise HTTPException(
-            status_code=500, detail="We humbly thank you for your patience"
-        )
-
-
-@router.get("/api/ticker")
-async def get_ticker_items(db: Database = Depends(get_db)):
-    """Get pre-generated ticker items for homepage news ticker (cached for 5 minutes)"""
-    global _ticker_cache, _ticker_cache_time
-
-    try:
-        # Check cache
-        current_time = time.time()
-        if _ticker_cache and (current_time - _ticker_cache_time) < TICKER_CACHE_TTL:
-            logger.debug("Returning cached ticker data")
-            return _ticker_cache
-
-        # Cache miss - generate new ticker items
-        logger.info("Generating fresh ticker data")
-        ticker_items = []
-
-        # Fetch 15 random meetings with items
-        for i in range(15):
-            meeting = await db.get_random_meeting_with_items()
-
-            if meeting:
-                # Convert Meeting object to dict for ticker generation
-                from dataclasses import asdict
-                meeting_dict = asdict(meeting)
-                ticker_item = await generate_ticker_item(meeting_dict, db)
-                if ticker_item:
-                    ticker_items.append(ticker_item)
-
-        result = {
-            "success": True,
-            "items": ticker_items,
-            "count": len(ticker_items)
-        }
-
-        # Update cache
-        _ticker_cache = result
-        _ticker_cache_time = current_time
-
-        return result
-
-    except Exception as e:
-        logger.error("ticker endpoint failed", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
