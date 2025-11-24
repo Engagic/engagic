@@ -10,7 +10,7 @@ import asyncio
 import asyncpg
 from pathlib import Path
 
-from config import settings
+from config import config
 
 
 async def setup_userland_schema():
@@ -24,10 +24,10 @@ async def setup_userland_schema():
     schema_sql = schema_path.read_text()
 
     # Get database connection string
-    database_url = settings.get_postgres_dsn()
+    database_url = config.get_postgres_dsn()
 
     print("Connecting to PostgreSQL database...")
-    print(f"Database: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}")
+    print(f"Database: {config.POSTGRES_HOST}:{config.POSTGRES_PORT}/{config.POSTGRES_DB}")
 
     # Connect to database
     conn = await asyncpg.connect(database_url)
