@@ -18,9 +18,9 @@ from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
 
 # Async adapters
-from vendors.adapters.granicus_adapter_async import GranicusAdapterAsync
-from vendors.adapters.legistar_adapter_async import LegistarAdapterAsync
-from vendors.adapters.primegov_adapter_async import PrimeGovAdapterAsync
+from vendors.adapters.granicus_adapter_async import AsyncGranicusAdapter
+from vendors.adapters.legistar_adapter_async import AsyncLegistarAdapter
+from vendors.adapters.primegov_adapter_async import AsyncPrimeGovAdapter
 
 logger = get_logger(__name__).bind(component="vendor")
 
@@ -39,9 +39,9 @@ VENDOR_ADAPTERS = {
 }
 
 ASYNC_VENDOR_ADAPTERS = {
-    "granicus": GranicusAdapterAsync,
-    "legistar": LegistarAdapterAsync,
-    "primegov": PrimeGovAdapterAsync,
+    "granicus": AsyncGranicusAdapter,
+    "legistar": AsyncLegistarAdapter,
+    "primegov": AsyncPrimeGovAdapter,
     # Remaining vendors use sync adapters (will be migrated in Phase 2)
     "civicclerk": CivicClerkAdapter,
     "civicplus": CivicPlusAdapter,
