@@ -28,7 +28,7 @@ async def extract_text_preview(meeting_id: str, output_file: Optional[str] = Non
     """
     logger.info("extracting text preview", meeting_id=meeting_id)
 
-    db = await Database.create(config.get_postgres_dsn(), 10, 100)
+    db = await Database.create()
     try:
         meeting = await db.meetings.get_meeting(meeting_id)
         if not meeting:
@@ -108,7 +108,7 @@ async def preview_items(meeting_id: str, extract_text: bool = False, output_dir:
     """
     logger.info("previewing items", meeting_id=meeting_id)
 
-    db = await Database.create(config.get_postgres_dsn(), 10, 100)
+    db = await Database.create()
     try:
         meeting = await db.meetings.get_meeting(meeting_id)
         if not meeting:

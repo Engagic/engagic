@@ -17,19 +17,36 @@ async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
     """Check rate limits for API endpoints with tier support"""
-    # Get real client IP from trusted proxy headers (priority order)
-    # X-Forwarded-User-IP: Set by our Cloudflare Worker for SSR requests (highest priority)
-    # CF-Connecting-IP: Set by Cloudflare for direct API requests
-    # X-Real-IP: Set by nginx
-    # X-Forwarded-For: Standard proxy header (take leftmost/original client)
-    # Fallback: request.client.host
+    # Get real client IP from nginx-validated header (prevents CF-Connecting-IP spoofing)
+    #
+    # X-Real-Client-IP: Set by nginx after validating the request came from Cloudflare.
+    #   - If from Cloudflare IP: Contains CF-Connecting-IP (trusted real client IP)
+    #   - If direct connection: Contains $remote_addr (attacker's real IP, not spoofed header)
+    #
+    # X-Is-Cloudflare: "1" if request came from Cloudflare IP range, "0" otherwise
+    #   - Used for logging/debugging but not for IP extraction (nginx handles that)
+    #
+    # Fallback chain for non-nginx scenarios (local dev, tests):
+    # X-Forwarded-User-IP: Set by our Cloudflare Worker for SSR requests
+    # CF-Connecting-IP: Direct Cloudflare requests (only trust in dev)
+    # X-Real-IP: Standard nginx header
+    # X-Forwarded-For: Standard proxy header
+    # request.client.host: Direct connection fallback
+    is_cloudflare = request.headers.get("X-Is-Cloudflare") == "1"
     client_ip_raw = (
-        request.headers.get("X-Forwarded-User-IP")
-        or request.headers.get("CF-Connecting-IP")
+        request.headers.get("X-Real-Client-IP")  # nginx-validated (production)
+        or request.headers.get("X-Forwarded-User-IP")  # Cloudflare Worker (SSR)
+        or request.headers.get("CF-Connecting-IP")  # Direct Cloudflare (dev only)
         or request.headers.get("X-Real-IP")
         or (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() if request.headers.get("X-Forwarded-For") else None)
         or (request.client.host if request.client else "unknown")
     )
+
+    # Log non-Cloudflare requests for monitoring (potential bypass attempts)
+    if not is_cloudflare and request.headers.get("X-Real-Client-IP"):
+        logger.warning(
+            f"Non-Cloudflare request detected from {client_ip_raw[:16]}... (direct VPS access)"
+        )
 
     # Hash IP for privacy (GDPR-friendly, can't reverse to get real IP)
     # Same user = same hash = consistent rate limiting

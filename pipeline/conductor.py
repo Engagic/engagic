@@ -356,7 +356,7 @@ def main():
     def sync_city(banana):
         """Sync specific city by city_banana"""
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 result = await conductor.force_sync_city(banana)
@@ -372,7 +372,7 @@ def main():
     def sync_and_process_city(banana):
         """Sync city and immediately process all its meetings"""
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 result = await conductor.sync_and_process_city(banana)
@@ -391,7 +391,7 @@ def main():
         click.echo(f"Syncing {len(city_list)} cities: {', '.join(city_list)}")
 
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 results = await conductor.sync_cities(city_list)
@@ -410,7 +410,7 @@ def main():
         click.echo(f"Processing queued jobs for {len(city_list)} cities: {', '.join(city_list)}")
 
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 results = await conductor.process_cities(city_list)
@@ -429,7 +429,7 @@ def main():
         click.echo(f"Syncing and processing {len(city_list)} cities: {', '.join(city_list)}")
 
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 results = await conductor.sync_and_process_cities(city_list)
@@ -444,7 +444,7 @@ def main():
     def full_sync():
         """Run full sync once"""
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 results = await conductor.fetcher.sync_all()
@@ -459,7 +459,7 @@ def main():
     def status():
         """Show sync status"""
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 sync_status = await conductor.get_sync_status()
@@ -474,7 +474,7 @@ def main():
     def fetcher():
         """Run as fetcher service (auto sync only, no processing)"""
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
 
@@ -527,7 +527,7 @@ def main():
     def preview_queue(banana):
         """Preview queued jobs (optionally specify city_banana)"""
         async def run():
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
                 result = await conductor.preview_queue(city_banana=banana)
@@ -572,7 +572,7 @@ def main():
         """
         async def run():
 
-            db = await Database.create(config.get_postgres_dsn(), 10, 100)
+            db = await Database.create()
             try:
                 conductor = Conductor(db)
 
