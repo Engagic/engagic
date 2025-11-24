@@ -10,7 +10,7 @@ Cities using PrimeGov: Palo Alto CA, Mountain View CA, Sunnyvale CA, and many ot
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from urllib.parse import urlencode
 import asyncio
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
@@ -69,7 +69,6 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
 
         # Fetch upcoming and archived meetings concurrently
         upcoming_url = f"{self.base_url}/api/v2/PublicPortal/ListUpcomingMeetings"
-        archived_url = f"{self.base_url}/api/v2/PublicPortal/ListArchivedMeetings?year={today.year}"
 
         # Concurrent API calls
         upcoming_task = asyncio.create_task(self._fetch_upcoming_meetings(upcoming_url))
@@ -169,7 +168,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
             logger.error("failed to fetch archived meetings", slug=self.slug, year=year, error=str(e))
             return []
 
-    async def _process_meeting(self, meeting: Dict[str, Any]) -> Dict[str, Any]:
+    async def _process_meeting(self, meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Process a single meeting (async HTML fetching if needed)"""
         title = meeting.get("title", "")
 
@@ -343,4 +342,4 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         if response.status >= 400:
             raise ValueError(f"Failed to download attachment: HTTP {response.status}")
 
-        return response._content
+        return await response.read()

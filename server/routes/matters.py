@@ -84,7 +84,7 @@ async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching matter timeline {matter_id}: {str(e)}")
+        logger.error("error fetching matter timeline", matter_id=matter_id, error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving matter timeline")
 
 
@@ -215,7 +215,7 @@ async def get_city_matters(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching matters for city {banana}: {str(e)}")
+        logger.error("error fetching matters for city", banana=banana, error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving city matters")
 
 
@@ -335,7 +335,7 @@ async def get_state_matters(
                             topic_aggregation[t] = 0
                         topic_aggregation[t] += 1
                 except (TypeError, KeyError) as e:
-                    logger.debug(f"Invalid topics: {e}")
+                    logger.debug("invalid topics", error=str(e))
 
         cities_list = [
             {
@@ -365,7 +365,7 @@ async def get_state_matters(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching state matters for {state_code}: {str(e)}")
+        logger.error("error fetching state matters", state_code=state_code, error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving state matters")
 
 
@@ -454,5 +454,5 @@ async def get_random_matter(db: Database = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching random matter: {str(e)}")
+        logger.error("error fetching random matter", error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving random matter")

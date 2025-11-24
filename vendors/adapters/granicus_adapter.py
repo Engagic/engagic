@@ -4,7 +4,7 @@ Granicus Adapter - HTML scraping for Granicus/Legistar platform
 Cities using Granicus: Cambridge MA, Santa Monica CA, and many others
 
 Complex adapter because Granicus doesn't provide a clean API - requires:
-- view_id discovery via brute force
+- Static view_id configuration (from data/granicus_view_ids.json)
 - HTML table scraping
 - PDF extraction from AgendaViewer pages
 """
@@ -13,8 +13,6 @@ import hashlib
 import json
 import os
 import re
-import requests
-from datetime import datetime
 from typing import Dict, Any, List, Optional, Iterator
 from urllib.parse import parse_qs, urlparse, urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
@@ -28,135 +26,53 @@ class GranicusAdapter(BaseAdapter):
 
     def __init__(self, city_slug: str):
         """
-        Initialize Granicus adapter with view_id discovery.
+        Initialize Granicus adapter with static view_id configuration.
 
         Args:
             city_slug: Granicus subdomain (e.g., "cambridge" for cambridge.granicus.com)
+
+        Raises:
+            ValueError: If view_id not configured for this city
         """
         super().__init__(city_slug, vendor="granicus")
         self.base_url = f"https://{self.slug}.granicus.com"
         self.view_ids_file = "data/granicus_view_ids.json"
         self.pdf_extractor = PdfExtractor()
 
-        # Discover or load view_id
-        self.view_id = self._get_view_id()
-        self.list_url = f"{self.base_url}/ViewPublisher.php?view_id={self.view_id}"
-
-        logger.info(f"[granicus:{self.slug}] Using view_id={self.view_id}")
-
-    def _get_view_id(self) -> int:
-        """Get view_id from cache or discover it"""
-        mappings = self._load_view_id_mappings()
-
-        if self.base_url in mappings:
-            logger.info(
-                f"[granicus:{self.slug}] Found cached view_id: {mappings[self.base_url]}"
+        # Load view_id from static configuration (fail-fast if not configured)
+        mappings = self._load_static_view_id_config()
+        if self.base_url not in mappings:
+            raise ValueError(
+                f"view_id not configured for {self.base_url}. "
+                f"Add mapping to {self.view_ids_file}"
             )
-            return mappings[self.base_url]
 
-        # Discover and cache
-        view_id = self._discover_view_id()
-        mappings[self.base_url] = view_id
-        self._save_view_id_mappings(mappings)
+        self.view_id: int = mappings[self.base_url]
+        self.list_url: str = f"{self.base_url}/ViewPublisher.php?view_id={self.view_id}"
 
-        logger.info(f"[granicus:{self.slug}] Discovered view_id: {view_id}")
-        return view_id
+        logger.info("granicus adapter initialized", slug=self.slug, view_id=self.view_id)
 
-    def _load_view_id_mappings(self) -> Dict[str, int]:
-        """Load view_id cache from disk"""
-        if os.path.exists(self.view_ids_file):
-            try:
-                with open(self.view_ids_file, "r") as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning(f"Could not load view_id cache: {e}")
-        return {}
-
-    def _save_view_id_mappings(self, mappings: Dict[str, int]):
-        """Save view_id cache to disk"""
-        os.makedirs(os.path.dirname(self.view_ids_file), exist_ok=True)
-        with open(self.view_ids_file, "w") as f:
-            json.dump(mappings, f, indent=2)
-
-    def _discover_view_id(self) -> int:
+    def _load_static_view_id_config(self) -> Dict[str, int]:
         """
-        Brute force discover view_id by testing 1-100.
-
-        Prioritizes pages with government meeting indicators like
-        "City Council", "Planning Commission", etc.
+        Load view_id mappings from static configuration file.
 
         Returns:
-            Valid view_id
+            Dictionary mapping base URLs to view_ids
 
         Raises:
-            RuntimeError if no view_id found
+            FileNotFoundError: If config file doesn't exist
+            ValueError: If config file is invalid JSON
         """
-        current_year = str(datetime.now().year)
-        base_url = f"{self.base_url}/ViewPublisher.php?view_id="
-
-        logger.info(f"[granicus:{self.slug}] Discovering view_id (testing 1-100)...")
-
-        # Government meeting indicators (high priority)
-        gov_indicators = [
-            "city council",
-            "planning commission",
-            "board of supervisors",
-            "town council",
-            "village board",
-            "board of trustees",
-        ]
-
-        candidates = []
-
-        # Scan for candidates
-        for i in range(1, 100):
-            try:
-                response = self._get(f"{base_url}{i}", timeout=10)
-                text = response.text
-                text_lower = text.lower()
-
-                # CRITICAL: Must have "upcoming" section for filtering
-                # Without it, we'd process all historical meetings
-                if "upcoming" not in text_lower:
-                    continue
-
-                # Must have basic meeting page indicators
-                if not ("ViewPublisher" in text and current_year in text):
-                    continue
-
-                # Score this candidate
-                score = 0
-
-                # Baseline: has required "upcoming" section
-                score += 5
-
-                # High priority: government body names
-                for indicator in gov_indicators:
-                    if indicator in text_lower:
-                        score += 10
-                        logger.debug(f"[granicus:{self.slug}] view_id {i} has '{indicator}' (+10)")
-
-                # Low priority: general meeting/agenda indicators
-                if "agenda" in text_lower or "meeting" in text_lower:
-                    score += 1
-
-                candidates.append((i, score))
-                logger.debug(f"[granicus:{self.slug}] view_id {i} score: {score}")
-
-            except (requests.RequestException, json.JSONDecodeError):
-                continue
-
-        # Sort by score (descending) and return highest
-        if candidates:
-            candidates.sort(key=lambda x: x[1], reverse=True)
-            best_id, best_score = candidates[0]
-            logger.info(
-                f"[granicus:{self.slug}] Found view_id {best_id} "
-                f"(score: {best_score}, {len(candidates)} candidates)"
+        if not os.path.exists(self.view_ids_file):
+            raise FileNotFoundError(
+                f"Granicus view_id configuration not found: {self.view_ids_file}"
             )
-            return best_id
 
-        raise RuntimeError(f"Could not discover view_id for {self.base_url}")
+        try:
+            with open(self.view_ids_file, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in {self.view_ids_file}: {e}")
 
     def fetch_meetings(self, days_forward: int = 14, days_back: int = 7) -> Iterator[Dict[str, Any]]:
         """
@@ -187,12 +103,12 @@ class GranicusAdapter(BaseAdapter):
                     next_table = upcoming_heading.find_next_sibling("table")
                     if next_table:
                         upcoming_section = next_table
-                        logger.info(f"[granicus:{self.slug}] Found upcoming section via {tag} heading (sibling table)")
+                        logger.info("found upcoming section via heading", slug=self.slug, tag=tag, location="sibling table")
                         break
                     # Fallback to parent div if no sibling table
                     upcoming_section = upcoming_heading.find_parent("div")
                     if upcoming_section:
-                        logger.info(f"[granicus:{self.slug}] Found upcoming section via {tag} heading (parent div)")
+                        logger.info("found upcoming section via heading", slug=self.slug, tag=tag, location="parent div")
                         break
         if not upcoming_section:
             # Check for table-based layout
@@ -201,7 +117,7 @@ class GranicusAdapter(BaseAdapter):
                 # Get parent table or containing structure
                 upcoming_section = header_cell.find_parent("table")
                 if upcoming_section:
-                    logger.info(f"[granicus:{self.slug}] Found upcoming section via table header")
+                    logger.info("found upcoming section via table header", slug=self.slug)
 
         if not upcoming_section:
             # Log what we're actually seeing for debugging
@@ -219,7 +135,7 @@ class GranicusAdapter(BaseAdapter):
             )
             return  # Return empty generator - do NOT process historical data
         else:
-            logger.info(f"[granicus:{self.slug}] Found 'Upcoming' section")
+            logger.info("found upcoming section", slug=self.slug)
             search_scope = upcoming_section
 
         # Find links within our target scope
@@ -351,7 +267,7 @@ class GranicusAdapter(BaseAdapter):
                                     if 'url' in params:
                                         result["packet_url"] = urllib.parse.unquote(params['url'][0])
                         except Exception as e:
-                            logger.debug(f"[granicus:{self.slug}] Failed to get PDF URL for {title[:30]}: {e}")
+                            logger.debug("failed to get pdf url", slug=self.slug, title_prefix=title[:30], error=str(e))
 
                     if items_data.get("participation"):
                         result["participation"] = items_data["participation"]

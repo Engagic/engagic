@@ -25,16 +25,6 @@ _ticker_cache_time: float = 0
 TICKER_CACHE_TTL = 300  # 5 minutes
 
 
-def get_analyzer():
-    """Dependency to get analyzer instance"""
-    from pipeline.analyzer import Analyzer
-    try:
-        analyzer = Analyzer(api_key=config.get_api_key())
-        return analyzer
-    except ValueError:
-        return None
-
-
 @router.get("/")
 async def root():
     """API status and info"""
@@ -113,8 +103,6 @@ async def root():
 @router.get("/api/health")
 async def health_check(db: Database = Depends(get_db)):
     """Health check endpoint"""
-    analyzer = get_analyzer()
-
     health_status = {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -165,7 +153,7 @@ async def health_check(db: Database = Depends(get_db)):
 
     # LLM analyzer check
     health_status["checks"]["llm_analyzer"] = {
-        "status": "available" if analyzer else "disabled",
+        "status": "available" if config.get_api_key() else "disabled",
         "has_api_key": bool(config.get_api_key()),
     }
 
@@ -210,7 +198,7 @@ async def get_stats(db: Database = Depends(get_db)):
             },
         }
     except Exception as e:
-        logger.error(f"Error fetching stats: {str(e)}")
+        logger.error("error fetching stats", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
@@ -237,7 +225,7 @@ async def get_queue_stats(db: Database = Depends(get_db)):
             "note": "Queue is processed continuously by background daemon. Failed jobs retry 3 times before moving to dead_letter.",
         }
     except Exception as e:
-        logger.error(f"Error fetching queue stats: {str(e)}")
+        logger.error("error fetching queue stats", error=str(e))
         raise HTTPException(status_code=500, detail="Error fetching queue statistics")
 
 
@@ -262,7 +250,7 @@ async def get_metrics(db: Database = Depends(get_db)):
             },
         }
     except Exception as e:
-        logger.error(f"Metrics endpoint failed: {e}")
+        logger.error("metrics endpoint failed", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
@@ -283,7 +271,7 @@ async def prometheus_metrics(db: Database = Depends(get_db)):
         # Return Prometheus text format
         return Response(content=get_metrics_text(), media_type="text/plain")
     except Exception as e:
-        logger.error(f"Prometheus metrics endpoint failed: {e}")
+        logger.error("prometheus metrics endpoint failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to generate metrics")
 
 
@@ -354,7 +342,7 @@ async def get_analytics(db: Database = Depends(get_db)):
         }
 
     except Exception as e:
-        logger.error(f"Analytics endpoint failed: {e}")
+        logger.error("analytics endpoint failed", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
@@ -401,7 +389,7 @@ async def get_ticker_items(db: Database = Depends(get_db)):
         return result
 
     except Exception as e:
-        logger.error(f"Ticker endpoint failed: {e}")
+        logger.error("ticker endpoint failed", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )

@@ -29,22 +29,22 @@ class Config:
     """Configuration management for engagic"""
 
     def __init__(self):
-        # Database configuration - SQLite (legacy, being migrated to PostgreSQL)
+        # Database configuration - PostgreSQL (migrated, production)
         # Default to VPS path if it exists, otherwise repo-relative for local dev
         vps_path = "/root/engagic/data"
         local_path = os.path.join(os.getcwd(), "data")
         default_data_dir = vps_path if os.path.exists(vps_path) else local_path
         self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", default_data_dir)
+
+        # DEPRECATED: Old SQLite paths (kept for migration script reference only)
         self.UNIFIED_DB_PATH = os.getenv(
             "ENGAGIC_UNIFIED_DB", f"{self.DB_DIR}/engagic.db"
         )
-
-        # Legacy paths kept for migration script only
         self.LOCATIONS_DB_PATH = f"{self.DB_DIR}/locations.db"
         self.MEETINGS_DB_PATH = f"{self.DB_DIR}/meetings.db"
         self.ANALYTICS_DB_PATH = f"{self.DB_DIR}/analytics.db"
 
-        # PostgreSQL configuration (migration in progress)
+        # PostgreSQL configuration (production database)
         self.USE_POSTGRES = os.getenv("ENGAGIC_USE_POSTGRES", "false").lower() == "true"
         self.POSTGRES_HOST = os.getenv("ENGAGIC_POSTGRES_HOST", "localhost")
         self.POSTGRES_PORT = int(os.getenv("ENGAGIC_POSTGRES_PORT", "5432"))

@@ -86,23 +86,23 @@ class ChicagoAdapter(BaseAdapter):
 
         # Fetch meetings
         api_url = f"{self.base_url}/meeting-agenda"
-        logger.info(f"[chicago:{self.slug}] Fetching meetings from {api_url}")
+        logger.info("fetching meetings", slug=self.slug, api_url=api_url)
 
         try:
             response = self._get(api_url, params=params)
         except Exception as e:
-            logger.error(f"[chicago:{self.slug}] Network error fetching meetings: {e}")
+            logger.error("network error fetching meetings", slug=self.slug, error=str(e))
             return
 
         try:
             response_data = response.json()
         except ValueError as e:
-            logger.error(f"[chicago:{self.slug}] Invalid JSON response: {e}")
+            logger.error("invalid json response", slug=self.slug, error=str(e))
             return
 
         # Extract meetings from response
         meetings = response_data.get("data", [])
-        logger.info(f"[chicago:{self.slug}] Retrieved {len(meetings)} meetings")
+        logger.info("retrieved meetings", slug=self.slug, count=len(meetings))
 
         for meeting in meetings:
             try:
@@ -113,19 +113,19 @@ class ChicagoAdapter(BaseAdapter):
                 location = meeting.get("location")
 
                 if not meeting_id or not date_str:
-                    logger.warning(f"[chicago:{self.slug}] Meeting {meeting.get('meetingId')}: missing ID or date")
+                    logger.warning("meeting missing id or date", slug=self.slug, meeting_id=meeting.get('meetingId'))
                     continue
 
                 # Parse date
                 meeting_date = self._parse_iso_date(date_str)
                 if not meeting_date:
-                    logger.warning(f"[chicago:{self.slug}] Meeting {meeting_id}: invalid date '{date_str}'")
+                    logger.warning("meeting invalid date", slug=self.slug, meeting_id=meeting_id, date_str=date_str)
                     continue
 
                 # Fetch full meeting detail to get agenda structure
                 meeting_detail = self._fetch_meeting_detail(meeting_id)
                 if not meeting_detail:
-                    logger.warning(f"[chicago:{self.slug}] Could not fetch detail for meeting {meeting_id}")
+                    logger.warning("could not fetch meeting detail", slug=self.slug, meeting_id=meeting_id)
                     continue
 
                 # Extract agenda items from meeting detail
@@ -153,12 +153,12 @@ class ChicagoAdapter(BaseAdapter):
                     if agenda_url:
                         result["agenda_url"] = agenda_url
                     result["items"] = items
-                    logger.info(f"[chicago:{self.slug}] Meeting {meeting_id}: {len(items)} items extracted")
+                    logger.info("meeting items extracted", slug=self.slug, meeting_id=meeting_id, item_count=len(items))
                 elif agenda_url:
                     result["packet_url"] = agenda_url
-                    logger.info(f"[chicago:{self.slug}] Meeting {meeting_id}: fallback to packet URL")
+                    logger.info("meeting fallback to packet url", slug=self.slug, meeting_id=meeting_id)
                 else:
-                    logger.debug(f"[chicago:{self.slug}] Meeting {meeting_id}: no data, skipping")
+                    logger.debug("meeting no data skipping", slug=self.slug, meeting_id=meeting_id)
                     continue
 
                 # Add video/transcript links if available
@@ -191,18 +191,18 @@ class ChicagoAdapter(BaseAdapter):
             Meeting detail dictionary with agenda.groups[].items[] structure
         """
         detail_url = f"{self.base_url}/meeting-agenda/{meeting_id}"
-        logger.debug(f"[chicago:{self.slug}] Fetching meeting detail: {detail_url}")
+        logger.debug("fetching meeting detail", slug=self.slug, detail_url=detail_url)
 
         try:
             response = self._get(detail_url)
         except Exception as e:
-            logger.warning(f"[chicago:{self.slug}] Network error fetching meeting detail {meeting_id}: {e}")
+            logger.warning("network error fetching meeting detail", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None
 
         try:
             return response.json()
         except ValueError as e:
-            logger.warning(f"[chicago:{self.slug}] Invalid JSON in meeting detail {meeting_id}: {e}")
+            logger.warning("invalid json in meeting detail", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None
 
     def _extract_agenda_items(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -244,7 +244,7 @@ class ChicagoAdapter(BaseAdapter):
         groups = agenda.get("groups", [])
 
         if not groups:
-            logger.debug(f"[chicago:{self.slug}] No agenda groups found in meeting detail")
+            logger.debug("no agenda groups found", slug=self.slug)
             return items
 
         for group in groups:
@@ -265,13 +265,13 @@ class ChicagoAdapter(BaseAdapter):
                 # Use matterId or commentId as item_id
                 item_id = matter_id or comment_id
                 if not item_id:
-                    logger.debug(f"[chicago:{self.slug}] Item missing ID, skipping: {title[:60]}")
+                    logger.debug("item missing id skipping", slug=self.slug, title_prefix=title[:60])
                     continue
 
                 # Skip procedural items (adapter-level filtering)
                 if should_skip_procedural_item(title, matter_type or ""):
                     items_filtered += 1
-                    logger.debug(f"[chicago:{self.slug}] Skipping procedural item: {title[:60]}")
+                    logger.debug("skipping procedural item", slug=self.slug, title_prefix=title[:60])
                     continue
 
                 # Increment counter for non-filtered items
@@ -323,9 +323,9 @@ class ChicagoAdapter(BaseAdapter):
                 items.append(item_data)
 
         if items_filtered > 0:
-            logger.info(f"[chicago:{self.slug}] Filtered {items_filtered} procedural items")
+            logger.info("filtered procedural items", slug=self.slug, filtered_count=items_filtered)
 
-        logger.debug(f"[chicago:{self.slug}] Extracted {len(items)} substantive items from agenda")
+        logger.debug("extracted substantive items", slug=self.slug, item_count=len(items))
         return items
 
     def _fetch_matter_data(self, matter_id: str) -> Dict[str, Any]:
@@ -343,13 +343,13 @@ class ChicagoAdapter(BaseAdapter):
         try:
             response = self._get(matter_url)
         except Exception as e:
-            logger.debug(f"[chicago:{self.slug}] Network error fetching matter {matter_id}: {e}")
+            logger.debug("network error fetching matter", slug=self.slug, matter_id=matter_id, error=str(e))
             return {"attachments": [], "sponsors": []}
 
         try:
             matter_data = response.json()
         except ValueError as e:
-            logger.debug(f"[chicago:{self.slug}] Invalid JSON in matter {matter_id}: {e}")
+            logger.debug("invalid json in matter", slug=self.slug, matter_id=matter_id, error=str(e))
             return {"attachments": [], "sponsors": []}
 
         # Extract attachments
@@ -389,7 +389,7 @@ class ChicagoAdapter(BaseAdapter):
             if sponsor_name:
                 sponsors.append(sponsor_name)
 
-        logger.debug(f"[chicago:{self.slug}] Matter {matter_id}: {len(attachments)} attachments, {len(sponsors)} sponsors")
+        logger.debug("matter data fetched", slug=self.slug, matter_id=matter_id, attachment_count=len(attachments), sponsor_count=len(sponsors))
         return {"attachments": attachments, "sponsors": sponsors}
 
     def _parse_iso_date(self, date_str: str) -> Optional[datetime]:
@@ -412,5 +412,5 @@ class ChicagoAdapter(BaseAdapter):
             else:
                 return datetime.fromisoformat(date_str)
         except Exception as e:
-            logger.warning(f"[chicago:{self.slug}] Could not parse date '{date_str}': {e}")
+            logger.warning("could not parse date", slug=self.slug, date_str=date_str, error=str(e))
             return None

@@ -94,7 +94,7 @@ def _match_lines_to_text(page: fitz.Page, lines: List[Tuple[float, float, float]
     }
 
     # Get text with detailed positioning
-    text_dict = page.get_text("dict")
+    text_dict = page.get_text("dict")  # type: ignore[attr-defined]
 
     for block in text_dict["blocks"]:
         if block.get("type") != 0:  # Skip non-text blocks
@@ -138,7 +138,7 @@ def _match_lines_to_text(page: fitz.Page, lines: List[Tuple[float, float, float]
 def _has_legislative_legend(doc: fitz.Document) -> bool:
     """Check if document contains legislative formatting legend (any page)."""
     for page_num in range(len(doc)):
-        text = doc[page_num].get_text().lower()
+        text = doc[page_num].get_text().lower()  # type: ignore[attr-defined]
         if (("addition" in text or "added" in text) and "underline" in text and
             ("deletion" in text or "deleted" in text) and "strikethrough" in text):
             return True
@@ -156,7 +156,7 @@ def _extract_text_with_formatting(page: fitz.Page, page_num: int) -> str:
 
     if not lines:
         # No formatting detected, return plain text
-        return page.get_text()
+        return page.get_text()  # type: ignore[attr-defined]
 
     # Match lines to text
     matched = _match_lines_to_text(page, lines)
@@ -164,7 +164,7 @@ def _extract_text_with_formatting(page: fitz.Page, page_num: int) -> str:
     underline_spans = {bbox: text for text, bbox in matched['underline']}
 
     # Get text with detailed positioning
-    text_dict = page.get_text("dict")
+    text_dict = page.get_text("dict")  # type: ignore[attr-defined]
     result_parts = []
 
     for block in text_dict["blocks"]:
@@ -249,10 +249,10 @@ class PdfExtractor:
             return text
 
         except (Image.DecompressionBombError, Image.DecompressionBombWarning):
-            logger.warning(f"Page {page.number + 1}: Image too large for OCR, skipping")
+            logger.warning("page image too large for OCR", page_num=page.number + 1)
             return ""
         except (OSError, pytesseract.TesseractError) as e:
-            logger.error(f"Page {page.number + 1}: OCR failed - {type(e).__name__}: {e}")
+            logger.error("OCR failed", page_num=page.number + 1, error=str(e), error_type=type(e).__name__)
             return ""
 
     def _is_ocr_better(self, original: str, ocr_result: str, page_num: int) -> bool:
@@ -271,7 +271,7 @@ class PdfExtractor:
 
         # If OCR produced nothing, always keep original
         if ocr_chars == 0:
-            logger.info(f"[PyMuPDF] Page {page_num}: Keeping original (OCR produced nothing)")
+            logger.info("keeping original text, OCR produced nothing", page_num=page_num)
             return False
 
         # Calculate quality metrics for OCR

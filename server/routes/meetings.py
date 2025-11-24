@@ -67,7 +67,7 @@ async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)
         }
 
     except Exception as e:
-        logger.error(f"Error retrieving agenda for {request.packet_url}: {str(e)}")
+        logger.error("error retrieving agenda", packet_url=request.packet_url, error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
@@ -112,7 +112,7 @@ async def get_random_best_meeting():
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting random best meeting: {str(e)}")
+        logger.error("error getting random best meeting", error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving meeting summary")
 
 
@@ -135,5 +135,5 @@ async def get_random_meeting_with_items(db: Database = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting random meeting with items: {str(e)}")
+        logger.error("error getting random meeting with items", error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving meeting")

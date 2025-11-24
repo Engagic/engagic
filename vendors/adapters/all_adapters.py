@@ -1,40 +1,35 @@
 """
-Consolidated adapter imports
+DEPRECATED: This module is deprecated and should not be used.
 
-Imports all city meeting adapters from their individual modules.
-This file serves as the public API for the adapters package.
+The adapter architecture has migrated to async/await patterns with a factory-based
+routing system that handles both async and sync adapters.
 
-Usage:
-    from vendors.adapters.all_adapters import PrimeGovAdapter, CivicClerkAdapter
+For async adapters (recommended), use:
+    from vendors.factory import get_async_adapter
+    adapter = get_async_adapter("primegov", "paloalto")
 
-Adapter Categories:
-    API-Based (Clean, ~70-80 lines):
-        - PrimeGovAdapter: JSON API
-        - CivicClerkAdapter: OData API
-        - LegistarAdapter: Legistar Web API (requires token for some cities)
+For sync adapters (legacy fallback), use:
+    from vendors.factory import get_adapter
+    adapter = get_adapter("primegov", "paloalto")
 
-    HTML Scraping (Complex, ~200-250 lines):
-        - GranicusAdapter: HTML tables with view_id discovery
-        - NovusAgendaAdapter: HTML table scraping
-        - CivicPlusAdapter: Homepage scraping with external system detection
+Direct imports are discouraged because:
+1. No automatic async/sync fallback handling
+2. No vendor-specific routing logic
+3. No centralized adapter configuration
+
+This file is kept for backward compatibility only and provides no functionality.
+All adapter usage should go through the factory pattern.
+
+Async adapters available:
+- AsyncLegistarAdapter (via get_async_adapter("legistar", slug))
+- AsyncPrimeGovAdapter (via get_async_adapter("primegov", slug))
+- AsyncGranicusAdapter (via get_async_adapter("granicus", slug))
+
+Sync adapters (legacy, 8 vendors still unmigrated):
+- IQM2Adapter, NovusAgendaAdapter, CivicClerkAdapter, CivicPlusAdapter,
+  EscribeAdapter, BerkeleyAdapter, ChicagoAdapter, MenloParkAdapter
 """
 
-from vendors.adapters.base_adapter import BaseAdapter
-from vendors.adapters.primegov_adapter import PrimeGovAdapter
-from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
-from vendors.adapters.granicus_adapter import GranicusAdapter
-from vendors.adapters.legistar_adapter import LegistarAdapter
-from vendors.adapters.novusagenda_adapter import NovusAgendaAdapter
-from vendors.adapters.civicplus_adapter import CivicPlusAdapter
-from vendors.adapters.escribe_adapter import EscribeAdapter
-
-__all__ = [
-    "BaseAdapter",
-    "PrimeGovAdapter",
-    "CivicClerkAdapter",
-    "GranicusAdapter",
-    "LegistarAdapter",
-    "NovusAgendaAdapter",
-    "CivicPlusAdapter",
-    "EscribeAdapter",
-]
+# This module intentionally provides no exports
+# Use vendors.factory.get_async_adapter() or vendors.factory.get_adapter() instead
+__all__ = []
