@@ -1,0 +1,414 @@
+"""Async QueueRepository for job queue operations
+
+Handles job queue management with PostgreSQL optimizations:
+- Atomic dequeue using FOR UPDATE SKIP LOCKED
+- Smart retry logic with exponential backoff
+- Dead letter queue for failed jobs
+- Priority-based processing
+"""
+
+from typing import Optional, Dict, Any
+
+from database.repositories_async.base import BaseRepository
+from pipeline.models import QueueJob, MeetingJob, MatterJob
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="queue_repository")
+
+
+class QueueRepository(BaseRepository):
+    """Repository for job queue operations
+
+    Provides:
+    - Enqueue jobs with deduplication
+    - Atomic dequeue with row-level locking
+    - Mark jobs complete/failed with retry logic
+    - Queue statistics for monitoring
+    """
+
+    async def enqueue_job(
+        self,
+        source_url: str,
+        job_type: str,
+        payload: Dict[str, Any],
+        meeting_id: Optional[str] = None,
+        banana: Optional[str] = None,
+        priority: int = 0,
+    ) -> None:
+        """Add job to processing queue with deduplication
+
+        Uses source_url as unique key. If job already exists, resets status to pending.
+
+        Args:
+            source_url: Unique identifier for job (used for deduplication)
+            job_type: Type of job (e.g., "meeting", "item", "matter")
+            payload: Job data (will be JSON-serialized)
+            meeting_id: Associated meeting ID
+            banana: Associated city banana
+            priority: Job priority (higher = processed first, default: 0)
+        """
+        await self._execute(
+            """
+            INSERT INTO queue (
+                source_url, meeting_id, banana, job_type, payload,
+                status, priority, retry_count
+            )
+            VALUES ($1, $2, $3, $4, $5, 'pending', $6, 0)
+            ON CONFLICT (source_url) DO UPDATE SET
+                status = 'pending',
+                priority = EXCLUDED.priority,
+                retry_count = 0,
+                error_message = NULL,
+                failed_at = NULL
+            """,
+            source_url,
+            meeting_id,
+            banana,
+            job_type,
+            payload,
+            priority,
+        )
+
+        logger.debug("job enqueued", source_url=source_url, job_type=job_type)
+
+    async def get_next_job(self) -> Optional[Dict[str, Any]]:
+        """Get next pending job from queue (highest priority first)
+
+        Uses FOR UPDATE SKIP LOCKED for safe concurrent access.
+
+        Returns:
+            Job dict with id, source_url, job_type, payload, etc., or None if queue empty
+        """
+        async with self.transaction() as conn:
+            # Atomic SELECT-UPDATE with row-level locking
+            row = await conn.fetchrow(
+                """
+                SELECT id, source_url, meeting_id, banana, job_type, payload,
+                       priority, retry_count
+                FROM queue
+                WHERE status = 'pending'
+                ORDER BY priority DESC, created_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+                """
+            )
+
+            if not row:
+                return None
+
+            # Mark as processing
+            await conn.execute(
+                """
+                UPDATE queue
+                SET status = 'processing', started_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+                """,
+                row["id"],
+            )
+
+            return {
+                "id": row["id"],
+                "source_url": row["source_url"],
+                "meeting_id": row["meeting_id"],
+                "banana": row["banana"],
+                "job_type": row["job_type"],
+                "payload": row["payload"],  # Already deserialized by asyncpg
+                "priority": row["priority"],
+                "retry_count": row["retry_count"],
+            }
+
+    async def get_next_for_processing(
+        self, banana: Optional[str] = None
+    ) -> Optional[QueueJob]:
+        """Get next typed job from processing queue
+
+        Returns QueueJob with typed payload (MeetingJob or MatterJob).
+        Uses atomic UPDATE-RETURNING to prevent race conditions.
+
+        Args:
+            banana: Optional city filter
+
+        Returns:
+            QueueJob object or None if queue empty
+        """
+        async with self.transaction() as conn:
+            # Atomic SELECT-UPDATE with optional city filter
+            if banana:
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, source_url, meeting_id, banana, job_type, payload,
+                           priority, retry_count, status, created_at, started_at
+                    FROM queue
+                    WHERE status = 'pending' AND banana = $1
+                    ORDER BY priority DESC, created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                    """,
+                    banana,
+                )
+            else:
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, source_url, meeting_id, banana, job_type, payload,
+                           priority, retry_count, status, created_at, started_at
+                    FROM queue
+                    WHERE status = 'pending'
+                    ORDER BY priority DESC, created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                    """
+                )
+
+            if not row:
+                return None
+
+            # Mark as processing
+            await conn.execute(
+                """
+                UPDATE queue
+                SET status = 'processing', started_at = NOW()
+                WHERE id = $1
+                """,
+                row["id"],
+            )
+
+            # Get payload (JSONB automatically deserialized by codec)
+            payload_data = row["payload"]
+
+            if row["job_type"] == "meeting":
+                payload = MeetingJob.from_dict(payload_data)
+            elif row["job_type"] == "matter":
+                payload = MatterJob.from_dict(payload_data)
+            else:
+                raise ValueError(f"Unknown job_type: {row['job_type']}")
+
+            return QueueJob(
+                id=row["id"],
+                job_type=row["job_type"],
+                payload=payload,
+                banana=row["banana"],
+                priority=row["priority"],
+                status="processing",
+                retry_count=row.get("retry_count", 0),
+                error_message=None,
+                created_at=row.get("created_at").isoformat() if row.get("created_at") else None,
+                started_at=row.get("started_at").isoformat() if row.get("started_at") else None
+            )
+
+    async def mark_job_complete(self, queue_id: int) -> None:
+        """Mark job as completed
+
+        Args:
+            queue_id: Queue entry ID
+        """
+        await self._execute(
+            """
+            UPDATE queue
+            SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+            """,
+            queue_id,
+        )
+
+        logger.debug("job completed", queue_id=queue_id)
+
+    async def mark_processing_complete(self, queue_id: int) -> None:
+        """Mark job as completed (alias for mark_job_complete)
+
+        Args:
+            queue_id: Queue job ID
+        """
+        await self._execute(
+            """
+            UPDATE queue
+            SET status = 'completed', completed_at = NOW()
+            WHERE id = $1
+            """,
+            queue_id,
+        )
+
+        logger.info("marked queue item as completed", queue_id=queue_id)
+
+    async def mark_job_failed(self, queue_id: int, error_message: str) -> None:
+        """Mark job as failed with retry logic
+
+        Implements retry logic:
+        - retry_count < 3: Increment retry, set status back to pending
+        - retry_count >= 3: Set status to dead_letter
+
+        Args:
+            queue_id: Queue entry ID
+            error_message: Error description
+        """
+        async with self.pool.acquire() as conn:
+            # Get current retry count
+            row = await conn.fetchrow(
+                "SELECT retry_count FROM queue WHERE id = $1",
+                queue_id,
+            )
+
+            if not row:
+                return
+
+            retry_count = row["retry_count"]
+
+            if retry_count < 3:
+                # Retry
+                await conn.execute(
+                    """
+                    UPDATE queue
+                    SET status = 'pending',
+                        retry_count = retry_count + 1,
+                        error_message = $2,
+                        failed_at = NOW()
+                    WHERE id = $1
+                    """,
+                    queue_id,
+                    error_message,
+                )
+                logger.warning("job failed, retrying", queue_id=queue_id, retry_count=retry_count + 1)
+            else:
+                # Dead letter
+                await conn.execute(
+                    """
+                    UPDATE queue
+                    SET status = 'dead_letter',
+                        retry_count = retry_count + 1,
+                        error_message = $2,
+                        failed_at = NOW()
+                    WHERE id = $1
+                    """,
+                    queue_id,
+                    error_message,
+                )
+                logger.error("job dead lettered", queue_id=queue_id, error=error_message)
+
+    async def mark_processing_failed(
+        self, queue_id: int, error_message: str, increment_retry: bool = True
+    ) -> None:
+        """Mark job as failed with smart retry logic
+
+        Implements exponential backoff retry (3 attempts) before moving to DLQ.
+        - retry_count < 3: Reset to 'pending' with lower priority
+        - retry_count >= 3: Move to 'dead_letter' status
+
+        Args:
+            queue_id: Queue job ID
+            error_message: Error description
+            increment_retry: If False, mark as failed without retry logic
+                           (used for non-retryable errors)
+        """
+        async with self.pool.acquire() as conn:
+            if not increment_retry:
+                # Non-retryable error
+                await conn.execute(
+                    """
+                    UPDATE queue
+                    SET status = 'failed',
+                        error_message = $2,
+                        completed_at = NOW()
+                    WHERE id = $1
+                    """,
+                    queue_id,
+                    error_message,
+                )
+                logger.warning("marked queue item as failed (non-retryable)", queue_id=queue_id, error=error_message)
+                return
+
+            # Get current retry_count and priority
+            row = await conn.fetchrow(
+                "SELECT retry_count, priority FROM queue WHERE id = $1",
+                queue_id,
+            )
+
+            if not row:
+                logger.error("queue item not found", queue_id=queue_id)
+                return
+
+            current_retry_count = row["retry_count"]
+            current_priority = row["priority"]
+
+            if current_retry_count < 2:  # Will be 3 after increment (0 -> 1 -> 2)
+                # Retry with exponential backoff priority
+                new_priority = current_priority - (20 * (current_retry_count + 1))
+
+                await conn.execute(
+                    """
+                    UPDATE queue
+                    SET status = 'pending',
+                        priority = $2,
+                        retry_count = retry_count + 1,
+                        error_message = $3,
+                        completed_at = NULL
+                    WHERE id = $1
+                    """,
+                    queue_id,
+                    new_priority,
+                    error_message,
+                )
+                logger.warning(
+                    "job retry scheduled",
+                    queue_id=queue_id,
+                    attempt=current_retry_count + 1,
+                    max_attempts=3,
+                    priority_old=current_priority,
+                    priority_new=new_priority,
+                    error=error_message
+                )
+            else:
+                # Move to dead letter queue
+                await conn.execute(
+                    """
+                    UPDATE queue
+                    SET status = 'dead_letter',
+                        retry_count = retry_count + 1,
+                        error_message = $2,
+                        failed_at = NOW(),
+                        completed_at = NOW()
+                    WHERE id = $1
+                    """,
+                    queue_id,
+                    error_message,
+                )
+                logger.error(
+                    "job moved to dead letter queue",
+                    queue_id=queue_id,
+                    total_failures=current_retry_count + 1,
+                    error=error_message
+                )
+
+    async def get_queue_stats(self) -> dict:
+        """Get queue statistics for Prometheus
+
+        Returns:
+            Dict with {status}_count for each status and avg_processing_seconds
+        """
+        async with self.pool.acquire() as conn:
+            # Count by status
+            status_rows = await conn.fetch("""
+                SELECT status, COUNT(*) as count
+                FROM queue
+                GROUP BY status
+            """)
+
+            # Build stats dict with {status}_count keys
+            stats = {}
+            for row in status_rows:
+                stats[f"{row['status']}_count"] = row['count']
+
+            # Ensure all statuses have defaults
+            for status in ['pending', 'processing', 'completed', 'failed', 'dead_letter']:
+                stats.setdefault(f"{status}_count", 0)
+
+            # Average processing time (completed jobs only)
+            avg_row = await conn.fetchrow("""
+                SELECT AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) as avg_seconds
+                FROM queue
+                WHERE status = 'completed'
+                AND completed_at IS NOT NULL
+                AND started_at IS NOT NULL
+            """)
+
+            stats['avg_processing_seconds'] = float(avg_row['avg_seconds']) if avg_row['avg_seconds'] else 0.0
+
+            return stats

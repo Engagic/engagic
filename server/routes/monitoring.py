@@ -5,11 +5,12 @@ Monitoring and health check API routes
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 
 from config import config, get_logger
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
+from server.dependencies import get_db
 from server.services.ticker import generate_ticker_item
 from server.metrics import metrics, get_metrics_text
 
@@ -22,21 +23,6 @@ router = APIRouter()
 _ticker_cache: Optional[Dict[str, Any]] = None
 _ticker_cache_time: float = 0
 TICKER_CACHE_TTL = 300  # 5 minutes
-
-
-def get_db(request: Request) -> UnifiedDatabase:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
-
-
-def get_analyzer():
-    """Dependency to get analyzer instance"""
-    from pipeline.analyzer import Analyzer
-    try:
-        analyzer = Analyzer(api_key=config.get_api_key())
-        return analyzer
-    except ValueError:
-        return None
 
 
 @router.get("/")
@@ -115,10 +101,8 @@ async def root():
 
 
 @router.get("/api/health")
-async def health_check(db: UnifiedDatabase = Depends(get_db)):
+async def health_check(db: Database = Depends(get_db)):
     """Health check endpoint"""
-    analyzer = get_analyzer()
-
     health_status = {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -127,9 +111,11 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
     }
 
     try:
-        # Database health check
-        db.conn.execute("SELECT 1").fetchone()
-        stats = db.get_stats()
+        # Database health check (async PostgreSQL)
+        async with db.pool.acquire() as conn:
+            await conn.fetchrow("SELECT 1")
+
+        stats = await db.get_stats()
         health_status["checks"]["databases"] = {
             "status": "healthy",
             "cities": stats["active_cities"],
@@ -137,7 +123,7 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
         }
 
         # Queue health check (detect backlog)
-        queue_stats = db.get_queue_stats()
+        queue_stats = await db.get_queue_stats()
         pending_count = queue_stats.get("pending_count", 0)
         dead_letter_count = queue_stats.get("dead_letter_count", 0)
 
@@ -167,7 +153,7 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
 
     # LLM analyzer check
     health_status["checks"]["llm_analyzer"] = {
-        "status": "available" if analyzer else "disabled",
+        "status": "available" if config.get_api_key() else "disabled",
         "has_api_key": bool(config.get_api_key()),
     }
 
@@ -194,10 +180,10 @@ async def health_check(db: UnifiedDatabase = Depends(get_db)):
 
 
 @router.get("/api/stats")
-async def get_stats(db: UnifiedDatabase = Depends(get_db)):
+async def get_stats(db: Database = Depends(get_db)):
     """Get system statistics"""
     try:
-        stats = db.get_stats()
+        stats = await db.get_stats()
 
         return {
             "status": "healthy",
@@ -212,17 +198,17 @@ async def get_stats(db: UnifiedDatabase = Depends(get_db)):
             },
         }
     except Exception as e:
-        logger.error(f"Error fetching stats: {str(e)}")
+        logger.error("error fetching stats", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
 
 
 @router.get("/api/queue-stats")
-async def get_queue_stats(db: UnifiedDatabase = Depends(get_db)):
+async def get_queue_stats(db: Database = Depends(get_db)):
     """Get processing queue statistics (Phase 4)"""
     try:
-        queue_stats = db.get_queue_stats()
+        queue_stats = await db.get_queue_stats()
 
         return {
             "status": "healthy",
@@ -239,15 +225,15 @@ async def get_queue_stats(db: UnifiedDatabase = Depends(get_db)):
             "note": "Queue is processed continuously by background daemon. Failed jobs retry 3 times before moving to dead_letter.",
         }
     except Exception as e:
-        logger.error(f"Error fetching queue stats: {str(e)}")
+        logger.error("error fetching queue stats", error=str(e))
         raise HTTPException(status_code=500, detail="Error fetching queue statistics")
 
 
 @router.get("/api/metrics")
-async def get_metrics(db: UnifiedDatabase = Depends(get_db)):
+async def get_metrics(db: Database = Depends(get_db)):
     """Basic metrics endpoint for monitoring"""
     try:
-        stats = db.get_stats()
+        stats = await db.get_stats()
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -264,14 +250,14 @@ async def get_metrics(db: UnifiedDatabase = Depends(get_db)):
             },
         }
     except Exception as e:
-        logger.error(f"Metrics endpoint failed: {e}")
+        logger.error("metrics endpoint failed", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
 
 
 @router.get("/metrics")
-async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
+async def prometheus_metrics(db: Database = Depends(get_db)):
     """Prometheus metrics endpoint
 
     Returns metrics in Prometheus text format for scraping.
@@ -279,86 +265,64 @@ async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
     """
     try:
         # Update queue size gauges with current stats
-        queue_stats = db.get_queue_stats()
+        queue_stats = await db.get_queue_stats()
         metrics.update_queue_sizes(queue_stats)
 
         # Return Prometheus text format
         return Response(content=get_metrics_text(), media_type="text/plain")
     except Exception as e:
-        logger.error(f"Prometheus metrics endpoint failed: {e}")
+        logger.error("prometheus metrics endpoint failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to generate metrics")
 
 
 @router.get("/api/analytics")
-async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
+async def get_analytics(db: Database = Depends(get_db)):
     """Get comprehensive analytics for public dashboard"""
     try:
-        # Get stats directly from unified database
-        if db.conn is None:
-            raise HTTPException(
-                status_code=500, detail="Database connection not established"
+        # Get stats using async PostgreSQL
+        async with db.pool.acquire() as conn:
+            # City stats
+            total_cities = await conn.fetchrow("SELECT COUNT(*) as total_cities FROM cities")
+            active_cities_stats = await conn.fetchrow("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
+
+            # Meeting stats
+            meetings_stats = await conn.fetchrow("SELECT COUNT(*) as meetings_count FROM meetings")
+            meetings_with_items_stats = await conn.fetchrow(
+                "SELECT COUNT(*) as meetings_with_items FROM meetings WHERE id IN (SELECT DISTINCT meeting_id FROM items)"
             )
-        cursor = db.conn.cursor()
-
-        # City stats
-        cursor.execute("SELECT COUNT(*) as total_cities FROM cities")
-        total_cities = dict(cursor.fetchone())
-
-        cursor.execute("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
-        active_cities_stats = dict(cursor.fetchone())
-
-        # Meeting stats
-        cursor.execute("SELECT COUNT(*) as meetings_count FROM meetings")
-        meetings_stats = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as meetings_with_items FROM meetings WHERE id IN (SELECT DISTINCT meeting_id FROM items)"
-        )
-        meetings_with_items_stats = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''"
-        )
-        packets_stats = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''"
-        )
-        summaries_stats = dict(cursor.fetchone())
-
-        # Item-level stats (matters-first architecture)
-        cursor.execute("SELECT COUNT(*) as items_count FROM items")
-        items_stats = dict(cursor.fetchone())
-
-        cursor.execute("SELECT COUNT(*) as matters_count FROM city_matters")
-        matters_stats = dict(cursor.fetchone())
-
-        # Unique summaries = deduplicated matters + standalone items with summaries
-        cursor.execute(
-            "SELECT COUNT(*) as matters_with_summary FROM city_matters WHERE canonical_summary IS NOT NULL AND canonical_summary != ''"
-        )
-        matters_summarized = dict(cursor.fetchone())
-
-        cursor.execute(
-            "SELECT COUNT(*) as standalone_items FROM items WHERE matter_id IS NULL AND summary IS NOT NULL AND summary != ''"
-        )
-        standalone_items = dict(cursor.fetchone())
-
-        unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
-
-        # Frequently updated cities (cities with at least 7 meetings with summaries)
-        cursor.execute("""
-            SELECT COUNT(*) as frequently_updated
-            FROM (
-                SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count
-                FROM meetings m
-                WHERE (m.summary IS NOT NULL AND m.summary != '')
-                   OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
-                GROUP BY m.banana
-                HAVING COUNT(DISTINCT m.id) >= 7
+            packets_stats = await conn.fetchrow(
+                "SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''"
             )
-        """)
-        frequently_updated_stats = dict(cursor.fetchone())
+            summaries_stats = await conn.fetchrow(
+                "SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''"
+            )
+
+            # Item-level stats (matters-first architecture)
+            items_stats = await conn.fetchrow("SELECT COUNT(*) as items_count FROM items")
+            matters_stats = await conn.fetchrow("SELECT COUNT(*) as matters_count FROM city_matters")
+
+            # Unique summaries = deduplicated matters + standalone items with summaries
+            matters_summarized = await conn.fetchrow(
+                "SELECT COUNT(*) as matters_with_summary FROM city_matters WHERE canonical_summary IS NOT NULL AND canonical_summary != ''"
+            )
+            standalone_items = await conn.fetchrow(
+                "SELECT COUNT(*) as standalone_items FROM items WHERE matter_id IS NULL AND summary IS NOT NULL AND summary != ''"
+            )
+
+            unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
+
+            # Frequently updated cities (cities with at least 7 meetings with summaries)
+            frequently_updated_stats = await conn.fetchrow("""
+                SELECT COUNT(*) as frequently_updated
+                FROM (
+                    SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count
+                    FROM meetings m
+                    WHERE (m.summary IS NOT NULL AND m.summary != '')
+                       OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
+                    GROUP BY m.banana
+                    HAVING COUNT(DISTINCT m.id) >= 7
+                ) AS subquery
+            """)
 
         return {
             "success": True,
@@ -378,14 +342,14 @@ async def get_analytics(db: UnifiedDatabase = Depends(get_db)):
         }
 
     except Exception as e:
-        logger.error(f"Analytics endpoint failed: {e}")
+        logger.error("analytics endpoint failed", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
 
 
 @router.get("/api/ticker")
-async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
+async def get_ticker_items(db: Database = Depends(get_db)):
     """Get pre-generated ticker items for homepage news ticker (cached for 5 minutes)"""
     global _ticker_cache, _ticker_cache_time
 
@@ -402,10 +366,13 @@ async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
 
         # Fetch 15 random meetings with items
         for i in range(15):
-            meeting = db.get_random_meeting_with_items()
+            meeting = await db.get_random_meeting_with_items()
 
             if meeting:
-                ticker_item = generate_ticker_item(meeting, db)
+                # Convert Meeting object to dict for ticker generation
+                from dataclasses import asdict
+                meeting_dict = asdict(meeting)
+                ticker_item = await generate_ticker_item(meeting_dict, db)
                 if ticker_item:
                     ticker_items.append(ticker_item)
 
@@ -422,7 +389,7 @@ async def get_ticker_items(db: UnifiedDatabase = Depends(get_db)):
         return result
 
     except Exception as e:
-        logger.error(f"Ticker endpoint failed: {e}")
+        logger.error("ticker endpoint failed", error=str(e))
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )

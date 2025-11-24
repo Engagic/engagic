@@ -14,12 +14,11 @@ Moved from: pipeline/conductor.py (refactored)
 import time
 from typing import List, Optional, Dict, Any
 
-from database.db import UnifiedDatabase, Meeting
-from database.models import Matter
+from database.db_postgres import Database
+from database.models import Meeting, Matter
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
-from database.transaction import transaction
 from exceptions import ProcessingError, ExtractionError, LLMError
-from pipeline.analyzer import Analyzer
+from analysis.analyzer_async import AsyncAnalyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
 from config import config, get_logger
@@ -170,16 +169,16 @@ class Processor:
 
     def __init__(
         self,
-        db: Optional[UnifiedDatabase] = None,
-        analyzer: Optional[Analyzer] = None,
+        db: Database,
+        analyzer: Optional[AsyncAnalyzer] = None,
     ):
         """Initialize the processor
 
         Args:
-            db: Database instance (or creates new one)
+            db: Database instance (PostgreSQL pool)
             analyzer: LLM analyzer instance (or creates new one if API key available)
         """
-        self.db = db or UnifiedDatabase(config.UNIFIED_DB_PATH)
+        self.db = db
         self.is_running = True  # Control flag for external stop
 
         # Initialize analyzer if not provided
@@ -187,8 +186,8 @@ class Processor:
             self.analyzer = analyzer
         else:
             try:
-                self.analyzer = Analyzer(api_key=config.get_api_key())
-                logger.info("initialized with llm analyzer", has_analyzer=True)
+                self.analyzer = AsyncAnalyzer(api_key=config.get_api_key())
+                logger.info("initialized with async llm analyzer", has_analyzer=True)
             except ValueError:
                 logger.warning(
                     "llm analyzer not available, summaries will be skipped",
@@ -236,7 +235,7 @@ class Processor:
 
         return filtered
 
-    def _dispatch_and_process_job(self, job, queue_id: int) -> bool:
+    async def _dispatch_and_process_job(self, job, queue_id: int) -> bool:
         """Dispatch and process a single queue job
 
         Args:
@@ -250,10 +249,9 @@ class Processor:
         """
         # Guard: Check analyzer availability first
         if not self.analyzer:
-            with transaction(self.db.conn):
-                self.db.mark_processing_failed(
-                    queue_id, "Analyzer not available", increment_retry=False
-                )
+            await self.db.queue.mark_processing_failed(
+                queue_id, "Analyzer not available", increment_retry=False
+            )
             logger.warning("skipping queue job - analyzer not available", queue_id=queue_id)
             return True
 
@@ -266,7 +264,7 @@ class Processor:
                 if not isinstance(job.payload, MatterJob):
                     raise ValueError(f"Invalid payload type for matter job: {type(job.payload)}")
 
-                self.process_matter(
+                await self.process_matter(
                     job.payload.matter_id,
                     job.payload.meeting_id,
                     {"item_ids": job.payload.item_ids}
@@ -277,38 +275,35 @@ class Processor:
                 if not isinstance(job.payload, MeetingJob):
                     raise ValueError(f"Invalid payload type for meeting job: {type(job.payload)}")
 
-                meeting = self.db.get_meeting(job.payload.meeting_id)
+                meeting = await self.db.meetings.get_meeting(job.payload.meeting_id)
                 if not meeting:
-                    with transaction(self.db.conn):
-                        self.db.mark_processing_failed(queue_id, "Meeting not found in database")
+                    await self.db.queue.mark_processing_failed(queue_id, "Meeting not found in database")
                     return True
 
-                self.process_meeting(meeting)
+                await self.process_meeting(meeting)
 
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
 
             # Success
-            with transaction(self.db.conn):
-                self.db.mark_processing_complete(queue_id)
+            await self.db.queue.mark_processing_complete(queue_id)
             logger.info("queue job completed", queue_id=queue_id)
             return True
 
-        except Exception as e:
+        except (ProcessingError, LLMError, ExtractionError) as e:
+            # Business logic errors - retry via queue
             error_msg = str(e)
-            with transaction(self.db.conn):
-                self.db.mark_processing_failed(queue_id, error_msg)
+            await self.db.queue.mark_processing_failed(queue_id, error_msg)
             logger.error("queue job failed", queue_id=queue_id, error=error_msg)
             return True
 
-    def process_queue(self):
+    async def process_queue(self):
         """Process jobs from the processing queue continuously"""
         logger.info("starting queue processor")
 
         while self.is_running:
             try:
-                with transaction(self.db.conn):
-                    job = self.db.get_next_for_processing()
+                job = await self.db.queue.get_next_for_processing()
 
                 if not job:
                     time.sleep(QUEUE_POLL_INTERVAL)
@@ -317,13 +312,14 @@ class Processor:
                 queue_id = job.id
                 logger.info("processing queue job", queue_id=queue_id, job_type=job.job_type)
 
-                self._dispatch_and_process_job(job, queue_id)
+                await self._dispatch_and_process_job(job, queue_id)
 
-            except Exception as e:
+            except (ProcessingError, LLMError, ExtractionError) as e:
+                # Expected errors during job processing - log and continue
                 logger.error("queue processor error", error=str(e), error_type=type(e).__name__)
                 time.sleep(QUEUE_FATAL_ERROR_BACKOFF)
 
-    def process_city_jobs(self, city_banana: str) -> dict:
+    async def process_city_jobs(self, city_banana: str) -> dict:
         """Process all queued jobs for a specific city
 
         Args:
@@ -338,8 +334,7 @@ class Processor:
 
         while True:
             # Get next job for this city
-            with transaction(self.db.conn):
-                job = self.db.get_next_for_processing(banana=city_banana)
+            job = await self.db.queue.get_next_for_processing(banana=city_banana)
 
             if not job:
                 break  # No more jobs for this city
@@ -358,18 +353,16 @@ class Processor:
                 if job_type == "meeting":
                     from pipeline.models import MeetingJob
                     if isinstance(job.payload, MeetingJob):
-                        meeting = self.db.get_meeting(job.payload.meeting_id)
+                        meeting = await self.db.meetings.get_meeting(job.payload.meeting_id)
                         if not meeting:
-                            with transaction(self.db.conn):
-                                self.db.mark_processing_failed(queue_id, "Meeting not found")
+                            await self.db.queue.mark_processing_failed(queue_id, "Meeting not found")
                             failed_count += 1
                             metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
                             continue
                         # Process the meeting (item-aware)
                         with metrics.processing_duration.labels(job_type="meeting").time():
-                            self.process_meeting(meeting)
-                        with transaction(self.db.conn):
-                            self.db.mark_processing_complete(queue_id)
+                            await self.process_meeting(meeting)
+                        await self.db.queue.mark_processing_complete(queue_id)
                         processed_count += 1
                         job_success = True
                         logger.info("processed meeting", meeting_id=job.payload.meeting_id, duration_seconds=round(time.time() - job_start_time, 1))
@@ -379,13 +372,12 @@ class Processor:
                     from pipeline.models import MatterJob
                     if isinstance(job.payload, MatterJob):
                         with metrics.processing_duration.labels(job_type="matter").time():
-                            self.process_matter(
+                            await self.process_matter(
                                 job.payload.matter_id,
                                 job.payload.meeting_id,
                                 {"item_ids": job.payload.item_ids}
                             )
-                        with transaction(self.db.conn):
-                            self.db.mark_processing_complete(queue_id)
+                        await self.db.queue.mark_processing_complete(queue_id)
                         processed_count += 1
                         job_success = True
                         logger.info("processed matter", matter_id=job.payload.matter_id, duration_seconds=round(time.time() - job_start_time, 1))
@@ -398,10 +390,10 @@ class Processor:
                 if job_success:
                     metrics.queue_jobs_processed.labels(job_type=job_type, status="completed").inc()
 
-            except Exception as e:
+            except (ProcessingError, LLMError, ExtractionError) as e:
+                # Business logic errors - mark failed and continue
                 error_msg = str(e)
-                with transaction(self.db.conn):
-                    self.db.mark_processing_failed(queue_id, error_msg)
+                await self.db.queue.mark_processing_failed(queue_id, error_msg)
                 failed_count += 1
                 job_duration = time.time() - job_start_time
 
@@ -423,7 +415,7 @@ class Processor:
             "failed_count": failed_count,
         }
 
-    def _process_single_item(self, item):
+    async def _process_single_item(self, item):
         """Process a single agenda item (extract PDFs and summarize)
 
         Args:
@@ -485,7 +477,7 @@ class Processor:
                         continue
 
                     try:
-                        result = self.analyzer.pdf_extractor.extract_from_url(att_url)
+                        result = await self.analyzer.extract_pdf_async(att_url)
                         if result.get("success") and result.get("text"):
                             # Post-extraction filter: Skip public comment compilations
                             if is_likely_public_comment_compilation(result, att_name or att_url):
@@ -528,7 +520,8 @@ class Processor:
 
         # Process via batch API (single item)
         try:
-            for chunk_results in self.analyzer.process_batch_items(batch_request, shared_context=None, meeting_id=None):
+            chunks = await self.analyzer.process_batch_items_async(batch_request, shared_context=None, meeting_id=None)
+            for chunk_results in chunks:
                 # Should only be one chunk with one result
                 if chunk_results:
                     result = chunk_results[0]
@@ -562,7 +555,7 @@ class Processor:
             context={"item_id": item.id, "item_title": item.title[:100]}
         )
 
-    def process_matter(self, matter_id: str, meeting_id: str, metadata: Optional[Dict] = None):
+    async def process_matter(self, matter_id: str, meeting_id: str, metadata: Optional[Dict] = None):
         """Process a matter across all its appearances (matters-first path)
 
         STRICT IMPROVEMENT: Queries ALL items from database (not just payload)
@@ -595,7 +588,7 @@ class Processor:
         if metadata:
             item_ids = metadata.get("item_ids", [])
             for item_id in item_ids:
-                item = self.db.get_agenda_item(item_id)
+                item = await self.db.items.get_agenda_item(item_id)
                 if item:
                     items.append(item)
 
@@ -603,7 +596,7 @@ class Processor:
         if not items:
             logger.warning("no items in payload, querying database", matter_id=matter_id)
             # matter_id is already composite hash, get all items directly
-            items = self.db._get_all_items_for_matter(matter_id)
+            items = await self.db.items.get_all_items_for_matter(matter_id)
 
         if not items:
             logger.error("no items found for matter", matter_id=matter_id)
@@ -644,7 +637,7 @@ class Processor:
 
         # Process item with ALL aggregated attachments (extract PDFs and summarize)
         try:
-            result = self._process_single_item(representative_item)
+            result = await self._process_single_item(representative_item)
         except ProcessingError as e:
             logger.error(
                 "matter processing failed",
@@ -667,54 +660,52 @@ class Processor:
             return
 
         # STRICT IMPROVEMENT: Atomic update of canonical_summary + all items
-        # Use transaction to ensure consistency
-        from database.transaction import transaction
+        # Database methods handle atomicity internally via asyncpg connections
 
         attachment_hash = hash_attachments(representative_item.attachments)
 
         # Fetch existing matter to preserve raw matter_id (vendor UUID/numeric ID)
         # CRITICAL: items.matter_id contains composite hash (FK), not raw vendor ID
         # city_matters.matter_id must contain raw vendor ID for traceability
-        existing_matter = self.db.get_matter(matter_id)
+        existing_matter = await self.db.matters.get_matter(matter_id)
         raw_matter_id = existing_matter.matter_id if existing_matter else None
 
-        with transaction(self.db.conn):
-            # Step 1: Create Matter object with canonical summary
-            matter_obj = Matter(
-                id=matter_id,
-                banana=banana,
-                matter_id=raw_matter_id,  # Raw vendor ID for reference
-                matter_file=representative_item.matter_file,
-                matter_type=representative_item.matter_type,
-                title=representative_item.title,
-                sponsors=getattr(representative_item, 'sponsors', []),
-                canonical_summary=summary,
-                canonical_topics=topics,
-                attachments=representative_item.attachments,
-                metadata={'attachment_hash': attachment_hash},
-                first_seen=None,  # Will preserve existing if matter already exists
-                last_seen=None,   # Will preserve existing if matter already exists
-                appearance_count=len(items),
-            )
+        # Step 1: Create Matter object with canonical summary
+        matter_obj = Matter(
+            id=matter_id,
+            banana=banana,
+            matter_id=raw_matter_id,  # Raw vendor ID for reference
+            matter_file=representative_item.matter_file,
+            matter_type=representative_item.matter_type,
+            title=representative_item.title,
+            sponsors=getattr(representative_item, 'sponsors', []),
+            canonical_summary=summary,
+            canonical_topics=topics,
+            attachments=representative_item.attachments,
+            metadata={'attachment_hash': attachment_hash},
+            first_seen=None,  # Will preserve existing if matter already exists
+            last_seen=None,   # Will preserve existing if matter already exists
+            appearance_count=len(items),
+        )
 
-            # Upsert canonical summary in city_matters (via repository)
-            self.db.store_matter(matter_obj)
+        # Upsert canonical summary in city_matters (via repository)
+        await self.db.matters.store_matter(matter_obj)
 
-            # Step 2: Backfill ALL items atomically (via repository)
-            item_ids = [item.id for item in items]
-            self.db.items.bulk_update_item_summaries(
-                item_ids=item_ids,
-                summary=summary,
-                topics=topics
-            )
+        # Step 2: Backfill ALL items atomically (via repository)
+        item_ids = [item.id for item in items]
+        await self.db.items.bulk_update_item_summaries(
+            item_ids=item_ids,
+            summary=summary,
+            topics=topics
+        )
 
-            logger.info(
-                "atomically stored canonical summary and backfilled items",
-                matter_id=matter_id,
-                item_count=len(items)
-            )
+        logger.info(
+            "atomically stored canonical summary and backfilled items",
+            matter_id=matter_id,
+            item_count=len(items)
+        )
 
-    def process_meeting(self, meeting: Meeting):
+    async def process_meeting(self, meeting: Meeting):
         """Process summary for a single meeting (agenda-first: items > packet)
 
         Args:
@@ -722,7 +713,7 @@ class Processor:
         """
         try:
             # AGENDA-FIRST ARCHITECTURE: Check for items before packet_url
-            agenda_items = self.db.get_agenda_items(meeting.id)
+            agenda_items = await self.db.items.get_agenda_items(meeting.id)
 
             if agenda_items:
                 # Item-level processing (HTML agenda path) - PRIMARY PATH
@@ -734,7 +725,7 @@ class Processor:
                 if not self.analyzer:
                     logger.warning("analyzer not available")
                     return
-                self._process_meeting_with_items(meeting, agenda_items)
+                await self._process_meeting_with_items(meeting, agenda_items)
 
             elif meeting.packet_url:
                 # Monolithic processing (PDF packet path) - FALLBACK PATH
@@ -742,15 +733,6 @@ class Processor:
                     "processing packet as monolithic unit - no items found",
                     meeting_title=meeting.title
                 )
-
-                # Check cache
-                cached = self.db.get_cached_summary(meeting.packet_url)
-                if cached:
-                    logger.debug(
-                        "meeting already processed - skipping",
-                        packet_url=meeting.packet_url
-                    )
-                    return
 
                 if not self.analyzer:
                     logger.warning(
@@ -766,8 +748,17 @@ class Processor:
                     "meeting_date": meeting.date.isoformat() if meeting.date else None,
                     "meeting_id": meeting.id,
                 }
-                result = self.analyzer.process_agenda_with_cache(meeting_data)
+                result = await self.analyzer.process_agenda_with_cache_async(meeting_data)
                 if result.get("success"):
+                    # Store monolithic summary in database
+                    await self.db.meetings.update_meeting_summary(
+                        meeting_id=meeting.id,
+                        summary=result.get("summary"),
+                        processing_method=result.get("processing_method") or "pymupdf_gemini",
+                        processing_time=result.get("processing_time") or 0.0,
+                        topics=None,  # Topics extracted from summary by topic normalizer
+                        participation=result.get("participation"),
+                    )
                     logger.info(
                         "processed packet",
                         packet_url=meeting.packet_url,
@@ -780,12 +771,13 @@ class Processor:
                         error=result.get('error')
                     )
 
-        except Exception as e:
+        except (ProcessingError, LLMError, ExtractionError) as e:
+            # Expected errors during summary processing - log and continue
             logger.error("error processing summary", packet_url=meeting.packet_url, error=str(e), error_type=type(e).__name__)
 
     # ========== Item Processing Helpers (extracted from 424-line God function) ==========
 
-    def _extract_participation_info(self, meeting: Meeting) -> Dict[str, Any]:
+    async def _extract_participation_info(self, meeting: Meeting) -> Dict[str, Any]:
         """Extract participation info from agenda_url (PDF or HTML)"""
         participation_data: Dict[str, Any] = {}
 
@@ -797,8 +789,11 @@ class Processor:
 
             # Handle PDF agendas (Legistar, etc.)
             if agenda_url_lower.endswith('.pdf') or '.ashx' in agenda_url_lower:
+                if not self.analyzer:
+                    logger.warning("analyzer not initialized, skipping participation extraction")
+                    return participation_data
                 logger.debug("extracting text from agenda_url PDF for participation info")
-                agenda_result = self.analyzer.pdf_extractor.extract_from_url(meeting.agenda_url)
+                agenda_result = await self.analyzer.extract_pdf_async(meeting.agenda_url)
                 if agenda_result.get("success") and agenda_result.get("text"):
                     # Parse only first 5000 chars (participation info is at the top)
                     agenda_text = agenda_result["text"][:5000]
@@ -826,7 +821,7 @@ class Processor:
 
         return participation_data
 
-    def _filter_processed_items(self, agenda_items: List) -> tuple[List[Dict], List]:
+    async def _filter_processed_items(self, agenda_items: List) -> tuple[List[Dict], List]:
         """Separate already-processed items from items needing processing"""
         already_processed = []
         need_processing = []
@@ -849,7 +844,7 @@ class Processor:
 
             # MATTERS-FIRST DEDUPLICATION: Check if item has matter with canonical summary
             if item.matter_id:
-                matter = self.db.get_matter(item.matter_id)
+                matter = await self.db.matters.get_matter(item.matter_id)
 
                 if matter and matter.canonical_summary:
                     # Reuse canonical summary from matter
@@ -861,7 +856,7 @@ class Processor:
 
                     # Update item with canonical summary if not already set
                     if not item.summary:
-                        self.db.update_agenda_item(
+                        await self.db.items.update_agenda_item(
                             item_id=item.id,
                             summary=matter.canonical_summary,
                             topics=matter.canonical_topics or []
@@ -889,7 +884,7 @@ class Processor:
 
         return already_processed, need_processing
 
-    def _build_document_cache(self, need_processing: List) -> tuple[Dict, Dict, set]:
+    async def _build_document_cache(self, need_processing: List) -> tuple[Dict, Dict, set]:
         """Build meeting-level document cache with version filtering and deduplication
 
         Returns:
@@ -903,6 +898,7 @@ class Processor:
         all_urls = set()
         url_to_items = {}  # url -> list of item IDs that reference this URL
         url_to_name = {}  # url -> attachment name
+        url_to_text = {}  # url -> extracted text (populated during extraction)
 
         for item in need_processing:
             # Collect this item's attachment URLs
@@ -940,6 +936,10 @@ class Processor:
 
         logger.info("collected unique URLs", url_count=len(all_urls), item_count=len(need_processing))
 
+        if not self.analyzer:
+            logger.error("analyzer not initialized, cannot extract attachments")
+            return url_to_text, item_attachments, all_urls
+
         # Second pass: Extract each unique URL once
         for att_url in all_urls:
             # Skip public comment and parcel table attachments by name
@@ -949,7 +949,7 @@ class Processor:
                 continue
 
             try:
-                result = self.analyzer.pdf_extractor.extract_from_url(att_url)
+                result = await self.analyzer.extract_pdf_async(att_url)
                 if result.get("success") and result.get("text"):
                     # Post-extraction filter: Skip public comment compilations
                     if is_likely_public_comment_compilation(result, att_name or att_url):
@@ -1092,7 +1092,7 @@ class Processor:
 
         return batch_requests, item_map, failed_items
 
-    def _process_batch_incrementally(
+    async def _process_batch_incrementally(
         self,
         batch_requests: List[Dict],
         item_map: Dict,
@@ -1110,17 +1110,22 @@ class Processor:
         if not batch_requests:
             return processed_items, failed_items
 
+        if not self.analyzer:
+            logger.error("analyzer not initialized, cannot process batch")
+            return processed_items, failed_items
+
         logger.info(
             "submitting batch to Gemini",
             item_count=len(batch_requests)
         )
 
-        # Process batch as generator - yields chunk results as they complete
-        for chunk_results in self.analyzer.process_batch_items(
+        # Process batch async - returns all results after processing
+        chunks = await self.analyzer.process_batch_items_async(
             batch_requests,
             shared_context=shared_context,
             meeting_id=meeting_id
-        ):
+        )
+        for chunk_results in chunks:
             logger.info(
                 "saving results from completed chunk",
                 result_count=len(chunk_results)
@@ -1146,7 +1151,7 @@ class Processor:
                     )
 
                     # Update item in database IMMEDIATELY with normalized topics
-                    self.db.update_agenda_item(
+                    await self.db.items.update_agenda_item(
                         item_id=item_id,
                         summary=result["summary"],
                         topics=normalized_topics,
@@ -1197,7 +1202,7 @@ class Processor:
 
     # ========== Main Item Processing Method (refactored) ==========
 
-    def _process_meeting_with_items(self, meeting: Meeting, agenda_items: List):
+    async def _process_meeting_with_items(self, meeting: Meeting, agenda_items: List):
         """Process meeting at item-level granularity using batch API (REFACTORED)
 
         Orchestrates 7 focused phases via helper methods:
@@ -1225,10 +1230,10 @@ class Processor:
         last_sequence = max(item_sequences) if item_sequences else None
 
         # PHASE 1: Extract participation info from agenda_url
-        participation_data = self._extract_participation_info(meeting)
+        participation_data = await self._extract_participation_info(meeting)
 
         # PHASE 2: Filter already-processed items from those needing processing
-        already_processed, need_processing = self._filter_processed_items(agenda_items)
+        already_processed, need_processing = await self._filter_processed_items(agenda_items)
         processed_items = already_processed  # Start with pre-processed items
 
         if not need_processing:
@@ -1243,7 +1248,7 @@ class Processor:
             )
 
             # PHASE 3: Build document cache with deduplication
-            document_cache, item_attachments, shared_urls = self._build_document_cache(need_processing)
+            document_cache, item_attachments, shared_urls = await self._build_document_cache(need_processing)
 
             # PHASE 4: Build shared context for batch API (if shared documents exist)
             shared_context = None
@@ -1276,7 +1281,7 @@ class Processor:
 
             # PHASE 6: Process batch incrementally, saving after each chunk
             if batch_requests:
-                new_processed, new_failed = self._process_batch_incrementally(
+                new_processed, new_failed = await self._process_batch_incrementally(
                     batch_requests,
                     item_map,
                     shared_context,
@@ -1305,15 +1310,14 @@ class Processor:
 
             # Update meeting with metadata only (items have their own summaries)
             processing_time = time.time() - start_time
-            with transaction(self.db.conn):
-                self.db.update_meeting_summary(
-                    meeting_id=meeting.id,
-                    summary=None,  # No concatenated summary - frontend composes from items
-                    processing_method=f"item_level_{len(processed_items)}_items",
-                    processing_time=processing_time,
-                    topics=meeting_topics,
-                    participation=merged_participation,
-                )
+            await self.db.meetings.update_meeting_summary(
+                meeting_id=meeting.id,
+                summary=None,  # No concatenated summary - frontend composes from items
+                processing_method=f"item_level_{len(processed_items)}_items",
+                processing_time=processing_time,
+                topics=meeting_topics,
+                participation=merged_participation,
+            )
 
             logger.info(
                 "item processing completed",
@@ -1323,3 +1327,9 @@ class Processor:
             )
         else:
             logger.warning("no items could be processed")
+
+    async def close(self):
+        """Cleanup resources (HTTP sessions)"""
+        if self.analyzer:
+            await self.analyzer.close()
+            logger.debug("analyzer http session closed")

@@ -65,7 +65,7 @@ async def create_checkout_session(donate_request: DonateRequest):
             "session_id": session.id
         }
 
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         logger.error("stripe error", error=str(e), error_type=type(e).__name__)
         raise HTTPException(
             status_code=500,

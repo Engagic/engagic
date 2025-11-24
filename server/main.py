@@ -6,20 +6,19 @@ Routes, services, and utilities are organized into focused modules.
 """
 
 import logging
-import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import config, get_logger
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard
 from userland.auth import init_jwt
-from userland.database.db import UserlandDB
 
 logger = get_logger(__name__)
 
@@ -30,8 +29,49 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(), logging.FileHandler(config.LOG_PATH, mode="a")],
 )
 
-# Initialize FastAPI app
-app = FastAPI(title="engagic API", description="EGMI")
+
+# Lifespan context manager for database initialization
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize and cleanup async database connection pool"""
+    # Startup: Create PostgreSQL connection pool
+    db = await Database.create()
+    logger.info("initialized PostgreSQL database with async connection pool")
+
+    # Store in app state
+    app.state.db = db
+
+    yield
+
+    # Shutdown: Close connection pool
+    try:
+        # Log connection count before closing
+        active_connections = db.pool.get_size()
+        logger.info(
+            "closing connection pool",
+            active_connections=active_connections,
+            min_size=db.pool.get_min_size(),
+            max_size=db.pool.get_max_size(),
+        )
+
+        await db.close()
+        logger.info("closed PostgreSQL connection pool")
+
+        # Warn if connections were active during shutdown (potential leaks)
+        if active_connections > 0:
+            logger.warning(
+                "connection pool had active connections on shutdown",
+                count=active_connections,
+            )
+
+    except Exception as e:
+        # Don't crash on shutdown - log and continue
+        logger.error("error closing connection pool", error=str(e), exc_info=True)
+        # Don't re-raise - allow shutdown to proceed gracefully
+
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(title="engagic API", description="EGMI", lifespan=lifespan)
 
 # CORS configuration
 app.add_middleware(
@@ -45,34 +85,20 @@ app.add_middleware(
 # Request ID middleware (must be early in stack for tracing)
 app.add_middleware(RequestIDMiddleware)
 
-# Initialize global instances
+# Initialize global instances (non-async)
 rate_limiter = SQLiteRateLimiter(
     db_path=str(config.UNIFIED_DB_PATH).replace("engagic.db", "rate_limits.db"),
     requests_limit=config.RATE_LIMIT_REQUESTS,
     window_seconds=config.RATE_LIMIT_WINDOW,
 )
 
-# Initialize shared database instance (reused across all requests)
-db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-logger.info("initialized shared database", db_path=config.UNIFIED_DB_PATH)
-
-# Initialize userland database for auth and user features
-userland_db_path = os.getenv('USERLAND_DB', str(config.DB_DIR) + '/userland.db')
-userland_db = UserlandDB(userland_db_path, silent=False)
-logger.info("initialized userland database", db_path=userland_db_path)
-
 # Initialize JWT for authentication
-jwt_secret = os.getenv('USERLAND_JWT_SECRET')
-if not jwt_secret:
+if not config.USERLAND_JWT_SECRET:
     logger.warning("WARNING: USERLAND_JWT_SECRET not set. Auth features will not work.")
     logger.warning("Generate with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")
 else:
-    init_jwt(jwt_secret)
+    init_jwt(config.USERLAND_JWT_SECRET)
     logger.info("JWT authentication initialized")
-
-# Store in app state for dependency injection
-app.state.db = db
-app.state.userland_db = userland_db
 
 
 # Register middleware (execution order: metrics -> rate limiting -> logging)
@@ -129,10 +155,18 @@ if __name__ == "__main__":
     # Handle command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "--init-db":
         logger.info("Initializing databases...")
-        from database.db import UnifiedDatabase
-        db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-        _ = db.get_stats()
-        logger.info("Databases initialized successfully")
+        import asyncio
+        from database.db_postgres import Database
+
+        async def init_db():
+            db = await Database.create()
+            try:
+                _ = await db.get_stats()
+                logger.info("Database initialized successfully")
+            finally:
+                await db.close()
+
+        asyncio.run(init_db())
         sys.exit(0)
 
     uvicorn.run(

@@ -14,12 +14,14 @@ import json
 import time
 from typing import List, Dict, Any, Optional, Tuple
 from importlib.resources import files
+from json import JSONDecodeError
 
 from google import genai
 from google.genai import types
 
 from config import get_logger
 from server.metrics import metrics
+from exceptions import LLMError
 
 logger = get_logger(__name__).bind(component="analyzer")
 
@@ -163,7 +165,12 @@ class GeminiSummarizer:
             )
             metrics.record_error(component="analyzer", error=e)
             logger.error("meeting summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__)
-            raise
+            raise LLMError(
+                f"Meeting summarization failed after {duration:.1f}s",
+                model=model_display,
+                prompt_type=prompt_type,
+                original_error=e
+            ) from e
 
     def summarize_item(self, item_title: str, text: str, page_count: Optional[int] = None) -> Tuple[str, List[str]]:
         """Summarize a single agenda item and extract topics (adaptive based on size)
@@ -192,7 +199,10 @@ class GeminiSummarizer:
             model_name = self.flash_model_name  # Always use flash for large items
             model_display = "flash"
             logger.info(
-                f"[Summarizer] Large item '{item_title[:50]}...' ({page_count} pages, {text_size} chars) - using comprehensive prompt"
+                "large item using comprehensive prompt",
+                item_title=item_title[:50],
+                page_count=page_count,
+                text_size=text_size
             )
         else:
             prompt_type = "standard"
@@ -204,7 +214,10 @@ class GeminiSummarizer:
                 model_name = self.flash_model_name
                 model_display = "flash"
             logger.info(
-                f"[Summarizer] Standard item '{item_title[:50]}...' ({page_count} pages, {text_size} chars)"
+                "standard item processing",
+                item_title=item_title[:50],
+                page_count=page_count,
+                text_size=text_size
             )
 
         # Get adaptive prompt and config
@@ -263,7 +276,12 @@ class GeminiSummarizer:
             )
             metrics.record_error(component="analyzer", error=e)
             logger.error("item summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__, prompt_type=prompt_type)
-            raise
+            raise LLMError(
+                f"Item summarization failed after {duration:.1f}s",
+                model=model_display,
+                prompt_type=f"item_{prompt_type}",
+                original_error=e
+            ) from e
 
     def summarize_batch(
         self,
@@ -318,7 +336,8 @@ class GeminiSummarizer:
             if token_count >= min_tokens:
                 try:
                     logger.info(
-                        f"[Summarizer] Creating Gemini cache for shared context (~{token_count:,} tokens)"
+                        "creating gemini cache for shared context",
+                        token_count=token_count
                     )
                     cache = self.client.caches.create(
                         model=self.flash_model_name,
@@ -330,19 +349,23 @@ class GeminiSummarizer:
                     )
                     cache_name = cache.name
                     logger.info(
-                        f"[Summarizer] Cache created: {cache_name} "
-                        f"(~{token_count:,} tokens, 1h TTL)"
+                        "cache created",
+                        cache_name=cache_name,
+                        token_count=token_count,
+                        ttl="1h"
                     )
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError, LLMError) as e:
                     logger.warning(
-                        f"[Summarizer] Failed to create cache: {e}. "
-                        "Proceeding without caching."
+                        "failed to create cache proceeding without caching",
+                        error=str(e),
+                        error_type=type(e).__name__
                     )
                     cache_name = None
             else:
                 logger.info(
-                    f"[Summarizer] Shared context too small for caching "
-                    f"({token_count} tokens < {min_tokens} minimum)"
+                    "shared context too small for caching",
+                    token_count=token_count,
+                    min_tokens=min_tokens
                 )
 
         # Chunk items to respect TPM (tokens-per-minute) limits
@@ -355,7 +378,9 @@ class GeminiSummarizer:
         ]
 
         logger.info(
-            f"[Summarizer] Split into {len(chunks)} chunks of {chunk_size} items each"
+            "split into chunks",
+            num_chunks=len(chunks),
+            chunk_size=chunk_size
         )
 
         total_successful = 0
@@ -365,7 +390,10 @@ class GeminiSummarizer:
             for chunk_idx, chunk in enumerate(chunks):
                 chunk_num = chunk_idx + 1
                 logger.info(
-                    f"[Summarizer] Processing chunk {chunk_num}/{len(chunks)} ({len(chunk)} items)"
+                    "processing chunk",
+                    chunk_num=chunk_num,
+                    total_chunks=len(chunks),
+                    items_in_chunk=len(chunk)
                 )
 
                 # Process chunk with retry logic (pass cache_name and shared_context)
@@ -377,8 +405,12 @@ class GeminiSummarizer:
                 total_processed += len(chunk_results)
 
                 logger.info(
-                    f"[Summarizer] Chunk {chunk_num} complete: {chunk_successful}/{len(chunk_results)} successful "
-                    f"(total: {total_successful}/{total_processed})"
+                    "chunk complete",
+                    chunk_num=chunk_num,
+                    successful=chunk_successful,
+                    total=len(chunk_results),
+                    cumulative_successful=total_successful,
+                    cumulative_total=total_processed
                 )
 
                 # Yield results immediately for incremental saving
@@ -388,7 +420,8 @@ class GeminiSummarizer:
                 if chunk_idx < len(chunks) - 1:
                     delay = 120  # 120 seconds between chunks (increased from 90s to prevent quota exhaustion)
                     logger.info(
-                        f"[Summarizer] Waiting {delay}s before next chunk (quota refill)..."
+                        "waiting before next chunk for quota refill",
+                        delay_seconds=delay
                     )
                     time.sleep(delay)
 
@@ -396,15 +429,235 @@ class GeminiSummarizer:
             # Cleanup: Delete cache after all chunks processed
             if cache_name:
                 try:
-                    logger.info(f"[Summarizer] Cleaning up cache: {cache_name}")
+                    logger.info("cleaning up cache", cache_name=cache_name)
                     self.client.caches.delete(name=cache_name)
-                    logger.info("[Summarizer] Cache deleted successfully")
-                except Exception as e:
-                    logger.warning(f"[Summarizer] Failed to delete cache: {e}")
+                    logger.info("cache deleted successfully")
+                except (ValueError, AttributeError, LLMError) as e:
+                    logger.warning("failed to delete cache", cache_name=cache_name, error=str(e), error_type=type(e).__name__)
 
             logger.info(
-                f"[Summarizer] Batch complete: {total_successful}/{total_processed} successful"
+                "batch complete",
+                successful=total_successful,
+                total=total_processed
             )
+
+    def _extract_response_text(self, response_data: Dict[str, Any]) -> Optional[str]:
+        """Extract text from nested Gemini response structure
+
+        Args:
+            response_data: Response data from batch API
+
+        Returns:
+            Extracted text or None if not found
+        """
+        # Direct text field (simple case)
+        if 'text' in response_data:
+            return response_data['text']
+
+        # Navigate candidates structure (complex case)
+        candidates = response_data.get('candidates')
+        if not candidates:
+            return None
+
+        candidate = candidates[0]
+        content = candidate.get('content')
+        if not content:
+            return None
+
+        parts = content.get('parts')
+        if not parts or not parts[0]:
+            return None
+
+        return parts[0].get('text')
+
+    def _parse_batch_response_line(
+        self,
+        line: str,
+        line_num: int,
+        request_map: Dict[str, Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Parse single JSONL response line and extract result
+
+        Args:
+            line: JSONL line to parse
+            line_num: Line number for logging
+            request_map: Map of item_id -> original request
+
+        Returns:
+            Result dict with item_id, success, summary/topics/error
+            None if line should be skipped
+        """
+        if not line.strip():
+            return None
+
+        try:
+            response_obj = json.loads(line)
+        except json.JSONDecodeError as e:
+            logger.error("failed to parse jsonl line", line_num=line_num, error=str(e), error_type=type(e).__name__)
+            return None
+
+        # Extract key from response
+        key = response_obj.get('key')
+        if not key:
+            logger.error("response line missing key field", line_num=line_num)
+            return None
+
+        if key not in request_map:
+            logger.warning(
+                "no mapping found for key",
+                key=key,
+                sample_keys=list(request_map.keys())[:5]
+            )
+            return None
+
+        original_req = request_map[key]
+
+        # Handle error response
+        if 'error' in response_obj:
+            error_data = response_obj['error']
+            error_str = str(error_data)
+
+            # Log quota errors but DON'T retry the whole chunk
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                logger.warning(
+                    "item hit quota limit individual failure",
+                    key=key,
+                    error=error_str
+                )
+            logger.error("item failed", key=key, error=error_str)
+
+            return {
+                "item_id": original_req["item_id"],
+                "success": False,
+                "error": error_str,
+            }
+
+        # Handle success response
+        if 'response' not in response_obj:
+            return None
+
+        response_data = response_obj['response']
+
+        try:
+            # Extract text from nested structure
+            response_text = self._extract_response_text(response_data)
+
+            # Check finish_reason
+            candidates = response_data.get('candidates')
+            if candidates:
+                finish_reason = candidates[0].get('finish_reason')
+                if finish_reason and finish_reason != "STOP":
+                    logger.warning(
+                        "non-normal finish reason",
+                        item_key=key,
+                        finish_reason=finish_reason
+                    )
+                    if finish_reason == "MAX_TOKENS":
+                        logger.error(
+                            "item hit max tokens response truncated",
+                            item_key=key
+                        )
+
+            # Log response
+            logger.info(
+                "response received",
+                key=key,
+                response_length=len(response_text) if response_text else 0
+            )
+
+            if not response_text:
+                logger.warning("empty response from gemini", key=key)
+                return {
+                    "item_id": original_req["item_id"],
+                    "success": False,
+                    "error": "Empty response from Gemini",
+                }
+
+            # Parse response
+            summary, topics = self._parse_item_response(response_text)
+
+            return {
+                "item_id": original_req["item_id"],
+                "success": True,
+                "summary": summary,
+                "topics": topics,
+            }
+
+        except (JSONDecodeError, ValueError, KeyError, AttributeError) as e:
+            logger.error(
+                "error parsing response",
+                key=key,
+                error=str(e),
+                error_type=type(e).__name__
+            )
+            logger.error(
+                "input that caused failure",
+                title=original_req['title'][:100],
+                text_length=len(original_req['text'])
+            )
+            logger.error(
+                "raw response that failed",
+                response_preview=str(response_text)[:1000] if response_text else 'None'
+            )
+            return {
+                "item_id": original_req["item_id"],
+                "success": False,
+                "error": str(e),
+            }
+
+    def _wait_for_batch_completion(
+        self,
+        batch_name: str,
+        max_wait_time: int = 1800,
+        poll_interval: int = 10
+    ) -> None:
+        """Poll batch job until completion
+
+        Args:
+            batch_name: Batch job identifier
+            max_wait_time: Maximum wait time in seconds (default 30 minutes)
+            poll_interval: Polling interval in seconds (default 10 seconds)
+
+        Raises:
+            TimeoutError: If batch doesn't complete within max_wait_time
+            RuntimeError: If batch job fails
+        """
+        completed_states = {
+            "JOB_STATE_SUCCEEDED",
+            "JOB_STATE_FAILED",
+            "JOB_STATE_CANCELLED",
+            "JOB_STATE_EXPIRED",
+        }
+
+        waited_time = 0
+        while waited_time < max_wait_time:
+            batch_job = self.client.batches.get(name=batch_name)
+
+            if batch_job.state and batch_job.state.name in completed_states:
+                logger.info(
+                    "batch completed",
+                    batch_name=batch_name,
+                    state=batch_job.state.name
+                )
+
+                # Check for success
+                if batch_job.state.name != "JOB_STATE_SUCCEEDED":
+                    raise RuntimeError(f"Batch failed: {batch_job.state.name}")
+
+                return
+
+            state_name = batch_job.state.name if batch_job.state else "unknown"
+            if waited_time % 30 == 0:  # Log every 30s
+                logger.info(
+                    "batch processing",
+                    waited_time_seconds=waited_time,
+                    state=state_name
+                )
+
+            time.sleep(poll_interval)
+            waited_time += poll_interval
+
+        raise TimeoutError(f"Batch timed out after {max_wait_time}s")
 
     def _process_batch_chunk(
         self,
@@ -432,17 +685,16 @@ class GeminiSummarizer:
         retry_delay = 60  # Start with 60s delay
 
         for attempt in range(max_retries):
-            # JSONL file method with explicit key-based matching
-            # This is the ONLY way to guarantee request/response matching
-            request_map = {}  # Maps key (item_id) -> original request
-
-            # Create temp JSONL file
-            temp_file = tempfile.NamedTemporaryFile(
-                mode='w', suffix='.json', delete=False
-            )
-            temp_path = temp_file.name
+            temp_path = None
 
             try:
+                # Build request map and JSONL file
+                request_map = {}
+                temp_file = tempfile.NamedTemporaryFile(
+                    mode='w', suffix='.json', delete=False
+                )
+                temp_path = temp_file.name
+
                 for i, req in enumerate(chunk_requests):
                     item_title = req["title"]
                     item_id = req["item_id"]
@@ -464,30 +716,31 @@ class GeminiSummarizer:
                     prompt = self._get_prompt(
                         "item", prompt_type, title=item_title, text=text
                     )
-                    # NOTE: Batch API might not support responseSchema
-                    # Use responseMimeType only, rely on prompt for structure
+
                     generation_config = {
                         "temperature": 0.3,
                         "maxOutputTokens": 8192,
                         "responseMimeType": "application/json",
                     }
 
-                    # Log input details for debugging
                     logger.info(
-                        f"[Summarizer] Request {i}: '{item_title[:80]}...', {len(text)} chars, {page_count} pages, {prompt_type} prompt"
+                        "batch request details",
+                        request_index=i,
+                        item_title=item_title[:80],
+                        text_length=len(text),
+                        page_count=page_count,
+                        prompt_type=prompt_type
                     )
 
                     # Write JSONL line with key for matching
-                    # NOTE: Batch API expects camelCase for ALL field names in JSON
                     jsonl_line = {
-                        "key": item_id,  # CRITICAL: This key matches response to request
+                        "key": item_id,
                         "request": {
                             "contents": [{"parts": [{"text": prompt}]}],
-                            "generationConfig": generation_config,  # camelCase!
+                            "generationConfig": generation_config,
                         }
                     }
 
-                    # Include cached context if available
                     if cache_name:
                         jsonl_line["request"]["cachedContent"] = cache_name
 
@@ -498,7 +751,10 @@ class GeminiSummarizer:
 
                 # Upload JSONL file
                 logger.info(
-                    f"[Summarizer] Uploading JSONL file with {len(chunk_requests)} items (attempt {attempt + 1}/{max_retries})"
+                    "uploading jsonl file",
+                    num_items=len(chunk_requests),
+                    attempt=attempt + 1,
+                    max_retries=max_retries
                 )
 
                 uploaded_file = self.client.files.upload(
@@ -506,17 +762,13 @@ class GeminiSummarizer:
                     config={"display_name": f"batch-chunk-{chunk_num}-{time.time()}"}
                 )
 
-                logger.info(f"[Summarizer] Uploaded file: {uploaded_file.name}")
-
-                # Submit batch job with uploaded file
                 if not uploaded_file.name:
                     raise ValueError("File uploaded but no name returned")
 
-                logger.info(
-                    f"[Summarizer] Submitting chunk {chunk_num} batch job"
-                )
+                logger.info("uploaded file", file_name=uploaded_file.name)
 
-                # Track batch job timing
+                # Submit batch job
+                logger.info("submitting batch job", chunk_num=chunk_num)
                 batch_start_time = time.time()
 
                 batch_job = self.client.batches.create(
@@ -525,198 +777,48 @@ class GeminiSummarizer:
                     config={"display_name": f"chunk-{chunk_num}-{time.time()}"},
                 )
 
-                batch_name = batch_job.name
-                if not batch_name:
+                if not batch_job.name:
                     raise ValueError("Batch job created but no name returned")
 
-                logger.info(f"[Summarizer] Submitted batch {batch_name}")
+                logger.info("submitted batch", batch_name=batch_job.name)
 
-                # Poll for completion
-                max_wait_time = 1800  # 30 minutes max
-                poll_interval = 10  # Check every 10 seconds
-                waited_time = 0
+                # Wait for batch completion
+                self._wait_for_batch_completion(batch_job.name)
 
-                completed_states = {
-                    "JOB_STATE_SUCCEEDED",
-                    "JOB_STATE_FAILED",
-                    "JOB_STATE_CANCELLED",
-                    "JOB_STATE_EXPIRED",
-                }
+                # Download and parse results
+                batch_job = self.client.batches.get(name=batch_job.name)
 
-                while waited_time < max_wait_time:
-                    batch_job = self.client.batches.get(name=batch_name)
-
-                    if batch_job.state and batch_job.state.name in completed_states:
-                        logger.info(
-                            f"[Summarizer] Batch {batch_name} completed: {batch_job.state.name}"
-                        )
-                        break
-
-                    state_name = batch_job.state.name if batch_job.state else "unknown"
-                    if waited_time % 30 == 0:  # Log every 30s
-                        logger.info(
-                            f"[Summarizer] Batch processing... ({waited_time}s, state: {state_name})"
-                        )
-
-                    time.sleep(poll_interval)
-                    waited_time += poll_interval
-
-                if waited_time >= max_wait_time:
-                    raise TimeoutError(f"Batch timed out after {max_wait_time}s")
-
-                if (
-                    not batch_job.state
-                    or batch_job.state.name != "JOB_STATE_SUCCEEDED"
-                ):
-                    state_name = batch_job.state.name if batch_job.state else "unknown"
-                    raise RuntimeError(f"Batch failed: {state_name}")
-
-                # Process results from JSONL response file
-                results = []
-
-                if batch_job.dest and batch_job.dest.file_name:
-                    # Download response JSONL file
-                    response_file_name = batch_job.dest.file_name
-                    logger.info(f"[Summarizer] Downloading response file: {response_file_name}")
-
-                    response_content = self.client.files.download(file=response_file_name)
-                    response_text = response_content.decode('utf-8')
-
-                    # Parse JSONL responses
-                    for line_num, line in enumerate(response_text.strip().split('\n')):
-                        if not line.strip():
-                            continue
-
-                        try:
-                            response_obj = json.loads(line)
-
-                            # Extract key from response
-                            key = response_obj.get('key')
-                            if not key:
-                                logger.error(f"[Summarizer] Response line {line_num} missing 'key' field")
-                                continue
-
-                            if key not in request_map:
-                                logger.warning(
-                                    f"[Summarizer] No mapping found for key {key} in request_map keys: {list(request_map.keys())[:5]}"
-                                )
-                                continue
-
-                            original_req = request_map[key]
-
-                            # Check if response or error
-                            if 'response' in response_obj:
-                                response_data = response_obj['response']
-                                response_text = None
-
-                                try:
-                                    # Extract text from response
-                                    if 'text' in response_data:
-                                        response_text = response_data['text']
-                                    elif 'candidates' in response_data and response_data['candidates']:
-                                        # Extract from candidates structure
-                                        candidate = response_data['candidates'][0]
-                                        if 'content' in candidate and 'parts' in candidate['content']:
-                                            parts = candidate['content']['parts']
-                                            if parts and 'text' in parts[0]:
-                                                response_text = parts[0]['text']
-
-                                    # Check finish_reason
-                                    if 'candidates' in response_data and response_data['candidates']:
-                                        finish_reason = response_data['candidates'][0].get('finish_reason')
-                                        if finish_reason and finish_reason != "STOP":
-                                            logger.warning(
-                                                f"[Summarizer] Item {key} had non-normal finish_reason: {finish_reason}"
-                                            )
-                                            if finish_reason == "MAX_TOKENS":
-                                                logger.error(
-                                                    f"[Summarizer] Item {key} hit MAX_TOKENS - response truncated!"
-                                                )
-
-                                    # Log response
-                                    logger.info(
-                                        f"[Summarizer] Response for {key}: {len(response_text) if response_text else 0} chars"
-                                    )
-
-                                    if not response_text:
-                                        logger.warning(f"[Summarizer] Empty response for {key}")
-                                        results.append({
-                                            "item_id": original_req["item_id"],
-                                            "success": False,
-                                            "error": "Empty response from Gemini",
-                                        })
-                                        continue
-
-                                    # Parse response
-                                    summary, topics = self._parse_item_response(response_text)
-
-                                    results.append({
-                                        "item_id": original_req["item_id"],
-                                        "success": True,
-                                        "summary": summary,
-                                        "topics": topics,
-                                    })
-
-                                except Exception as e:
-                                    logger.error(
-                                        f"[Summarizer] Error parsing response for {key}: {e}"
-                                    )
-                                    logger.error(
-                                        f"[Summarizer] Input that caused failure - Title: {original_req['title'][:100]}"
-                                    )
-                                    logger.error(
-                                        f"[Summarizer] Input text length: {len(original_req['text'])} chars"
-                                    )
-                                    logger.error(
-                                        f"[Summarizer] Raw response that failed: {str(response_text)[:1000] if response_text else 'None'}"
-                                    )
-                                    results.append({
-                                        "item_id": original_req["item_id"],
-                                        "success": False,
-                                        "error": str(e),
-                                    })
-
-                            elif 'error' in response_obj:
-                                error_data = response_obj['error']
-                                error_str = str(error_data)
-
-                                # Log quota errors but DON'T retry the whole chunk
-                                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                                    logger.warning(
-                                        f"[Summarizer] Item {key} hit quota limit (individual failure): {error_str}"
-                                    )
-                                logger.error(
-                                    f"[Summarizer] Item {key} failed: {error_str}"
-                                )
-                                results.append({
-                                    "item_id": original_req["item_id"],
-                                    "success": False,
-                                    "error": error_str,
-                                })
-
-                        except json.JSONDecodeError as e:
-                            logger.error(f"[Summarizer] Failed to parse JSONL line {line_num}: {e}")
-                            continue
-
-                else:
-                    logger.error("[Summarizer] Batch job completed but no response file available")
+                if not batch_job.dest or not batch_job.dest.file_name:
+                    logger.error("batch job completed but no response file available")
                     raise RuntimeError("No response file in batch job result")
 
-                # Cleanup: Delete temp file
-                try:
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-                        logger.debug(f"[Summarizer] Cleaned up temp file: {temp_path}")
-                except Exception as cleanup_error:
-                    logger.warning(f"[Summarizer] Failed to cleanup temp file: {cleanup_error}")
+                response_file_name = batch_job.dest.file_name
+                logger.info("downloading response file", file_name=response_file_name)
 
+                response_content = self.client.files.download(file=response_file_name)
+                response_text = response_content.decode('utf-8')
+
+                # Parse JSONL responses
+                results = []
+                for line_num, line in enumerate(response_text.strip().split('\n')):
+                    result = self._parse_batch_response_line(line, line_num, request_map)
+                    if result:
+                        results.append(result)
+
+                # Cleanup temp file
+                try:
+                    if temp_path and os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                        logger.debug("cleaned up temp file", path=temp_path)
+                except OSError as cleanup_error:
+                    logger.warning("failed to cleanup temp file", path=temp_path, error=str(cleanup_error), error_type=type(cleanup_error).__name__)
+
+                # Record metrics
                 successful = sum(1 for r in results if r.get("success"))
                 failed = len(results) - successful
                 batch_duration = time.time() - batch_start_time
 
-                # Record metrics for each item in batch
                 for result in results:
-                    # Estimate prompt type from request
                     req = request_map.get(result["item_id"], {})
                     page_count = req.get("page_count", 0) if req else 0
                     prompt_type = "large" if page_count >= 100 else "standard"
@@ -724,10 +826,10 @@ class GeminiSummarizer:
                     metrics.record_llm_call(
                         model="flash",
                         prompt_type=f"item_{prompt_type}_batch",
-                        duration_seconds=batch_duration / len(results),  # Amortize batch time
-                        input_tokens=0,  # Batch API doesn't provide per-item token counts
+                        duration_seconds=batch_duration / len(results),
+                        input_tokens=0,
                         output_tokens=0,
-                        cost_dollars=0,  # Track via batch-level estimates
+                        cost_dollars=0,
                         success=result.get("success", False)
                     )
 
@@ -739,40 +841,41 @@ class GeminiSummarizer:
                 error_str = str(e)
                 is_quota_error = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
 
-                # Record error metrics
                 metrics.record_error(component="analyzer", error=e)
 
                 if is_quota_error and attempt < max_retries - 1:
-                    # Exponential backoff on quota errors
                     backoff_delay = retry_delay * (2**attempt)
                     logger.warning(
-                        f"[Summarizer] Chunk {chunk_num} hit quota limit (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {backoff_delay}s..."
+                        "chunk hit quota limit retrying",
+                        chunk_num=chunk_num,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        backoff_delay_seconds=backoff_delay
                     )
                     time.sleep(backoff_delay)
                     continue
-                else:
-                    # Final attempt failed or non-quota error
-                    logger.error("batch chunk failed", chunk_num=chunk_num, attempts=attempt + 1, error=str(e), error_type=type(e).__name__)
 
-                    # Record failed batch metrics
-                    for req in chunk_requests:
-                        page_count = req.get("page_count", 0)
-                        prompt_type = "large" if page_count >= 100 else "standard"
-                        metrics.record_llm_call(
-                            model="flash",
-                            prompt_type=f"item_{prompt_type}_batch",
-                            duration_seconds=0,
-                            input_tokens=0,
-                            output_tokens=0,
-                            cost_dollars=0,
-                            success=False
-                        )
+                # Final attempt failed or non-quota error
+                logger.error("batch chunk failed", chunk_num=chunk_num, attempts=attempt + 1, error=str(e), error_type=type(e).__name__)
 
-                    return [
-                        {"item_id": req["item_id"], "success": False, "error": error_str}
-                        for req in chunk_requests
-                    ]
+                # Record failed batch metrics
+                for req in chunk_requests:
+                    page_count = req.get("page_count", 0)
+                    prompt_type = "large" if page_count >= 100 else "standard"
+                    metrics.record_llm_call(
+                        model="flash",
+                        prompt_type=f"item_{prompt_type}_batch",
+                        duration_seconds=0,
+                        input_tokens=0,
+                        output_tokens=0,
+                        cost_dollars=0,
+                        success=False
+                    )
+
+                return [
+                    {"item_id": req["item_id"], "success": False, "error": error_str}
+                    for req in chunk_requests
+                ]
 
         # Should never reach here, but safety fallback
         return [
@@ -827,7 +930,8 @@ class GeminiSummarizer:
         if page_count <= 10 and text_size <= 30000:
             # Easy task: Simple agendas, disable thinking for speed
             logger.info(
-                f"[Summarizer] Simple document ({page_count} pages) - disabling thinking for speed"
+                "simple document disabling thinking for speed",
+                page_count=page_count
             )
             return types.GenerateContentConfig(
                 temperature=0.3,
@@ -840,7 +944,8 @@ class GeminiSummarizer:
         elif page_count <= 50 and text_size <= 150000:
             # Medium task: Standard agendas, use moderate thinking
             logger.info(
-                f"[Summarizer] Medium document ({page_count} pages) - using moderate thinking"
+                "medium document using moderate thinking",
+                page_count=page_count
             )
             if model_name == self.flash_lite_model_name:
                 # Flash-Lite needs explicit budget since it doesn't think by default
@@ -862,7 +967,8 @@ class GeminiSummarizer:
         else:
             # Hard task: Complex documents, use dynamic thinking for best quality
             logger.info(
-                f"[Summarizer] Complex document ({page_count} pages) - using dynamic thinking"
+                "complex document using dynamic thinking",
+                page_count=page_count
             )
             return types.GenerateContentConfig(
                 temperature=0.3,
@@ -892,7 +998,7 @@ class GeminiSummarizer:
             required_fields = ["summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
             missing_fields = [f for f in required_fields if f not in data]
             if missing_fields:
-                logger.error(f"[Summarizer] JSON missing required fields: {missing_fields}")
+                logger.error("json missing required fields", missing_fields=missing_fields)
                 raise ValueError(f"Invalid JSON response: missing {missing_fields}")
 
             # Build comprehensive summary with all components
@@ -903,7 +1009,7 @@ class GeminiSummarizer:
             # Validate and normalize topics
             raw_topics = data.get("topics", [])
             if not isinstance(raw_topics, list):
-                logger.error(f"[Summarizer] Topics field is not a list: {type(raw_topics)}")
+                logger.error("topics field is not a list", topics_type=type(raw_topics).__name__)
                 raw_topics = []
 
             # Validate topics against canonical taxonomy
@@ -919,17 +1025,19 @@ class GeminiSummarizer:
                     validated_topics.append(topic)
                 else:
                     invalid_topics.append(topic)
-                    logger.warning(f"[Summarizer] LLM returned invalid topic: '{topic}' (not in taxonomy)")
+                    logger.warning("llm returned invalid topic not in taxonomy", topic=topic)
 
             if invalid_topics:
                 logger.warning(
-                    f"[Summarizer] Rejected {len(invalid_topics)} invalid topics: {invalid_topics}. "
-                    f"Valid topics: {validated_topics}"
+                    "rejected invalid topics",
+                    num_invalid=len(invalid_topics),
+                    invalid_topics=invalid_topics,
+                    valid_topics=validated_topics
                 )
 
             # If all topics were invalid, use "other" as fallback
             if not validated_topics and raw_topics:
-                logger.warning("[Summarizer] All topics invalid, using 'other' as fallback")
+                logger.warning("all topics invalid using other as fallback")
                 validated_topics = ["other"]
 
             topics = validated_topics
@@ -954,12 +1062,12 @@ class GeminiSummarizer:
             # FIXED (Nov 2025): Was caused by max_output_tokens=2048 in batch API
             # Increased to 8192 to match single-item processing
             # Added finish_reason checking to detect future MAX_TOKENS issues
-            logger.error(f"[Summarizer] Failed to parse JSON response: {e}")
-            logger.error(f"[Summarizer] Full malformed JSON response:\n{response_text}")
+            logger.error("failed to parse json response", error=str(e), error_type=type(e).__name__)
+            logger.error("full malformed json response", response_text=response_text)
             raise
         except Exception as e:
-            logger.error(f"[Summarizer] Error validating JSON response: {e}")
-            logger.error(f"[Summarizer] Response that failed validation:\n{response_text}")
+            logger.error("error validating json response", error=str(e), error_type=type(e).__name__)
+            logger.error("response that failed validation", response_text=response_text)
             raise
 
     def _clean_summary(self, raw_summary: str) -> str:

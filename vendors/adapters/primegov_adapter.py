@@ -1,6 +1,10 @@
 """
 PrimeGov Adapter - Thin wrapper for PrimeGov municipal calendar API
 
+DEPRECATED: This sync adapter is deprecated. Use AsyncPrimeGovAdapter instead.
+Scheduled for removal after async migration complete.
+For new code, use: from vendors.factory import get_async_adapter
+
 Cities using PrimeGov: Palo Alto CA, Mountain View CA, Sunnyvale CA, and many others
 """
 
@@ -125,7 +129,7 @@ class PrimeGovAdapter(BaseAdapter):
             # Skip SAP (Spanish Audio/Video) broadcast duplicates
             # These are just video links for the same meeting, no agenda content
             if " - SAP" in title:
-                logger.debug(f"[primegov:{self.slug}] Skipping SAP broadcast: {title}")
+                logger.debug("skipping SAP broadcast", vendor="primegov", slug=self.slug, title=title)
                 continue
 
             # Find packet document (prefer "Packet", fall back to "Agenda" if not HTML)
@@ -176,7 +180,7 @@ class PrimeGovAdapter(BaseAdapter):
 
                     # Fetch HTML agenda items (item-level granularity)
                     try:
-                        logger.info(f"[primegov:{self.slug}] GET {html_url}")
+                        logger.info("fetching HTML agenda", vendor="primegov", slug=self.slug, url=html_url)
                         items_data = self.fetch_html_agenda_items(html_url)
                         if items_data["items"]:
                             result["items"] = items_data["items"]

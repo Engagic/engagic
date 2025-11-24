@@ -4,11 +4,11 @@ Matter API routes
 Handles matter tracking, timelines, and cross-meeting aggregation
 """
 
-import json
 import random
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from server.metrics import metrics
-from database.db import UnifiedDatabase
+from server.dependencies import get_db
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -18,20 +18,15 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def get_db(request: Request) -> UnifiedDatabase:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
-
-
 @router.get("/matters/{matter_id}/timeline")
-async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_db)):
+async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
     """Get timeline of a matter across multiple meetings
 
     Returns all appearances of this matter with meeting context
     """
     try:
         # Get the canonical matter record
-        matter = db.get_matter(matter_id)
+        matter = await db.get_matter(matter_id)
 
         if not matter:
             raise HTTPException(status_code=404, detail="Matter not found")
@@ -40,24 +35,25 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
         metrics.page_views.labels(page_type='matter').inc()
         metrics.matter_engagement.labels(action='timeline').inc()
 
-        # Get all items for this matter across meetings (simple FK join)
-        items = db.conn.execute(
-            """
-            SELECT
-                i.*,
-                m.title as meeting_title,
-                m.date as meeting_date,
-                m.banana,
-                c.name as city_name,
-                c.state
-            FROM items i
-            JOIN meetings m ON i.meeting_id = m.id
-            JOIN cities c ON m.banana = c.banana
-            WHERE i.matter_id = ?
-            ORDER BY m.date ASC, i.sequence ASC
-            """,
-            (matter.id,)
-        ).fetchall()
+        # Get all items for this matter across meetings (async PostgreSQL)
+        async with db.pool.acquire() as conn:
+            items = await conn.fetch(
+                """
+                SELECT
+                    i.*,
+                    m.title as meeting_title,
+                    m.date as meeting_date,
+                    m.banana,
+                    c.name as city_name,
+                    c.state
+                FROM items i
+                JOIN meetings m ON i.meeting_id = m.id
+                JOIN cities c ON m.banana = c.banana
+                WHERE i.matter_id = $1
+                ORDER BY m.date ASC, i.sequence ASC
+                """,
+                matter.id
+            )
 
         if not items:
             raise HTTPException(status_code=404, detail="No items found for this matter")
@@ -75,7 +71,7 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
                 "banana": item["banana"],
                 "agenda_number": item["agenda_number"],
                 "summary": item["summary"],
-                "topics": json.loads(item["topics"]) if item["topics"] else []
+                "topics": item["topics"] or []
             })
 
         return {
@@ -88,7 +84,7 @@ async def get_matter_timeline(matter_id: str, db: UnifiedDatabase = Depends(get_
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching matter timeline {matter_id}: {str(e)}")
+        logger.error("error fetching matter timeline", matter_id=matter_id, error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving matter timeline")
 
 
@@ -97,7 +93,7 @@ async def get_city_matters(
     banana: str,
     limit: int = 50,
     offset: int = 0,
-    db: UnifiedDatabase = Depends(get_db)
+    db: Database = Depends(get_db)
 ):
     """Get all matters for a city with appearance counts
 
@@ -107,63 +103,64 @@ async def get_city_matters(
     """
     try:
         # Verify city exists
-        city = db.get_city(banana=banana)
+        city = await db.get_city(banana=banana)
         if not city:
             raise HTTPException(status_code=404, detail="City not found")
 
         # Track city page view
         metrics.page_views.labels(page_type='city').inc()
 
-        # Single optimized query: fetch matters with their timelines (eliminates N+1 problem)
-        # Uses CTE for matter filtering, then joins timeline data in one query
-        all_data = db.conn.execute(
-            """
-            WITH matter_summary AS (
+        # Single optimized query: fetch matters with their timelines (async PostgreSQL)
+        async with db.pool.acquire() as conn:
+            all_data = await conn.fetch(
+                """
+                WITH matter_summary AS (
+                    SELECT
+                        m.*,
+                        COUNT(i.id) as actual_appearance_count,
+                        MAX(mt.date) as last_seen_date
+                    FROM city_matters m
+                    LEFT JOIN items i ON i.matter_id = m.id
+                    LEFT JOIN meetings mt ON i.meeting_id = mt.id
+                    WHERE m.banana = $1
+                    GROUP BY m.id
+                    HAVING COUNT(i.id) >= 1
+                    ORDER BY last_seen_date DESC, m.created_at DESC
+                    LIMIT $2 OFFSET $3
+                )
                 SELECT
-                    m.*,
-                    COUNT(i.id) as actual_appearance_count,
-                    MAX(mt.date) as last_seen_date
-                FROM city_matters m
-                LEFT JOIN items i ON i.matter_id = m.id
-                LEFT JOIN meetings mt ON i.meeting_id = mt.id
-                WHERE m.banana = ?
-                GROUP BY m.id
-                HAVING COUNT(i.id) >= 1
-                ORDER BY last_seen_date DESC, m.created_at DESC
-                LIMIT ? OFFSET ?
+                    ms.*,
+                    i.id as item_id,
+                    i.meeting_id,
+                    i.agenda_number,
+                    i.summary as item_summary,
+                    i.topics as item_topics,
+                    m.title as meeting_title,
+                    m.date as meeting_date,
+                    m.banana as meeting_banana
+                FROM matter_summary ms
+                LEFT JOIN items i ON i.matter_id = ms.id
+                LEFT JOIN meetings m ON i.meeting_id = m.id
+                ORDER BY ms.last_seen_date DESC, ms.created_at DESC, m.date ASC, i.sequence ASC
+                """,
+                banana, limit, offset
             )
-            SELECT
-                ms.*,
-                i.id as item_id,
-                i.meeting_id,
-                i.agenda_number,
-                i.summary as item_summary,
-                i.topics as item_topics,
-                m.title as meeting_title,
-                m.date as meeting_date,
-                m.banana as meeting_banana
-            FROM matter_summary ms
-            LEFT JOIN items i ON i.matter_id = ms.id
-            LEFT JOIN meetings m ON i.meeting_id = m.id
-            ORDER BY ms.last_seen_date DESC, ms.created_at DESC, m.date ASC, i.sequence ASC
-            """,
-            (banana, limit, offset)
-        ).fetchall()
 
-        # Count all matters with at least one appearance
-        total_count = db.conn.execute(
-            """
-            SELECT COUNT(*) FROM (
-                SELECT m.id
-                FROM city_matters m
-                LEFT JOIN items i ON i.matter_id = m.id
-                WHERE m.banana = ?
-                GROUP BY m.id
-                HAVING COUNT(i.id) >= 1
+            # Count all matters with at least one appearance
+            total_count_row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) as count FROM (
+                    SELECT m.id
+                    FROM city_matters m
+                    LEFT JOIN items i ON i.matter_id = m.id
+                    WHERE m.banana = $1
+                    GROUP BY m.id
+                    HAVING COUNT(i.id) >= 1
+                ) AS subquery
+                """,
+                banana
             )
-            """,
-            (banana,)
-        ).fetchone()[0]
+            total_count = total_count_row['count']
 
         # Group timeline data by matter (single pass through results)
         matters_dict = {}
@@ -178,9 +175,9 @@ async def get_city_matters(
                     "matter_id": row["matter_id"],
                     "matter_type": row["matter_type"],
                     "title": row["title"],
-                    "sponsors": json.loads(row["sponsors"]) if row["sponsors"] else [],
+                    "sponsors": row["sponsors"] or [],
                     "canonical_summary": row["canonical_summary"],
-                    "canonical_topics": json.loads(row["canonical_topics"]) if row["canonical_topics"] else [],
+                    "canonical_topics": row["canonical_topics"] or [],
                     "first_seen": row["first_seen"],
                     "last_seen": row["last_seen"],
                     "appearance_count": row["actual_appearance_count"],
@@ -198,7 +195,7 @@ async def get_city_matters(
                     "banana": row["meeting_banana"],
                     "agenda_number": row["agenda_number"],
                     "summary": row["item_summary"],
-                    "topics": json.loads(row["item_topics"]) if row["item_topics"] else []
+                    "topics": row["item_topics"] or []
                 })
 
         # Convert dict to list (preserves ORDER BY from query)
@@ -218,7 +215,7 @@ async def get_city_matters(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching matters for city {banana}: {str(e)}")
+        logger.error("error fetching matters for city", banana=banana, error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving city matters")
 
 
@@ -227,7 +224,7 @@ async def get_state_matters(
     state_code: str,
     topic: str | None = None,
     limit: int = 100,
-    db: UnifiedDatabase = Depends(get_db)
+    db: Database = Depends(get_db)
 ):
     """Get matters across all cities in a state
 
@@ -243,74 +240,102 @@ async def get_state_matters(
         # Track state page view
         metrics.page_views.labels(page_type='state').inc()
 
-        # Build query with optional topic filter
-        query = """
-            SELECT
-                m.*,
-                c.name as city_name,
-                c.banana,
-                COUNT(i.id) as appearance_count
-            FROM city_matters m
-            JOIN cities c ON m.banana = c.banana
-            LEFT JOIN items i ON i.matter_id = m.id
-            WHERE c.state = ?
-        """
+        # Query matters with async PostgreSQL
+        async with db.pool.acquire() as conn:
+            # Build query with optional topic filter
+            if topic:
+                # PostgreSQL uses JSONB @> operator or jsonb_array_elements for topic filtering
+                matters = await conn.fetch(
+                    """
+                    SELECT
+                        m.*,
+                        c.name as city_name,
+                        c.banana,
+                        COUNT(i.id) as appearance_count
+                    FROM city_matters m
+                    JOIN cities c ON m.banana = c.banana
+                    LEFT JOIN items i ON i.matter_id = m.id
+                    WHERE c.state = $1
+                    AND m.canonical_topics::text LIKE $2
+                    GROUP BY m.id, c.name, c.banana
+                    HAVING COUNT(i.id) >= 2
+                    ORDER BY m.last_seen DESC
+                    LIMIT $3
+                    """,
+                    state_code, f'%"{topic}"%', limit
+                )
+            else:
+                matters = await conn.fetch(
+                    """
+                    SELECT
+                        m.*,
+                        c.name as city_name,
+                        c.banana,
+                        COUNT(i.id) as appearance_count
+                    FROM city_matters m
+                    JOIN cities c ON m.banana = c.banana
+                    LEFT JOIN items i ON i.matter_id = m.id
+                    WHERE c.state = $1
+                    GROUP BY m.id, c.name, c.banana
+                    HAVING COUNT(i.id) >= 2
+                    ORDER BY m.last_seen DESC
+                    LIMIT $2
+                    """,
+                    state_code, limit
+                )
 
-        params: list[str | int] = [state_code]
+            # Get cities in this state
+            cities = await conn.fetch(
+                """
+                SELECT banana, name, vendor
+                FROM cities
+                WHERE state = $1
+                ORDER BY name ASC
+                """,
+                state_code
+            )
 
-        if topic:
-            query += " AND json_extract(m.canonical_topics, '$') LIKE ?"
-            params.append(f'%"{topic}"%')
-
-        query += """
-            GROUP BY m.id
-            HAVING COUNT(i.id) >= 2
-            ORDER BY m.last_seen DESC
-            LIMIT ?
-        """
-        params.append(limit)
-
-        matters = db.conn.execute(query, tuple(params)).fetchall()
+            # Get meeting statistics for this state
+            meeting_stats = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) as total_meetings,
+                    SUM(CASE WHEN agenda_url IS NOT NULL OR packet_url IS NOT NULL THEN 1 ELSE 0 END) as with_agendas,
+                    SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as with_summaries
+                FROM meetings m
+                JOIN cities c ON m.banana = c.banana
+                WHERE c.state = $1
+                """,
+                state_code
+            )
 
         # Group by topic for aggregation
         topic_aggregation = {}
         matters_list = []
 
         for matter in matters:
-            matter_dict = dict(matter)
             matters_list.append({
-                "id": matter_dict["id"],
-                "matter_file": matter_dict["matter_file"],
-                "matter_type": matter_dict["matter_type"],
-                "title": matter_dict["title"],
-                "city_name": matter_dict["city_name"],
-                "banana": matter_dict["banana"],
-                "canonical_topics": matter_dict["canonical_topics"],
-                "last_seen": matter_dict["last_seen"],
-                "appearance_count": matter_dict["appearance_count"]
+                "id": matter["id"],
+                "matter_file": matter["matter_file"],
+                "matter_type": matter["matter_type"],
+                "title": matter["title"],
+                "city_name": matter["city_name"],
+                "banana": matter["banana"],
+                "canonical_topics": matter["canonical_topics"],
+                "last_seen": matter["last_seen"],
+                "appearance_count": matter["appearance_count"]
             })
 
             # Aggregate by topics
-            if matter_dict.get("canonical_topics"):
+            if matter.get("canonical_topics"):
                 try:
-                    topics = json.loads(matter_dict["canonical_topics"])
+                    topics = matter["canonical_topics"]
                     for t in topics:
                         if t not in topic_aggregation:
                             topic_aggregation[t] = 0
                         topic_aggregation[t] += 1
-                except (json.JSONDecodeError, TypeError, KeyError) as e:
-                    logger.debug(f"Invalid topics JSON: {e}")
-
-        # Get cities in this state
-        cities = db.conn.execute(
-            """
-            SELECT banana, name, vendor
-            FROM cities
-            WHERE state = ?
-            ORDER BY name ASC
-            """,
-            (state_code,)
-        ).fetchall()
+                except (TypeError, KeyError) as e:
+                    logger.debug("invalid topics", error=str(e))
 
         cities_list = [
             {
@@ -320,20 +345,6 @@ async def get_state_matters(
             }
             for city in cities
         ]
-
-        # Get meeting statistics for this state
-        meeting_stats = db.conn.execute(
-            """
-            SELECT
-                COUNT(*) as total_meetings,
-                SUM(CASE WHEN agenda_url IS NOT NULL OR packet_url IS NOT NULL THEN 1 ELSE 0 END) as with_agendas,
-                SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as with_summaries
-            FROM meetings m
-            JOIN cities c ON m.banana = c.banana
-            WHERE c.state = ?
-            """,
-            (state_code,)
-        ).fetchone()
 
         return {
             "success": True,
@@ -354,62 +365,62 @@ async def get_state_matters(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching state matters for {state_code}: {str(e)}")
+        logger.error("error fetching state matters", state_code=state_code, error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving state matters")
 
 
 @router.get("/random-matter")
-async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
+async def get_random_matter(db: Database = Depends(get_db)):
     """Get a random high-quality matter (2+ appearances)
 
     Returns a random matter with its timeline for showcasing legislative tracking
     """
     try:
-        # Get all matters with 2+ appearances AND summaries
-        matters = db.conn.execute(
-            """
-            SELECT
-                m.id,
-                m.matter_file,
-                m.matter_id,
-                m.matter_type,
-                m.title,
-                m.banana,
-                m.canonical_summary,
-                m.canonical_topics,
-                c.name as city_name,
-                c.state,
-                COUNT(i.id) as appearance_count
-            FROM city_matters m
-            JOIN cities c ON m.banana = c.banana
-            LEFT JOIN items i ON i.matter_id = m.id
-            WHERE m.canonical_summary IS NOT NULL AND m.canonical_summary != ''
-            GROUP BY m.id
-            HAVING COUNT(i.id) >= 2
-            """,
-        ).fetchall()
+        # Get all matters with 2+ appearances AND summaries (async PostgreSQL)
+        async with db.pool.acquire() as conn:
+            matters = await conn.fetch(
+                """
+                SELECT
+                    m.id,
+                    m.matter_file,
+                    m.matter_id,
+                    m.matter_type,
+                    m.title,
+                    m.banana,
+                    m.canonical_summary,
+                    m.canonical_topics,
+                    c.name as city_name,
+                    c.state,
+                    COUNT(i.id) as appearance_count
+                FROM city_matters m
+                JOIN cities c ON m.banana = c.banana
+                LEFT JOIN items i ON i.matter_id = m.id
+                WHERE m.canonical_summary IS NOT NULL AND m.canonical_summary != ''
+                GROUP BY m.id, c.name, c.state
+                HAVING COUNT(i.id) >= 2
+                """
+            )
 
-        if not matters:
-            raise HTTPException(status_code=404, detail="No high-quality matters found")
+            if not matters:
+                raise HTTPException(status_code=404, detail="No high-quality matters found")
 
-        # Pick a random matter
-        matter = random.choice(matters)
-        matter_dict = dict(matter)
+            # Pick a random matter
+            matter = random.choice(matters)
 
-        # Get timeline for this matter (simple FK join)
-        timeline_items = db.conn.execute(
-            """
-            SELECT
-                i.*,
-                m.title as meeting_title,
-                m.date as meeting_date
-            FROM items i
-            JOIN meetings m ON i.meeting_id = m.id
-            WHERE i.matter_id = ?
-            ORDER BY m.date ASC, i.sequence ASC
-            """,
-            (matter_dict["id"],)
-        ).fetchall()
+            # Get timeline for this matter
+            timeline_items = await conn.fetch(
+                """
+                SELECT
+                    i.*,
+                    m.title as meeting_title,
+                    m.date as meeting_date
+                FROM items i
+                JOIN meetings m ON i.meeting_id = m.id
+                WHERE i.matter_id = $1
+                ORDER BY m.date ASC, i.sequence ASC
+                """,
+                matter["id"]
+            )
 
         timeline = []
         for item in timeline_items:
@@ -426,16 +437,16 @@ async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
         return {
             "success": True,
             "matter": {
-                "id": matter_dict["id"],
-                "matter_file": matter_dict["matter_file"],
-                "matter_type": matter_dict["matter_type"],
-                "title": matter_dict["title"],
-                "city_name": matter_dict["city_name"],
-                "state": matter_dict["state"],
-                "banana": matter_dict["banana"],
-                "canonical_summary": matter_dict["canonical_summary"],
-                "canonical_topics": matter_dict["canonical_topics"],
-                "appearance_count": matter_dict["appearance_count"]
+                "id": matter["id"],
+                "matter_file": matter["matter_file"],
+                "matter_type": matter["matter_type"],
+                "title": matter["title"],
+                "city_name": matter["city_name"],
+                "state": matter["state"],
+                "banana": matter["banana"],
+                "canonical_summary": matter["canonical_summary"],
+                "canonical_topics": matter["canonical_topics"],
+                "appearance_count": matter["appearance_count"]
             },
             "timeline": timeline
         }
@@ -443,5 +454,5 @@ async def get_random_matter(db: UnifiedDatabase = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching random matter: {str(e)}")
+        logger.error("error fetching random matter", error=str(e))
         raise HTTPException(status_code=500, detail="Error retrieving random matter")

@@ -1,16 +1,22 @@
 """
 Legistar Adapter - API integration for Legistar platform
 
+DEPRECATED: This sync adapter is deprecated. Use AsyncLegistarAdapter instead.
+Scheduled for removal after async migration complete.
+For new code, use: from vendors.factory import get_async_adapter
+
 Cities using Legistar: Seattle WA, NYC, Cambridge MA, and many others
 """
 
 from typing import Dict, Any, Iterator, Optional, List
 from datetime import datetime, timedelta
+from json import JSONDecodeError
 import re
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter import BaseAdapter, logger
 from vendors.utils.item_filters import should_skip_procedural_item
 from pipeline.utils import combine_date_time
+from exceptions import VendorHTTPError, VendorParsingError
 
 
 class LegistarAdapter(BaseAdapter):
@@ -41,17 +47,19 @@ class LegistarAdapter(BaseAdapter):
         """
         api_yielded = 0
         try:
-            logger.info(f"[Vendor] legistar:{self.slug} using API")
+            logger.info("using api", vendor="legistar", city_slug=self.slug)
             for meeting in self._fetch_meetings_api(days_back, days_forward):
                 api_yielded += 1
                 yield meeting
-        except Exception as e:
-            if hasattr(e, 'response') and e.response.status_code in [400, 403, 404]:
+        except VendorHTTPError as e:
+            if e.status_code in [400, 403, 404]:
                 logger.warning(
-                    f"[Vendor] legistar:{self.slug} API failed (HTTP {e.response.status_code}), "
-                    f"falling back to HTML scraping"
+                    "api failed falling back to html scraping",
+                    vendor="legistar",
+                    city_slug=self.slug,
+                    http_status=e.status_code
                 )
-                logger.info(f"[Vendor] legistar:{self.slug} using HTML fallback")
+                logger.info("using html fallback", vendor="legistar", city_slug=self.slug)
                 yield from self._fetch_meetings_html(days_back, days_forward)
             else:
                 raise
@@ -60,13 +68,14 @@ class LegistarAdapter(BaseAdapter):
         # If API succeeded but returned 0 events, fall back to HTML
         if api_yielded == 0:
             logger.warning(
-                f"[Vendor] legistar:{self.slug} API returned 0 events, "
-                f"falling back to HTML scraping"
+                "api returned zero events falling back to html scraping",
+                vendor="legistar",
+                city_slug=self.slug
             )
-            logger.info(f"[Vendor] legistar:{self.slug} using HTML fallback")
+            logger.info("using html fallback", vendor="legistar", city_slug=self.slug)
             yield from self._fetch_meetings_html(days_back, days_forward)
         else:
-            logger.info(f"[Vendor] legistar:{self.slug} API returned {api_yielded} meetings")
+            logger.info("api returned meetings", vendor="legistar", city_slug=self.slug, num_meetings=api_yielded)
 
     def _fetch_meetings_api(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """
@@ -112,13 +121,13 @@ class LegistarAdapter(BaseAdapter):
         events = []
         try:
             events = response.json()
-            logger.info(f"[legistar:{self.slug}] Retrieved {len(events)} events (JSON)")
-        except Exception as json_error:
+            logger.info("retrieved events json", vendor="legistar", city_slug=self.slug, num_events=len(events))
+        except (JSONDecodeError, ValueError) as json_error:
             # Try XML parsing
             try:
                 events = self._parse_xml_events(response.text)
-                logger.info(f"[legistar:{self.slug}] Retrieved {len(events)} events (XML)")
-            except Exception as xml_error:
+                logger.info("retrieved events xml", vendor="legistar", city_slug=self.slug, num_events=len(events))
+            except (ET.ParseError, VendorParsingError) as xml_error:
                 logger.error(
                     f"[legistar:{self.slug}] Failed to parse as JSON or XML. "
                     f"JSON error: {json_error}, XML error: {xml_error}"
@@ -138,8 +147,8 @@ class LegistarAdapter(BaseAdapter):
                     # Only include events within our date range
                     if start_date_dt <= event_date <= end_date_dt:
                         filtered_events.append(event)
-                except Exception as e:
-                    logger.debug(f"[legistar:{self.slug}] Could not parse date {event_date_str}: {e}")
+                except (ValueError, TypeError) as e:
+                    logger.debug("could not parse date", vendor="legistar", city_slug=self.slug, date_str=event_date_str, error=str(e), error_type=type(e).__name__)
                     # Include events with unparseable dates (let validation handle them)
                     filtered_events.append(event)
             else:
@@ -224,13 +233,13 @@ class LegistarAdapter(BaseAdapter):
         try:
             response = self._get(items_url, params=params)
             event_items = response.json()
-            logger.debug(f"[legistar:{self.slug}] Retrieved {len(event_items)} items (JSON)")
-        except Exception as json_error:
+            logger.debug("retrieved items json", vendor="legistar", city_slug=self.slug, num_items=len(event_items))
+        except (JSONDecodeError, ValueError) as json_error:
             # Try XML parsing
             try:
                 event_items = self._parse_xml_event_items(response.text)
-                logger.debug(f"[legistar:{self.slug}] Retrieved {len(event_items)} items (XML)")
-            except Exception as xml_error:
+                logger.debug("retrieved items xml", vendor="legistar", city_slug=self.slug, num_items=len(event_items))
+            except (ET.ParseError, VendorParsingError) as xml_error:
                 logger.error(
                     f"[legistar:{self.slug}] Failed to parse items for event {event_id} as JSON or XML. "
                     f"JSON error: {json_error}, XML error: {xml_error}"
@@ -327,8 +336,8 @@ class LegistarAdapter(BaseAdapter):
                     if s.get("MatterSponsorName")
                 ]
 
-        except Exception as e:
-            logger.debug(f"[legistar:{self.slug}] Could not fetch matter metadata for {matter_id}: {e}")
+        except (VendorHTTPError, JSONDecodeError, ValueError) as e:
+            logger.debug("could not fetch matter metadata", vendor="legistar", city_slug=self.slug, matter_id=matter_id, error=str(e), error_type=type(e).__name__)
 
         return metadata
 
@@ -352,11 +361,11 @@ class LegistarAdapter(BaseAdapter):
         try:
             response = self._get(attachments_url, params=params)
             raw_attachments = response.json()
-        except Exception as json_error:
+        except (JSONDecodeError, ValueError) as json_error:
             # Try XML parsing
             try:
                 raw_attachments = self._parse_xml_attachments(response.text)
-            except Exception as xml_error:
+            except (ET.ParseError, VendorParsingError) as xml_error:
                 logger.warning(
                     f"[legistar:{self.slug}] Failed to fetch attachments for matter {matter_id} as JSON or XML. "
                     f"JSON error: {json_error}, XML error: {xml_error}"
@@ -437,7 +446,7 @@ class LegistarAdapter(BaseAdapter):
             return events
 
         except ET.ParseError as e:
-            logger.error(f"[legistar:{self.slug}] XML parsing error: {e}")
+            logger.error("xml parsing error", vendor="legistar", city_slug=self.slug, error=str(e), error_type=type(e).__name__)
             raise
 
     def _parse_xml_event_items(self, xml_text: str) -> List[Dict[str, Any]]:
@@ -488,7 +497,7 @@ class LegistarAdapter(BaseAdapter):
             return items
 
         except ET.ParseError as e:
-            logger.error(f"[legistar:{self.slug}] XML parsing error for event items: {e}")
+            logger.error("xml parsing error for event items", vendor="legistar", city_slug=self.slug, error=str(e), error_type=type(e).__name__)
             raise
 
     def _parse_xml_attachments(self, xml_text: str) -> List[Dict[str, Any]]:
@@ -531,7 +540,7 @@ class LegistarAdapter(BaseAdapter):
             return attachments
 
         except ET.ParseError as e:
-            logger.error(f"[legistar:{self.slug}] XML parsing error for attachments: {e}")
+            logger.error("xml parsing error for attachments", vendor="legistar", city_slug=self.slug, error=str(e), error_type=type(e).__name__)
             raise
 
     def _fetch_meetings_html(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
@@ -561,10 +570,10 @@ class LegistarAdapter(BaseAdapter):
             try:
                 soup = self._fetch_html(url)
                 calendar_url = url
-                logger.info(f"[legistar:{self.slug}] Found HTML calendar at {url}")
+                logger.info("found html calendar", vendor="legistar", city_slug=self.slug, url=url)
                 break
-            except Exception as e:
-                logger.debug(f"[legistar:{self.slug}] Calendar not found at {url}: {e}")
+            except (VendorHTTPError, VendorParsingError) as e:
+                logger.debug("calendar not found at url", vendor="legistar", city_slug=self.slug, url=url, error=str(e), error_type=type(e).__name__)
                 continue
 
         if not soup or not calendar_url:
@@ -591,15 +600,15 @@ class LegistarAdapter(BaseAdapter):
             )
             # Log a sample of all table rows for debugging
             all_tables = soup.find_all("table")
-            logger.info(f"[legistar:{self.slug}] Found {len(all_tables)} tables in HTML")
+            logger.info("found tables in html", vendor="legistar", city_slug=self.slug, num_tables=len(all_tables))
             if all_tables:
                 # Find the rgMasterTable specifically
                 master_table = soup.find("table", class_="rgMasterTable")
                 if master_table:
                     sample_rows = master_table.find_all("tr")[:5]
-                    logger.info(f"[legistar:{self.slug}] Found rgMasterTable with {len(sample_rows)} rows")
+                    logger.info("found rgmastertable with rows", vendor="legistar", city_slug=self.slug, num_rows=len(sample_rows))
                     for i, row in enumerate(sample_rows):
-                        logger.info(f"[legistar:{self.slug}] Sample row {i}: {str(row)[:500]}")
+                        logger.info("sample row", vendor="legistar", city_slug=self.slug, row_index=i, row_content=str(row)[:500])
             return
 
         logger.info(
@@ -719,7 +728,7 @@ class LegistarAdapter(BaseAdapter):
                         f"[legistar:{self.slug}] Meeting {meeting_id} ({title}) on {meeting_dt.strftime('%Y-%m-%d')}: NO DATA (detail page returned None)"
                     )
 
-            except Exception as e:
+            except (AttributeError, IndexError, ValueError) as e:
                 logger.warning(
                     f"[legistar:{self.slug}] Error parsing meeting row: {e}"
                 )
@@ -806,7 +815,7 @@ class LegistarAdapter(BaseAdapter):
                         packet_url = urljoin(base_url, link["href"])
                         break
 
-        except Exception as e:
+        except (VendorHTTPError, VendorParsingError) as e:
             logger.debug(
                 f"[legistar:{self.slug}] Detail page unavailable for meeting {meeting_id}: {e}"
             )
@@ -957,7 +966,7 @@ class LegistarAdapter(BaseAdapter):
 
             return attachments
 
-        except Exception as e:
+        except (VendorHTTPError, VendorParsingError) as e:
             logger.warning(
                 f"[legistar:{self.slug}] Failed to fetch attachments for item {item.get('item_id')}: {e}"
             )

@@ -48,8 +48,8 @@ async def rate_limit_middleware(
     # Scanners bypass /api/ check by hitting root, /login.php, etc.
     should_rate_limit = True
 
-    # Whitelist monitoring endpoints
-    if request.url.path in ["/health", "/metrics"]:
+    # Whitelist monitoring endpoints (Prometheus scraping + health checks)
+    if request.url.path in ["/health", "/metrics", "/api/health", "/api/metrics"]:
         should_rate_limit = False
 
     if should_rate_limit:

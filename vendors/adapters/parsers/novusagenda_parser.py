@@ -44,14 +44,14 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
     # Look for common patterns: tables, divs with item classes, etc.
 
     # Log page structure for debugging
-    logger.debug(f"[HTMLParser:NovusAgenda] HTML length: {len(html)} characters")
+    logger.debug("parsing NovusAgenda HTML", parser="novusagenda", html_length=len(html))
 
     # Pattern 1: Look for links to CoverSheet.aspx (item detail pages)
     # Note: NovusAgenda uses "CoverSheet" with both C and S capitalized
     coversheet_links = soup.find_all('a', href=re.compile(r'CoverSheet\.aspx\?ItemID=', re.IGNORECASE))
 
     if coversheet_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(coversheet_links)} Coversheet links")
+        logger.info("found coversheet links", parser="novusagenda", link_count=len(coversheet_links))
 
         for sequence, link in enumerate(coversheet_links, 1):
             # Extract ItemID from href
@@ -81,30 +81,28 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
     # Try finding tables with agenda item data
     agenda_tables = soup.find_all('table', class_=re.compile(r'agenda', re.I))
     if agenda_tables:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(agenda_tables)} agenda tables")
+        logger.info("found agenda tables", parser="novusagenda", table_count=len(agenda_tables))
 
     # Pattern 3: Look for PDF links that might be attachments
     pdf_links = soup.find_all('a', href=re.compile(r'\.pdf$|DisplayAgendaPDF', re.I))
     if pdf_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(pdf_links)} PDF links")
+        logger.info("found PDF links", parser="novusagenda", pdf_count=len(pdf_links))
 
     # Pattern 4: Look for "Online Agenda" / "HTML Agenda" / "View Agenda" links
     agenda_view_links = soup.find_all('a', text=re.compile(r'(online|html|view).*agenda', re.I))
     if agenda_view_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(agenda_view_links)} agenda view links")
+        logger.info("found agenda view links", parser="novusagenda", link_count=len(agenda_view_links))
         for link in agenda_view_links:
-            logger.debug(f"[HTMLParser:NovusAgenda] Agenda view link: {link.get('onClick', link.get('href', 'no href'))}")
+            logger.debug("agenda view link", parser="novusagenda", link_action=link.get('onClick', link.get('href', 'no href')))
 
     # Pattern 5: Look for image-based agenda links (common pattern)
     img_links = soup.find_all('img', alt=re.compile(r'agenda|item', re.I))
     if img_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(img_links)} agenda/item images")
+        logger.info("found agenda/item images", parser="novusagenda", image_count=len(img_links))
         for img in img_links[:5]:  # Log first 5
-            logger.debug(f"[HTMLParser:NovusAgenda] Image alt: {img.get('alt')}")
+            logger.debug("image alt text", parser="novusagenda", alt_text=img.get('alt'))
 
-    logger.info(
-        f"[HTMLParser:NovusAgenda] Extracted {len(items)} items from HTML"
-    )
+    logger.info("extracted items from HTML", parser="novusagenda", item_count=len(items))
 
     return {
         'participation': {},

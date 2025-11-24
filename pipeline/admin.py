@@ -9,14 +9,14 @@ These are debugging tools, not core orchestration logic.
 from typing import Dict, Any, Optional
 
 from config import config
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="engagic")
 
 
-def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> Dict[str, Any]:
+async def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> Dict[str, Any]:
     """Extract text from meeting PDF without processing (for manual review)
 
     Args:
@@ -28,17 +28,17 @@ def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> 
     """
     logger.info("extracting text preview", meeting_id=meeting_id)
 
-    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-    meeting = db.get_meeting(meeting_id)
-    if not meeting:
-        return {"error": "Meeting not found"}
-
-    # Try agenda_url first (item-level), fallback to packet_url (monolithic)
-    source_url = meeting.agenda_url or meeting.packet_url
-    if not source_url:
-        return {"error": "No agenda or packet URL for this meeting"}
-
+    db = await Database.create(config.get_postgres_dsn(), 10, 100)
     try:
+        meeting = await db.meetings.get_meeting(meeting_id)
+        if not meeting:
+            return {"error": "Meeting not found"}
+
+        # Try agenda_url first (item-level), fallback to packet_url (monolithic)
+        source_url = meeting.agenda_url or meeting.packet_url
+        if not source_url:
+            return {"error": "No agenda or packet URL for this meeting"}
+
         # Extract text using PDF extractor (doesn't need LLM analyzer)
         from parsing.pdf import PdfExtractor
         extractor = PdfExtractor()
@@ -91,9 +91,11 @@ def extract_text_preview(meeting_id: str, output_file: Optional[str] = None) -> 
             "error": str(e),
             "meeting_id": meeting_id,
         }
+    finally:
+        await db.close()
 
 
-def preview_items(meeting_id: str, extract_text: bool = False, output_dir: Optional[str] = None) -> Dict[str, Any]:
+async def preview_items(meeting_id: str, extract_text: bool = False, output_dir: Optional[str] = None) -> Dict[str, Any]:
     """Preview items and optionally extract text from their attachments
 
     Args:
@@ -106,92 +108,95 @@ def preview_items(meeting_id: str, extract_text: bool = False, output_dir: Optio
     """
     logger.info("previewing items", meeting_id=meeting_id)
 
-    db = UnifiedDatabase(config.UNIFIED_DB_PATH)
-    meeting = db.get_meeting(meeting_id)
-    if not meeting:
-        return {"error": "Meeting not found"}
+    db = await Database.create(config.get_postgres_dsn(), 10, 100)
+    try:
+        meeting = await db.meetings.get_meeting(meeting_id)
+        if not meeting:
+            return {"error": "Meeting not found"}
 
-    # Get items from database
-    agenda_items = db.get_agenda_items(meeting_id)
-    if not agenda_items:
+        # Get items from database
+        agenda_items = await db.items.get_agenda_items(meeting_id)
+        if not agenda_items:
+            return {
+                "error": "No items found for this meeting",
+                "meeting_id": meeting_id,
+                "meeting_title": meeting.title,
+            }
+
+        items_preview = []
+
+        for item in agenda_items:
+            item_data = {
+                "item_id": item.id,
+                "title": item.title,
+                "sequence": item.sequence,
+                "attachments": [
+                    {
+                        "name": att.get("name", "Unknown"),
+                        "url": att.get("url", ""),
+                        "type": att.get("type", "unknown"),
+                    }
+                    for att in (item.attachments or [])
+                ],
+                "has_summary": bool(item.summary),
+            }
+
+            # Optionally extract text from first attachment
+            if extract_text and item.attachments:
+                first_attachment = item.attachments[0]
+                att_url = first_attachment.get("url")
+
+                if att_url and att_url.endswith(".pdf"):
+                    try:
+                        from parsing.pdf import PdfExtractor
+                        extractor = PdfExtractor()
+
+                        logger.info("extracting text from attachment", item_id=item.id)
+                        extraction_result = extractor.extract_from_url(att_url)
+
+                        if extraction_result["success"]:
+                            text = extraction_result["text"]
+                            page_count = extraction_result.get("page_count", 0)
+
+                            # Preview first 500 chars
+                            item_data["text_preview"] = text[:500] + ("..." if len(text) > 500 else "")
+                            item_data["page_count"] = page_count
+                            item_data["text_length"] = len(text)
+
+                            # Optionally save to file
+                            if output_dir:
+                                import os
+                                os.makedirs(output_dir, exist_ok=True)
+                                filename = f"{item.id}.txt"
+                                filepath = os.path.join(output_dir, filename)
+
+                                with open(filepath, "w") as f:
+                                    f.write(f"Item: {item.title}\n")
+                                    f.write(f"Attachment: {first_attachment.get('name')}\n")
+                                    f.write(f"URL: {att_url}\n")
+                                    f.write(f"Pages: {page_count}\n")
+                                    f.write(f"Characters: {len(text)}\n")
+                                    f.write("=" * 80 + "\n\n")
+                                    f.write(text)
+
+                                item_data["saved_to"] = filepath
+                                logger.info("saved item text to file", item_id=item.id, filepath=filepath)
+                        else:
+                            item_data["text_error"] = extraction_result.get("error", "Failed to extract")
+
+                    except Exception as e:
+                        logger.warning("failed to extract item text", item_id=item.id, error=str(e), error_type=type(e).__name__)
+                        item_data["text_error"] = str(e)
+
+            items_preview.append(item_data)
+
         return {
-            "error": "No items found for this meeting",
+            "success": True,
             "meeting_id": meeting_id,
             "meeting_title": meeting.title,
+            "meeting_date": meeting.date.isoformat() if meeting.date else None,
+            "total_items": len(agenda_items),
+            "items": items_preview,
         }
-
-    items_preview = []
-
-    for item in agenda_items:
-        item_data = {
-            "item_id": item.id,
-            "title": item.title,
-            "sequence": item.sequence,
-            "attachments": [
-                {
-                    "name": att.get("name", "Unknown"),
-                    "url": att.get("url", ""),
-                    "type": att.get("type", "unknown"),
-                }
-                for att in (item.attachments or [])
-            ],
-            "has_summary": bool(item.summary),
-        }
-
-        # Optionally extract text from first attachment
-        if extract_text and item.attachments:
-            first_attachment = item.attachments[0]
-            att_url = first_attachment.get("url")
-
-            if att_url and att_url.endswith(".pdf"):
-                try:
-                    from parsing.pdf import PdfExtractor
-                    extractor = PdfExtractor()
-
-                    logger.info("extracting text from attachment", item_id=item.id)
-                    extraction_result = extractor.extract_from_url(att_url)
-
-                    if extraction_result["success"]:
-                        text = extraction_result["text"]
-                        page_count = extraction_result.get("page_count", 0)
-
-                        # Preview first 500 chars
-                        item_data["text_preview"] = text[:500] + ("..." if len(text) > 500 else "")
-                        item_data["page_count"] = page_count
-                        item_data["text_length"] = len(text)
-
-                        # Optionally save to file
-                        if output_dir:
-                            import os
-                            os.makedirs(output_dir, exist_ok=True)
-                            filename = f"{item.id}.txt"
-                            filepath = os.path.join(output_dir, filename)
-
-                            with open(filepath, "w") as f:
-                                f.write(f"Item: {item.title}\n")
-                                f.write(f"Attachment: {first_attachment.get('name')}\n")
-                                f.write(f"URL: {att_url}\n")
-                                f.write(f"Pages: {page_count}\n")
-                                f.write(f"Characters: {len(text)}\n")
-                                f.write("=" * 80 + "\n\n")
-                                f.write(text)
-
-                            item_data["saved_to"] = filepath
-                            logger.info("saved item text to file", item_id=item.id, filepath=filepath)
-                    else:
-                        item_data["text_error"] = extraction_result.get("error", "Failed to extract")
-
-                except Exception as e:
-                    logger.warning("failed to extract item text", item_id=item.id, error=str(e), error_type=type(e).__name__)
-                    item_data["text_error"] = str(e)
-
-        items_preview.append(item_data)
-
-    return {
-        "success": True,
-        "meeting_id": meeting_id,
-        "meeting_title": meeting.title,
-        "meeting_date": meeting.date.isoformat() if meeting.date else None,
-        "total_items": len(agenda_items),
-        "items": items_preview,
-    }
+    finally:
+        await db.close()

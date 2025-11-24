@@ -97,10 +97,7 @@ class QueueJob:
         - payload: JSON string of payload data
         """
         job_type = row["job_type"]
-        payload_json = row["payload"]
-
-        # Parse payload JSON
-        payload_data = json.loads(payload_json) if isinstance(payload_json, str) else payload_json
+        payload_data = row["payload"]
 
         # Deserialize to correct payload type
         if job_type == "meeting":
