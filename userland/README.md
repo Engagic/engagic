@@ -32,7 +32,24 @@ Free civic alerts with passwordless authentication. Every Sunday at 9am, users g
 
 ## Quick Start
 
-### 1. Environment Variables
+### 1. Setup PostgreSQL Schema
+
+The userland system uses PostgreSQL with a dedicated `userland` schema. First, apply the schema:
+
+```bash
+# From project root
+python3 -m userland.scripts.setup_db
+```
+
+This creates:
+- `userland.users` - User accounts
+- `userland.alerts` - Alert configurations
+- `userland.alert_matches` - Matched meetings/items
+- `userland.used_magic_links` - Security table for magic link replay prevention
+
+Safe to run multiple times (uses `IF NOT EXISTS`).
+
+### 2. Environment Variables
 
 ```bash
 # Generate JWT secret
@@ -42,10 +59,11 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 export USERLAND_JWT_SECRET="<generated-secret>"
 export MAILGUN_API_KEY="<your-key>"
 export MAILGUN_DOMAIN="<your-domain>"
-export USERLAND_DB="/root/engagic/data/userland.db"
 ```
 
-### 2. Run Backend
+Note: `USERLAND_DB` is no longer used - the system now uses the main PostgreSQL database with a `userland` schema.
+
+### 3. Run Backend
 
 ```bash
 # From project root
@@ -54,7 +72,7 @@ python3 -m userland.server.main
 
 Backend runs on http://localhost:8001
 
-### 3. Run Frontend
+### 4. Run Frontend
 
 ```bash
 # From frontend directory
@@ -65,7 +83,7 @@ npm run dev
 
 Frontend runs on http://localhost:5173
 
-### 4. Test Flow
+### 5. Test Flow
 
 **Simple Flow (Recommended):**
 1. Visit http://localhost:5173/cities/paloaltoCA (any city)
@@ -80,7 +98,7 @@ Frontend runs on http://localhost:5173
 3. Check email, verify, go to dashboard
 4. Add cities/keywords later
 
-### 5. Run Weekly Digest
+### 6. Run Weekly Digest
 
 ```bash
 # Test weekly digest (sends emails to all active users)
