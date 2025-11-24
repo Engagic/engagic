@@ -82,8 +82,8 @@ class ItemRepository(BaseRepository):
                     matter_type = EXCLUDED.matter_type,
                     agenda_number = EXCLUDED.agenda_number,
                     sponsors = EXCLUDED.sponsors,
-                    summary = EXCLUDED.summary,
-                    topics = EXCLUDED.topics
+                    summary = COALESCE(EXCLUDED.summary, items.summary),
+                    topics = COALESCE(EXCLUDED.topics, items.topics)
                 """,
                 item_records,
             )

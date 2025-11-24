@@ -13,10 +13,10 @@ import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from database.db_postgres import Database
-from database.models import City, Meeting, AgendaItem
+from database.models import City, Meeting, AgendaItem, Matter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +32,9 @@ class MigrationStats:
         self.cities = 0
         self.meetings = 0
         self.items = 0
+        self.city_matters = 0
+        self.matter_appearances = 0
+        self.matter_topics = 0
         self.queue_jobs = 0
         self.cache_entries = 0
         self.zipcodes = 0
@@ -44,15 +47,18 @@ class MigrationStats:
         logger.info("=" * 60)
         logger.info("Migration Summary")
         logger.info("=" * 60)
-        logger.info(f"Cities:          {self.cities:,}")
-        logger.info(f"Zipcodes:        {self.zipcodes:,}")
-        logger.info(f"Meetings:        {self.meetings:,}")
-        logger.info(f"Meeting Topics:  {self.meeting_topics:,}")
-        logger.info(f"Items:           {self.items:,}")
-        logger.info(f"Item Topics:     {self.item_topics:,}")
-        logger.info(f"Queue Jobs:      {self.queue_jobs:,}")
-        logger.info(f"Cache Entries:   {self.cache_entries:,}")
-        logger.info(f"Errors:          {len(self.errors)}")
+        logger.info(f"Cities:             {self.cities:,}")
+        logger.info(f"Zipcodes:           {self.zipcodes:,}")
+        logger.info(f"Meetings:           {self.meetings:,}")
+        logger.info(f"Meeting Topics:     {self.meeting_topics:,}")
+        logger.info(f"City Matters:       {self.city_matters:,}")
+        logger.info(f"Matter Topics:      {self.matter_topics:,}")
+        logger.info(f"Matter Appearances: {self.matter_appearances:,}")
+        logger.info(f"Items:              {self.items:,}")
+        logger.info(f"Item Topics:        {self.item_topics:,}")
+        logger.info(f"Queue Jobs:         {self.queue_jobs:,}")
+        logger.info(f"Cache Entries:      {self.cache_entries:,}")
+        logger.info(f"Errors:             {len(self.errors)}")
         if self.errors:
             logger.error("\nErrors encountered:")
             for err in self.errors[:10]:  # Show first 10 errors
@@ -96,24 +102,49 @@ class SQLitePostgresMigrator:
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
+    def parse_timestamp(self, timestamp_str: Optional[str]) -> Optional[datetime]:
+        """Parse timestamp string from SQLite into datetime object
+
+        Handles ISO format timestamps with or without timezone info.
+        Returns None if timestamp_str is None or empty.
+        """
+        if not timestamp_str:
+            return None
+
+        try:
+            # Handle ISO format with Z (UTC) suffix
+            if timestamp_str.endswith("Z"):
+                return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            # Handle ISO format
+            return datetime.fromisoformat(timestamp_str)
+        except (ValueError, AttributeError):
+            logger.warning(f"Failed to parse timestamp: {timestamp_str}")
+            return None
+
     async def migrate_cities(self):
         """Migrate cities and zipcodes"""
         logger.info("\n--- Migrating Cities ---")
         cities = self.get_sqlite_data("cities")
         logger.info(f"Found {len(cities):,} cities in SQLite")
 
+        # Fetch all zipcodes and group by banana
+        all_zipcodes = self.get_sqlite_data("zipcodes")
+        zipcodes_by_city = {}
+        for zc in all_zipcodes:
+            banana = zc["banana"]
+            if banana not in zipcodes_by_city:
+                zipcodes_by_city[banana] = []
+            zipcodes_by_city[banana].append(zc["zipcode"])
+
+        logger.info(f"Found {len(all_zipcodes):,} zipcodes in SQLite")
+
         for i, city in enumerate(cities, 1):
             if i % 100 == 0:
                 logger.info(f"Progress: {i}/{len(cities)} cities")
 
             try:
-                # Parse zipcodes from JSON
-                zipcodes = []
-                if city.get("zipcodes"):
-                    if isinstance(city["zipcodes"], str):
-                        zipcodes = json.loads(city["zipcodes"])
-                    else:
-                        zipcodes = city["zipcodes"]
+                # Get zipcodes for this city from the separate table
+                zipcodes = zipcodes_by_city.get(city["banana"], [])
 
                 # Create City model object
                 city_obj = City(
@@ -128,7 +159,7 @@ class SQLitePostgresMigrator:
                 )
 
                 if not self.dry_run:
-                    await self.pg_db.add_city(city_obj)
+                    await self.pg_db.cities.add_city(city_obj)
 
                 self.stats.cities += 1
                 self.stats.zipcodes += len(zipcodes)
@@ -192,7 +223,7 @@ class SQLitePostgresMigrator:
                 )
 
                 if not self.dry_run:
-                    await self.pg_db.store_meeting(meeting_obj)
+                    await self.pg_db.meetings.store_meeting(meeting_obj)
 
                 self.stats.meetings += 1
                 self.stats.meeting_topics += len(topics)
@@ -203,6 +234,81 @@ class SQLitePostgresMigrator:
                 logger.error(error_msg)
 
         logger.info(f"✅ Migrated {self.stats.meetings:,} meetings with {self.stats.meeting_topics:,} topics")
+
+    async def migrate_city_matters(self):
+        """Migrate city_matters (legislative items tracked across meetings)"""
+        logger.info("\n--- Migrating City Matters ---")
+        matters = self.get_sqlite_data("city_matters")
+        logger.info(f"Found {len(matters):,} city matters in SQLite")
+
+        processed = 0
+        for matter in matters:
+            try:
+                # Parse JSON fields
+                sponsors = []
+                if matter.get("sponsors"):
+                    if isinstance(matter["sponsors"], str):
+                        sponsors = json.loads(matter["sponsors"])
+                    else:
+                        sponsors = matter["sponsors"]
+
+                canonical_topics = []
+                if matter.get("canonical_topics"):
+                    if isinstance(matter["canonical_topics"], str):
+                        canonical_topics = json.loads(matter["canonical_topics"])
+                    else:
+                        canonical_topics = matter["canonical_topics"]
+
+                attachments = []
+                if matter.get("attachments"):
+                    if isinstance(matter["attachments"], str):
+                        attachments = json.loads(matter["attachments"])
+                    else:
+                        attachments = matter["attachments"]
+
+                metadata = {}
+                if matter.get("metadata"):
+                    if isinstance(matter["metadata"], str):
+                        metadata = json.loads(matter["metadata"])
+                    else:
+                        metadata = matter["metadata"]
+
+                # Create Matter model object
+                matter_obj = Matter(
+                    id=matter["id"],
+                    banana=matter["banana"],
+                    matter_id=matter.get("matter_id"),
+                    matter_file=matter.get("matter_file"),
+                    matter_type=matter.get("matter_type"),
+                    title=matter["title"],
+                    sponsors=sponsors if sponsors else None,
+                    canonical_summary=matter.get("canonical_summary"),
+                    canonical_topics=canonical_topics if canonical_topics else None,
+                    first_seen=self.parse_timestamp(matter.get("first_seen")),
+                    last_seen=self.parse_timestamp(matter.get("last_seen")),
+                    appearance_count=matter.get("appearance_count", 1),
+                    status=matter.get("status", "active"),
+                    attachments=attachments if attachments else None,
+                    metadata=metadata if metadata else None
+                )
+
+                if not self.dry_run:
+                    await self.pg_db.matters.store_matter(matter_obj)
+
+                self.stats.city_matters += 1
+                if canonical_topics:
+                    self.stats.matter_topics += len(canonical_topics)
+
+                processed += 1
+                if processed % 500 == 0:
+                    logger.info(f"Progress: {processed}/{len(matters)} matters")
+
+            except Exception as e:
+                error_msg = f"Matter {matter.get('id')}: {str(e)}"
+                self.stats.errors.append(error_msg)
+                logger.error(error_msg)
+
+        logger.info(f"✅ Migrated {self.stats.city_matters:,} city matters with {self.stats.matter_topics:,} topics")
 
     async def migrate_items(self):
         """Migrate agenda items and item_topics"""
@@ -267,7 +373,7 @@ class SQLitePostgresMigrator:
                     self.stats.item_topics += len(topics)
 
                 if not self.dry_run:
-                    await self.pg_db.store_agenda_items(items_to_store)
+                    await self.pg_db.items.store_agenda_items(meeting_id, items_to_store)
 
                 self.stats.items += len(items_to_store)
                 processed += 1
@@ -281,6 +387,60 @@ class SQLitePostgresMigrator:
                 logger.error(error_msg)
 
         logger.info(f"✅ Migrated {self.stats.items:,} items with {self.stats.item_topics:,} topics")
+
+    async def migrate_matter_appearances(self):
+        """Migrate matter_appearances (matter tracking across meetings)"""
+        logger.info("\n--- Migrating Matter Appearances ---")
+        appearances = self.get_sqlite_data("matter_appearances")
+        logger.info(f"Found {len(appearances):,} matter appearances in SQLite")
+
+        processed = 0
+        for appearance in appearances:
+            try:
+                # Parse vote_tally JSON if present
+                vote_tally = None
+                if appearance.get("vote_tally"):
+                    if isinstance(appearance["vote_tally"], str):
+                        try:
+                            vote_tally = json.loads(appearance["vote_tally"])
+                        except json.JSONDecodeError:
+                            vote_tally = None
+                    else:
+                        vote_tally = appearance["vote_tally"]
+
+                if not self.dry_run:
+                    # Store matter appearance directly via SQL
+                    # Note: PostgreSQL uses auto-increment for id, so we don't pass it
+                    await self.pg_db.pool.execute(
+                        """
+                        INSERT INTO matter_appearances (
+                            matter_id, meeting_id, item_id, appeared_at,
+                            committee, action, vote_tally, sequence
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        ON CONFLICT (matter_id, meeting_id, item_id) DO NOTHING
+                        """,
+                        appearance["matter_id"],
+                        appearance["meeting_id"],
+                        appearance["item_id"],
+                        self.parse_timestamp(appearance["appeared_at"]),
+                        appearance.get("committee"),
+                        appearance.get("action"),
+                        json.dumps(vote_tally) if vote_tally else None,
+                        appearance.get("sequence")
+                    )
+
+                self.stats.matter_appearances += 1
+                processed += 1
+                if processed % 500 == 0:
+                    logger.info(f"Progress: {processed}/{len(appearances)} appearances")
+
+            except Exception as e:
+                error_msg = f"Appearance {appearance.get('id')}: {str(e)}"
+                self.stats.errors.append(error_msg)
+                logger.error(error_msg)
+
+        logger.info(f"✅ Migrated {self.stats.matter_appearances:,} matter appearances")
 
     async def migrate_queue(self):
         """Migrate processing queue"""
@@ -309,7 +469,7 @@ class SQLitePostgresMigrator:
                         else:
                             payload = job["payload"]
 
-                    await self.pg_db.enqueue_job(
+                    await self.pg_db.queue.enqueue_job(
                         source_url=job["source_url"],
                         job_type=job.get("job_type", "meeting"),  # Default to meeting
                         payload=payload,
@@ -414,7 +574,9 @@ class SQLitePostgresMigrator:
             # Migrate in order (respecting foreign keys)
             await self.migrate_cities()
             await self.migrate_meetings()
+            await self.migrate_city_matters()
             await self.migrate_items()
+            await self.migrate_matter_appearances()
             await self.migrate_queue()
             await self.migrate_cache()
 
