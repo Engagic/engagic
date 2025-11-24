@@ -35,8 +35,7 @@ async def create_checkout_session(donate_request: DonateRequest):
         )
 
     try:
-        stripe.api_key = config.STRIPE_SECRET_KEY
-
+        # stripe.api_key is set at app startup in server/main.py
         amount = donate_request.amount
         logger.info("creating checkout session", amount_cents=amount, amount_dollars=amount/100)
 

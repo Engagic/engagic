@@ -2,6 +2,7 @@
 Admin API routes
 """
 
+import secrets
 import time
 import httpx
 from typing import Optional
@@ -33,7 +34,7 @@ async def verify_admin_token(authorization: str = Header(None)):
         if scheme.lower() != "bearer":
             raise HTTPException(status_code=401, detail="Invalid authentication scheme")
 
-        if token != config.ADMIN_TOKEN:
+        if not secrets.compare_digest(token, config.ADMIN_TOKEN):
             raise HTTPException(status_code=403, detail="Invalid admin token")
 
     except ValueError:
