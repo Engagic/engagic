@@ -75,7 +75,7 @@ def hash_attachments(
                 tuples.append((url, name, metadata['content_length'], metadata['last_modified']))
             except Exception as e:
                 # Fallback to URL-only if metadata fetch fails
-                logger.debug("failed to fetch metadata", url=url, error=str(e))
+                logger.warning("failed to fetch metadata", url=url, error=str(e))
                 tuples.append((url, name, "", ""))
 
         tuples.sort()
