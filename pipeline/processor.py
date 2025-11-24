@@ -18,7 +18,7 @@ from database.db_postgres import Database
 from database.models import Meeting, Matter
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
 from exceptions import ProcessingError, ExtractionError, LLMError
-from pipeline.analyzer import Analyzer
+from analysis.analyzer_async import AsyncAnalyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
 from config import config, get_logger
@@ -170,7 +170,7 @@ class Processor:
     def __init__(
         self,
         db: Database,
-        analyzer: Optional[Analyzer] = None,
+        analyzer: Optional[AsyncAnalyzer] = None,
     ):
         """Initialize the processor
 
@@ -186,8 +186,8 @@ class Processor:
             self.analyzer = analyzer
         else:
             try:
-                self.analyzer = Analyzer(api_key=config.get_api_key())
-                logger.info("initialized with llm analyzer", has_analyzer=True)
+                self.analyzer = AsyncAnalyzer(api_key=config.get_api_key())
+                logger.info("initialized with async llm analyzer", has_analyzer=True)
             except ValueError:
                 logger.warning(
                     "llm analyzer not available, summaries will be skipped",
@@ -415,7 +415,7 @@ class Processor:
             "failed_count": failed_count,
         }
 
-    def _process_single_item(self, item):
+    async def _process_single_item(self, item):
         """Process a single agenda item (extract PDFs and summarize)
 
         Args:
@@ -477,7 +477,7 @@ class Processor:
                         continue
 
                     try:
-                        result = self.analyzer.pdf_extractor.extract_from_url(att_url)
+                        result = await self.analyzer.extract_pdf_async(att_url)
                         if result.get("success") and result.get("text"):
                             # Post-extraction filter: Skip public comment compilations
                             if is_likely_public_comment_compilation(result, att_name or att_url):
@@ -520,7 +520,8 @@ class Processor:
 
         # Process via batch API (single item)
         try:
-            for chunk_results in self.analyzer.process_batch_items(batch_request, shared_context=None, meeting_id=None):
+            chunks = await self.analyzer.process_batch_items_async(batch_request, shared_context=None, meeting_id=None)
+            for chunk_results in chunks:
                 # Should only be one chunk with one result
                 if chunk_results:
                     result = chunk_results[0]
@@ -636,7 +637,7 @@ class Processor:
 
         # Process item with ALL aggregated attachments (extract PDFs and summarize)
         try:
-            result = self._process_single_item(representative_item)
+            result = await self._process_single_item(representative_item)
         except ProcessingError as e:
             logger.error(
                 "matter processing failed",
@@ -747,7 +748,7 @@ class Processor:
                     "meeting_date": meeting.date.isoformat() if meeting.date else None,
                     "meeting_id": meeting.id,
                 }
-                result = self.analyzer.process_agenda_with_cache(meeting_data)
+                result = await self.analyzer.process_agenda_with_cache_async(meeting_data)
                 if result.get("success"):
                     # Store monolithic summary in database
                     await self.db.meetings.update_meeting_summary(
@@ -776,7 +777,7 @@ class Processor:
 
     # ========== Item Processing Helpers (extracted from 424-line God function) ==========
 
-    def _extract_participation_info(self, meeting: Meeting) -> Dict[str, Any]:
+    async def _extract_participation_info(self, meeting: Meeting) -> Dict[str, Any]:
         """Extract participation info from agenda_url (PDF or HTML)"""
         participation_data: Dict[str, Any] = {}
 
@@ -792,7 +793,7 @@ class Processor:
                     logger.warning("analyzer not initialized, skipping participation extraction")
                     return participation_data
                 logger.debug("extracting text from agenda_url PDF for participation info")
-                agenda_result = self.analyzer.pdf_extractor.extract_from_url(meeting.agenda_url)
+                agenda_result = await self.analyzer.extract_pdf_async(meeting.agenda_url)
                 if agenda_result.get("success") and agenda_result.get("text"):
                     # Parse only first 5000 chars (participation info is at the top)
                     agenda_text = agenda_result["text"][:5000]
@@ -883,7 +884,7 @@ class Processor:
 
         return already_processed, need_processing
 
-    def _build_document_cache(self, need_processing: List) -> tuple[Dict, Dict, set]:
+    async def _build_document_cache(self, need_processing: List) -> tuple[Dict, Dict, set]:
         """Build meeting-level document cache with version filtering and deduplication
 
         Returns:
@@ -948,7 +949,7 @@ class Processor:
                 continue
 
             try:
-                result = self.analyzer.pdf_extractor.extract_from_url(att_url)
+                result = await self.analyzer.extract_pdf_async(att_url)
                 if result.get("success") and result.get("text"):
                     # Post-extraction filter: Skip public comment compilations
                     if is_likely_public_comment_compilation(result, att_name or att_url):
@@ -1118,12 +1119,13 @@ class Processor:
             item_count=len(batch_requests)
         )
 
-        # Process batch as generator - yields chunk results as they complete
-        for chunk_results in self.analyzer.process_batch_items(
+        # Process batch async - returns all results after processing
+        chunks = await self.analyzer.process_batch_items_async(
             batch_requests,
             shared_context=shared_context,
             meeting_id=meeting_id
-        ):
+        )
+        for chunk_results in chunks:
             logger.info(
                 "saving results from completed chunk",
                 result_count=len(chunk_results)
@@ -1228,7 +1230,7 @@ class Processor:
         last_sequence = max(item_sequences) if item_sequences else None
 
         # PHASE 1: Extract participation info from agenda_url
-        participation_data = self._extract_participation_info(meeting)
+        participation_data = await self._extract_participation_info(meeting)
 
         # PHASE 2: Filter already-processed items from those needing processing
         already_processed, need_processing = await self._filter_processed_items(agenda_items)
@@ -1246,7 +1248,7 @@ class Processor:
             )
 
             # PHASE 3: Build document cache with deduplication
-            document_cache, item_attachments, shared_urls = self._build_document_cache(need_processing)
+            document_cache, item_attachments, shared_urls = await self._build_document_cache(need_processing)
 
             # PHASE 4: Build shared context for batch API (if shared documents exist)
             shared_context = None
@@ -1325,3 +1327,9 @@ class Processor:
             )
         else:
             logger.warning("no items could be processed")
+
+    async def close(self):
+        """Cleanup resources (HTTP sessions)"""
+        if self.analyzer:
+            await self.analyzer.close()
+            logger.debug("analyzer http session closed")

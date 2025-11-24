@@ -1,0 +1,53 @@
+"""Async vendor-aware rate limiter to be respectful to city websites"""
+
+import asyncio
+import time
+import random
+from collections import defaultdict
+
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
+
+
+class AsyncRateLimiter:
+    """Async vendor-aware rate limiter to be respectful to city websites
+
+    Uses asyncio.Lock for async-safe locking and asyncio.sleep for non-blocking delays.
+    """
+
+    def __init__(self):
+        self.last_request = defaultdict(float)
+        self.lock = asyncio.Lock()
+
+    async def wait_if_needed(self, vendor: str):
+        """Enforce minimum delay between requests to same vendor (async)"""
+        delays = {
+            "primegov": 3.0,  # PrimeGov cities
+            "granicus": 4.0,  # Granicus/Legistar cities
+            "civicclerk": 3.0,  # CivicClerk cities
+            "legistar": 3.0,  # Direct Legistar
+            "civicplus": 8.0,  # CivicPlus cities - aggressive blocking, need longer delays
+            "novusagenda": 4.0,  # NovusAgenda cities
+            "iqm2": 3.0,  # IQM2 cities
+            "escribe": 3.0,  # eScribe cities
+            "unknown": 5.0,  # Unknown vendors get longest delay
+        }
+
+        min_delay = delays.get(vendor, 5.0)
+
+        # CivicPlus gets extra random jitter to avoid pattern detection
+        jitter = random.uniform(0, 2) if vendor == "civicplus" else random.uniform(0, 1)
+
+        async with self.lock:
+            now = time.time()
+            last = self.last_request[vendor]
+
+            if last > 0:
+                elapsed = now - last
+                if elapsed < min_delay:
+                    sleep_time = min_delay - elapsed + jitter
+                    logger.info("vendor rate limit", vendor=vendor, sleep_seconds=round(sleep_time, 1))
+                    await asyncio.sleep(sleep_time)
+
+            self.last_request[vendor] = time.time()
