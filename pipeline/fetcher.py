@@ -162,7 +162,7 @@ class Fetcher:
                     vendor=vendor,
                     break_seconds=round(vendor_break, 1)
                 )
-                time.sleep(vendor_break)
+                await asyncio.sleep(vendor_break)
 
         # Log summary
         total_meetings = sum(r.meetings_found for r in results)
@@ -493,7 +493,7 @@ class Fetcher:
                 wait_seconds=round(wait_time, 1),
                 error=last_error
             )
-            time.sleep(wait_time)
+            await asyncio.sleep(wait_time)
 
         # Shouldn't reach here due to is_last_attempt logic, but preserve data if we do
         if last_result:
