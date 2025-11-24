@@ -98,13 +98,13 @@ class Config:
             "https://engagic.org"
         )
 
-        # CORS settings
+        # CORS settings - production origins only (no localhost in production)
+        # For local dev, set ENGAGIC_ALLOWED_ORIGINS env var to include localhost
         self.ALLOWED_ORIGINS = self._parse_origins(
             os.getenv(
                 "ENGAGIC_ALLOWED_ORIGINS",
                 "https://engagic.org,https://www.engagic.org,https://api.engagic.org,"
-                "https://engagic.pages.dev,http://localhost:3000,http://localhost:5173,"
-                "http://localhost:5000,http://127.0.0.1:3000,http://192.168.12.190:3000,"
+                "https://engagic.pages.dev,"
                 "https://motioncount.com,https://www.motioncount.com,https://api.motioncount.com",
             )
         )
