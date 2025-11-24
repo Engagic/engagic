@@ -69,7 +69,7 @@
 				</div>
 
 				<div class="tier-card tier-hacktivist">
-					<h3 class="tier-name">Hacktivist Tier</h3>
+					<h3 class="tier-name">Community Tier</h3>
 					<div class="tier-limits">
 						<div class="limit-item">
 							<span class="limit-value">100</span>
@@ -207,7 +207,6 @@
 			<ul>
 				<li>Temporary IP blocks</li>
 				<li>Permanent bans for egregious abuse</li>
-				<li>Legal action for damages</li>
 			</ul>
 			<p class="casual-text">We're reasonable, hit us up.</p>
 		</section>
@@ -260,7 +259,6 @@
 				<p>If you're an individual wanting to check your city's meetings: <strong>use it freely</strong>.</p>
 				<p>If you're a nonprofit fighting for housing justice: <strong>let's partner</strong>.</p>
 				<p>If you're a commercial entity building on our work: <strong>let's talk</strong>.</p>
-				<p>If you're a VC-backed startup scraping our API to train your models: <strong>pay up or self-host</strong>.</p>
 			</div>
 			<p class="philosophy-footer">
 				<strong>Questions?</strong> <a href="mailto:hello@engagic.org">hello@engagic.org</a><br>
