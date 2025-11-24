@@ -11,6 +11,7 @@ Handles:
 Moved from: pipeline/conductor.py (refactored)
 """
 
+import asyncio
 import time
 from typing import List, Optional, Dict, Any
 
@@ -306,7 +307,7 @@ class Processor:
                 job = await self.db.queue.get_next_for_processing()
 
                 if not job:
-                    time.sleep(QUEUE_POLL_INTERVAL)
+                    await asyncio.sleep(QUEUE_POLL_INTERVAL)
                     continue
 
                 queue_id = job.id
@@ -317,7 +318,7 @@ class Processor:
             except (ProcessingError, LLMError, ExtractionError) as e:
                 # Expected errors during job processing - log and continue
                 logger.error("queue processor error", error=str(e), error_type=type(e).__name__)
-                time.sleep(QUEUE_FATAL_ERROR_BACKOFF)
+                await asyncio.sleep(QUEUE_FATAL_ERROR_BACKOFF)
 
     async def process_city_jobs(self, city_banana: str) -> dict:
         """Process all queued jobs for a specific city

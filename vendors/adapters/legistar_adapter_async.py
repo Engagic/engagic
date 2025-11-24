@@ -292,14 +292,16 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
 
             # Filter out errors and procedural items
             items = []
-            for item in processed_items:
-                if isinstance(item, dict) and not should_skip_procedural_item(item.get("title", "")):
+            for idx, item in enumerate(processed_items):
+                if isinstance(item, Exception):
+                    logger.warning("item processing failed", event_id=event_id, item_index=idx, error=str(item))
+                elif isinstance(item, dict) and not should_skip_procedural_item(item.get("title", "")):
                     items.append(item)
 
             return items
 
         except (VendorHTTPError, aiohttp.ClientError, VendorParsingError) as e:
-            logger.debug("failed to fetch event items from API", event_id=event_id, error=str(e))
+            logger.warning("failed to fetch event items from API", event_id=event_id, error=str(e))
             return []
 
     def _parse_xml_event_items(self, xml_text: str) -> List[Dict]:

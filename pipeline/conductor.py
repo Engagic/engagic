@@ -642,6 +642,11 @@ def main():
                     await asyncio.gather(sync_loop, processing_loop)
                 except asyncio.CancelledError:
                     logger.info("[Daemon] Tasks cancelled")
+                except Exception as e:
+                    logger.error("[Daemon] Task failed", error=str(e), error_type=type(e).__name__)
+                    # Cancel the other task to prevent resource leak
+                    sync_loop.cancel()
+                    processing_loop.cancel()
 
                 logger.info("[Daemon] Shutdown complete")
 
