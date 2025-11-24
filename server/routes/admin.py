@@ -2,6 +2,7 @@
 Admin API routes
 """
 
+import asyncio
 import secrets
 import time
 import httpx
@@ -222,19 +223,19 @@ async def get_activity_feed(
 
     Returns chronological feed of searches and page views
     """
-    import subprocess
     import re
 
     try:
-        result = subprocess.run(
-            ['journalctl', '-u', 'engagic-api', '-n', '2000', '--no-pager'],
-            capture_output=True,
-            text=True,
-            timeout=5
+        proc = await asyncio.create_subprocess_exec(
+            'journalctl', '-u', 'engagic-api', '-n', '2000', '--no-pager',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        result_stdout = stdout.decode()
 
         activities = []
-        lines = result.stdout.split('\n')
+        lines = result_stdout.split('\n')
 
         i = 0
         while i < len(lines):
