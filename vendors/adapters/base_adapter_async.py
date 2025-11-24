@@ -51,7 +51,7 @@ class AsyncBaseAdapter:
         self.slug = city_slug
         self.vendor = vendor
 
-        logger.info(f"initialized async {vendor} adapter", city_slug=city_slug)
+        logger.info("initialized async adapter", vendor=vendor, city_slug=city_slug)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get shared async session for this vendor"""

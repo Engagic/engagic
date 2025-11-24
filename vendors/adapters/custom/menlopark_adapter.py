@@ -72,13 +72,13 @@ class MenloParkAdapter(BaseAdapter):
 
         meetings_url = f"{self.base_url}/Agendas-and-minutes"
 
-        logger.info(f"[menlopark:{self.slug}] Fetching meetings from {meetings_url}")
+        logger.info("fetching meetings list", adapter="menlopark", slug=self.slug, url=meetings_url)
 
         try:
             response = self.session.get(meetings_url, timeout=30)
             response.raise_for_status()
         except Exception as e:
-            logger.error(f"[menlopark:{self.slug}] Failed to fetch meetings list: {e}")
+            logger.error("failed to fetch meetings list", adapter="menlopark", slug=self.slug, error=str(e))
             return
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -103,14 +103,14 @@ class MenloParkAdapter(BaseAdapter):
             # Parse date
             meeting_date = self._parse_date(date_text)
             if not meeting_date:
-                logger.debug(f"[menlopark:{self.slug}] Could not parse date: {date_text}")
+                logger.debug("could not parse date", adapter="menlopark", slug=self.slug, date_text=date_text)
                 continue
 
             # Filter to meetings from date range (calculated at method start)
             meeting_date_only = meeting_date.date()
 
             if meeting_date_only < today or meeting_date_only > two_weeks_from_now:
-                logger.debug(f"[menlopark:{self.slug}] Skipping meeting {date_text} - outside 2-week window")
+                logger.debug("skipping meeting outside 2-week window", adapter="menlopark", slug=self.slug, date=date_text)
                 continue
 
             # Cell 1: Agenda packet PDF link
@@ -123,7 +123,7 @@ class MenloParkAdapter(BaseAdapter):
 
             # Skip if no PDF packet
             if not pdf_link:
-                logger.debug(f"[menlopark:{self.slug}] No PDF packet for {date_text}")
+                logger.debug("no PDF packet", adapter="menlopark", slug=self.slug, date=date_text)
                 continue
 
             # Generate meeting ID from date
@@ -138,7 +138,7 @@ class MenloParkAdapter(BaseAdapter):
 
             # Extract items from PDF
             try:
-                logger.info(f"[menlopark:{self.slug}] Extracting items from PDF: {pdf_link}")
+                logger.info("extracting items from PDF", adapter="menlopark", slug=self.slug, url=pdf_link)
                 pdf_result = self.pdf_extractor.extract_from_url(pdf_link, extract_links=True)
 
                 if pdf_result['success']:
@@ -167,7 +167,7 @@ class MenloParkAdapter(BaseAdapter):
                     # Continue anyway - we have basic meeting data
 
             except Exception as e:
-                logger.warning(f"[menlopark:{self.slug}] Failed to parse PDF items for {meeting_id}: {e}")
+                logger.warning("failed to parse PDF items", adapter="menlopark", slug=self.slug, meeting_id=meeting_id, error=str(e))
                 # Continue anyway - we have basic meeting data
 
             yield meeting_data

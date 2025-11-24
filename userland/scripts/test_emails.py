@@ -29,7 +29,7 @@ from userland.scripts.weekly_digest import (
 )
 
 
-def send_test_emails(email: str):
+async def send_test_emails(email: str):
     """
     Send all email types to test address.
 
@@ -62,64 +62,83 @@ def send_test_emails(email: str):
 
     # 3. Weekly digest
     print("3. Weekly Digest")
-    send_test_digest(email)
+    await send_test_digest(email)
 
     print("\nAll test emails sent.")
     print(f"Check inbox: {email}")
 
 
-def send_test_digest(email: str):
+async def send_test_digest(email: str):
     """Send weekly digest with REAL data from database."""
+    from database.db_postgres import Database
+    import asyncpg
 
     # Use actual city with real data
     city_banana = "paloaltoCA"
     app_url = os.getenv("APP_URL", "https://engagic.org")
 
-    # Get REAL data from database
-    city_name = get_city_name(city_banana)
-
-    # Get REAL upcoming meetings (next 10 days)
-    upcoming_meetings = get_upcoming_meetings(city_banana, days_ahead=10)
-
-    # Get REAL keyword matches (next 10 days)
-    keywords = ['housing', 'zoning', 'transit', 'development']
-    keyword_matches = find_keyword_matches(city_banana, keywords, days_ahead=10)
-
-    # Build digest HTML using actual template function with REAL data
-    html = build_digest_email(
-        user_name="Test User",
-        city_name=city_name,
-        city_banana=city_banana,
-        keyword_matches=keyword_matches,
-        keywords=keywords,
-        upcoming_meetings=upcoming_meetings,
-        app_url=app_url
+    # Initialize database connection
+    pool = await asyncpg.create_pool(
+        host=os.getenv("USERLAND_DB_HOST", "localhost"),
+        port=int(os.getenv("USERLAND_DB_PORT", "5432")),
+        database=os.getenv("USERLAND_DB_NAME", "engagic"),
+        user=os.getenv("USERLAND_DB_USER", "engagic"),
+        password=os.getenv("USERLAND_DB_PASSWORD", ""),
+        min_size=1,
+        max_size=5
     )
+    db = Database(pool)
 
-    # Send email
-    email_service = EmailService()
-    match_count = len(keyword_matches)
-    meeting_count = len(upcoming_meetings)
+    try:
+        # Get REAL data from database
+        city_name = await get_city_name(db, city_banana)
 
-    subject = f"This week in {city_name}"
-    if match_count > 0:
-        subject += f" - {match_count} keyword match{'es' if match_count != 1 else ''}"
+        # Get REAL upcoming meetings (next 10 days)
+        upcoming_meetings = await get_upcoming_meetings(db, city_banana, days_ahead=10)
 
-    result = email_service.send_email(
-        to_email=email,
-        subject=subject,
-        html_body=html
-    )
+        # Get REAL keyword matches (next 10 days)
+        keywords = ['housing', 'zoning', 'transit', 'development']
+        keyword_matches = await find_keyword_matches(db, city_banana, keywords, days_ahead=10)
 
-    print(f"   Status: {'Sent' if result else 'Failed'}")
-    print(f"   Real data: {match_count} keyword matches, {meeting_count} upcoming meetings\n")
+        # Build digest HTML using actual template function with REAL data
+        html = build_digest_email(
+            user_name="Test User",
+            city_name=city_name,
+            city_banana=city_banana,
+            keyword_matches=keyword_matches,
+            keywords=keywords,
+            upcoming_meetings=upcoming_meetings,
+            app_url=app_url
+        )
+
+        # Send email
+        email_service = EmailService()
+        match_count = len(keyword_matches)
+        meeting_count = len(upcoming_meetings)
+
+        subject = f"This week in {city_name}"
+        if match_count > 0:
+            subject += f" - {match_count} keyword match{'es' if match_count != 1 else ''}"
+
+        result = email_service.send_email(
+            to_email=email,
+            subject=subject,
+            html_body=html
+        )
+
+        print(f"   Status: {'Sent' if result else 'Failed'}")
+        print(f"   Real data: {match_count} keyword matches, {meeting_count} upcoming meetings\n")
+    finally:
+        await pool.close()
 
 
 if __name__ == "__main__":
+    import asyncio
+
     if len(sys.argv) > 1:
         test_email = sys.argv[1]
     else:
         print("Usage: uv run userland/scripts/test_emails.py your@email.com")
         sys.exit(1)
 
-    send_test_emails(test_email)
+    asyncio.run(send_test_emails(test_email))

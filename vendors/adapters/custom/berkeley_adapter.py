@@ -65,13 +65,13 @@ class BerkeleyAdapter(BaseAdapter):
 
         meetings_url = f"{self.base_url}/your-government/city-council/city-council-agendas"
 
-        logger.info(f"[berkeley:{self.slug}] Fetching meetings from {meetings_url}")
+        logger.info("fetching meetings list", adapter="berkeley", slug=self.slug, url=meetings_url)
 
         try:
             response = self.session.get(meetings_url, timeout=30)
             response.raise_for_status()
         except Exception as e:
-            logger.error(f"[berkeley:{self.slug}] Failed to fetch meetings list: {e}")
+            logger.error("failed to fetch meetings list", adapter="berkeley", slug=self.slug, error=str(e))
             return
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -115,14 +115,14 @@ class BerkeleyAdapter(BaseAdapter):
             # Parse date
             meeting_date = self._parse_date(date_text)
             if not meeting_date:
-                logger.debug(f"[berkeley:{self.slug}] Could not parse date: {date_text}")
+                logger.debug("could not parse date", adapter="berkeley", slug=self.slug, date_text=date_text)
                 continue
 
             # Filter to meetings from date range (calculated at method start)
             meeting_date_only = meeting_date.date()
 
             if meeting_date_only < today or meeting_date_only > two_weeks_from_now:
-                logger.debug(f"[berkeley:{self.slug}] Skipping meeting {date_text} - outside 2-week window")
+                logger.debug("skipping meeting outside 2-week window", adapter="berkeley", slug=self.slug, date=date_text)
                 continue
 
             # Cell 2: HTML Agenda link (Berkeley always has HTML agendas)
@@ -134,7 +134,7 @@ class BerkeleyAdapter(BaseAdapter):
 
             # Skip if no HTML agenda (Berkeley should always have one)
             if not html_link:
-                logger.debug(f"[berkeley:{self.slug}] No HTML agenda link for {date_text}")
+                logger.debug("no HTML agenda link", adapter="berkeley", slug=self.slug, date=date_text)
                 continue
 
             # Generate meeting ID from date
@@ -154,18 +154,18 @@ class BerkeleyAdapter(BaseAdapter):
 
             # Fetch HTML agenda detail to extract items (Berkeley always has HTML agendas)
             try:
-                logger.info(f"[berkeley:{self.slug}] GET {html_link}")
+                logger.info("fetching HTML agenda detail", adapter="berkeley", slug=self.slug, url=html_link)
                 detail = self._fetch_meeting_detail(html_link)
                 if detail:
                     if detail.get('participation'):
                         meeting_data['participation'] = detail['participation']
                     if detail.get('items'):
                         meeting_data['items'] = detail['items']
-                        logger.info(f"[berkeley:{self.slug}] Extracted {len(detail['items'])} items from HTML agenda")
+                        logger.info("extracted items from HTML agenda", adapter="berkeley", slug=self.slug, item_count=len(detail['items']))
                     if detail.get('title'):
                         meeting_data['title'] = detail['title']
             except Exception as e:
-                logger.warning(f"[berkeley:{self.slug}] Failed to fetch detail for {meeting_id}: {e}")
+                logger.warning("failed to fetch detail", adapter="berkeley", slug=self.slug, meeting_id=meeting_id, error=str(e))
                 # Continue anyway - we have basic meeting data even without items
 
             item_count = len(meeting_data.get('items', []))
@@ -192,7 +192,7 @@ class BerkeleyAdapter(BaseAdapter):
                 'items': [...]
             }
         """
-        logger.debug(f"[berkeley:{self.slug}] Fetching detail: {agenda_url}")
+        logger.debug("fetching detail page", adapter="berkeley", slug=self.slug, url=agenda_url)
 
         response = self.session.get(agenda_url, timeout=30)
         response.raise_for_status()
@@ -348,7 +348,7 @@ class BerkeleyAdapter(BaseAdapter):
 
             items.append(item_data)
 
-        logger.debug(f"[berkeley:{self.slug}] Extracted {len(items)} items")
+        logger.debug("extracted items", adapter="berkeley", slug=self.slug, item_count=len(items))
         return items
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:

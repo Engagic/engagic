@@ -46,7 +46,7 @@ class BaseAdapter:
         # Use shared session for connection pooling (2-5x faster than per-adapter sessions)
         self.session = SessionManager.get_session(vendor)
 
-        logger.info(f"Initialized {vendor} adapter for {city_slug}")
+        logger.info("initialized adapter", vendor=vendor, city_slug=city_slug)
 
     def __enter__(self):
         """Context manager entry - returns self for 'with' statement"""
@@ -359,7 +359,7 @@ class BaseAdapter:
                     absolute_url = urljoin(url, href)
                     pdfs.append(absolute_url)
 
-            logger.debug(f"[{self.vendor}:{self.slug}] Found {len(pdfs)} PDFs at {url}")
+            logger.debug("found PDFs", vendor=self.vendor, slug=self.slug, pdf_count=len(pdfs), url=url[:100])
             return pdfs
 
         except Exception as e:

@@ -65,8 +65,10 @@ async def generate_flyer(
         )
 
         logger.info(
-            f"Generated flyer for meeting {request.meeting_id}, "
-            f"item {request.item_id}, position {request.position}"
+            "generated flyer",
+            meeting_id=request.meeting_id,
+            item_id=request.item_id,
+            position=request.position
         )
 
         return HTMLResponse(content=html)
@@ -75,6 +77,5 @@ async def generate_flyer(
         raise
     except Exception as e:
         import traceback
-        logger.error(f"Error generating flyer: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("error generating flyer", error=str(e), traceback=traceback.format_exc())
         raise HTTPException(status_code=500, detail="Error generating flyer")

@@ -148,7 +148,7 @@ async def get_dead_letter_queue(
         }
 
     except Exception as e:
-        logger.error(f"Failed to fetch dead letter queue: {e}")
+        logger.error("failed to fetch dead letter queue", error=str(e))
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch dead letter queue: {str(e)}"
@@ -205,7 +205,7 @@ async def prometheus_query(
             detail="Prometheus query timeout"
         )
     except Exception as e:
-        logger.error(f"Prometheus query error: {str(e)}")
+        logger.error("prometheus query error", error=str(e))
         raise HTTPException(
             status_code=500,
             detail=f"Prometheus query failed: {str(e)}"
@@ -292,7 +292,7 @@ async def get_activity_feed(
         }
 
     except Exception as e:
-        logger.error(f"Error retrieving activity feed: {str(e)}")
+        logger.error("error retrieving activity feed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to retrieve activity feed: {str(e)}")
 
 
@@ -335,7 +335,7 @@ async def get_live_metrics(is_admin: bool = Depends(verify_admin_token)):
         }
 
     except Exception as e:
-        logger.error(f"Error retrieving live metrics: {str(e)}")
+        logger.error("error retrieving live metrics", error=str(e))
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve metrics: {str(e)}"

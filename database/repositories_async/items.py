@@ -103,7 +103,7 @@ class ItemRepository(BaseRepository):
                 topic_records = [
                     (item.id, topic)
                     for item in items_with_topics
-                    for topic in item.topics
+                    for topic in (item.topics or [])
                 ]
                 if topic_records:
                     await conn.executemany(

@@ -77,11 +77,8 @@ class AsyncSessionManager:
                 raise_for_status=False  # Don't raise on 4xx/5xx (handle in adapters)
             )
 
-            logger.debug(  # type: ignore[call-arg]
-                "created async session",
-                vendor=vendor,
-                max_connections=20,
-                timeout_seconds=timeout_total
+            logger.debug(
+                f"created async session: vendor={vendor}, max_connections=20, timeout_seconds={timeout_total}"
             )
 
         return cls._sessions[vendor]
@@ -119,7 +116,7 @@ class AsyncSessionManager:
             session = cls._sessions[vendor]
             if not session.closed:
                 await session.close()
-                logger.debug("closed async session", vendor=vendor)
+                logger.debug(f"closed async session: vendor={vendor}")
             del cls._sessions[vendor]
 
     @classmethod

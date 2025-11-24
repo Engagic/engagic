@@ -233,33 +233,37 @@ class MeetingValidator:
         # Reject if either URL fails validation
         if packet_validation["action"] == "reject":
             logger.error(
-                f"[{city_banana}] REJECTING meeting due to packet_url corruption: "
-                f"{meeting_data.get('title', 'Unknown')}"
+                "rejecting meeting due to packet_url corruption",
+                city_banana=city_banana,
+                meeting_title=meeting_data.get('title', 'Unknown'),
+                reason=packet_validation['error']
             )
-            logger.error(f"[{city_banana}] Reason: {packet_validation['error']}")
             return False
 
         if agenda_validation["action"] == "reject":
             logger.error(
-                f"[{city_banana}] REJECTING meeting due to agenda_url corruption: "
-                f"{meeting_data.get('title', 'Unknown')}"
+                "rejecting meeting due to agenda_url corruption",
+                city_banana=city_banana,
+                meeting_title=meeting_data.get('title', 'Unknown'),
+                reason=agenda_validation['error']
             )
-            logger.error(f"[{city_banana}] Reason: {agenda_validation['error']}")
             return False
 
         # Warn if either URL is suspicious
         if packet_validation["action"] == "warn":
             logger.warning(
-                f"[{city_banana}] Storing meeting with packet_url warning: "
-                f"{meeting_data.get('title', 'Unknown')}"
+                "storing meeting with packet_url warning",
+                city_banana=city_banana,
+                meeting_title=meeting_data.get('title', 'Unknown'),
+                warning=packet_validation.get('warning')
             )
-            logger.warning(f"[{city_banana}] Warning: {packet_validation.get('warning')}")
 
         if agenda_validation["action"] == "warn":
             logger.warning(
-                f"[{city_banana}] Storing meeting with agenda_url warning: "
-                f"{meeting_data.get('title', 'Unknown')}"
+                "storing meeting with agenda_url warning",
+                city_banana=city_banana,
+                meeting_title=meeting_data.get('title', 'Unknown'),
+                warning=agenda_validation.get('warning')
             )
-            logger.warning(f"[{city_banana}] Warning: {agenda_validation.get('warning')}")
 
         return True

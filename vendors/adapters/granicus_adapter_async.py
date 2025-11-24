@@ -2,7 +2,7 @@
 Async Granicus Adapter - Concurrent HTML scraping for Granicus/Legistar platform
 
 Async version with:
-- Async view_id discovery (concurrent testing of candidates)
+- Static view_id configuration (from data/granicus_view_ids.json)
 - Async HTML agenda parsing
 - S3 SSL workaround (handled in base adapter)
 
@@ -13,7 +13,7 @@ import json
 import os
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.granicus_parser import parse_html_agenda
 from vendors.utils.item_filters import should_skip_procedural_item
@@ -24,159 +24,52 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
     def __init__(self, city_slug: str):
         """
-        Initialize async Granicus adapter with view_id discovery.
+        Initialize async Granicus adapter with static view_id configuration.
 
         Args:
             city_slug: Granicus subdomain (e.g., "cambridge")
+
+        Raises:
+            ValueError: If view_id not configured for this city
         """
         super().__init__(city_slug, vendor="granicus")
         self.base_url = f"https://{self.slug}.granicus.com"
         self.view_ids_file = "data/granicus_view_ids.json"
-        self.view_id: Optional[int] = None
-        self.list_url: Optional[str] = None
 
-    async def _initialize_view_id(self):
-        """Initialize view_id (async, called before fetch_meetings)"""
-        if self.view_id is not None:
-            return  # Already initialized
-
-        # Discover or load view_id
-        self.view_id = await self._get_view_id_async()
-        self.list_url = f"{self.base_url}/ViewPublisher.php?view_id={self.view_id}"
-
-        logger.info("granicus using view_id", slug=self.slug, view_id=self.view_id)
-
-    async def _get_view_id_async(self) -> int:
-        """Get view_id from cache or discover it (async)"""
-        mappings = self._load_view_id_mappings()
-
-        if self.base_url in mappings:
-            logger.info(
-                "granicus found cached view_id",
-                slug=self.slug,
-                view_id=mappings[self.base_url]
+        # Load view_id from static configuration (fail-fast if not configured)
+        mappings = self._load_static_view_id_config()
+        if self.base_url not in mappings:
+            raise ValueError(
+                f"view_id not configured for {self.base_url}. "
+                f"Add mapping to {self.view_ids_file}"
             )
-            return mappings[self.base_url]
 
-        # Discover and cache (async)
-        view_id = await self._discover_view_id_async()
-        mappings[self.base_url] = view_id
-        self._save_view_id_mappings(mappings)
+        self.view_id: int = mappings[self.base_url]
+        self.list_url: str = f"{self.base_url}/ViewPublisher.php?view_id={self.view_id}"
 
-        logger.info("granicus discovered view_id", slug=self.slug, view_id=view_id)
-        return view_id
+        logger.info("granicus initialized", slug=self.slug, view_id=self.view_id)
 
-    def _load_view_id_mappings(self) -> Dict[str, int]:
-        """Load view_id cache from disk"""
-        if os.path.exists(self.view_ids_file):
-            try:
-                with open(self.view_ids_file, "r") as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning("could not load view_id cache", error=str(e))
-        return {}
-
-    def _save_view_id_mappings(self, mappings: Dict[str, int]):
-        """Save view_id cache to disk"""
-        os.makedirs(os.path.dirname(self.view_ids_file), exist_ok=True)
-        with open(self.view_ids_file, "w") as f:
-            json.dump(mappings, f, indent=2)
-
-    async def _discover_view_id_async(self) -> int:
+    def _load_static_view_id_config(self) -> Dict[str, int]:
         """
-        Brute force discover view_id by testing 1-100 (async, concurrent).
+        Load view_id mappings from static configuration file.
 
         Returns:
-            Valid view_id
+            Dictionary mapping base URLs to view_ids
 
         Raises:
-            RuntimeError if no view_id found
+            FileNotFoundError: If config file doesn't exist
+            ValueError: If config file is invalid JSON
         """
-        current_year = str(datetime.now().year)
-        base_url = f"{self.base_url}/ViewPublisher.php?view_id="
-
-        logger.info("granicus discovering view_id, testing 1-100", slug=self.slug)
-
-        # Government meeting indicators (high priority)
-        gov_indicators = [
-            "city council",
-            "planning commission",
-            "board of supervisors",
-            "town council",
-            "village board",
-            "board of trustees",
-        ]
-
-        # Test view_ids concurrently (batches of 10)
-        candidates = []
-        batch_size = 10
-
-        for batch_start in range(1, 100, batch_size):
-            batch_ids = range(batch_start, min(batch_start + batch_size, 100))
-            batch_tasks = [
-                self._test_view_id_async(f"{base_url}{i}", i, current_year, gov_indicators)
-                for i in batch_ids
-            ]
-            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-
-            # Collect successful candidates
-            for result in batch_results:
-                if isinstance(result, tuple) and result is not None:
-                    candidates.append(result)
-
-        # Sort by score (descending) and return highest
-        if candidates:
-            candidates.sort(key=lambda x: x[1], reverse=True)
-            best_view_id, best_score = candidates[0]
-            logger.info(
-                "granicus selected best view_id",
-                slug=self.slug,
-                view_id=best_view_id,
-                score=best_score,
-                candidates=len(candidates)
+        if not os.path.exists(self.view_ids_file):
+            raise FileNotFoundError(
+                f"Granicus view_id configuration not found: {self.view_ids_file}"
             )
-            return best_view_id
 
-        raise RuntimeError(f"Could not discover view_id for {self.slug}.granicus.com")
-
-    async def _test_view_id_async(
-        self,
-        url: str,
-        view_id: int,
-        current_year: str,
-        gov_indicators: List[str]
-    ) -> Optional[tuple[int, int]]:
-        """Test a single view_id (async)"""
         try:
-            response = await self._get(url)
-            text = await response.text()
-            text_lower = text.lower()
-
-            # Must have "upcoming" section
-            if "upcoming" not in text_lower:
-                return None
-
-            # Must have basic meeting page indicators
-            if not ("ViewPublisher" in text and current_year in text):
-                return None
-
-            # Score this candidate
-            score = 5  # Baseline for having "upcoming"
-
-            # High priority: government body names
-            for indicator in gov_indicators:
-                if indicator in text_lower:
-                    score += 10
-
-            # Low priority: general meeting/agenda indicators
-            if "agenda" in text_lower or "meeting" in text_lower:
-                score += 1
-
-            logger.debug("granicus view_id candidate", slug=self.slug, view_id=view_id, score=score)
-            return (view_id, score)
-
-        except Exception:
-            return None
+            with open(self.view_ids_file, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in {self.view_ids_file}: {e}")
 
     async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
@@ -189,11 +82,6 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         Returns:
             List of meeting dictionaries
         """
-        # Initialize view_id if needed
-        await self._initialize_view_id()
-
-        if not self.list_url:
-            raise RuntimeError("view_id not initialized")
 
         # Fetch HTML list page (async)
         response = await self._get(self.list_url)
