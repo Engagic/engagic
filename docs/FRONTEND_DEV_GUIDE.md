@@ -1,8 +1,11 @@
-# Frontend Development Guide
+# Frontend Development & API Guide
 
-**Last Updated:** 2025-11-02
+**Last Updated:** 2025-11-24
 **Node Version:** 18+ required
-**Package Manager:** npm (comes with Node)
+**Package Manager:** npm
+**API Base URL:** `https://api.engagic.org`
+
+**Note:** Historical docs archived in `docs/archive/frontend-docs-2024-11/`
 
 ---
 
@@ -10,11 +13,12 @@
 
 1. [Getting Started](#getting-started)
 2. [Development Workflow](#development-workflow)
-3. [Common Tasks](#common-tasks)
-4. [Debugging](#debugging)
-5. [Testing](#testing)
-6. [Build & Deploy](#build--deploy)
-7. [Troubleshooting](#troubleshooting)
+3. [API Integration](#api-integration)
+4. [Common Tasks](#common-tasks)
+5. [Debugging](#debugging)
+6. [Testing](#testing)
+7. [Build & Deploy](#build--deploy)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -36,7 +40,7 @@ npm --version
 
 ```bash
 # 1. Navigate to frontend directory
-cd /path/to/engagic/frontend
+cd frontend
 
 # 2. Install dependencies
 npm install
@@ -68,24 +72,6 @@ npm run dev
 npm run check:watch
 ```
 
-**File Structure Recap:**
-
-```
-src/
-├── lib/                 # Shared code (components, utils, API)
-│   ├── components/      # Reusable UI components
-│   ├── api/             # API client
-│   ├── utils/           # Helper functions
-│   └── services/        # Business logic
-│
-└── routes/              # File-based routing
-    ├── +layout.svelte   # Root layout
-    ├── +page.svelte     # Homepage
-    ├── about/           # About page
-    ├── [city_url]/      # Dynamic city routes
-    └── service-worker.ts  # PWA service worker
-```
-
 ### Hot Module Replacement (HMR)
 
 **Changes auto-reload:**
@@ -96,82 +82,409 @@ src/
 
 **No need to manually refresh!**
 
+### File Structure Recap
+
+```
+src/
+├── lib/                 # Shared code
+│   ├── components/      # Reusable UI components
+│   ├── api.ts           # API client
+│   └── types.ts         # TypeScript types
+│
+└── routes/              # File-based routing
+    ├── +layout.svelte   # Root layout
+    ├── +page.svelte     # Homepage
+    ├── [city]/          # City page
+    └── [city]/[date]/   # Meeting detail
+```
+
+---
+
+## API Integration
+
+### Overview
+
+Thin, type-safe wrapper around `fetch()` with automatic retry logic. No external HTTP libraries (axios, etc.) to minimize bundle size.
+
+**Architecture:**
+
+```
+Component/Load Function
+    ↓
+api.searchMeetings()
+    ↓
+fetchWithRetry() [3 attempts, 1s delay]
+    ↓
+fetch() [native browser API]
+    ↓
+api.engagic.org [FastAPI backend]
+```
+
+**Features:**
+- Automatic retries (3 attempts with exponential backoff)
+- Timeout protection (30s)
+- Full TypeScript coverage
+- Error classification (network vs API vs timeout)
+- Zero dependencies
+
+### API Client Location
+
+`lib/api.ts` (simplified unified client)
+
+### Core Functions
+
+#### fetchWithRetry()
+
+Retries failed requests automatically:
+
+```typescript
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  retries: number = 3
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30s
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    // Success
+    if (response.ok) return response;
+
+    // Rate limited (don't retry)
+    if (response.status === 429) {
+      throw new ApiError('Rate limit exceeded', 429, true);
+    }
+
+    // Not found (don't retry)
+    if (response.status === 404) {
+      throw new ApiError('Not found', 404, false);
+    }
+
+    // Server error (retry)
+    if (response.status >= 500 && retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+
+    throw new ApiError('Request failed', response.status, false);
+
+  } catch (error) {
+    // Timeout or network error (retry)
+    if (error.name === 'AbortError' && retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
+}
+```
+
+### API Methods
+
+#### searchMeetings()
+
+Search for meetings by topic and location:
+
+```typescript
+import { api } from '$lib/api';
+
+const results = await api.searchMeetings({
+  topics: ['zoning', 'housing'],
+  cityBanana: 'paloaltoCA',
+  limit: 10
+});
+```
+
+**Parameters:**
+```typescript
+interface SearchParams {
+  topics?: string[];
+  cityBanana?: string;
+  startDate?: string;  // ISO 8601
+  endDate?: string;
+  limit?: number;      // Default: 20
+}
+```
+
+**Returns:**
+```typescript
+interface SearchResponse {
+  results: Meeting[];
+  total: number;
+  page: number;
+}
+```
+
+#### getMeetings()
+
+Get meetings for a specific city:
+
+```typescript
+const meetings = await api.getMeetings('paloaltoCA', {
+  startDate: '2025-01-01',
+  limit: 10
+});
+```
+
+**Parameters:**
+```typescript
+getMeetings(
+  cityBanana: string,
+  options?: {
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }
+): Promise<Meeting[]>
+```
+
+#### getMeetingDetail()
+
+Get single meeting with full agenda items:
+
+```typescript
+const meeting = await api.getMeetingDetail('paloaltoCA', '2025-01-15');
+```
+
+**Parameters:**
+```typescript
+getMeetingDetail(
+  cityBanana: string,
+  date: string  // YYYY-MM-DD
+): Promise<Meeting>
+```
+
+#### getTopics()
+
+Get available topics for filtering:
+
+```typescript
+const topics = await api.getTopics();
+// ['zoning', 'housing', 'transportation', ...]
+```
+
+#### getCities()
+
+Get all available cities:
+
+```typescript
+const cities = await api.getCities();
+```
+
+**Returns:**
+```typescript
+interface City {
+  city_banana: string;
+  city_name: string;
+  state: string;
+  vendor: string;
+  last_sync?: string;
+}
+```
+
+### Error Handling
+
+**ApiError class:**
+
+```typescript
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public isRateLimited: boolean = false
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+```
+
+**Usage in components:**
+
+```svelte
+<script lang="ts">
+  import { api } from '$lib/api';
+  import type { Meeting } from '$lib/types';
+
+  let meetings = $state<Meeting[]>([]);
+  let error = $state<string | null>(null);
+  let loading = $state(false);
+
+  async function loadMeetings() {
+    loading = true;
+    error = null;
+
+    try {
+      meetings = await api.getMeetings('paloaltoCA');
+    } catch (e) {
+      if (e instanceof ApiError) {
+        if (e.isRateLimited) {
+          error = 'Too many requests. Please try again later.';
+        } else if (e.statusCode === 404) {
+          error = 'No meetings found for this city.';
+        } else {
+          error = 'Failed to load meetings. Please try again.';
+        }
+      } else {
+        error = 'Network error. Please check your connection.';
+      }
+    } finally {
+      loading = false;
+    }
+  }
+</script>
+
+{#if loading}
+  <p>Loading...</p>
+{:else if error}
+  <p class="error">{error}</p>
+{:else}
+  <ul>
+    {#each meetings as meeting}
+      <li>{meeting.title}</li>
+    {/each}
+  </ul>
+{/if}
+```
+
+### Usage in Load Functions
+
+**Server-side load:**
+
+```typescript
+// +page.server.ts
+import { api } from '$lib/api';
+import { error } from '@sveltejs/kit';
+
+export async function load({ params }) {
+  try {
+    const meetings = await api.getMeetings(params.city);
+    return { meetings };
+  } catch (e) {
+    throw error(500, 'Failed to load meetings');
+  }
+}
+```
+
+**Universal load:**
+
+```typescript
+// +page.ts
+import { api } from '$lib/api';
+import { error } from '@sveltejs/kit';
+
+export async function load({ params, fetch }) {
+  try {
+    const meeting = await api.getMeetingDetail(params.city, params.date);
+    return { meeting };
+  } catch (e) {
+    if (e instanceof ApiError && e.statusCode === 404) {
+      throw error(404, 'Meeting not found');
+    }
+    throw error(500, 'Failed to load meeting');
+  }
+}
+```
+
+### Type System
+
+**Core types:**
+
+```typescript
+// lib/types.ts
+
+export interface Meeting {
+  id: string;
+  city_banana: string;
+  city_name: string;
+  date: string;           // YYYY-MM-DD
+  title: string;
+  meeting_url: string;
+  agenda_url?: string;
+  packet_url?: string;
+  items: AgendaItem[];
+  topics: string[];
+  participation_info?: ParticipationInfo;
+}
+
+export interface AgendaItem {
+  id: string;
+  sequence: number;
+  title: string;
+  summary?: string;
+  thinking?: string;      // LLM reasoning
+  topics: string[];
+  attachments: Attachment[];
+}
+
+export interface Attachment {
+  url: string;
+  name: string;
+  size?: number;
+}
+
+export interface ParticipationInfo {
+  email?: string;
+  phone?: string;
+  zoom_url?: string;
+}
+
+export interface City {
+  city_banana: string;
+  city_name: string;
+  state: string;
+  vendor: string;
+  last_sync?: string;
+}
+```
+
 ---
 
 ## Common Tasks
 
-### 1. Add a New Page
+### Add a New Page
 
+1. Create route file:
 ```bash
-# Create new route directory
-mkdir src/routes/new-page
+# Homepage
+src/routes/+page.svelte
 
-# Create page component
-touch src/routes/new-page/+page.svelte
+# About page
+src/routes/about/+page.svelte
+
+# Dynamic route
+src/routes/[param]/+page.svelte
 ```
 
-**Basic page template:**
-
-```svelte
-<script lang="ts">
-  import Footer from '$lib/components/Footer.svelte';
-</script>
-
-<svelte:head>
-  <title>New Page - engagic</title>
-</svelte:head>
-
-<div class="container">
-  <div class="main-content">
-    <h1>New Page</h1>
-    <p>Content goes here...</p>
-  </div>
-
-  <Footer />
-</div>
-```
-
-**Access at:** `http://localhost:5173/new-page`
-
-### 2. Add a Data Loader
-
-```bash
-# Create load function
-touch src/routes/new-page/+page.ts
-```
-
+2. Add load function (optional):
 ```typescript
-import type { PageLoad } from './$types';
-
-export const load: PageLoad = async ({ params }) => {
-  // Fetch data
-  const data = await fetchData();
-
-  return {
-    data
-  };
-};
+// +page.ts or +page.server.ts
+export async function load() {
+  return { title: 'My Page' };
+}
 ```
 
-**Receive in component:**
-
+3. Create component:
 ```svelte
 <script lang="ts">
-  import type { PageData } from './$types';
-
-  let { data }: { data: PageData } = $props();
+  let { data } = $props();
 </script>
 
-<div>{data.someField}</div>
+<h1>{data.title}</h1>
 ```
 
-### 3. Add a New Component
+### Add a New Component
 
-```bash
-# Create component file
-touch src/lib/components/MyComponent.svelte
-```
+1. Create file: `src/lib/components/MyComponent.svelte`
 
+2. Define props and logic:
 ```svelte
 <script lang="ts">
   interface Props {
@@ -180,23 +493,21 @@ touch src/lib/components/MyComponent.svelte
   }
 
   let { title, count = 0 }: Props = $props();
+  let doubled = $derived(count * 2);
 </script>
 
 <div class="my-component">
   <h2>{title}</h2>
-  <p>Count: {count}</p>
+  <p>Count: {count}, Doubled: {doubled}</p>
 </div>
 
 <style>
-  .my-component {
-    padding: 1rem;
-    border: 1px solid var(--civic-border);
-  }
+  .my-component { padding: 1rem; }
+  h2 { font-size: 1.5rem; }
 </style>
 ```
 
-**Use in page:**
-
+3. Use it:
 ```svelte
 <script>
   import MyComponent from '$lib/components/MyComponent.svelte';
@@ -205,275 +516,193 @@ touch src/lib/components/MyComponent.svelte
 <MyComponent title="Hello" count={5} />
 ```
 
-### 4. Add API Endpoint Support
-
-**1. Add type to `lib/api/types.ts`:**
+### Call an API Endpoint
 
 ```typescript
-export interface NewDataType {
-  id: number;
-  name: string;
+import { api } from '$lib/api';
+
+// In component
+async function fetchData() {
+  const meetings = await api.getMeetings('paloaltoCA');
+}
+
+// In load function
+export async function load({ params }) {
+  const meetings = await api.getMeetings(params.city);
+  return { meetings };
 }
 ```
 
-**2. Add method to `lib/api/api-client.ts`:**
+### Add Styling
 
-```typescript
-export const apiClient = {
-  // ... existing methods
-
-  async getNewData(): Promise<NewDataType> {
-    const response = await fetchWithRetry(
-      `${config.apiBaseUrl}/api/new-endpoint`
-    );
-    return response.json();
-  }
-};
-```
-
-**3. Export from `lib/api/index.ts`:**
-
-```typescript
-export const getNewData = apiClient.getNewData.bind(apiClient);
-```
-
-**4. Use in load function:**
-
-```typescript
-import { getNewData } from '$lib/api/index';
-
-export const load: PageLoad = async () => {
-  const data = await getNewData();
-  return { data };
-};
-```
-
-### 5. Add Environment Variable
-
-```bash
-# Create .env file in frontend/ directory
-echo "VITE_NEW_VAR=value" >> .env
-```
-
-**Access in code:**
-
-```typescript
-const value = import.meta.env.VITE_NEW_VAR;
-```
-
-**IMPORTANT:** Prefix must be `VITE_` for client code access.
-
-### 6. Add Global CSS
-
-**In `src/app.css`:**
-
+**Global styles** (`src/app.css`):
 ```css
-/* Add at end of file */
-.my-utility-class {
-  color: var(--civic-blue);
-  font-weight: 600;
+:root {
+  --color-primary: #2563eb;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  color: var(--color-text);
 }
 ```
 
-**Automatically available everywhere** (imported in `+layout.svelte`).
+**Component styles** (scoped):
+```svelte
+<style>
+  .card {
+    padding: var(--spacing-md);
+    background: var(--color-bg);
+  }
+</style>
+```
 
 ---
 
 ## Debugging
 
-### Browser DevTools
+### Dev Tools
 
-**Chrome/Firefox DevTools:**
+**Svelte DevTools:**
+- Install browser extension: [Svelte DevTools](https://chrome.google.com/webstore/detail/svelte-devtools/)
+- Inspect component state, props, events
+- View component tree
 
-1. **Open DevTools** - F12 or Cmd+Option+I (Mac)
-2. **Sources tab** - View source files, set breakpoints
-3. **Console tab** - See logs, errors, warnings
-4. **Network tab** - Monitor API calls
-5. **Application tab** - Check localStorage, service workers
+**Browser DevTools:**
+- `console.log()` in `<script>` blocks
+- Network tab for API calls
+- Elements tab for DOM inspection
 
-### Svelte DevTools
-
-**Chrome Extension:**
-
-1. Install from [Chrome Web Store](https://chrome.google.com/webstore/detail/svelte-devtools)
-2. Open DevTools → "Svelte" tab
-3. Inspect component hierarchy
-4. View component state
-5. Track state changes
-
-### Console Logging
-
-**Development logging:**
-
-```typescript
-import { logger } from '$lib/services/logger';
-
-// Info logging
-logger.info('User clicked button', { userId: 123 });
-
-// Error logging
-logger.error('API call failed', error, { endpoint: '/api/search' });
-
-// Event tracking
-logger.trackEvent('search_success', { query: 'Austin' });
+**In-template debugging:**
+```svelte
+{@debug variable}
 ```
-
-**Production logs:**
-- Stored in localStorage (last 100)
-- Access: `localStorage.getItem('engagic_logs')`
-- Future: Send to monitoring service
 
 ### Common Issues
 
-**1. Port already in use**
+**"Hydration mismatch"**
+- SSR HTML ≠ client render
+- Check conditional logic that differs server/client
+- Ensure date/time rendering is consistent
 
-```bash
-# Error: Port 5173 is already in use
-# Solution: Kill existing process or use different port
-npm run dev -- --port 5174
-```
+**"Cannot access X before initialization"**
+- Use `$effect()` for side effects, not top-level code
+- Move DOM access into `onMount()` or `$effect()`
 
-**2. Import errors**
+**"Styles not applying"**
+- Check CSS specificity
+- Ensure styles are in `<style>` block
+- Use browser DevTools to inspect computed styles
 
-```bash
-# Error: Cannot find module '$lib/...'
-# Solution: Run SvelteKit sync
-npx svelte-kit sync
-```
-
-**3. Type errors**
-
-```bash
-# Run type checking
-npm run check
-
-# Watch mode (live feedback)
-npm run check:watch
-```
-
-**4. Stale cache**
-
-```bash
-# Clear SvelteKit cache
-rm -rf .svelte-kit
-
-# Reinstall dependencies
-rm -rf node_modules
-npm install
-```
+**"API calls failing"**
+- Check Network tab in DevTools
+- Verify API endpoint is correct
+- Check for CORS issues (should be configured on backend)
 
 ---
 
 ## Testing
 
-### Manual Testing
+### Vitest + Testing Library
 
-**No automated tests yet.** Manual testing workflow:
-
-1. **Feature testing**
-   - Test all user flows
-   - Check responsive design (mobile/tablet/desktop)
-   - Test keyboard navigation
-   - Test with screen reader (VoiceOver/NVDA)
-
-2. **Cross-browser testing**
-   - Chrome (primary)
-   - Firefox
-   - Safari
-   - Edge
-
-3. **Accessibility testing**
-   - Run Lighthouse audit
-   - Test keyboard-only navigation
-   - Check color contrast
-   - Verify ARIA labels
-
-### Type Checking
-
+**Run tests:**
 ```bash
-# Check types
-npm run check
-
-# Watch mode
-npm run check:watch
+npm run test        # Run once
+npm run test:watch  # Watch mode
 ```
 
-**TypeScript catches:**
-- Missing props
-- Wrong types
-- Undefined variables
-- Typos in property names
+### Example Test
 
-### Lighthouse Audit
+```typescript
+// MyComponent.test.ts
+import { render, screen } from '@testing-library/svelte';
+import { describe, it, expect } from 'vitest';
+import MyComponent from '$lib/components/MyComponent.svelte';
 
-**Chrome DevTools:**
+describe('MyComponent', () => {
+  it('renders title', () => {
+    render(MyComponent, { props: { title: 'Hello' } });
+    expect(screen.getByText('Hello')).toBeInTheDocument();
+  });
 
-1. Open DevTools → Lighthouse tab
-2. Select categories (Performance, Accessibility, Best Practices, SEO)
-3. Run audit
-4. Review scores and recommendations
+  it('displays count', () => {
+    render(MyComponent, { props: { title: 'Test', count: 5 } });
+    expect(screen.getByText(/Count: 5/)).toBeInTheDocument();
+  });
+});
+```
 
-**Target scores:**
-- Performance: 90+
-- Accessibility: 95+
-- Best Practices: 95+
-- SEO: 95+
+### Testing API Calls
+
+```typescript
+// api.test.ts
+import { describe, it, expect, vi } from 'vitest';
+import { api } from '$lib/api';
+
+describe('API Client', () => {
+  it('fetches meetings', async () => {
+    // Mock fetch
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([{ id: '1', title: 'Meeting' }])
+      })
+    );
+
+    const meetings = await api.getMeetings('paloaltoCA');
+    expect(meetings).toHaveLength(1);
+    expect(meetings[0].title).toBe('Meeting');
+  });
+});
+```
 
 ---
 
 ## Build & Deploy
 
-### Local Build
+### Build for Production
 
 ```bash
-# Create production build
-npm run build
-
-# Preview production build
-npm run preview
+npm run build   # Builds to build/
+npm run preview # Preview production build locally
 ```
 
-**Build output:** `.svelte-kit/output/`
+**Build output:**
+- Static HTML/CSS/JS files
+- Pre-rendered pages
+- Optimized assets
 
-**Build process:**
-1. TypeScript compilation
-2. Svelte component compilation
-3. CSS extraction and minification
-4. JavaScript bundling and minification
-5. Asset optimization
-6. Cloudflare adapter processing
+### Cloudflare Pages Deployment
 
-### Deployment (Cloudflare Workers)
-
-**Automated via GitHub Actions:**
-
+**Automatic (GitHub integration):**
 1. Push to `main` branch
-2. GitHub Actions runs
-3. Build happens in CI
-4. Deploy to Cloudflare Workers
-5. Available at `https://engagic.org`
+2. Cloudflare detects changes
+3. Builds with `npm run build`
+4. Deploys to edge network (~30s)
 
-**Manual deployment (if needed):**
-
+**Manual:**
 ```bash
-# Build locally
 npm run build
-
-# Deploy with Wrangler (requires Cloudflare account)
-npx wrangler pages deploy .svelte-kit/output
+wrangler pages publish build
 ```
 
-### Environment Variables (Production)
+### Environment Variables
 
-**Cloudflare dashboard:**
+Create `.env` in `frontend/`:
 
-1. Go to Workers & Pages → engagic
-2. Settings → Environment Variables
-3. Add production variables
-4. Redeploy
+```bash
+PUBLIC_API_BASE_URL=https://api.engagic.org
+```
 
-**Required production env vars:**
-- `VITE_API_BASE_URL` - API endpoint (https://api.engagic.org)
+**Access in code:**
+```typescript
+import { env } from '$env/dynamic/public';
+const apiUrl = env.PUBLIC_API_BASE_URL;
+```
+
+**Cloudflare Pages:**
+- Set in dashboard: Settings → Environment Variables
+- Prefix with `PUBLIC_` for client-side access
 
 ---
 
@@ -481,198 +710,68 @@ npx wrangler pages deploy .svelte-kit/output
 
 ### Build Fails
 
-**"Cannot find module"**
+**Check:**
+1. `npm run check` for type errors
+2. `npm run build` output for specific errors
+3. Ensure all imports are correct
+4. Verify `package.json` dependencies match
 
+**Common causes:**
+- Missing type definitions
+- Import path errors
+- TypeScript errors
+
+### Dev Server Won't Start
+
+**Solutions:**
 ```bash
-# Reinstall dependencies
+# Clear node_modules and reinstall
 rm -rf node_modules package-lock.json
 npm install
-```
 
-**"Out of memory"**
-
-```bash
-# Increase Node memory
-export NODE_OPTIONS="--max-old-space-size=4096"
-npm run build
-```
-
-**"Type error"**
-
-```bash
-# Run type checking to see specific errors
-npm run check
-```
-
-### Dev Server Issues
-
-**"Address already in use"**
-
-```bash
-# Find process using port 5173
+# Check port 5173 is available
 lsof -i :5173
-
-# Kill it
+# Kill process if needed
 kill -9 <PID>
 
-# Or use different port
-npm run dev -- --port 5174
+# Try different port
+npm run dev -- --port 3000
 ```
 
-**"Module not found"**
+### API Calls Fail in Production
 
-```bash
-# Sync SvelteKit types
-npx svelte-kit sync
-```
+**Check:**
+1. API base URL is correct
+2. CORS is configured on backend
+3. Network tab shows actual request URL
+4. Backend is running and accessible
 
-**"Hot reload not working"**
+### Styles Look Different in Production
 
-```bash
-# Restart dev server
-# Ctrl+C to stop
-npm run dev
-```
+**Common causes:**
+- CSS not being purged correctly
+- Missing global styles
+- CSS custom properties not supported (unlikely with modern browsers)
 
-### API Connection Issues
+**Debug:**
+1. Run `npm run preview` to test prod build locally
+2. Check browser DevTools for missing styles
+3. Verify CSS is in `build/` output
 
-**Check API is running:**
+### Performance Issues
 
-```bash
-# Test API endpoint
-curl https://api.engagic.org/api/analytics
-```
-
-**Use local API for development:**
-
-```bash
-# In .env
-VITE_API_BASE_URL=http://localhost:8000
-
-# Restart dev server
-```
-
-### Type Issues
-
-**"Property does not exist on type"**
-
-- Check type definitions in `lib/api/types.ts`
-- Make sure interfaces match API responses
-- Use optional chaining: `meeting?.date`
-
-**"Cannot find name"**
-
-- Check import paths
-- Verify file exists
-- Run `npx svelte-kit sync`
+**Optimize:**
+1. Enable preloading: `data-sveltekit-preload-data="hover"`
+2. Lazy load images: `loading="lazy"`
+3. Check bundle size: `npm run build -- --analyze`
+4. Minimize JavaScript: already done by Vite
 
 ---
 
-## Development Tips
+## See Also
 
-### Productivity
-
-**1. Use TypeScript**
-- Catch errors before runtime
-- Get autocomplete everywhere
-- Refactor with confidence
-
-**2. Use SvelteKit DevTools**
-- Inspect component state
-- Track reactivity
-- Debug navigation
-
-**3. Keep dev server running**
-- Hot reload is instant
-- See errors immediately
-- No manual refresh
-
-**4. Use type checking in watch mode**
-```bash
-npm run check:watch
-```
-
-**5. Learn keyboard shortcuts**
-- Cmd+P - Quick file open (VS Code)
-- Cmd+Shift+F - Global search
-- F12 - Go to definition
-
-### Code Quality
-
-**Before committing:**
-
-```bash
-# 1. Type check
-npm run check
-
-# 2. Build test
-npm run build
-
-# 3. Manual test in browser
-npm run preview
-```
-
-**Git workflow (reminder):**
-
-```bash
-# User handles all git commands
-# Just tell them when code is ready
-
-# Example message to user:
-"Feature is complete and tested. Ready to commit:
-- Added [feature name]
-- Updated types
-- No console errors
-- Tested mobile/desktop"
-```
-
----
-
-## Quick Reference
-
-### Commands
-
-```bash
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run preview      # Preview production build
-npm run check        # Type checking
-npm run check:watch  # Type checking (watch mode)
-```
-
-### Imports
-
-```typescript
-// Components
-import MyComponent from '$lib/components/MyComponent.svelte';
-
-// API
-import { searchMeetings } from '$lib/api/index';
-
-// Utils
-import { generateCityUrl } from '$lib/utils/utils';
-
-// SvelteKit
-import { goto } from '$app/navigation';
-import { page } from '$app/stores';
-
-// Types
-import type { Meeting } from '$lib/api/types';
-import type { PageData } from './$types';
-```
-
-### File Paths
-
-- `$lib` → `src/lib/`
-- `$app` → SvelteKit internal modules
-- `./$types` → Generated types for current route
-
----
-
-**Last Updated:** 2025-11-02
-**See Also:**
-- [FRONTEND.md](./FRONTEND.md) - Architecture overview
-- [FRONTEND_COMPONENTS.md](./FRONTEND_COMPONENTS.md) - Component reference
-- [FRONTEND_ROUTING.md](./FRONTEND_ROUTING.md) - Routing guide
-- [FRONTEND_API.md](./FRONTEND_API.md) - API integration
-- [FRONTEND_STYLING.md](./FRONTEND_STYLING.md) - Styling system
+- **Frontend Overview**: See `FRONTEND_README.md` for architecture and components
+- **Backend API**: See `docs/API.md` for complete endpoint reference
+- **Historical Docs**: See `docs/archive/frontend-docs-2024-11/` for detailed pre-consolidation documentation
+- **SvelteKit Docs**: https://kit.svelte.dev/
+- **Vite Docs**: https://vitejs.dev/

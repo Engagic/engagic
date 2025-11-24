@@ -31,10 +31,6 @@ async def rate_limit_middleware(
         or (request.client.host if request.client else "unknown")
     )
 
-    # SECURITY: Get socket connection IP for whitelist check (NOT spoofable)
-    # This is the actual TCP connection source, not from headers
-    socket_ip = request.client.host if request.client else None
-
     # Hash IP for privacy (GDPR-friendly, can't reverse to get real IP)
     # Same user = same hash = consistent rate limiting
     # Use first 16 chars of SHA-256 hash for brevity
@@ -61,7 +57,7 @@ async def rate_limit_middleware(
         api_key = request.headers.get("X-API-Key")
 
         is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(
-            client_ip_hash, api_key, client_ip_raw, socket_ip
+            client_ip_hash, api_key, client_ip_raw, client_ip_raw
         )
 
         if not is_allowed:

@@ -2,46 +2,57 @@
 
 **Fetch meeting data from 11 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
 
-**Last Updated:** November 20, 2025
+**Last Updated:** November 24, 2025
 
 ---
 
 ## Overview
 
-The vendors module provides adapters for fetching meeting data from civic technology platforms used by local governments. Each adapter implements a common interface (`BaseAdapter`) while handling vendor-specific quirks in HTML parsing, API integration, and data extraction.
+The vendors module provides adapters for fetching meeting data from civic technology platforms used by local governments. Each adapter implements a common interface (`AsyncBaseAdapter` for async, `BaseAdapter` for sync) while handling vendor-specific quirks in HTML parsing, API integration, and data extraction.
 
-**Architecture Pattern:** BaseAdapter + Vendor-Specific Parsers + Shared Utilities
+**Architecture Pattern:** AsyncBaseAdapter (primary) + BaseAdapter (deprecated) + Vendor-Specific Parsers + Shared Utilities
+
+**Migration Status:** 5 vendors fully async (Legistar, PrimeGov, Granicus, IQM2, NovusAgenda), 6 vendors pending (CivicClerk, CivicPlus, eScribe, Berkeley, Chicago, Menlo Park)
 
 ```
 vendors/
-├── adapters/           # 11 vendor-specific adapters
-│   ├── base_adapter.py         # Shared HTTP/date/retry logic (398 lines)
-│   ├── legistar_adapter.py     # Legistar (API + HTML) - 980 lines
-│   ├── primegov_adapter.py     # PrimeGov (HTML) - 326 lines
-│   ├── granicus_adapter.py     # Granicus (API + HTML) - 584 lines
-│   ├── iqm2_adapter.py         # IQM2 (HTML) - 343 lines
-│   ├── novusagenda_adapter.py  # NovusAgenda (HTML) - 410 lines
-│   ├── escribe_adapter.py      # eScribe (HTML) - 261 lines
-│   ├── civicclerk_adapter.py   # CivicClerk (monolithic) - 192 lines
-│   ├── civicplus_adapter.py    # CivicPlus (monolithic) - 168 lines
+├── adapters/           # 19 adapter files (11 unique vendors, 5 with async versions)
+│   ├── base_adapter.py             # Sync base (457 lines) - DEPRECATED
+│   ├── base_adapter_async.py       # Async base (398 lines) - PRIMARY
+│   ├── legistar_adapter.py         # Legistar sync (973 lines) - DEPRECATED
+│   ├── legistar_adapter_async.py   # Legistar async (947 lines)
+│   ├── primegov_adapter.py         # PrimeGov sync (287 lines) - DEPRECATED
+│   ├── primegov_adapter_async.py   # PrimeGov async (345 lines)
+│   ├── granicus_adapter.py         # Granicus sync (518 lines) - DEPRECATED
+│   ├── granicus_adapter_async.py   # Granicus async (148 lines)
+│   ├── iqm2_adapter.py             # IQM2 sync (613 lines) - DEPRECATED
+│   ├── iqm2_adapter_async.py       # IQM2 async (621 lines)
+│   ├── novusagenda_adapter.py      # NovusAgenda sync (207 lines) - DEPRECATED
+│   ├── novusagenda_adapter_async.py # NovusAgenda async (223 lines)
+│   ├── escribe_adapter.py          # eScribe (155 lines) - Sync only
+│   ├── civicclerk_adapter.py       # CivicClerk (113 lines) - Sync only
+│   ├── civicplus_adapter.py        # CivicPlus (368 lines) - Sync only
 │   ├── custom/
-│   │   ├── berkeley_adapter.py     # Berkeley custom (monolithic) - 156 lines
-│   │   ├── chicago_adapter.py      # Chicago custom (item-level) - 447 lines
-│   │   └── menlopark_adapter.py    # Menlo Park custom (monolithic) - 134 lines
-│   └── parsers/        # Vendor-specific HTML parsing (4 parsers)
-│       ├── legistar_parser.py      # Legistar HTML tables - 246 lines
-│       ├── primegov_parser.py      # PrimeGov HTML tables - 187 lines
-│       ├── granicus_parser.py      # Granicus HTML tables - 215 lines
-│       └── novusagenda_parser.py   # NovusAgenda HTML - 212 lines
+│   │   ├── berkeley_adapter.py     # Berkeley (385 lines) - Sync only
+│   │   ├── chicago_adapter.py      # Chicago (416 lines) - Sync only
+│   │   └── menlopark_adapter.py    # Menlo Park (195 lines) - Sync only
+│   └── parsers/        # 4 vendor-specific HTML parsers
+│       ├── legistar_parser.py      # Legistar HTML tables - 359 lines
+│       ├── primegov_parser.py      # PrimeGov HTML tables - 282 lines
+│       ├── granicus_parser.py      # Granicus HTML tables - 141 lines
+│       └── novusagenda_parser.py   # NovusAgenda HTML - 116 lines
 ├── utils/              # Shared utilities
-│   ├── filtering.py    # Item filtering (procedural detection)
-│   └── deduplication.py # Attachment deduplication
-├── factory.py          # get_adapter() dispatcher - 65 lines
-├── rate_limiter.py     # Vendor-aware rate limiting - 49 lines
-├── validator.py        # Meeting validation - 265 lines
-└── schemas.py          # Pydantic schemas for vendor data
+│   ├── item_filters.py    # Procedural item detection (151 lines)
+│   └── attachments.py     # Attachment deduplication (162 lines)
+├── factory.py          # Adapter dispatcher (142 lines)
+├── rate_limiter_async.py  # Async vendor rate limiting (53 lines)
+├── session_manager.py     # Sync HTTP pooling (127 lines) - DEPRECATED
+├── session_manager_async.py  # Async HTTP pooling (139 lines)
+├── validator.py        # Meeting validation (269 lines)
+└── schemas.py          # Pydantic validation schemas (145 lines)
 
-**Total:** ~6,556 lines
+**Total:** 9,484 lines (current with both sync + async during migration)
+**Post-migration:** ~6,302 lines (after removing 3,182 lines of deprecated sync code)
 ```
 
 ---
@@ -246,7 +257,7 @@ class LegistarParser:
 
 ## Shared Utilities
 
-### Item Filtering (vendors/utils/filtering.py)
+### Item Filtering (vendors/utils/item_filters.py)
 
 **Procedural item detection:** Identifies agenda items that don't need LLM summarization.
 
@@ -280,7 +291,7 @@ def is_procedural_item(title: str) -> bool:
 
 **Impact:** Saves ~5-10% of LLM costs by skipping procedural items
 
-### Attachment Deduplication (vendors/utils/deduplication.py)
+### Attachment Deduplication (vendors/utils/attachments.py)
 
 **Hash-based deduplication:** Prevents processing same PDF multiple times.
 

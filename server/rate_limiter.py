@@ -363,7 +363,7 @@ class SQLiteRateLimiter:
         except Exception as e:
             logger.error(f"Failed to export blocked IPs: {e}")
 
-    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, socket_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
+    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, whitelist_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
         """
         Check if client has exceeded rate limits (both minute and day).
 
@@ -371,14 +371,14 @@ class SQLiteRateLimiter:
             client_ip: Client IP address (hashed, for rate limiting)
             api_key: Optional API key for tier lookup
             real_ip: Real client IP from proxy headers (for logging)
-            socket_ip: Actual socket connection IP (for whitelist - NOT spoofable)
+            whitelist_ip: IP to check against whitelist (from CF-Connecting-IP via Cloudflare)
 
         Returns:
             (is_allowed, remaining_minute, limit_info)
         """
-        # SECURITY: Whitelist uses socket_ip (actual connection), NOT headers (spoofable)
-        # Only VPS IP (165.232.158.241) and true localhost (127.0.0.1 from socket) allowed
-        if socket_ip and socket_ip in config.ADMIN_WHITELIST_IPS:
+        # Whitelist check: VPS IP (165.232.158.241) bypasses rate limits
+        # Uses CF-Connecting-IP from Cloudflare (trusted, can't be spoofed with proper DNS)
+        if whitelist_ip and whitelist_ip in config.ADMIN_WHITELIST_IPS:
             return True, 999999, {
                 "tier": "admin",
                 "limit_type": "whitelisted",

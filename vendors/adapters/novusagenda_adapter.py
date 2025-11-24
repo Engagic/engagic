@@ -1,6 +1,10 @@
 """
 NovusAgenda Adapter - HTML scraping for NovusAgenda platform
 
+DEPRECATED: This sync adapter is deprecated. Use AsyncNovusAgendaAdapter instead.
+Scheduled for removal after async migration complete.
+For new code, use: from vendors.factory import get_async_adapter
+
 Cities using NovusAgenda: Hagerstown MD, Houston TX, and others
 """
 

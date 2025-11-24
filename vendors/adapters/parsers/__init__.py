@@ -1,5 +1,1 @@
-
-
-from config import get_logger
-
-logger = get_logger(__name__).bind(component="vendor")
+# Parsers package - vendor-specific HTML parsing modules

@@ -1,6 +1,10 @@
 """
 IQM2 Adapter - HTML scraping for IQM2 platform (Granicus subsidiary)
 
+DEPRECATED: This sync adapter is deprecated. Use AsyncIQM2Adapter instead.
+Scheduled for removal after async migration complete.
+For new code, use: from vendors.factory import get_async_adapter
+
 Gold standard adapter for IQM2 cities. Supports item-level processing with full
 matter tracking, attachments, metadata, and cross-meeting legislative tracking.
 

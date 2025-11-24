@@ -10,18 +10,6 @@ SvelteKit static web app for civic engagement. Deployed on Cloudflare Pages.
 - **Hosting:** Cloudflare Pages
 - **Build:** Vite
 
-## Design System
-
-Custom design system inspired by [cobalt.tools](https://cobalt.tools) - a beautifully crafted media downloader with excellent UI patterns. We adopted their approach to:
-
-- **Consistent design tokens** (spacing scale, border radius, transition timing)
-- **Component-scoped styles** over monolithic CSS
-- **Mobile-first responsive design** with safe area insets
-- **Accessibility-first** patterns (focus management, reduced motion support)
-- **Clean component architecture** with TypeScript
-
-Big thanks to the cobalt team for building such a polished reference implementation. Their code quality and attention to detail set a high bar for civic tech UX.
-
 ## Development
 
 ```bash
