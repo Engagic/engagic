@@ -31,7 +31,7 @@ class DatabaseViewer:
 
     async def show_cities_table(self, limit: int = 50):
         """Display cities table with zipcode counts"""
-        cities = await self.db.cities.get_all_cities(limit=limit)
+        cities = await self.db.cities.get_cities(status="active", limit=limit)
 
         print(f"\n=== CITIES TABLE (showing {len(cities)}) ===")
         print(
@@ -87,7 +87,7 @@ class DatabaseViewer:
         """Display meetings table with city information"""
         if city_filter:
             # Search for matching cities
-            all_cities = await self.db.cities.get_all_cities(limit=1000)
+            all_cities = await self.db.cities.get_cities(status="active", limit=1000)
             matching_bananas = [
                 c['banana']
                 for c in all_cities
@@ -102,7 +102,7 @@ class DatabaseViewer:
             # Get meetings for matching cities
             meetings = []
             for banana in matching_bananas[:10]:  # Limit cities to avoid too many queries
-                city_meetings = await self.db.meetings.get_meetings_by_city(
+                city_meetings = await self.db.meetings.get_meetings_for_city(
                     banana, limit=limit
                 )
                 meetings.extend(city_meetings)
@@ -141,7 +141,7 @@ class DatabaseViewer:
                     date_str = meeting['date'].strftime("%Y-%m-%d")
 
             # Get item count
-            items = await self.db.items.get_items_by_meeting(meeting['id'])
+            items = await self.db.items.get_agenda_items(meeting['id'])
             item_count = str(len(items)) if items else "0"
 
             status = meeting.get('status', '-')[:9]
@@ -158,7 +158,7 @@ class DatabaseViewer:
 
         all_items = []
         for meeting in meetings:
-            items = await self.db.items.get_items_by_meeting(meeting['id'])
+            items = await self.db.items.get_agenda_items(meeting['id'])
             for item in items:
                 all_items.append({'item': item, 'meeting': meeting})
                 if len(all_items) >= limit:
@@ -200,7 +200,7 @@ class DatabaseViewer:
         async with self.db.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT id, job_type, job_data, status, priority, retry_count, created_at
+                SELECT id, job_type, payload, status, priority, retry_count, created_at
                 FROM queue
                 WHERE status IN ('pending', 'processing', 'failed')
                 ORDER BY priority DESC, created_at ASC
@@ -217,8 +217,8 @@ class DatabaseViewer:
             print("-" * 80)
 
             for row in rows:
-                job_data = row['job_data']
-                banana = job_data.get('banana', '')[:14] if job_data else ''
+                payload = row['payload']
+                banana = payload.get('banana', '')[:14] if payload else ''
                 job_type = row['job_type'][:11]
 
                 print(
@@ -428,7 +428,7 @@ class DatabaseViewer:
         results = []
 
         # Search cities
-        all_cities = await self.db.cities.get_all_cities(limit=1000)
+        all_cities = await self.db.cities.get_cities(status="active", limit=1000)
         for city in all_cities:
             if (
                 query.lower() in city['name'].lower()
@@ -469,7 +469,7 @@ class DatabaseViewer:
         # Search meetings (title and banana)
         for city in all_cities:
             if query.lower() in city['banana'].lower():
-                meetings = await self.db.meetings.get_meetings_by_city(city['banana'], limit=10)
+                meetings = await self.db.meetings.get_meetings_for_city(city['banana'], limit=10)
                 for meeting in meetings:
                     date_str = ''
                     if meeting.get('date'):
