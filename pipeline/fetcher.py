@@ -11,6 +11,7 @@ Handles:
 Moved from: pipeline/conductor.py (refactored)
 """
 
+import asyncio
 import time
 import random
 from datetime import datetime
@@ -21,8 +22,8 @@ from enum import Enum
 from database.db_postgres import Database
 from database.models import City
 from exceptions import VendorError
-from vendors.factory import get_adapter
-from vendors.rate_limiter import RateLimiter
+from vendors.factory import get_async_adapter
+from vendors.rate_limiter_async import AsyncRateLimiter
 from config import config, get_logger
 from server.metrics import metrics
 
@@ -62,7 +63,7 @@ class Fetcher:
             db: Async Database instance (required)
         """
         self.db = db
-        self.rate_limiter = RateLimiter()
+        self.rate_limiter = AsyncRateLimiter()
         self.failed_cities: Set[str] = set()
         self.is_running = True  # Control flag for external stop
 
@@ -142,7 +143,7 @@ class Fetcher:
                     continue
 
                 # Apply rate limiting before sync
-                self.rate_limiter.wait_if_needed(vendor)
+                await self.rate_limiter.wait_if_needed(vendor)
 
                 # Sync with retry logic
                 result = await self._sync_city_with_retry(city)
@@ -207,7 +208,7 @@ class Fetcher:
                 continue
 
             # Apply rate limiting
-            self.rate_limiter.wait_if_needed(city.vendor)
+            await self.rate_limiter.wait_if_needed(city.vendor)
 
             # Sync with retry
             result = await self._sync_city_with_retry(city)
@@ -239,7 +240,7 @@ class Fetcher:
                     break
 
                 # Apply rate limiting
-                self.rate_limiter.wait_if_needed(vendor)
+                await self.rate_limiter.wait_if_needed(vendor)
 
                 # Sync with retry
                 result = await self._sync_city_with_retry(city)
@@ -289,7 +290,7 @@ class Fetcher:
             kwargs["api_token"] = config.NYC_LEGISTAR_TOKEN
 
         try:
-            adapter = get_adapter(city.vendor, city.slug, **kwargs)
+            adapter = get_async_adapter(city.vendor, city.slug, **kwargs)
         except VendorError as e:
             result.status = SyncStatus.SKIPPED
             result.error_message = str(e)
@@ -297,152 +298,151 @@ class Fetcher:
             metrics.record_error("vendor", e)
             return result
 
-        # Use context manager to ensure session cleanup
-        with adapter:
+        # Async adapters don't use context managers (session managed by AsyncSessionManager)
+        try:
+            logger.info("starting sync", city=city.banana, vendor=city.vendor)
+            result.status = SyncStatus.IN_PROGRESS
+
+            # Fetch meetings using unified adapter interface
             try:
-                logger.info("starting sync", city=city.banana, vendor=city.vendor)
-                result.status = SyncStatus.IN_PROGRESS
+                all_meetings = await adapter.fetch_meetings()
 
-                # Fetch meetings using unified adapter interface
-                try:
-                    all_meetings = list(adapter.fetch_meetings())
+                # Count different types of meeting data
+                meetings_with_items = [m for m in all_meetings if m.get("items")]
+                meetings_with_agenda_url = [m for m in all_meetings if m.get("agenda_url")]
+                meetings_with_packet_url = [m for m in all_meetings if m.get("packet_url")]
 
-                    # Count different types of meeting data
-                    meetings_with_items = [m for m in all_meetings if m.get("items")]
-                    meetings_with_agenda_url = [m for m in all_meetings if m.get("agenda_url")]
-                    meetings_with_packet_url = [m for m in all_meetings if m.get("packet_url")]
+                # Count total items
+                total_items = sum(len(m.get("items", [])) for m in all_meetings)
 
-                    # Count total items
-                    total_items = sum(len(m.get("items", [])) for m in all_meetings)
+                # Count items with matter tracking
+                total_matters = 0
+                for meeting in all_meetings:
+                    for item in meeting.get("items", []):
+                        if item.get("matter_file") or item.get("matter_id"):
+                            total_matters += 1
 
-                    # Count items with matter tracking
-                    total_matters = 0
-                    for meeting in all_meetings:
-                        for item in meeting.get("items", []):
-                            if item.get("matter_file") or item.get("matter_id"):
-                                total_matters += 1
-
-                except (VendorError, ValueError, KeyError) as e:
-                    logger.error("error fetching meetings", city=city.banana, error=str(e), error_type=type(e).__name__)
-                    result.status = SyncStatus.FAILED
-                    result.error_message = str(e)
-                    # Record vendor failure metrics
-                    metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
-                    metrics.record_error('vendor', e)
-                    return result
-
-                result.meetings_found = len(all_meetings)
-
-                # Log what we found with detailed breakdown
-                logger.info(
-                    "found meetings for city",
-                    city=city.banana,
-                    meeting_count=len(all_meetings),
-                    total_items=total_items,
-                    matters_with_tracking=total_matters
-                )
-                logger.info(
-                    "meeting breakdown",
-                    city=city.banana,
-                    item_level_count=len(meetings_with_items),
-                    html_agenda_count=len(meetings_with_agenda_url),
-                    pdf_packet_count=len(meetings_with_packet_url)
-                )
-
-                # Store ALL meetings and enqueue for processing
-                processed_count = 0
-                items_stored_count = 0
-                matters_tracked_count = 0
-                matters_duplicate_count = 0
-                skipped_meetings = 0
-
-                logger.info(
-                    "storing meetings",
-                    city=city.banana,
-                    meeting_count=len(all_meetings)
-                )
-                for i, meeting_dict in enumerate(all_meetings):
-                    # Progress update every 10 meetings
-                    if (i + 1) % 10 == 0:
-                        logger.info(
-                            "storage progress",
-                            city=city.banana,
-                            progress=i + 1,
-                            total=len(all_meetings)
-                        )
-
-                    if not self.is_running:
-                        logger.warning("processing stopped - is_running flag is false")
-                        break
-
-                    # Use database method to handle all transformation and storage
-                    stored_meeting, storage_stats = await self.db.store_meeting_from_sync(meeting_dict, city)
-                    if not stored_meeting:
-                        skipped = storage_stats.get('meetings_skipped', 0)
-                        reason = storage_stats.get('skip_reason')
-                        skipped_title = storage_stats.get('skipped_title') or meeting_dict.get("title", "Unknown")
-                        if skipped:
-                            skipped_meetings += skipped
-                            logger.warning(
-                                "skipped meeting",
-                                meeting_title=skipped_title,
-                                reason=reason or 'unknown reason'
-                            )
-                        else:
-                            logger.warning(
-                                "failed to store meeting without skip metadata",
-                                meeting_title=skipped_title
-                            )
-                        continue
-
-                    processed_count += 1
-                    items_stored_count += storage_stats.get('items_stored', 0)
-                    matters_tracked_count += storage_stats.get('matters_tracked', 0)
-                    matters_duplicate_count += storage_stats.get('matters_duplicate', 0)
-
-                result.meetings_processed = processed_count
-                result.meetings_skipped = skipped_meetings
-                result.status = SyncStatus.COMPLETED
-                result.duration_seconds = time.time() - start_time
-
-                # Record vendor success metrics
-                metrics.vendor_requests.labels(vendor=city.vendor, status='success').inc()
-
-                # Record metrics
-                metrics.meetings_synced.labels(city=city.banana, vendor=city.vendor).inc(processed_count)
-                metrics.items_extracted.labels(city=city.banana, vendor=city.vendor).inc(items_stored_count)
-                metrics.matters_tracked.labels(city=city.banana).inc(matters_tracked_count)
-
-                logger.info(
-                    "sync complete",
-                    city=city.banana,
-                    vendor=city.vendor,
-                    meetings=processed_count,
-                    skipped_meetings=skipped_meetings,
-                    items=items_stored_count,
-                    new_matters=matters_tracked_count,
-                    duplicate_matters=matters_duplicate_count,
-                    duration_seconds=round(result.duration_seconds, 1)
-                )
-
-            except Exception as e:
+            except (VendorError, ValueError, KeyError) as e:
+                logger.error("error fetching meetings", city=city.banana, error=str(e), error_type=type(e).__name__)
                 result.status = SyncStatus.FAILED
                 result.error_message = str(e)
-                result.duration_seconds = time.time() - start_time
-
                 # Record vendor failure metrics
                 metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
                 metrics.record_error('vendor', e)
+                return result
 
-                # Record error metrics
-                metrics.record_error(component="fetcher", error=e)
+            result.meetings_found = len(all_meetings)
 
-                logger.error("sync failed", city=city.banana, vendor=city.vendor, duration_seconds=round(result.duration_seconds, 1), error=str(e), error_type=type(e).__name__)
+            # Log what we found with detailed breakdown
+            logger.info(
+                "found meetings for city",
+                city=city.banana,
+                meeting_count=len(all_meetings),
+                total_items=total_items,
+                matters_with_tracking=total_matters
+            )
+            logger.info(
+                "meeting breakdown",
+                city=city.banana,
+                item_level_count=len(meetings_with_items),
+                html_agenda_count=len(meetings_with_agenda_url),
+                pdf_packet_count=len(meetings_with_packet_url)
+            )
 
-                # Add small delay on error with jitter
-                time.sleep(SYNC_ERROR_DELAY_BASE + random.uniform(0, SYNC_ERROR_DELAY_JITTER))
+            # Store ALL meetings and enqueue for processing
+            processed_count = 0
+            items_stored_count = 0
+            matters_tracked_count = 0
+            matters_duplicate_count = 0
+            skipped_meetings = 0
 
-            return result
+            logger.info(
+                "storing meetings",
+                city=city.banana,
+                meeting_count=len(all_meetings)
+            )
+            for i, meeting_dict in enumerate(all_meetings):
+                # Progress update every 10 meetings
+                if (i + 1) % 10 == 0:
+                    logger.info(
+                        "storage progress",
+                        city=city.banana,
+                        progress=i + 1,
+                        total=len(all_meetings)
+                    )
+
+                if not self.is_running:
+                    logger.warning("processing stopped - is_running flag is false")
+                    break
+
+                # Use database method to handle all transformation and storage
+                stored_meeting, storage_stats = await self.db.store_meeting_from_sync(meeting_dict, city)
+                if not stored_meeting:
+                    skipped = storage_stats.get('meetings_skipped', 0)
+                    reason = storage_stats.get('skip_reason')
+                    skipped_title = storage_stats.get('skipped_title') or meeting_dict.get("title", "Unknown")
+                    if skipped:
+                        skipped_meetings += skipped
+                        logger.warning(
+                            "skipped meeting",
+                            meeting_title=skipped_title,
+                            reason=reason or 'unknown reason'
+                        )
+                    else:
+                        logger.warning(
+                            "failed to store meeting without skip metadata",
+                            meeting_title=skipped_title
+                        )
+                    continue
+
+                processed_count += 1
+                items_stored_count += storage_stats.get('items_stored', 0)
+                matters_tracked_count += storage_stats.get('matters_tracked', 0)
+                matters_duplicate_count += storage_stats.get('matters_duplicate', 0)
+
+            result.meetings_processed = processed_count
+            result.meetings_skipped = skipped_meetings
+            result.status = SyncStatus.COMPLETED
+            result.duration_seconds = time.time() - start_time
+
+            # Record vendor success metrics
+            metrics.vendor_requests.labels(vendor=city.vendor, status='success').inc()
+
+            # Record metrics
+            metrics.meetings_synced.labels(city=city.banana, vendor=city.vendor).inc(processed_count)
+            metrics.items_extracted.labels(city=city.banana, vendor=city.vendor).inc(items_stored_count)
+            metrics.matters_tracked.labels(city.banana).inc(matters_tracked_count)
+
+            logger.info(
+                "sync complete",
+                city=city.banana,
+                vendor=city.vendor,
+                meetings=processed_count,
+                skipped_meetings=skipped_meetings,
+                items=items_stored_count,
+                new_matters=matters_tracked_count,
+                duplicate_matters=matters_duplicate_count,
+                duration_seconds=round(result.duration_seconds, 1)
+            )
+
+        except Exception as e:
+            result.status = SyncStatus.FAILED
+            result.error_message = str(e)
+            result.duration_seconds = time.time() - start_time
+
+            # Record vendor failure metrics
+            metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
+            metrics.record_error('vendor', e)
+
+            # Record error metrics
+            metrics.record_error(component="fetcher", error=e)
+
+            logger.error("sync failed", city=city.banana, vendor=city.vendor, duration_seconds=round(result.duration_seconds, 1), error=str(e), error_type=type(e).__name__)
+
+            # Add small delay on error with jitter (async)
+            await asyncio.sleep(SYNC_ERROR_DELAY_BASE + random.uniform(0, SYNC_ERROR_DELAY_JITTER))
+
+        return result
 
     async def _sync_city_with_retry(self, city: City, max_retries: int = 1) -> SyncResult:
         """Sync city with retry (5s, 20s delays)"""

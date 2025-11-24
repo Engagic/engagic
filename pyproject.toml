@@ -62,6 +62,14 @@ engagic-conductor = "pipeline.conductor:main"
 premium = [
     "mistralai>=1.0.0",  # For Tier 2 OCR processing (paid customers only)
 ]
+test = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-aiohttp>=1.0.5",
+    "pytest-cov>=6.0.0",
+    "pytest-timeout>=2.3.1",
+    "httpx>=0.28.1",  # For HTTP mocking in tests
+]
 
 [tool.pyright]
 include = ["vendors", "parsing", "analysis", "pipeline", "database", "server", "userland"]

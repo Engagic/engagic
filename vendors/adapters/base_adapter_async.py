@@ -1,0 +1,398 @@
+"""
+Async Base Adapter - Shared logic for all async vendor adapters
+
+Async version of base_adapter.py with:
+- aiohttp for async HTTP requests
+- AsyncSessionManager for connection pooling
+- Non-blocking I/O for concurrent city fetching
+- Same error handling and logging as sync version
+
+Extracts common patterns:
+- Async HTTP session with error handling
+- Date parsing across vendor formats
+- PDF discovery from HTML
+- Error handling and logging
+"""
+
+import asyncio
+import time
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
+import aiohttp
+
+from config import get_logger
+from server.metrics import metrics
+from vendors.session_manager_async import AsyncSessionManager
+from exceptions import VendorHTTPError
+
+logger = get_logger(__name__).bind(component="vendor")
+
+
+class AsyncBaseAdapter:
+    """
+    Async base adapter with shared HTTP session, date parsing, and PDF discovery.
+
+    Vendor-specific async adapters extend this and implement fetch_meetings().
+    """
+
+    def __init__(self, city_slug: str, vendor: str):
+        """
+        Initialize adapter with city slug and vendor name.
+
+        Args:
+            city_slug: Vendor-specific city identifier (e.g., "cityofpaloalto")
+            vendor: Vendor name for logging (e.g., "primegov")
+        """
+        if not city_slug:
+            raise ValueError(f"city_slug required for {vendor}")
+
+        self.slug = city_slug
+        self.vendor = vendor
+
+        logger.info(f"initialized async {vendor} adapter", city_slug=city_slug)
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get shared async session for this vendor"""
+        return await AsyncSessionManager.get_session(self.vendor)
+
+    async def _get(self, url: str, **kwargs) -> aiohttp.ClientResponse:
+        """
+        Make async GET request with error handling and logging.
+
+        Args:
+            url: URL to fetch
+            **kwargs: Additional arguments for aiohttp.get
+
+        Returns:
+            ClientResponse object (must read with .text(), .json(), etc.)
+
+        Raises:
+            VendorHTTPError on failure
+        """
+        session = await self._get_session()
+
+        # Set default timeout if not specified
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = aiohttp.ClientTimeout(total=30)
+
+        # For Legistar API endpoints, prefer JSON over XML
+        if 'webapi.legistar.com' in url:
+            headers = kwargs.get('headers', {})
+            if 'Accept' not in headers:
+                headers = headers.copy() if headers else {}
+                headers['Accept'] = 'application/json, application/xml;q=0.9, */*;q=0.8'
+                kwargs['headers'] = headers
+
+        # Disable SSL verification for Granicus domains (known S3 redirect issue)
+        # Confidence: 8/10 - Safe for public civic data, Granicus infra issue
+        # Granicus redirects to S3 with mismatched SSL certs, causing verification failures
+        if (
+            self.vendor == "granicus"
+            or "granicus.com" in url
+            or "granicus_production_attachments.s3.amazonaws.com" in url
+        ):
+            kwargs["ssl"] = False
+
+        # Track request duration
+        start_time = time.time()
+
+        try:
+            logger.debug("vendor request", vendor=self.vendor, slug=self.slug, method="GET", url=url[:100])
+
+            # Don't use context manager - return unconsumed response for caller to use
+            response = await session.get(url, **kwargs)
+
+            # Get metadata from headers (don't consume body yet)
+            content_length = response.headers.get('content-length', 'unknown')
+            content_type = response.headers.get('content-type', 'unknown')
+            duration = time.time() - start_time
+
+            logger.debug(
+                "vendor response",
+                vendor=self.vendor,
+                slug=self.slug,
+                status_code=response.status,
+                content_length=content_length,
+                content_type=content_type,
+                duration_seconds=round(duration, 2)
+            )
+
+            # Check for HTTP errors
+            if response.status >= 400:
+                # For errors, consume body for logging then raise
+                error_body = await response.text()
+                metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{response.status}").inc()
+                metrics.record_error(component="vendor", error=VendorHTTPError(
+                    f"HTTP {response.status} error",
+                    vendor=self.vendor,
+                    status_code=response.status,
+                    url=url,
+                    city_slug=self.slug
+                ))
+                logger.error(
+                    "vendor http error",
+                    vendor=self.vendor,
+                    slug=self.slug,
+                    status_code=response.status,
+                    url=url[:100],
+                    error_body=error_body[:500] if error_body else None,
+                    duration_seconds=round(duration, 2)
+                )
+                raise VendorHTTPError(
+                    f"HTTP {response.status} error",
+                    vendor=self.vendor,
+                    status_code=response.status,
+                    url=url,
+                    city_slug=self.slug
+                )
+
+            # Record successful request
+            metrics.vendor_requests.labels(vendor=self.vendor, status="success").inc()
+            metrics.vendor_request_duration.labels(vendor=self.vendor).observe(duration)
+
+            # Return unconsumed response - caller will call await response.text() or .json()
+            return response
+
+        except asyncio.TimeoutError as e:
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status="timeout").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error(
+                "vendor request timeout",
+                vendor=self.vendor,
+                slug=self.slug,
+                url=url[:100],
+                duration_seconds=round(duration, 2)
+            )
+            raise VendorHTTPError(
+                f"Request timeout after {duration:.1f}s",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
+        except aiohttp.ClientError as e:
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error(
+                "vendor request failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                url=url[:100],
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_seconds=round(duration, 2)
+            )
+            raise VendorHTTPError(
+                f"Request failed: {str(e)}",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
+
+    async def _post(self, url: str, **kwargs) -> aiohttp.ClientResponse:
+        """
+        Make async POST request with error handling.
+
+        Args:
+            url: URL to post to
+            **kwargs: Additional arguments for aiohttp.post
+
+        Returns:
+            ClientResponse object (must read with .text(), .json(), etc.)
+
+        Raises:
+            VendorHTTPError on failure
+        """
+        session = await self._get_session()
+
+        # Set default timeout if not specified
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = aiohttp.ClientTimeout(total=30)
+
+        # Track request duration
+        start_time = time.time()
+
+        try:
+            logger.debug("vendor request", vendor=self.vendor, slug=self.slug, method="POST", url=url[:100])
+
+            # Don't use context manager - return unconsumed response for caller to use
+            response = await session.post(url, **kwargs)
+
+            # Get metadata from headers (don't consume body yet)
+            content_length = response.headers.get('content-length', 'unknown')
+            content_type = response.headers.get('content-type', 'unknown')
+            duration = time.time() - start_time
+
+            logger.debug(
+                "vendor response",
+                vendor=self.vendor,
+                slug=self.slug,
+                status_code=response.status,
+                content_length=content_length,
+                content_type=content_type,
+                duration_seconds=round(duration, 2)
+            )
+
+            # Check for HTTP errors
+            if response.status >= 400:
+                # For errors, consume body for logging then raise
+                error_body = await response.text()
+                metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{response.status}").inc()
+                metrics.record_error(component="vendor", error=VendorHTTPError(
+                    f"HTTP {response.status} error",
+                    vendor=self.vendor,
+                    status_code=response.status,
+                    url=url,
+                    city_slug=self.slug
+                ))
+                logger.error(
+                    "vendor POST failed",
+                    vendor=self.vendor,
+                    slug=self.slug,
+                    status_code=response.status,
+                    url=url[:100],
+                    error_body=error_body[:500] if error_body else None,
+                    duration_seconds=round(duration, 2)
+                )
+                raise VendorHTTPError(
+                    f"HTTP {response.status} error",
+                    vendor=self.vendor,
+                    status_code=response.status,
+                    url=url,
+                    city_slug=self.slug
+                )
+
+            # Record successful request
+            metrics.vendor_requests.labels(vendor=self.vendor, status="success").inc()
+            metrics.vendor_request_duration.labels(vendor=self.vendor).observe(duration)
+
+            # Return unconsumed response - caller will call await response.text() or .json()
+            return response
+
+        except asyncio.TimeoutError as e:
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status="timeout").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error(
+                "vendor POST timeout",
+                vendor=self.vendor,
+                slug=self.slug,
+                url=url[:100],
+                duration_seconds=round(duration, 2)
+            )
+            raise VendorHTTPError(
+                f"POST timeout after {duration:.1f}s",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
+        except aiohttp.ClientError as e:
+            duration = time.time() - start_time
+            metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
+            metrics.record_error(component="vendor", error=e)
+            logger.error(
+                "vendor POST failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                url=url[:100],
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_seconds=round(duration, 2)
+            )
+            raise VendorHTTPError(
+                f"POST request failed: {str(e)}",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
+
+    def _parse_date(self, date_str: str) -> Optional[datetime]:
+        """
+        Parse date string from various vendor formats.
+
+        Supports common municipal calendar formats:
+        - ISO 8601: "2025-01-22T18:00:00Z"
+        - US formats: "Jan 22, 2025 6:00 PM", "01/22/2025 6:00 PM"
+        - Verbose: "January 22, 2025 at 6:00 PM"
+
+        Args:
+            date_str: Date string in various formats
+
+        Returns:
+            datetime object or None if parsing fails
+
+        NOTE: Returning None for empty input is intentional - graceful handling of missing dates
+        """
+        if not date_str:
+            return None
+
+        # Common formats used by municipal calendar systems
+        formats = [
+            # ISO formats
+            "%Y-%m-%dT%H:%M:%S.%fZ",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+            # US formats with 12-hour time
+            "%b %d, %Y %I:%M %p",
+            "%B %d, %Y %I:%M %p",
+            "%m/%d/%Y %I:%M %p",
+            "%m/%d/%Y %I:%M:%S %p",
+            # US formats with 24-hour time
+            "%b %d, %Y %H:%M",
+            "%B %d, %Y %H:%M",
+            "%m/%d/%Y %H:%M",
+            # Date only formats
+            "%b %d, %Y",
+            "%B %d, %Y",
+            "%m/%d/%Y",
+            # Verbose formats
+            "%B %d, %Y at %I:%M %p",
+        ]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str.strip(), fmt)
+            except (ValueError, AttributeError):
+                continue
+
+        logger.warning("failed to parse date", date_str=date_str, vendor=self.vendor)
+        return None
+
+    def _find_pdf_in_html(self, html: str, base_url: str) -> Optional[str]:
+        """
+        Find PDF link in HTML content.
+
+        Args:
+            html: HTML content
+            base_url: Base URL for resolving relative links
+
+        Returns:
+            Absolute PDF URL or None
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+
+        # Find links with .pdf extension
+        for link in soup.find_all('a', href=True):
+            href = link['href']  # type: ignore[index]
+            if '.pdf' in href.lower():  # type: ignore[union-attr]
+                # Convert to absolute URL
+                return urljoin(base_url, href)  # type: ignore[arg-type]
+
+        return None
+
+    async def fetch_meetings(self) -> List[Dict[str, Any]]:
+        """
+        Fetch meetings from vendor (to be implemented by subclasses).
+
+        Returns:
+            List of meeting dictionaries
+
+        Raises:
+            NotImplementedError: Subclass must implement this method
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} must implement fetch_meetings()")
