@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Footer from '$lib/components/Footer.svelte';
 
-	// Smooth scroll to section (cobalt pattern)
+	// Smooth scroll to section
 	function scrollToSection(id: string) {
 		const element = document.getElementById(id);
 		if (element) {
@@ -319,7 +319,7 @@
 		color: var(--civic-accent);
 	}
 
-	/* Table of Contents (cobalt-inspired) */
+	/* Table of Contents */
 	.toc {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
@@ -420,7 +420,7 @@
 		color: var(--civic-accent);
 	}
 
-	/* Tier Cards (cobalt-inspired grid) */
+	/* Tier Cards */
 	.tier-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -564,7 +564,7 @@
 		color: var(--civic-white);
 	}
 
-	/* Code Blocks (cobalt-inspired) */
+	/* Code Blocks */
 	.code-block {
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);

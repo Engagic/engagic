@@ -6,7 +6,7 @@ Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 
 **Database:** PostgreSQL 16 with asyncpg
 **Location:** `/root/engagic` (VPS production)
-**Code:** Async Repository Pattern (database/db_postgres.py → 6 focused async repositories)
+**Code:** Async Repository Pattern (database/db_postgres.py → 8 repositories)
 **Last Updated:** November 23, 2025 (PostgreSQL migration complete)
 
 ---

@@ -114,12 +114,11 @@ class Config:
 
         # Admin authentication
         self.ADMIN_TOKEN = os.getenv("ENGAGIC_ADMIN_TOKEN", "")
-        # SECURITY: Only VPS IP in whitelist. Socket connection IP used for check (not spoofable headers).
-        # Local testing from VPS itself will show request.client.host = 127.0.0.1 (legitimate).
+        # Whitelist VPS IP for admin access (uses CF-Connecting-IP from Cloudflare)
         self.ADMIN_WHITELIST_IPS = self._parse_whitelist_ips(
             os.getenv(
                 "ENGAGIC_ADMIN_WHITELIST_IPS",
-                "165.232.158.241,127.0.0.1"
+                "165.232.158.241"
             )
         )
 

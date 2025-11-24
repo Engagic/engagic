@@ -9,7 +9,7 @@
 	--width-detail: 1000px;
 	--width-state: 1400px;
 
-	/* Spacing scale (cobalt-inspired) */
+	/* Spacing scale */
 	--space-xs: 0.5rem;   /* 8px */
 	--space-sm: 0.75rem;  /* 12px */
 	--space-md: 1rem;     /* 16px */
@@ -18,12 +18,12 @@
 	--space-2xl: 3rem;    /* 48px */
 	--space-3xl: 4rem;    /* 64px */
 
-	/* Border radius (cobalt-inspired consistent values) */
+	/* Border radius */
 	--radius-sm: 6px;    /* Small elements (tags, badges) */
 	--radius-md: 11px;   /* Standard (cards, buttons) */
 	--radius-lg: 16px;   /* Large containers */
 
-	/* Transitions (cobalt-inspired) */
+	/* Transitions */
 	--transition-fast: 0.15s ease-out;    /* Micro-interactions */
 	--transition-normal: 0.2s ease-out;   /* Standard hover */
 	--transition-slow: 0.3s ease-out;     /* Page transitions */
@@ -149,7 +149,7 @@ body {
 	transition: background var(--transition-slow), color var(--transition-slow);
 }
 
-/* Accessibility: Focus indicators (cobalt-inspired improvements) */
+/* Accessibility: Focus indicators */
 /* Remove focus outline for mouse users */
 *:focus:not(:focus-visible) {
 	outline: none;

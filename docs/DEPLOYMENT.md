@@ -422,6 +422,22 @@ ufw status
 
 ---
 
+## Performance Profile
+
+### Expected Performance Metrics
+
+- **API response**: <100ms (cache hit)
+- **PDF extraction**: 2-5s per document (PyMuPDF)
+- **Item processing**: 10-30s per item (Gemini LLM)
+- **Batch processing**: 50% cost savings over individual API calls
+- **Background sync**: ~2 hours for 500 cities
+- **Memory usage**:
+  - API server: ~200MB
+  - Background daemon: ~500MB peak
+- **Capacity**: 500 cities, ~10K meetings, ~1000 concurrent requests
+
+---
+
 ## Performance Tuning
 
 ### If API is slow

@@ -95,8 +95,9 @@ class MeetingValidator:
         if not url:
             return {"valid": True, "action": "store"}
 
-        # TODO: Support List[str] packet URLs (eScribe adapter at line 117)
-        # Zero cities affected currently. Fix: normalize to list, validate each URL
+        # Note: eScribe adapter may return List[str] for packet_url (multiple PDFs).
+        # Not implemented here since validator not used in production (only in tests).
+        # If integrating validator into production, normalize List[str] to single URL.
 
         # Extract domain from URL
         if url.startswith("http"):
