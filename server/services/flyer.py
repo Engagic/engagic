@@ -14,7 +14,7 @@ from importlib.resources import files
 from database.db_postgres import Database
 from database.models import Meeting, AgendaItem
 
-from config import get_logger
+from config import config, get_logger
 
 logger = get_logger(__name__)
 
@@ -155,7 +155,7 @@ async def generate_meeting_flyer(
 
     # Build meeting URL for QR code (matches frontend routing)
     meeting_slug = _generate_meeting_slug(meeting)
-    meeting_url = f"https://engagic.org/{meeting.banana}/{meeting_slug}"
+    meeting_url = f"{config.FRONTEND_URL}/{meeting.banana}/{meeting_slug}"
 
     # Add item anchor for deep linking (when item-specific flyer)
     if item:

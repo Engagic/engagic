@@ -1,6 +1,6 @@
 # Database - Persistence & Repository Pattern
 
-**Purpose:** Single source of truth for all Engagic data. Clean separation of concerns via Repository Pattern.
+**Purpose:** Single source of truth for all Engagic data. PostgreSQL with async connection pooling.
 
 Manages:
 - Cities and zipcodes
@@ -8,38 +8,44 @@ Manages:
 - Matters (legislative tracking)
 - Processing queue (typed jobs)
 - Search, topics, and caching
+- User authentication and alerts (userland schema)
 
 ---
 
 ## Architecture Overview
 
-The database uses a **Repository Pattern** with a **facade** that delegates to focused repositories:
+**Repository Pattern** with async PostgreSQL (asyncpg connection pooling):
 
 ```
 ┌─────────────────────┐
-│  UnifiedDatabase    │  Facade (775 lines)
-│  (db.py)            │
+│  Database           │  Orchestration (858 lines)
+│  (db_postgres.py)   │
 └──────────┬──────────┘
            │
-           ├──> repositories/base.py        (95 lines)  - Base repository class
-           ├──> repositories/cities.py     (248 lines) - City and zipcode operations
-           ├──> repositories/meetings.py   (234 lines) - Meeting storage and retrieval
-           ├──> repositories/items.py      (196 lines) - Agenda item operations
-           ├──> repositories/matters.py    (300 lines) - Matter operations (matters-first)
-           ├──> repositories/queue.py      (578 lines) - Processing queue management
-           └──> repositories/search.py     (231 lines) - Search, topics, cache, stats
+           ├──> repositories_async/base.py        (83 lines)  - Base repository with connection pooling
+           ├──> repositories_async/cities.py     (329 lines) - City and zipcode operations
+           ├──> repositories_async/meetings.py   (444 lines) - Meeting storage and retrieval
+           ├──> repositories_async/items.py      (485 lines) - Agenda item operations
+           ├──> repositories_async/matters.py    (314 lines) - Matter operations (matters-first)
+           ├──> repositories_async/queue.py      (414 lines) - Processing queue management
+           ├──> repositories_async/search.py     (198 lines) - PostgreSQL full-text search
+           └──> repositories_async/userland.py   (498 lines) - User auth, alerts, notifications
 
 Supporting Modules:
-├── models.py          (393 lines) - Data models (City, Meeting, AgendaItem, Matter)
-├── id_generation.py   (148 lines) - Deterministic matter ID generation (SHA256)
-└── search_utils.py    (433 lines) - Search utilities (strip_markdown, search_summaries, search_matters)
+├── models.py          (263 lines) - Pydantic dataclasses (City, Meeting, AgendaItem, Matter)
+├── id_generation.py   (332 lines) - Deterministic matter ID generation (SHA256)
+├── schema_postgres.sql - Main database schema (cities, meetings, items, matters, queue)
+└── schema_userland.sql - Userland schema (users, alerts, alert_matches)
 ```
+
+**Total: 4,237 lines** (858 orchestration + 2,784 repositories + 595 supporting)
 
 **Why Repository Pattern?**
 - **Separation of concerns:** Each repository handles one domain
 - **Testability:** Mock repositories independently
-- **Maintainability:** 200-line focused modules > 2,000-line monolith
-- **Single database connection:** Shared across all repositories
+- **Maintainability:** Focused modules > monolithic database layer
+- **Shared connection pool:** asyncpg pool (5-20 connections) across all repositories
+- **True concurrency:** PostgreSQL handles concurrent operations safely
 
 ---
 
@@ -48,31 +54,35 @@ Supporting Modules:
 ### Basic Usage
 
 ```python
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
-db = UnifiedDatabase("/path/to/engagic.db")
+# Create database with connection pool
+db = await Database.create()
 
 # City operations
-city = db.get_city(banana="paloaltoCA")
-cities = db.get_cities(state="CA", vendor="primegov")
+city = await db.cities.get_city("paloaltoCA")
+cities = await db.cities.get_cities(state="CA", vendor="primegov")
 
 # Meeting operations
-meeting = db.get_meeting("sanfranciscoCA_2025-11-10")
-meetings = db.get_meetings(bananas=["paloaltoCA"], limit=50)
+meeting = await db.meetings.get_meeting("sanfranciscoCA_2025-11-10")
+meetings = await db.meetings.get_meetings_for_city("paloaltoCA", limit=50)
 
 # Agenda item operations
-items = db.get_agenda_items("sanfranciscoCA_2025-11-10")
-db.update_agenda_item(item_id, summary, topics)
+items = await db.items.get_agenda_items("sanfranciscoCA_2025-11-10")
+await db.items.update_agenda_item(item_id, summary, topics)
 
 # Queue operations
-db.enqueue_meeting_job(meeting_id, source_url, banana, priority=150)
-job = db.get_next_for_processing()
-db.mark_processing_complete(job.id)
+await db.queue.enqueue_job(source_url, job_type="meeting", payload={...}, priority=150)
+job = await db.queue.get_next_for_processing()
+await db.queue.mark_processing_complete(job.id)
 
 # Search operations
-meetings = db.search_meetings_by_topic("housing", city_banana="paloaltoCA")
-topics = db.get_popular_topics(limit=20)
-stats = db.get_stats()
+meetings = await db.search.search_meetings_by_topic("housing", banana="paloaltoCA")
+topics = await db.search.get_popular_topics(limit=20)
+stats = await db.get_stats()
+
+# Cleanup
+await db.close()
 ```
 
 ---
@@ -274,10 +284,68 @@ CREATE TABLE cache (
     processing_method TEXT,
     processing_time REAL,
     cache_hit_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP,
-    last_accessed TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+### Userland Schema Tables
+
+**Separate namespace for user authentication and alerts (Phase 2/3):**
+
+#### `userland.users` - User Accounts
+```sql
+CREATE TABLE userland.users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP
+);
+```
+
+#### `userland.alerts` - User-Configured Alerts
+```sql
+CREATE TABLE userland.alerts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    cities JSONB NOT NULL,              -- Array of city bananas: ["paloaltoCA", ...]
+    criteria JSONB NOT NULL,            -- {"keywords": ["housing", "zoning"]}
+    frequency TEXT DEFAULT 'weekly',    -- 'weekly' or 'daily'
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES userland.users(id) ON DELETE CASCADE
+);
+```
+
+#### `userland.alert_matches` - Matched Meetings/Items
+```sql
+CREATE TABLE userland.alert_matches (
+    id TEXT PRIMARY KEY,
+    alert_id TEXT NOT NULL,
+    meeting_id TEXT NOT NULL,
+    item_id TEXT,                       -- NULL for meeting-level matches
+    match_type TEXT NOT NULL,           -- 'keyword' or 'matter'
+    confidence REAL NOT NULL,           -- 0.0-1.0
+    matched_criteria JSONB NOT NULL,    -- Match details for display
+    notified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (alert_id) REFERENCES userland.alerts(id) ON DELETE CASCADE
+);
+```
+
+#### `userland.used_magic_links` - Single-Use Token Tracking
+```sql
+CREATE TABLE userland.used_magic_links (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+```
+
+**Security:** Prevents magic link replay attacks by tracking used tokens.
 
 ---
 
@@ -623,54 +691,93 @@ cleared = db.clear_queue()  # {"pending": 10, "processing": 2, ...}
 
 ---
 
-### 6. SearchRepository (231 lines)
+### 6. SearchRepository (198 lines)
 
 **Operations:**
-- Topic-based meeting search
+- PostgreSQL full-text search (FTS with ts_rank)
+- Topic-based meeting search (normalized tables)
 - Popular topics aggregation
-- Cache lookups and hit tracking
-- Database statistics
 
 **Methods:**
 
 ```python
-# Search by topic
-meetings = db.search_meetings_by_topic(
-    topic="housing",
-    city_banana="sanfranciscoCA",
+# Full-text search (PostgreSQL FTS with relevance ranking)
+meetings = await db.search.search_meetings_fulltext(
+    query="affordable housing",
+    banana="sanfranciscoCA",
     limit=50
 )
 
-# Get items matching topic
-items = db.get_items_by_topic(meeting_id, topic="housing")
-
-# Get popular topics
-topics = db.get_popular_topics(limit=20)
-# [{"topic": "housing", "count": 150}, ...]
-
-# Get cached summary (increments hit count)
-meeting = db.get_cached_summary(packet_url)
-
-# Store processing result
-db.store_processing_result(
-    packet_url="https://...",
-    processing_method="pymupdf_gemini",
-    processing_time=12.5
+# Topic-based search (normalized meeting_topics table)
+meetings = await db.search.search_meetings_by_topic(
+    topic="housing",
+    banana="sanfranciscoCA",
+    limit=50
 )
 
-# Database statistics
-stats = db.get_stats()
-# {
-#     "active_cities": 500,
-#     "total_meetings": 10000,
-#     "summarized_meetings": 5000,
-#     "pending_meetings": 2000,
-#     "summary_rate": "50.0%"
-# }
-
-# Random meeting with items (for demos)
-random_meeting = db.get_random_meeting_with_items()
+# Get popular topics (aggregated from meeting_topics)
+topics = await db.search.get_popular_topics(limit=20)
+# [{"topic": "housing", "count": 150}, ...]
 ```
+
+**PostgreSQL FTS Features:**
+- Uses `to_tsvector('english', ...)` for indexing
+- GIN indexes for fast text search
+- `ts_rank()` for relevance scoring
+- Searches both title and summary fields
+
+---
+
+### 7. UserlandRepository (498 lines)
+
+**Operations:**
+- User authentication (magic link tokens)
+- Alert management (create, update, delete)
+- Alert matching (keyword-based, matter-based)
+- Notification tracking
+
+**Methods:**
+
+```python
+# User operations
+user = await db.userland.get_user_by_email("user@example.com")
+user = await db.userland.create_user(email="user@example.com", name="Jane Doe")
+
+# Alert operations
+alert = await db.userland.create_alert(
+    user_id="user_123",
+    name="Housing Alerts",
+    cities=["paloaltoCA", "mountainviewCA"],
+    criteria={"keywords": ["housing", "zoning"]},
+    frequency="weekly"
+)
+
+alerts = await db.userland.get_user_alerts(user_id="user_123", active_only=True)
+await db.userland.update_alert(alert_id, active=False)
+
+# Alert matching
+await db.userland.create_alert_match(
+    alert_id="alert_123",
+    meeting_id="paloaltoCA_2025-11-10",
+    item_id="item_5",
+    match_type="keyword",
+    confidence=0.95,
+    matched_criteria={"keywords": ["housing"]}
+)
+
+unnotified = await db.userland.get_unnotified_matches(limit=100)
+await db.userland.mark_matches_notified([match_id_1, match_id_2])
+
+# Magic link authentication
+token_hash = await db.userland.store_used_magic_link(user_id, expires_at)
+is_valid = await db.userland.check_magic_link_valid(token_hash)
+```
+
+**Userland Schema (separate namespace):**
+- `userland.users` - User accounts (email-based auth)
+- `userland.alerts` - User-configured alerts (cities + criteria)
+- `userland.alert_matches` - Matched meetings/items that triggered alerts
+- `userland.used_magic_links` - Single-use token tracking (replay attack prevention)
 
 ---
 
@@ -678,7 +785,7 @@ random_meeting = db.get_random_meeting_with_items()
 
 ### Store Meeting from Sync (Complex Orchestration)
 
-**Location:** `db.py` (not in repository)
+**Location:** `db_postgres.py` (orchestration layer, not in repositories)
 
 **What it does:**
 1. Parse dates from vendor format
@@ -920,25 +1027,34 @@ print(f"Pending: {stats['pending_count']}, Failed: {stats['failed_count']}")
 
 ## Configuration
 
-**Required:**
+**Required Environment Variables:**
 ```bash
-ENGAGIC_DB_DIR=/root/engagic/data
-ENGAGIC_UNIFIED_DB=/root/engagic/data/engagic.db
+# PostgreSQL connection (defaults to config.get_postgres_dsn())
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=engagic
+POSTGRES_USER=engagic
+POSTGRES_PASSWORD=***
+
+# Connection pool settings
+POSTGRES_POOL_MIN_SIZE=5   # Minimum connections
+POSTGRES_POOL_MAX_SIZE=20  # Maximum connections (tuned for 2GB VPS)
 ```
 
-**Performance Settings:**
-```sql
-PRAGMA journal_mode=WAL;          -- Write-Ahead Logging (faster writes)
-PRAGMA synchronous=NORMAL;        -- Balance durability vs speed
-PRAGMA cache_size=10000;          -- 10K pages (~40MB cache)
-PRAGMA foreign_keys=ON;           -- Enforce referential integrity
-```
+**Connection Pool:**
+- **asyncpg pool:** 5-20 connections shared across all repositories
+- **Automatic JSONB codec:** Python dicts ↔ PostgreSQL JSONB (see ASYNCPG_JSONB_HANDLING.md)
+- **Connection timeout:** 60 seconds
+- **Pool lifecycle:** Created at Database.create(), closed at db.close()
+
+**Important Documentation:**
+- **ASYNCPG_JSONB_HANDLING.md** - Automatic JSONB serialization pattern (critical for understanding JSONB operations)
 
 ---
 
 ## Key Indices
 
-**Performance-critical indices:**
+**Performance-critical indices (PostgreSQL):**
 
 ```sql
 -- City lookups
@@ -947,34 +1063,62 @@ CREATE INDEX idx_cities_state ON cities(state);
 CREATE INDEX idx_zipcodes_zipcode ON zipcodes(zipcode);
 
 -- Meeting queries
-CREATE INDEX idx_meetings_banana ON meetings(banana);
-CREATE INDEX idx_meetings_date ON meetings(date);
+CREATE INDEX idx_meetings_banana_date ON meetings(banana, date DESC);  -- Composite for city timeline
 CREATE INDEX idx_meetings_status ON meetings(processing_status);
 
+-- Topic searches (normalized tables)
+CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
+CREATE INDEX idx_item_topics_topic ON item_topics(topic);
+CREATE INDEX idx_matter_topics_topic ON matter_topics(topic);
+
+-- Full-text search (GIN indexes)
+CREATE INDEX idx_meetings_fts ON meetings USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')));
+CREATE INDEX idx_items_fts ON items USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')));
+
 -- Queue operations
-CREATE INDEX idx_queue_status ON queue(status);
-CREATE INDEX idx_queue_priority ON queue(priority DESC);
-CREATE INDEX idx_queue_city ON queue(banana);
+CREATE INDEX idx_queue_processing ON queue(status, priority DESC, created_at ASC);  -- Composite for dequeue
+
+-- Matter tracking
+CREATE INDEX idx_city_matters_banana_file ON city_matters(banana, matter_file) WHERE matter_file IS NOT NULL;
+CREATE INDEX idx_matter_appearances_matter ON matter_appearances(matter_id);
 ```
+
+**See schema_postgres.sql for complete index definitions.**
 
 ---
 
-## Migration Notes
+## PostgreSQL-Specific Patterns
 
-### Preservation on Re-Sync
+### Preservation on Re-Sync (UPSERT)
 
 **CRITICAL:** Re-syncing cities should NOT overwrite existing summaries.
 
-**Implementation:**
+**PostgreSQL Implementation:**
 ```sql
+INSERT INTO meetings (...) VALUES (...)
 ON CONFLICT(id) DO UPDATE SET
     summary = CASE
         WHEN excluded.summary IS NOT NULL THEN excluded.summary
         ELSE meetings.summary
+    END,
+    topics = CASE
+        WHEN excluded.topics IS NOT NULL THEN excluded.topics
+        ELSE meetings.topics
     END
 ```
 
-**Why:** Adapters may fetch same meeting multiple times (schedule changes, status updates). We don't want to erase already-processed summaries.
+**Why:** Adapters may fetch same meeting multiple times (schedule changes, status updates). UPSERT preserves existing summaries while updating metadata.
+
+### Normalized Topics
+
+**Pattern:** Topics stored in separate tables (meeting_topics, item_topics, matter_topics) instead of JSON arrays.
+
+**Benefits:**
+- Efficient filtering: `WHERE topic = 'housing'` uses index
+- GIN indexes for topic searches
+- No JSON array scanning
+
+**Trade-off:** More joins, but PostgreSQL handles them efficiently with proper indexes.
 
 ---
 
@@ -991,16 +1135,16 @@ ON CONFLICT(id) DO UPDATE SET
 
 ## Supporting Modules
 
-### `models.py` - Data Models (393 lines)
+### `models.py` - Data Models (263 lines)
 
-**Dataclasses representing core entities.**
+**Pydantic dataclasses with runtime validation.**
 
 ```python
 from database.models import City, Meeting, AgendaItem, Matter
 
 # All models have:
 # - .to_dict() → Convert to dict for JSON serialization
-# - .from_db_row(row) → Create from SQLite row
+# - Runtime validation via Pydantic dataclasses
 ```
 
 **Models:**
@@ -1016,9 +1160,9 @@ from database.models import City, Meeting, AgendaItem, Matter
 
 ---
 
-### `id_generation.py` - Matter ID Generation (148 lines)
+### `id_generation.py` - Matter ID Generation (332 lines)
 
-**Deterministic, collision-free ID generation for matters.**
+**Deterministic, collision-free ID generation for matters with title-based fallback.**
 
 ```python
 from database.id_generation import generate_matter_id, validate_matter_id
@@ -1057,74 +1201,4 @@ banana = extract_banana_from_matter_id("nashvilleTN_7a8f3b2c1d9e4f5a")
 
 ---
 
-### `search_utils.py` - Search Utilities (433 lines)
-
-**Full-text search in meeting and item summaries.**
-
-```python
-from database.search_utils import search_summaries, search_matters, strip_markdown
-
-# Search in meeting/item summaries (individual occurrences)
-results = search_summaries(
-    search_term="affordable housing",
-    city_banana="sanfranciscoCA",
-    state="CA",
-    case_sensitive=False
-)
-
-# Returns list of dicts:
-# [
-#     {
-#         "type": "meeting",  # or "item"
-#         "url": "https://engagic.org/sanfranciscoCA/2025-11-10-2111",
-#         "city": "San Francisco, CA",
-#         "meeting_title": "Board of Supervisors",
-#         "context": "...affordable housing project...",
-#         "summary": "Full summary markdown...",
-#         "topics": ["housing", "zoning"],
-#         ...
-#     }
-# ]
-
-# Search in matter canonical summaries (deduplicated)
-matters = search_matters(
-    search_term="zoning amendment",
-    city_banana="nashvilleTN"
-)
-
-# Returns list of dicts:
-# [
-#     {
-#         "type": "matter",
-#         "matter_id": "nashvilleTN_7a8f3b2c",
-#         "matter_file": "BL2025-1098",
-#         "title": "Zoning Amendment for District 12",
-#         "summary": "Canonical summary...",
-#         "topics": ["zoning", "development"],
-#         "appearance_count": 3,
-#         "timeline_url": "https://engagic.org/nashvilleTN?view=matters#bl2025-1098"
-#     }
-# ]
-
-# Strip markdown for display
-clean_text = strip_markdown("**Bold** and *italic* text")
-# Returns: "Bold and italic text"
-
-# Build Engagic URL
-url = build_engagic_url("nashvilleTN", "2025-11-10T14:00:00Z", "2111")
-# Returns: "https://engagic.org/nashvilleTN/2025-11-10-2111"
-```
-
-**Functions:**
-- **`search_summaries()`** - Search meeting/item summaries (individual occurrences)
-- **`search_matters()`** - Search canonical matter summaries (deduplicated)
-- **`strip_markdown()`** - Remove markdown formatting for clean display
-- **`build_engagic_url()`** - Construct URLs with date-id format
-- **`format_date()`** - Convert ISO dates to YYYY_MM_DD
-- **`slugify()`** - Convert text to URL-friendly slugs
-
-**Use case:** Full-text search across all civic meeting content.
-
----
-
-**Last Updated:** 2025-11-20 (Line Count Verification)
+**Last Updated:** 2025-11-23 (PostgreSQL migration, accurate line counts, added UserlandRepository)

@@ -2,8 +2,6 @@
 Meeting API routes
 """
 
-import sys
-import os
 from fastapi import APIRouter, HTTPException, Depends
 from server.models.requests import ProcessRequest
 from server.services.meeting import get_meeting_with_items
@@ -77,13 +75,6 @@ async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)
 async def get_random_best_meeting():
     """Get a random high-quality meeting summary for showcasing"""
     try:
-        # Import the quality checker
-        sys.path.insert(
-            0,
-            os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            ),
-        )
         from scripts.summary_quality_checker import SummaryQualityChecker
 
         checker = SummaryQualityChecker()
