@@ -8,6 +8,7 @@ Routes, services, and utilities are organized into focused modules.
 import logging
 from contextlib import asynccontextmanager
 
+import stripe
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -73,12 +74,12 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app with lifespan
 app = FastAPI(title="engagic API", description="EGMI", lifespan=lifespan)
 
-# CORS configuration
+# CORS configuration - explicit methods and headers for security
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
     allow_credentials=True,
 )
 
@@ -91,6 +92,13 @@ rate_limiter = SQLiteRateLimiter(
     requests_limit=config.RATE_LIMIT_REQUESTS,
     window_seconds=config.RATE_LIMIT_WINDOW,
 )
+
+# Initialize Stripe at app startup (not per-request)
+if config.STRIPE_SECRET_KEY:
+    stripe.api_key = config.STRIPE_SECRET_KEY
+    logger.info("Stripe payment processing initialized")
+else:
+    logger.warning("STRIPE_SECRET_KEY not set - payment features disabled")
 
 # Initialize JWT for authentication
 if not config.USERLAND_JWT_SECRET:

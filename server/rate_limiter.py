@@ -1,5 +1,6 @@
 """Rate limit handling for API requests"""
 
+import hashlib
 import time
 import random
 import sqlite3
@@ -267,12 +268,17 @@ class SQLiteRateLimiter:
                     (client_ip, real_ip, ban_until, ban_reason, violations_1h)
                 )
                 conn.commit()
+                # Hash real_ip in logs for privacy (full IP stored in DB for nginx blocking)
+                real_ip_hash = hashlib.sha256(real_ip.encode()).hexdigest()[:12] if real_ip else "unknown"
                 logger.warning(
-                    f"Temporary ban imposed on {client_ip[:16]} (real IP: {real_ip}) - {ban_reason} - banned until {ban_until}"
+                    f"Temporary ban imposed on {client_ip[:16]} (real IP hash: {real_ip_hash}) - {ban_reason} - banned until {ban_until}"
                 )
 
                 # Export blocked IPs for nginx
                 self.export_blocked_ips()
+
+                # Cleanup old temp_bans (90-day retention for GDPR)
+                self._cleanup_old_bans(conn)
 
             # Cleanup old violations (keep last 7 days)
             cleanup_cutoff = current_time - 604800
@@ -475,6 +481,23 @@ class SQLiteRateLimiter:
                     logger.debug(f"Cleaned up {deleted} old rate limit entries")
         except Exception as e:
             logger.error(f"Failed to cleanup rate limit entries: {e}")
+
+    def _cleanup_old_bans(self, conn):
+        """Remove expired temp_bans older than 90 days (GDPR retention policy)"""
+        try:
+            # Delete bans that expired more than 90 days ago
+            ninety_days_ago = time.time() - (90 * 24 * 3600)
+            conn.execute(
+                "DELETE FROM temp_bans WHERE ban_until < ?",
+                (ninety_days_ago,)
+            )
+            deleted = conn.total_changes
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} expired temp_bans (90-day retention)")
+                # Re-export nginx blocklist after cleanup
+                self.export_blocked_ips()
+        except Exception as e:
+            logger.error(f"Failed to cleanup old temp_bans: {e}")
 
     def reset_client(self, client_ip: str):
         """Reset rate limit for specific client"""
