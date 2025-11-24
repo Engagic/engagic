@@ -105,12 +105,31 @@ finally:
 
 ---
 
+## Deployment Requirements
+
+### Database Schema Setup (REQUIRED)
+
+The userland schema must be applied to PostgreSQL before the system can function:
+
+```bash
+# On VPS
+ssh root@engagic
+cd /root/engagic
+python3 -m userland.scripts.setup_db
+```
+
+This creates the `userland` schema and all required tables. See `userland/DEPLOYMENT.md` for full instructions.
+
+**Status**: Schema defined, awaiting VPS deployment.
+
+---
+
 ## Migration Complete
 
 **Status**: 100% complete - All userland code now uses async PostgreSQL
 
-**No remaining work** - The entire userland system (API routes, background scripts, admin utilities) has been successfully migrated from SQLite to PostgreSQL with async/await throughout.
+**Next Step**: Apply schema on VPS (see above)
 
 ---
 
-**Last Updated:** 2025-11-23 (Migration Complete)
+**Last Updated:** 2025-11-24 (Added schema setup script)
