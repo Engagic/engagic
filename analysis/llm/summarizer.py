@@ -9,6 +9,7 @@ Responsibilities:
 - Parse and validate responses
 """
 
+import asyncio
 import os
 import json
 import time
@@ -283,7 +284,7 @@ class GeminiSummarizer:
                 original_error=e
             ) from e
 
-    def summarize_batch(
+    async def summarize_batch(
         self,
         item_requests: List[Dict[str, Any]],
         shared_context: Optional[str] = None,
@@ -397,7 +398,7 @@ class GeminiSummarizer:
                 )
 
                 # Process chunk with retry logic (pass cache_name and shared_context)
-                chunk_results = self._process_batch_chunk(chunk, chunk_num, cache_name, shared_context)
+                chunk_results = await self._process_batch_chunk(chunk, chunk_num, cache_name, shared_context)
 
                 # Track stats
                 chunk_successful = sum(1 for r in chunk_results if r.get("success"))
@@ -423,7 +424,7 @@ class GeminiSummarizer:
                         "waiting before next chunk for quota refill",
                         delay_seconds=delay
                     )
-                    time.sleep(delay)
+                    await asyncio.sleep(delay)
 
         finally:
             # Cleanup: Delete cache after all chunks processed
@@ -605,7 +606,7 @@ class GeminiSummarizer:
                 "error": str(e),
             }
 
-    def _wait_for_batch_completion(
+    async def _wait_for_batch_completion(
         self,
         batch_name: str,
         max_wait_time: int = 1800,
@@ -654,12 +655,12 @@ class GeminiSummarizer:
                     state=state_name
                 )
 
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
             waited_time += poll_interval
 
         raise TimeoutError(f"Batch timed out after {max_wait_time}s")
 
-    def _process_batch_chunk(
+    async def _process_batch_chunk(
         self,
         chunk_requests: List[Dict[str, Any]],
         chunk_num: int,
@@ -783,7 +784,7 @@ class GeminiSummarizer:
                 logger.info("submitted batch", batch_name=batch_job.name)
 
                 # Wait for batch completion
-                self._wait_for_batch_completion(batch_job.name)
+                await self._wait_for_batch_completion(batch_job.name)
 
                 # Download and parse results
                 batch_job = self.client.batches.get(name=batch_job.name)
@@ -852,7 +853,7 @@ class GeminiSummarizer:
                         max_retries=max_retries,
                         backoff_delay_seconds=backoff_delay
                     )
-                    time.sleep(backoff_delay)
+                    await asyncio.sleep(backoff_delay)
                     continue
 
                 # Final attempt failed or non-quota error
