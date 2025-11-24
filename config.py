@@ -54,8 +54,7 @@ class Config:
         self.POSTGRES_POOL_MIN_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MIN_SIZE", "5"))
         self.POSTGRES_POOL_MAX_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MAX_SIZE", "20"))
 
-        # Userland database configuration (for auth and user features - SQLite)
-        self.USERLAND_DB_PATH = os.getenv("USERLAND_DB", f"{self.DB_DIR}/userland.db")
+        # Userland authentication
         self.USERLAND_JWT_SECRET = os.getenv("USERLAND_JWT_SECRET")
 
         # Default log path to repo-relative
@@ -80,6 +79,18 @@ class Config:
         # Payment processing
         self.STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
         self.STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
+
+        # Email (Mailgun)
+        self.MAILGUN_API_KEY = os.getenv("MAILGUN_API_KEY")
+        self.MAILGUN_DOMAIN = os.getenv("MAILGUN_DOMAIN")
+        self.MAILGUN_FROM_EMAIL = os.getenv(
+            "MAILGUN_FROM_EMAIL",
+            f"alerts@{self.MAILGUN_DOMAIN}" if self.MAILGUN_DOMAIN else None
+        )
+
+        # Cookie settings (userland auth)
+        self.COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
+        self.COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")
 
         # Frontend URL for payment redirects
         self.FRONTEND_URL = os.getenv(

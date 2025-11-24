@@ -18,22 +18,18 @@ import asyncio
 import os
 import re
 import sys
-import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from config import get_logger
 from database.db_postgres import Database
 from userland.email.emailer import EmailService
 from userland.email.templates import DARK_MODE_CSS
 
-logging.basicConfig(
-    level=os.getenv('LOG_LEVEL', 'INFO'),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("engagic.weekly_digest")
+logger = get_logger(__name__)
 
 
 def highlight_keywords(text: str, keywords: List[str]) -> str:
@@ -483,7 +479,7 @@ async def send_weekly_digest():
                 if keyword_matches:
                     subject += f" - {len(keyword_matches)} keyword match{'es' if len(keyword_matches) > 1 else ''}"
 
-                email_service.send_email(
+                await email_service.send_email(
                     to_email=user.email,
                     subject=subject,
                     html_body=html

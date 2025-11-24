@@ -5,15 +5,15 @@ Uses engagic's database directly for efficient SQL-based matching.
 Dual-track matching: string-based (granular) + matter-based (deduplicated)
 """
 
-import logging
 from datetime import datetime, timedelta
 from typing import List, Dict
 from uuid import uuid4
 
+from config import get_logger
 from database.db_postgres import Database
 from userland.database.models import Alert, AlertMatch
 
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__)
 
 
 async def match_alert(
