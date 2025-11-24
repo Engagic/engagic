@@ -77,7 +77,7 @@ def parse_legislation_attachments(html: str, base_url: str) -> List[Dict[str, An
             'type': file_type,
         })
 
-    logger.debug(f"[HTMLParser:Legistar] Found {len(attachments)} attachments")
+    logger.debug("found attachments", parser="legistar", attachment_count=len(attachments))
 
     return attachments
 
@@ -114,14 +114,14 @@ def parse_novusagenda_html_agenda(html: str) -> Dict[str, Any]:
     # Look for common patterns: tables, divs with item classes, etc.
 
     # Log page structure for debugging
-    logger.debug(f"[HTMLParser:NovusAgenda] HTML length: {len(html)} characters")
+    logger.debug("parsing NovusAgenda HTML", parser="novusagenda", html_length=len(html))
 
     # Pattern 1: Look for links to CoverSheet.aspx (item detail pages)
     # Note: NovusAgenda uses "CoverSheet" with both C and S capitalized
     coversheet_links = soup.find_all('a', href=re.compile(r'CoverSheet\.aspx\?ItemID=', re.IGNORECASE))
 
     if coversheet_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(coversheet_links)} Coversheet links")
+        logger.info("found coversheet links", parser="novusagenda", link_count=len(coversheet_links))
 
         for sequence, link in enumerate(coversheet_links, 1):
             # Extract ItemID from href
@@ -151,26 +151,26 @@ def parse_novusagenda_html_agenda(html: str) -> Dict[str, Any]:
     # Try finding tables with agenda item data
     agenda_tables = soup.find_all('table', class_=re.compile(r'agenda', re.I))
     if agenda_tables:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(agenda_tables)} agenda tables")
+        logger.info("found agenda tables", parser="novusagenda", table_count=len(agenda_tables))
 
     # Pattern 3: Look for PDF links that might be attachments
     pdf_links = soup.find_all('a', href=re.compile(r'\.pdf$|DisplayAgendaPDF', re.I))
     if pdf_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(pdf_links)} PDF links")
+        logger.info("found PDF links", parser="novusagenda", pdf_count=len(pdf_links))
 
     # Pattern 4: Look for "Online Agenda" / "HTML Agenda" / "View Agenda" links
     agenda_view_links = soup.find_all('a', text=re.compile(r'(online|html|view).*agenda', re.I))
     if agenda_view_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(agenda_view_links)} agenda view links")
+        logger.info("found agenda view links", parser="novusagenda", link_count=len(agenda_view_links))
         for link in agenda_view_links:
-            logger.debug(f"[HTMLParser:NovusAgenda] Agenda view link: {link.get('onClick', link.get('href', 'no href'))}")
+            logger.debug("agenda view link", parser="novusagenda", link_action=link.get('onClick', link.get('href', 'no href')))
 
     # Pattern 5: Look for image-based agenda links (common pattern)
     img_links = soup.find_all('img', alt=re.compile(r'agenda|item', re.I))
     if img_links:
-        logger.info(f"[HTMLParser:NovusAgenda] Found {len(img_links)} agenda/item images")
+        logger.info("found agenda/item images", parser="novusagenda", image_count=len(img_links))
         for img in img_links[:5]:  # Log first 5
-            logger.debug(f"[HTMLParser:NovusAgenda] Image alt: {img.get('alt')}")
+            logger.debug("image alt text", parser="novusagenda", alt_text=img.get('alt'))
 
     logger.info(
         f"[HTMLParser:NovusAgenda] Extracted {len(items)} items from HTML"
@@ -241,7 +241,7 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             # Normalize header text (remove nbsp, lowercase)
             header_text = th.get_text(strip=True).replace('\xa0', ' ').lower()
             column_map[header_text] = i
-        logger.debug(f"[HTMLParser:Legistar] Column map: {column_map}")
+        logger.debug("column map created", parser="legistar", column_map=column_map)
     else:
         # Fallback: assume standard layout if no header found
         logger.warning("[HTMLParser:Legistar] No header row found, using default column positions")
@@ -258,14 +258,14 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
         logger.debug("[HTMLParser:Legistar] No rgRow/rgAltRow rows found")
         return {'participation': {}, 'items': []}
 
-    logger.debug(f"[HTMLParser:Legistar] Found {len(rows)} rows in RadGrid")
+    logger.debug("found RadGrid rows", parser="legistar", row_count=len(rows))
 
     for sequence, row in enumerate(rows, 1):
         try:
             cells = row.find_all('td')
 
             if len(cells) < 5:
-                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has only {len(cells)} cells, skipping")
+                logger.debug("row has too few cells, skipping", parser="legistar", row=sequence, cell_count=len(cells))
                 continue
 
             # Extract File # and legislation ID (always column 0)
@@ -273,7 +273,7 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             file_link = file_cell.find('a', href=lambda x: x and 'LegislationDetail.aspx' in x)
 
             if not file_link:
-                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no LegislationDetail link, skipping")
+                logger.debug("row has no LegislationDetail link, skipping", parser="legistar", row=sequence)
                 continue
 
             file_number = file_link.get_text(strip=True)
@@ -284,7 +284,7 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             legislation_id = legislation_id_match.group(1) if legislation_id_match else None
 
             if not legislation_id:
-                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no ID in link, skipping")
+                logger.debug("row has no ID in link, skipping", parser="legistar", row=sequence)
                 continue
 
             # Extract fields using column map
@@ -305,7 +305,7 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             item_title = title if title else name
 
             if not item_title:
-                logger.debug(f"[HTMLParser:Legistar] Row {sequence} has no title, skipping")
+                logger.debug("row has no title, skipping", parser="legistar", row=sequence)
                 continue
 
             # Build full legislation detail URL for potential future attachment fetching

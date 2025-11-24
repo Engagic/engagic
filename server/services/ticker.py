@@ -6,7 +6,7 @@ import re
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from database.db import UnifiedDatabase
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -126,7 +126,7 @@ def _generate_item_anchor(item: Dict[str, Any]) -> str:
     return f"item-{item['id']}"
 
 
-def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Optional[Dict[str, str]]:
+async def generate_ticker_item(meeting: Dict[str, Any], db: Database) -> Optional[Dict[str, str]]:
     """
     Generate a single ticker item from a meeting.
 
@@ -141,7 +141,7 @@ def generate_ticker_item(meeting: Dict[str, Any], db: UnifiedDatabase) -> Option
         return None
 
     # Look up city from database (single source of truth)
-    city = db.get_city(banana=banana)
+    city = await db.get_city(banana=banana)
     if not city:
         return None
 

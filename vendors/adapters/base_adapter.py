@@ -14,28 +14,13 @@ from typing import Optional, List, Dict, Any, Iterator
 from datetime import datetime
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from config import get_logger
 from server.metrics import metrics
+from vendors.session_manager import SessionManager
+from exceptions import VendorHTTPError
 
 logger = get_logger(__name__).bind(component="vendor")
-
-# Browser-like headers to avoid bot detection
-DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Cache-Control": "max-age=0",
-}
 
 
 class BaseAdapter:
@@ -58,51 +43,22 @@ class BaseAdapter:
 
         self.slug = city_slug
         self.vendor = vendor
-        self.session = self._create_session()
+        # Use shared session for connection pooling (2-5x faster than per-adapter sessions)
+        self.session = SessionManager.get_session(vendor)
 
-        logger.info(f"Initialized {vendor} adapter for {city_slug}")
+        logger.info("initialized adapter", vendor=vendor, city_slug=city_slug)
 
     def __enter__(self):
         """Context manager entry - returns self for 'with' statement"""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - cleanup session on exit"""
-        if hasattr(self, "session"):
-            self.session.close()
+        """Context manager exit - no cleanup needed (shared session)"""
         return False
 
     def close(self):
-        """Explicit cleanup method for non-context-manager usage"""
-        if hasattr(self, "session"):
-            self.session.close()
-
-    def _create_session(self) -> requests.Session:
-        """
-        Create HTTP session with retry logic and proper headers.
-
-        Retry strategy:
-        - 3 total retries
-        - Exponential backoff (1s, 2s, 4s)
-        - Retry on 500, 502, 503, 504 (server errors only)
-        - NOT 429: Rate limiting prevents this, if we hit it our delays are wrong
-        """
-        session = requests.Session()
-        session.headers.update(DEFAULT_HEADERS)
-
-        # Retry only on server errors, not rate limits (we prevent those)
-        retry_strategy = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[500, 502, 503, 504],
-            allowed_methods=["GET", "POST", "HEAD"],
-        )
-
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-
-        return session
+        """No-op - session is shared across adapters, managed by SessionManager"""
+        pass
 
     def _get(self, url: str, **kwargs) -> requests.Response:
         """
@@ -176,19 +132,36 @@ class BaseAdapter:
             metrics.vendor_requests.labels(vendor=self.vendor, status="timeout").inc()
             metrics.record_error(component="vendor", error=e)
             logger.error("vendor request timeout", vendor=self.vendor, slug=self.slug, url=url[:100], duration_seconds=round(duration, 2))
-            raise
+            raise VendorHTTPError(
+                f"Request timeout after {duration:.1f}s",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
         except requests.HTTPError as e:
             duration = time.time() - start_time
-            metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{e.response.status_code}").inc()
+            status_code = e.response.status_code if e.response else None
+            metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{status_code}").inc()
             metrics.record_error(component="vendor", error=e)
-            logger.error("vendor http error", vendor=self.vendor, slug=self.slug, status_code=e.response.status_code, url=url[:100], duration_seconds=round(duration, 2))
-            raise
+            logger.error("vendor http error", vendor=self.vendor, slug=self.slug, status_code=status_code, url=url[:100], duration_seconds=round(duration, 2))
+            raise VendorHTTPError(
+                f"HTTP {status_code} error",
+                vendor=self.vendor,
+                status_code=status_code,
+                url=url,
+                city_slug=self.slug
+            ) from e
         except requests.RequestException as e:
             duration = time.time() - start_time
             metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
             metrics.record_error(component="vendor", error=e)
             logger.error("vendor request failed", vendor=self.vendor, slug=self.slug, url=url[:100], error=str(e), error_type=type(e).__name__, duration_seconds=round(duration, 2))
-            raise
+            raise VendorHTTPError(
+                f"Request failed: {str(e)}",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
 
     def _post(self, url: str, **kwargs) -> requests.Response:
         """Make POST request with error handling"""
@@ -227,7 +200,12 @@ class BaseAdapter:
             metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
             metrics.record_error(component="vendor", error=e)
             logger.error("vendor POST failed", vendor=self.vendor, slug=self.slug, url=url[:100], error=str(e), error_type=type(e).__name__, duration_seconds=round(duration, 2))
-            raise
+            raise VendorHTTPError(
+                f"POST request failed: {str(e)}",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
         """
@@ -381,12 +359,16 @@ class BaseAdapter:
                     absolute_url = urljoin(url, href)
                     pdfs.append(absolute_url)
 
-            logger.debug(f"[{self.vendor}:{self.slug}] Found {len(pdfs)} PDFs at {url}")
+            logger.debug("found PDFs", vendor=self.vendor, slug=self.slug, pdf_count=len(pdfs), url=url[:100])
             return pdfs
 
         except Exception as e:
             logger.warning(
-                f"[{self.vendor}:{self.slug}] PDF discovery failed for {url}: {e}"
+                "pdf discovery failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                url=url[:100],
+                error=str(e)
             )
             return []
 

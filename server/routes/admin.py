@@ -5,10 +5,12 @@ Admin API routes
 import time
 import httpx
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi import APIRouter, HTTPException, Header, Depends
 
 from config import config, get_logger
 from server.models.requests import ProcessRequest
+from server.dependencies import get_db
+from database.db_postgres import Database
 
 logger = get_logger(__name__)
 
@@ -87,7 +89,7 @@ async def force_process_meeting(
 
 @router.get("/dead-letter-queue")
 async def get_dead_letter_queue(
-    request: Request,
+    db: Database = Depends(get_db),
     is_admin: bool = Depends(verify_admin_token)
 ):
     """Get jobs in dead letter queue (failed after 3 retries)
@@ -95,29 +97,27 @@ async def get_dead_letter_queue(
     Returns list of failed jobs with error messages for debugging.
     These jobs require manual intervention or code fixes.
     """
-    from database.db import UnifiedDatabase
-
-    db: UnifiedDatabase = request.app.state.db
 
     try:
         # Get dead letter jobs from queue
-        dead_jobs = db.conn.execute("""
-            SELECT
-                id,
-                job_type,
-                meeting_id,
-                banana,
-                source_url,
-                error_message,
-                retry_count,
-                created_at,
-                started_at,
-                failed_at
-            FROM queue
-            WHERE status = 'dead_letter'
-            ORDER BY failed_at DESC
-            LIMIT 100
-        """).fetchall()
+        async with db.pool.acquire() as conn:
+            dead_jobs = await conn.fetch("""
+                SELECT
+                    id,
+                    job_type,
+                    meeting_id,
+                    banana,
+                    source_url,
+                    error_message,
+                    retry_count,
+                    created_at,
+                    started_at,
+                    failed_at
+                FROM queue
+                WHERE status = 'dead_letter'
+                ORDER BY failed_at DESC
+                LIMIT 100
+            """)
 
         jobs_list = []
         for job in dead_jobs:
@@ -129,8 +129,8 @@ async def get_dead_letter_queue(
                 "source_url": job["source_url"],
                 "error": job["error_message"],
                 "retries": job["retry_count"],
-                "created": job["created_at"],
-                "failed": job["failed_at"],
+                "created": str(job["created_at"]),
+                "failed": str(job["failed_at"]) if job["failed_at"] else None,
             })
 
         # Alert if too many failures
@@ -148,7 +148,7 @@ async def get_dead_letter_queue(
         }
 
     except Exception as e:
-        logger.error(f"Failed to fetch dead letter queue: {e}")
+        logger.error("failed to fetch dead letter queue", error=str(e))
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch dead letter queue: {str(e)}"
@@ -205,7 +205,7 @@ async def prometheus_query(
             detail="Prometheus query timeout"
         )
     except Exception as e:
-        logger.error(f"Prometheus query error: {str(e)}")
+        logger.error("prometheus query error", error=str(e))
         raise HTTPException(
             status_code=500,
             detail=f"Prometheus query failed: {str(e)}"
@@ -292,7 +292,7 @@ async def get_activity_feed(
         }
 
     except Exception as e:
-        logger.error(f"Error retrieving activity feed: {str(e)}")
+        logger.error("error retrieving activity feed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to retrieve activity feed: {str(e)}")
 
 
@@ -335,7 +335,7 @@ async def get_live_metrics(is_admin: bool = Depends(verify_admin_token)):
         }
 
     except Exception as e:
-        logger.error(f"Error retrieving live metrics: {str(e)}")
+        logger.error("error retrieving live metrics", error=str(e))
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve metrics: {str(e)}"

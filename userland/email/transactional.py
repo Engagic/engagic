@@ -15,7 +15,6 @@ from userland.settings import (
     APP_URL,
 )
 from userland.email.templates import (
-    DARK_MODE_CSS,
     email_wrapper_start,
     email_wrapper_end,
 )

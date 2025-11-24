@@ -71,7 +71,7 @@ class CivicClerkAdapter(BaseAdapter):
         data = response.json()
 
         meetings = data.get("value", [])
-        logger.info(f"[civicclerk:{self.slug}] Retrieved {len(meetings)} meetings")
+        logger.info("retrieved meetings from API", vendor="civicclerk", slug=self.slug, meeting_count=len(meetings))
 
         for meeting in meetings:
             # Find agenda packet in published files

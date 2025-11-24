@@ -125,7 +125,7 @@ class TopicNormalizer:
                     self._track_unknown_topic(topic_lower)
 
         result = sorted(list(canonical_topics))
-        logger.debug(f"[TopicNormalizer] {topics} -> {result}")
+        logger.debug("normalized topics", input_topics=topics, output_topics=result)
         return result
 
     def _contains_word(self, text: str, word: str) -> bool:
@@ -189,7 +189,7 @@ class TopicNormalizer:
                 return canonical
 
         # No match - log and return normalized original
-        logger.debug(f"[TopicNormalizer] Unknown single topic: '{topic}'")
+        logger.debug("unknown single topic", topic=topic)
         return topic_lower
 
     def get_display_name(self, canonical_topic: str) -> str:

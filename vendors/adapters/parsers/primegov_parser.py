@@ -76,7 +76,7 @@ def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     meeting_items = soup.find_all('div', class_='meeting-item')
 
     if meeting_items:
-        logger.debug(f"[HTMLParser:PrimeGov] Found {len(meeting_items)} meeting-item divs (LA pattern)")
+        logger.debug("found meeting-item divs (LA pattern)", parser="primegov", item_count=len(meeting_items))
         for meeting_item_div in meeting_items:
             item_dict = _extract_la_pattern_item(meeting_item_div, soup)
             if item_dict:
@@ -84,7 +84,7 @@ def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     else:
         # Fallback to older pattern (Palo Alto): direct agenda-item divs
         agenda_items = soup.find_all('div', class_='agenda-item')
-        logger.debug(f"[HTMLParser:PrimeGov] Found {len(agenda_items)} agenda-item divs (Palo Alto pattern)")
+        logger.debug("found agenda-item divs (Palo Alto pattern)", parser="primegov", item_count=len(agenda_items))
 
         for sequence, item_div in enumerate(agenda_items, 1):
             item_dict = _extract_palo_alto_pattern_item(item_div, soup, sequence)
@@ -129,7 +129,7 @@ def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup) -> Optional[
     # Find agenda-item div inside
     agenda_item_div = meeting_item_div.find('div', class_='agenda-item')
     if not agenda_item_div:
-        logger.debug(f"[HTMLParser:PrimeGov:LA] Item {item_id} missing agenda-item div, skipping")
+        logger.debug("item missing agenda-item div, skipping", parser="primegov", pattern="LA", item_id=item_id)
         return None
 
     # Extract matter metadata from forcepopulate table
@@ -142,7 +142,7 @@ def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup) -> Optional[
         rows = forcepopulate_table.find_all('tr')
 
         # First row: matter_file (colspan=2)
-        if len(rows) > 0:
+        if rows:
             first_cell = rows[0].find('td', colspan='2')
             if first_cell:
                 matter_file = first_cell.get_text(strip=True) or None
@@ -213,7 +213,7 @@ def _extract_palo_alto_pattern_item(item_div, soup: BeautifulSoup, sequence: int
     # Get item ID from div (format: "AgendaItem_12345")
     item_full_id = item_div.get('id', '')
     if not item_full_id:
-        logger.warning(f"[HTMLParser:PrimeGov:PaloAlto] Agenda item {sequence} has no ID, skipping")
+        logger.warning("agenda item has no ID, skipping", parser="primegov", pattern="PaloAlto", sequence=sequence)
         return None
 
     # Extract numeric ID

@@ -2,9 +2,10 @@
 Topic search API routes
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from server.models.requests import TopicSearchRequest
-from database.db import UnifiedDatabase
+from server.dependencies import get_db
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -12,11 +13,6 @@ logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/api")
-
-
-def get_db(request: Request) -> UnifiedDatabase:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
 
 
 @router.get("/topics")
@@ -48,7 +44,7 @@ async def get_all_topics():
 
 
 @router.post("/search/by-topic")
-async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Depends(get_db)):
+async def search_by_topic(request: TopicSearchRequest, db: Database = Depends(get_db)):
     """Search meetings by topic (Phase 1 - Topic Extraction)"""
     try:
         from analysis.topics.normalizer import get_normalizer
@@ -60,7 +56,7 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
         logger.info("topic search", query=request.topic, normalized=normalized_topic, city=request.banana)
 
         # Search meetings by topic using db method
-        meetings = db.search_meetings_by_topic(
+        meetings = await db.search_meetings_by_topic(
             topic=normalized_topic,
             city_banana=request.banana,
             limit=request.limit
@@ -70,7 +66,7 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
         results = []
         for meeting in meetings:
             # Get items with this topic using db method
-            matching_items = db.get_items_by_topic(meeting.id, normalized_topic)
+            matching_items = await db.get_items_by_topic(meeting.id, normalized_topic)
 
             results.append({
                 "meeting": meeting.to_dict(),
@@ -101,11 +97,11 @@ async def search_by_topic(request: TopicSearchRequest, db: UnifiedDatabase = Dep
 
 
 @router.get("/topics/popular")
-async def get_popular_topics(db: UnifiedDatabase = Depends(get_db)):
+async def get_popular_topics(db: Database = Depends(get_db)):
     """Get most common topics across all meetings (for UI suggestions)"""
     try:
         # Get popular topics using db method
-        topic_counts = db.get_popular_topics(limit=20)
+        topic_counts = await db.get_popular_topics(limit=20)
 
         from analysis.topics.normalizer import get_normalizer
         normalizer = get_normalizer()

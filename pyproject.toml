@@ -24,6 +24,7 @@ dependencies = [
     "uv>=0.9.0",
     "aiohttp>=3.12.15",
     "anthropic>=0.64.0",
+    "asyncpg>=0.30.0",
     "beautifulsoup4>=4.13.5",
     "click>=8.1.0",
     "email-validator>=2.0.0",
@@ -42,8 +43,6 @@ dependencies = [
     "python-dateutil>=2.8.2",
     "qrcode>=8.0",
     "requests",
-    "sqlalchemy<2.0",
-    "sqlalchemy-mate<2.0",
     "stripe>=11.3.0",
     "structlog>=24.1.0",
     "uszipcode>=1.0.1",
@@ -62,6 +61,14 @@ engagic-conductor = "pipeline.conductor:main"
 [project.optional-dependencies]
 premium = [
     "mistralai>=1.0.0",  # For Tier 2 OCR processing (paid customers only)
+]
+test = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-aiohttp>=1.0.5",
+    "pytest-cov>=6.0.0",
+    "pytest-timeout>=2.3.1",
+    "httpx>=0.28.1",  # For HTTP mocking in tests
 ]
 
 [tool.pyright]

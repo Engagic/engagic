@@ -29,20 +29,34 @@ class Config:
     """Configuration management for engagic"""
 
     def __init__(self):
-        # Database configuration - unified database (Phase 1 refactor)
+        # Database configuration - PostgreSQL (migrated, production)
         # Default to VPS path if it exists, otherwise repo-relative for local dev
         vps_path = "/root/engagic/data"
         local_path = os.path.join(os.getcwd(), "data")
         default_data_dir = vps_path if os.path.exists(vps_path) else local_path
         self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", default_data_dir)
+
+        # DEPRECATED: Old SQLite paths (kept for migration script reference only)
         self.UNIFIED_DB_PATH = os.getenv(
             "ENGAGIC_UNIFIED_DB", f"{self.DB_DIR}/engagic.db"
         )
-
-        # Legacy paths kept for migration script only
         self.LOCATIONS_DB_PATH = f"{self.DB_DIR}/locations.db"
         self.MEETINGS_DB_PATH = f"{self.DB_DIR}/meetings.db"
         self.ANALYTICS_DB_PATH = f"{self.DB_DIR}/analytics.db"
+
+        # PostgreSQL configuration (production database)
+        self.USE_POSTGRES = os.getenv("ENGAGIC_USE_POSTGRES", "false").lower() == "true"
+        self.POSTGRES_HOST = os.getenv("ENGAGIC_POSTGRES_HOST", "localhost")
+        self.POSTGRES_PORT = int(os.getenv("ENGAGIC_POSTGRES_PORT", "5432"))
+        self.POSTGRES_DB = os.getenv("ENGAGIC_POSTGRES_DB", "engagic")
+        self.POSTGRES_USER = os.getenv("ENGAGIC_POSTGRES_USER", "engagic")
+        self.POSTGRES_PASSWORD = os.getenv("ENGAGIC_POSTGRES_PASSWORD", "")
+        self.POSTGRES_POOL_MIN_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MIN_SIZE", "5"))
+        self.POSTGRES_POOL_MAX_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MAX_SIZE", "20"))
+
+        # Userland database configuration (for auth and user features - SQLite)
+        self.USERLAND_DB_PATH = os.getenv("USERLAND_DB", f"{self.DB_DIR}/userland.db")
+        self.USERLAND_JWT_SECRET = os.getenv("USERLAND_JWT_SECRET")
 
         # Default log path to repo-relative
         default_log_path = os.path.join(os.getcwd(), "engagic.log")
@@ -134,6 +148,20 @@ class Config:
         """Get the appropriate API key for LLM services - prioritize Gemini"""
         return self.GEMINI_API_KEY or self.LLM_API_KEY or self.ANTHROPIC_API_KEY
 
+    def get_postgres_dsn(self) -> str:
+        """Build PostgreSQL DSN for asyncpg connection
+
+        Returns:
+            PostgreSQL connection string (DSN)
+
+        Example:
+            postgresql://engagic:password@localhost:5432/engagic
+        """
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
     def ensure_data_dir(self) -> str:
         """Lazily create data directory if it doesn't exist
 
@@ -156,6 +184,10 @@ class Config:
         return {
             "db_dir": self.DB_DIR,
             "database": os.path.basename(self.UNIFIED_DB_PATH),
+            "postgres_enabled": self.USE_POSTGRES,
+            "postgres_host": self.POSTGRES_HOST if self.USE_POSTGRES else None,
+            "postgres_db": self.POSTGRES_DB if self.USE_POSTGRES else None,
+            "postgres_pool_size": f"{self.POSTGRES_POOL_MIN_SIZE}-{self.POSTGRES_POOL_MAX_SIZE}" if self.USE_POSTGRES else None,
             "api_host": self.API_HOST,
             "api_port": self.API_PORT,
             "debug": self.DEBUG,

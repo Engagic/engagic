@@ -11,7 +11,8 @@ from server.services.search import (
 )
 from server.utils.geo import is_state_query
 from server.metrics import metrics
-from database.db import UnifiedDatabase
+from server.dependencies import get_db
+from database.db_postgres import Database
 
 from config import get_logger
 
@@ -21,13 +22,8 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def get_db(request: Request) -> UnifiedDatabase:
-    """Dependency to get shared database instance from app state"""
-    return request.app.state.db
-
-
 @router.post("/search")
-async def search_meetings(search_request: SearchRequest, request: Request, db: UnifiedDatabase = Depends(get_db)):
+async def search_meetings(search_request: SearchRequest, request: Request, db: Database = Depends(get_db)):
     """Single endpoint for all meeting searches - handles zipcode or city name"""
     try:
         query = search_request.query.strip()
@@ -45,7 +41,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
         query_lower = query.lower()
         if query_lower in ["new york", "new york city"]:
             logger.debug("nyc redirect")
-            return handle_city_search("new york, ny", db)
+            return await handle_city_search("new york, ny", db)
 
         # Determine if input is zipcode, state, or city name
         is_zipcode = query.isdigit() and len(query) == 5
@@ -58,13 +54,13 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: U
 
         if is_zipcode:
             metrics.search_queries.labels(query_type='zipcode').inc()
-            return handle_zipcode_search(query, db)
+            return await handle_zipcode_search(query, db)
         elif is_state:
             metrics.search_queries.labels(query_type='state').inc()
-            return handle_state_search(query, db)
+            return await handle_state_search(query, db)
         else:
             metrics.search_queries.labels(query_type='city_name').inc()
-            return handle_city_search(query, db)
+            return await handle_city_search(query, db)
 
     except HTTPException:
         raise
