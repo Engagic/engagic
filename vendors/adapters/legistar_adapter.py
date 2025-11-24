@@ -1,6 +1,10 @@
 """
 Legistar Adapter - API integration for Legistar platform
 
+DEPRECATED: This sync adapter is deprecated. Use AsyncLegistarAdapter instead.
+Scheduled for removal after async migration complete.
+For new code, use: from vendors.factory import get_async_adapter
+
 Cities using Legistar: Seattle WA, NYC, Cambridge MA, and many others
 """
 
