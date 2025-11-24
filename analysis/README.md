@@ -1,239 +1,365 @@
 # Analysis Module - LLM Intelligence & Topic Extraction
 
-**Transform raw meeting documents into actionable civic intelligence.** Gemini API orchestration, adaptive prompting, topic normalization, and cost optimization.
+**Transform raw meeting documents into actionable civic intelligence.** Async orchestration, Gemini API integration, adaptive prompting, topic normalization.
 
-**Last Updated:** November 20, 2025
+**Last Updated:** November 23, 2025
 
 ---
 
 ## Overview
 
-The analysis module provides LLM-powered intelligence for civic meeting documents. It orchestrates Google's Gemini API to generate summaries, extract topics, and assess citizen impact from agenda items and meeting packets.
+The analysis module provides LLM-powered intelligence for civic meeting documents. Orchestrates Google's Gemini API to generate summaries, extract topics, and assess citizen impact from agenda items and meeting packets.
 
 **Core Capabilities:**
+- **Async orchestration:** Concurrent PDF downloads, rate-limited API calls, non-blocking extraction
 - **Adaptive summarization:** Item-level (1-5 sentences) vs comprehensive (5-10 sentences) based on document size
 - **Topic extraction:** 16 canonical civic topics (housing, zoning, transportation, etc.)
 - **Citizen impact assessment:** "Why should residents care?" analysis
-- **Thinking traces:** Structured reasoning before summary (improves quality)
 - **Batch processing:** 50% cost savings via Gemini Batch API
 - **JSON structured output:** Schema-validated responses (no parsing failures)
 
-**Architecture Pattern:** Summarizer (orchestration) + Normalizer (topic mapping) + Prompts (templates)
+**Architecture Pattern:** AsyncAnalyzer (orchestration) → GeminiSummarizer (LLM) + AsyncRateLimiter (throttling) → TopicNormalizer (mapping)
 
 ```
 analysis/
+├── analyzer_async.py       # 350 lines - Async orchestration
+├── rate_limiter_async.py   # 157 lines - Token bucket rate limiting
 ├── llm/
-│   ├── summarizer.py       # Gemini API orchestration - 607 lines
-│   └── prompts_v2.json     # JSON prompt templates (item/large/meeting)
+│   ├── summarizer.py       # 1,115 lines - Gemini API orchestration
+│   └── prompts_v2.json     # 149 lines - Prompt templates
 └── topics/
-    ├── normalizer.py       # Topic normalization - 190 lines
-    └── taxonomy.json       # 16 canonical topics + mappings
+    ├── normalizer.py       # 231 lines - Topic normalization
+    └── taxonomy.json       # 242 lines - 16 canonical topics
 
-**Total:** ~1,236 lines
+**Total:** 1,849 lines Python + 391 lines JSON = 2,240 lines
 ```
 
 ---
 
 ## Architecture
 
-### GeminiSummarizer (analysis/llm/summarizer.py)
+### AsyncAnalyzer (analysis/analyzer_async.py)
 
-**Orchestrates Gemini API calls** with model selection, thinking budgets, retry logic, and batch processing.
+**Main orchestration layer** - coordinates async PDF downloads, rate-limited LLM calls, and concurrent processing.
 
 ```python
-class GeminiSummarizer:
+class AsyncAnalyzer:
     """
-    Gemini API orchestration for agenda item and meeting summarization.
+    Async LLM analysis orchestrator with intelligent rate limiting.
 
-    Features:
-    - Adaptive prompt selection (standard vs large)
-    - JSON structured output with schema validation
-    - Batch processing (50% cost savings)
-    - Thinking traces (improved quality)
-    - Model selection (Flash-2.0 vs Pro-1.5)
+    Key Features:
+    - Async PDF downloads (aiohttp, concurrent)
+    - CPU-bound extraction in thread pool (non-blocking)
+    - Gemini API rate limiting (tokens/min, /hour, /day)
+    - Concurrent batch processing within limits
     """
 
-    # Model configuration
-    MODELS = {
-        "flash": "gemini-2.0-flash-exp",        # Fast, cheap, good quality
-        "pro": "gemini-1.5-pro-002",            # Slower, expensive, best quality
-        "flash_thinking": "gemini-2.0-flash-thinking-exp-1219",  # Experimental
-    }
+    def __init__(self, api_key: Optional[str] = None):
+        self.pdf_extractor = PdfExtractor()  # Sync extractor, wrap in asyncio.to_thread()
+        self.summarizer = GeminiSummarizer(api_key=api_key)  # Sync summarizer, wrap in thread
+        self.rate_limiter = AsyncRateLimiter()  # Async token bucket limiter
+        self.http_session: Optional[aiohttp.ClientSession] = None
+```
 
-    # Cost per 1M tokens (as of Nov 2025)
-    COSTS = {
-        "flash": {"input": 0.075, "output": 0.30},      # $0.075/1M input, $0.30/1M output
-        "pro": {"input": 1.25, "output": 5.00},         # $1.25/1M input, $5.00/1M output
-        "batch": 0.50,  # 50% discount for batch processing
-    }
+**Key Methods:**
 
-    def __init__(self, api_key: str, model: str = "flash"):
-        self.api_key = api_key
-        self.model = self.MODELS.get(model, self.MODELS["flash"])
-        self.client = genai.GenerativeModel(self.model)
+```python
+async def download_pdf_async(url: str) -> bytes:
+    """Download PDF asynchronously with aiohttp"""
 
-    def summarize_item(
+async def extract_pdf_async(url: str) -> Dict[str, Any]:
+    """
+    Extract text from PDF asynchronously.
+    Downloads with async HTTP, extracts in thread pool (CPU-bound).
+    Returns: {success, text, page_count, ...}
+    """
+
+async def process_agenda_async(url: str) -> Tuple[str, str, Optional[Dict]]:
+    """
+    Process agenda using PyMuPDF + Gemini (fail-fast approach).
+    Returns: (summary, method_used, participation_info)
+    """
+
+async def process_batch_items_async(
+    item_requests: List[Dict[str, Any]],
+    shared_context: Optional[str] = None
+) -> List[List[Dict[str, Any]]]:
+    """
+    Process multiple agenda items concurrently (respects rate limits).
+    Processes items in parallel where rate limits allow.
+    Returns: [[{item_id, success, summary, topics, error?}, ...]]
+    """
+```
+
+**Why async?**
+- **I/O parallelism:** Download 10 PDFs concurrently instead of sequentially (10× faster)
+- **Non-blocking:** Event loop continues while waiting on HTTP/API responses
+- **Resource efficiency:** Thread pool for CPU-bound work (PyMuPDF), async for I/O
+- **Rate limit coordination:** Async context managers coordinate token consumption across tasks
+
+**Usage:**
+```python
+analyzer = AsyncAnalyzer()
+results = await analyzer.process_batch_items_async(items)
+await analyzer.close()  # Cleanup HTTP session
+```
+
+---
+
+### AsyncRateLimiter (analysis/rate_limiter_async.py)
+
+**Token bucket rate limiter** for Gemini API quota management. Prevents hitting API limits with async-aware throttling.
+
+```python
+class AsyncRateLimiter:
+    """
+    Async rate limiter for Gemini API with token-based throttling.
+
+    Respects three Gemini API limits:
+    - Tokens per minute (default: 1,000,000)
+    - Tokens per hour (default: 30,000,000)
+    - Tokens per day (default: 500,000,000)
+    """
+
+    def __init__(
         self,
-        title: str,
-        text: str,
-        context: Optional[str] = None,
-        page_count: int = 0,
-    ) -> Dict:
-        """
-        Summarize a single agenda item.
-
-        Args:
-            title: Item title
-            text: Extracted PDF text
-            context: Meeting context (city, date, etc.)
-            page_count: Actual PDF page count (for adaptive prompting)
-
-        Returns:
-            {
-                "thinking": "2-5 or 5-10 bullet points of reasoning",
-                "summary_markdown": "1-5 or 5-10 sentence summary",
-                "citizen_impact_markdown": "Why residents should care",
-                "topics": ["housing", "zoning"],
-                "confidence": 0.85,  # 0.0-1.0
-            }
-        """
-        # 1. Select prompt (standard vs large based on page count)
-        prompt_template = self._select_prompt(page_count)
-
-        # 2. Build prompt with context
-        prompt = prompt_template.format(
-            title=title,
-            text=text[:50000],  # Truncate to model limits
-            context=context or "",
-        )
-
-        # 3. Generate with JSON schema validation
-        response = self._generate_with_schema(
-            prompt=prompt,
-            schema=ITEM_SUMMARY_SCHEMA,
-            thinking_budget=5 if page_count < 100 else 10,
-        )
-
-        # 4. Normalize topics
-        normalized_topics = self._normalize_topics(response["topics"])
-
-        return {
-            **response,
-            "topics": normalized_topics,
+        tokens_per_minute: int = 1_000_000,
+        tokens_per_hour: int = 30_000_000,
+        tokens_per_day: int = 500_000_000
+    ):
+        self.limits: Dict[str, TokenBucket] = {
+            "minute": TokenBucket(capacity=tokens_per_minute, refill_rate=tokens_per_minute / 60.0),
+            "hour": TokenBucket(capacity=tokens_per_hour, refill_rate=tokens_per_hour / 3600.0),
+            "day": TokenBucket(capacity=tokens_per_day, refill_rate=tokens_per_day / 86400.0)
         }
 ```
 
-**Adaptive Prompting:**
+**Usage:**
 ```python
-def _select_prompt(self, page_count: int) -> str:
-    """
-    Select prompt based on document size.
+rate_limiter = AsyncRateLimiter()
 
-    - Standard (<100 pages): Focused prompt, 2-5 bullet thinking, 1-5 sentence summary
-    - Large (100+ pages): Comprehensive prompt, 5-10 bullet thinking, 5-10 sentence summary
+# Estimate tokens for text
+tokens = estimate_tokens(text)  # ~4 chars/token + 20% buffer
+
+# Acquire tokens (waits asynchronously if needed)
+async with rate_limiter.acquire(tokens):
+    summary = await asyncio.to_thread(summarizer.summarize_item, title, text)
+```
+
+**Token Bucket Algorithm:**
+- **Capacity:** Maximum tokens available
+- **Refill rate:** Tokens added per second (capacity / period_seconds)
+- **Consumption:** Tokens consumed per API call (estimated from text length)
+- **Waiting:** If insufficient tokens, calculates wait time and sleeps asynchronously
+
+**Why token-aware?**
+- Gemini charges by tokens, not requests
+- Large PDFs (50K+ tokens) consume quota differently than small items (5K tokens)
+- Token-based limiting prevents quota exhaustion more accurately than request-based
+
+```python
+def estimate_tokens(text: str) -> int:
+    """
+    Estimate token count for Gemini API.
+    Gemini uses ~4 characters per token for English text.
+    Add 20% buffer for safety (prompts, JSON structure, thinking, etc.)
+    """
+    char_count = len(text)
+    base_tokens = char_count / 4
+    buffered_tokens = int(base_tokens * 1.2)
+    return max(buffered_tokens, 100)  # Minimum 100 tokens for overhead
+```
+
+---
+
+### GeminiSummarizer (analysis/llm/summarizer.py)
+
+**Gemini API orchestration** with model selection, adaptive prompting, retry logic, and batch processing.
+
+```python
+class GeminiSummarizer:
+    """Smart LLM orchestrator - picks model, picks prompt, formats response"""
+
+    def __init__(self, api_key: Optional[str] = None, prompts_path: Optional[str] = None):
+        self.client = genai.Client(api_key=api_key)
+        self.flash_model_name = "gemini-2.5-flash"
+        self.flash_lite_model_name = "gemini-2.5-flash-lite"
+
+        # Load prompts from JSON
+        self.prompts = json.load(open(prompts_path or "analysis/llm/prompts_v2.json"))
+```
+
+**Model Selection:**
+
+| Model | Speed | Quality | Cost (per 1M tokens) | Use Case |
+|-------|-------|---------|----------------------|----------|
+| Flash-2.5 | Fast (2-5s) | Good | $0.075 input, $0.30 output | Standard items, batch processing |
+| Flash-2.5-Lite | Very fast (1-2s) | Acceptable | $0.0375 input, $0.15 output | Simple items (<50 pages, <200K chars) |
+
+**Adaptive Prompt Selection:**
+
+```python
+def summarize_item(item_title: str, text: str, page_count: Optional[int] = None) -> Tuple[str, List[str]]:
+    """
+    Summarize agenda item with adaptive prompting.
+
+    Prompt selection:
+    - Standard items (<100 pages): focused prompt, 1-5 sentence summary
+    - Large items (100+ pages): comprehensive prompt, 5-10 sentence summary
+
+    Model selection:
+    - Flash-Lite: <50 pages AND <200K chars
+    - Flash: Everything else
+
+    Returns: (summary_markdown, topics_list)
     """
     if page_count >= 100:
-        return self.prompts["large_item"]
+        prompt_type = "large"
+        model = self.flash_model_name  # Always Flash for large items
     else:
-        return self.prompts["standard_item"]
+        prompt_type = "standard"
+        model = self.flash_lite_model_name if self._is_simple(text, page_count) else self.flash_model_name
+
+    prompt = self._get_prompt("item", prompt_type, title=item_title, text=text)
+    response = self.client.models.generate_content(model=model, contents=prompt, config=config)
+
+    return self._parse_item_response(response.text)
+```
+
+**Batch Processing (50% Cost Savings):**
+
+```python
+def summarize_batch(
+    item_requests: List[Dict[str, Any]],
+    shared_context: Optional[str] = None,
+    meeting_id: Optional[str] = None
+):
+    """
+    Process multiple items using Gemini Batch API.
+
+    Generator yields results per chunk:
+    - 5 items per chunk (respects TPM quota)
+    - 120-second delays between chunks (allows quota refill)
+    - Exponential backoff on 429 errors
+
+    Yields: List of results per chunk
+    """
+    # Create cache for shared context (if token count >= 1024)
+    cache_name = None
+    if shared_context and len(shared_context) // 4 >= 1024:
+        cache = self.client.caches.create(model=self.flash_model_name, contents=[shared_context])
+        cache_name = cache.name
+
+    # Process chunks with delay between each
+    for chunk in chunks:
+        chunk_results = self._process_batch_chunk(chunk, cache_name, shared_context)
+        yield chunk_results
+        time.sleep(120)  # 120s delay for quota refill
 ```
 
 ---
 
 ## Prompts Architecture (prompts_v2.json)
 
-**JSON-structured prompts** with thinking budget specifications and schema definitions.
+**JSON-structured prompts** with schema-validated responses and adaptive complexity.
 
+**Structure:**
 ```json
 {
-  "standard_item": {
-    "system": "You are a civic intelligence assistant. Analyze local government agenda items and provide concise summaries for residents.",
-    "user_template": "# Agenda Item: {title}\n\n## Context\n{context}\n\n## Document Text\n{text}\n\n## Your Task\nProvide a JSON response with:\n1. **thinking**: 2-5 bullet points of your reasoning\n2. **summary_markdown**: 1-5 sentence summary of what this item proposes\n3. **citizen_impact_markdown**: 1-3 sentences on why residents should care\n4. **topics**: Array of relevant topics (housing, zoning, budget, etc.)\n5. **confidence**: 0.0-1.0 score on summary accuracy",
-    "thinking_budget": 5,
-    "expected_length": "1-5 sentences"
+  "item": {
+    "standard": {
+      "description": "For individual agenda items - JSON structured output",
+      "variables": ["title", "text"],
+      "output_format": "json",
+      "response_schema": { ... },
+      "system_instruction": "You are an expert at analyzing city council agenda items...",
+      "template": "Analyze this city council agenda item...\n\n# Item Title\n\"{title}\"\n..."
+    },
+    "large": {
+      "description": "For complex/lengthy agenda items (100+ pages) - enhanced analysis",
+      "variables": ["title", "text"],
+      "output_format": "json",
+      "response_schema": { ... },
+      "system_instruction": "You are an expert at analyzing complex city council items...",
+      "template": "Analyze this complex city council agenda item...\n..."
+    }
   },
-
-  "large_item": {
-    "system": "You are a civic intelligence assistant. Analyze complex local government documents and provide comprehensive summaries.",
-    "user_template": "# Large Document: {title}\n\n## Context\n{context}\n\n## Document Text (100+ pages)\n{text}\n\n## Your Task\nProvide a JSON response with:\n1. **thinking**: 5-10 bullet points of your reasoning (this is a complex document)\n2. **summary_markdown**: 5-10 sentence comprehensive summary\n3. **citizen_impact_markdown**: 3-5 sentences on policy implications for residents\n4. **topics**: Array of all relevant topics\n5. **confidence**: 0.0-1.0 score",
-    "thinking_budget": 10,
-    "expected_length": "5-10 sentences"
-  },
-
-  "meeting_summary": {
-    "system": "You are a civic intelligence assistant. Summarize local government meetings for residents who couldn't attend.",
-    "user_template": "# Meeting: {title}\n\n## Date & Location\n{context}\n\n## Full Meeting Packet\n{text}\n\n## Your Task\nFor monolithic meetings (no structured items), provide:\n1. **thinking**: Key themes and decisions\n2. **summary_markdown**: Comprehensive meeting summary (10-15 sentences)\n3. **citizen_impact_markdown**: What residents need to know\n4. **topics**: All discussed topics\n5. **confidence**: 0.0-1.0 score",
-    "thinking_budget": 10,
-    "expected_length": "10-15 sentences"
+  "meeting": {
+    "short_agenda": {
+      "description": "FALLBACK: For full meeting packets ≤30 pages when item-level processing unavailable",
+      "variables": ["text"],
+      "template": "This is a city council meeting agenda. Provide a clear, concise summary..."
+    },
+    "comprehensive": {
+      "description": "FALLBACK: For large/complex agendas >30 pages when item-level processing unavailable",
+      "variables": ["text"],
+      "template": "Analyze this city council meeting agenda and provide comprehensive summary..."
+    }
   }
+}
+```
+
+**Response Schema (item prompts):**
+```json
+{
+  "type": "object",
+  "properties": {
+    "summary_markdown": {
+      "type": "string",
+      "description": "Main summary in markdown format (1-5 or 5-10 sentences)"
+    },
+    "citizen_impact_markdown": {
+      "type": "string",
+      "description": "How this affects residents (1 or 2-3 sentences)"
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["housing", "zoning", "transportation", "budget", "public_safety",
+                 "environment", "parks", "utilities", "economic_development",
+                 "education", "health", "planning", "permits", "contracts",
+                 "appointments", "other"]
+      },
+      "minItems": 1,
+      "maxItems": 3
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"]
+    }
+  },
+  "required": ["summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
 }
 ```
 
 **Why JSON prompts?**
 - **Version control:** Track prompt changes in git
+- **Schema enforcement:** Gemini validates response against schema (no parsing errors)
 - **A/B testing:** Easy to swap prompts and compare quality
-- **Consistency:** Same structure across all prompt types
-- **Documentation:** Self-documenting with thinking budgets and expected lengths
+- **Documentation:** Self-documenting with descriptions and variable lists
 
----
+**Prompt Guidelines (from templates):**
 
-## JSON Structured Output
+**Standard items:**
+- 1-5 sentences (simple appointments: 1-2, complex developments: 4-5)
+- Include dollar amounts, addresses, dates, ordinance numbers
+- Use **bold** for key numbers and names
+- Plain language, no jargon
 
-**Schema-validated responses** eliminate parsing failures and ensure consistency.
+**Large items:**
+- 5-10 sentences with markdown sections
+- Break into ## Financial, ## Timeline, ## Impact if needed
+- Include ALL dollar amounts, addresses, dates
+- Use lists for multiple components
+- Cross-reference documents for consistency
 
-```python
-# Schema definition
-ITEM_SUMMARY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "thinking": {
-            "type": "string",
-            "description": "2-5 or 5-10 bullet points of reasoning before summarizing",
-        },
-        "summary_markdown": {
-            "type": "string",
-            "description": "1-5 or 5-10 sentence summary in markdown format",
-        },
-        "citizen_impact_markdown": {
-            "type": "string",
-            "description": "1-3 or 3-5 sentences on why residents should care",
-        },
-        "topics": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Array of relevant civic topics",
-        },
-        "confidence": {
-            "type": "number",
-            "minimum": 0.0,
-            "maximum": 1.0,
-            "description": "Confidence score on summary accuracy",
-        },
-    },
-    "required": ["thinking", "summary_markdown", "citizen_impact_markdown", "topics", "confidence"],
-}
-
-# API call with schema
-response = client.generate_content(
-    prompt,
-    generation_config={
-        "response_mime_type": "application/json",
-        "response_schema": ITEM_SUMMARY_SCHEMA,
-    },
-)
-
-# Guaranteed valid JSON!
-result = json.loads(response.text)
-assert "thinking" in result
-assert "summary_markdown" in result
-# No try/except needed - schema enforces structure
-```
-
-**Benefits:**
-- **Zero parsing errors:** Model returns valid JSON or fails (no malformed responses)
-- **Type safety:** Schema enforces types (string, array, number)
-- **Required fields:** Model must include all required fields
-- **Validation:** Confidence must be 0.0-1.0, topics must be array
+**Meeting summaries (fallback only):**
+- Plain markdown text (no JSON)
+- List all agenda items with descriptions
+- Include all financial details
+- Preserve exact dollar amounts and addresses
+- Note public participation opportunities
 
 ---
 
@@ -243,289 +369,124 @@ assert "summary_markdown" in result
 
 ### Canonical Topics (taxonomy.json)
 
+16 categories covering civic government:
+
+```python
+CANONICAL_TOPICS = [
+    "housing",              # Housing & Development
+    "zoning",               # Zoning & Land Use
+    "transportation",       # Transportation & Traffic
+    "budget",               # Budget & Finance
+    "public_safety",        # Public Safety
+    "environment",          # Environment & Sustainability
+    "parks",                # Parks & Recreation
+    "utilities",            # Utilities & Infrastructure
+    "economic_development", # Economic Development
+    "education",            # Education & Schools
+    "health",               # Public Health
+    "planning",             # City Planning
+    "permits",              # Permits & Licensing
+    "contracts",            # Contracts & Procurement
+    "appointments",         # Appointments & Personnel
+    "other"                 # Other
+]
+```
+
+**Synonym Mapping:**
 ```json
 {
-  "canonical_topics": [
-    {"id": "housing", "label": "Housing & Development", "color": "#4A90E2"},
-    {"id": "zoning", "label": "Zoning & Land Use", "color": "#7B68EE"},
-    {"id": "transportation", "label": "Transportation & Transit", "color": "#50C878"},
-    {"id": "budget", "label": "Budget & Finance", "color": "#F4A460"},
-    {"id": "education", "label": "Education & Schools", "color": "#FF6B6B"},
-    {"id": "public_safety", "label": "Public Safety & Police", "color": "#E74C3C"},
-    {"id": "environment", "label": "Environment & Sustainability", "color": "#27AE60"},
-    {"id": "health", "label": "Health & Social Services", "color": "#9B59B6"},
-    {"id": "parks", "label": "Parks & Recreation", "color": "#1ABC9C"},
-    {"id": "utilities", "label": "Utilities & Infrastructure", "color": "#95A5A6"},
-    {"id": "business", "label": "Business & Economic Development", "color": "#E67E22"},
-    {"id": "governance", "label": "Governance & Administration", "color": "#34495E"},
-    {"id": "equity", "label": "Equity & Social Justice", "color": "#8E44AD"},
-    {"id": "technology", "label": "Technology & Innovation", "color": "#3498DB"},
-    {"id": "arts", "label": "Arts & Culture", "color": "#E91E63"},
-    {"id": "other", "label": "Other", "color": "#95A5A6"}
-  ],
-
-  "mappings": {
-    "affordable housing": "housing",
-    "residential development": "housing",
-    "homelessness": "housing",
-    "rent control": "housing",
-
-    "rezoning": "zoning",
-    "land use": "zoning",
-    "planning commission": "zoning",
-    "conditional use permit": "zoning",
-
-    "transit": "transportation",
-    "bike lanes": "transportation",
-    "traffic": "transportation",
-    "parking": "transportation",
-
-    "budget": "budget",
-    "taxes": "budget",
-    "revenue": "budget",
-    "fiscal": "budget",
-
-    "schools": "education",
-    "SFUSD": "education",
-
-    "police": "public_safety",
-    "fire": "public_safety",
-    "emergency": "public_safety",
-
-    "climate": "environment",
-    "sustainability": "environment",
-    "green": "environment",
-    "solar": "environment",
-
-    "health": "health",
-    "mental health": "health",
-    "social services": "health",
-
-    "parks": "parks",
-    "recreation": "parks",
-
-    "water": "utilities",
-    "sewer": "utilities",
-    "infrastructure": "utilities",
-
-    "economic development": "business",
-    "small business": "business",
-
-    "council": "governance",
-    "mayor": "governance",
-    "administration": "governance",
-
-    "equity": "equity",
-    "racial justice": "equity",
-    "inclusion": "equity",
-
-    "technology": "technology",
-    "broadband": "technology",
-    "digital": "technology",
-
-    "arts": "arts",
-    "culture": "arts",
-    "library": "arts"
-  }
+  "housing": {
+    "canonical": "housing",
+    "display_name": "Housing & Development",
+    "synonyms": [
+      "affordable housing",
+      "housing affordability",
+      "low-income housing",
+      "workforce housing",
+      "residential development",
+      "homeless services",
+      "homelessness"
+    ]
+  },
+  "zoning": {
+    "canonical": "zoning",
+    "display_name": "Zoning & Land Use",
+    "synonyms": [
+      "rezoning",
+      "zoning changes",
+      "land use",
+      "conditional use permit",
+      "variance",
+      "general plan"
+    ]
+  },
+  ...
 }
 ```
 
 ### Normalizer Logic
 
 ```python
-# analysis/topics/normalizer.py
 class TopicNormalizer:
-    """
-    Normalize raw LLM topics to canonical taxonomy.
+    """Normalizes extracted topics to canonical taxonomy"""
 
-    Example:
-        Raw: ["affordable housing", "bike lanes", "budget"]
-        Normalized: ["housing", "transportation", "budget"]
-    """
-
-    def __init__(self, taxonomy_path: str = "analysis/topics/taxonomy.json"):
-        with open(taxonomy_path) as f:
-            data = json.load(f)
-            self.canonical_topics = {t["id"]: t for t in data["canonical_topics"]}
-            self.mappings = data["mappings"]
-
-    def normalize(self, raw_topics: List[str]) -> List[str]:
+    def normalize(topics: List[str]) -> List[str]:
         """
-        Normalize raw topics to canonical IDs.
+        Normalize raw topics to canonical forms.
 
-        Args:
-            raw_topics: ["Affordable Housing", "bike lanes", "budget"]
+        Process:
+        1. Direct match: "housing" → "housing"
+        2. Synonym match: "affordable housing" → "housing"
+        3. Word-boundary partial match: "affordable housing plan" → "housing"
+        4. No match: log to unknown_topics.log for taxonomy expansion
 
-        Returns:
-            ["housing", "transportation", "budget"]
+        Returns: Sorted list of canonical topics (deduplicated)
         """
-        normalized = set()
+        canonical_topics = set()
 
-        for raw_topic in raw_topics:
-            # Case-insensitive matching
-            raw_lower = raw_topic.lower().strip()
+        for topic in topics:
+            topic_lower = topic.strip().lower()
 
             # Direct match
-            if raw_lower in self.canonical_topics:
-                normalized.add(raw_lower)
-                continue
+            if topic_lower in self._synonym_map:
+                canonical_topics.add(self._synonym_map[topic_lower])
+            # Word-boundary-aware partial match
+            elif matched := self._find_word_match(topic_lower):
+                canonical_topics.add(matched)
+            else:
+                # Track unknown topics for taxonomy improvement
+                self._track_unknown_topic(topic_lower)
 
-            # Mapping match
-            if raw_lower in self.mappings:
-                normalized.add(self.mappings[raw_lower])
-                continue
+        return sorted(list(canonical_topics))
 
-            # Fuzzy match (substring)
-            matched = False
-            for mapping_key, canonical_id in self.mappings.items():
-                if mapping_key in raw_lower or raw_lower in mapping_key:
-                    normalized.add(canonical_id)
-                    matched = True
-                    break
-
-            if not matched:
-                normalized.add("other")
-
-        return sorted(list(normalized))
-
-    def get_topic_metadata(self, topic_id: str) -> Dict:
+    def _contains_word(text: str, word: str) -> bool:
         """
-        Get label and color for topic.
-
-        Returns:
-            {
-                "id": "housing",
-                "label": "Housing & Development",
-                "color": "#4A90E2"
-            }
+        Check if word appears as complete word(s) in text.
+        Prevents false positives like "park" matching "parking".
+        Uses regex word boundaries: r'\bword\b'
         """
-        return self.canonical_topics.get(topic_id, self.canonical_topics["other"])
+```
+
+**Usage:**
+```python
+from analysis.topics.normalizer import get_normalizer
+
+normalizer = get_normalizer()
+raw_topics = ["Affordable Housing", "bike lanes", "budget"]
+canonical = normalizer.normalize(raw_topics)
+# Returns: ["budget", "housing", "transportation"]
 ```
 
 **Why normalize topics?**
-- **Consistent filtering:** Frontend can filter by "housing" reliably
+- **Consistent filtering:** Frontend can filter by "housing" reliably across all cities
 - **User-friendly labels:** "Housing & Development" vs raw "affordable housing units"
-- **Visual consistency:** Each topic has assigned color for frontend display
-- **Analytics:** Can aggregate "how often does housing appear?" across all cities
+- **Analytics:** Aggregate "how often does housing appear?" across all cities
+- **Taxonomy evolution:** Unknown topics logged to `{DB_DIR}/unknown_topics.log` for review
 
----
-
-## Batch Processing (50% Cost Savings)
-
-**Gemini Batch API** processes multiple items asynchronously for half the cost.
-
-```python
-def summarize_batch(self, items: List[Dict]) -> List[Dict]:
-    """
-    Batch process multiple agenda items (50% cost savings).
-
-    Args:
-        items: [
-            {"id": "item_1", "title": "...", "text": "...", "page_count": 5},
-            {"id": "item_2", "title": "...", "text": "...", "page_count": 150},
-            ...
-        ]
-
-    Returns:
-        [
-            {"id": "item_1", "thinking": "...", "summary": "...", ...},
-            {"id": "item_2", "thinking": "...", "summary": "...", ...},
-            ...
-        ]
-
-    Process:
-        1. Create batch job with all items
-        2. Submit to Gemini Batch API
-        3. Poll for completion (typically 5-15 minutes)
-        4. Retrieve results
-        5. Return in same order as input
-    """
-    # Build batch requests
-    requests = []
-    for item in items:
-        prompt_template = self._select_prompt(item["page_count"])
-        prompt = prompt_template.format(**item)
-
-        requests.append({
-            "custom_id": item["id"],
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generation_config": {
-                "response_mime_type": "application/json",
-                "response_schema": ITEM_SUMMARY_SCHEMA,
-            },
-        })
-
-    # Submit batch
-    batch_job = self.client.batches.create(requests=requests)
-
-    # Poll for completion (with timeout)
-    start_time = time.time()
-    while batch_job.state != "COMPLETED":
-        if time.time() - start_time > 3600:  # 1 hour timeout
-            raise TimeoutError("Batch job did not complete in time")
-
-        time.sleep(30)  # Check every 30 seconds
-        batch_job = self.client.batches.get(batch_job.name)
-
-    # Retrieve results
-    results = []
-    for response in batch_job.responses:
-        result = json.loads(response.response.text)
-        results.append({
-            "id": response.custom_id,
-            **result,
-        })
-
-    return results
-```
-
-**When to use batch:**
-- Large meetings with 20+ items
-- Nightly processing (not time-sensitive)
-- Cost optimization (50% savings adds up at scale)
-
-**When to use real-time:**
-- User-requested processing (can't wait 10 minutes)
-- Small meetings (1-5 items, overhead not worth it)
-- Development/testing (faster iteration)
-
----
-
-## Thinking Traces (Quality Improvement)
-
-**Structured reasoning before summarization** improves output quality by 15-20%.
-
-**Without thinking:**
-```json
-{
-  "summary": "The city is approving a new housing development."
-}
-```
-
-**With thinking:**
-```json
-{
-  "thinking": [
-    "This item is a zoning change to allow 500-unit residential building",
-    "The developer is requesting height variance from 40ft to 80ft",
-    "Community opposition focused on traffic and parking concerns",
-    "City planning commission recommended approval with conditions",
-    "Conditions include 15% affordable units and traffic mitigation"
-  ],
-  "summary": "The City Council will vote on a zoning variance allowing an 80-foot, 500-unit residential building, with conditions requiring 15% affordable housing and traffic mitigation measures."
-}
-```
-
-**Why thinking helps:**
-- **Decomposition:** Breaks complex documents into key points
-- **Accuracy:** Forces model to identify important details before summarizing
-- **Debugging:** Can verify reasoning if summary seems wrong
-- **Confidence:** Model self-assesses understanding before committing to summary
-
-**Thinking budget tuning:**
-- **2-5 bullets:** Standard items (<100 pages), quick reasoning
-- **5-10 bullets:** Large items (100+ pages), comprehensive reasoning
-- **Higher budgets = better quality but slower/more expensive**
+**Unknown Topic Tracking:**
+- Logs to `{DB_DIR}/unknown_topics.log` when no match found
+- Review periodically to expand taxonomy
+- Example: If "cannabis" appears 50 times, add to taxonomy
 
 ---
 
@@ -533,64 +494,136 @@ def summarize_batch(self, items: List[Dict]) -> List[Dict]:
 
 ### 1. Model Selection
 
-| Model | Speed | Quality | Cost (per 1M tokens) | Use Case |
-|-------|-------|---------|----------------------|----------|
-| Flash-2.0 | Fast (2-5s) | Good | $0.075 input, $0.30 output | Standard items, batch processing |
-| Pro-1.5 | Slow (10-20s) | Best | $1.25 input, $5.00 output | Complex legal documents, high-stakes |
+- **Flash-Lite (50%):** Simple items <50 pages, <200K chars → 50% cost savings
+- **Flash (default):** Standard items, all batch processing
+- **Never Pro:** Not cost-justified for agenda items
 
-**Default:** Flash-2.0 for 95% of items
+### 2. Adaptive Prompting
 
-### 2. Text Truncation
+```python
+# Standard item: shorter prompt, shorter output
+if page_count < 100:
+    prompt = SHORT_PROMPT      # ~500 tokens
+    max_output = 2048          # 1-5 sentences
+
+# Large item: longer prompt, detailed output
+else:
+    prompt = LONG_PROMPT       # ~1000 tokens
+    max_output = 8192          # 5-10 sentences
+```
+
+**Savings:** Reduces output tokens by 50-70% for standard items
+
+### 3. Batch Processing
+
+- **50% cost reduction** for batch API
+- **Process overnight:** 100 items = $0.50 instead of $1.00
+- **Trade-off:** 5-15 minute latency (acceptable for background processing)
+
+### 4. Text Truncation
 
 ```python
 def truncate_text(text: str, max_tokens: int = 50000) -> str:
     """
     Truncate text to model limits.
-
-    - Flash-2.0: 1M token context (but diminishing returns after 50K)
-    - Strategy: Keep first 40K + last 10K tokens (intro + conclusion)
+    Strategy: Keep first 80% + last 20% (intro + conclusion)
     """
-    if len(text) <= max_tokens:
+    if len(text) <= max_tokens * 4:  # ~4 chars per token
         return text
 
-    # Rough token estimate: 1 token ≈ 4 characters
     char_limit = max_tokens * 4
-
-    first_half = text[: int(char_limit * 0.8)]
-    last_half = text[-int(char_limit * 0.2) :]
+    first_half = text[:int(char_limit * 0.8)]
+    last_half = text[-int(char_limit * 0.2):]
 
     return first_half + "\n\n[... middle section truncated ...]\n\n" + last_half
 ```
 
 **Savings:** Reduces input tokens by 60-80% for large documents with minimal quality loss
 
-### 3. Adaptive Prompting
+### 5. Context Caching
 
 ```python
-# Standard item (focused prompt, short summary)
-if page_count < 100:
-    prompt = SHORT_PROMPT  # Fewer tokens in prompt
-    thinking_budget = 5     # Less thinking = faster
-    expected_output = "1-5 sentences"  # Shorter output = cheaper
-
-# Large item (comprehensive prompt, detailed summary)
-else:
-    prompt = LONG_PROMPT
-    thinking_budget = 10
-    expected_output = "5-10 sentences"
+# Create cache for shared meeting context (>1024 tokens)
+if len(shared_context) // 4 >= 1024:
+    cache = client.caches.create(
+        model=flash_model_name,
+        contents=[shared_context],
+        ttl="3600s"  # 1 hour
+    )
+    # Reuse cache across all items in meeting
 ```
 
-**Savings:** Reduces output tokens by 50-70% for standard items
-
-### 4. Batch Processing
-
-- **50% cost reduction** for batch API
-- **Process overnight:** 100 items = $0.50 instead of $1.00
+**Savings:** Cached tokens cost 10% of normal input tokens
 
 **Monthly cost estimate (500 cities, ~10K items/month):**
 - Real-time Flash: $150/month
 - Batch Flash: $75/month
-- **Savings: $75/month ($900/year)**
+- Batch Flash + caching: $60/month
+- **Total savings: $90/month ($1,080/year)**
+
+---
+
+## Error Handling
+
+**Common failure modes and recovery strategies:**
+
+### 1. API Timeout
+```python
+@retry(max_attempts=3, backoff_seconds=5)
+async def _generate_with_retry(prompt: str) -> Dict:
+    """Retry with exponential backoff on timeout"""
+    try:
+        response = await asyncio.to_thread(
+            self.client.generate_content, prompt, timeout=30
+        )
+        return json.loads(response.text)
+    except TimeoutError:
+        # Retry with longer timeout
+        response = await asyncio.to_thread(
+            self.client.generate_content, prompt, timeout=60
+        )
+        return json.loads(response.text)
+```
+
+### 2. Rate Limiting (429 / RESOURCE_EXHAUSTED)
+- AsyncRateLimiter prevents most 429s via proactive throttling
+- If 429 occurs: exponential backoff (60s, 120s, 240s)
+- Batch processing: chunked processing with 120s delays between chunks
+
+### 3. Content Filtering (Safety blocks)
+```python
+try:
+    response = client.generate_content(prompt)
+except ContentFilterError as e:
+    logger.warning("content filtered", item_id=item_id, reason=str(e))
+    return {
+        "summary": "[Content unavailable due to safety filters]",
+        "topics": ["other"],
+        "confidence": "low"
+    }
+```
+
+### 4. Schema Validation Failure
+- With `response_schema`, Gemini enforces JSON structure
+- If malformed JSON: retry with explicit error message in prompt
+- Track finish_reason: if "MAX_TOKENS", increase max_output_tokens
+
+### 5. PDF Extraction Failures
+```python
+async def extract_pdf_async(url: str) -> Dict[str, Any]:
+    """Extract text from PDF with error handling"""
+    try:
+        pdf_bytes = await self.download_pdf_async(url)
+        result = await asyncio.to_thread(self.pdf_extractor.extract_from_bytes, pdf_bytes)
+
+        if not result.get("success"):
+            raise ExtractionError(f"PDF extraction failed: {result.get('error')}")
+
+        return result
+    except (ExtractionError, aiohttp.ClientError) as e:
+        logger.error("pdf processing failed", url=url, error=str(e))
+        raise
+```
 
 ---
 
@@ -606,70 +639,11 @@ else:
 | Confidence calibration | 0.91 | >0.85 |
 | JSON parse success | 100% | 100% |
 
-**Accuracy evaluation:** Human reviewers rate summaries on 5-point scale, 4+ = accurate
-
-**Topic precision:** % of extracted topics that match human-labeled ground truth
-
-**Confidence calibration:** Correlation between model confidence and human accuracy ratings
-
----
-
-## Error Handling
-
-**Common failure modes and recovery strategies:**
-
-### 1. API Timeout
-
-```python
-@retry(max_attempts=3, backoff_seconds=5)
-def _generate_with_retry(self, prompt: str) -> Dict:
-    """Retry with exponential backoff on timeout."""
-    try:
-        response = self.client.generate_content(prompt, timeout=30)
-        return json.loads(response.text)
-    except TimeoutError:
-        # Retry with longer timeout
-        response = self.client.generate_content(prompt, timeout=60)
-        return json.loads(response.text)
-```
-
-### 2. Rate Limiting (429)
-
-```python
-if response.status_code == 429:
-    retry_after = int(response.headers.get("Retry-After", 60))
-    time.sleep(retry_after)
-    # Retry request
-```
-
-### 3. Content Filtering (Safety blocks)
-
-```python
-try:
-    response = self.client.generate_content(prompt)
-except ContentFilterError as e:
-    # Document contains blocked content (profanity, violence, etc.)
-    logger.warning("content filtered", item_id=item_id, reason=str(e))
-    return {
-        "summary": "[Content unavailable due to safety filters]",
-        "topics": ["other"],
-        "confidence": 0.0,
-    }
-```
-
-### 4. Schema Validation Failure
-
-```python
-try:
-    result = json.loads(response.text)
-    validate_schema(result, ITEM_SUMMARY_SCHEMA)
-except ValidationError as e:
-    # Model returned invalid JSON (rare with schema enforcement)
-    logger.error("schema validation failed", error=str(e), response=response.text)
-    # Fallback: Re-prompt with error message
-    retry_prompt = f"{original_prompt}\n\nPREVIOUS ATTEMPT FAILED. Ensure JSON matches schema."
-    result = self._generate_with_retry(retry_prompt)
-```
+**Definitions:**
+- **Summary accuracy:** Human reviewers rate summaries on 5-point scale, 4+ = accurate
+- **Topic precision:** % of extracted topics that match human-labeled ground truth
+- **Confidence calibration:** Correlation between model confidence ("high"/"medium"/"low") and human accuracy ratings
+- **JSON parse success:** % of responses that parse without errors (schema enforcement ensures 100%)
 
 ---
 
@@ -679,7 +653,7 @@ except ValidationError as e:
 
 ```python
 def test_topic_normalization():
-    normalizer = TopicNormalizer()
+    normalizer = get_normalizer()
     raw = ["Affordable Housing", "bike lanes", "budget"]
     normalized = normalizer.normalize(raw)
 
@@ -691,32 +665,48 @@ def test_adaptive_prompt_selection():
     summarizer = GeminiSummarizer(api_key="test")
 
     # Standard item
-    prompt = summarizer._select_prompt(page_count=50)
-    assert "1-5 sentences" in prompt
+    prompt_type = "large" if 50 >= 100 else "standard"
+    assert prompt_type == "standard"
 
     # Large item
-    prompt = summarizer._select_prompt(page_count=150)
-    assert "5-10 sentences" in prompt
+    prompt_type = "large" if 150 >= 100 else "standard"
+    assert prompt_type == "large"
+
+def test_token_estimation():
+    text = "a" * 4000  # 4000 chars
+    tokens = estimate_tokens(text)
+    # Should be ~1200 (4000/4 * 1.2 buffer)
+    assert 1100 <= tokens <= 1300
 ```
 
 **Integration tests:** `tests/integration/test_gemini.py`
 
 ```python
 @pytest.mark.integration
-def test_gemini_summarization():
-    """Test live Gemini API (uses real API key)."""
+async def test_gemini_summarization():
+    """Test live Gemini API (uses real API key)"""
     summarizer = GeminiSummarizer(api_key=os.getenv("GEMINI_API_KEY"))
 
-    result = summarizer.summarize_item(
-        title="Zoning Variance Request",
+    summary, topics = summarizer.summarize_item(
+        item_title="Zoning Variance Request",
         text="The applicant requests a variance to allow...",
-        page_count=5,
+        page_count=5
     )
 
-    assert "thinking" in result
-    assert "summary_markdown" in result
-    assert len(result["topics"]) > 0
-    assert 0.0 <= result["confidence"] <= 1.0
+    assert len(summary) > 0
+    assert len(topics) > 0
+    assert all(t in CANONICAL_TOPICS for t in topics)
+
+@pytest.mark.integration
+async def test_async_analyzer():
+    """Test async orchestration"""
+    analyzer = AsyncAnalyzer()
+
+    result = await analyzer.extract_pdf_async("https://example.com/agenda.pdf")
+    assert result["success"]
+    assert result["page_count"] > 0
+
+    await analyzer.close()
 ```
 
 ---
@@ -724,24 +714,29 @@ def test_gemini_summarization():
 ## Future Work
 
 **Model improvements:**
-- [ ] Test Gemini-2.0 Flash Thinking (experimental, better reasoning)
-- [ ] A/B test Flash vs Pro on accuracy (justify cost difference)
-- [ ] Fine-tuning: Train custom model on civic-specific language
+- [ ] Test Gemini-2.5 Flash Thinking (experimental extended thinking mode)
+- [ ] A/B test Flash vs Flash-Lite on accuracy (validate cost savings)
+- [ ] Fine-tuning: Train custom model on civic-specific language (requires 1000+ examples)
 
 **Prompt engineering:**
 - [ ] Chain-of-thought prompting (explicit step-by-step reasoning)
-- [ ] Few-shot examples (include 2-3 example summaries in prompt)
-- [ ] Prompt versioning (track prompt changes, revert if quality drops)
+- [ ] Few-shot examples (include 2-3 example summaries in prompt for consistency)
+- [ ] Prompt versioning infrastructure (track changes, measure quality regression)
 
 **Topic extraction:**
-- [ ] Expand to 25 topics (add "climate", "immigration", "cannabis", etc.)
-- [ ] Multi-label classification (most items have 2-3 topics, not 1)
-- [ ] Topic confidence scores (how sure is model about each topic?)
+- [ ] Expand to 20 topics (add "climate", "immigration", "cannabis", "housing")
+- [ ] Multi-label confidence scores (probability per topic instead of binary)
+- [ ] Topic hierarchy (parent-child relationships: "housing" → "affordable housing", "senior housing")
 
 **Cost optimization:**
-- [ ] Caching: Store embeddings for repeated text (deduplication)
+- [ ] Embedding-based deduplication (cache embeddings for repeated text)
 - [ ] Summarize-then-expand: Quick summary first, expand only if user clicks
-- [ ] Local models: Run Llama-3 locally for simple items, Gemini for complex
+- [ ] Local models: Run Llama-3 locally for simple items (<10 pages), Gemini for complex
+
+**Async improvements:**
+- [ ] Connection pooling for HTTP session (single session across all tasks)
+- [ ] Retry with exponential backoff for transient errors
+- [ ] Structured concurrency (task groups for better error handling)
 
 ---
 
@@ -750,4 +745,4 @@ def test_gemini_summarization():
 - [database/README.md](../database/README.md) - How summaries are stored
 - [VISION.md](../docs/VISION.md) - Roadmap for intelligence features (Phase 6)
 
-**Last Updated:** 2025-11-20 (Initial documentation)
+**Last Updated:** 2025-11-23 (Comprehensive accuracy audit)

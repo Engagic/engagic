@@ -6,6 +6,8 @@ import json
 import os
 from typing import Optional
 
+from config import config
+
 
 def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
     """
@@ -55,7 +57,7 @@ def _get_granicus_url(slug: str) -> Optional[str]:
     Returns:
         Full URL with view_id, or base URL if view_id not found
     """
-    view_ids_file = "/root/engagic/data/granicus_view_ids.json"
+    view_ids_file = os.path.join(config.DB_DIR, "granicus_view_ids.json")
     base_url = f"https://{slug}.granicus.com"
 
     # Try to load cached view_ids

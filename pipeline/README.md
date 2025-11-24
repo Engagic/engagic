@@ -13,62 +13,57 @@ The pipeline handles:
 
 ## Architecture Overview
 
-The pipeline consists of **6 focused modules** with clear responsibilities:
+The pipeline consists of **7 focused modules** with clear responsibilities:
 
 ```
 ┌──────────────┐
-│  Conductor   │  Lightweight orchestration (start/stop, admin commands)
+│  Conductor   │  Async orchestration (CLI, daemon lifecycle)
 └──────┬───────┘
        │
        ├──────> Fetcher    (City sync, vendor routing, rate limiting)
        │
        └──────> Processor  (Queue processing, item assembly)
                      │
-                     ├──────> Analyzer (PDF extraction, LLM analysis)
-                     │
-                     ├──────> Models   (Job type definitions)
-                     │
-                     └──────> Utils    (Matter-first utilities)
+                     ├──────> Models      (Job type definitions)
+                     ├──────> Utils       (Matter-first utilities)
+                     ├──────> Admin       (Debug/preview commands)
+                     └──────> ClickTypes  (CLI parameter validation)
 ```
 
-**Key Pattern:** Conductor delegates to Fetcher and Processor, which are specialized for their domains. Models define typed job payloads. Utils provide matter-first deduplication utilities.
+**Key Pattern:** Conductor delegates to Fetcher and Processor, which are specialized for their domains. Processor imports analyzer from `analysis/` module. Models define typed job payloads. Utils provide matter-first deduplication utilities.
 
 ---
 
 ## Module Reference
 
-### 1. `conductor.py` - Orchestration (617 lines)
+### 1. `conductor.py` - Orchestration (657 lines)
 
 **Entry point for all pipeline operations.** Coordinates sync and processing loops.
 
 #### Responsibilities
-- Start/stop background daemon threads
-- Sync loop (runs every 7 days)
+- Start/stop background daemon (async tasks)
+- Sync loop (runs every 72 hours)
 - Processing loop (continuously processes queue)
 - Admin commands (force sync, status, preview)
-- Global state management (`is_running` flag)
+- Global state management (graceful shutdown)
 
 #### Key Methods
 
 ```python
-conductor = Conductor(unified_db_path="/path/to/engagic.db")
+conductor = Conductor(db=database_instance)
 
 # Background daemon (production)
-conductor.start()  # Starts sync + processing threads
-conductor.stop()   # Graceful shutdown
+await conductor.start()  # Starts sync + processing tasks
+conductor.stop()         # Graceful shutdown (sets stop flag)
 
-# Single city operations (admin/testing)
-conductor.force_sync_city("paloaltoCA")
-conductor.sync_and_process_city("paloaltoCA")
+# Single city operations (admin/testing) - via CLI only
+# conductor.force_sync_city("paloaltoCA")
+# conductor.sync_and_process_city("paloaltoCA")
 
-# Multi-city operations
-conductor.sync_cities(["paloaltoCA", "oaklandCA"])
-conductor.process_cities(["paloaltoCA", "oaklandCA"])
-
-# Preview and debugging
-conductor.preview_queue(city_banana="paloaltoCA", limit=10)
-conductor.extract_text_preview(meeting_id, output_file="text.txt")
-conductor.preview_items(meeting_id, extract_text=True)
+# Preview and debugging - via CLI only
+# conductor.preview_queue(city_banana="paloaltoCA", limit=10)
+# conductor.extract_text_preview(meeting_id, output_file="text.txt")
+# conductor.preview_items(meeting_id, extract_text=True)
 ```
 
 #### CLI Usage
@@ -87,14 +82,15 @@ engagic-daemon --preview-queue paloaltoCA
 engagic-daemon --status
 ```
 
-#### Threading Model
-- **Sync thread:** Runs `_sync_loop()` every 7 days (calls `fetcher.sync_all()`)
-- **Processing thread:** Runs `_processing_loop()` continuously (calls `processor.process_queue()`)
-- Both threads check `is_running` flag for graceful shutdown
+#### Async Architecture
+- **Single event loop:** Uses `asyncio` with concurrent tasks
+- **Sync task:** Runs `_sync_loop()` every 72 hours (calls `fetcher.sync_all()`)
+- **Processing task:** Runs `_processing_loop()` continuously (calls `processor.process_queue()`)
+- **Graceful shutdown:** Tasks check stop flag and clean up on SIGTERM/SIGINT
 
 ---
 
-### 2. `fetcher.py` - City Sync & Vendor Routing (553 lines)
+### 2. `fetcher.py` - City Sync & Vendor Routing (562 lines)
 
 **Fetches meetings from vendor platforms.** Handles rate limiting, retry logic, and database storage.
 
@@ -168,7 +164,7 @@ class SyncResult:
 
 ---
 
-### 3. `processor.py` - Queue Processing & Item Assembly (1325 lines)
+### 3. `processor.py` - Queue Processing & Item Assembly (1335 lines)
 
 **Processes jobs from the queue.** Extracts text from PDFs, assembles items, orchestrates LLM analysis.
 
@@ -303,13 +299,7 @@ for chunk_results in analyzer.process_batch_items(batch_requests):
 
 ---
 
-### 4. `analyzer.py` - LLM Analysis Orchestration (227 lines)
-
-**Coordinates PDF extraction and LLM analysis.** Thin wrapper around parsing and analysis modules.
-
----
-
-### 5. `models.py` - Job Type Definitions (157 lines)
+### 4. `models.py` - Job Type Definitions (155 lines)
 
 **Type-safe job payload definitions.** Enables exhaustive type checking and safe dispatch.
 
@@ -391,7 +381,7 @@ elif job.job_type == "matter":
 
 ---
 
-### 6. `utils.py` - Matter-First Utilities (130 lines)
+### 5. `utils.py` - Matter-First Utilities (212 lines)
 
 **Utilities for matter-first processing.** Attachment hashing and matter key extraction.
 
@@ -485,15 +475,83 @@ get_matter_key(None, "uuid-abc")  # Returns: "uuid-abc"
 
 ---
 
+### 6. `admin.py` - Admin & Debug Utilities (202 lines)
+
+**Debug utilities for manual inspection.** Not used in production daemon, only CLI commands.
+
+#### Responsibilities
+- Extract and preview text from meeting PDFs
+- Preview agenda items with optional text extraction
+- Support manual debugging workflows
+
+#### Key Functions
+
+```python
+from pipeline.admin import extract_text_preview, preview_items
+
+# Extract full text to file (for manual review)
+extract_text_preview(
+    db=db,
+    meeting_id="paloaltoCA_2025-11-10",
+    output_file="text.txt"
+)
+
+# Preview agenda items (with optional text extraction)
+preview_items(
+    db=db,
+    meeting_id="paloaltoCA_2025-11-10",
+    extract_text=True  # Also extract and display text
+)
+```
+
+**CLI Usage:**
+```bash
+# Extract text to file
+engagic-daemon --extract-text paloaltoCA_2025-11-10 --output-file debug.txt
+
+# Preview items
+engagic-daemon --preview-items paloaltoCA_2025-11-10
+```
+
+---
+
+### 7. `click_types.py` - CLI Parameter Types (57 lines)
+
+**Custom Click parameter types for CLI validation.**
+
+#### Responsibilities
+- Validate city_banana format
+- Provide clear error messages for invalid inputs
+
+#### BananaType Validator
+
+```python
+from pipeline.click_types import BananaType
+
+# Used in CLI commands
+@click.command()
+@click.argument("city_banana", type=BananaType())
+def sync_city(city_banana: str):
+    """Sync a single city"""
+    pass
+```
+
+**Validation:**
+- Format: lowercase alphanumeric + uppercase 2-letter state code
+- Examples: `paloaltoCA`, `nashvilleTN`, `stlouisMO`
+- Invalid: `PaloAltoCA` (capital), `paloaltoca` (lowercase state), `paloalto` (missing state)
+
+---
+
 ## Data Flow Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Conductor                                                        │
-│  ├─ Sync Thread (every 7 days)                                  │
+│ Conductor (Async Event Loop)                                    │
+│  ├─ Sync Task (every 72 hours)                                  │
 │  │   └─> Fetcher.sync_all()                                     │
 │  │                                                               │
-│  └─ Processing Thread (continuous)                              │
+│  └─ Processing Task (continuous)                                │
 │      └─> Processor.process_queue()                              │
 └─────────────────────────────────────────────────────────────────┘
                          │
@@ -736,9 +794,11 @@ engagic-daemon
 
 - **`vendors/`** - Adapter implementations for civic tech platforms
 - **`parsing/`** - PDF text extraction and participation parsing
-- **`analysis/`** - LLM summarization and topic normalization
+- **`analysis/`** - LLM summarization and topic normalization (includes analyzer)
 - **`database/`** - Repository Pattern for data persistence
+
+**Note:** The `Analyzer` class lives in `analysis/analyzer_async.py`, not `pipeline/`. Processor imports and uses it.
 
 ---
 
-**Last Updated:** 2025-11-20 (Line Count Verification)
+**Last Updated:** 2025-11-23 (Pipeline documentation audit - removed phantom analyzer.py module, added admin.py and click_types.py sections, updated all line counts, fixed async architecture description)

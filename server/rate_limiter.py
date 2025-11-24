@@ -8,7 +8,7 @@ from typing import Optional, Callable, Any, Dict, Tuple
 from functools import wraps
 from enum import Enum
 
-from config import get_logger
+from config import config, get_logger
 
 logger = get_logger(__name__)
 
@@ -363,20 +363,22 @@ class SQLiteRateLimiter:
         except Exception as e:
             logger.error(f"Failed to export blocked IPs: {e}")
 
-    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
+    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, socket_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
         """
         Check if client has exceeded rate limits (both minute and day).
 
         Args:
-            client_ip: Client IP address
+            client_ip: Client IP address (hashed, for rate limiting)
             api_key: Optional API key for tier lookup
+            real_ip: Real client IP from proxy headers (for logging)
+            socket_ip: Actual socket connection IP (for whitelist - NOT spoofable)
 
         Returns:
             (is_allowed, remaining_minute, limit_info)
         """
-        # Whitelist localhost and server's own IP (bypass rate limiting for testing/admin)
-        WHITELISTED_IPS = {'127.0.0.1', '::1', 'localhost', '165.232.158.241'}
-        if real_ip and real_ip in WHITELISTED_IPS:
+        # SECURITY: Whitelist uses socket_ip (actual connection), NOT headers (spoofable)
+        # Only VPS IP (165.232.158.241) and true localhost (127.0.0.1 from socket) allowed
+        if socket_ip and socket_ip in config.ADMIN_WHITELIST_IPS:
             return True, 999999, {
                 "tier": "admin",
                 "limit_type": "whitelisted",

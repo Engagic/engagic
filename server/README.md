@@ -18,43 +18,52 @@ Provides:
 
 ```
 server/
-├── main.py                 121 lines  - FastAPI app initialization
-├── rate_limiter.py         481 lines  - SQLite-based rate limiting
-├── metrics.py              222 lines  - Prometheus instrumentation
+├── main.py                 177 lines  - FastAPI app initialization
+├── dependencies.py          25 lines  - Centralized dependency injection
+├── rate_limiter.py         662 lines  - SQLite tiered rate limiting (Basic/Hacktivist/Enterprise)
+├── metrics.py              240 lines  - Prometheus instrumentation
 │
-├── routes/                1271 lines  - HTTP request handlers
-│   ├── search.py            (61 lines)
-│   ├── admin.py             (81 lines)
-│   ├── flyer.py             (82 lines)
-│   ├── topics.py           (128 lines)
-│   ├── meetings.py         (149 lines)
+├── routes/                2201 lines  - HTTP request handlers (10 modules)
+│   ├── search.py            (71 lines)
+│   ├── meetings.py         (139 lines)
+│   ├── topics.py           (126 lines)
+│   ├── admin.py            (342 lines)
 │   ├── monitoring.py       (340 lines)
-│   └── matters.py          (430 lines)
+│   ├── flyer.py             (81 lines)
+│   ├── matters.py          (458 lines)
+│   ├── donate.py            (79 lines) - Stripe donation integration
+│   ├── auth.py             (370 lines) - Magic link authentication (Phase 2/3)
+│   └── dashboard.py        (494 lines) - User dashboard and alerts (Phase 2/3)
 │
-├── services/                717 lines  - Business logic (+ 369 HTML)
-│   ├── meeting.py           (41 lines)
-│   ├── search.py           (315 lines)
-│   ├── flyer.py            (361 lines)
+├── services/                738 lines  - Business logic (+ 369 HTML)
+│   ├── meeting.py           (47 lines)
+│   ├── search.py           (326 lines)
+│   ├── flyer.py            (365 lines)
 │   └── flyer_template.html (369 lines)
 │
-├── middleware/               92 lines  - Cross-cutting concerns
-│   ├── logging.py           (37 lines)
-│   └── rate_limiting.py     (55 lines)
+├── middleware/              455 lines  - Cross-cutting concerns (4 modules)
+│   ├── logging.py           (47 lines)
+│   ├── rate_limiting.py    (220 lines)
+│   ├── metrics.py          (148 lines) - Prometheus request metrics
+│   └── request_id.py        (45 lines) - Request ID correlation for tracing
 │
-├── models/                  119 lines  - Request validation
-│   └── requests.py         (119 lines)
+├── models/                  131 lines  - Request validation
+│   └── requests.py         (131 lines)
 │
-└── utils/                   245 lines  - Reusable utilities
+└── utils/                   454 lines  - Reusable utilities (4 modules)
     ├── validation.py        (31 lines) - Input sanitization
     ├── constants.py         (96 lines) - State mappings
-    └── geo.py              (118 lines) - City/state parsing
+    ├── geo.py              (118 lines) - City/state parsing
+    └── vendor_urls.py      (103 lines) - Vendor attribution URL construction
 ```
 
+**Total: 31 Python files, 5,289 lines**
+
 **Why this structure?**
-- **109-line main.py** (down from 1,245) - Minimal entry point
-- **Focused route modules** - Single responsibility per file (7 modules)
+- **177-line main.py** (down from 1,245) - Minimal entry point
+- **Focused route modules** - Single responsibility per file (10 modules)
 - **Service layer** - Business logic separate from HTTP concerns
-- **Dependency injection** - Database and rate limiter via FastAPI deps
+- **Dependency injection** - Centralized in dependencies.py
 - **Clean imports** - No circular dependencies
 
 ---
@@ -100,7 +109,7 @@ response = requests.post("http://localhost:8000/api/search/by-topic", json={
 
 ## Module Reference
 
-### 1. `main.py` - Application Entry Point (121 lines)
+### 1. `main.py` - Application Entry Point (177 lines)
 
 **Minimal FastAPI app initialization.** Just wiring, no business logic.
 
@@ -160,9 +169,9 @@ async def search_meetings(request: SearchRequest, db: UnifiedDatabase = Depends(
 
 ---
 
-### 2. `rate_limiter.py` - Persistent Rate Limiting (481 lines)
+### 2. `rate_limiter.py` - Tiered Rate Limiting (662 lines)
 
-**SQLite-based rate limiter that survives restarts.**
+**SQLite-based rate limiter with three tiers: Basic (free), Hacktivist (nonprofit/journalist), Enterprise (commercial).**
 
 #### SQLiteRateLimiter
 
@@ -225,7 +234,7 @@ def call_gemini_api():
 
 ---
 
-### 3. `metrics.py` - Prometheus Instrumentation (222 lines)
+### 3. `metrics.py` - Prometheus Instrumentation (240 lines)
 
 **Centralized metrics for observability.**
 
@@ -293,11 +302,11 @@ engagic_llm_api_cost_dollars{model="gemini-2.5-flash"} 15.75
 
 ---
 
-## Route Modules (1271 lines total)
+## Route Modules (2201 lines total, 10 modules)
 
 **Each route module focuses on one domain.** No business logic - delegate to services.
 
-### 1. `routes/search.py` (61 lines)
+### 1. `routes/search.py` (71 lines)
 
 **Single unified search endpoint** - handles zipcode, city, or state.
 
@@ -340,7 +349,7 @@ POST /api/search {"query": "California"}
 
 ---
 
-### 2. `routes/meetings.py` (149 lines)
+### 2. `routes/meetings.py` (139 lines)
 
 **Meeting retrieval and processing.**
 
@@ -384,7 +393,7 @@ async def get_random_meeting_with_items(db: UnifiedDatabase = Depends(get_db)):
 
 ---
 
-### 3. `routes/topics.py` (128 lines)
+### 3. `routes/topics.py` (126 lines)
 
 **Topic-based search and browsing.**
 
@@ -451,9 +460,9 @@ async def get_popular_topics(db: UnifiedDatabase = Depends(get_db)):
 
 ---
 
-### 4. `routes/admin.py` (81 lines)
+### 4. `routes/admin.py` (342 lines)
 
-**Admin endpoints with bearer token authentication.**
+**Admin endpoints with bearer token authentication, dead letter queue management, activity feed.**
 
 ```python
 async def verify_admin_token(authorization: str = Header(None)):
@@ -549,7 +558,7 @@ async def prometheus_metrics(db: UnifiedDatabase = Depends(get_db)):
 
 ---
 
-### 6. `routes/flyer.py` (82 lines)
+### 6. `routes/flyer.py` (81 lines)
 
 **Civic action flyer generation.**
 
@@ -593,7 +602,7 @@ POST /api/flyer/generate
 
 ---
 
-### 7. `routes/matters.py` (430 lines)
+### 7. `routes/matters.py` (458 lines)
 
 **Matter tracking and timeline endpoints.**
 
@@ -683,11 +692,217 @@ async def get_city_matters(
 
 ---
 
-## Service Layer (894 lines + 369 HTML)
+### 8. `routes/donate.py` (79 lines)
+
+**Stripe donation integration for sustainable funding.**
+
+```python
+@router.post("/api/donate/create-checkout")
+async def create_checkout_session(request: DonateRequest):
+    """Create Stripe checkout session for one-time or recurring donations
+
+    Supports:
+    - One-time donations ($5, $20, $50, custom)
+    - Monthly recurring donations
+    - Redirects back to frontend after success/cancel
+    """
+    checkout_session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "usd",
+                "product_data": {"name": "Support engagic"},
+                "unit_amount": request.amount * 100,
+                "recurring": {"interval": "month"} if request.recurring else None
+            },
+            "quantity": 1
+        }],
+        mode="subscription" if request.recurring else "payment",
+        success_url=f"{config.FRONTEND_URL}/donate/success",
+        cancel_url=f"{config.FRONTEND_URL}/donate/cancel"
+    )
+
+    return {"checkout_url": checkout_session.url}
+```
+
+**Use case:** Sustainable funding model, alternative to aggressive API monetization.
+
+---
+
+### 9. `routes/auth.py` (370 lines)
+
+**Magic link authentication for user profiles and alerts (Phase 2/3).**
+
+```python
+@router.post("/api/auth/request-magic-link")
+async def request_magic_link(request: MagicLinkRequest, db: Database = Depends(get_db)):
+    """Send magic link to user's email
+
+    Security:
+    - Tokens hashed with SHA-256 before storage
+    - Single-use tokens (marked as used after first access)
+    - 15-minute expiration window
+    - Rate limiting to prevent abuse
+    """
+    # Generate secure token
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    # Store in database with expiration
+    await db.store_magic_link_token(
+        email=request.email,
+        token_hash=token_hash,
+        expires_at=datetime.utcnow() + timedelta(minutes=15)
+    )
+
+    # Send email with magic link
+    magic_link = f"{config.FRONTEND_URL}/auth/verify?token={token}"
+    send_magic_link_email(request.email, magic_link)
+
+    return {"success": True, "message": "Magic link sent"}
+
+@router.post("/api/auth/verify-token")
+async def verify_token(request: TokenVerifyRequest, db: Database = Depends(get_db)):
+    """Verify magic link token and create session
+
+    Returns:
+    - Session cookie (httpOnly, secure, sameSite=strict)
+    - User profile data
+    - Redirect to dashboard
+    """
+    token_hash = hashlib.sha256(request.token.encode()).hexdigest()
+
+    # Verify token (single-use, not expired)
+    user = await db.verify_and_consume_token(token_hash)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Create session
+    session_token = secrets.token_urlsafe(32)
+    await db.create_session(user_id=user.id, session_token=session_token)
+
+    # Set httpOnly cookie
+    response = JSONResponse(content={"success": True, "user": user.to_dict()})
+    response.set_cookie(
+        key="session",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=30 * 24 * 60 * 60  # 30 days
+    )
+
+    return response
+```
+
+**Security features:**
+- No passwords (magic links only)
+- Tokens hashed before storage
+- Single-use enforcement
+- httpOnly cookies (XSS protection)
+- Secure flag (HTTPS only)
+
+---
+
+### 10. `routes/dashboard.py` (494 lines)
+
+**User dashboard for topic subscriptions and alert management (Phase 2/3).**
+
+```python
+@router.get("/api/dashboard")
+async def get_dashboard(
+    user: User = Depends(get_current_user),
+    db: Database = Depends(get_db)
+):
+    """Get user's dashboard with subscriptions and recent alerts
+
+    Returns:
+    - User profile
+    - Subscribed topics
+    - Tracked cities
+    - Recent meeting alerts
+    - Alert delivery settings
+    """
+    subscriptions = await db.get_user_subscriptions(user.id)
+    recent_alerts = await db.get_user_alerts(user.id, limit=20)
+
+    return {
+        "user": user.to_dict(),
+        "subscriptions": [s.to_dict() for s in subscriptions],
+        "recent_alerts": [a.to_dict() for a in recent_alerts],
+        "alert_settings": user.alert_settings
+    }
+
+@router.post("/api/dashboard/subscribe-topic")
+async def subscribe_topic(
+    request: TopicSubscribeRequest,
+    user: User = Depends(get_current_user),
+    db: Database = Depends(get_db)
+):
+    """Subscribe to topic alerts for a city
+
+    User will receive email alerts when meetings in their city
+    discuss the subscribed topic.
+    """
+    await db.create_topic_subscription(
+        user_id=user.id,
+        city_banana=request.city_banana,
+        topic=request.topic
+    )
+
+    return {"success": True, "message": f"Subscribed to {request.topic}"}
+
+@router.post("/api/dashboard/unsubscribe-topic")
+async def unsubscribe_topic(
+    request: TopicUnsubscribeRequest,
+    user: User = Depends(get_current_user),
+    db: Database = Depends(get_db)
+):
+    """Unsubscribe from topic alerts"""
+    await db.delete_topic_subscription(
+        user_id=user.id,
+        subscription_id=request.subscription_id
+    )
+
+    return {"success": True}
+
+@router.post("/api/dashboard/update-alert-settings")
+async def update_alert_settings(
+    request: AlertSettingsRequest,
+    user: User = Depends(get_current_user),
+    db: Database = Depends(get_db)
+):
+    """Update alert delivery preferences
+
+    Settings:
+    - Frequency: real-time, daily digest, weekly summary
+    - Delivery: email, push notifications (future)
+    - Quiet hours: disable alerts during sleep hours
+    """
+    await db.update_user_alert_settings(
+        user_id=user.id,
+        settings=request.settings
+    )
+
+    return {"success": True}
+```
+
+**Features:**
+- Topic-based subscriptions (16 canonical topics)
+- City-specific tracking
+- Alert frequency control
+- Recent alert history
+- One-click unsubscribe
+
+**Use case:** Convert passive browsing → active civic engagement through personalized alerts.
+
+---
+
+## Service Layer (738 lines + 369 HTML)
 
 **Business logic separated from HTTP concerns.**
 
-### 1. `services/search.py` (315 lines)
+### 1. `services/search.py` (326 lines)
 
 **Core search logic** for zipcode, city, and state searches.
 
@@ -788,7 +1003,7 @@ def handle_state_search(state_input: str, db: UnifiedDatabase) -> Dict[str, Any]
 
 ---
 
-### 2. `services/meeting.py` (41 lines)
+### 2. `services/meeting.py` (47 lines)
 
 **Meeting retrieval with items attached.**
 
@@ -822,7 +1037,7 @@ def get_meetings_with_items(meetings: List[Meeting], db: UnifiedDatabase) -> Lis
 
 ---
 
-### 3. `services/flyer.py` (361 lines)
+### 3. `services/flyer.py` (365 lines)
 
 **Generate printable civic action flyers.**
 
@@ -894,11 +1109,11 @@ def generate_meeting_flyer(
 
 ---
 
-## Middleware (92 lines)
+## Middleware (455 lines, 4 modules)
 
 **Cross-cutting concerns applied to all requests.**
 
-### 1. `middleware/logging.py` (37 lines)
+### 1. `middleware/logging.py` (47 lines)
 
 **Request/response logging with unique IDs.**
 
@@ -930,9 +1145,9 @@ async def log_requests(request: Request, call_next):
 
 ---
 
-### 2. `middleware/rate_limiting.py` (55 lines)
+### 2. `middleware/rate_limiting.py` (220 lines)
 
-**Rate limit enforcement.**
+**Rate limit enforcement with tier detection and comprehensive 429 responses.**
 
 ```python
 async def rate_limit_middleware(request: Request, call_next, rate_limiter: SQLiteRateLimiter):
@@ -960,11 +1175,99 @@ async def rate_limit_middleware(request: Request, call_next, rate_limiter: SQLit
 
 ---
 
-## Models (119 lines)
+### 3. `middleware/metrics.py` (148 lines)
+
+**Prometheus request metrics collection.**
+
+```python
+async def metrics_middleware(request: Request, call_next):
+    """Collect Prometheus metrics for each request
+
+    Tracks:
+    - HTTP request duration (histogram)
+    - Request count by endpoint, method, status (counter)
+    - Active requests (gauge)
+    """
+    start_time = time.time()
+    endpoint = request.url.path
+    method = request.method
+
+    # Track active requests
+    metrics.active_requests.inc()
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+
+        # Record duration
+        duration = time.time() - start_time
+        metrics.http_request_duration_seconds.labels(
+            method=method,
+            endpoint=endpoint,
+            status=status_code
+        ).observe(duration)
+
+        # Record request count
+        metrics.http_requests_total.labels(
+            method=method,
+            endpoint=endpoint,
+            status=status_code
+        ).inc()
+
+        return response
+
+    finally:
+        metrics.active_requests.dec()
+```
+
+**Exported metrics:**
+- `engagic_http_request_duration_seconds` - Request latency histogram
+- `engagic_http_requests_total` - Total request counter
+- `engagic_active_requests` - Currently processing requests
+
+---
+
+### 4. `middleware/request_id.py` (45 lines)
+
+**Request ID correlation for distributed tracing.**
+
+```python
+async def request_id_middleware(request: Request, call_next):
+    """Add unique request ID for tracing across logs
+
+    Request ID is:
+    - Generated for each request (8-char hex)
+    - Bound to structlog context (appears in all logs for this request)
+    - Returned in X-Request-ID response header
+    - Used for log correlation and debugging
+    """
+    request_id = str(uuid.uuid4())[:8]
+
+    # Bind to structlog context (all subsequent logs will include this)
+    with structlog.contextvars.bound_contextvars(request_id=request_id):
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+```
+
+**Usage:**
+```bash
+# Find all logs for a specific request
+journalctl -u engagic-api | grep "request_id=a3f9c2d1"
+
+# Client can include request ID in bug reports
+X-Request-ID: a3f9c2d1
+```
+
+**Why?** Distributed systems need request correlation. This makes debugging production issues tractable.
+
+---
+
+## Models (131 lines)
 
 **Pydantic models for request validation.**
 
-### `models/requests.py` (119 lines)
+### `models/requests.py` (131 lines)
 
 ```python
 class SearchRequest(BaseModel):
@@ -1024,7 +1327,7 @@ class FlyerRequest(BaseModel):
 
 ---
 
-## Utils (245 lines)
+## Utils (454 lines, 4 modules)
 
 **Reusable utilities across the server.**
 
@@ -1138,6 +1441,97 @@ def sanitize_string(value: str) -> str:
 ```
 
 **Used by:** All Pydantic validators to prevent SQL injection.
+
+---
+
+### 4. `utils/vendor_urls.py` (103 lines)
+
+**Vendor attribution URL construction for source transparency.**
+
+```python
+def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
+    """Construct the source URL for a city's meeting calendar
+
+    Args:
+        vendor: Vendor name (legistar, primegov, granicus, etc.)
+        slug: City-specific slug used by the vendor
+
+    Returns:
+        Full URL to the city's calendar page
+
+    Examples:
+        get_vendor_source_url("legistar", "paloaltoca")
+        → "https://paloaltoca.legistar.com/Calendar.aspx"
+
+        get_vendor_source_url("primegov", "paloaltoca")
+        → "https://paloaltoca.primegov.com/Portal/Meeting?clearCache=1"
+
+        get_vendor_source_url("granicus", "santaclara")
+        → "https://santaclara.granicus.com/ViewPublisher.php?view_id=123"
+    """
+    if vendor == "legistar":
+        return f"https://{slug}.legistar.com/Calendar.aspx"
+
+    elif vendor == "primegov":
+        return f"https://{slug}.primegov.com/Portal/Meeting?clearCache=1"
+
+    elif vendor == "granicus":
+        return get_granicus_url(slug)  # Uses cached view_id mapping
+
+    elif vendor == "iqm2":
+        return f"https://iqm2.com/Citizens/Calendar.aspx?From=1/1/{datetime.now().year}&To=12/31/{datetime.now().year}&CommunityKey={slug}"
+
+    elif vendor == "novusagenda":
+        return f"https://{slug}.novusagenda.com/agendapublic/CoverSheet.aspx"
+
+    elif vendor == "escribe":
+        return f"https://{slug}.escribemeetings.com"
+
+    elif vendor == "civicclerk":
+        return f"https://{slug}.ca.us/AgendaCenter"
+
+    elif vendor == "civicplus":
+        return f"https://{slug}.civicplus.com/Calendar"
+
+    elif vendor == "berkeley":
+        return "https://berkeleyca.gov/your-government/agenda-minutes"
+
+    elif vendor == "chicago":
+        return "https://chicago.gov/city/en/depts/dol/supp_info/city-council-meeting-schedule.html"
+
+    elif vendor == "menlopark":
+        return "https://menlopark.gov/Government/Meetings"
+
+    return None
+
+
+def get_granicus_url(slug: str) -> str:
+    """Get Granicus URL with city-specific view_id from cache
+
+    Granicus requires a view_id parameter that varies by city.
+    This reads from a cached JSON file generated during city sync.
+
+    Falls back to base URL if view_id not found.
+    """
+    view_ids_file = os.path.join(config.DB_DIR, "granicus_view_ids.json")
+
+    if os.path.exists(view_ids_file):
+        try:
+            with open(view_ids_file, "r") as f:
+                mappings = json.load(f)
+                base_url = f"https://{slug}.granicus.com"
+                view_id = mappings.get(base_url)
+                if view_id:
+                    return f"{base_url}/ViewPublisher.php?view_id={view_id}"
+        except Exception:
+            pass
+
+    return f"https://{slug}.granicus.com"
+```
+
+**Use case:** Frontend displays "View on [Vendor]" links with proper attribution to original source.
+
+**Why cached view_ids?** Granicus doesn't expose view_id in a predictable way. We discover it during sync and cache for URL construction.
 
 ---
 
@@ -1442,4 +1836,4 @@ hey -n 10000 -c 100 http://localhost:8000/api/health
 
 ---
 
-**Last Updated:** 2025-11-20 (Line Count Verification)
+**Last Updated:** 2025-11-23 (Comprehensive audit - all line counts verified, missing modules documented)
