@@ -348,22 +348,7 @@ const isValidDate = $derived(
 
 ## Performance Strategy
 
-### 1. Zero CLS (Cumulative Layout Shift)
-
-**Problem:** Ticker spawns late, pushes search bar down during tap
-
-**Solution:**
-```css
-.news-ticker {
-  min-height: 46px;  /* Reserve space before data loads */
-  position: fixed;   /* Out of document flow */
-  top: 0;
-}
-```
-
-**Result:** CLS = 0 (perfect score)
-
-### 2. Load Functions (Data Before Render)
+### 1. Load Functions (Data Before Render)
 
 **Before (onMount):**
 ```
@@ -382,7 +367,7 @@ Time to content: 1.2s (52% faster)
 **Three-tier strategy:**
 
 1. **Browser cache** (Cache-Control headers)
-   - Homepage: 5 minutes (analytics/ticker)
+   - Homepage: 5 minutes (analytics)
    - City pages: 2 minutes (meetings)
 
 2. **Navigation state** (eliminate double-fetch)

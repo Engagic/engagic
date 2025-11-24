@@ -5,7 +5,6 @@ import type {
 	RandomMeetingResponse,
 	RandomMeetingWithItemsResponse,
 	TopicSearchResult,
-	TickerResponse,
 	MatterTimelineResponse,
 	GetMeetingResponse,
 	GetCityMattersResponse,
@@ -161,17 +160,6 @@ export const apiClient = {
 	async getMeeting(meetingId: string, clientIp?: string): Promise<GetMeetingResponse> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/meeting/${meetingId}`,
-			{},
-			config.maxRetries,
-			clientIp
-		);
-
-		return response.json();
-	},
-
-	async getTicker(clientIp?: string): Promise<TickerResponse> {
-		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/api/ticker`,
 			{},
 			config.maxRetries,
 			clientIp

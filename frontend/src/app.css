@@ -56,8 +56,6 @@
 	--shadow-sm: rgba(0, 0, 0, 0.04);
 	--shadow-md: rgba(0, 0, 0, 0.1);
 	--shadow-lg: rgba(79, 70, 229, 0.12);
-	--ticker-bg: #4f46e5;
-	--ticker-text: #ffffff;
 
 	/* Badge colors */
 	--badge-blue-bg: #dbeafe;
@@ -103,8 +101,6 @@
 	--shadow-sm: rgba(0, 0, 0, 0.3);
 	--shadow-md: rgba(0, 0, 0, 0.5);
 	--shadow-lg: rgba(251, 146, 60, 0.25);
-	--ticker-bg: #1e293b;
-	--ticker-text: #f8fafc;
 
 	/* Badge colors */
 	--badge-blue-bg: #1e3a8a;
@@ -269,22 +265,6 @@ body {
 	}
 }
 
-.news-ticker {
-	width: 100%;
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	overflow: hidden;
-	background: var(--ticker-bg);
-	padding: 0.75rem 0;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-	z-index: 1000;
-	box-shadow: 0 2px 8px var(--shadow-md);
-	min-height: 46px;
-	transition: background 0.3s ease;
-}
-
 /* Navigation loading indicator */
 .navigation-loading {
 	position: fixed;
@@ -307,76 +287,6 @@ body {
 	}
 	100% {
 		transform: scaleX(0.95);
-	}
-}
-
-.ticker-content {
-	display: flex;
-	animation: scroll 48s linear infinite;
-	white-space: nowrap;
-}
-
-.news-ticker:hover .ticker-content {
-	animation-play-state: paused;
-}
-
-.ticker-item {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.75rem;
-	padding: 0 3rem;
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 0.85rem;
-	color: var(--ticker-text);
-	text-decoration: none;
-	transition: opacity 0.2s ease;
-	cursor: pointer;
-}
-
-.ticker-item:hover {
-	opacity: 0.85;
-}
-
-.ticker-item:hover .ticker-city {
-	text-decoration: underline;
-}
-
-.ticker-city {
-	font-weight: 600;
-	color: var(--ticker-text);
-}
-
-.ticker-separator {
-	color: rgba(255, 255, 255, 0.5);
-}
-
-.ticker-date {
-	color: rgba(255, 255, 255, 0.8);
-	font-size: 0.8rem;
-}
-
-.ticker-excerpt {
-	color: rgba(255, 255, 255, 0.9);
-	max-width: 500px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-@keyframes scroll {
-	0% {
-		transform: translateX(0);
-	}
-	100% {
-		transform: translateX(-50%);
-	}
-}
-
-@keyframes scrollMobile {
-	0% {
-		transform: translateX(0);
-	}
-	100% {
-		transform: translateX(-50%);
 	}
 }
 
@@ -514,10 +424,6 @@ body {
 @media (max-width: 640px) {
 	body {
 		padding-top: 2rem;
-	}
-
-	.ticker-content {
-		animation: scrollMobile 36s linear infinite;
 	}
 
 	.container {

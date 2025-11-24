@@ -118,7 +118,7 @@ The frontend is now **thoroughly documented** with 6 comprehensive guides totali
 
 **What it covers:**
 - API client architecture (fetchWithRetry)
-- All 7 endpoints (search, analytics, ticker, etc.)
+- All API endpoints (search, analytics, meetings, matters, etc.)
 - Error handling (3 error types, retry logic)
 - Type system (186 lines of TypeScript types)
 - Configuration (env vars, retry settings)
@@ -140,7 +140,7 @@ The frontend is now **thoroughly documented** with 6 comprehensive guides totali
 - Color system (semantic colors, status indicators)
 - Layout system (progressive widths, flexbox)
 - Accessibility (focus indicators, reduced motion)
-- Animations (navigation bar, ticker)
+- Animations (navigation bar, page transitions)
 - Responsive design (mobile-first)
 
 **When to read:**

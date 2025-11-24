@@ -139,7 +139,6 @@ export const apiClient = {
   getRandomMeetingWithItems(): Promise<RandomMeetingWithItemsResponse>
   searchByTopic(topic: string, banana?: string, limit?: number): Promise<TopicSearchResult>
   getMeeting(meetingId: number): Promise<MeetingResponse>
-  getTicker(): Promise<TickerResponse>
 };
 ```
 
@@ -376,38 +375,6 @@ console.log(result.meeting.title);
 - Direct ID lookup (no search)
 - Single meeting returned (not full list)
 - Faster than `searchMeetings()` + filter
-
----
-
-### 7. Get Ticker
-
-**Method:** `apiClient.getTicker()`
-**Endpoint:** `GET /api/ticker`
-**Purpose:** Fetch recent interesting meetings for homepage ticker
-
-**Response:**
-```typescript
-{
-  success: true,
-  items: [
-    {
-      city: "Palo Alto",
-      date: "Nov 2",
-      excerpt: "Discussed new housing development...",
-      url: "/paloaltoCA/123-city-council-nov-2-2024"
-    },
-    // ... more items
-  ]
-}
-```
-
-**Usage:**
-```typescript
-const ticker = await apiClient.getTicker();
-if (ticker.success) {
-  console.log(ticker.items);
-}
-```
 
 ---
 
