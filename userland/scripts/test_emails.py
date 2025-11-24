@@ -41,7 +41,7 @@ async def send_test_emails(email: str):
     # 1. Magic link (signup)
     print("1. Magic Link - Signup")
     signup_token = secrets.token_urlsafe(32)
-    result = send_magic_link(
+    result = await send_magic_link(
         email=email,
         token=signup_token,
         user_name="Test User",
@@ -52,7 +52,7 @@ async def send_test_emails(email: str):
     # 2. Magic link (login)
     print("2. Magic Link - Login")
     login_token = secrets.token_urlsafe(32)
-    result = send_magic_link(
+    result = await send_magic_link(
         email=email,
         token=login_token,
         user_name="Test User",
@@ -120,7 +120,7 @@ async def send_test_digest(email: str):
         if match_count > 0:
             subject += f" - {match_count} keyword match{'es' if match_count != 1 else ''}"
 
-        result = email_service.send_email(
+        result = await email_service.send_email(
             to_email=email,
             subject=subject,
             html_body=html

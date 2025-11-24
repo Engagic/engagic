@@ -1,28 +1,23 @@
 """
 Transactional Email Delivery
 
-Magic link emails via Mailgun for authentication.
+Magic link emails for authentication via Mailgun.
+Uses EmailService for actual sending.
 """
 
-import logging
-import requests
 from typing import Optional
 
-from userland.settings import (
-    MAILGUN_API_KEY,
-    MAILGUN_DOMAIN,
-    MAILGUN_FROM_EMAIL,
-    APP_URL,
-)
+from config import config, get_logger
+from userland.email.emailer import EmailService
 from userland.email.templates import (
     email_wrapper_start,
     email_wrapper_end,
 )
 
-logger = logging.getLogger("userland")
+logger = get_logger(__name__)
 
 
-def send_magic_link(
+async def send_magic_link(
     email: str,
     token: str,
     user_name: Optional[str] = None,
@@ -40,11 +35,8 @@ def send_magic_link(
     Returns:
         True if email sent successfully, False otherwise.
     """
-    if not MAILGUN_API_KEY or not MAILGUN_DOMAIN:
-        logger.error("Mailgun not configured. Cannot send magic link.")
-        return False
-
-    magic_link = f"{APP_URL}/auth/verify?token={token}"
+    app_url = config.FRONTEND_URL or "https://engagic.org"
+    magic_link = f"{app_url}/auth/verify?token={token}"
     name = user_name or email.split('@')[0]
 
     if is_signup:
@@ -57,7 +49,36 @@ def send_magic_link(
         message = "Click the button below to access your digest dashboard:"
 
     subject = "Engagic Login Link"
-    html = f"""{email_wrapper_start("Your Engagic Login Link")}
+    html = _build_magic_link_html(header_title, header_subtitle, message, magic_link)
+    text = _build_magic_link_text(header_title, header_subtitle, magic_link)
+
+    try:
+        email_service = EmailService()
+        success = await email_service.send_email(
+            to_email=email,
+            subject=subject,
+            html_body=html,
+            text_body=text
+        )
+        if success:
+            logger.info("magic link sent", email=email, is_signup=is_signup)
+        return success
+    except ValueError as e:
+        logger.error("mailgun not configured", error=str(e))
+        return False
+    except Exception as e:
+        logger.error("failed to send magic link", email=email, error=str(e))
+        return False
+
+
+def _build_magic_link_html(
+    header_title: str,
+    header_subtitle: str,
+    message: str,
+    magic_link: str
+) -> str:
+    """Build magic link HTML email template"""
+    return f"""{email_wrapper_start("Your Engagic Login Link")}
                     <!-- Header -->
                     <tr>
                         <td style="padding: 32px 40px 28px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
@@ -116,7 +137,14 @@ def send_magic_link(
                     </tr>
 {email_wrapper_end()}"""
 
-    text = f"""
+
+def _build_magic_link_text(
+    header_title: str,
+    header_subtitle: str,
+    magic_link: str
+) -> str:
+    """Build magic link plain text email"""
+    return f"""
     {header_title}
     {header_subtitle}
 
@@ -129,28 +157,3 @@ def send_magic_link(
     Engagic is free and open-source. If you find it valuable, please support the project.
     https://engagic.org/about/donate
     """
-
-    try:
-        response = requests.post(
-            f"https://api.mailgun.net/v3/{MAILGUN_DOMAIN}/messages",
-            auth=("api", MAILGUN_API_KEY),
-            data={
-                "from": f"Engagic <{MAILGUN_FROM_EMAIL}>",
-                "to": email,
-                "subject": subject,
-                "text": text,
-                "html": html
-            },
-            timeout=10
-        )
-
-        if response.status_code == 200:
-            logger.info(f"Magic link sent to {email} (signup={is_signup})")
-            return True
-        else:
-            logger.error(f"Failed to send magic link: {response.status_code} {response.text}")
-            return False
-
-    except Exception as e:
-        logger.error(f"Error sending magic link: {e}")
-        return False

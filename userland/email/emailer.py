@@ -1,65 +1,64 @@
 """
-Email delivery service for weekly digest notifications.
+Async email delivery service using Mailgun API.
 
-Uses Mailgun for reliable email delivery.
-WEEKLY DIGEST ONLY - no alert emails.
+Provides unified email sending for:
+- Weekly digest notifications
+- Magic link authentication (via transactional.py)
 """
 
-import logging
-import os
+import httpx
 from typing import Optional
-import requests
 
-logger = logging.getLogger("engagic")
+from config import config, get_logger
+
+logger = get_logger(__name__)
 
 
 class EmailService:
-    """Send weekly digest emails via Mailgun"""
+    """Async email service using Mailgun API"""
 
-    def __init__(self, api_key: Optional[str] = None, domain: Optional[str] = None):
-        api_key_value = api_key or os.getenv("MAILGUN_API_KEY")
-        if not api_key_value:
-            raise ValueError("MAILGUN_API_KEY not configured")
-        self.api_key: str = api_key_value
+    def __init__(self):
+        if not config.MAILGUN_API_KEY or not config.MAILGUN_DOMAIN:
+            raise ValueError("Mailgun configuration missing (MAILGUN_API_KEY, MAILGUN_DOMAIN)")
+        self.api_key = config.MAILGUN_API_KEY  # Store validated key
+        self.api_url = f"https://api.mailgun.net/v3/{config.MAILGUN_DOMAIN}/messages"
+        self.from_email = config.MAILGUN_FROM_EMAIL or f"alerts@{config.MAILGUN_DOMAIN}"
 
-        domain_value = domain or os.getenv("MAILGUN_DOMAIN")
-        if not domain_value:
-            raise ValueError("MAILGUN_DOMAIN not configured")
-        self.domain: str = domain_value
-
-        self.from_email = os.getenv("MAILGUN_FROM_EMAIL", f"digest@{self.domain}")
-        self.api_url = f"https://api.mailgun.net/v3/{self.domain}/messages"
-
-    def send_email(self, to_email: str, subject: str, html_body: str) -> bool:
-        """
-        Send a weekly digest HTML email via Mailgun.
+    async def send_email(
+        self,
+        to_email: str,
+        subject: str,
+        html_body: str,
+        text_body: Optional[str] = None
+    ) -> bool:
+        """Send email via Mailgun API (async)
 
         Args:
             to_email: Recipient email address
             subject: Email subject line
             html_body: HTML content for email body
+            text_body: Plain text fallback (optional, defaults to html_body)
 
         Returns:
-            True if sent successfully
+            True if sent successfully, False otherwise
         """
-        try:
-            response = requests.post(
-                self.api_url,
-                auth=("api", self.api_key),
-                data={
-                    "from": self.from_email,
-                    "to": to_email,
-                    "subject": subject,
-                    "html": html_body
-                }
-            )
-            response.raise_for_status()
-
-            logger.info(
-                f"Sent digest to {to_email}: {subject}, status={response.status_code}"
-            )
-            return response.status_code == 200
-
-        except requests.RequestException as e:
-            logger.error(f"Failed to send digest to {to_email}: {e}")
-            return False
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    self.api_url,
+                    auth=("api", self.api_key),
+                    data={
+                        "from": self.from_email,
+                        "to": to_email,
+                        "subject": subject,
+                        "html": html_body,
+                        "text": text_body or html_body,
+                    },
+                    timeout=10
+                )
+                response.raise_for_status()
+                logger.info("email sent", to=to_email, subject=subject[:50])
+                return True
+            except httpx.HTTPError as e:
+                logger.error("email send failed", to=to_email, error=str(e))
+                return False

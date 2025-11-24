@@ -135,7 +135,7 @@ async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
     # Send magic link email (use shared transactional template)
     from userland.email.transactional import send_magic_link
 
-    success = send_magic_link(
+    success = await send_magic_link(
         email=signup_request.email,
         token=token,
         user_name=name,
@@ -176,7 +176,7 @@ async def login(login_request: LoginRequest, db: Database = Depends(get_db)):
     # Send magic link email (use shared transactional template)
     from userland.email.transactional import send_magic_link
 
-    success = send_magic_link(
+    success = await send_magic_link(
         email=login_request.email,
         token=token,
         user_name=user.name,
