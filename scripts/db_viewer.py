@@ -44,13 +44,13 @@ class DatabaseViewer:
             async with self.db.pool.acquire() as conn:
                 zipcode_count = await conn.fetchval(
                     "SELECT COUNT(*) FROM zipcodes WHERE banana = $1",
-                    city['banana']
+                    city.banana
                 )
 
             print(
-                f"{city['banana']:<20} {city['name'][:19]:<20} {city['state']:<6} "
-                f"{city['slug'][:19]:<20} {city['vendor']:<12} "
-                f"{city.get('status', 'active'):<8} {zipcode_count:<4}"
+                f"{city.banana:<20} {city.name[:19]:<20} {city.state:<6} "
+                f"{city.slug[:19]:<20} {city.vendor:<12} "
+                f"{city.status:<8} {zipcode_count:<4}"
             )
 
     async def show_zipcodes_table(self, limit: int = 50):
@@ -125,29 +125,29 @@ class DatabaseViewer:
         print("-" * 105)
 
         for meeting in meetings:
-            city = await self.db.cities.get_city(meeting['banana'])
+            city = await self.db.cities.get_city(meeting.banana)
             city_display = (
-                f"{city['name'][:15]}, {city['state']}" if city else meeting['banana'][:19]
+                f"{city.name[:15]}, {city.state}" if city else meeting.banana[:19]
             )
 
-            title = meeting.get('title', 'Unknown')[:34]
+            title = (meeting.title or 'Unknown')[:34]
 
             # Format date
             date_str = ""
-            if meeting.get('date'):
-                if isinstance(meeting['date'], str):
-                    date_str = meeting['date'][:10]
+            if meeting.date:
+                if isinstance(meeting.date, str):
+                    date_str = meeting.date[:10]
                 else:
-                    date_str = meeting['date'].strftime("%Y-%m-%d")
+                    date_str = meeting.date.strftime("%Y-%m-%d")
 
             # Get item count
-            items = await self.db.items.get_agenda_items(meeting['id'])
+            items = await self.db.items.get_agenda_items(meeting.id)
             item_count = str(len(items)) if items else "0"
 
-            status = meeting.get('status', '-')[:9]
+            status = (meeting.status or '-')[:9]
 
             print(
-                f"{meeting['id'][:11]:<12} {city_display[:19]:<20} {title:<35} "
+                f"{meeting.id[:11]:<12} {city_display[:19]:<20} {title:<35} "
                 f"{date_str:<12} {item_count:<6} {status:<10}"
             )
 
@@ -158,7 +158,7 @@ class DatabaseViewer:
 
         all_items = []
         for meeting in meetings:
-            items = await self.db.items.get_agenda_items(meeting['id'])
+            items = await self.db.items.get_agenda_items(meeting.id)
             for item in items:
                 all_items.append({'item': item, 'meeting': meeting})
                 if len(all_items) >= limit:
@@ -178,12 +178,12 @@ class DatabaseViewer:
             item = row['item']
             meeting = row['meeting']
 
-            meeting_title = meeting.get('title', 'Unknown')[:29]
-            item_title = item.get('title', 'Unknown')[:39]
-            has_summary = "YES" if item.get('summary') else "NO"
+            meeting_title = (meeting.title or 'Unknown')[:29]
+            item_title = (item.title or 'Unknown')[:39]
+            has_summary = "YES" if item.summary else "NO"
 
             print(
-                f"{item['id'][:14]:<15} {meeting_title:<30} {item_title:<40} {has_summary:<8}"
+                f"{item.id[:14]:<15} {meeting_title:<30} {item_title:<40} {has_summary:<8}"
             )
 
     async def show_queue_table(self, limit: int = 50):
@@ -329,13 +329,13 @@ class DatabaseViewer:
                         current_banana = None
                         continue
 
-                print(f"\n=== {city['name']}, {city['state']} ({current_banana}) ===")
-                print(f"  name:   {city['name']}")
-                print(f"  state:  {city['state']}")
-                print(f"  vendor: {city['vendor']}")
-                print(f"  slug:   {city['slug']}")
-                print(f"  county: {city.get('county') or 'None'}")
-                print(f"  status: {city.get('status', 'active')}")
+                print(f"\n=== {city.name}, {city.state} ({current_banana}) ===")
+                print(f"  name:   {city.name}")
+                print(f"  state:  {city.state}")
+                print(f"  vendor: {city.vendor}")
+                print(f"  slug:   {city.slug}")
+                print(f"  county: {city.county or 'None'}")
+                print(f"  status: {(city.status or 'active')}")
 
                 field = input(
                     "\nField to update (name/state/slug/vendor/status/county) or 'q' to quit: "
@@ -360,14 +360,14 @@ class DatabaseViewer:
                     continue
 
                 # Update the field
-                city[field] = new_value if new_value else None
+                setattr(city, field, new_value if new_value else None)
 
                 # If updating name or state, recalculate banana
                 if field in ['name', 'state']:
                     import re
                     new_banana = (
-                        re.sub(r"[^a-zA-Z0-9]", "", city['name']).lower()
-                        + city['state'].upper()
+                        re.sub(r"[^a-zA-Z0-9]", "", city.name).lower()
+                        + city.state.upper()
                     )
 
                     if new_banana != current_banana:
@@ -381,7 +381,7 @@ class DatabaseViewer:
                                     SET name = $1, state = $2, banana = $3, updated_at = NOW()
                                     WHERE banana = $4
                                     """,
-                                    city['name'], city['state'], new_banana, current_banana
+                                    city.name, city.state, new_banana, current_banana
                                 )
 
                                 # Update foreign keys
@@ -431,18 +431,18 @@ class DatabaseViewer:
         all_cities = await self.db.cities.get_cities(status="active", limit=1000)
         for city in all_cities:
             if (
-                query.lower() in city['name'].lower()
-                or query.lower() in city['state'].lower()
-                or query.lower() in city['banana'].lower()
-                or query.lower() in city['slug'].lower()
-                or query.lower() in city['vendor'].lower()
+                query.lower() in city.name.lower()
+                or query.lower() in city.state.lower()
+                or query.lower() in city.banana.lower()
+                or query.lower() in city.slug.lower()
+                or query.lower() in city.vendor.lower()
             ):
                 results.append({
                     'type': 'CITY',
-                    'id': city['banana'],
-                    'name': f"{city['name']}, {city['state']}",
-                    'info': f"{city['banana']} ({city['vendor']})",
-                    'extra': city['slug']
+                    'id': city.banana,
+                    'name': f"{city.name}, {city.state}",
+                    'info': f"{city.banana} ({city.vendor})",
+                    'extra': city.slug
                 })
 
         # Search zipcodes
@@ -468,21 +468,21 @@ class DatabaseViewer:
 
         # Search meetings (title and banana)
         for city in all_cities:
-            if query.lower() in city['banana'].lower():
-                meetings = await self.db.meetings.get_meetings_for_city(city['banana'], limit=10)
+            if query.lower() in city.banana.lower():
+                meetings = await self.db.meetings.get_meetings_for_city(city.banana, limit=10)
                 for meeting in meetings:
                     date_str = ''
-                    if meeting.get('date'):
-                        if isinstance(meeting['date'], str):
-                            date_str = meeting['date'][:10]
+                    if meeting.date:
+                        if isinstance(meeting.date, str):
+                            date_str = meeting.date[:10]
                         else:
-                            date_str = meeting['date'].strftime("%Y-%m-%d")
+                            date_str = meeting.date.strftime("%Y-%m-%d")
 
                     results.append({
                         'type': 'MEETING',
-                        'id': meeting['id'][:10],
-                        'name': meeting.get('title', 'Unknown')[:40],
-                        'info': f"{city['name']}, {city['state']}",
+                        'id': meeting.id[:10],
+                        'name': (meeting.title or 'Unknown')[:40],
+                        'info': f"{city.name}, {city.state}",
                         'extra': date_str
                     })
 
