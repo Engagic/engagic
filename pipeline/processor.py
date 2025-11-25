@@ -392,26 +392,13 @@ class Processor:
         total_page_count = 0
 
         for att in item.attachments:
-            if isinstance(att, str):
-                att_url = att
-                att_type = "pdf"
-                att_name = ""
-            elif isinstance(att, dict):
-                att_url = att.get("url")
-                att_type = att.get("type", "unknown")
-                att_name = att.get("name", "")
-
-                # Handle text segments directly
-                if att_type == "text_segment":
-                    text_content = att.get("content", "")
-                    if text_content:
-                        item_parts.append(text_content)
-                    continue
-            else:
-                continue
+            # Trust Pydantic AttachmentInfo model
+            att_url = att.url
+            att_type = att.type
+            att_name = att.name
 
             # Extract PDFs and documents
-            if att_type in ("pdf", "doc", "unknown") or isinstance(att, str):
+            if att_type in ("pdf", "doc", "unknown"):
                 if att_url:
                     # Skip public comment and parcel table attachments by name
                     if att_name and is_public_comment_attachment(att_name):
@@ -550,13 +537,8 @@ class Processor:
 
         for item in items:
             for att in (item.attachments or []):
-                # Normalize attachment to dict
-                if isinstance(att, str):
-                    att_url = att
-                elif isinstance(att, dict):
-                    att_url = att.get("url")
-                else:
-                    continue
+                # Trust Pydantic AttachmentInfo model
+                att_url = att.url
 
                 # Deduplicate by URL
                 if att_url and att_url not in seen_urls:
@@ -849,25 +831,13 @@ class Processor:
             # Collect this item's attachment URLs
             item_urls = []
             for att in item.attachments:
-                # Pydantic models are the standard (AttachmentInfo)
-                if hasattr(att, 'url'):
-                    att_url = att.url
-                    att_type = getattr(att, 'type', 'unknown')
-                    att_name = getattr(att, 'name', '')
-                # Legacy fallbacks (should rarely be hit post-migration)
-                elif isinstance(att, dict):
-                    att_url = att.get("url")
-                    att_type = att.get("type", "unknown")
-                    att_name = att.get("name", "")
-                elif isinstance(att, str):
-                    att_url = att
-                    att_type = "pdf"
-                    att_name = ""
-                else:
-                    continue
+                # Trust Pydantic AttachmentInfo model
+                att_url = att.url
+                att_type = att.type
+                att_name = att.name
 
-                # Only process PDF/document/unknown types (not text segments)
-                if att_type in ("pdf", "doc", "unknown") or isinstance(att, str):
+                # Only process PDF/document types
+                if att_type in ("pdf", "doc", "unknown"):
                     if att_url:
                         item_urls.append(att_url)
                         # Track name for this URL
@@ -990,13 +960,6 @@ class Processor:
                         doc = document_cache[att_url]
                         item_specific_parts.append(f"=== {doc['name']} ===\n{doc['text']}")
                         total_page_count += doc['page_count']
-
-                # Also include text segments from item.attachments
-                for att in item.attachments:
-                    if isinstance(att, dict) and att.get("type") == "text_segment":
-                        text_content = att.get("content", "")
-                        if text_content:
-                            item_specific_parts.append(text_content)
 
                 if item_specific_parts:
                     combined_text = "\n\n".join(item_specific_parts)
