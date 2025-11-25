@@ -849,14 +849,20 @@ class Processor:
             # Collect this item's attachment URLs
             item_urls = []
             for att in item.attachments:
-                if isinstance(att, str):
-                    att_url = att
-                    att_type = "pdf"
-                    att_name = ""
+                # Pydantic models are the standard (AttachmentInfo)
+                if hasattr(att, 'url'):
+                    att_url = att.url
+                    att_type = getattr(att, 'type', 'unknown')
+                    att_name = getattr(att, 'name', '')
+                # Legacy fallbacks (should rarely be hit post-migration)
                 elif isinstance(att, dict):
                     att_url = att.get("url")
                     att_type = att.get("type", "unknown")
                     att_name = att.get("name", "")
+                elif isinstance(att, str):
+                    att_url = att
+                    att_type = "pdf"
+                    att_name = ""
                 else:
                     continue
 
@@ -1266,7 +1272,7 @@ class Processor:
                 processing_method=f"item_level_{len(processed_items)}_items",
                 processing_time=processing_time,
                 topics=meeting_topics,
-                participation=merged_participation,
+                participation=merged_participation,  # JSONB encoder handles Pydantic models
             )
 
             logger.info(

@@ -29,6 +29,25 @@ from pipeline.utils import hash_attachments
 logger = get_logger(__name__).bind(component="database_postgres")
 
 
+def _jsonb_encoder(obj):
+    """JSONB encoder with automatic Pydantic model serialization.
+
+    Handles:
+    - Native Python types (dict, list, str, int, float, bool, None)
+    - Pydantic models (via model_dump())
+    - Nested structures containing Pydantic models
+
+    This completes the automatic JSONB serialization migration.
+    See database/ASYNCPG_JSONB_HANDLING.md for details.
+    """
+    def default(o):
+        if hasattr(o, 'model_dump'):
+            return o.model_dump()
+        raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
+    return json.dumps(obj, default=default)
+
+
 class Database:
     """Async PostgreSQL database with repository pattern
 
@@ -106,7 +125,7 @@ class Database:
             """Initialize connection with JSONB codec for automatic serialization"""
             await conn.set_type_codec(
                 'jsonb',
-                encoder=json.dumps,
+                encoder=_jsonb_encoder,
                 decoder=json.loads,
                 schema='pg_catalog'
             )
