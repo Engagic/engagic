@@ -31,13 +31,13 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
         super().__init__(city_slug, vendor="novusagenda")
         self.base_url = f"https://{self.slug}.novusagenda.com"
 
-    async def fetch_meetings(self, days_forward: int = 14, days_back: int = 7) -> List[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Scrape meetings from NovusAgenda /agendapublic page with date filtering.
 
         Args:
-            days_forward: Days to look ahead (default 14)
             days_back: Days to look back (default 7)
+            days_forward: Days to look ahead (default 14)
 
         Returns:
             List of meeting dictionaries with meeting_id, title, start, packet_url, items (if available)

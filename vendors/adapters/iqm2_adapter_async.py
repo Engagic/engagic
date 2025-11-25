@@ -58,7 +58,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
         logger.info("initialized async IQM2 adapter", vendor="iqm2", slug=self.slug)
 
     async def fetch_meetings(
-        self, days_forward: int = 14, days_back: int = 7
+        self, days_back: int = 7, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         """
         Scrape meetings from IQM2 calendar page.
@@ -66,8 +66,8 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
         Calendar.aspx returns all meetings for the year. We filter by date range manually.
 
         Args:
-            days_forward: Days to look ahead (default 14)
             days_back: Days to look back (default 7)
+            days_forward: Days to look ahead (default 14)
 
         Returns:
             List of meeting dictionaries with meeting_id, title, start, items
