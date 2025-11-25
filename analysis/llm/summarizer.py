@@ -12,6 +12,7 @@ Responsibilities:
 import asyncio
 import os
 import json
+import re
 import time
 from typing import List, Dict, Any, Optional, Tuple
 from importlib.resources import files
@@ -89,6 +90,66 @@ class GeminiSummarizer:
 
         return input_cost + output_cost
 
+    def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3):
+        """Call Gemini API with automatic retry on 429 rate limits.
+
+        Instead of proactive rate limiting, we trust Gemini to tell us when to retry.
+        Gemini returns retryDelay in 429 responses - we parse and respect it.
+
+        Args:
+            model_name: Gemini model to use
+            prompt: The prompt text
+            config: GenerateContentConfig
+            max_retries: Maximum retry attempts (default 3)
+
+        Returns:
+            GenerateContentResponse from Gemini
+
+        Raises:
+            LLMError: If max retries exceeded or non-rate-limit error
+        """
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                response = self.client.models.generate_content(
+                    model=model_name, contents=prompt, config=config
+                )
+                return response
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    # Parse retryDelay from Gemini's error response
+                    retry_match = re.search(r'"retryDelay":\s*"(\d+)s"', error_str)
+                    if retry_match:
+                        delay = int(retry_match.group(1)) + 1  # Add 1s buffer
+                    else:
+                        # Fallback: exponential backoff (30s, 60s, 90s)
+                        delay = 30 * (attempt + 1)
+
+                    logger.warning(
+                        "rate limited by gemini, waiting for retry",
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        delay_seconds=delay
+                    )
+                    time.sleep(delay)
+                    continue
+
+                # Non-rate-limit error: raise immediately
+                raise
+
+        # All retries exhausted
+        raise LLMError(
+            f"Max retries ({max_retries}) exceeded due to rate limiting",
+            model=model_name,
+            prompt_type="unknown",
+            original_error=last_error
+        )
+
     def summarize_meeting(self, text: str) -> str:
         """Summarize a full meeting agenda
 
@@ -125,9 +186,7 @@ class GeminiSummarizer:
         prompt_type = "meeting_short" if page_count <= 30 else "meeting_comprehensive"
 
         try:
-            response = self.client.models.generate_content(
-                model=model_name, contents=prompt, config=config
-            )
+            response = self._call_with_retry(model_name, prompt, config)
 
             if response.text is None:
                 raise ValueError("Gemini returned no text in response")
@@ -235,9 +294,7 @@ class GeminiSummarizer:
         start_time = time.time()
 
         try:
-            response = self.client.models.generate_content(
-                model=model_name, contents=prompt, config=config
-            )
+            response = self._call_with_retry(model_name, prompt, config)
 
             # Extract text - handle various response structures
             response_text = response.text
