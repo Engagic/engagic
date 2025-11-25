@@ -21,6 +21,7 @@ _ALGORITHM = "HS256"
 _MAGIC_LINK_EXPIRY = timedelta(minutes=15)  # Magic links are one-time use, short expiry is fine
 _ACCESS_TOKEN_EXPIRY = timedelta(hours=1)  # Extended for better UX during active sessions
 _REFRESH_TOKEN_EXPIRY = timedelta(days=30)  # Long-lived for persistent sessions
+_UNSUBSCRIBE_TOKEN_EXPIRY = timedelta(days=365)  # Long-lived for email links
 
 
 def init_jwt(secret: str) -> None:
@@ -116,6 +117,21 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[di
         return payload
     except JWTError:
         return None
+
+
+def generate_unsubscribe_token(user_id: str) -> str:
+    """
+    Generate long-lived unsubscribe token for email links.
+
+    Expiry: 1 year (emails may be read months later)
+    """
+    secret = _get_secret()
+    payload = {
+        "user_id": user_id,
+        "type": "unsubscribe",
+        "exp": datetime.utcnow() + _UNSUBSCRIBE_TOKEN_EXPIRY,
+    }
+    return jwt.encode(payload, secret, algorithm=_ALGORITHM)
 
 
 def extract_user_id(token: str) -> Optional[str]:

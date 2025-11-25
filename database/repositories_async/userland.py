@@ -431,7 +431,6 @@ class UserlandRepository(BaseRepository):
             query += " WHERE 1=1"
 
         if since_days:
-            params.append(since_days)
             query += f" AND am.created_at >= NOW() - INTERVAL '{since_days} days'"
 
         async with self.pool.acquire() as conn:

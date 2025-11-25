@@ -19,6 +19,7 @@ from userland.auth.jwt import (
     generate_access_token,
     generate_magic_link_token,
     generate_refresh_token,
+    generate_unsubscribe_token,
     verify_token,
 )
 from userland.database.models import Alert, User
@@ -368,3 +369,62 @@ async def get_current_user_endpoint(user: User = Depends(get_current_user)):
         email=user.email,
         created_at=user.created_at.isoformat(),
     )
+
+
+@router.get("/unsubscribe")
+async def unsubscribe(token: str, request: Request):
+    """
+    One-click unsubscribe from email digest.
+
+    Deactivates all alerts for the user. Token is long-lived (1 year)
+    and embedded in email footer links for CAN-SPAM compliance.
+    """
+    payload = verify_token(token, expected_type="unsubscribe")
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired unsubscribe link",
+        )
+
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload"
+        )
+
+    db: Database = request.app.state.db
+    user = await db.userland.get_user(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Deactivate all alerts for this user
+    alerts = await db.userland.get_alerts(user_id=user_id)
+    deactivated_count = 0
+    for alert in alerts:
+        if alert.active:
+            await db.userland.update_alert(alert_id=alert.id, active=False)
+            deactivated_count += 1
+
+    logger.info("user unsubscribed", user_id=user_id, email=user.email, alerts_deactivated=deactivated_count)
+
+    return {
+        "status": "unsubscribed",
+        "message": f"You have been unsubscribed from {deactivated_count} digest(s).",
+        "email": user.email
+    }
+
+
+@router.get("/unsubscribe-token")
+async def get_unsubscribe_token(user: User = Depends(get_current_user)):
+    """
+    Get unsubscribe token for current user (for testing/debugging).
+
+    Requires authentication.
+    """
+    token = generate_unsubscribe_token(user.id)
+    return {"token": token}
