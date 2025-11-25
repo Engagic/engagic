@@ -410,16 +410,24 @@ class ItemRepository(BaseRepository):
                 matter_id,
             )
 
+            if not rows:
+                return []
+
+            # Batch fetch ALL topics for ALL items (eliminates N+1)
+            item_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
+                item_ids,
+            )
+
+            # Group topics by item
+            topics_by_item: Dict[str, List[str]] = defaultdict(list)
+            for tr in topic_rows:
+                topics_by_item[tr["item_id"]].append(tr["topic"])
+
+            # Build item objects
             items = []
             for row in rows:
-                # Fetch normalized topics
-                topic_rows = await conn.fetch(
-                    "SELECT topic FROM item_topics WHERE item_id = $1",
-                    row["id"],
-                )
-                topics = [r["topic"] for r in topic_rows]
-
-                # Deserialize JSONB attachments to typed models
                 attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
                 sponsors = row["sponsors"] or []
 
@@ -437,7 +445,7 @@ class ItemRepository(BaseRepository):
                         agenda_number=row["agenda_number"],
                         sponsors=sponsors,
                         summary=row["summary"],
-                        topics=topics,  # Single source: normalized item_topics table
+                        topics=topics_by_item.get(row["id"], []),
                     )
                 )
 
@@ -526,18 +534,25 @@ class ItemRepository(BaseRepository):
                 topic,
             )
 
+            if not rows:
+                return []
+
+            # Batch fetch ALL topics for ALL items (eliminates N+1)
+            item_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
+                item_ids,
+            )
+
+            # Group topics by item
+            topics_by_item: Dict[str, List[str]] = defaultdict(list)
+            for tr in topic_rows:
+                topics_by_item[tr["item_id"]].append(tr["topic"])
+
             items = []
             for row in rows:
-                # Deserialize JSONB attachments to typed models
                 attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
                 sponsors = row["sponsors"] or []
-
-                # Get normalized topics
-                topic_rows = await conn.fetch(
-                    "SELECT topic FROM item_topics WHERE item_id = $1",
-                    row["id"],
-                )
-                topics = [t["topic"] for t in topic_rows]
 
                 items.append(
                     AgendaItem(
@@ -547,7 +562,7 @@ class ItemRepository(BaseRepository):
                         sequence=row["sequence"],
                         attachments=attachments,
                         summary=row["summary"],
-                        topics=topics,
+                        topics=topics_by_item.get(row["id"], []),
                         matter_id=row["matter_id"],
                         matter_file=row["matter_file"],
                         matter_type=row["matter_type"],
