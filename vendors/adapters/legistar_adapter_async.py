@@ -137,6 +137,14 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 text = await response.text()
                 events = self._parse_xml_events(text)
 
+        # Defensive: Validate response is a list (API may return error dict)
+        if not isinstance(events, list):
+            raise VendorParsingError(
+                f"Expected list from Legistar API at {url}, got {type(events).__name__}",
+                vendor=self.vendor,
+                city_slug=self.slug
+            )
+
         # CRITICAL: Filter client-side because some APIs (Nashville) ignore server filters
         filtered_events = []
         for event in events:

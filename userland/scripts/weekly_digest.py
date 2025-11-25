@@ -429,7 +429,7 @@ async def send_weekly_digest():
         except ValueError:
             pass  # Already initialized
 
-    logger.info("Starting weekly digest process...")
+    logger.info("starting weekly digest process")
 
     db = await Database.create()
     try:
@@ -437,7 +437,7 @@ async def send_weekly_digest():
 
         # Get all active alerts (weekly digest subscriptions)
         active_alerts = await db.userland.get_active_alerts()
-        logger.info(f"Found {len(active_alerts)} active alerts")
+        logger.info("found active alerts", count=len(active_alerts))
 
         sent_count = 0
         error_count = 0
@@ -447,16 +447,16 @@ async def send_weekly_digest():
                 # Get user
                 user = await db.userland.get_user(alert.user_id)
                 if not user:
-                    logger.warning(f"User not found for alert {alert.id}")
+                    logger.warning("user not found for alert", alert_id=alert.id)
                     continue
 
                 # Get primary city (first city in alert)
                 if not alert.cities or len(alert.cities) == 0:
-                    logger.warning(f"Alert {alert.id} has no cities configured")
+                    logger.warning("alert has no cities configured", alert_id=alert.id)
                     continue
 
                 primary_city = alert.cities[0]
-                logger.info(f"Processing digest for {user.email} ({primary_city})...")
+                logger.info("processing digest", email=user.email, city=primary_city)
 
                 # Get actual city name (not banana)
                 city_name = await get_city_name(db, primary_city)
@@ -470,7 +470,7 @@ async def send_weekly_digest():
 
                 # Skip if no content
                 if not keyword_matches and not upcoming_meetings:
-                    logger.info(f"No content for {user.email}, skipping")
+                    logger.info("no content for user, skipping", email=user.email)
                     continue
 
                 # Generate unsubscribe token for this user
@@ -500,14 +500,14 @@ async def send_weekly_digest():
                 )
 
                 sent_count += 1
-                logger.info(f"Sent digest to {user.email}")
+                logger.info("sent digest", email=user.email)
 
             except Exception as e:
                 error_count += 1
-                logger.error(f"Failed to send digest for alert {alert.id}: {e}")
+                logger.error("failed to send digest", alert_id=alert.id, error=str(e))
                 continue
 
-        logger.info(f"Weekly digest complete: {sent_count} sent, {error_count} errors")
+        logger.info("weekly digest complete", sent_count=sent_count, error_count=error_count)
         return sent_count, error_count
     finally:
         await db.close()

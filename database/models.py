@@ -7,12 +7,76 @@ Pydantic dataclasses with runtime validation for core entities.
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from pydantic import BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
 from dataclasses import asdict
 
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="engagic")
+
+
+# --- JSONB Pydantic Models (for typed serialization/deserialization) ---
+
+
+class EmailContext(BaseModel):
+    """Email with inferred purpose"""
+    model_config = ConfigDict(extra="forbid")
+    address: str
+    purpose: str = "general contact"
+
+
+class StreamingUrl(BaseModel):
+    """Streaming platform URL"""
+    model_config = ConfigDict(extra="forbid")
+    url: Optional[str] = None
+    platform: str
+    channel: Optional[str] = None  # For cable TV
+
+
+class ParticipationInfo(BaseModel):
+    """
+    Typed JSONB for meetings.participation field.
+
+    Extracted from PDF text before AI summarization.
+    Provides structured contact info for civic engagement.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    email: Optional[str] = None  # Primary contact email
+    emails: Optional[List[EmailContext]] = None  # All emails with context
+    phone: Optional[str] = None  # Normalized phone (+1XXXXXXXXXX)
+    virtual_url: Optional[str] = None  # Zoom/Teams/Meet URL
+    meeting_id: Optional[str] = None  # Zoom meeting ID
+    is_hybrid: Optional[bool] = None  # In-person + virtual
+    is_virtual_only: Optional[bool] = None  # Virtual only
+    streaming_urls: Optional[List[StreamingUrl]] = None  # YouTube, cable, etc.
+
+
+class MatterMetadata(BaseModel):
+    """
+    Typed JSONB for city_matters.metadata field.
+
+    Contains attachment_hash for change detection and deduplication.
+    """
+    model_config = ConfigDict(extra="forbid")
+    attachment_hash: Optional[str] = None
+
+
+class AttachmentInfo(BaseModel):
+    """
+    Typed JSONB for attachments arrays (items.attachments, city_matters.attachments).
+
+    Mirrors vendors.schemas.AttachmentSchema but used for DB fields.
+    """
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    url: str
+    type: str  # pdf, doc, spreadsheet, unknown
+    history_id: Optional[str] = None  # PrimeGov-specific
+
+
+# --- Domain Dataclasses (with runtime validation) ---
 
 
 @dataclass

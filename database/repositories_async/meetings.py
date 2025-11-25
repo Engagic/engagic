@@ -366,17 +366,28 @@ class MeetingRepository(BaseRepository):
                 LIMIT $1
             """, limit)
 
+            if not rows:
+                return []
+
+            # Batch fetch all topics for all meetings (avoid N+1 query)
+            meeting_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT meeting_id, topic FROM meeting_topics WHERE meeting_id = ANY($1::text[])",
+                meeting_ids,
+            )
+
+            # Build topic map: meeting_id -> [topics]
+            topics_by_meeting: dict[str, list[str]] = {}
+            for topic_row in topic_rows:
+                meeting_id = topic_row["meeting_id"]
+                if meeting_id not in topics_by_meeting:
+                    topics_by_meeting[meeting_id] = []
+                topics_by_meeting[meeting_id].append(topic_row["topic"])
+
             meetings = []
             for row in rows:
-                # Deserialize JSONB participation
+                topics = topics_by_meeting.get(row["id"], [])
                 participation = row["participation"]
-
-                # Get normalized topics
-                topic_rows = await conn.fetch(
-                    "SELECT topic FROM meeting_topics WHERE meeting_id = $1",
-                    row["id"]
-                )
-                topics = [t["topic"] for t in topic_rows]
 
                 meetings.append(Meeting(
                     id=row["id"],

@@ -8,15 +8,16 @@ Parses text BEFORE AI summarization to extract structured contact info.
 
 import re
 
-from typing import Dict, Any, Optional
+from typing import Optional
 from urllib.parse import urlparse
 
 from config import get_logger
+from database.models import ParticipationInfo, EmailContext, StreamingUrl
 
 logger = get_logger(__name__).bind(component="engagic")
 
 
-def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
+def parse_participation_info(text: str) -> Optional[ParticipationInfo]:
     """
     Extract participation info from meeting text.
 
@@ -24,13 +25,13 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
         text: Extracted PDF text (before AI summarization)
 
     Returns:
-        Dict with contact info or None if nothing found
+        ParticipationInfo model or None if nothing found
     """
     if not text:
         return None
 
     text_lower = text.lower()
-    info = {}
+    info: dict = {}
 
     # Extract ALL email addresses with context
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
@@ -45,8 +46,8 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
             info['email'] = valid[0]
 
             # Store all unique emails with context
-            emails_with_context = []
-            seen = set()
+            emails_with_context: list[EmailContext] = []
+            seen: set[str] = set()
             for email in valid:
                 if email.lower() in seen:
                     continue
@@ -54,10 +55,10 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
 
                 # Try to infer purpose from surrounding text
                 purpose = _infer_email_purpose(text, email)
-                emails_with_context.append({
-                    'address': email,
-                    'purpose': purpose
-                })
+                emails_with_context.append(EmailContext(
+                    address=email,
+                    purpose=purpose
+                ))
 
             if len(emails_with_context) > 1:
                 info['emails'] = emails_with_context
@@ -96,7 +97,7 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
         'vimeo.com': 'Vimeo'
     }
 
-    streaming_urls = []
+    streaming_urls: list[StreamingUrl] = []
 
     for url in urls:
         # Clean trailing punctuation (common in agendas)
@@ -112,10 +113,10 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
         # Check for streaming platforms
         for domain, platform_name in streaming_platforms.items():
             if domain in parsed.netloc:
-                streaming_urls.append({
-                    'url': url,
-                    'platform': platform_name
-                })
+                streaming_urls.append(StreamingUrl(
+                    url=url,
+                    platform=platform_name
+                ))
                 break
 
     if streaming_urls:
@@ -127,10 +128,10 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
     if cable_matches:
         if 'streaming_urls' not in info:
             info['streaming_urls'] = []
-        info['streaming_urls'].append({
-            'channel': cable_matches[0],
-            'platform': 'Cable TV'
-        })
+        info['streaming_urls'].append(StreamingUrl(
+            channel=cable_matches[0],
+            platform='Cable TV'
+        ))
 
     # Extract Zoom meeting ID (handle spaces and dashes)
     if 'zoom' in text_lower or info.get('virtual_url'):
@@ -149,7 +150,9 @@ def parse_participation_info(text: str) -> Optional[Dict[str, Any]]:
         info['is_virtual_only'] = True
 
     # Only return if we found something
-    return info if info else None
+    if not info:
+        return None
+    return ParticipationInfo(**info)
 
 
 def _infer_email_purpose(text: str, email: str) -> str:

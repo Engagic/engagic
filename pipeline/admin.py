@@ -8,7 +8,6 @@ These are debugging tools, not core orchestration logic.
 
 from typing import Dict, Any, Optional
 
-from config import config
 from database.db_postgres import Database
 
 from config import get_logger

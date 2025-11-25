@@ -33,12 +33,12 @@ async def match_alert(
         List of AlertMatch objects
     """
     if not alert.active:
-        logger.debug(f"Alert {alert.name} is inactive, skipping")
+        logger.debug("alert inactive, skipping", alert_name=alert.name)
         return []
 
     keywords = alert.criteria.get("keywords", [])
     if not keywords:
-        logger.info(f"Alert {alert.name} has no keywords, skipping")
+        logger.info("alert has no keywords, skipping", alert_name=alert.name)
         return []
 
     cutoff_date = (datetime.now() - timedelta(days=since_days)).isoformat()
@@ -46,13 +46,15 @@ async def match_alert(
     seen_items = set()
 
     logger.info(
-        f"Matching alert '{alert.name}': "
-        f"{len(keywords)} keywords, {len(alert.cities)} cities"
+        "matching alert",
+        alert_name=alert.name,
+        keyword_count=len(keywords),
+        city_count=len(alert.cities)
     )
 
     async with db.pool.acquire() as conn:
         for keyword in keywords:
-            logger.debug(f"Searching for keyword: '{keyword}'")
+            logger.debug("searching for keyword", keyword=keyword)
 
             for city_banana in alert.cities:
                 # Search items table for keyword matches
@@ -87,7 +89,7 @@ async def match_alert(
                         limit=1000
                     )
                     if any(m.item_id == item_id for m in existing_matches):
-                        logger.debug(f"Already matched: {item_id}")
+                        logger.debug("already matched", item_id=item_id)
                         continue
 
                     # Extract clean summary (skip thinking section)
@@ -120,9 +122,9 @@ async def match_alert(
                     )
 
                     matches.append(match)
-                    logger.debug(f"Match: {row['city_name']} - {row['title'][:50]}")
+                    logger.debug("match found", city_name=row['city_name'], title=row['title'][:50])
 
-    logger.info(f"Alert '{alert.name}': {len(matches)} new matches")
+    logger.info("alert matching complete", alert_name=alert.name, match_count=len(matches))
     return matches
 
 
@@ -148,23 +150,23 @@ async def match_matters_for_alert(
         List of AlertMatch objects (one per matter, not per appearance)
     """
     if not alert.active:
-        logger.debug(f"Alert {alert.name} is inactive, skipping")
+        logger.debug("alert inactive, skipping matter match", alert_name=alert.name)
         return []
 
     keywords = alert.criteria.get("keywords", [])
     if not keywords:
-        logger.info(f"Alert {alert.name} has no keywords, skipping")
+        logger.info("alert has no keywords, skipping matter match", alert_name=alert.name)
         return []
 
     cutoff_date = (datetime.now() - timedelta(days=since_days)).isoformat()
     matches = []
     seen_matters = set()
 
-    logger.info(f"Matter matching for '{alert.name}': {len(keywords)} keywords, {len(alert.cities)} cities")
+    logger.info("matter matching for alert", alert_name=alert.name, keyword_count=len(keywords), city_count=len(alert.cities))
 
     async with db.pool.acquire() as conn:
         for keyword in keywords:
-            logger.debug(f"Searching matters for keyword: '{keyword}'")
+            logger.debug("searching matters for keyword", keyword=keyword)
 
             # Search city_matters for keyword matches
             cities_placeholder = ','.join(f'${i+1}' for i in range(len(alert.cities)))
@@ -204,7 +206,7 @@ async def match_matters_for_alert(
                 )
 
                 if existing_check:
-                    logger.debug(f"Already matched matter: {matter_id}")
+                    logger.debug("already matched matter", matter_id=matter_id)
                     continue
 
                 # Get matter appearances for timeline
@@ -272,11 +274,13 @@ async def match_matters_for_alert(
 
                 matches.append(match)
                 logger.debug(
-                    f"Matter match: {row['city_name']} - "
-                    f"{row['matter_file']} ({row['appearance_count']} appearances)"
+                    "matter match found",
+                    city_name=row['city_name'],
+                    matter_file=row['matter_file'],
+                    appearance_count=row['appearance_count']
                 )
 
-    logger.info(f"Alert '{alert.name}': {len(matches)} new matter matches")
+    logger.info("matter matching complete", alert_name=alert.name, match_count=len(matches))
     return matches
 
 
@@ -305,7 +309,7 @@ async def match_all_alerts_dual_track(
         }
     """
     active_alerts = await db.userland.get_active_alerts()
-    logger.info(f"Processing {len(active_alerts)} active alerts (dual-track: string + matter)")
+    logger.info("processing active alerts dual-track", count=len(active_alerts))
 
     all_matches = {}
 
@@ -327,6 +331,6 @@ async def match_all_alerts_dual_track(
 
     total_string = sum(len(m["string_matches"]) for m in all_matches.values())
     total_matter = sum(len(m["matter_matches"]) for m in all_matches.values())
-    logger.info(f"Dual-track complete: {total_string} string matches, {total_matter} matter matches")
+    logger.info("dual-track matching complete", string_matches=total_string, matter_matches=total_matter)
 
     return all_matches

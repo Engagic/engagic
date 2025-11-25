@@ -36,7 +36,7 @@ class EscribeAdapter(BaseAdapter):
         current_year = datetime.now().year
         list_url = f"{self.base_url}/?Year={current_year}"
 
-        logger.info(f"[escribe:{self.slug}] Fetching meetings from {list_url}")
+        logger.info("fetching meetings", vendor="escribe", slug=self.slug, url=list_url)
 
         soup = self._fetch_html(list_url)
 
@@ -46,7 +46,7 @@ class EscribeAdapter(BaseAdapter):
         )
 
         if not upcoming_section:
-            logger.warning(f"[escribe:{self.slug}] No upcoming meetings section found")
+            logger.warning("no upcoming meetings section found", vendor="escribe", slug=self.slug)
             return
 
         # Parse meeting containers
@@ -55,7 +55,10 @@ class EscribeAdapter(BaseAdapter):
         )
 
         logger.info(
-            f"[escribe:{self.slug}] Found {len(meeting_containers)} upcoming meetings"
+            "found upcoming meetings",
+            vendor="escribe",
+            slug=self.slug,
+            count=len(meeting_containers)
         )
 
         for container in meeting_containers:
@@ -129,7 +132,7 @@ class EscribeAdapter(BaseAdapter):
         if meeting_status:
             result["meeting_status"] = meeting_status
 
-        logger.debug(f"[escribe:{self.slug}] Parsed meeting: {title} on {date_text}")
+        logger.debug("parsed meeting", vendor="escribe", slug=self.slug, title=title, date=date_text)
 
         return result
 
