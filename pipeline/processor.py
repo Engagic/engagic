@@ -24,7 +24,7 @@ from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
 from config import config, get_logger
 from server.metrics import metrics
-from vendors.utils.item_filters import should_skip_procedural_item, is_public_comment_attachment
+from vendors.utils.item_filters import should_skip_processing, is_public_comment_attachment
 
 logger = get_logger(__name__).bind(component="processor")
 
@@ -39,8 +39,8 @@ MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_MB * 1024 * 1024
 
 
 def is_procedural_item(title: str) -> bool:
-    """Check if agenda item is procedural (skip to save API costs)"""
-    return should_skip_procedural_item(title)
+    """Check if item should skip LLM processing (save tokens on low-value items)"""
+    return should_skip_processing(title)
 
 
 def is_likely_public_comment_compilation(
