@@ -207,6 +207,11 @@ class Conductor:
         city_results = []
 
         with self.enable_processing():
+            total_items_processed = 0
+            total_items_new = 0
+            total_items_skipped = 0
+            total_items_failed = 0
+
             for banana in city_bananas:
                 if not self.is_running:
                     break
@@ -216,17 +221,28 @@ class Conductor:
 
                 total_processed += stats["processed_count"]
                 total_failed += stats["failed_count"]
+                total_items_processed += stats.get("items_processed", 0)
+                total_items_new += stats.get("items_new", 0)
+                total_items_skipped += stats.get("items_skipped", 0)
+                total_items_failed += stats.get("items_failed", 0)
 
                 city_results.append({
                     "city_banana": banana,
                     "processed": stats["processed_count"],
                     "failed": stats["failed_count"],
+                    "items_processed": stats.get("items_processed", 0),
+                    "items_new": stats.get("items_new", 0),
+                    "items_skipped": stats.get("items_skipped", 0),
                 })
 
             return {
                 "cities_count": len(city_bananas),
-                "processed_count": total_processed,
-                "failed_count": total_failed,
+                "meetings_processed": total_processed,
+                "meetings_failed": total_failed,
+                "items_processed": total_items_processed,
+                "items_new": total_items_new,
+                "items_skipped": total_items_skipped,
+                "items_failed": total_items_failed,
                 "city_results": city_results,
             }
 

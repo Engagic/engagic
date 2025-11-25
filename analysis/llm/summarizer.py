@@ -330,6 +330,16 @@ class GeminiSummarizer:
                 success=True
             )
 
+            # Log completion
+            logger.info(
+                "item summarized",
+                item_title=item_title[:50],
+                duration_seconds=round(duration, 1),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model=model_display
+            )
+
             # Parse response based on version
             summary, topics = self._parse_item_response(response_text)
 
