@@ -3,21 +3,16 @@
 from config import get_logger
 from exceptions import VendorError
 
-# Sync adapters
+# Sync adapters (unmigrated vendors only)
 from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
 from vendors.adapters.civicplus_adapter import CivicPlusAdapter
 from vendors.adapters.escribe_adapter import EscribeAdapter
-from vendors.adapters.granicus_adapter import GranicusAdapter
-from vendors.adapters.iqm2_adapter import IQM2Adapter
-from vendors.adapters.legistar_adapter import LegistarAdapter
-from vendors.adapters.novusagenda_adapter import NovusAgendaAdapter
-from vendors.adapters.primegov_adapter import PrimeGovAdapter
 
 from vendors.adapters.custom.berkeley_adapter import BerkeleyAdapter
 from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
 
-# Async adapters
+# Async adapters (primary - all migrated vendors)
 from vendors.adapters.granicus_adapter_async import AsyncGranicusAdapter
 from vendors.adapters.iqm2_adapter_async import AsyncIQM2Adapter
 from vendors.adapters.legistar_adapter_async import AsyncLegistarAdapter
@@ -26,15 +21,19 @@ from vendors.adapters.primegov_adapter_async import AsyncPrimeGovAdapter
 
 logger = get_logger(__name__).bind(component="vendor")
 
+# VENDOR_ADAPTERS: Sync adapters for unmigrated vendors + async for migrated
+# Used by get_adapter() - prefer get_async_adapter() for production
 VENDOR_ADAPTERS = {
+    # Migrated to async
+    "granicus": AsyncGranicusAdapter,
+    "iqm2": AsyncIQM2Adapter,
+    "legistar": AsyncLegistarAdapter,
+    "novusagenda": AsyncNovusAgendaAdapter,
+    "primegov": AsyncPrimeGovAdapter,
+    # Unmigrated (sync)
     "civicclerk": CivicClerkAdapter,
     "civicplus": CivicPlusAdapter,
     "escribe": EscribeAdapter,
-    "granicus": GranicusAdapter,
-    "iqm2": IQM2Adapter,
-    "legistar": LegistarAdapter,
-    "novusagenda": NovusAgendaAdapter,
-    "primegov": PrimeGovAdapter,
     "berkeley": BerkeleyAdapter,
     "chicago": ChicagoAdapter,
     "menlopark": MenloParkAdapter,

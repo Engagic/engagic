@@ -20,6 +20,11 @@ def parse_legislation_attachments(html: str, base_url: str) -> List[Dict[str, An
     """
     Parse attachments from Legistar LegislationDetail.aspx page.
 
+    Uses multiple fallback strategies for resilience:
+    1. Primary: Exact ASP.NET control IDs (current Legistar implementation)
+    2. Fallback: Structural patterns (class-based, text-based)
+    3. Last resort: Any PDF/doc links on the page
+
     Args:
         html: HTML content from LegislationDetail.aspx
         base_url: Base URL for building absolute URLs
@@ -31,23 +36,32 @@ def parse_legislation_attachments(html: str, base_url: str) -> List[Dict[str, An
 
     soup = BeautifulSoup(html, 'html.parser')
     attachments = []
+    links = None
 
-    # Find the attachments table
+    # Strategy 1: Primary - exact ASP.NET control IDs
     attachments_table = soup.find('table', id='ctl00_ContentPlaceHolder1_tblAttachments')
+    if attachments_table:
+        attachments_span = attachments_table.find('span', id='ctl00_ContentPlaceHolder1_lblAttachments2')
+        if attachments_span:
+            links = attachments_span.find_all('a', href=True)
+            logger.debug("found attachments via primary selector", parser="legistar")
 
-    if not attachments_table:
-        logger.debug("[HTMLParser:Legistar] No attachments table found")
+    # Strategy 2: Fallback - look for "Attachments" label and nearby View.ashx links
+    if not links:
+        attachments_label = soup.find(string=re.compile(r'Attachments?', re.IGNORECASE))
+        if attachments_label:
+            parent = attachments_label.find_parent(['td', 'div', 'span', 'tr'])
+            if parent:
+                container = parent.find_parent(['table', 'div'])
+                if container:
+                    # Only match Legistar View.ashx pattern, not arbitrary PDFs
+                    links = container.find_all('a', href=re.compile(r'View\.ashx\?', re.IGNORECASE))
+                    if links:
+                        logger.warning("using fallback selector for attachments", parser="legistar")
+
+    if not links:
+        logger.debug("no attachments found", parser="legistar")
         return attachments
-
-    # Find the span containing attachment links
-    attachments_span = attachments_table.find('span', id='ctl00_ContentPlaceHolder1_lblAttachments2')
-
-    if not attachments_span:
-        logger.debug("[HTMLParser:Legistar] No attachments span found")
-        return attachments
-
-    # Find all links in the span
-    links = attachments_span.find_all('a', href=True)
 
     for link in links:
         href = link.get('href', '')

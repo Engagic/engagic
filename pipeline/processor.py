@@ -24,58 +24,9 @@ from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
 from config import config, get_logger
 from server.metrics import metrics
+from vendors.utils.item_filters import should_skip_procedural_item, is_public_comment_attachment
 
 logger = get_logger(__name__).bind(component="processor")
-
-# Skip procedural items (administrative overhead, not policy)
-PROCEDURAL_PATTERNS = [
-    "review of minutes",
-    "approval of minutes",
-    "adopt minutes",
-    "roll call",
-    "pledge of allegiance",
-    "invocation",
-    "adjournment",
-    "proclamation",
-    "commendation",
-    "recognition",
-    "ceremonial",
-]
-
-# Skip public comment attachments (high token cost, low informational value)
-PUBLIC_COMMENT_PATTERNS = [
-    "public comment",
-    "public correspondence",
-    "comment letter",
-    "comment ltrs",  # SF abbreviation
-    "written comment",
-    "public hearing comment",
-    "citizen comment",
-    "correspondence received",
-    "public input",
-    "public testimony",
-    "letters received",
-    "petitions",  # SF uses "Petitions and Communications"
-    "communications",  # Often paired with "Petitions"
-    "pub corr",  # SF abbreviation for public correspondence
-    "pulbic corr",  # Common typo seen in SF data
-    "comm pkt",  # Committee packets (often contain public comments)
-    "committee packet",  # Full form
-]
-
-# Skip parcel tables and property lists (massive PDFs with no civic value)
-# Example: "Parcel Tables" (992 pages!) - just property IDs and addresses
-PARCEL_TABLE_PATTERNS = [
-    "parcel table",
-    "parcel list",
-    "parcel map",
-    "tax parcel",
-    "property list",
-    "property table",
-    "assessor",
-    "apn list",  # Assessor Parcel Number
-    "parcel number",
-]
 
 # Queue processing timing constants (seconds)
 QUEUE_POLL_INTERVAL = 5  # Time to wait when queue is empty
@@ -89,17 +40,7 @@ MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_MB * 1024 * 1024
 
 def is_procedural_item(title: str) -> bool:
     """Check if agenda item is procedural (skip to save API costs)"""
-    title_lower = title.lower()
-    return any(pattern in title_lower for pattern in PROCEDURAL_PATTERNS)
-
-
-def is_public_comment_attachment(name: str) -> bool:
-    """Check if attachment is public comments or parcel tables (high token cost, low signal)"""
-    name_lower = name.lower()
-    return (
-        any(pattern in name_lower for pattern in PUBLIC_COMMENT_PATTERNS) or
-        any(pattern in name_lower for pattern in PARCEL_TABLE_PATTERNS)
-    )
+    return should_skip_procedural_item(title)
 
 
 def is_likely_public_comment_compilation(
