@@ -8,22 +8,17 @@ Usage:
 
 import asyncio
 import json
-import logging
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from config import get_logger
 from database.db_postgres import Database
 from database.models import City, Meeting, AgendaItem, Matter
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__).bind(component="migration")
 
 
 class MigrationStats:
@@ -44,27 +39,26 @@ class MigrationStats:
 
     def report(self):
         """Print migration summary"""
-        logger.info("=" * 60)
-        logger.info("Migration Summary")
-        logger.info("=" * 60)
-        logger.info(f"Cities:             {self.cities:,}")
-        logger.info(f"Zipcodes:           {self.zipcodes:,}")
-        logger.info(f"Meetings:           {self.meetings:,}")
-        logger.info(f"Meeting Topics:     {self.meeting_topics:,}")
-        logger.info(f"City Matters:       {self.city_matters:,}")
-        logger.info(f"Matter Topics:      {self.matter_topics:,}")
-        logger.info(f"Matter Appearances: {self.matter_appearances:,}")
-        logger.info(f"Items:              {self.items:,}")
-        logger.info(f"Item Topics:        {self.item_topics:,}")
-        logger.info(f"Queue Jobs:         {self.queue_jobs:,}")
-        logger.info(f"Cache Entries:      {self.cache_entries:,}")
-        logger.info(f"Errors:             {len(self.errors)}")
+        logger.info(
+            "migration_summary",
+            cities=self.cities,
+            zipcodes=self.zipcodes,
+            meetings=self.meetings,
+            meeting_topics=self.meeting_topics,
+            city_matters=self.city_matters,
+            matter_topics=self.matter_topics,
+            matter_appearances=self.matter_appearances,
+            items=self.items,
+            item_topics=self.item_topics,
+            queue_jobs=self.queue_jobs,
+            cache_entries=self.cache_entries,
+            error_count=len(self.errors)
+        )
         if self.errors:
-            logger.error("\nErrors encountered:")
-            for err in self.errors[:10]:  # Show first 10 errors
-                logger.error(f"  - {err}")
+            for err in self.errors[:10]:
+                logger.error("migration_error", error=err)
             if len(self.errors) > 10:
-                logger.error(f"  ... and {len(self.errors) - 10} more")
+                logger.error("additional_errors", remaining=len(self.errors) - 10)
 
 
 class SQLitePostgresMigrator:
@@ -80,13 +74,13 @@ class SQLitePostgresMigrator:
 
     async def connect(self):
         """Connect to both databases"""
-        logger.info(f"Connecting to SQLite: {self.sqlite_path}")
+        logger.info("connecting_sqlite", path=self.sqlite_path)
         self.sqlite_conn = sqlite3.connect(self.sqlite_path)
         self.sqlite_conn.row_factory = sqlite3.Row
 
-        logger.info("Connecting to PostgreSQL...")
+        logger.info("connecting_postgres")
         self.pg_db = await Database.create()
-        logger.info("Connected to both databases")
+        logger.info("databases_connected")
 
     async def close(self):
         """Close connections"""
@@ -118,14 +112,14 @@ class SQLitePostgresMigrator:
             # Handle ISO format
             return datetime.fromisoformat(timestamp_str)
         except (ValueError, AttributeError):
-            logger.warning(f"Failed to parse timestamp: {timestamp_str}")
+            logger.warning("timestamp_parse_failed", timestamp=timestamp_str)
             return None
 
     async def migrate_cities(self):
         """Migrate cities and zipcodes"""
-        logger.info("\n--- Migrating Cities ---")
+        logger.info("migrating_cities")
         cities = self.get_sqlite_data("cities")
-        logger.info(f"Found {len(cities):,} cities in SQLite")
+        logger.info("found_cities", count=len(cities))
 
         # Fetch all zipcodes and group by banana
         all_zipcodes = self.get_sqlite_data("zipcodes")
@@ -136,11 +130,11 @@ class SQLitePostgresMigrator:
                 zipcodes_by_city[banana] = []
             zipcodes_by_city[banana].append(zc["zipcode"])
 
-        logger.info(f"Found {len(all_zipcodes):,} zipcodes in SQLite")
+        logger.info("found_zipcodes", count=len(all_zipcodes))
 
         for i, city in enumerate(cities, 1):
             if i % 100 == 0:
-                logger.info(f"Progress: {i}/{len(cities)} cities")
+                logger.info("cities_progress", current=i, total=len(cities))
 
             try:
                 # Get zipcodes for this city from the separate table
@@ -169,17 +163,17 @@ class SQLitePostgresMigrator:
                 self.stats.errors.append(error_msg)
                 logger.error(error_msg)
 
-        logger.info(f"✅ Migrated {self.stats.cities:,} cities with {self.stats.zipcodes:,} zipcodes")
+        logger.info("cities_migrated", cities=self.stats.cities, zipcodes=self.stats.zipcodes)
 
     async def migrate_meetings(self):
         """Migrate meetings and meeting_topics"""
-        logger.info("\n--- Migrating Meetings ---")
+        logger.info("migrating_meetings")
         meetings = self.get_sqlite_data("meetings")
-        logger.info(f"Found {len(meetings):,} meetings in SQLite")
+        logger.info("found_meetings", count=len(meetings))
 
         for i, meeting in enumerate(meetings, 1):
             if i % 100 == 0:
-                logger.info(f"Progress: {i}/{len(meetings)} meetings")
+                logger.info("meetings_progress", current=i, total=len(meetings))
 
             try:
                 # Parse JSON fields
@@ -233,13 +227,13 @@ class SQLitePostgresMigrator:
                 self.stats.errors.append(error_msg)
                 logger.error(error_msg)
 
-        logger.info(f"✅ Migrated {self.stats.meetings:,} meetings with {self.stats.meeting_topics:,} topics")
+        logger.info("meetings_migrated", meetings=self.stats.meetings, topics=self.stats.meeting_topics)
 
     async def migrate_city_matters(self):
         """Migrate city_matters (legislative items tracked across meetings)"""
-        logger.info("\n--- Migrating City Matters ---")
+        logger.info("migrating_city_matters")
         matters = self.get_sqlite_data("city_matters")
-        logger.info(f"Found {len(matters):,} city matters in SQLite")
+        logger.info("found_city_matters", count=len(matters))
 
         processed = 0
         for matter in matters:
@@ -301,20 +295,20 @@ class SQLitePostgresMigrator:
 
                 processed += 1
                 if processed % 500 == 0:
-                    logger.info(f"Progress: {processed}/{len(matters)} matters")
+                    logger.info("matters_progress", current=processed, total=len(matters))
 
             except Exception as e:
                 error_msg = f"Matter {matter.get('id')}: {str(e)}"
                 self.stats.errors.append(error_msg)
-                logger.error(error_msg)
+                logger.error("matter_migration_error", matter_id=matter.get('id'), error=str(e))
 
-        logger.info(f"✅ Migrated {self.stats.city_matters:,} city matters with {self.stats.matter_topics:,} topics")
+        logger.info("city_matters_migrated", matters=self.stats.city_matters, topics=self.stats.matter_topics)
 
     async def migrate_items(self):
         """Migrate agenda items and item_topics"""
-        logger.info("\n--- Migrating Agenda Items ---")
+        logger.info("migrating_items")
         items = self.get_sqlite_data("items")
-        logger.info(f"Found {len(items):,} items in SQLite")
+        logger.info("found_items", count=len(items))
 
         # Batch items by meeting_id for efficiency
         items_by_meeting: Dict[str, List[Dict]] = {}
@@ -324,7 +318,7 @@ class SQLitePostgresMigrator:
                 items_by_meeting[meeting_id] = []
             items_by_meeting[meeting_id].append(item)
 
-        logger.info(f"Grouped into {len(items_by_meeting):,} meetings")
+        logger.info("items_grouped", meeting_count=len(items_by_meeting))
 
         processed = 0
         for meeting_id, meeting_items in items_by_meeting.items():
@@ -379,20 +373,20 @@ class SQLitePostgresMigrator:
                 processed += 1
 
                 if processed % 100 == 0:
-                    logger.info(f"Progress: {processed}/{len(items_by_meeting)} meetings ({self.stats.items:,} items)")
+                    logger.info("items_progress", meetings_done=processed, total_meetings=len(items_by_meeting), items_count=self.stats.items)
 
             except Exception as e:
                 error_msg = f"Items for meeting {meeting_id}: {str(e)}"
                 self.stats.errors.append(error_msg)
-                logger.error(error_msg)
+                logger.error("items_migration_error", meeting_id=meeting_id, error=str(e))
 
-        logger.info(f"✅ Migrated {self.stats.items:,} items with {self.stats.item_topics:,} topics")
+        logger.info("items_migrated", items=self.stats.items, topics=self.stats.item_topics)
 
     async def migrate_matter_appearances(self):
         """Migrate matter_appearances (matter tracking across meetings)"""
-        logger.info("\n--- Migrating Matter Appearances ---")
+        logger.info("migrating_matter_appearances")
         appearances = self.get_sqlite_data("matter_appearances")
-        logger.info(f"Found {len(appearances):,} matter appearances in SQLite")
+        logger.info("found_matter_appearances", count=len(appearances))
 
         processed = 0
         for appearance in appearances:
@@ -433,24 +427,24 @@ class SQLitePostgresMigrator:
                 self.stats.matter_appearances += 1
                 processed += 1
                 if processed % 500 == 0:
-                    logger.info(f"Progress: {processed}/{len(appearances)} appearances")
+                    logger.info("appearances_progress", current=processed, total=len(appearances))
 
             except Exception as e:
                 error_msg = f"Appearance {appearance.get('id')}: {str(e)}"
                 self.stats.errors.append(error_msg)
-                logger.error(error_msg)
+                logger.error("appearance_migration_error", appearance_id=appearance.get('id'), error=str(e))
 
-        logger.info(f"✅ Migrated {self.stats.matter_appearances:,} matter appearances")
+        logger.info("matter_appearances_migrated", count=self.stats.matter_appearances)
 
     async def migrate_queue(self):
         """Migrate processing queue"""
-        logger.info("\n--- Migrating Queue Jobs ---")
+        logger.info("migrating_queue")
         jobs = self.get_sqlite_data("queue")
-        logger.info(f"Found {len(jobs):,} queue jobs in SQLite")
+        logger.info("found_queue_jobs", count=len(jobs))
 
         for i, job in enumerate(jobs, 1):
             if i % 100 == 0:
-                logger.info(f"Progress: {i}/{len(jobs)} jobs")
+                logger.info("queue_progress", current=i, total=len(jobs))
 
             try:
                 # Note: Intentionally NOT migrating processing_metadata, started_at, completed_at
@@ -485,17 +479,17 @@ class SQLitePostgresMigrator:
                 self.stats.errors.append(error_msg)
                 # Don't log every queue error, they're expected for duplicates
 
-        logger.info(f"✅ Migrated {self.stats.queue_jobs:,} queue jobs")
+        logger.info("queue_jobs_migrated", count=self.stats.queue_jobs)
 
     async def migrate_cache(self):
         """Migrate processing cache"""
-        logger.info("\n--- Migrating Cache ---")
+        logger.info("migrating_cache")
         cache_entries = self.get_sqlite_data("cache")
-        logger.info(f"Found {len(cache_entries):,} cache entries in SQLite")
+        logger.info("found_cache_entries", count=len(cache_entries))
 
         for i, entry in enumerate(cache_entries, 1):
             if i % 50 == 0:
-                logger.info(f"Progress: {i}/{len(cache_entries)} cache entries")
+                logger.info("cache_progress", current=i, total=len(cache_entries))
 
             try:
                 if not self.dry_run:
@@ -522,13 +516,13 @@ class SQLitePostgresMigrator:
             except Exception as e:
                 error_msg = f"Cache {entry.get('packet_url')}: {str(e)}"
                 self.stats.errors.append(error_msg)
-                logger.error(error_msg)
+                logger.error("cache_migration_error", packet_url=entry.get('packet_url'), error=str(e))
 
-        logger.info(f"✅ Migrated {self.stats.cache_entries:,} cache entries")
+        logger.info("cache_entries_migrated", count=self.stats.cache_entries)
 
     async def verify_counts(self):
         """Verify row counts match"""
-        logger.info("\n--- Verifying Migration ---")
+        logger.info("verifying_migration")
 
         # Get SQLite counts
         sqlite_counts = {}
@@ -544,19 +538,21 @@ class SQLitePostgresMigrator:
             pg_counts[table] = count
 
         # Compare
-        logger.info("\nRow Count Verification:")
-        logger.info(f"{'Table':<15} {'SQLite':>10} {'PostgreSQL':>12} {'Match':>8}")
-        logger.info("-" * 50)
-
         all_match = True
         for table in ["cities", "meetings", "items", "queue", "cache"]:
             sqlite_count = sqlite_counts.get(table, 0)
             pg_count = pg_counts.get(table, 0)
-            match = "✅" if sqlite_count == pg_count else "❌"
-            if sqlite_count != pg_count:
+            match = sqlite_count == pg_count
+            if not match:
                 all_match = False
 
-            logger.info(f"{table:<15} {sqlite_count:>10,} {pg_count:>12,} {match:>8}")
+            logger.info(
+                "count_verification",
+                table=table,
+                sqlite=sqlite_count,
+                postgres=pg_count,
+                match=match
+            )
 
         return all_match
 
@@ -566,9 +562,9 @@ class SQLitePostgresMigrator:
             await self.connect()
 
             if self.dry_run:
-                logger.info("🔍 DRY RUN MODE - No data will be written")
+                logger.info("dry_run_mode")
 
-            logger.info(f"\nBatch size: {self.batch_size}")
+            logger.info("migration_starting", batch_size=self.batch_size)
             logger.info("=" * 60)
 
             # Migrate in order (respecting foreign keys)
@@ -587,17 +583,17 @@ class SQLitePostgresMigrator:
             if not self.dry_run:
                 all_match = await self.verify_counts()
                 if all_match:
-                    logger.info("\n✅ Migration completed successfully!")
+                    logger.info("migration_completed", success=True)
                 else:
-                    logger.warning("\n⚠️  Migration completed with count mismatches")
+                    logger.warning("migration_completed", success=False, reason="count_mismatch")
                     return 1
             else:
-                logger.info("\n✅ Dry run completed successfully!")
+                logger.info("dry_run_completed")
 
             return 0
 
         except Exception as e:
-            logger.error(f"\n❌ Migration failed: {e}")
+            logger.error("migration_failed", error=str(e))
             import traceback
             traceback.print_exc()
             return 1
@@ -620,7 +616,7 @@ async def main():
     # Verify SQLite database exists
     sqlite_path = Path(args.sqlite_path)
     if not sqlite_path.exists():
-        logger.error(f"SQLite database not found: {sqlite_path}")
+        logger.error("sqlite_not_found", path=str(sqlite_path))
         return 1
 
     # Run migration

@@ -284,7 +284,7 @@
 				onclick={handleRandomMeeting}
 				disabled={loading || loadingRandom || loadingRandomPolicy}
 			>
-				{loadingRandom ? 'Loading...' : '🎲 Random Meeting'}
+				{loadingRandom ? 'Loading...' : 'Discover a Meeting'}
 			</button>
 
 			<button
@@ -292,7 +292,7 @@
 				onclick={handleRandomPolicy}
 				disabled={loading || loadingRandom || loadingRandomPolicy}
 			>
-				{loadingRandomPolicy ? 'Loading...' : '📜 Random Policy'}
+				{loadingRandomPolicy ? 'Loading...' : 'Discover a Policy'}
 			</button>
 		</div>
 	</div>

@@ -15,12 +15,13 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import sqlite3
-import logging
 import re
 import argparse
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
+
+from config import get_logger
 
 try:
     from config import Config
@@ -31,10 +32,7 @@ except ImportError:
     # Fallback if config not available
     MEETINGS_DB_PATH = "/root/engagic/data/engagic.db"
 
-logger = logging.getLogger("engagic")
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logger = get_logger(__name__).bind(component="quality_checker")
 
 
 class SummaryQuality(Enum):
@@ -274,11 +272,11 @@ class SummaryQualityChecker:
                 to_clear.append((meeting_id, city, name, result.quality.value))
 
         if dry_run:
-            logger.info(f"DRY RUN: Would clear {len(to_clear)} summaries")
+            logger.info("dry_run_clear", count=len(to_clear))
             for meeting_id, city, name, quality in to_clear[:5]:
-                logger.info(f"  - {city}: {name} (quality: {quality})")
+                logger.info("would_clear", city=city, meeting=name, quality=quality)
             if len(to_clear) > 5:
-                logger.info(f"  ... and {len(to_clear) - 5} more")
+                logger.info("additional_to_clear", remaining=len(to_clear) - 5)
         else:
             # Actually clear the summaries
             meeting_ids = [t[0] for t in to_clear]
@@ -293,7 +291,7 @@ class SummaryQualityChecker:
                     meeting_ids,
                 )
                 conn.commit()
-                logger.info(f"Cleared {len(to_clear)} bad summaries")
+                logger.info("summaries_cleared", count=len(to_clear))
 
         conn.close()
         return len(to_clear)
@@ -445,7 +443,7 @@ def parse_quality_types(types_str: str) -> List[SummaryQuality]:
         if t in valid_types:
             result.append(valid_types[t])
         else:
-            logger.warning(f"Unknown quality type: {t}")
+            logger.warning("unknown_quality_type", type=t)
 
     return result
 
