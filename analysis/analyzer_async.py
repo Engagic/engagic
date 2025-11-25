@@ -328,8 +328,13 @@ class AsyncAnalyzer:
                     "error": str(e)
                 }
 
-        # Process all items concurrently
-        results = await asyncio.gather(*[process_item(item) for item in item_requests])
+        # Process items sequentially to avoid TPM rate limits
+        # Gemini API has strict tokens-per-minute limits that parallel calls exceed
+        results = []
+        for i, item in enumerate(item_requests):
+            logger.debug("processing item", index=i + 1, total=len(item_requests))
+            result = await process_item(item)
+            results.append(result)
 
         # Return as single chunk (compatible with sync generator interface)
         logger.info("batch processing complete", success=sum(1 for r in results if r["success"]), total=len(results))

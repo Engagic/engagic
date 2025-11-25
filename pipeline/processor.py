@@ -273,6 +273,10 @@ class Processor:
         logger.info("processing queued jobs for city", city=city_banana)
         processed_count = 0
         failed_count = 0
+        total_items_processed = 0
+        total_items_new = 0
+        total_items_skipped = 0
+        total_items_failed = 0
 
         while True:
             # Get next job for this city
@@ -303,10 +307,16 @@ class Processor:
                             continue
                         # Process the meeting (item-aware)
                         with metrics.processing_duration.labels(job_type="meeting").time():
-                            await self.process_meeting(meeting)
+                            item_stats = await self.process_meeting(meeting)
                         await self.db.queue.mark_processing_complete(queue_id)
                         processed_count += 1
                         job_success = True
+                        # Aggregate item counts
+                        if item_stats:
+                            total_items_processed += item_stats.get("items_processed", 0)
+                            total_items_new += item_stats.get("items_new", 0)
+                            total_items_skipped += item_stats.get("items_skipped", 0)
+                            total_items_failed += item_stats.get("items_failed", 0)
                         logger.info("processed meeting", meeting_id=job.payload.meeting_id, duration_seconds=round(time.time() - job_start_time, 1))
                     else:
                         raise ValueError("Invalid payload type for meeting job")
@@ -348,13 +358,21 @@ class Processor:
         logger.info(
             "processing complete for city",
             city=city_banana,
-            succeeded=processed_count,
-            failed=failed_count
+            meetings_succeeded=processed_count,
+            meetings_failed=failed_count,
+            items_processed=total_items_processed,
+            items_new=total_items_new,
+            items_skipped=total_items_skipped,
+            items_failed=total_items_failed
         )
 
         return {
             "processed_count": processed_count,
             "failed_count": failed_count,
+            "items_processed": total_items_processed,
+            "items_new": total_items_new,
+            "items_skipped": total_items_skipped,
+            "items_failed": total_items_failed,
         }
 
     async def _process_single_item(self, item):
@@ -648,8 +666,8 @@ class Processor:
                 )
                 if not self.analyzer:
                     logger.warning("analyzer not available")
-                    return
-                await self._process_meeting_with_items(meeting, agenda_items)
+                    return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 0}
+                return await self._process_meeting_with_items(meeting, agenda_items)
 
             elif meeting.packet_url:
                 # Monolithic processing (PDF packet path) - FALLBACK PATH
@@ -663,7 +681,7 @@ class Processor:
                         "skipping meeting - analyzer not available",
                         packet_url=meeting.packet_url
                     )
-                    return
+                    return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 0}
 
                 meeting_data = {
                     "packet_url": meeting.packet_url,
@@ -688,16 +706,23 @@ class Processor:
                         packet_url=meeting.packet_url,
                         processing_time_seconds=round(result['processing_time'], 1)
                     )
+                    # Monolithic = 1 "item" (the whole packet)
+                    return {"items_processed": 1, "items_new": 1, "items_skipped": 0, "items_failed": 0}
                 else:
                     logger.error(
                         "failed to process packet",
                         packet_url=meeting.packet_url,
                         error=result.get('error')
                     )
+                    return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 1}
+
+            # No items and no packet_url
+            return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 0}
 
         except (ProcessingError, LLMError, ExtractionError) as e:
             # Expected errors during summary processing - log and continue
             logger.error("error processing summary", packet_url=meeting.packet_url, error=str(e), error_type=type(e).__name__)
+            return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 1}
 
     # ========== Item Processing Helpers (extracted from 424-line God function) ==========
 
@@ -1238,14 +1263,28 @@ class Processor:
                 participation=merged_participation,  # JSONB encoder handles Pydantic models
             )
 
+            failed_count = len(failed_items) if 'failed_items' in locals() else 0
+            skipped_count = len(already_processed)
+            new_count = len(processed_items) - skipped_count
+
             logger.info(
                 "item processing completed",
                 processed_count=len(processed_items),
-                failed_count=len(failed_items) if 'failed_items' in locals() else 0,
+                new_items=new_count,
+                skipped_items=skipped_count,
+                failed_count=failed_count,
                 processing_time_seconds=round(processing_time, 1)
             )
+
+            return {
+                "items_processed": len(processed_items),
+                "items_new": new_count,
+                "items_skipped": skipped_count,
+                "items_failed": failed_count
+            }
         else:
             logger.warning("no items could be processed")
+            return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 0}
 
     async def close(self):
         """Cleanup resources (HTTP sessions)"""

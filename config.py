@@ -131,6 +131,8 @@ class Config:
 
         # Logging
         self.LOG_LEVEL = os.getenv("ENGAGIC_LOG_LEVEL", "INFO").upper()
+        # Log format: "json" (default for prod) or "dev" (human-readable key=value)
+        self.LOG_FORMAT = os.getenv("ENGAGIC_LOG_FORMAT", "json").lower()
 
         # Admin authentication
         self.ADMIN_TOKEN = os.getenv("ENGAGIC_ADMIN_TOKEN", "")
@@ -291,8 +293,9 @@ def configure_structlog(is_development: bool = False, log_level: str = "INFO"):
 config = Config()
 
 # Configure structured logging
-# Use development mode if DEBUG=true or localhost in origins
+# Use dev format if LOG_FORMAT=dev, or if in development mode
+use_dev_format = config.LOG_FORMAT == "dev" or config.is_development()
 configure_structlog(
-    is_development=config.is_development(),
+    is_development=use_dev_format,
     log_level=config.LOG_LEVEL
 )
