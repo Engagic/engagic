@@ -473,6 +473,9 @@ async def send_weekly_digest():
                     logger.info(f"No content for {user.email}, skipping")
                     continue
 
+                # Generate unsubscribe token for this user
+                unsubscribe_token = generate_unsubscribe_token(user.id)
+
                 # Build email
                 html = build_digest_email(
                     user_name=user.name,
@@ -481,7 +484,8 @@ async def send_weekly_digest():
                     keyword_matches=keyword_matches,
                     keywords=keywords,
                     upcoming_meetings=upcoming_meetings,
-                    app_url=app_url
+                    app_url=app_url,
+                    unsubscribe_token=unsubscribe_token
                 )
 
                 # Send email
