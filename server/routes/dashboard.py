@@ -64,7 +64,7 @@ async def get_dashboard(
                 "id": alert.id,
                 "name": alert.name,
                 "cities": alert.cities,
-                "keywords": keywords,
+                "criteria": {"keywords": keywords},
                 "frequency": alert.frequency,
                 "active": alert.active,
                 "created_at": alert.created_at.isoformat(),
@@ -169,7 +169,7 @@ async def get_alert_config(
                 "alert_id": alert.id,
                 "alert_name": alert.name,
                 "cities": alert.cities,
-                "keywords": keywords,
+                "criteria": {"keywords": keywords},
                 "frequency": alert.frequency,
                 "active": alert.active,
             }
