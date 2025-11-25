@@ -101,13 +101,21 @@ Frontend runs on http://localhost:5173
 ### 6. Run Weekly Digest
 
 ```bash
-# Test weekly digest (sends emails to all active users)
-python3 -m userland.scripts.weekly_digest
+# Test weekly digest manually (sends emails to all active users)
+sudo systemctl start engagic-digest.service
+
+# Check logs
+journalctl -u engagic-digest.service --since "5 minutes ago"
 ```
 
-**Cron setup (Sundays at 9am):**
+**Systemd timer (Sundays at 9am):**
+The weekly digest runs automatically via systemd timer:
 ```bash
-0 9 * * 0 cd /root/engagic && .venv/bin/python -m userland.scripts.weekly_digest >> /var/log/userland_digest.log 2>&1
+# Check timer status
+systemctl status engagic-digest.timer
+
+# View next scheduled run
+systemctl list-timers | grep engagic
 ```
 
 ## Database Schema
@@ -170,15 +178,26 @@ python3 -m userland.scripts.weekly_digest
 ✅ **Keyword tracking** - 1-3 keywords recommended (unlimited supported)
 ✅ **Single-city focus** - Most users watch one city (multi-city supported for power users)
 
+## Production Deployment
+
+**Deployed at:** `/opt/engagic` on VPS
+
+**Services:**
+- `engagic-api.service` - Main API (includes auth routes)
+- `engagic-digest.timer` - Weekly digest (Sundays 9am)
+
+**Environment:** `/opt/engagic/.env`
+- `USERLAND_JWT_SECRET` - JWT signing key
+- `MAILGUN_API_KEY` - Email delivery
+- `MAILGUN_DOMAIN` - Mailgun domain
+- `MAILGUN_FROM_EMAIL` - Sender address
+
 ## Next Steps
 
-- [ ] Deploy to production VPS
-- [ ] Set up Mailgun for production emails
 - [ ] Monitor email deliverability and open rates
 - [ ] Add unsubscribe flow
+- [ ] Add email open/click tracking
 
 ---
 
-**Status:** Backend ✅ | Frontend ✅ | Integration ✅
-
-**Ready to deploy!** Simple Sunday digest for civic engagement.
+**Status:** Backend (deployed) | Frontend (deployed) | Weekly Digest (scheduled)
