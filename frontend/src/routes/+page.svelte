@@ -2,11 +2,12 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { apiClient } from '$lib/api/api-client';
-	import type { SearchResult, CityOption, Meeting } from '$lib/api/types';
+	import type { SearchResult, CityOption, Meeting, AnalyticsData } from '$lib/api/types';
 	import { isSearchSuccess, isSearchAmbiguous } from '$lib/api/types';
 	import { generateCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
+	import { getAnalytics } from '$lib/api/index';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
 
@@ -20,16 +21,26 @@
 	let error = $state('');
 	let currentStatIndex = $state(0);
 
-	// Data now comes from load function - already available on mount
-	let analytics = $state(data.analytics);
+	// Analytics fetched client-side (not blocking SSR)
+	let analytics: AnalyticsData | null = $state(null);
 
-	const stats = $derived(analytics ? [
-		{ label: 'cities tracked', value: analytics.real_metrics.cities_covered.toLocaleString() },
-		{ label: 'meetings summarized', value: analytics.real_metrics.agendas_summarized.toLocaleString() },
-		{ label: 'total meetings', value: analytics.real_metrics.meetings_tracked.toLocaleString() }
-	] : []);
+	const stats = $derived.by(() => {
+		if (!analytics) return [];
+		return [
+			{ label: 'cities tracked', value: analytics.real_metrics.cities_covered.toLocaleString() },
+			{ label: 'meetings summarized', value: analytics.real_metrics.agendas_summarized.toLocaleString() },
+			{ label: 'total meetings', value: analytics.real_metrics.meetings_tracked.toLocaleString() }
+		];
+	});
 
 	onMount(() => {
+		// Fetch analytics client-side (non-blocking)
+		getAnalytics().then((data) => {
+			analytics = data;
+		}).catch((err) => {
+			logger.error('Analytics fetch failed', err as Error);
+		});
+
 		// Rotate stats every 3 seconds
 		const interval = setInterval(() => {
 			if (stats.length > 0) {
