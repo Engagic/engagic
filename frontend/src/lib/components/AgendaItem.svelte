@@ -162,7 +162,7 @@
 								class="matter-badge matter-badge-link"
 								title="View legislative journey for {item.matter_file}"
 								onclick={(e) => e.stopPropagation()}
-								data-sveltekit-preload-data="hover"
+								data-sveltekit-preload-data="tap"
 							>
 								{item.matter_file}
 							</a>
@@ -188,7 +188,7 @@
 							class="matter-timeline-badge"
 							title="View legislative journey across {item.matter.appearance_count} meetings"
 							onclick={(e) => e.stopPropagation()}
-							data-sveltekit-preload-data="hover"
+							data-sveltekit-preload-data="tap"
 						>
 							{item.matter.appearance_count} appearances
 						</a>
