@@ -297,7 +297,7 @@ def _generate_logo_data_url() -> str:
 
         # If logo not found, create a simple SVG placeholder
         svg = '''<svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
-            <rect width="48" height="48" rx="12" fill="#0ea5e9"/>
+            <rect width="48" height="48" rx="12" fill="#4f46e5"/>
             <text x="24" y="32" text-anchor="middle" fill="white" font-size="24" font-weight="bold">e</text>
         </svg>'''
         svg_base64 = base64.b64encode(svg.encode()).decode()
@@ -307,7 +307,7 @@ def _generate_logo_data_url() -> str:
         logger.warning("logo generation failed, using fallback", error=str(e))
         # Fallback to simple SVG
         svg = '''<svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
-            <rect width="48" height="48" rx="12" fill="#0ea5e9"/>
+            <rect width="48" height="48" rx="12" fill="#4f46e5"/>
             <text x="24" y="32" text-anchor="middle" fill="white" font-size="24" font-weight="bold">e</text>
         </svg>'''
         svg_base64 = base64.b64encode(svg.encode()).decode()

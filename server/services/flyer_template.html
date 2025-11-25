@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Civic Action Flyer - {city_name}</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         @page {
             size: letter;
@@ -17,7 +18,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: 'IBM Plex Mono', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             line-height: 1.6;
             color: #000;
             background: #fff;
@@ -42,7 +43,7 @@
 
         .header {
             text-align: center;
-            border-bottom: 3px solid #0ea5e9;
+            border-bottom: 3px solid #4f46e5;
             padding-bottom: 1.25rem;
             margin-bottom: 1.5rem;
             display: flex;
@@ -52,7 +53,7 @@
         }
 
         body.dark-mode .header {
-            border-bottom: 3px solid #38bdf8;
+            border-bottom: 3px solid #a78bfa;
         }
 
         .header .logo {
@@ -70,11 +71,11 @@
             font-weight: 700;
             letter-spacing: 1px;
             margin: 0;
-            color: #0ea5e9;
+            color: #4f46e5;
         }
 
         body.dark-mode .header h1 {
-            color: #38bdf8;
+            color: #a78bfa;
         }
 
         .header .subtitle {
@@ -94,24 +95,24 @@
             margin-bottom: 1.5rem;
             padding: 1rem;
             background: #eff6ff;
-            border-left: 4px solid #0ea5e9;
-            border-radius: 4px;
+            border-left: 4px solid #4f46e5;
+            border-radius: 6px;
         }
 
         body.dark-mode .meeting-info {
             background: #1e293b;
-            border-left: 4px solid #38bdf8;
+            border-left: 4px solid #a78bfa;
         }
 
         .meeting-info h2 {
             font-size: 14pt;
             font-weight: 700;
             margin-bottom: 0.5rem;
-            color: #0ea5e9;
+            color: #4f46e5;
         }
 
         body.dark-mode .meeting-info h2 {
-            color: #38bdf8;
+            color: #a78bfa;
         }
 
         .meeting-info p {
@@ -149,7 +150,7 @@
             padding: 0.25rem 0.75rem;
             background: #f3f4f6;
             border: 1px solid #d1d5db;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 9pt;
             font-weight: 600;
             color: #6b7280;
@@ -173,15 +174,15 @@
             background: #000;
             color: #fff;
             text-align: center;
-            border-radius: 8px;
+            border-radius: 11px;
         }
 
         .position.support {
-            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
         }
 
         body.dark-mode .position.support {
-            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
         }
 
         .position.oppose {
@@ -221,15 +222,15 @@
         .participation {
             margin-bottom: 1.5rem;
             padding: 1.25rem;
-            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-            border: 3px solid #22c55e;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border: 3px solid #10b981;
             color: #000;
-            border-radius: 8px;
+            border-radius: 11px;
         }
 
         body.dark-mode .participation {
             background: linear-gradient(135deg, #14532d 0%, #166534 100%);
-            border: 3px solid #22c55e;
+            border: 3px solid #10b981;
             color: #fff;
         }
 
@@ -238,12 +239,12 @@
             font-weight: 700;
             margin-bottom: 0.75rem;
             text-transform: uppercase;
-            color: #15803d;
+            color: #047857;
             letter-spacing: 1px;
         }
 
         body.dark-mode .participation h2 {
-            color: #86efac;
+            color: #6ee7b7;
         }
 
         .participation p {
@@ -252,18 +253,18 @@
         }
 
         .participation a {
-            color: #15803d;
+            color: #047857;
             text-decoration: underline;
             word-break: break-all;
             font-weight: 600;
         }
 
         body.dark-mode .participation a {
-            color: #86efac;
+            color: #6ee7b7;
         }
 
         .footer {
-            border-top: 3px solid #0ea5e9;
+            border-top: 3px solid #4f46e5;
             padding-top: 1.25rem;
             display: flex;
             justify-content: space-between;
@@ -271,21 +272,21 @@
         }
 
         body.dark-mode .footer {
-            border-top: 3px solid #38bdf8;
+            border-top: 3px solid #a78bfa;
         }
 
         .footer .qr-code {
             width: 90px;
             height: 90px;
-            border: 2px solid #0ea5e9;
-            border-radius: 8px;
+            border: 2px solid #4f46e5;
+            border-radius: 11px;
             padding: 4px;
             background: #fff;
         }
 
         body.dark-mode .footer .qr-code {
             filter: invert(1);
-            border-color: #38bdf8;
+            border-color: #a78bfa;
         }
 
         .footer .branding {
@@ -305,11 +306,11 @@
         .footer .branding .url {
             font-weight: 700;
             font-size: 14pt;
-            color: #0ea5e9;
+            color: #4f46e5;
         }
 
         body.dark-mode .footer .branding .url {
-            color: #38bdf8;
+            color: #a78bfa;
         }
 
         @media print {

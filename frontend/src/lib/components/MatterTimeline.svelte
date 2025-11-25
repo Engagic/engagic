@@ -85,7 +85,7 @@
 		<div class="timeline-flow">
 			{#each timelineData.timeline as appearance, index}
 				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
-				{@const status = inferStatus(index, timelineData.timeline.length)}
+				{@const dateContext = getDateContext(index, timelineData.timeline.length)}
 				{@const isExpanded = expandedAppearances.has(index)}
 
 				<div class="flow-step" class:selected={isExpanded}>
@@ -102,7 +102,7 @@
 						<div class="step-content">
 							<div class="step-header">
 								<div class="step-type">{meetingInfo.name}</div>
-								<div class="step-status">{status}</div>
+								<div class="step-status">{dateContext}</div>
 							</div>
 							<div class="step-date">{formatDate(appearance.meeting_date)}</div>
 							{#if appearance.agenda_number}
