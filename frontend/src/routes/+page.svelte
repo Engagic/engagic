@@ -73,14 +73,6 @@
 			return;
 		}
 
-		// Check if this is a state search
-		const stateDetection = detectStateSearch(searchQuery);
-		if (stateDetection.isState && stateDetection.stateCode) {
-			logger.trackEvent('state_search', { query: searchQuery, state: stateDetection.stateCode });
-			goto(`/state/${stateDetection.stateCode}`);
-			return;
-		}
-
 		loading = true;
 		error = '';
 		searchResults = null;
@@ -97,6 +89,14 @@
 				goto(`/${cityUrl}`, { state: { cachedSearchResults: result } });
 			} else if (isSearchAmbiguous(result)) {
 				logger.trackEvent('search_ambiguous', { query: searchQuery });
+			} else {
+				// API returned not found - check if it's a state search as fallback
+				const stateDetection = detectStateSearch(searchQuery);
+				if (stateDetection.isState && stateDetection.stateCode) {
+					logger.trackEvent('state_search', { query: searchQuery, state: stateDetection.stateCode });
+					goto(`/state/${stateDetection.stateCode}`);
+				}
+				// Otherwise the "not found" message from API will be shown via searchResults
 			}
 		} catch (err) {
 			logger.error('Search failed', err as Error, { query: searchQuery });
@@ -230,10 +230,6 @@
 		return { isState: false };
 	}
 
-	const stateSearch = $derived(() => {
-		if (!searchQuery) return { isState: false };
-		return detectStateSearch(searchQuery);
-	});
 </script>
 
 <svelte:head>
