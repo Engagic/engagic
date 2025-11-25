@@ -13,5 +13,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Store in locals so it's available to all server load functions
 	event.locals.clientIp = clientIp;
 
-	return resolve(event);
+	return resolve(event, {
+		// Preload fonts to eliminate FOIT (Flash of Invisible Text)
+		preload: ({ type, path }) => {
+			if (type === 'font') return path.includes('ibm-plex-mono');
+			return type === 'js' || type === 'css';
+		}
+	});
 };
