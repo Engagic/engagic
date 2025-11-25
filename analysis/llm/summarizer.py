@@ -226,7 +226,7 @@ class GeminiSummarizer:
         response_schema = self.prompts["item"][prompt_type].get("response_schema")
         config = types.GenerateContentConfig(
             temperature=0.3,
-            max_output_tokens=2048,
+            max_output_tokens=8192,  # Increased from 2048 to match batch API
             response_mime_type="application/json",
             response_schema=response_schema
         )
@@ -239,7 +239,21 @@ class GeminiSummarizer:
                 model=model_name, contents=prompt, config=config
             )
 
-            if not response.text:
+            # Extract text - handle various response structures
+            response_text = response.text
+            if not response_text:
+                # Try extracting from candidates structure (may have thinking blocks)
+                response_text = self._extract_text_from_response(response)
+
+            if not response_text:
+                # Log full response structure for debugging
+                logger.error(
+                    "gemini empty response debug",
+                    has_candidates=hasattr(response, 'candidates') and bool(response.candidates),
+                    candidate_count=len(response.candidates) if hasattr(response, 'candidates') and response.candidates else 0,
+                    has_prompt_feedback=hasattr(response, 'prompt_feedback'),
+                    prompt_feedback=str(getattr(response, 'prompt_feedback', None))[:200] if hasattr(response, 'prompt_feedback') else None
+                )
                 raise ValueError("Gemini returned no text")
 
             # Extract token usage
@@ -260,7 +274,7 @@ class GeminiSummarizer:
             )
 
             # Parse response based on version
-            summary, topics = self._parse_item_response(response.text)
+            summary, topics = self._parse_item_response(response_text)
 
             return summary, topics
 
@@ -470,6 +484,44 @@ class GeminiSummarizer:
             return None
 
         return parts[0].get('text')
+
+    def _extract_text_from_response(self, response) -> Optional[str]:
+        """Extract text from live Gemini API response object
+
+        Handles various response structures including thinking blocks.
+        Used when response.text is None/empty.
+
+        Args:
+            response: GenerateContentResponse object from Gemini API
+
+        Returns:
+            Extracted text or None if not found
+        """
+        # Check for candidates
+        if not hasattr(response, 'candidates') or not response.candidates:
+            return None
+
+        candidate = response.candidates[0]
+
+        # Check finish reason for debugging
+        if hasattr(candidate, 'finish_reason'):
+            logger.debug("candidate finish_reason", finish_reason=str(candidate.finish_reason))
+
+        # Check for content
+        if not hasattr(candidate, 'content') or not candidate.content:
+            return None
+
+        # Check for parts
+        if not hasattr(candidate.content, 'parts') or not candidate.content.parts:
+            return None
+
+        # Try to find text in parts (skip thinking blocks)
+        for part in candidate.content.parts:
+            if hasattr(part, 'text') and part.text:
+                logger.info("extracted text from candidate part", length=len(part.text))
+                return part.text
+
+        return None
 
     def _parse_batch_response_line(
         self,
