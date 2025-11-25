@@ -46,15 +46,20 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
 
     # Extract participation info from page text (before agenda items)
     page_text = soup.get_text()
-    participation = parse_participation_info(page_text) or {}
+    participation_info = parse_participation_info(page_text)
 
     # Extract agenda items
     items = _extract_agenda_items(soup)
 
+    # Get field names for logging
+    participation_fields = list(participation_info.model_dump(exclude_none=True).keys()) if participation_info else []
     logger.debug(
         f"[HTMLParser:PrimeGov] Extracted {len(items)} agenda items, "
-        f"participation fields: {list(participation.keys())}"
+        f"participation fields: {participation_fields}"
     )
+
+    # Convert to dict for return, defaulting to empty dict if None
+    participation = participation_info.model_dump() if participation_info else {}
 
     return {
         'participation': participation,

@@ -108,7 +108,8 @@ async def send_test_digest(email: str):
             keyword_matches=keyword_matches,
             keywords=keywords,
             upcoming_meetings=upcoming_meetings,
-            app_url=app_url
+            app_url=app_url,
+            unsubscribe_token="test-unsubscribe-token"
         )
 
         # Send email

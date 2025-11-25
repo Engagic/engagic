@@ -227,6 +227,92 @@ class UserlandRepository(BaseRepository):
         """
         return await self.get_alerts(active_only=True)
 
+    async def get_demanded_cities(self) -> List[str]:
+        """Get all unique cities that users have subscribed to
+
+        Extracts city bananas from active alerts' cities JSONB arrays.
+        Used by sync pipeline to prioritize user-demanded cities.
+
+        Returns:
+            List of unique city bananas (e.g., ["paloaltoCA", "austinTX"])
+        """
+        async with self.pool.acquire() as conn:
+            # Use jsonb_array_elements_text to unnest JSONB arrays
+            # Deduplicate with DISTINCT
+            rows = await conn.fetch(
+                """
+                SELECT DISTINCT jsonb_array_elements_text(cities) as city_banana
+                FROM userland.alerts
+                WHERE active = TRUE
+                ORDER BY city_banana
+                """
+            )
+            return [row["city_banana"] for row in rows]
+
+    # ========== City Request Operations ==========
+
+    async def record_city_request(self, city_banana: str) -> None:
+        """Record or increment a request for an unknown city
+
+        Uses upsert: first request creates row, subsequent requests increment count.
+
+        Args:
+            city_banana: City identifier (e.g., "austinTX")
+        """
+        async with self.transaction() as conn:
+            await conn.execute(
+                """
+                INSERT INTO userland.city_requests (city_banana, request_count, first_requested, last_requested)
+                VALUES ($1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (city_banana) DO UPDATE SET
+                    request_count = userland.city_requests.request_count + 1,
+                    last_requested = CURRENT_TIMESTAMP
+                """,
+                city_banana
+            )
+
+    async def get_pending_city_requests(self) -> List[dict]:
+        """Get all pending city requests ordered by demand
+
+        Returns:
+            List of dicts with city_banana, request_count, first_requested, last_requested
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT city_banana, request_count, first_requested, last_requested
+                FROM userland.city_requests
+                WHERE status = 'pending'
+                ORDER BY request_count DESC, first_requested ASC
+                """
+            )
+            return [dict(row) for row in rows]
+
+    async def update_city_request_status(
+        self,
+        city_banana: str,
+        status: str,
+        notes: Optional[str] = None
+    ) -> None:
+        """Update city request status
+
+        Args:
+            city_banana: City identifier
+            status: New status ('pending', 'added', 'rejected')
+            notes: Optional admin notes
+        """
+        async with self.transaction() as conn:
+            await conn.execute(
+                """
+                UPDATE userland.city_requests
+                SET status = $2, notes = $3
+                WHERE city_banana = $1
+                """,
+                city_banana,
+                status,
+                notes
+            )
+
     async def update_alert(
         self,
         alert_id: str,

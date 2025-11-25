@@ -220,7 +220,7 @@ class AsyncAnalyzer:
                 # Parse participation info BEFORE AI summarization
                 participation = parse_participation_info(extracted_text)
                 if participation:
-                    logger.debug("extracted participation info", fields=list(participation.keys()))
+                    logger.debug("extracted participation info", fields=list(participation.model_dump(exclude_none=True).keys()))
 
                 # Estimate tokens for rate limiting
                 tokens = estimate_tokens(extracted_text)
@@ -239,7 +239,9 @@ class AsyncAnalyzer:
                 del result
                 del extracted_text
 
-                return summary, "pymupdf_gemini", participation
+                # Convert Pydantic model to dict for return type consistency
+                participation_dict = participation.model_dump() if participation else None
+                return summary, "pymupdf_gemini", participation_dict
             else:
                 logger.warning("no text extracted or poor quality", url=url)
 
