@@ -4,15 +4,15 @@ Async Analyzer - LLM analysis orchestration with concurrent processing
 Async version of pipeline/analyzer.py with:
 - Async PDF downloads (aiohttp)
 - Concurrent PDF extraction (asyncio.to_thread for PyMuPDF)
-- Intelligent rate limiting (Gemini API tokens/min, /hour, /day)
-- Concurrent batch processing (respects rate limits)
+- Concurrent batch processing
 
 Coordinates:
 - PDF extraction (parsing/)
 - LLM summarization (analysis/llm/)
 - Participation parsing (parsing/)
 - Topic extraction (analysis/topics/)
-- Rate limiting (analysis/rate_limiter_async)
+
+Rate limiting is handled by the summarizer via Gemini's retry instructions.
 """
 
 import asyncio
@@ -24,7 +24,6 @@ from exceptions import ExtractionError, LLMError
 from parsing.pdf import PdfExtractor
 from parsing.participation import parse_participation_info
 from analysis.llm.summarizer import GeminiSummarizer
-from analysis.rate_limiter_async import AsyncRateLimiter, estimate_tokens
 
 from config import get_logger
 
@@ -38,13 +37,14 @@ class AnalysisError(Exception):
 
 class AsyncAnalyzer:
     """
-    Async LLM analysis orchestrator with intelligent rate limiting.
+    Async LLM analysis orchestrator.
 
     Key Features:
     - Async PDF downloads (aiohttp, concurrent)
     - CPU-bound extraction in thread pool (non-blocking)
-    - Gemini API rate limiting (tokens/min, /hour, /day)
-    - Concurrent batch processing within limits
+    - Concurrent batch processing
+
+    Rate limiting is handled reactively by the summarizer via Gemini's retry instructions.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -55,14 +55,12 @@ class AsyncAnalyzer:
         """
         self.pdf_extractor = PdfExtractor()  # Sync extractor, we'll wrap calls
         self.summarizer = GeminiSummarizer(api_key=api_key)  # Sync summarizer, we'll wrap calls
-        self.rate_limiter = AsyncRateLimiter()  # Async rate limiter
         self.http_session: Optional[aiohttp.ClientSession] = None
 
         logger.info(
             "async analyzer initialized",
             pdf_extractor="pymupdf",
-            summarizer="gemini",
-            rate_limiter="async_token_bucket"
+            summarizer="gemini"
         )
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -222,16 +220,12 @@ class AsyncAnalyzer:
                 if participation:
                     logger.debug("extracted participation info", fields=list(participation.model_dump(exclude_none=True).keys()))
 
-                # Estimate tokens for rate limiting
-                tokens = estimate_tokens(extracted_text)
-
-                # Acquire rate limit tokens (async wait if needed)
-                async with self.rate_limiter.acquire(tokens):
-                    # Summarize meeting (Gemini SDK is sync, run in thread pool)
-                    summary = await asyncio.to_thread(
-                        self.summarizer.summarize_meeting,
-                        extracted_text
-                    )
+                # Summarize meeting (Gemini SDK is sync, run in thread pool)
+                # Rate limiting handled reactively by summarizer via Gemini's retry instructions
+                summary = await asyncio.to_thread(
+                    self.summarizer.summarize_meeting,
+                    extracted_text
+                )
 
                 logger.info("agenda processing success", url=url)
 
@@ -262,10 +256,10 @@ class AsyncAnalyzer:
         meeting_id: Optional[str] = None
     ) -> List[List[Dict[str, Any]]]:
         """
-        Process multiple agenda items concurrently (respects rate limits).
+        Process multiple agenda items concurrently.
 
         Unlike sync version (generator), returns complete results after processing.
-        Processes items in parallel where rate limits allow.
+        Rate limiting handled reactively by summarizer via Gemini's retry instructions.
 
         Args:
             item_requests: List of dicts with structure:
@@ -298,26 +292,21 @@ class AsyncAnalyzer:
             concurrent=True
         )
 
-        # Process items concurrently (rate limiter handles throttling)
         async def process_item(item: Dict[str, Any]) -> Dict[str, Any]:
-            """Process single item with rate limiting"""
+            """Process single item"""
             try:
                 text = item.get("text", "")
                 title = item.get("title", "")
                 page_count = item.get("page_count")
 
-                # Estimate tokens for rate limiting
-                tokens = estimate_tokens(text)
-
-                # Acquire rate limit tokens (async wait if needed)
-                async with self.rate_limiter.acquire(tokens):
-                    # Summarize item (Gemini SDK is sync, run in thread pool)
-                    summary, topics = await asyncio.to_thread(
-                        self.summarizer.summarize_item,
-                        title,
-                        text,
-                        page_count
-                    )
+                # Summarize item (Gemini SDK is sync, run in thread pool)
+                # Rate limiting handled reactively by summarizer
+                summary, topics = await asyncio.to_thread(
+                    self.summarizer.summarize_item,
+                    title,
+                    text,
+                    page_count
+                )
 
                 return {
                     "item_id": item["item_id"],
@@ -339,13 +328,9 @@ class AsyncAnalyzer:
                     "error": str(e)
                 }
 
-        # Process all items concurrently (rate limiter serializes as needed)
+        # Process all items concurrently
         results = await asyncio.gather(*[process_item(item) for item in item_requests])
 
         # Return as single chunk (compatible with sync generator interface)
         logger.info("batch processing complete", success=sum(1 for r in results if r["success"]), total=len(results))
         return [results]
-
-    async def get_rate_limiter_stats(self) -> Dict[str, Any]:
-        """Get current rate limiter statistics"""
-        return self.rate_limiter.get_stats()
