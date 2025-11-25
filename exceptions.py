@@ -21,11 +21,26 @@ class EngagicError(Exception):
     - Catch all Engagic errors with single except clause
     - Distinguish our errors from library errors
     - Add common attributes (context, original_error)
+    - Check if error is retryable via is_retryable property
     """
+
+    # Default: errors are not retryable (permanent failure)
+    # Subclasses can override this for transient failures
+    _retryable: bool = False
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None):
         self.context = context or {}
         super().__init__(message)
+
+    @property
+    def is_retryable(self) -> bool:
+        """Check if this error represents a transient failure that should be retried.
+
+        Returns:
+            True for transient failures (network, rate limits, timeouts)
+            False for permanent failures (parse errors, validation, missing data)
+        """
+        return self._retryable
 
     def __str__(self):
         base_msg = super().__str__()
@@ -52,7 +67,7 @@ class DatabaseError(EngagicError):
 
 class DatabaseConnectionError(DatabaseError):
     """Failed to establish or maintain database connection"""
-    pass
+    _retryable = True  # Connection issues are often transient
 
 
 class DataIntegrityError(DatabaseError):
@@ -112,6 +127,14 @@ class VendorHTTPError(VendorError):
     - 403 Forbidden
     - 500 Server Error
     - Timeout
+
+    Retryable for:
+    - 5xx errors (server issues)
+    - Timeouts (network transient)
+    - Connection errors
+
+    Not retryable for:
+    - 4xx errors (client issues, bad request, not found)
     """
 
     def __init__(
@@ -134,6 +157,14 @@ class VendorHTTPError(VendorError):
             context['city_slug'] = city_slug
 
         super().__init__(message, context)
+
+    @property
+    def is_retryable(self) -> bool:
+        """5xx errors and timeouts are retryable, 4xx are not"""
+        if self.status_code is None:
+            # No status code = network/timeout error, retryable
+            return True
+        return self.status_code >= 500
 
 
 class VendorParsingError(VendorError):
@@ -330,7 +361,11 @@ class RateLimitError(EngagicError):
     - Vendor rate limit
     - API rate limit
     - Internal rate limit
+
+    Always retryable (wait and try again).
     """
+
+    _retryable = True  # Rate limits are always transient
 
     def __init__(
         self,

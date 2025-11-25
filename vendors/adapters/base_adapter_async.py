@@ -309,6 +309,63 @@ class AsyncBaseAdapter:
                 city_slug=self.slug
             ) from e
 
+    async def _get_json(self, url: str, **kwargs) -> Any:
+        """
+        Make async GET request and parse JSON response with error handling.
+
+        Args:
+            url: URL to fetch
+            **kwargs: Additional arguments for aiohttp.get
+
+        Returns:
+            Parsed JSON data (dict or list)
+
+        Raises:
+            VendorHTTPError on HTTP or JSON parsing failure
+        """
+        response = await self._get(url, **kwargs)
+        try:
+            return await response.json()
+        except aiohttp.ContentTypeError as e:
+            # Server returned non-JSON content type
+            text = await response.text()
+            logger.error(
+                "vendor json parse failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                url=url[:100],
+                error="unexpected content type",
+                content_type=response.headers.get('content-type', 'unknown'),
+                body_preview=text[:200] if text else None
+            )
+            raise VendorHTTPError(
+                f"Expected JSON but got {response.headers.get('content-type', 'unknown')}",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
+        except Exception as e:
+            # JSONDecodeError or other parsing issues
+            try:
+                text = await response.text()
+            except Exception:
+                text = "(unable to read response body)"
+            logger.error(
+                "vendor json parse failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                url=url[:100],
+                error=str(e),
+                error_type=type(e).__name__,
+                body_preview=text[:200] if text else None
+            )
+            raise VendorHTTPError(
+                f"JSON parse failed: {str(e)}",
+                vendor=self.vendor,
+                url=url,
+                city_slug=self.slug
+            ) from e
+
     def _parse_date(self, date_str: str) -> Optional[datetime]:
         """
         Parse date string from various vendor formats.

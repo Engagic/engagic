@@ -19,6 +19,7 @@ Note: Ceremonial patterns updated to catch Chicago-specific items like
 import re
 
 # Procedural patterns to skip (no civic impact)
+# Confidence: 8/10 - Validated against Legistar, Chicago, and multi-city production data
 PROCEDURAL_PATTERNS = [
     # Core procedural items
     r'appointment',
@@ -29,31 +30,67 @@ PROCEDURAL_PATTERNS = [
     r'invocation',
     r'pledge of allegiance',
     r'approval of (minutes|agenda)',
+    r'adopt minutes',
+    r'review of minutes',
     r'^minutes of',  # Standalone minutes items (e.g., "Minutes of Oct 1, 2025")
     r'adjourn',
 
-    # Low-value administrative items (conservative filtering)
-    r'(?i)liquor license',
-    r'(?i)beer (and|&) wine license',
-    r'(?i)alcoholic beverage license',
-
-    # Ceremonial items (ZERO civic value - validated against Chicago)
-    # Confidence: 9/10 - These have no legislative/policy impact
-    r'(?i)congratulations (to|extended to|for)',  # Broader: catches all congratulations
+    # Ceremonial items (ZERO civic value)
+    r'proclamation',
+    r'commendation',
+    r'recognition',
+    r'ceremonial',
+    r'(?i)congratulations (to|extended to|for)',
     r'(?i)tribute to (late|the late)',
-    r'(?i)\bon (his|her|their) retirement\b',  # "on his/her/their retirement"
-    r'(?i)retirement of',  # "Retirement of John Doe"
+    r'(?i)\bon (his|her|their) retirement\b',
+    r'(?i)retirement of',
     r'(?i)happy birthday',
     r'(?i)birthday (wishes|greetings|recognition|celebration)',
 
-    # Administrative permits (no policy value)
+    # Low-value administrative items
+    r'(?i)liquor license',
+    r'(?i)beer (and|&) wine license',
+    r'(?i)alcoholic beverage license',
     r'issuance of permits? for sign',
     r'signboard permit',
-
-    # Minor administrative items
     r'fee waiver for',
     r'(various )?small claims?',
     r'time fixed for next',
+]
+
+# Skip public comment attachments (high token cost, low informational value)
+# These are typically scanned form letters - hundreds of pages, minimal unique content
+PUBLIC_COMMENT_PATTERNS = [
+    r'public comment',
+    r'public correspondence',
+    r'comment letter',
+    r'comment ltrs',  # SF abbreviation
+    r'written comment',
+    r'public hearing comment',
+    r'citizen comment',
+    r'correspondence received',
+    r'public input',
+    r'public testimony',
+    r'letters received',
+    r'petitions',  # SF "Petitions and Communications"
+    r'pub corr',  # SF abbreviation
+    r'pulbic corr',  # Common typo in SF data
+    r'comm pkt',  # Committee packets
+    r'committee packet',
+]
+
+# Skip parcel tables and property lists (massive PDFs with no civic value)
+# Example: "Parcel Tables" (992 pages!) - just property IDs and addresses
+PARCEL_TABLE_PATTERNS = [
+    r'parcel table',
+    r'parcel list',
+    r'parcel map',
+    r'tax parcel',
+    r'property list',
+    r'property table',
+    r'assessor',
+    r'apn list',  # Assessor Parcel Number
+    r'parcel number',
 ]
 
 # Matter types to skip (administrative/procedural, not legislative)
@@ -149,3 +186,39 @@ def add_custom_skip_patterns(patterns: list[str]) -> None:
     """
     global PROCEDURAL_PATTERNS
     PROCEDURAL_PATTERNS.extend(patterns)
+
+
+def is_public_comment_attachment(name: str) -> bool:
+    """
+    Check if attachment is public comments or parcel tables (skip to save tokens).
+
+    These attachments are typically:
+    - Hundreds of pages of scanned form letters
+    - Property lists with no policy content
+    - High token cost, low informational value
+
+    Args:
+        name: Attachment filename or title
+
+    Returns:
+        True if attachment should be skipped
+
+    Examples:
+        >>> is_public_comment_attachment("Public Comments Received")
+        True
+        >>> is_public_comment_attachment("Parcel Table 2025")
+        True
+        >>> is_public_comment_attachment("Staff Report.pdf")
+        False
+    """
+    name_lower = name.lower()
+
+    for pattern in PUBLIC_COMMENT_PATTERNS:
+        if re.search(pattern, name_lower, re.IGNORECASE):
+            return True
+
+    for pattern in PARCEL_TABLE_PATTERNS:
+        if re.search(pattern, name_lower, re.IGNORECASE):
+            return True
+
+    return False
