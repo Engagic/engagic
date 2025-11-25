@@ -24,8 +24,9 @@ from typing import List, Dict, Any
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from config import get_logger
+from config import config, get_logger
 from database.db_postgres import Database
+from userland.auth.jwt import generate_unsubscribe_token, init_jwt
 from userland.email.emailer import EmailService
 from userland.email.templates import DARK_MODE_CSS
 
@@ -244,7 +245,8 @@ def build_digest_email(
     keyword_matches: List[Dict[str, Any]],
     keywords: List[str],
     upcoming_meetings: List[Dict[str, Any]],
-    app_url: str
+    app_url: str,
+    unsubscribe_token: str
 ) -> str:
     """
     Build HTML email for weekly digest.
@@ -378,7 +380,8 @@ def build_digest_email(
                     </tr>
 """
 
-    # Footer
+    # Footer with one-click unsubscribe (CAN-SPAM compliant)
+    unsubscribe_url = f"https://api.engagic.org/api/auth/unsubscribe?token={unsubscribe_token}"
     html += f"""
                     <tr>
                         <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0;">
@@ -394,7 +397,7 @@ def build_digest_email(
                             <p style="margin: 0; font-size: 12px; font-family: Georgia, serif;">
                                 <a href="{app_url}/dashboard" style="color: #64748b; text-decoration: underline;">Manage subscription</a>
                                 <span style="margin: 0 8px; color: #cbd5e1;">|</span>
-                                <a href="{app_url}/unsubscribe" style="color: #64748b; text-decoration: none;">Unsubscribe</a>
+                                <a href="{unsubscribe_url}" style="color: #64748b; text-decoration: none;">Unsubscribe</a>
                             </p>
                         </td>
                     </tr>
@@ -418,6 +421,13 @@ async def send_weekly_digest():
     """
 
     app_url = os.getenv('APP_URL', 'https://engagic.org')
+
+    # Initialize JWT for unsubscribe token generation
+    if config.USERLAND_JWT_SECRET:
+        try:
+            init_jwt(config.USERLAND_JWT_SECRET)
+        except ValueError:
+            pass  # Already initialized
 
     logger.info("Starting weekly digest process...")
 
