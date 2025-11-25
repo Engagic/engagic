@@ -7,7 +7,8 @@ Handles CRUD operations for agenda items with PostgreSQL optimizations:
 - Efficient matter-based lookups
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
+from collections import defaultdict
 
 from database.repositories_async.base import BaseRepository
 from database.models import AgendaItem, AttachmentInfo
@@ -190,6 +191,77 @@ class ItemRepository(BaseRepository):
                 )
 
             return items
+
+    async def get_items_for_meetings(
+        self, meeting_ids: List[str]
+    ) -> Dict[str, List[AgendaItem]]:
+        """Batch fetch items for multiple meetings - eliminates N+1
+
+        Args:
+            meeting_ids: List of meeting identifiers
+
+        Returns:
+            Dict mapping meeting_id to list of AgendaItem objects
+        """
+        if not meeting_ids:
+            return {}
+
+        async with self.pool.acquire() as conn:
+            # Single query for ALL items across ALL meetings
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id, meeting_id, title, sequence, attachments,
+                    attachment_hash, matter_id, matter_file, matter_type,
+                    agenda_number, sponsors, summary, topics
+                FROM items
+                WHERE meeting_id = ANY($1::text[])
+                ORDER BY meeting_id, sequence
+                """,
+                meeting_ids,
+            )
+
+            if not rows:
+                return {mid: [] for mid in meeting_ids}
+
+            # Single query for ALL item topics
+            item_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
+                item_ids,
+            )
+
+            # Group topics by item
+            topics_by_item: Dict[str, List[str]] = defaultdict(list)
+            for tr in topic_rows:
+                topics_by_item[tr["item_id"]].append(tr["topic"])
+
+            # Build items grouped by meeting
+            items_by_meeting: Dict[str, List[AgendaItem]] = {mid: [] for mid in meeting_ids}
+
+            for row in rows:
+                topics = topics_by_item.get(row["id"], [])
+                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
+                sponsors = row["sponsors"] or []
+
+                item = AgendaItem(
+                    id=row["id"],
+                    meeting_id=row["meeting_id"],
+                    title=row["title"],
+                    sequence=row["sequence"],
+                    attachments=attachments,
+                    attachment_hash=row["attachment_hash"],
+                    matter_id=row["matter_id"],
+                    matter_file=row["matter_file"],
+                    matter_type=row["matter_type"],
+                    agenda_number=row["agenda_number"],
+                    sponsors=sponsors,
+                    summary=row["summary"],
+                    topics=topics,
+                )
+                items_by_meeting[row["meeting_id"]].append(item)
+
+            return items_by_meeting
 
     async def get_agenda_item(self, item_id: str) -> Optional[AgendaItem]:
         """Get a single agenda item by ID
