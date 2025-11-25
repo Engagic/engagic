@@ -62,8 +62,9 @@ def hash_attachments(
         # Enhanced mode: Include content metadata in hash
         tuples = []
         for att in attachments:
-            url = att.get("url", "")
-            name = att.get("name", "")
+            # Trust Pydantic AttachmentInfo model
+            url = att.url or ""
+            name = att.name or ""
 
             if not url:
                 tuples.append((url, name, "", ""))
@@ -82,8 +83,8 @@ def hash_attachments(
         content = json.dumps(tuples, sort_keys=True)
         return hashlib.sha256(content.encode()).hexdigest()
     else:
-        # Fast mode: URL-only hashing
-        pairs = [(att.get("url", ""), att.get("name", "")) for att in attachments]
+        # Fast mode: URL-only hashing - trust Pydantic AttachmentInfo model
+        pairs = [(att.url or "", att.name or "") for att in attachments]
         pairs.sort()
         content = json.dumps(pairs, sort_keys=True)
         return hashlib.sha256(content.encode()).hexdigest()
