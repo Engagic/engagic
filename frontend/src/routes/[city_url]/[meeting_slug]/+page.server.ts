@@ -1,9 +1,9 @@
 import { getMeeting, searchMeetings } from '$lib/api/index';
 import { extractMeetingIdFromSlug, parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
-import type { PageLoad } from './$types';
+import type { PageServerLoad } from './$types';
 import type { Meeting } from '$lib/api/types';
 
-export const load: PageLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params }) => {
 	const { city_url, meeting_slug } = params;
 
 	try {

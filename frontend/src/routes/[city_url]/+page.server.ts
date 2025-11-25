@@ -35,7 +35,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals }) => {
 };
 
 function processMeetingsData(result: SearchResult) {
-	if (!result.success || !('meetings' in result)) {
+	if (!result.success || !('meetings' in result) || !result.meetings) {
 		return {
 			searchResults: result,
 			upcomingMeetings: [],
