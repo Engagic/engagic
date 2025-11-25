@@ -1,41 +1,47 @@
 """
-Item filtering utilities - skip procedural items with no civic impact
+Item filtering utilities - two-tier filtering for agenda items
 
-ALL adapters should use this to filter out:
-- Roll call, invocations, pledges
-- Approval of minutes/agenda
-- Public comment periods
-- Adjournments
-- Appointments/confirmations without substantive discussion
-- Ceremonial items (birthdays, retirements, congratulations)
+TWO LEVELS OF FILTERING:
+
+1. ADAPTER LEVEL (should_skip_item):
+   - Items to NOT SAVE at all - zero metadata value
+   - Roll call, pledge, invocation, adjournment, minutes approval
+   - These never hit the database
+
+2. PROCESSOR LEVEL (should_skip_processing):
+   - Items to SAVE but NOT LLM-PROCESS
+   - Proclamations, commendations, appointments - have searchable metadata
+   - Stored in DB but skipped during LLM summarization to save tokens
 
 Confidence: 8/10
-Patterns validated against Legistar and Chicago, applicable to all vendors
-
-Note: Ceremonial patterns updated to catch Chicago-specific items like
-"Congratulations to X on retirement" and birthday recognitions.
+Patterns validated against Legistar, Chicago, and multi-city production data
 """
 
 import re
 
-# Procedural patterns to skip (no civic impact)
-# Confidence: 8/10 - Validated against Legistar, Chicago, and multi-city production data
-PROCEDURAL_PATTERNS = [
-    # Core procedural items
-    r'appointment',
-    r'confirmation',
-    r'public comment',
-    r'communications',
+# =============================================================================
+# ADAPTER LEVEL - Don't save these items at all (zero metadata value)
+# =============================================================================
+ADAPTER_SKIP_PATTERNS = [
+    # Core procedural items - no value even as metadata
     r'roll call',
     r'invocation',
     r'pledge of allegiance',
     r'approval of (minutes|agenda)',
     r'adopt minutes',
     r'review of minutes',
-    r'^minutes of',  # Standalone minutes items (e.g., "Minutes of Oct 1, 2025")
+    r'^minutes of',  # Standalone minutes items
     r'adjourn',
+    r'public comment',  # The period itself, not the content
+    r'communications',  # Generic communications period
+    r'time fixed for next',
+]
 
-    # Ceremonial items (ZERO civic value)
+# =============================================================================
+# PROCESSOR LEVEL - Save but don't LLM-process (has metadata value)
+# =============================================================================
+PROCESSOR_SKIP_PATTERNS = [
+    # Ceremonial items - who/what is searchable, but no need to summarize
     r'proclamation',
     r'commendation',
     r'recognition',
@@ -47,7 +53,11 @@ PROCEDURAL_PATTERNS = [
     r'(?i)happy birthday',
     r'(?i)birthday (wishes|greetings|recognition|celebration)',
 
-    # Low-value administrative items
+    # Appointments/confirmations - names matter, details don't need LLM
+    r'appointment',
+    r'confirmation',
+
+    # Low-value administrative - save for record, don't process
     r'(?i)liquor license',
     r'(?i)beer (and|&) wine license',
     r'(?i)alcoholic beverage license',
@@ -55,8 +65,10 @@ PROCEDURAL_PATTERNS = [
     r'signboard permit',
     r'fee waiver for',
     r'(various )?small claims?',
-    r'time fixed for next',
 ]
+
+# Combined for backward compatibility (deprecated - use specific functions)
+PROCEDURAL_PATTERNS = ADAPTER_SKIP_PATTERNS + PROCESSOR_SKIP_PATTERNS
 
 # Skip public comment attachments (high token cost, low informational value)
 # These are typically scanned form letters - hundreds of pages, minimal unique content
@@ -108,32 +120,70 @@ SKIP_MATTER_TYPES = [
 ]
 
 
-def should_skip_procedural_item(title: str, item_type: str = "") -> bool:
+def should_skip_item(title: str, item_type: str = "") -> bool:
     """
-    Check if an agenda item should be skipped (procedural, no civic impact).
+    ADAPTER LEVEL: Check if item should NOT be saved at all.
+
+    Use this in adapters to filter out items with zero metadata value.
+    These items never reach the database.
 
     Args:
         title: Item title
         item_type: Item type (if available)
 
     Returns:
-        True if item should be skipped
+        True if item should be skipped entirely (not saved)
 
     Examples:
-        >>> should_skip_procedural_item("Roll Call")
+        >>> should_skip_item("Roll Call")
         True
-        >>> should_skip_procedural_item("Approval of Minutes")
+        >>> should_skip_item("Approval of Minutes")
         True
-        >>> should_skip_procedural_item("Housing Development at 123 Main St")
-        False
+        >>> should_skip_item("Proclamation honoring Jane Doe")
+        False  # Saved but not processed
     """
     combined = f"{title} {item_type}".lower()
 
-    for pattern in PROCEDURAL_PATTERNS:
+    for pattern in ADAPTER_SKIP_PATTERNS:
         if re.search(pattern, combined, re.IGNORECASE):
             return True
 
     return False
+
+
+def should_skip_processing(title: str, item_type: str = "") -> bool:
+    """
+    PROCESSOR LEVEL: Check if item should be saved but NOT LLM-processed.
+
+    Use this in processor to skip LLM summarization for items that have
+    metadata value but don't need expensive analysis.
+
+    Args:
+        title: Item title
+        item_type: Item type (if available)
+
+    Returns:
+        True if item should skip LLM processing (but is still saved)
+
+    Examples:
+        >>> should_skip_processing("Proclamation honoring Jane Doe")
+        True  # Save metadata, skip LLM
+        >>> should_skip_processing("Housing Development at 123 Main St")
+        False  # Full processing
+    """
+    combined = f"{title} {item_type}".lower()
+
+    for pattern in PROCESSOR_SKIP_PATTERNS:
+        if re.search(pattern, combined, re.IGNORECASE):
+            return True
+
+    return False
+
+
+# Backward compatibility alias (deprecated)
+def should_skip_procedural_item(title: str, item_type: str = "") -> bool:
+    """DEPRECATED: Use should_skip_item() for adapters."""
+    return should_skip_item(title, item_type)
 
 
 def should_skip_matter(matter_type: str) -> bool:
