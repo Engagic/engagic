@@ -96,7 +96,7 @@
 						class:council={meetingInfo.type === 'council'}
 						class:board={meetingInfo.type === 'board'}
 						class:has-summary={!!appearance.summary}
-						data-sveltekit-preload-data="hover"
+						data-sveltekit-preload-data="tap"
 					>
 						<div class="step-number">{index + 1}</div>
 						<div class="step-content">

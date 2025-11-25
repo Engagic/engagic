@@ -26,7 +26,7 @@ class TierLimits:
     """Rate limit configuration for each tier"""
     BASIC = {
         "minute_limit": 30,
-        "day_limit": 300,
+        "day_limit": 1000,
         "description": "Free tier - reasonable personal use"
     }
     HACKTIVIST = {
