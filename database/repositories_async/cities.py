@@ -153,14 +153,18 @@ class CityRepository(BaseRepository):
                 zipcodes=zipcodes,
             )
 
-    async def get_all_cities(self, status: str = "active") -> List[City]:
+    async def get_all_cities(
+        self, status: str = "active", include_zipcodes: bool = False
+    ) -> List[City]:
         """Get all cities with given status
 
         Args:
             status: City status filter (default: "active")
+            include_zipcodes: If True, fetch zipcodes for each city (N+1 queries).
+                             Default False for performance in search contexts.
 
         Returns:
-            List of City objects with zipcodes
+            List of City objects (zipcodes empty unless include_zipcodes=True)
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
@@ -175,16 +179,13 @@ class CityRepository(BaseRepository):
 
             cities = []
             for row in rows:
-                # Fetch zipcodes for each city
-                zipcodes_rows = await conn.fetch(
-                    """
-                    SELECT zipcode
-                    FROM zipcodes
-                    WHERE banana = $1
-                    """,
-                    row["banana"],
-                )
-                zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
+                zipcodes: List[str] = []
+                if include_zipcodes:
+                    zipcodes_rows = await conn.fetch(
+                        "SELECT zipcode FROM zipcodes WHERE banana = $1",
+                        row["banana"],
+                    )
+                    zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
 
                 cities.append(
                     City(
@@ -208,6 +209,7 @@ class CityRepository(BaseRepository):
         name: Optional[str] = None,
         status: str = "active",
         limit: Optional[int] = None,
+        include_zipcodes: bool = False,
     ) -> List[City]:
         """Batch city lookup with filters
 
@@ -217,9 +219,11 @@ class CityRepository(BaseRepository):
             name: Filter by exact name match
             status: Filter by status (default: "active")
             limit: Maximum number of results
+            include_zipcodes: If True, fetch zipcodes for each city (N+1 queries).
+                             Default False for performance in search contexts.
 
         Returns:
-            List of City objects matching filters
+            List of City objects matching filters (zipcodes empty unless include_zipcodes=True)
         """
         conditions = ["status = $1"]
         params: List[Any] = [status]
@@ -258,16 +262,13 @@ class CityRepository(BaseRepository):
 
             cities = []
             for row in rows:
-                # Fetch zipcodes for this city
-                zipcodes_rows = await conn.fetch(
-                    """
-                    SELECT zipcode
-                    FROM zipcodes
-                    WHERE banana = $1
-                    """,
-                    row["banana"],
-                )
-                zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
+                zipcodes: List[str] = []
+                if include_zipcodes:
+                    zipcodes_rows = await conn.fetch(
+                        "SELECT zipcode FROM zipcodes WHERE banana = $1",
+                        row["banana"],
+                    )
+                    zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
 
                 cities.append(
                     City(
@@ -283,6 +284,24 @@ class CityRepository(BaseRepository):
                 )
 
             return cities
+
+    async def get_city_names(self, status: str = "active") -> List[str]:
+        """Get just city names for fuzzy matching (no N+1)
+
+        Lightweight query that returns only names, avoiding the full City
+        object construction and zipcode queries. Used for fuzzy search.
+
+        Args:
+            status: City status filter (default: "active")
+
+        Returns:
+            List of city names
+        """
+        rows = await self._fetch(
+            "SELECT DISTINCT name FROM cities WHERE status = $1 ORDER BY name",
+            status,
+        )
+        return [row["name"] for row in rows]
 
     async def get_city_meeting_frequency(self, banana: str, days: int = 30) -> int:
         """Get count of meetings for a city in the last N days

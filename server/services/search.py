@@ -215,20 +215,19 @@ async def handle_ambiguous_city_search(
 ) -> Dict[str, Any]:
     """Handle city search when no state is provided - check for ambiguous matches"""
 
-    # Look for all cities with this name (exact match)
+    # Look for all cities with this name (exact match, no zipcodes needed)
     cities = await db.get_cities(name=city_name)
 
     # If no exact match, try fuzzy matching to handle typos
     if not cities:
-        # Get all active city names from database
-        all_cities = await db.get_cities()  # Gets all active cities
-        city_names = [city.name.lower() for city in all_cities]
+        # Lightweight query: just city names, no full objects, no zipcodes N+1
+        all_names = await db.get_city_names()
 
         # Find close matches (cutoff=0.8 means 80% similarity required)
-        close_matches = get_close_matches(city_name.lower(), city_names, n=5, cutoff=0.8)
+        close_matches = get_close_matches(city_name.lower(), [n.lower() for n in all_names], n=5, cutoff=0.8)
 
         if close_matches:
-            # Get cities matching the fuzzy results
+            # Get cities matching the fuzzy results (no zipcodes needed)
             fuzzy_cities = []
             for match in close_matches:
                 matched_cities = await db.get_cities(name=match.title())

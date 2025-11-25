@@ -738,19 +738,32 @@ class Database:
         name: Optional[str] = None,
         vendor: Optional[str] = None,
         status: str = "active",
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        include_zipcodes: bool = False,
     ) -> List[City]:
         """Get cities with optional filtering
 
         Facade method for server routes - delegates to CityRepository.
+
+        Args:
+            include_zipcodes: If True, fetch zipcodes (N+1). Default False for
+                             performance in search contexts where zipcodes unused.
         """
         return await self.cities.get_cities(
             state=state,
             name=name,
             vendor=vendor,
             status=status,
-            limit=limit
+            limit=limit,
+            include_zipcodes=include_zipcodes,
         )
+
+    async def get_city_names(self, status: str = "active") -> List[str]:
+        """Get city names for fuzzy matching (lightweight, no N+1)
+
+        Facade method for search service - delegates to CityRepository.
+        """
+        return await self.cities.get_city_names(status=status)
 
     async def get_meeting(self, meeting_id: str) -> Optional[Meeting]:
         """Get meeting by ID
@@ -855,36 +868,50 @@ class Database:
         return await self.queue.get_queue_stats()
 
     async def get_city_meeting_stats(self, bananas: List[str]) -> dict:
-        """Get meeting statistics for multiple cities
+        """Get meeting statistics for multiple cities (batch query)
 
         Returns dict with city-level meeting counts and summary stats.
-        Adapted for item-level processing (PostgreSQL):
-        - meetings_with_packet: Counts meetings with agenda_url OR packet_url
-        - summarized_meetings: Counts meetings that have items with summaries
+        Uses single batch query with LEFT JOIN to avoid N+1 pattern.
+
+        Metrics:
+        - total_meetings: All meetings for city
+        - meetings_with_packet: Meetings with agenda_url OR packet_url
+        - summarized_meetings: Meetings that have at least one item with summary
         """
-        stats = {}
+        if not bananas:
+            return {}
 
-        for banana in bananas:
-            async with self.pool.acquire() as conn:
-                result = await conn.fetchrow("""
-                    SELECT
-                        COUNT(*) as total_meetings,
-                        COUNT(CASE WHEN (packet_url IS NOT NULL OR agenda_url IS NOT NULL) THEN 1 END) as meetings_with_packet,
-                        COUNT(DISTINCT CASE
-                            WHEN EXISTS (
-                                SELECT 1 FROM items
-                                WHERE items.meeting_id = meetings.id
-                                AND items.summary IS NOT NULL
-                            ) THEN meetings.id
-                        END) as summarized_meetings
-                    FROM meetings
-                    WHERE banana = $1
-                """, banana)
+        # Initialize all bananas with zeros (handles cities with no meetings)
+        stats = {
+            b: {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0}
+            for b in bananas
+        }
 
-                stats[banana] = {
-                    "total_meetings": result['total_meetings'],
-                    "meetings_with_packet": result['meetings_with_packet'],
-                    "summarized_meetings": result['summarized_meetings'],
+        async with self.pool.acquire() as conn:
+            # Single batch query: JOIN items once, GROUP BY banana
+            # Uses subquery to identify meetings with summarized items
+            rows = await conn.fetch("""
+                WITH summarized_meetings AS (
+                    SELECT DISTINCT meeting_id
+                    FROM items
+                    WHERE summary IS NOT NULL
+                )
+                SELECT
+                    m.banana,
+                    COUNT(*) as total_meetings,
+                    COUNT(CASE WHEN m.packet_url IS NOT NULL OR m.agenda_url IS NOT NULL THEN 1 END) as meetings_with_packet,
+                    COUNT(sm.meeting_id) as summarized_meetings
+                FROM meetings m
+                LEFT JOIN summarized_meetings sm ON sm.meeting_id = m.id
+                WHERE m.banana = ANY($1::text[])
+                GROUP BY m.banana
+            """, bananas)
+
+            for row in rows:
+                stats[row['banana']] = {
+                    "total_meetings": row['total_meetings'],
+                    "meetings_with_packet": row['meetings_with_packet'],
+                    "summarized_meetings": row['summarized_meetings'],
                 }
 
         return stats

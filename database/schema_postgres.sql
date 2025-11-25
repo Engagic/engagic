@@ -276,6 +276,7 @@ CREATE INDEX IF NOT EXISTS idx_items_matter_file ON items(matter_file) WHERE mat
 CREATE INDEX IF NOT EXISTS idx_items_matter_id ON items(matter_id) WHERE matter_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_items_meeting_id ON items(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_items_matter_meeting ON items(matter_id, meeting_id) WHERE matter_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_items_meeting_summarized ON items(meeting_id) WHERE summary IS NOT NULL;  -- For stats query: meetings with summarized items
 
 -- Item topics (new normalized table)
 CREATE INDEX IF NOT EXISTS idx_item_topics_topic ON item_topics(topic);
