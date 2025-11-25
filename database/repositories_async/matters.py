@@ -7,7 +7,8 @@ Handles CRUD operations for matters (recurring legislative items):
 - Timeline tracking (first_seen, last_seen, appearance_count)
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
+from collections import defaultdict
 from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
@@ -151,6 +152,77 @@ class MatterRepository(BaseRepository):
                 appearance_count=row["appearance_count"],
                 status=row["status"],
             )
+
+    async def get_matters_batch(self, matter_ids: List[str]) -> Dict[str, Matter]:
+        """Batch fetch multiple matters by ID - eliminates N+1
+
+        Args:
+            matter_ids: List of matter identifiers
+
+        Returns:
+            Dict mapping matter_id to Matter object
+        """
+        if not matter_ids:
+            return {}
+
+        # Deduplicate IDs
+        unique_ids = list(set(matter_ids))
+
+        async with self.pool.acquire() as conn:
+            # Single query for all matters
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id, banana, matter_id, matter_file, matter_type,
+                    title, sponsors, canonical_summary, canonical_topics,
+                    attachments, metadata, first_seen, last_seen,
+                    appearance_count, status, created_at, updated_at
+                FROM city_matters
+                WHERE id = ANY($1::text[])
+                """,
+                unique_ids,
+            )
+
+            if not rows:
+                return {}
+
+            # Single query for ALL matter topics
+            topic_rows = await conn.fetch(
+                "SELECT matter_id, topic FROM matter_topics WHERE matter_id = ANY($1::text[])",
+                unique_ids,
+            )
+
+            # Group topics by matter
+            topics_by_matter: Dict[str, List[str]] = defaultdict(list)
+            for tr in topic_rows:
+                topics_by_matter[tr["matter_id"]].append(tr["topic"])
+
+            # Build matters dict
+            matters: Dict[str, Matter] = {}
+            for row in rows:
+                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
+                metadata = MatterMetadata(**row["metadata"]) if row["metadata"] else None
+                topics = topics_by_matter.get(row["id"], []) or row["canonical_topics"]
+
+                matters[row["id"]] = Matter(
+                    id=row["id"],
+                    banana=row["banana"],
+                    matter_id=row["matter_id"],
+                    matter_file=row["matter_file"],
+                    matter_type=row["matter_type"],
+                    title=row["title"],
+                    sponsors=row["sponsors"],
+                    canonical_summary=row["canonical_summary"],
+                    canonical_topics=topics,
+                    attachments=attachments,
+                    metadata=metadata,
+                    first_seen=row["first_seen"],
+                    last_seen=row["last_seen"],
+                    appearance_count=row["appearance_count"],
+                    status=row["status"],
+                )
+
+            return matters
 
     async def update_matter_summary(
         self,

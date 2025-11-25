@@ -802,19 +802,71 @@ class Database:
         """Get agenda items for meeting
 
         Facade method for server routes - delegates to ItemRepository.
+        For batch loading across multiple meetings, use get_items_for_meetings().
         """
         items = await self.items.get_agenda_items(meeting_id)
 
         if load_matters and items:
-            # Load matter data for items that have matter_id
-            for item in items:
-                if item.matter_id:
-                    matter = await self.matters.get_matter(item.matter_id)
-                    if matter:
-                        # Attach matter to item (extend model if needed)
-                        item.matter = matter
+            # Batch load matters instead of N+1
+            matter_ids = [item.matter_id for item in items if item.matter_id]
+            if matter_ids:
+                matters = await self.matters.get_matters_batch(matter_ids)
+                for item in items:
+                    if item.matter_id and item.matter_id in matters:
+                        item.matter = matters[item.matter_id]
 
         return items
+
+    async def get_items_for_meetings(
+        self,
+        meeting_ids: List[str],
+        load_matters: bool = False
+    ) -> Dict[str, List[AgendaItem]]:
+        """Batch fetch items for multiple meetings - eliminates N+1
+
+        This is the preferred method for search results where you have
+        multiple meetings and need their items. Uses only 4-5 queries total
+        instead of N*M queries.
+
+        Args:
+            meeting_ids: List of meeting identifiers
+            load_matters: If True, batch load Matter objects for all items
+
+        Returns:
+            Dict mapping meeting_id to list of AgendaItem objects
+        """
+        if not meeting_ids:
+            return {}
+
+        # Batch fetch items (1 query for items, 1 for topics)
+        items_by_meeting = await self.items.get_items_for_meetings(meeting_ids)
+
+        if load_matters:
+            # Collect all matter_ids across all items
+            all_matter_ids = []
+            for items in items_by_meeting.values():
+                for item in items:
+                    if item.matter_id:
+                        all_matter_ids.append(item.matter_id)
+
+            # Batch fetch all matters (1 query for matters, 1 for topics)
+            if all_matter_ids:
+                matters = await self.matters.get_matters_batch(all_matter_ids)
+
+                # Attach matters to items
+                for items in items_by_meeting.values():
+                    for item in items:
+                        if item.matter_id and item.matter_id in matters:
+                            item.matter = matters[item.matter_id]
+
+        return items_by_meeting
+
+    async def get_matters_batch(self, matter_ids: List[str]) -> Dict[str, "Matter"]:
+        """Batch fetch multiple matters - eliminates N+1
+
+        Facade method for server routes - delegates to MatterRepository.
+        """
+        return await self.matters.get_matters_batch(matter_ids)
 
     async def search_meetings_by_topic(
         self,
