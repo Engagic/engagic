@@ -17,16 +17,16 @@ export interface AgendaItem {
 	title: string;
 	sequence: number;
 	attachments: Array<{
-		url?: string;
-		pages?: string;
-		name?: string;
-		type?: string;
+		name: string;
+		url: string;
+		type: string;
+		history_id?: string;  // PrimeGov-specific
 	}>;
 	summary?: string;
 	topics?: string[];
 	created_at?: string;
 	// Matter tracking (Nov 2025)
-	matter_id?: string;  // Backend unique identifier
+	matter_id?: string;  // Composite hash (FK to city_matters)
 	matter_file?: string;  // Official public identifier (BL2025-1005, 25-1209, etc.)
 	matter_type?: string;  // Ordinance, Resolution, CD 12, etc.
 	agenda_number?: string;  // Position on this agenda (1, K. 87, etc.)
@@ -105,6 +105,8 @@ interface SearchSuccess {
 	state: string;
 	banana: string;
 	vendor: string;
+	vendor_display_name: string;
+	source_url: string | null;
 	meetings: Meeting[];
 	cached: boolean;
 	query: string;
@@ -225,13 +227,15 @@ export function isSearchError(result: SearchResult): result is SearchError {
 // Matter types
 export interface Matter {
 	id: string;
-	matter_file?: string;
+	banana: string;  // City identifier (FK to cities)
+	matter_id?: string;  // Raw vendor ID (UUID, numeric, etc.)
+	matter_file?: string;  // Official public identifier (25-1234, BL2025-1098)
 	matter_type?: string;
-	title: string;
+	title?: string;  // May be null for legacy data
 	canonical_summary?: string;
 	canonical_topics?: string[];
 	sponsors?: string[];
-	attachments?: Array<{ name: string; url: string; type: string }>;
+	attachments?: Array<{ name: string; url: string; type: string; history_id?: string }>;
 	first_seen: string;
 	last_seen: string;
 	appearance_count?: number;  // Number of times this matter appeared across meetings

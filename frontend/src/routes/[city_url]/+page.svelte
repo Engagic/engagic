@@ -312,11 +312,16 @@
 													success: true,
 													matter: {
 														id: matter.id,
+														banana: matter.banana,
+														matter_id: matter.matter_id,
 														matter_file: matter.matter_file,
 														matter_type: matter.matter_type,
 														title: matter.title,
 														canonical_summary: matter.canonical_summary,
-														canonical_topics: matter.canonical_topics
+														canonical_topics: matter.canonical_topics,
+														first_seen: matter.first_seen,
+														last_seen: matter.last_seen,
+														appearance_count: matter.appearance_count
 													},
 													timeline: matter.timeline,
 													appearance_count: matter.appearance_count

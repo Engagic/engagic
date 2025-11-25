@@ -483,6 +483,16 @@ class Database:
                         matter_type=matter_type
                     )
                 else:
+                    # Guard: Skip matter creation if no identifiers available
+                    # At least one of matter_file, raw_vendor_matter_id, or title must exist
+                    if not agenda_item.matter_file and not raw_vendor_matter_id and not agenda_item.title:
+                        logger.debug(
+                            "skipping matter - no identifiers",
+                            item_id=agenda_item.id,
+                            matter_composite_id=matter_composite_id
+                        )
+                        continue
+
                     # Create new Matter object
                     matter_obj = Matter(
                         id=matter_composite_id,
