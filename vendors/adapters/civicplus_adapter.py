@@ -63,14 +63,21 @@ class CivicPlusAdapter(BaseAdapter):
                         for pattern, vendor in known_systems.items():
                             if pattern in domain:
                                 logger.warning(
-                                    f"[civicplus:{self.slug}] City uses {vendor} ({domain}), not CivicPlus! "
-                                    f"Update city config to use {vendor} adapter"
+                                    "city uses external agenda system",
+                                    vendor="civicplus",
+                                    slug=self.slug,
+                                    detected_vendor=vendor,
+                                    domain=domain,
+                                    action="update city config to use correct adapter"
                                 )
                                 break
 
         except Exception as e:
             logger.debug(
-                f"[civicplus:{self.slug}] Could not check for external system: {e}"
+                "could not check for external system",
+                vendor="civicplus",
+                slug=self.slug,
+                error=str(e)
             )
 
     def _find_agenda_url(self) -> Optional[str]:
@@ -97,12 +104,12 @@ class CivicPlusAdapter(BaseAdapter):
                     "agenda" in response.text.lower()
                     or "meeting" in response.text.lower()
                 ):
-                    logger.info(f"[civicplus:{self.slug}] Found agenda page: {pattern}")
+                    logger.info("found agenda page", vendor="civicplus", slug=self.slug, pattern=pattern)
                     return test_url
             except (requests.RequestException, ConnectionError, TimeoutError):
                 continue
 
-        logger.warning(f"[civicplus:{self.slug}] Could not find agenda page")
+        logger.warning("could not find agenda page", vendor="civicplus", slug=self.slug)
         return None
 
     def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
@@ -125,7 +132,9 @@ class CivicPlusAdapter(BaseAdapter):
         agenda_url = self._find_agenda_url()
         if not agenda_url:
             logger.error(
-                f"[civicplus:{self.slug}] No agenda page found - cannot fetch meetings"
+                "no agenda page found - cannot fetch meetings",
+                vendor="civicplus",
+                slug=self.slug
             )
             return
 
@@ -137,7 +146,10 @@ class CivicPlusAdapter(BaseAdapter):
             meeting_links = self._extract_meeting_links(soup, agenda_url)
 
             logger.info(
-                f"[civicplus:{self.slug}] Found {len(meeting_links)} meeting links"
+                "found meeting links",
+                vendor="civicplus",
+                slug=self.slug,
+                count=len(meeting_links)
             )
 
             meetings_in_range = 0
@@ -159,12 +171,16 @@ class CivicPlusAdapter(BaseAdapter):
                         yield meeting
 
             logger.info(
-                f"[civicplus:{self.slug}] Filtered to {meetings_in_range} meetings "
-                f"in date range ({start_date.date()} to {end_date.date()})"
+                "filtered meetings in date range",
+                vendor="civicplus",
+                slug=self.slug,
+                count=meetings_in_range,
+                start_date=str(start_date.date()),
+                end_date=str(end_date.date())
             )
 
         except Exception as e:
-            logger.error(f"[civicplus:{self.slug}] Failed to fetch meetings: {e}")
+            logger.error("failed to fetch meetings", vendor="civicplus", slug=self.slug, error=str(e))
 
     def _is_meeting_in_range(
         self, meeting: Dict[str, Any], start_date: datetime, end_date: datetime
@@ -301,7 +317,7 @@ class CivicPlusAdapter(BaseAdapter):
 
             # Log if no PDFs (but still track the meeting)
             if not pdfs:
-                logger.debug(f"[civicplus:{self.slug}] No PDFs found for: {title}")
+                logger.debug("no PDFs found for meeting", vendor="civicplus", slug=self.slug, title=title)
 
             result = {
                 "meeting_id": meeting_id,
@@ -316,7 +332,7 @@ class CivicPlusAdapter(BaseAdapter):
             return result
 
         except Exception as e:
-            logger.warning(f"[civicplus:{self.slug}] Failed to scrape {url}: {e}")
+            logger.warning("failed to scrape meeting page", vendor="civicplus", slug=self.slug, url=url, error=str(e))
             return None
 
     def _extract_date_from_page(self, soup: BeautifulSoup) -> Optional[str]:

@@ -304,7 +304,7 @@ def _generate_logo_data_url() -> str:
         return f"data:image/svg+xml;base64,{svg_base64}"
 
     except (UnicodeEncodeError, ValueError, OSError) as e:
-        logger.warning(f"Logo generation failed, using fallback: {e}")
+        logger.warning("logo generation failed, using fallback", error=str(e))
         # Fallback to simple SVG
         svg = '''<svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
             <rect width="48" height="48" rx="12" fill="#0ea5e9"/>

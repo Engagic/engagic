@@ -50,7 +50,7 @@ class NovusAgendaAdapter(BaseAdapter):
 
         # Find meeting rows (rgRow and rgAltRow classes)
         meeting_rows = soup.find_all("tr", class_=["rgRow", "rgAltRow"])
-        logger.info(f"[novusagenda:{self.slug}] Found {len(meeting_rows)} meeting rows")
+        logger.info("found meeting rows", vendor="novusagenda", slug=self.slug, count=len(meeting_rows))
 
         for row in meeting_rows:
             cells = row.find_all("td")
@@ -66,11 +66,11 @@ class NovusAgendaAdapter(BaseAdapter):
                 meeting_date = datetime.strptime(date_str, "%m/%d/%y")
                 # Skip meetings outside date range
                 if meeting_date < start_date or meeting_date > end_date:
-                    logger.debug(f"[novusagenda:{self.slug}] Skipping {meeting_type} on {date_str} (outside date range)")
+                    logger.debug("skipping meeting outside date range", vendor="novusagenda", slug=self.slug, meeting_type=meeting_type, date=date_str)
                     continue
             except ValueError:
                 # If date parsing fails, skip this meeting
-                logger.warning(f"[novusagenda:{self.slug}] Could not parse date '{date_str}' for {meeting_type}")
+                logger.warning("could not parse date", vendor="novusagenda", slug=self.slug, date=date_str, meeting_type=meeting_type)
                 continue
 
             # Time is often in cell 3 or 4 depending on layout
@@ -137,7 +137,11 @@ class NovusAgendaAdapter(BaseAdapter):
                     agenda_url = f"{self.base_url}/agendapublic/{agenda_relative_url}"
 
                     logger.debug(
-                        f"[novusagenda:{self.slug}] Selected HTML agenda: {best_agenda_link.get_text(strip=True)[:40]} (score={best_score})"
+                        "selected HTML agenda",
+                        vendor="novusagenda",
+                        slug=self.slug,
+                        link_text=best_agenda_link.get_text(strip=True)[:40],
+                        score=best_score
                     )
 
                     # Extract meeting ID if not already found
@@ -155,14 +159,18 @@ class NovusAgendaAdapter(BaseAdapter):
 
             if not packet_url and not agenda_url:
                 logger.debug(
-                    f"[novusagenda:{self.slug}] No packet or agenda for: {meeting_type} on {date_str}"
+                    "no packet or agenda found",
+                    vendor="novusagenda",
+                    slug=self.slug,
+                    meeting_type=meeting_type,
+                    date=date_str
                 )
 
             # Try to fetch and parse HTML agenda for items
             items = []
             if agenda_url:
                 try:
-                    logger.info(f"[novusagenda:{self.slug}] Fetching HTML agenda: {agenda_url}")
+                    logger.info("fetching HTML agenda", vendor="novusagenda", slug=self.slug, url=agenda_url)
                     # Fetch raw HTML (get response text directly)
                     response = self._get(agenda_url)
                     agenda_html = response.text
@@ -180,16 +188,26 @@ class NovusAgendaAdapter(BaseAdapter):
                     items_filtered = items_before - len(items)
                     if items_filtered > 0:
                         logger.info(
-                            f"[novusagenda:{self.slug}] Filtered {items_filtered} procedural items"
+                            "filtered procedural items",
+                            vendor="novusagenda",
+                            slug=self.slug,
+                            filtered_count=items_filtered
                         )
 
                     logger.info(
-                        f"[novusagenda:{self.slug}] Meeting {meeting_id}: "
-                        f"extracted {len(items)} items from HTML agenda"
+                        "extracted items from HTML agenda",
+                        vendor="novusagenda",
+                        slug=self.slug,
+                        meeting_id=meeting_id,
+                        item_count=len(items)
                     )
                 except Exception as e:
                     logger.warning(
-                        f"[novusagenda:{self.slug}] Failed to parse HTML agenda for {meeting_id}: {e}"
+                        "failed to parse HTML agenda",
+                        vendor="novusagenda",
+                        slug=self.slug,
+                        meeting_id=meeting_id,
+                        error=str(e)
                     )
 
             result = {

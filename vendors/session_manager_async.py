@@ -13,10 +13,11 @@ Replaces: vendors/session_manager.py (sync version with requests)
 """
 
 import aiohttp
-from typing import Dict
-import logging
+from typing import Any, Dict
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="vendor")
 
 
 class AsyncSessionManager:
@@ -78,7 +79,10 @@ class AsyncSessionManager:
             )
 
             logger.debug(
-                f"created async session: vendor={vendor}, max_connections=20, timeout_seconds={timeout_total}"
+                "created async session",
+                vendor=vendor,
+                max_connections=20,
+                timeout_seconds=timeout_total
             )
 
         return cls._sessions[vendor]
@@ -94,12 +98,12 @@ class AsyncSessionManager:
         if cls._closed:
             return
 
-        logger.info("closing async sessions", session_count=len(cls._sessions))  # type: ignore[call-arg]
+        logger.info("closing async sessions", session_count=len(cls._sessions))
 
         for vendor, session in cls._sessions.items():
             if not session.closed:
                 await session.close()
-                logger.debug("closed async session", vendor=vendor)  # type: ignore[call-arg]
+                logger.debug("closed async session", vendor=vendor)
 
         cls._sessions.clear()
         cls._closed = True
@@ -116,11 +120,11 @@ class AsyncSessionManager:
             session = cls._sessions[vendor]
             if not session.closed:
                 await session.close()
-                logger.debug(f"closed async session: vendor={vendor}")
+                logger.debug("closed async session", vendor=vendor)
             del cls._sessions[vendor]
 
     @classmethod
-    def get_stats(cls) -> Dict[str, any]:  # type: ignore[valid-type]
+    def get_stats(cls) -> Dict[str, Any]:
         """Get statistics about active sessions"""
         stats = {
             "total_sessions": len(cls._sessions),

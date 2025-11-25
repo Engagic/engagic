@@ -58,7 +58,7 @@ class IQM2Adapter(BaseAdapter):
             f"{self.base_url}/Citizens/Calendar.aspx",  # Legacy pattern
         ]
 
-        logger.info(f"[iqm2:{self.slug}] Initialized IQM2 adapter")
+        logger.info("initialized IQM2 adapter", vendor="iqm2", slug=self.slug)
 
     def fetch_meetings(
         self, days_forward: int = 14, days_back: int = 7
@@ -82,7 +82,7 @@ class IQM2Adapter(BaseAdapter):
 
         for calendar_url in self.calendar_url_patterns:
             try:
-                logger.info(f"[iqm2:{self.slug}] Trying calendar URL: {calendar_url}")
+                logger.info("trying calendar URL", vendor="iqm2", slug=self.slug, url=calendar_url)
                 soup = self._fetch_html(calendar_url)
 
                 # Check if we got a valid calendar page with meetings
@@ -90,22 +90,36 @@ class IQM2Adapter(BaseAdapter):
                 if meeting_rows:
                     working_url = calendar_url
                     logger.info(
-                        f"[iqm2:{self.slug}] Success with {calendar_url} - found {len(meeting_rows)} total meetings"
+                        "found meetings on calendar",
+                        vendor="iqm2",
+                        slug=self.slug,
+                        url=calendar_url,
+                        count=len(meeting_rows)
                     )
                     break
                 else:
                     logger.debug(
-                        f"[iqm2:{self.slug}] No meetings found at {calendar_url}, trying next pattern"
+                        "no meetings found at URL",
+                        vendor="iqm2",
+                        slug=self.slug,
+                        url=calendar_url
                     )
             except Exception as e:
                 logger.debug(
-                    f"[iqm2:{self.slug}] Failed to fetch {calendar_url}: {e}"
+                    "failed to fetch calendar URL",
+                    vendor="iqm2",
+                    slug=self.slug,
+                    url=calendar_url,
+                    error=str(e)
                 )
                 continue
 
         if not soup or not working_url or not meeting_rows:
             logger.error(
-                f"[iqm2:{self.slug}] Could not find working calendar URL. Tried: {self.calendar_url_patterns}"
+                "could not find working calendar URL",
+                vendor="iqm2",
+                slug=self.slug,
+                tried_urls=self.calendar_url_patterns
             )
             return
 
@@ -141,7 +155,10 @@ class IQM2Adapter(BaseAdapter):
                 meeting_dt = datetime.strptime(datetime_text, "%b %d, %Y %I:%M %p")
             except ValueError:
                 logger.warning(
-                    f"[iqm2:{self.slug}] Could not parse datetime: {datetime_text}"
+                    "could not parse datetime",
+                    vendor="iqm2",
+                    slug=self.slug,
+                    datetime_text=datetime_text
                 )
                 continue
 
@@ -155,7 +172,10 @@ class IQM2Adapter(BaseAdapter):
 
             # Fetch Detail_Meeting page to extract items
             logger.info(
-                f"[iqm2:{self.slug}] Fetching meeting details for ID={meeting_id}"
+                "fetching meeting details",
+                vendor="iqm2",
+                slug=self.slug,
+                meeting_id=meeting_id
             )
             meeting_data = self._fetch_meeting_details(meeting_id, meeting_dt, title)
 
@@ -164,7 +184,10 @@ class IQM2Adapter(BaseAdapter):
                 yield meeting_data
 
         logger.info(
-            f"[iqm2:{self.slug}] Yielded {meetings_yielded} meetings in date range"
+            "yielded meetings in date range",
+            vendor="iqm2",
+            slug=self.slug,
+            count=meetings_yielded
         )
 
     def _fetch_meeting_details(
@@ -196,7 +219,10 @@ class IQM2Adapter(BaseAdapter):
         items_filtered = items_before - len(items)
         if items_filtered > 0:
             logger.info(
-                f"[iqm2:{self.slug}] Filtered {items_filtered} procedural items"
+                "filtered procedural items",
+                vendor="iqm2",
+                slug=self.slug,
+                filtered_count=items_filtered
             )
 
         # Extract packet URL if available
@@ -215,7 +241,11 @@ class IQM2Adapter(BaseAdapter):
         }
 
         logger.info(
-            f"[iqm2:{self.slug}] Meeting {meeting_id}: {len(items)} items extracted"
+            "extracted items from meeting",
+            vendor="iqm2",
+            slug=self.slug,
+            meeting_id=meeting_id,
+            item_count=len(items)
         )
 
         return meeting_data
@@ -296,17 +326,29 @@ class IQM2Adapter(BaseAdapter):
             if attachments:
                 metadata["attachments"] = attachments
                 logger.debug(
-                    f"[iqm2:{self.slug}] Found {len(attachments)} attachments for {legifile_id}"
+                    "found attachments for legifile",
+                    vendor="iqm2",
+                    slug=self.slug,
+                    legifile_id=legifile_id,
+                    count=len(attachments)
                 )
 
             logger.debug(
-                f"[iqm2:{self.slug}] Fetched matter metadata for {legifile_id}: {metadata}"
+                "fetched matter metadata",
+                vendor="iqm2",
+                slug=self.slug,
+                legifile_id=legifile_id,
+                metadata=metadata
             )
             return metadata
 
         except Exception as e:
             logger.warning(
-                f"[iqm2:{self.slug}] Failed to fetch matter metadata for {legifile_id}: {e}"
+                "failed to fetch matter metadata",
+                vendor="iqm2",
+                slug=self.slug,
+                legifile_id=legifile_id,
+                error=str(e)
             )
             return {}
 
@@ -334,7 +376,7 @@ class IQM2Adapter(BaseAdapter):
 
         table = soup.find("table", id="MeetingDetail")
         if not table:
-            logger.warning(f"[iqm2:{self.slug}] No MeetingDetail table found")
+            logger.warning("no MeetingDetail table found", vendor="iqm2", slug=self.slug)
             return items
 
         rows = table.find_all("tr")
@@ -360,7 +402,10 @@ class IQM2Adapter(BaseAdapter):
                     if section_text:
                         current_section = section_text
                         logger.debug(
-                            f"[iqm2:{self.slug}] Found section: {current_section}"
+                            "found section",
+                            vendor="iqm2",
+                            slug=self.slug,
+                            section=current_section
                         )
                     continue
 
@@ -436,7 +481,11 @@ class IQM2Adapter(BaseAdapter):
                                 current_item["attachments"].extend(metadata["attachments"])
 
                         logger.debug(
-                            f"[iqm2:{self.slug}] Found nested item {item_number}: {item_title[:50]}"
+                            "found nested item",
+                            vendor="iqm2",
+                            slug=self.slug,
+                            item_number=item_number,
+                            title=item_title[:50]
                         )
                         continue
 
@@ -459,7 +508,10 @@ class IQM2Adapter(BaseAdapter):
                         if title_strong and not title_link:
                             # This is a section header like "A. Expenses", skip it
                             logger.debug(
-                                f"[iqm2:{self.slug}] Skipping section header: {title_cell.get_text(strip=True)[:40]}"
+                                "skipping section header",
+                                vendor="iqm2",
+                                slug=self.slug,
+                                header=title_cell.get_text(strip=True)[:40]
                             )
                             continue
 
@@ -560,7 +612,11 @@ class IQM2Adapter(BaseAdapter):
                                 current_item["attachments"].extend(metadata["attachments"])
 
                         logger.debug(
-                            f"[iqm2:{self.slug}] Found item {item_number}: {item_title[:50]}"
+                            "found item",
+                            vendor="iqm2",
+                            slug=self.slug,
+                            item_number=item_number,
+                            title=item_title[:50]
                         )
                         continue
 
@@ -603,7 +659,10 @@ class IQM2Adapter(BaseAdapter):
                                     {"name": pdf_name, "url": pdf_url, "type": file_type}
                                 )
                                 logger.debug(
-                                    f"[iqm2:{self.slug}] Added attachment: {pdf_name[:40]}"
+                                    "added attachment",
+                                    vendor="iqm2",
+                                    slug=self.slug,
+                                    name=pdf_name[:40]
                                 )
 
         # Don't forget the last item
@@ -611,7 +670,10 @@ class IQM2Adapter(BaseAdapter):
             items.append(current_item)
 
         logger.info(
-            f"[iqm2:{self.slug}] Parsed {len(items)} items from MeetingDetail table"
+            "parsed items from MeetingDetail table",
+            vendor="iqm2",
+            slug=self.slug,
+            item_count=len(items)
         )
 
         return items

@@ -2,10 +2,11 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Dict
-import logging
+from typing import Any, Dict
 
-logger = logging.getLogger("engagic")
+from config import get_logger
+
+logger = get_logger(__name__).bind(component="analysis")
 
 
 @dataclass
@@ -107,9 +108,9 @@ class AsyncRateLimiter:
                 max_wait_name, max_wait_time = max(wait_times, key=lambda x: x[1])
                 logger.info(
                     "rate_limit_wait",
-                    limit=max_wait_name,  # type: ignore
-                    wait_seconds=round(max_wait_time, 2),  # type: ignore
-                    tokens_requested=tokens  # type: ignore
+                    limit=max_wait_name,
+                    wait_seconds=round(max_wait_time, 2),
+                    tokens_requested=tokens
                 )
                 await asyncio.sleep(max_wait_time)
 
@@ -121,7 +122,7 @@ class AsyncRateLimiter:
 
         yield
 
-    def get_stats(self) -> Dict[str, any]:  # type: ignore[valid-type]
+    def get_stats(self) -> Dict[str, Any]:
         """Get current rate limiter statistics"""
         return {
             "total_consumed": self._total_consumed,

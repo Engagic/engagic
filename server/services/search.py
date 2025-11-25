@@ -40,7 +40,10 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> Dict[str, Any]:
 
     if meetings:
         logger.info(
-            f"Found {len(meetings)} cached meetings for {city.name}, {city.state}"
+            "found cached meetings",
+            count=len(meetings),
+            city=city.name,
+            state=city.state
         )
 
         meetings_with_items = await get_meetings_with_items(meetings, db)
@@ -105,7 +108,7 @@ async def handle_city_search(city_input: str, db: Database) -> Dict[str, Any]:
     meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
     if meetings:
-        logger.info(f"Found {len(meetings)} cached meetings for {city_name}, {state}")
+        logger.info("found cached meetings for city", count=len(meetings), city=city_name, state=state)
 
         meetings_with_items = await get_meetings_with_items(meetings, db)
 
@@ -233,7 +236,7 @@ async def handle_ambiguous_city_search(
 
             if fuzzy_cities:
                 cities = fuzzy_cities
-                logger.info(f"Fuzzy match: '{city_name}' -> {[c.name for c in cities]}")
+                logger.info("fuzzy match found", query=city_name, matches=[c.name for c in cities])
 
     if not cities:
         return {

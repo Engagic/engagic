@@ -10,7 +10,6 @@ Usage:
 
 import argparse
 import asyncio
-import logging
 import secrets
 import sys
 from pathlib import Path
@@ -18,14 +17,11 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from config import get_logger
 from database.db_postgres import Database
 from userland.database.models import User, Alert
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("engagic")
+logger = get_logger(__name__)
 
 
 async def main():
@@ -36,16 +32,14 @@ async def main():
     parser.add_argument('--keywords', nargs='+', help="Optional: Keywords to track (e.g., housing zoning)")
     args = parser.parse_args()
 
-    logger.info("Creating new user account...")
-    logger.info(f"  Email: {args.email}")
-    logger.info(f"  Name: {args.name}")
+    logger.info("creating new user account", email=args.email, name=args.name)
 
     db = await Database.create()
     try:
         # Check if user already exists
         existing = await db.userland.get_user_by_email(args.email)
         if existing:
-            logger.error(f"User with email {args.email} already exists!")
+            logger.error("user already exists", email=args.email)
             return 1
 
         # Create user
@@ -58,7 +52,7 @@ async def main():
 
         try:
             await db.userland.create_user(user)
-            logger.info(f"User created: {user.id}")
+            logger.info("user created", user_id=user.id)
 
             # Create alert if cities and keywords provided
             if args.cities and args.keywords:
@@ -72,15 +66,12 @@ async def main():
                     active=True
                 )
                 await db.userland.create_alert(alert)
-                logger.info(f"Alert created: {alert.id}")
-                logger.info(f"  Cities: {', '.join(args.cities)}")
-                logger.info(f"  Keywords: {', '.join(args.keywords)}")
+                logger.info("alert created", alert_id=alert.id, cities=args.cities, keywords=args.keywords)
 
-            logger.info("\nUser account created successfully!")
-            logger.info("User can log in at: https://engagic.org/login")
+            logger.info("user account created successfully", login_url="https://engagic.org/login")
 
         except Exception as e:
-            logger.error(f"Failed to create user: {e}")
+            logger.error("failed to create user", error=str(e))
             return 1
 
         return 0

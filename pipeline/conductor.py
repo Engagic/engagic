@@ -22,7 +22,7 @@ from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
 from pipeline.processor import Processor
 from pipeline.click_types import BANANA
 
-from config import config, get_logger
+from config import get_logger
 
 logger = get_logger(__name__).bind(component="engagic")
 

@@ -159,7 +159,7 @@ class SQLiteRateLimiter:
             """)
 
             conn.commit()
-            logger.info(f"Initialized persistent rate limiter at {self.db_path}")
+            logger.info("initialized persistent rate limiter", db_path=str(self.db_path))
 
     def get_client_tier(self, client_ip: str, api_key: Optional[str] = None) -> RateLimitTier:
         """
@@ -355,7 +355,7 @@ class SQLiteRateLimiter:
                 for ip in blocked_ips:
                     f.write(f"{ip} 1;\n")
 
-            logger.info(f"Exported {len(blocked_ips)} blocked IPs to {nginx_conf_file}")
+            logger.info("exported blocked IPs", count=len(blocked_ips), file=nginx_conf_file)
 
             # Reload nginx if IPs were blocked/unblocked
             if blocked_ips:
@@ -363,11 +363,11 @@ class SQLiteRateLimiter:
                 try:
                     subprocess.run(["nginx", "-t"], check=True, capture_output=True)
                     subprocess.run(["systemctl", "reload", "nginx"], check=True)
-                    logger.info("Nginx reloaded with updated blocklist")
+                    logger.info("nginx reloaded with updated blocklist")
                 except subprocess.CalledProcessError as e:
-                    logger.error(f"Failed to reload nginx: {e}")
+                    logger.error("failed to reload nginx", error=str(e))
         except Exception as e:
-            logger.error(f"Failed to export blocked IPs: {e}")
+            logger.error("failed to export blocked IPs", error=str(e))
 
     def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, whitelist_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
         """
@@ -478,9 +478,9 @@ class SQLiteRateLimiter:
                 deleted = conn.total_changes
                 conn.commit()
                 if deleted > 0:
-                    logger.debug(f"Cleaned up {deleted} old rate limit entries")
+                    logger.debug("cleaned up old rate limit entries", deleted=deleted)
         except Exception as e:
-            logger.error(f"Failed to cleanup rate limit entries: {e}")
+            logger.error("failed to cleanup rate limit entries", error=str(e))
 
     def _cleanup_old_bans(self, conn):
         """Remove expired temp_bans older than 90 days (GDPR retention policy)"""
@@ -493,18 +493,18 @@ class SQLiteRateLimiter:
             )
             deleted = conn.total_changes
             if deleted > 0:
-                logger.info(f"Cleaned up {deleted} expired temp_bans (90-day retention)")
+                logger.info("cleaned up expired temp_bans", deleted=deleted, retention_days=90)
                 # Re-export nginx blocklist after cleanup
                 self.export_blocked_ips()
         except Exception as e:
-            logger.error(f"Failed to cleanup old temp_bans: {e}")
+            logger.error("failed to cleanup old temp_bans", error=str(e))
 
     def reset_client(self, client_ip: str):
         """Reset rate limit for specific client"""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("DELETE FROM rate_limits WHERE client_ip = ?", (client_ip,))
             conn.commit()
-            logger.info(f"Reset rate limit for {client_ip}")
+            logger.info("reset rate limit", client_ip=client_ip)
 
     def get_client_status(self, client_ip: str) -> Dict[str, Any]:
         """Get current rate limit status for a client"""
@@ -623,7 +623,7 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
                     last_error = e
 
                     if not handler.should_retry(e):
-                        logger.error(f"Non-retryable error in {func.__name__}: {e}")
+                        logger.error("non-retryable error", func=func.__name__, error=str(e))
                         raise
 
                     if "529" in str(e) or "overloaded" in str(e).lower():
@@ -632,13 +632,19 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
                     if attempt < handler.max_retries - 1:
                         delay = handler.calculate_delay(attempt)
                         logger.warning(
-                            f"Rate limit hit in {func.__name__}, attempt {attempt + 1}/{handler.max_retries}, "
-                            f"retrying in {delay:.1f}s: {e}"
+                            "rate limit hit, retrying",
+                            func=func.__name__,
+                            attempt=attempt + 1,
+                            max_retries=handler.max_retries,
+                            retry_delay=round(delay, 1),
+                            error=str(e)
                         )
                         time.sleep(delay)
                     else:
                         logger.error(
-                            f"Max retries ({handler.max_retries}) exceeded in {func.__name__}"
+                            "max retries exceeded",
+                            func=func.__name__,
+                            max_retries=handler.max_retries
                         )
 
             if last_error is not None:
@@ -669,13 +675,13 @@ class APIRateLimitManager:
     def pause_all(self, duration: float):
         """Pause all API calls for a duration"""
         self.global_pause_until = time.time() + duration
-        logger.warning(f"Pausing all API calls for {duration}s due to rate limits")
+        logger.warning("pausing all API calls due to rate limits", duration=duration)
 
     def can_proceed(self) -> bool:
         """Check if we can make API calls"""
         if time.time() < self.global_pause_until:
             remaining = self.global_pause_until - time.time()
-            logger.info(f"API calls paused for {remaining:.1f}s more")
+            logger.info("API calls paused", remaining_seconds=round(remaining, 1))
             return False
         return True
 
@@ -683,5 +689,5 @@ class APIRateLimitManager:
         """Wait if global pause is active"""
         if time.time() < self.global_pause_until:
             remaining = self.global_pause_until - time.time()
-            logger.info(f"Waiting {remaining:.1f}s for rate limit pause to end")
+            logger.info("waiting for rate limit pause to end", remaining_seconds=round(remaining, 1))
             time.sleep(remaining)
