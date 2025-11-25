@@ -13,7 +13,7 @@ from pathlib import Path
 
 from config import get_logger, config
 from database.id_generation import generate_matter_id
-from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata
+from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata, AttachmentInfo
 from database.repositories_async import (
     CityRepository,
     MeetingRepository,
@@ -340,7 +340,10 @@ class Database:
         for item_data in items_data:
             item_id = f"{stored_meeting.id}_{item_data['item_id']}"
 
-            item_attachments = item_data.get("attachments", [])
+            # BOUNDARY: Convert raw dicts to Pydantic models
+            # All downstream code can trust AttachmentInfo objects
+            raw_attachments = item_data.get("attachments", [])
+            item_attachments = [AttachmentInfo(**att) for att in raw_attachments] if raw_attachments else []
             sponsors = item_data.get("sponsors", [])
 
             attachment_hash = hash_attachments(item_attachments) if item_attachments else None
