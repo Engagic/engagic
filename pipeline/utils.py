@@ -17,7 +17,7 @@ logger = get_logger(__name__).bind(component="engagic")
 
 
 def hash_attachments(
-    attachments: List[Dict[str, Any]],
+    attachments: List[Any],
     include_metadata: bool = False,
     timeout: int = 3
 ) -> str:

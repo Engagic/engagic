@@ -68,6 +68,34 @@
 	--badge-info-border: #bfdbfe;
 	--badge-info-text: #1e40af;
 
+	/* Component-specific badge tokens */
+	--badge-matter-bg-start: #dbeafe;
+	--badge-matter-bg-end: #bfdbfe;
+	--badge-matter-text: #1e40af;
+	--badge-matter-border: #3b82f6;
+	--badge-matter-shadow: rgba(59, 130, 246, 0.2);
+
+	--badge-procedural-bg: #fef3c7;
+	--badge-procedural-text: #92400e;
+	--badge-procedural-border: #fbbf24;
+
+	--badge-sponsor-bg-start: #fef3c7;
+	--badge-sponsor-bg-end: #fde68a;
+	--badge-sponsor-text: #92400e;
+	--badge-sponsor-border: #f59e0b;
+
+	--badge-timeline-bg-start: #dcfce7;
+	--badge-timeline-bg-end: #bbf7d0;
+	--badge-timeline-text: #065f46;
+	--badge-timeline-border: #10b981;
+	--badge-timeline-shadow: rgba(16, 185, 129, 0.2);
+
+	/* Agenda item indicators */
+	--item-summary-border: #93c5fd;
+	--item-type-bg: #f3f4f6;
+	--item-type-text: #4b5563;
+	--item-type-border: #d1d5db;
+
 	/* Committee type colors */
 	--committee-color: #8b5cf6;
 	--council-color: #10b981;
@@ -112,6 +140,34 @@
 	--badge-info-bg: #1e3a5f;
 	--badge-info-border: #3b82f6;
 	--badge-info-text: #93c5fd;
+
+	/* Component-specific badge tokens */
+	--badge-matter-bg-start: #1e3a8a;
+	--badge-matter-bg-end: #1e40af;
+	--badge-matter-text: #93c5fd;
+	--badge-matter-border: #3b82f6;
+	--badge-matter-shadow: rgba(59, 130, 246, 0.3);
+
+	--badge-procedural-bg: #78350f;
+	--badge-procedural-text: #fde68a;
+	--badge-procedural-border: #f59e0b;
+
+	--badge-sponsor-bg-start: #78350f;
+	--badge-sponsor-bg-end: #92400e;
+	--badge-sponsor-text: #fde68a;
+	--badge-sponsor-border: #f59e0b;
+
+	--badge-timeline-bg-start: #064e3b;
+	--badge-timeline-bg-end: #065f46;
+	--badge-timeline-text: #6ee7b7;
+	--badge-timeline-border: #10b981;
+	--badge-timeline-shadow: rgba(16, 185, 129, 0.3);
+
+	/* Agenda item indicators */
+	--item-summary-border: #3b82f6;
+	--item-type-bg: #334155;
+	--item-type-text: #cbd5e1;
+	--item-type-border: #475569;
 
 	/* Committee type colors */
 	--committee-color: #c4b5fd;

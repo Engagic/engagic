@@ -13,7 +13,7 @@ from pathlib import Path
 
 from config import get_logger, config
 from database.id_generation import generate_matter_id
-from database.models import City, Meeting, AgendaItem, Matter
+from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata
 from database.repositories_async import (
     CityRepository,
     MeetingRepository,
@@ -436,7 +436,7 @@ class Database:
                 existing_matter = await self.matters.get_matter(matter_composite_id)
 
                 # Compute attachment hash for deduplication
-                attachment_hash = hash_attachments(agenda_item.attachments)
+                attachment_hash = hash_attachments(agenda_item.attachments or [])
 
                 if existing_matter:
                     # Check if this meeting_id is already counted for this matter
@@ -473,7 +473,7 @@ class Database:
                         canonical_summary=None,
                         canonical_topics=None,
                         attachments=agenda_item.attachments,
-                        metadata={'attachment_hash': attachment_hash},
+                        metadata=MatterMetadata(attachment_hash=attachment_hash),
                         first_seen=meeting.date,
                         last_seen=meeting.date,
                         appearance_count=1,

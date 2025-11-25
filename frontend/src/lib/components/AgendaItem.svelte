@@ -305,7 +305,7 @@
 	}
 
 	.agenda-item[data-has-summary="true"] {
-		border-left-color: #93c5fd;
+		border-left-color: var(--item-summary-border);
 	}
 
 	.agenda-item[data-has-summary="false"] {
@@ -362,9 +362,9 @@
 	.procedural-badge {
 		display: inline-block;
 		padding: 0.15rem 0.5rem;
-		background: #fef3c7;
-		color: #92400e;
-		border: 1px solid #fbbf24;
+		background: var(--badge-procedural-bg);
+		color: var(--badge-procedural-text);
+		border: 1px solid var(--badge-procedural-border);
 		border-radius: 10px;
 		font-size: 0.65rem;
 		font-weight: 600;
@@ -376,15 +376,15 @@
 	.matter-badge {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-		color: #1e40af;
-		border: 1.5px solid #3b82f6;
+		background: linear-gradient(135deg, var(--badge-matter-bg-start) 0%, var(--badge-matter-bg-end) 100%);
+		color: var(--badge-matter-text);
+		border: 1.5px solid var(--badge-matter-border);
 		border-radius: 12px;
 		font-size: 0.7rem;
 		font-weight: 700;
 		font-family: 'IBM Plex Mono', monospace;
 		letter-spacing: 0.5px;
-		box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2);
+		box-shadow: 0 1px 3px var(--badge-matter-shadow);
 		transition: all 0.2s ease;
 		cursor: help;
 	}
@@ -396,18 +396,18 @@
 
 	.matter-badge:hover,
 	.matter-badge-link:hover {
-		background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
-		border-color: #2563eb;
+		background: linear-gradient(135deg, var(--badge-matter-bg-end) 0%, var(--item-summary-border) 100%);
+		border-color: var(--badge-matter-text);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+		box-shadow: 0 2px 6px var(--badge-matter-shadow);
 	}
 
 	.matter-type-badge {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: #f3f4f6;
-		color: #4b5563;
-		border: 1px solid #d1d5db;
+		background: var(--item-type-bg);
+		color: var(--item-type-text);
+		border: 1px solid var(--item-type-border);
 		border-radius: 12px;
 		font-size: 0.65rem;
 		font-weight: 600;
@@ -419,9 +419,9 @@
 	.sponsors-badge {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-		color: #92400e;
-		border: 1.5px solid #f59e0b;
+		background: linear-gradient(135deg, var(--badge-sponsor-bg-start) 0%, var(--badge-sponsor-bg-end) 100%);
+		color: var(--badge-sponsor-text);
+		border: 1.5px solid var(--badge-sponsor-border);
 		border-radius: 12px;
 		font-size: 0.65rem;
 		font-weight: 600;
@@ -433,9 +433,9 @@
 	.matter-timeline-badge {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-		color: #065f46;
-		border: 1.5px solid #10b981;
+		background: linear-gradient(135deg, var(--badge-timeline-bg-start) 0%, var(--badge-timeline-bg-end) 100%);
+		color: var(--badge-timeline-text);
+		border: 1.5px solid var(--badge-timeline-border);
 		border-radius: 12px;
 		font-size: 0.65rem;
 		font-weight: 700;
@@ -444,14 +444,14 @@
 		text-decoration: none;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2);
+		box-shadow: 0 1px 3px var(--badge-timeline-shadow);
 	}
 
 	.matter-timeline-badge:hover {
-		background: linear-gradient(135deg, #bbf7d0 0%, #86efac 100%);
-		border-color: #059669;
+		background: linear-gradient(135deg, var(--badge-timeline-bg-end) 0%, var(--badge-green-border) 100%);
+		border-color: var(--badge-timeline-text);
 		transform: translateY(-1px);
-		box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 2px 6px var(--badge-timeline-shadow);
 	}
 
 	.item-summary-preview {

@@ -10,7 +10,7 @@ Handles CRUD operations for agenda items with PostgreSQL optimizations:
 from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.models import AgendaItem
+from database.models import AgendaItem, AttachmentInfo
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="item_repository")
@@ -167,7 +167,8 @@ class ItemRepository(BaseRepository):
             for row in rows:
                 topics = topics_by_item.get(row["id"], [])
 
-                attachments = row["attachments"] or []
+                # Deserialize JSONB attachments to typed models
+                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
                 sponsors = row["sponsors"] or []
 
                 items.append(
@@ -176,7 +177,7 @@ class ItemRepository(BaseRepository):
                         meeting_id=row["meeting_id"],
                         title=row["title"],
                         sequence=row["sequence"],
-                        attachments=attachments or [],
+                        attachments=attachments,
                         attachment_hash=row["attachment_hash"],
                         matter_id=row["matter_id"],
                         matter_file=row["matter_file"],
@@ -222,7 +223,8 @@ class ItemRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            attachments = row["attachments"] or []
+            # Deserialize JSONB attachments to typed models
+            attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
             sponsors = row["sponsors"] or []
 
             return AgendaItem(
@@ -230,7 +232,7 @@ class ItemRepository(BaseRepository):
                 meeting_id=row["meeting_id"],
                 title=row["title"],
                 sequence=row["sequence"],
-                attachments=attachments or [],
+                attachments=attachments,
                 attachment_hash=row["attachment_hash"],
                 matter_id=row["matter_id"],
                 matter_file=row["matter_file"],
@@ -345,7 +347,8 @@ class ItemRepository(BaseRepository):
                 )
                 topics = [r["topic"] for r in topic_rows]
 
-                attachments = row["attachments"] or []
+                # Deserialize JSONB attachments to typed models
+                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
                 sponsors = row["sponsors"] or []
 
                 items.append(
@@ -354,7 +357,7 @@ class ItemRepository(BaseRepository):
                         meeting_id=row["meeting_id"],
                         title=row["title"],
                         sequence=row["sequence"],
-                        attachments=attachments or [],
+                        attachments=attachments,
                         attachment_hash=row["attachment_hash"],
                         matter_id=row["matter_id"],
                         matter_file=row["matter_file"],
@@ -453,8 +456,8 @@ class ItemRepository(BaseRepository):
 
             items = []
             for row in rows:
-                # Parse JSONB fields
-                attachments = row["attachments"] or []
+                # Deserialize JSONB attachments to typed models
+                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
                 sponsors = row["sponsors"] or []
 
                 # Get normalized topics
@@ -470,7 +473,7 @@ class ItemRepository(BaseRepository):
                         meeting_id=row["meeting_id"],
                         title=row["title"],
                         sequence=row["sequence"],
-                        attachments=attachments or [],
+                        attachments=attachments,
                         summary=row["summary"],
                         topics=topics,
                         matter_id=row["matter_id"],

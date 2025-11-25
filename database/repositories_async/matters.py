@@ -11,7 +11,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
-from database.models import Matter
+from database.models import Matter, AttachmentInfo, MatterMetadata
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="matter_repository")
@@ -130,6 +130,10 @@ class MatterRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
+            # Deserialize JSONB fields to typed models
+            attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
+            metadata = MatterMetadata(**row["metadata"]) if row["metadata"] else None
+
             return Matter(
                 id=row["id"],
                 banana=row["banana"],
@@ -140,8 +144,8 @@ class MatterRepository(BaseRepository):
                 sponsors=row["sponsors"],
                 canonical_summary=row["canonical_summary"],
                 canonical_topics=topics or row["canonical_topics"],
-                attachments=row["attachments"],
-                metadata=row["metadata"],
+                attachments=attachments,
+                metadata=metadata,
                 first_seen=row["first_seen"],
                 last_seen=row["last_seen"],
                 appearance_count=row["appearance_count"],
@@ -205,7 +209,7 @@ class MatterRepository(BaseRepository):
         self,
         matter_id: str,
         meeting_date: Optional[datetime],
-        attachments: Optional[List],
+        attachments: Optional[List[AttachmentInfo]],
         attachment_hash: str,
         increment_appearance_count: bool = False
     ) -> None:

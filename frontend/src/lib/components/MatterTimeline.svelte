@@ -38,11 +38,12 @@
 		return { name: 'Meeting', type: 'other' };
 	}
 
-	function inferStatus(index: number, total: number): string {
-		// Infer legislative status from position in timeline
-		if (index === 0) return 'Introduced';
-		if (index === total - 1) return 'Recent';
-		return 'Under Review';
+	function getDateContext(index: number, total: number): string {
+		// Show truthful date context instead of fake legislative status
+		if (total === 1) return 'Only appearance';
+		if (index === 0) return 'First discussed';
+		if (index === total - 1) return 'Most recent';
+		return `Step ${index + 1}`;
 	}
 
 	function buildItemAnchor(appearance: MatterTimelineAppearance): string {

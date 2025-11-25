@@ -16,7 +16,7 @@ import time
 from typing import List, Optional, Dict, Any
 
 from database.db_postgres import Database
-from database.models import Meeting, Matter
+from database.models import Meeting, Matter, MatterMetadata, ParticipationInfo
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
 from exceptions import ProcessingError, ExtractionError, LLMError
 from analysis.analyzer_async import AsyncAnalyzer
@@ -608,7 +608,7 @@ class Processor:
         seen_urls = set()
 
         for item in items:
-            for att in item.attachments:
+            for att in (item.attachments or []):
                 # Normalize attachment to dict
                 if isinstance(att, str):
                     att_url = att
@@ -683,7 +683,7 @@ class Processor:
             canonical_summary=summary,
             canonical_topics=topics,
             attachments=representative_item.attachments,
-            metadata={'attachment_hash': attachment_hash},
+            metadata=MatterMetadata(attachment_hash=attachment_hash),
             first_seen=None,  # Will preserve existing if matter already exists
             last_seen=None,   # Will preserve existing if matter already exists
             appearance_count=len(items),
@@ -800,10 +800,12 @@ class Processor:
                     agenda_text = agenda_result["text"][:5000]
                     agenda_participation = parse_participation_info(agenda_text)
                     if agenda_participation:
-                        participation_data.update(agenda_participation)
+                        # Convert typed model to dict for merging
+                        agenda_part_dict = agenda_participation.model_dump(exclude_none=True)
+                        participation_data.update(agenda_part_dict)
                         logger.info(
                             "found participation info in agenda_url PDF",
-                            participation_fields=list(agenda_participation.keys())
+                            participation_fields=list(agenda_part_dict.keys())
                         )
                     # Free memory immediately
                     del agenda_result
@@ -811,10 +813,11 @@ class Processor:
 
             # Handle HTML agendas (PrimeGov, Granicus, etc.) - already parsed by adapter
             elif meeting.participation:
-                participation_data.update(meeting.participation)
+                # Convert typed model to dict for merging
+                participation_data.update(meeting.participation.model_dump(exclude_none=True))
                 logger.debug(
                     "using existing participation from adapter",
-                    participation_fields=list(meeting.participation.keys())
+                    participation_fields=list(meeting.participation.model_dump(exclude_none=True).keys())
                 )
 
         except (ExtractionError, OSError, IOError) as e:
@@ -1055,12 +1058,14 @@ class Processor:
                     if item.sequence == first_sequence or item.sequence == last_sequence:
                         item_participation = parse_participation_info(combined_text)
                         if item_participation:
+                            # Convert typed model to dict for merging
+                            item_part_dict = item_participation.model_dump(exclude_none=True)
                             logger.debug(
                                 "found participation info in item",
                                 sequence=item.sequence,
-                                participation_fields=list(item_participation.keys())
+                                participation_fields=list(item_part_dict.keys())
                             )
-                            participation_data.update(item_participation)
+                            participation_data.update(item_part_dict)
 
                     batch_requests.append({
                         "item_id": item.id,
@@ -1301,13 +1306,16 @@ class Processor:
             # Merge participation data from items with existing meeting participation
             merged_participation = None
             if participation_data or meeting.participation:
-                merged_participation = meeting.participation.copy() if meeting.participation else {}
+                # Start with existing participation (convert typed model to dict for merging)
+                merged_dict = meeting.participation.model_dump(exclude_none=True) if meeting.participation else {}
                 if participation_data:
-                    merged_participation.update(participation_data)
+                    merged_dict.update(participation_data)
                     logger.info(
                         "updated meeting with participation info from items",
                         participation_fields=list(participation_data.keys())
                     )
+                # Convert merged dict back to typed model
+                merged_participation = ParticipationInfo(**merged_dict) if merged_dict else None
 
             # Update meeting with metadata only (items have their own summaries)
             processing_time = time.time() - start_time

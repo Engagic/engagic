@@ -7,10 +7,10 @@ Handles CRUD operations for meetings:
 - JSONB for participation data
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.models import Meeting
+from database.models import Meeting, ParticipationInfo
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="meeting_repository")
@@ -135,8 +135,8 @@ class MeetingRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            # Deserialize JSONB participation
-            participation = row["participation"]
+            # Deserialize JSONB participation to typed model
+            participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
 
             return Meeting(
                 id=row["id"],
@@ -209,8 +209,8 @@ class MeetingRepository(BaseRepository):
             for row in rows:
                 topics = topics_by_meeting.get(row["id"], [])
 
-                # Deserialize JSONB participation
-                participation = row["participation"]
+                # Deserialize JSONB participation to typed model
+                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
 
                 meetings.append(
                     Meeting(
@@ -271,8 +271,8 @@ class MeetingRepository(BaseRepository):
             )
             topics = [r["topic"] for r in topic_rows]
 
-            # Deserialize JSONB participation
-            participation = row["participation"]
+            # Deserialize JSONB participation to typed model
+            participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
 
             return Meeting(
                 id=row["id"],
@@ -296,7 +296,7 @@ class MeetingRepository(BaseRepository):
         summary: Optional[str],
         processing_method: str,
         processing_time: float,
-        participation: Optional[Dict[str, Any]] = None,
+        participation: Optional[ParticipationInfo] = None,
         topics: Optional[List[str]] = None,
     ) -> None:
         """Update meeting summary and processing metadata
@@ -387,7 +387,8 @@ class MeetingRepository(BaseRepository):
             meetings = []
             for row in rows:
                 topics = topics_by_meeting.get(row["id"], [])
-                participation = row["participation"]
+                # Deserialize JSONB participation to typed model
+                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
 
                 meetings.append(Meeting(
                     id=row["id"],
@@ -428,8 +429,8 @@ class MeetingRepository(BaseRepository):
             if not row:
                 return None
 
-            # Deserialize JSONB participation
-            participation = row["participation"]
+            # Deserialize JSONB participation to typed model
+            participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
 
             # Get normalized topics
             topic_rows = await conn.fetch(
