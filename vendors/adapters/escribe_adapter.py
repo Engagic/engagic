@@ -8,7 +8,7 @@ Example: Beaumont, CA uses pub-beaumont.escribemeetings.com
 import re
 import hashlib
 from typing import Dict, Any, Optional, Iterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urljoin
 from vendors.adapters.base_adapter import BaseAdapter, logger
 
@@ -26,13 +26,22 @@ class EscribeAdapter(BaseAdapter):
         super().__init__(city_slug, vendor="escribe")
         self.base_url = f"https://{self.slug}.escribemeetings.com"
 
-    def fetch_meetings(self) -> Iterator[Dict[str, Any]]:
+    def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
         """
-        Scrape meetings from Escribe HTML.
+        Scrape meetings from Escribe HTML with date filtering.
+
+        Args:
+            days_back: Days to look back (default 7)
+            days_forward: Days to look ahead (default 14)
 
         Yields:
             Meeting dictionaries with meeting_id, title, start, packet_url
         """
+        # Calculate date range
+        today = datetime.now()
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
+
         current_year = datetime.now().year
         list_url = f"{self.base_url}/?Year={current_year}"
 
@@ -64,6 +73,28 @@ class EscribeAdapter(BaseAdapter):
         for container in meeting_containers:
             meeting = self._parse_meeting_container(container)
             if meeting:
+                # Filter by date range
+                meeting_start = meeting.get("start")
+                if meeting_start:
+                    try:
+                        # Parse date (base adapter returns ISO format YYYY-MM-DD)
+                        if isinstance(meeting_start, str):
+                            meeting_dt = datetime.strptime(meeting_start[:10], "%Y-%m-%d")
+                        else:
+                            meeting_dt = meeting_start
+                        # Skip meetings outside date range
+                        if not (start_date <= meeting_dt <= end_date):
+                            logger.debug(
+                                "skipping meeting outside date range",
+                                vendor="escribe",
+                                slug=self.slug,
+                                title=meeting.get("title"),
+                                date=meeting_start
+                            )
+                            continue
+                    except (ValueError, TypeError):
+                        # If date parsing fails, include the meeting anyway
+                        pass
                 yield meeting
 
     def _parse_meeting_container(self, container) -> Optional[Dict[str, Any]]:
