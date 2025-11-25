@@ -5,9 +5,8 @@ Handles user accounts, alert configurations, alert matches, and magic link secur
 Pure async PostgreSQL implementation using 'userland' schema namespace.
 """
 
-from typing import Optional, List
 from datetime import datetime
-import json
+from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
 from userland.database.models import User, Alert, AlertMatch
@@ -140,8 +139,8 @@ class UserlandRepository(BaseRepository):
                 alert.id,
                 alert.user_id,
                 alert.name,
-                json.dumps(alert.cities),  # List → JSONB
-                json.dumps(alert.criteria),  # Dict → JSONB
+                alert.cities,  # asyncpg handles list → JSONB natively
+                alert.criteria,  # asyncpg handles dict → JSONB natively
                 alert.frequency,
                 alert.active,
                 alert.created_at
@@ -258,13 +257,13 @@ class UserlandRepository(BaseRepository):
         params = []
 
         if cities is not None:
-            params.append(json.dumps(cities))
+            params.append(cities)  # asyncpg handles list → JSONB natively
             updates.append(f"cities = ${len(params)}")
 
         if keywords is not None:
             # Update keywords in criteria JSON
             alert.criteria["keywords"] = keywords
-            params.append(json.dumps(alert.criteria))
+            params.append(alert.criteria)  # asyncpg handles dict → JSONB natively
             updates.append(f"criteria = ${len(params)}")
 
         if frequency is not None:
@@ -333,7 +332,7 @@ class UserlandRepository(BaseRepository):
                 match.item_id,
                 match.match_type,
                 match.confidence,
-                json.dumps(match.matched_criteria),
+                match.matched_criteria,  # asyncpg handles dict → JSONB natively
                 match.notified,
                 match.created_at
             )

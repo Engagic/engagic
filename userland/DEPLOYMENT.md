@@ -1,115 +1,90 @@
 # Userland Deployment Guide
 
-## VPS Setup (One-time)
+## Current Deployment
 
-### 1. Apply Database Schema
+**Location:** `/opt/engagic`
+**User:** `engagic` (non-root, security hardened)
 
-SSH to VPS and run the schema setup:
+### Services
 
-```bash
-ssh root@engagic
-cd /root/engagic
+| Service | Purpose | Status |
+|---------|---------|--------|
+| `engagic-api.service` | Main API (includes auth) | `systemctl status engagic-api` |
+| `engagic-digest.timer` | Weekly digest (Sun 9am) | `systemctl status engagic-digest.timer` |
 
-# Apply userland schema to PostgreSQL
-python3 -m userland.scripts.setup_db
-```
+### Environment
 
-Expected output:
-```
-Connecting to PostgreSQL database...
-Database: localhost:5432/engagic
-
-Applying userland schema from /root/engagic/database/schema_userland.sql...
-
-Schema applied successfully!
-
-Verifying tables...
-
-Userland tables created:
-  - userland.alert_matches
-  - userland.alerts
-  - userland.used_magic_links
-  - userland.users
-
-Current data:
-  - Users: 0
-  - Alerts: 0
-
-Database connection closed.
-```
-
-Safe to run multiple times (uses `IF NOT EXISTS`).
-
-### 2. Verify Environment Variables
-
-Ensure these variables are set in `/root/.bashrc` or systemd service file:
+All environment variables in `/opt/engagic/.env`:
 
 ```bash
-# Required
-export USERLAND_JWT_SECRET="<your-secret-key>"
-export MAILGUN_API_KEY="<your-mailgun-key>"
-export MAILGUN_DOMAIN="<your-domain>"
-
-# PostgreSQL (should already be set for main engagic)
-export ENGAGIC_USE_POSTGRES="true"
-export ENGAGIC_POSTGRES_HOST="localhost"
-export ENGAGIC_POSTGRES_PORT="5432"
-export ENGAGIC_POSTGRES_DB="engagic"
-export ENGAGIC_POSTGRES_USER="engagic"
-export ENGAGIC_POSTGRES_PASSWORD="<your-password>"
+# Required for userland
+USERLAND_JWT_SECRET=<secret>
+MAILGUN_API_KEY=<key>
+MAILGUN_DOMAIN=mail.engagic.org
+MAILGUN_FROM_EMAIL=digest@engagic.org
 ```
 
-### 3. Test Signup Flow
+## Common Operations
 
-Restart the API service and test:
+### Test Weekly Digest Manually
 
 ```bash
-sudo systemctl restart engagic-api
+sudo systemctl start engagic-digest.service
+journalctl -u engagic-digest.service --since "5 minutes ago"
+```
 
-# Test signup endpoint
-curl -X POST https://api.engagic.org/api/auth/signup \
+### Test Signup Flow
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","name":"Test User"}'
+  -d '{"email":"test@example.com","name":"Test User","city_banana":"paloaltoCA"}'
 ```
 
-Should return 200 with user creation success (or 400 if email exists).
-
-### 4. Setup Weekly Digest Cron
-
-Add to crontab for weekly civic alerts:
+### Check User Data
 
 ```bash
-crontab -e
+PGPASSWORD='engagic_secure_2025' psql -U engagic -d engagic -h localhost -c "
+SELECT u.email, u.name, a.cities, a.criteria
+FROM userland.users u
+LEFT JOIN userland.alerts a ON u.id = a.user_id;"
+```
 
-# Add this line (Sundays at 9am)
-0 9 * * 0 cd /root/engagic && .venv/bin/python -m userland.scripts.weekly_digest >> /var/log/userland_digest.log 2>&1
+### View Timer Schedule
+
+```bash
+systemctl list-timers | grep engagic
 ```
 
 ## Troubleshooting
 
-### Schema Already Exists
-Safe to ignore - script uses `IF NOT EXISTS`.
+### Email Not Sending
+1. Check Mailgun credentials: `grep MAILGUN /opt/engagic/.env`
+2. Test manually: `sudo systemctl start engagic-digest.service`
+3. Check logs: `journalctl -u engagic-digest.service`
 
-### Connection Errors
-- Check PostgreSQL is running: `sudo systemctl status postgresql`
-- Verify credentials in environment variables
-- Test connection: `psql -U engagic -d engagic -c "SELECT 1"`
+### Auth Endpoints 401
+1. Verify JWT secret: `grep JWT /opt/engagic/.env`
+2. Restart API: `sudo systemctl restart engagic-api`
+3. Check logs: `journalctl -u engagic-api`
 
-### Missing Environment Variables
-- Check: `echo $USERLAND_JWT_SECRET`
-- Reload: `source /root/.bashrc` or restart service
+### Database Issues
+```bash
+# Check schema exists
+PGPASSWORD='engagic_secure_2025' psql -U engagic -d engagic -h localhost -c "\dt userland.*"
 
-### Table Access Errors
-- Check schema exists: `psql -U engagic -d engagic -c "\dn"`
-- Check tables: `psql -U engagic -d engagic -c "\dt userland.*"`
+# Check user count
+PGPASSWORD='engagic_secure_2025' psql -U engagic -d engagic -h localhost -c "SELECT COUNT(*) FROM userland.users"
+```
 
 ## Rollback (Emergency)
-
-If needed, drop the userland schema:
 
 ```sql
 -- WARNING: Destroys all user data
 DROP SCHEMA userland CASCADE;
 ```
 
-Then re-run setup script to recreate.
+Then re-apply schema:
+```bash
+cd /opt/engagic && /opt/engagic/.venv/bin/python -m userland.scripts.setup_db
+```
