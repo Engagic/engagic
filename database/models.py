@@ -233,11 +233,12 @@ class Matter:
                 value=self.appearance_count
             )
 
-        # Validate at least one identifier present
-        if not self.matter_file and not self.matter_id:
+        # Validate at least one identifier present (matter_file, matter_id, or title)
+        # Title-based matters are valid for cities without stable vendor IDs
+        if not self.matter_file and not self.matter_id and not self.title:
             from exceptions import ValidationError
             raise ValidationError(
-                "Matter must have at least one identifier (matter_file or matter_id)",
+                "Matter must have at least one identifier (matter_file, matter_id, or title)",
                 field="matter_file",
                 value=None
             )
