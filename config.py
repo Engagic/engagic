@@ -1,9 +1,18 @@
 import os
 import logging
 import sys
+from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
 import structlog
+
+# Auto-load .env file from project root before any config reads
+# This eliminates need for shell scripts to source .env manually
+_project_root = Path(__file__).parent
+_env_file = _project_root / ".env"
+if _env_file.exists():
+    load_dotenv(_env_file)
 
 logger = logging.getLogger("engagic")
 

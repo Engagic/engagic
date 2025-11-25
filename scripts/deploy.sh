@@ -42,6 +42,23 @@ check_uv() {
     fi
 }
 
+load_env() {
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    # Source .env (PostgreSQL, etc.)
+    if [ -f "$APP_DIR/.env" ]; then
+        set -a
+        source "$APP_DIR/.env"
+        set +a
+    fi
+    # Source API keys (Gemini, etc.)
+    if [ -f ~/.llm_secrets ]; then
+        set -a
+        source ~/.llm_secrets
+        set +a
+    fi
+}
+
 setup_env() {
     log "Setting up Python environment with uv..."
     check_uv
@@ -435,14 +452,7 @@ sync_city() {
         error "City banana required (e.g., paloaltoCA)"
     fi
 
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    # Source and export API keys if available
-    if [ -f ~/.llm_secrets ]; then
-        set -a  # Auto-export all variables
-        source ~/.llm_secrets
-        set +a
-    fi
+    load_env
     uv run engagic-conductor sync-city "$1"
 }
 
@@ -452,14 +462,7 @@ sync_and_process_city() {
     fi
 
     log "Syncing and processing $1..."
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    # Source and export API keys if available
-    if [ -f ~/.llm_secrets ]; then
-        set -a  # Auto-export all variables
-        source ~/.llm_secrets
-        set +a
-    fi
+    load_env
     uv run engagic-conductor sync-and-process-city "$1"
 }
 
@@ -469,14 +472,7 @@ sync_cities() {
     fi
 
     log "Syncing cities: $1"
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    # Source and export API keys if available
-    if [ -f ~/.llm_secrets ]; then
-        set -a  # Auto-export all variables
-        source ~/.llm_secrets
-        set +a
-    fi
+    load_env
     uv run engagic-conductor sync-cities "$1"
 }
 
@@ -486,14 +482,7 @@ process_cities() {
     fi
 
     log "Processing queued jobs for cities: $1"
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    # Source and export API keys if available
-    if [ -f ~/.llm_secrets ]; then
-        set -a  # Auto-export all variables
-        source ~/.llm_secrets
-        set +a
-    fi
+    load_env
     uv run engagic-conductor process-cities "$1"
 }
 
@@ -503,32 +492,17 @@ sync_and_process_cities() {
     fi
 
     log "Syncing and processing cities: $1"
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    # Source and export API keys if available
-    if [ -f ~/.llm_secrets ]; then
-        set -a  # Auto-export all variables
-        source ~/.llm_secrets
-        set +a
-    fi
+    load_env
     uv run engagic-conductor sync-and-process-cities "$1"
 }
 
 process_unprocessed() {
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    # Source and export API keys if available
-    if [ -f ~/.llm_secrets ]; then
-        set -a  # Auto-export all variables
-        source ~/.llm_secrets
-        set +a
-    fi
+    load_env
     uv run engagic-conductor full-sync
 }
 
 preview_queue() {
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
+    load_env
     uv run engagic-conductor preview-queue "${1:-}"
 }
 
@@ -537,8 +511,7 @@ extract_text() {
         error "Meeting ID required"
     fi
 
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
+    load_env
 
     # Build command with Click syntax
     if [ -n "$2" ]; then
@@ -555,8 +528,7 @@ preview_items() {
         error "Meeting ID required"
     fi
 
-    cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
+    load_env
 
     # Build command with Click syntax
     if [ "$2" = "--extract" ]; then
