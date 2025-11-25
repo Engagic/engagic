@@ -4,242 +4,120 @@ AI-powered civic engagement platform that discovers, processes, and summarizes l
 
 Live at **[engagic.org](https://engagic.org)**
 
+---
+
+## What It Does
+
+Engagic fetches city council meeting agendas from civic tech platforms (Legistar, PrimeGov, Granicus, etc.), extracts structured data, and uses LLMs to generate summaries that civilians can understand.
+
+**Key capabilities:**
+- **Item-level processing:** 86% of cities get structured agenda items (not just PDF blobs)
+- **Matters-first architecture:** Legislative items tracked across meetings with deduplication
+- **Topic extraction:** 16 canonical civic topics for filtering and alerts
+- **Participation info:** Email, phone, Zoom links for civic action
+
+---
+
 ## Architecture
 
-### Directory Structure
-
 ```
-engagic/
-├── vendors/            # Fetch from civic tech vendors
-│   ├── adapters/       # 11 vendor adapters (Legistar, PrimeGov, Granicus, IQM2, NovusAgenda, eScribe, CivicClerk, CivicPlus, Berkeley, Chicago, Menlo Park)
-│   ├── factory.py      # Adapter dispatcher
-│   ├── rate_limiter.py # Vendor-aware rate limiting
-│   └── validator.py    # Meeting validation
-│
-├── parsing/            # Extract structured text
-│   ├── pdf.py          # PyMuPDF extraction
-│   ├── participation.py # Parse participation info
-│   └── chunker.py      # Document chunking
-│
-├── analysis/           # LLM intelligence
-│   ├── llm/            # Gemini API orchestration
-│   └── topics/         # Topic normalization (16 canonical topics)
-│
-├── pipeline/           # Orchestrate the data flow
-│   ├── conductor.py    # Sync scheduling, priority queue
-│   └── processor.py    # Processing orchestration
-│
-├── database/           # SQLite persistence
-│   └── db.py          # Unified database (cities, meetings, items, queue)
-│
-├── server/             # Public API
-│   ├── main.py        # FastAPI app
-│   └── rate_limiter.py # API rate limiting
-│
-└── frontend/           # SvelteKit (Cloudflare Pages)
+                        Frontend (SvelteKit)
+                              |
+                              v
+                        Server (FastAPI)
+                              |
+              +---------------+---------------+
+              |               |               |
+              v               v               v
+         Database        Pipeline         Analysis
+        (PostgreSQL)   (Orchestration)     (LLM)
+              |               |               |
+              +-------+-------+               |
+                      |                       |
+                      v                       v
+                  Vendors  <-----------------+
+               (11 Adapters)
 ```
 
-### Core Components
+**~27,100 lines Python backend** organized into focused modules:
 
-**vendors/** - Adapters for 11 civic tech platforms (BaseAdapter pattern, 94% success rate)
-- Legistar (110 cities, API-based item extraction)
-- PrimeGov (64 cities, HTML agenda parsing)
-- Granicus (467 cities, 200+ with HTML item extraction)
-- CivicClerk, NovusAgenda, CivicPlus
+| Module | Purpose | Details |
+|--------|---------|---------|
+| [vendors/](vendors/README.md) | 11 civic tech platform adapters | HTML parsers, API clients, rate limiting |
+| [analysis/](analysis/README.md) | LLM intelligence | Gemini API, topic extraction, adaptive prompts |
+| [pipeline/](pipeline/README.md) | Processing orchestration | Sync scheduling, queue management, batch processing |
+| [database/](database/README.md) | PostgreSQL repository pattern | 8 async repositories, matters tracking, userland schema |
+| [server/](server/README.md) | FastAPI public API | 10 route modules, tiered rate limiting, middleware |
 
-**parsing/** - Text extraction from PDFs and HTML
-- PyMuPDF with actual page counts
-- Participation info extraction (Zoom, phone, email)
+---
 
-**analysis/** - LLM intelligence
-- Gemini API with adaptive prompts (standard vs large items)
-- JSON structured output with schema validation
-- Topic normalization to 16 canonical topics
+## Key Patterns
 
-**pipeline/** - Processing orchestration
-- Priority queue (recent meetings first)
-- Batch API for 50% cost savings
-- Item-level vs monolithic processing paths
+**Matters-First:** Legislative items (bills, ordinances) tracked across meetings. Process once, reuse summary. Attachment hash detects changes.
 
-**database/** - Single SQLite database
-- Tables: cities, meetings, items, queue, cache, zipcodes
-- 827 cities, 5,344 meetings, 1,789 agenda items
-- Cache-first serving with deduplication
+**Item-Level Processing:** HTML agendas parsed into structured items. Each item gets focused summary. Topics aggregated to meeting level.
 
-**server/** - FastAPI public API
-- Zipcode search, cache-first serving
-- Rate limiting (30 req/60s per IP)
+**Cache-First API:** Server never fetches live. Background daemon syncs cities every 72 hours, processes queue continuously.
 
-## Key Design Patterns
+**Async PostgreSQL:** Connection pooling (asyncpg, 5-20 connections), `FOR UPDATE SKIP LOCKED` for queue processing, UPSERT for idempotent updates.
 
-**The ONE TRUE PATH**:
-- HTML agenda → Extract items → Batch process → Aggregate
-- PDF packet only → Monolithic summary
-- No detection, no fallbacks, no parallel systems
+---
 
-**Cache-First**: API never fetches live data. Background daemon syncs cities every 72 hours.
-
-**Priority Queue**: Recent meetings processed first. Decouples fast scraping (seconds) from slow AI processing (10-30s).
-
-**Item-Level Processing**: 374+ cities (58% of platform) break 500-page packets into 10-50 page items.
-
-**Adaptive Prompts**: Standard (<100 pages) vs Large (100+ pages) prompts based on actual PDF page counts.
-
-**Vendor-Agnostic Identifier**: `city_banana` ("paloaltoCA") used internally instead of vendor-specific slugs.
-
-## Setup
+## Quick Start
 
 ### Prerequisites
 - Python 3.13+
+- PostgreSQL 14+
 - Node.js 18+
 - Google Gemini API key
 
 ### Backend
+
 ```bash
-# Install dependencies (uses uv)
+# Install dependencies
 uv sync
 
 # Set environment variables
 export GEMINI_API_KEY="your-key"
-export ENGAGIC_DB_DIR="/root/engagic/data"
-export ENGAGIC_ADMIN_TOKEN="secure-token"
+export POSTGRES_HOST="localhost"
+export POSTGRES_DB="engagic"
+export POSTGRES_USER="engagic"
+export POSTGRES_PASSWORD="***"
 
 # Run API server
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 # Run background daemon (separate terminal)
-engagic-daemon --daemon
+python -m pipeline.conductor daemon
 ```
 
 ### Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev  # localhost:5173
 ```
 
-## API Endpoints
+---
 
-### Public
-- `POST /api/search` - Search by zipcode, city+state, or state only
-- `POST /api/process-agenda` - Get cached summary (or trigger processing)
-- `GET /api/random-best-meeting` - Discovery feature
-- `GET /api/stats` - Cache statistics
-- `GET /api/queue-stats` - Job queue status
-- `GET /api/health` - Health check with detailed metrics
-- `GET /api/metrics` - Prometheus-style metrics
-- `GET /api/analytics` - Usage analytics
+## Documentation
 
-### Admin (Bearer token required)
-- `GET /api/admin/city-requests` - View requested cities
-- `POST /api/admin/sync-city/{banana}` - Force city sync
-- `POST /api/admin/process-meeting` - Force meeting processing
+| Document | Description |
+|----------|-------------|
+| [docs/VISION.md](docs/VISION.md) | Mission, roadmap, architectural philosophy |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deployment guide |
+| [docs/API.md](docs/API.md) | Complete API endpoint reference |
+| [docs/SCHEMA.md](docs/SCHEMA.md) | Database schema quick reference |
+| [CHANGELOG.md](CHANGELOG.md) | Version history and recent changes |
 
-## Search Modes
-
-**Zipcode → City**: `"94301"` → Palo Alto, CA meetings
-
-**City + State**: `"Palo Alto, CA"` or `"Palo Alto California"` → Direct match
-
-**State Only**: `"CA"` or `"California"` → List of covered cities with meeting counts
-
-**Ambiguous**: `"Springfield"` → Returns multiple state options
-
-Handles 48+ state name variations, case-insensitive, space-normalized.
-
-## Configuration
-
-Environment variables (see `config.py`):
-
-```bash
-ENGAGIC_DB_DIR="/root/engagic/data"
-ENGAGIC_UNIFIED_DB="/root/engagic/data/engagic.db"
-ENGAGIC_HOST="0.0.0.0"
-ENGAGIC_PORT="8000"
-ENGAGIC_RATE_LIMIT_REQUESTS="30"
-ENGAGIC_RATE_LIMIT_WINDOW="60"
-ENGAGIC_SYNC_INTERVAL_HOURS="72"
-ENGAGIC_LOG_LEVEL="INFO"
-GEMINI_API_KEY="required"
-ENGAGIC_ADMIN_TOKEN="required"
-```
-
-## Import Organization
-
-Clean, tab-autocomplete-friendly imports:
-
-```python
-# Standard library
-import logging
-from typing import Dict, List
-
-# Local clusters (alphabetical)
-from analysis.llm.summarizer import GeminiSummarizer
-from analysis.topics.normalizer import get_normalizer
-from database.db import UnifiedDatabase
-from parsing.pdf import PdfExtractor
-from vendors.factory import get_adapter
-```
-
-## Performance
-
-- API response: <100ms (cache hit)
-- PDF extraction: 2-5s (PyMuPDF)
-- Item processing: 10-30s per item (Gemini)
-- Batch processing: 50% cost savings
-- Background sync: ~2 hours for 500 cities
-- Memory: ~200MB API, ~500MB daemon
-- Capacity: 500 cities, ~10K meetings
-
-## Development
-
-**Local machine**: Write code only, no testing
-
-**VPS**: Pull changes, test and deploy there
-
-All code uses VPS paths as defaults (`/root/engagic/`).
-
-## Recent Improvements
-
-**October 2025: Directory Reorganization**
-- Reorganized into 6 logical clusters (vendors, parsing, analysis, pipeline, database, server)
-- Tab-autocomplete friendly names
-- Deleted 300+ lines of legacy code
-- Extracted adapter factory and rate limiter
-- Simplified processor (489 → 268 lines)
-- Conductor streamlined (1,477 → 1,133 lines)
-- Clean imports: `from parsing.pdf` instead of `from infocore.processing.pdf_extractor`
-
-**October 2025: Granicus Item-Level Processing**
-- Crossed majority threshold: 174 → 374+ cities with item-level processing (58% of platform)
-- HTML agenda parser for Granicus (200+ cities)
-- MetaViewer PDF extraction with full text
-- Zero infrastructure changes, same pipeline as Legistar/PrimeGov
-
-**January 2025:**
-- Database consolidation: 3 DBs → 1 unified SQLite
-- Adapter refactor with BaseAdapter
-- Processor modularization: 1,797 → 415 lines (-77%)
-- Item-level processing for Legistar and PrimeGov
-- Priority job queue with SQLite backend
-
-**Net: -2,017 lines eliminated**
-
-## Roadmap
-
-See `docs/VISION.md` for full roadmap and technical philosophy.
-
-**Next**: User features (profiles, alerts, digests)
-
-**Q4 2025**: Intelligence layer (topic extraction, tracked items, timeline view, alerts)
-
-**Q1 2026**: Multi-tenancy (tenant API, coverage filtering, keyword matching, Redis rate limiting)
-
-**Future**: Remaining vendor item-level processing, Rust conductor migration
+---
 
 ## Stack
 
-Python 3.13, FastAPI, SQLite, BeautifulSoup, PyMuPDF, Google Gemini, SvelteKit, Cloudflare Pages
+Python 3.13, FastAPI, PostgreSQL, asyncpg, BeautifulSoup, PyMuPDF, Google Gemini, SvelteKit, Cloudflare Pages
+
+---
 
 ## License
 
