@@ -1,8 +1,8 @@
 # Asyncpg JSONB Handling - Critical Documentation
 
 **Date**: 2025-11-23
-**Updated**: 2025-11-23 (migrated to automatic codec)
-**Status**: MIGRATED TO AUTOMATIC CODEC - Manual serialization no longer needed
+**Updated**: 2025-11-25 (added Pydantic model support)
+**Status**: AUTOMATIC CODEC WITH PYDANTIC SUPPORT
 
 ## The Migration
 
@@ -10,15 +10,27 @@
 
 Previously, asyncpg required manual JSON string conversion. We've now configured automatic codec registration at connection pool initialization, eliminating all manual json.dumps()/json.loads() calls.
 
-## Current Approach (Automatic Codec)
+**November 2025 Update**: Extended encoder to handle Pydantic models automatically via `model_dump()`.
 
-Connection pool is configured with JSONB codec:
+## Current Approach (Automatic Codec with Pydantic)
+
+Connection pool is configured with JSONB codec that handles both native types AND Pydantic models:
 
 ```python
+def _jsonb_encoder(obj):
+    """JSONB encoder with automatic Pydantic model serialization."""
+    def default(o):
+        if hasattr(o, 'model_dump'):
+            return o.model_dump()
+        raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
+    return json.dumps(obj, default=default)
+
+
 async def init_connection(conn):
     await conn.set_type_codec(
         'jsonb',
-        encoder=json.dumps,
+        encoder=_jsonb_encoder,  # Handles dicts AND Pydantic models
         decoder=json.loads,
         schema='pg_catalog'
     )
@@ -29,7 +41,9 @@ pool = await asyncpg.create_pool(
 )
 ```
 
-With this configuration, Python dicts/lists are automatically serialized to JSONB and vice versa.
+With this configuration:
+- Python dicts/lists are automatically serialized to JSONB
+- Pydantic models (ParticipationInfo, MatterMetadata, etc.) are automatically serialized via model_dump()
 
 ### Test Results
 
