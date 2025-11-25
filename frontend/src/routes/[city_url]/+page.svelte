@@ -243,12 +243,22 @@
 					<div class="no-meetings">
 						<p class="empty-state-title">No meetings found</p>
 						<p class="empty-state-message">This city might not have any upcoming meetings scheduled yet. Check back soon!</p>
+						<div class="request-city-cta">
+							<p class="cta-text">Want priority updates for this city?</p>
+							<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
+							<p class="cta-subtext">Cities with active watchers get synced more frequently.</p>
+						</div>
 					</div>
 				{/if}
 			{:else}
 				<div class="no-meetings">
 					<p class="empty-state-title">No meetings found</p>
 					<p class="empty-state-message">{'message' in searchResults ? searchResults.message : 'We could not find any meetings for this city. Agendas are typically posted 48 hours before meetings.'}</p>
+					<div class="request-city-cta">
+						<p class="cta-text">Want priority updates for this city?</p>
+						<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
+						<p class="cta-subtext">Cities with active watchers get synced more frequently.</p>
+					</div>
 				</div>
 			{/if}
 		{:else if viewMode === 'matters'}
@@ -614,6 +624,48 @@
 
 	.matter-timeline-container {
 		margin-top: 1rem;
+	}
+
+	.request-city-cta {
+		margin-top: 2rem;
+		padding: 1.5rem;
+		background: var(--surface-secondary);
+		border: 2px solid var(--civic-blue);
+		border-radius: 11px;
+		text-align: center;
+	}
+
+	.cta-text {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin: 0 0 0.75rem 0;
+	}
+
+	.cta-button {
+		display: inline-block;
+		padding: 0.75rem 1.5rem;
+		background: var(--civic-blue);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.95rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: opacity 0.2s;
+	}
+
+	.cta-button:hover {
+		opacity: 0.9;
+	}
+
+	.cta-subtext {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.85rem;
+		color: var(--text-tertiary);
+		margin: 0.75rem 0 0 0;
 	}
 
 	@media (max-width: 640px) {

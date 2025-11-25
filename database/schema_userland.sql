@@ -86,6 +86,24 @@ CREATE TABLE IF NOT EXISTS userland.used_magic_links (
 CREATE INDEX IF NOT EXISTS idx_userland_magic_links_expires ON userland.used_magic_links(expires_at);
 
 -- ============================================================
+-- CITY REQUESTS TABLE
+-- ============================================================
+-- Track unknown cities that users request via their watchlists
+-- Helps prioritize which cities to add based on user demand
+CREATE TABLE IF NOT EXISTS userland.city_requests (
+    city_banana TEXT PRIMARY KEY,
+    request_count INTEGER DEFAULT 1,
+    first_requested TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_requested TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'added', 'rejected')),
+    notes TEXT
+);
+
+-- Index for pending requests lookup
+CREATE INDEX IF NOT EXISTS idx_city_requests_status
+    ON userland.city_requests(status) WHERE status = 'pending';
+
+-- ============================================================
 -- COMMENTS
 -- ============================================================
 -- Table purposes for documentation
@@ -94,6 +112,7 @@ COMMENT ON TABLE userland.users IS 'User accounts with email-based authenticatio
 COMMENT ON TABLE userland.alerts IS 'User-configured alerts for meeting/agenda item notifications';
 COMMENT ON TABLE userland.alert_matches IS 'Matched meetings/items that triggered user alerts';
 COMMENT ON TABLE userland.used_magic_links IS 'Security table to prevent magic link replay attacks';
+COMMENT ON TABLE userland.city_requests IS 'Unknown cities requested by users - tracks demand for coverage expansion';
 
 -- Column-level comments for clarity
 COMMENT ON COLUMN userland.alerts.cities IS 'JSONB array of city bananas to monitor (e.g., ["paloaltoCA"])';

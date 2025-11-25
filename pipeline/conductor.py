@@ -455,6 +455,132 @@ def main():
         results = asyncio.run(run())
         click.echo(f"Full sync complete: {len(results)} cities processed")
 
+    @cli.command("sync-watchlist")
+    def sync_watchlist():
+        """Sync and process cities that users are watching
+
+        Queries userland for cities with active alert subscriptions.
+        These are cities users explicitly requested - they get priority.
+        """
+        async def run():
+            db = await Database.create()
+            try:
+                # Get demanded cities from userland
+                demanded = await db.userland.get_demanded_cities()
+                if not demanded:
+                    return {"message": "No cities in user watchlists", "cities": []}
+
+                # Filter to cities that exist in our database
+                valid_cities = []
+                unknown_cities = []
+                for banana in demanded:
+                    city = await db.cities.get_city(banana)
+                    if city:
+                        valid_cities.append(banana)
+                    else:
+                        unknown_cities.append(banana)
+
+                if unknown_cities:
+                    click.echo(f"Unknown cities (need manual setup): {', '.join(unknown_cities)}")
+                    # Record unknown cities for tracking
+                    for banana in unknown_cities:
+                        await db.userland.record_city_request(banana)
+
+                if not valid_cities:
+                    return {"message": "No valid cities to sync", "cities": []}
+
+                click.echo(f"Syncing {len(valid_cities)} watchlist cities: {', '.join(valid_cities)}")
+
+                # Sync and process
+                conductor = Conductor(db)
+                results = await conductor.sync_and_process_cities(valid_cities)
+                return {
+                    "cities_synced": len(valid_cities),
+                    "unknown_cities": unknown_cities,
+                    "results": results
+                }
+            finally:
+                await db.close()
+
+        results = asyncio.run(run())
+        if "message" in results:
+            click.echo(results["message"])
+        else:
+            click.echo(f"Watchlist sync complete: {results['cities_synced']} cities")
+
+    @cli.command("process-watchlist")
+    def process_watchlist():
+        """Process queued jobs for cities that users are watching
+
+        No sync - just processes existing queue for watchlist cities.
+        """
+        async def run():
+            db = await Database.create()
+            try:
+                demanded = await db.userland.get_demanded_cities()
+                if not demanded:
+                    return {"message": "No cities in user watchlists"}
+
+                # Filter to valid cities
+                valid_cities = []
+                unknown_cities = []
+                for banana in demanded:
+                    city = await db.cities.get_city(banana)
+                    if city:
+                        valid_cities.append(banana)
+                    else:
+                        unknown_cities.append(banana)
+
+                if unknown_cities:
+                    # Record unknown cities for tracking
+                    for banana in unknown_cities:
+                        await db.userland.record_city_request(banana)
+
+                if not valid_cities:
+                    return {"message": "No valid cities to process"}
+
+                click.echo(f"Processing {len(valid_cities)} watchlist cities: {', '.join(valid_cities)}")
+
+                conductor = Conductor(db)
+                results = await conductor.process_cities(valid_cities)
+                return {"cities_processed": len(valid_cities), "results": results}
+            finally:
+                await db.close()
+
+        results = asyncio.run(run())
+        if "message" in results:
+            click.echo(results["message"])
+        else:
+            click.echo(f"Watchlist processing complete: {results['cities_processed']} cities")
+
+    @cli.command("city-requests")
+    def city_requests():
+        """Show pending city requests from users
+
+        Lists cities that users have requested but don't exist in the database.
+        Sorted by demand (request count).
+        """
+        async def run():
+            db = await Database.create()
+            try:
+                requests = await db.userland.get_pending_city_requests()
+                return requests
+            finally:
+                await db.close()
+
+        requests = asyncio.run(run())
+        if not requests:
+            click.echo("No pending city requests")
+            return
+
+        click.echo(f"\nPending city requests ({len(requests)} total):\n")
+        click.echo(f"{'City':<25} {'Requests':<10} {'First Requested':<20} {'Last Requested':<20}")
+        click.echo("-" * 75)
+        for req in requests:
+            first = req['first_requested'].strftime('%Y-%m-%d %H:%M') if req['first_requested'] else '-'
+            last = req['last_requested'].strftime('%Y-%m-%d %H:%M') if req['last_requested'] else '-'
+            click.echo(f"{req['city_banana']:<25} {req['request_count']:<10} {first:<20} {last:<20}")
+
     @cli.command("status")
     def status():
         """Show sync status"""

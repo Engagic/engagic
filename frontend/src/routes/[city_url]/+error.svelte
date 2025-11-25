@@ -26,6 +26,11 @@
 					Agendas are typically posted 48 hours before meetings. If this is a valid city,
 					please check back later or try searching by zipcode.
 				</p>
+				<div class="request-city-cta">
+					<p class="cta-text">Want us to track this city?</p>
+					<a href="/dashboard" class="cta-link">Create an account and add it to your watchlist</a>
+					<p class="cta-subtext">Cities with active watchers get priority coverage.</p>
+				</div>
 			{:else}
 				<h2 class="error-title">Something Went Wrong</h2>
 				<p class="error-message">
@@ -102,6 +107,43 @@
 		color: var(--text-tertiary);
 		margin: 1.5rem 0;
 		line-height: 1.6;
+	}
+
+	.request-city-cta {
+		margin: 2rem 0;
+		padding: 1.5rem;
+		background: var(--surface-secondary);
+		border: 2px solid var(--civic-blue);
+		border-radius: 11px;
+	}
+
+	.cta-text {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--civic-dark);
+		margin: 0 0 0.5rem 0;
+	}
+
+	.cta-link {
+		display: inline-block;
+		color: var(--civic-blue);
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.95rem;
+		font-weight: 500;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.cta-link:hover {
+		opacity: 0.8;
+	}
+
+	.cta-subtext {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.85rem;
+		color: var(--text-tertiary);
+		margin: 0.75rem 0 0 0;
 	}
 
 	.error-actions {

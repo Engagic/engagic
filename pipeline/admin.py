@@ -131,9 +131,9 @@ async def preview_items(meeting_id: str, extract_text: bool = False, output_dir:
                 "sequence": item.sequence,
                 "attachments": [
                     {
-                        "name": att.get("name", "Unknown"),
-                        "url": att.get("url", ""),
-                        "type": att.get("type", "unknown"),
+                        "name": att.name,
+                        "url": att.url,
+                        "type": att.type,
                     }
                     for att in (item.attachments or [])
                 ],
@@ -143,7 +143,7 @@ async def preview_items(meeting_id: str, extract_text: bool = False, output_dir:
             # Optionally extract text from first attachment
             if extract_text and item.attachments:
                 first_attachment = item.attachments[0]
-                att_url = first_attachment.get("url")
+                att_url = first_attachment.url
 
                 if att_url and att_url.endswith(".pdf"):
                     try:
@@ -171,7 +171,7 @@ async def preview_items(meeting_id: str, extract_text: bool = False, output_dir:
 
                                 with open(filepath, "w") as f:
                                     f.write(f"Item: {item.title}\n")
-                                    f.write(f"Attachment: {first_attachment.get('name')}\n")
+                                    f.write(f"Attachment: {first_attachment.name}\n")
                                     f.write(f"URL: {att_url}\n")
                                     f.write(f"Pages: {page_count}\n")
                                     f.write(f"Characters: {len(text)}\n")

@@ -334,6 +334,11 @@
 				<div class="error-message">
 					{searchResults.message || 'Search failed'}
 				</div>
+				<div class="request-city-cta">
+					<p class="cta-text">Looking for a city we don't track yet?</p>
+					<a href="/dashboard" class="cta-link">Create an account and request it</a>
+					<p class="cta-subtext">Cities with active watchers get priority coverage.</p>
+				</div>
 			{/if}
 		</div>
 	{:else if loading}
@@ -367,5 +372,43 @@
 			height: 48px;
 			border-radius: 12px;
 		}
+	}
+
+	.request-city-cta {
+		margin-top: 1.5rem;
+		padding: 1.5rem;
+		background: var(--surface-secondary);
+		border: 2px solid var(--civic-blue);
+		border-radius: 11px;
+		text-align: center;
+	}
+
+	.cta-text {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin: 0 0 0.5rem 0;
+	}
+
+	.cta-link {
+		display: inline-block;
+		color: var(--civic-blue);
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.95rem;
+		font-weight: 500;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.cta-link:hover {
+		opacity: 0.8;
+	}
+
+	.cta-subtext {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.85rem;
+		color: var(--text-tertiary);
+		margin: 0.75rem 0 0 0;
 	}
 </style>
