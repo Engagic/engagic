@@ -5,7 +5,7 @@ Pydantic dataclasses with runtime validation for core entities.
 """
 
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
@@ -123,7 +123,7 @@ class Meeting:
         str | List[str]
     ] = None  # PDF packet (monolithic, fallback)
     summary: Optional[str] = None
-    participation: Optional[Dict[str, Any]] = None  # Contact info: email, phone, virtual_url, etc.
+    participation: Optional[ParticipationInfo] = None  # Contact info: email, phone, virtual_url, etc.
     status: Optional[str] = (
         None  # cancelled, postponed, revised, rescheduled, or None for normal
     )
@@ -198,8 +198,8 @@ class Matter:
     last_seen: Optional[datetime] = None  # Most recent appearance date
     appearance_count: int = 1  # Number of appearances across meetings
     status: str = "active"  # Matter status
-    attachments: Optional[List[Dict[str, Any]]] = None  # Attachment metadata
-    metadata: Optional[Dict[str, Any]] = None  # attachment_hash, etc.
+    attachments: Optional[List[AttachmentInfo]] = None  # Attachment metadata
+    metadata: Optional[MatterMetadata] = None  # attachment_hash, etc.
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -273,9 +273,7 @@ class AgendaItem:
     meeting_id: str  # Foreign key to Meeting
     title: str
     sequence: int  # Order in agenda
-    attachments: List[
-        Any
-    ]  # Attachment metadata as JSON (flexible: URLs, dicts with name/url/type, page ranges, etc.)
+    attachments: Optional[List[AttachmentInfo]] = None  # Attachment metadata (name, url, type)
     attachment_hash: Optional[str] = None  # SHA-256 hash of attachments for change detection
     matter_id: Optional[str] = None  # Backend unique identifier
     matter_file: Optional[str] = None  # Official public identifier (BL2025-1005, 25-1209)

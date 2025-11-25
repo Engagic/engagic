@@ -226,19 +226,19 @@ async def generate_meeting_flyer(
         </div>
         """
 
-    # Participation info
-    participation = meeting.participation or {}
+    # Participation info (typed model access)
+    participation = meeting.participation
     participation_lines = []
 
-    if participation.get("email"):
-        participation_lines.append(f"<p><strong>EMAIL:</strong> {_escape_html(participation['email'])}</p>")
+    if participation and participation.email:
+        participation_lines.append(f"<p><strong>EMAIL:</strong> {_escape_html(participation.email)}</p>")
 
-    if participation.get("phone"):
-        participation_lines.append(f"<p><strong>PHONE:</strong> {_escape_html(participation['phone'])}</p>")
+    if participation and participation.phone:
+        participation_lines.append(f"<p><strong>PHONE:</strong> {_escape_html(participation.phone)}</p>")
 
-    if participation.get("zoom_url"):
-        zoom_url = participation["zoom_url"]
-        participation_lines.append(f"<p><strong>ZOOM:</strong> <a href=\"{_escape_html(zoom_url)}\">{_escape_html(zoom_url)}</a></p>")
+    if participation and participation.virtual_url:
+        virtual_url = participation.virtual_url
+        participation_lines.append(f"<p><strong>JOIN ONLINE:</strong> <a href=\"{_escape_html(virtual_url)}\">{_escape_html(virtual_url)}</a></p>")
 
     participation_html = "\n".join(participation_lines) if participation_lines else "<p>Contact your city for participation details</p>"
 

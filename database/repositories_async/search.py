@@ -9,7 +9,7 @@ Handles search operations using PostgreSQL features:
 from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.models import Meeting
+from database.models import Meeting, ParticipationInfo
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="search_repository")
@@ -87,8 +87,8 @@ class SearchRepository(BaseRepository):
                 )
                 topics = [r["topic"] for r in topic_rows]
 
-                # Deserialize JSONB participation
-                participation = row["participation"]
+                # Deserialize JSONB participation to typed model
+                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
 
                 meetings.append(
                     Meeting(
@@ -150,8 +150,8 @@ class SearchRepository(BaseRepository):
 
             meetings = []
             for row in rows:
-                # Deserialize JSONB participation
-                participation = row["participation"]
+                # Deserialize JSONB participation to typed model
+                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
 
                 # Get normalized topics
                 topic_rows = await conn.fetch(
