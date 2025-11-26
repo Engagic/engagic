@@ -189,6 +189,10 @@
 			</div>
 		{/if}
 
+		<p class="priority-hint">
+			<button class="hint-link" onclick={() => showWatchModal = true}>Watching this city</button> will give it sync priority
+		</p>
+
 		{#if viewMode === 'meetings'}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
 				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
@@ -490,6 +494,27 @@
 		background: var(--civic-blue);
 		color: white;
 		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+	}
+
+	.priority-hint {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		color: var(--civic-gray);
+		margin: 0 0 1.5rem 0;
+	}
+
+	.hint-link {
+		background: none;
+		border: none;
+		color: var(--civic-blue);
+		cursor: pointer;
+		padding: 0;
+		font: inherit;
+		text-decoration: underline;
+	}
+
+	.hint-link:hover {
+		color: var(--civic-accent);
 	}
 
 	.loading-matters {
