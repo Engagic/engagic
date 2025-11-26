@@ -2,7 +2,8 @@
 Meeting API routes
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, Query
 from server.models.requests import ProcessRequest
 from server.services.meeting import get_meeting_with_items
 from server.metrics import metrics
@@ -15,6 +16,68 @@ logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/meetings/upcoming")
+async def get_upcoming_meetings(
+    hours: int = Query(default=168, ge=1, le=720, description="Look-ahead hours (max 30 days)"),
+    limit: int = Query(default=20, ge=1, le=100),
+    state: Optional[str] = Query(default=None, description="State code filter (e.g., CA)"),
+    db: Database = Depends(get_db)
+):
+    """Get upcoming meetings across all cities
+
+    Returns meetings within the next N hours, sorted by date (soonest first).
+    Includes participation info for immediate action.
+
+    Use cases:
+    - Homepage "Happening This Week" section
+    - Trending/discovery features
+    """
+    try:
+        meetings = await db.get_upcoming_meetings(hours, limit, state)
+
+        return {
+            "success": True,
+            "meetings": meetings,
+            "count": len(meetings),
+            "hours": hours,
+            "state": state,
+        }
+    except Exception as e:
+        logger.error("error fetching upcoming meetings", error=str(e))
+        raise HTTPException(status_code=500, detail="Error fetching upcoming meetings")
+
+
+@router.get("/city/{banana}/activity")
+async def get_city_activity(banana: str, db: Database = Depends(get_db)):
+    """Get city activity summary for landing page
+
+    Single endpoint for city hero section:
+    - Next upcoming meeting with participation info
+    - Upcoming meeting count
+    - Active matters summary
+    - Trending topics
+
+    Use cases:
+    - City page hero section
+    - Quick city overview
+    """
+    try:
+        activity = await db.get_city_activity(banana)
+
+        if not activity:
+            raise HTTPException(status_code=404, detail="City not found")
+
+        return {
+            "success": True,
+            **activity,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("error fetching city activity", banana=banana, error=str(e))
+        raise HTTPException(status_code=500, detail="Error fetching city activity")
 
 
 @router.get("/meeting/{meeting_id}")

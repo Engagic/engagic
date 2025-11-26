@@ -2,7 +2,8 @@
 Topic search API routes
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, Query
 from server.models.requests import TopicSearchRequest
 from server.dependencies import get_db
 from database.db_postgres import Database
@@ -13,6 +14,36 @@ logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/topics/trending")
+async def get_trending_topics(
+    period: str = Query(default="week", description="Time period: day, week, or month"),
+    limit: int = Query(default=8, ge=1, le=20),
+    state: Optional[str] = Query(default=None, description="State code filter"),
+    db: Database = Depends(get_db)
+):
+    """Get trending topics with trend direction
+
+    Compares current period to previous period to show momentum.
+    Returns topics with meeting_count, city_count, and trend indicator.
+
+    Use cases:
+    - Homepage topic chips for discovery
+    - "What's America discussing?" feature
+    """
+    try:
+        topics = await db.get_trending_topics(period, limit, state)
+
+        return {
+            "success": True,
+            "topics": topics,
+            "period": period,
+            "state": state,
+        }
+    except Exception as e:
+        logger.error("error fetching trending topics", error=str(e))
+        raise HTTPException(status_code=500, detail="Error fetching trending topics")
 
 
 @router.get("/topics")

@@ -213,3 +213,110 @@ class SearchRepository(BaseRepository):
         """, limit)
 
         return [{"topic": row["topic"], "count": row["count"]} for row in rows]
+
+    async def get_trending_topics(
+        self,
+        period: str = "week",
+        limit: int = 8,
+        state: Optional[str] = None
+    ) -> List[dict]:
+        """Get trending topics with trend direction
+
+        Compares current period to previous period to determine trend.
+
+        Args:
+            period: Time period - 'day', 'week', or 'month'
+            limit: Maximum topics to return
+            state: Optional state filter
+
+        Returns:
+            List of dicts with topic info and trend direction
+        """
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+
+        # Define periods
+        period_days = {"day": 1, "week": 7, "month": 30}
+        days = period_days.get(period, 7)
+
+        current_start = now - timedelta(days=days)
+        previous_start = now - timedelta(days=days * 2)
+
+        async with self.pool.acquire() as conn:
+            # Get current period topic counts
+            if state:
+                current_counts = await conn.fetch("""
+                    SELECT mt.topic, COUNT(DISTINCT m.id) as meeting_count,
+                           COUNT(DISTINCT m.banana) as city_count
+                    FROM meeting_topics mt
+                    JOIN meetings m ON mt.meeting_id = m.id
+                    JOIN cities c ON m.banana = c.banana
+                    WHERE m.date >= $1
+                      AND c.state = $2
+                    GROUP BY mt.topic
+                    ORDER BY meeting_count DESC
+                    LIMIT $3
+                """, current_start, state, limit)
+
+                # Get previous period for trend comparison
+                previous_counts = await conn.fetch("""
+                    SELECT mt.topic, COUNT(DISTINCT m.id) as meeting_count
+                    FROM meeting_topics mt
+                    JOIN meetings m ON mt.meeting_id = m.id
+                    JOIN cities c ON m.banana = c.banana
+                    WHERE m.date >= $1 AND m.date < $2
+                      AND c.state = $3
+                    GROUP BY mt.topic
+                """, previous_start, current_start, state)
+            else:
+                current_counts = await conn.fetch("""
+                    SELECT mt.topic, COUNT(DISTINCT m.id) as meeting_count,
+                           COUNT(DISTINCT m.banana) as city_count
+                    FROM meeting_topics mt
+                    JOIN meetings m ON mt.meeting_id = m.id
+                    WHERE m.date >= $1
+                    GROUP BY mt.topic
+                    ORDER BY meeting_count DESC
+                    LIMIT $2
+                """, current_start, limit)
+
+                previous_counts = await conn.fetch("""
+                    SELECT mt.topic, COUNT(DISTINCT m.id) as meeting_count
+                    FROM meeting_topics mt
+                    JOIN meetings m ON mt.meeting_id = m.id
+                    WHERE m.date >= $1 AND m.date < $2
+                    GROUP BY mt.topic
+                """, previous_start, current_start)
+
+            # Build previous count map
+            prev_map = {r["topic"]: r["meeting_count"] for r in previous_counts}
+
+            from analysis.topics.normalizer import get_normalizer
+            normalizer = get_normalizer()
+
+            results = []
+            for row in current_counts:
+                topic = row["topic"]
+                current = row["meeting_count"]
+                previous = prev_map.get(topic, 0)
+
+                # Calculate trend
+                if previous == 0:
+                    trend = "new" if current > 0 else "stable"
+                elif current > previous:
+                    trend = "up"
+                elif current < previous:
+                    trend = "down"
+                else:
+                    trend = "stable"
+
+                results.append({
+                    "topic": topic,
+                    "display_name": normalizer.get_display_name(topic),
+                    "meeting_count": current,
+                    "city_count": row["city_count"],
+                    "trend": trend,
+                })
+
+            return results

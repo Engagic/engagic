@@ -454,3 +454,248 @@ class MeetingRepository(BaseRepository):
                 processing_time=row["processing_time"],
                 topics=topics,
             )
+
+    async def get_upcoming_meetings(
+        self,
+        hours: int = 168,
+        limit: int = 20,
+        state: Optional[str] = None
+    ) -> List[dict]:
+        """Get upcoming meetings within the next N hours
+
+        Returns meetings sorted by date ascending (soonest first).
+        Includes participation info and city data for the frontend.
+
+        Args:
+            hours: Look-ahead window in hours (default: 168 = 7 days)
+            limit: Maximum number of meetings to return
+            state: Optional state code to filter by (e.g., "CA")
+
+        Returns:
+            List of meeting dicts with city info and participation
+        """
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        cutoff = now + timedelta(hours=hours)
+
+        async with self.pool.acquire() as conn:
+            # Build query with optional state filter
+            if state:
+                rows = await conn.fetch("""
+                    SELECT
+                        m.id, m.banana, m.title, m.date, m.agenda_url, m.packet_url,
+                        m.participation, m.status,
+                        c.name as city_name, c.state,
+                        (SELECT COUNT(*) FROM items WHERE meeting_id = m.id) as item_count
+                    FROM meetings m
+                    JOIN cities c ON m.banana = c.banana
+                    WHERE m.date >= $1
+                      AND m.date <= $2
+                      AND m.status IS DISTINCT FROM 'cancelled'
+                      AND c.state = $3
+                    ORDER BY m.date ASC
+                    LIMIT $4
+                """, now, cutoff, state, limit)
+            else:
+                rows = await conn.fetch("""
+                    SELECT
+                        m.id, m.banana, m.title, m.date, m.agenda_url, m.packet_url,
+                        m.participation, m.status,
+                        c.name as city_name, c.state,
+                        (SELECT COUNT(*) FROM items WHERE meeting_id = m.id) as item_count
+                    FROM meetings m
+                    JOIN cities c ON m.banana = c.banana
+                    WHERE m.date >= $1
+                      AND m.date <= $2
+                      AND m.status IS DISTINCT FROM 'cancelled'
+                    ORDER BY m.date ASC
+                    LIMIT $3
+                """, now, cutoff, limit)
+
+            if not rows:
+                return []
+
+            # Batch fetch topics
+            meeting_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT meeting_id, topic FROM meeting_topics WHERE meeting_id = ANY($1::text[])",
+                meeting_ids,
+            )
+
+            topics_by_meeting: dict[str, list[str]] = {}
+            for topic_row in topic_rows:
+                meeting_id = topic_row["meeting_id"]
+                if meeting_id not in topics_by_meeting:
+                    topics_by_meeting[meeting_id] = []
+                topics_by_meeting[meeting_id].append(topic_row["topic"])
+
+            results = []
+            for row in rows:
+                participation = row["participation"] or {}
+                topics = topics_by_meeting.get(row["id"], [])
+
+                # Calculate hours until meeting
+                meeting_date = row["date"]
+                hours_until = (meeting_date - now).total_seconds() / 3600 if meeting_date else None
+
+                # Determine primary action based on participation info
+                primary_action = None
+                if participation.get("email"):
+                    primary_action = "email"
+                elif participation.get("virtual_url"):
+                    primary_action = "watch"
+                elif participation.get("phone"):
+                    primary_action = "call"
+
+                results.append({
+                    "id": row["id"],
+                    "city_name": row["city_name"],
+                    "state": row["state"],
+                    "banana": row["banana"],
+                    "title": row["title"],
+                    "date": meeting_date.isoformat() if meeting_date else None,
+                    "hours_until": round(hours_until, 1) if hours_until else None,
+                    "item_count": row["item_count"] or 0,
+                    "topics": topics[:3],  # Limit to 3 for card display
+                    "participation": {
+                        "can_email": bool(participation.get("email")),
+                        "can_attend": bool(participation.get("physical_location") or not participation.get("is_virtual_only")),
+                        "can_watch": bool(participation.get("virtual_url") or participation.get("streaming_urls")),
+                        "email": participation.get("email"),
+                        "virtual_url": participation.get("virtual_url"),
+                        "location": participation.get("physical_location"),
+                    },
+                    "primary_action": primary_action,
+                })
+
+            return results
+
+    async def get_city_activity(self, banana: str) -> Optional[dict]:
+        """Get city activity summary for landing page hero
+
+        Single query for:
+        - Next upcoming meeting with participation
+        - Upcoming meeting count
+        - Active matters count
+        - Top matters by appearance
+        - Trending topics
+
+        Args:
+            banana: City banana identifier
+
+        Returns:
+            Activity summary dict, or None if city not found
+        """
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+
+        async with self.pool.acquire() as conn:
+            # Get city info
+            city_row = await conn.fetchrow(
+                "SELECT name, state FROM cities WHERE banana = $1",
+                banana
+            )
+
+            if not city_row:
+                return None
+
+            # Get next upcoming meeting
+            next_meeting = await conn.fetchrow("""
+                SELECT
+                    m.id, m.title, m.date, m.participation,
+                    (SELECT COUNT(*) FROM items WHERE meeting_id = m.id) as item_count
+                FROM meetings m
+                WHERE m.banana = $1
+                  AND m.date >= $2
+                  AND m.status IS DISTINCT FROM 'cancelled'
+                ORDER BY m.date ASC
+                LIMIT 1
+            """, banana, now)
+
+            # Get upcoming meeting count (next 30 days)
+            from datetime import timedelta
+            upcoming_count = await conn.fetchval("""
+                SELECT COUNT(*)
+                FROM meetings
+                WHERE banana = $1
+                  AND date >= $2
+                  AND date <= $3
+                  AND status IS DISTINCT FROM 'cancelled'
+            """, banana, now, now + timedelta(days=30))
+
+            # Get active matters count
+            active_matters_count = await conn.fetchval("""
+                SELECT COUNT(*)
+                FROM city_matters
+                WHERE banana = $1
+                  AND status = 'active'
+            """, banana)
+
+            # Get top matters by appearance count
+            top_matters = await conn.fetch("""
+                SELECT
+                    id, matter_file, title, canonical_summary,
+                    appearance_count, first_seen, last_seen
+                FROM city_matters
+                WHERE banana = $1
+                  AND status = 'active'
+                ORDER BY appearance_count DESC, last_seen DESC
+                LIMIT 5
+            """, banana)
+
+            # Get trending topics (most common in recent meetings)
+            trending_topics = await conn.fetch("""
+                SELECT mt.topic, COUNT(*) as count
+                FROM meeting_topics mt
+                JOIN meetings m ON mt.meeting_id = m.id
+                WHERE m.banana = $1
+                  AND m.date >= $2
+                GROUP BY mt.topic
+                ORDER BY count DESC
+                LIMIT 5
+            """, banana, now - timedelta(days=60))
+
+            # Build response
+            result = {
+                "city_name": city_row["name"],
+                "state": city_row["state"],
+                "upcoming_count": upcoming_count or 0,
+                "active_matters_count": active_matters_count or 0,
+                "next_meeting": None,
+                "top_matters": [],
+                "trending_topics": [r["topic"] for r in trending_topics],
+            }
+
+            if next_meeting:
+                participation = next_meeting["participation"] or {}
+                meeting_date = next_meeting["date"]
+                hours_until = (meeting_date - now).total_seconds() / 3600 if meeting_date else None
+
+                result["next_meeting"] = {
+                    "id": next_meeting["id"],
+                    "title": next_meeting["title"],
+                    "date": meeting_date.isoformat() if meeting_date else None,
+                    "hours_until": round(hours_until, 1) if hours_until else None,
+                    "item_count": next_meeting["item_count"] or 0,
+                    "participation": {
+                        "can_email": bool(participation.get("email")),
+                        "can_watch": bool(participation.get("virtual_url")),
+                        "email": participation.get("email"),
+                        "virtual_url": participation.get("virtual_url"),
+                    },
+                }
+
+            result["top_matters"] = [
+                {
+                    "id": m["id"],
+                    "matter_file": m["matter_file"],
+                    "title": m["title"],
+                    "canonical_summary": m["canonical_summary"][:200] if m["canonical_summary"] else None,
+                    "appearance_count": m["appearance_count"],
+                }
+                for m in top_matters
+            ]
+
+            return result

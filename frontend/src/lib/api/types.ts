@@ -326,3 +326,46 @@ export interface GetStateMattersResponse {
 		with_summaries: number;
 	};
 }
+
+// Upcoming meetings (homepage feed)
+export interface UpcomingMeeting {
+	id: string;
+	banana: string;
+	title: string;
+	date: string;
+	city_name: string;
+	state: string;
+	topics: string[];
+	hours_until: number;
+	primary_action: 'email' | 'watch' | 'attend' | null;
+	participation: {
+		email?: string;
+		virtual_url?: string;
+		streaming_urls?: Array<{ url?: string; platform: string }>;
+		is_virtual_only?: boolean;
+	};
+}
+
+export interface UpcomingMeetingsResponse {
+	success: boolean;
+	meetings: UpcomingMeeting[];
+	count: number;
+	hours: number;
+	state: string | null;
+}
+
+// Trending topics
+export interface TrendingTopic {
+	topic: string;
+	display_name: string;
+	meeting_count: number;
+	city_count: number;
+	trend: 'up' | 'down' | 'stable' | 'new';
+}
+
+export interface TrendingTopicsResponse {
+	success: boolean;
+	topics: TrendingTopic[];
+	period: string;
+	state: string | null;
+}

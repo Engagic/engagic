@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
-	import { onMount } from 'svelte';
 	import type { Meeting } from '../api/types';
 	import { generateMeetingSlug } from '../utils/utils';
-	import { extractTime } from '../utils/date-utils';
+	import { formatRelativeTime, getUrgencyLevel } from '../utils/date-utils';
 
 	interface Props {
 		meeting: Meeting;
 		cityUrl: string;
 		isPast?: boolean;
+		showCity?: boolean;
+		cityName?: string;
 		animationDelay?: number;
 		animationDuration?: number;
 		onIntroEnd?: () => void;
@@ -18,182 +19,256 @@
 		meeting,
 		cityUrl,
 		isPast = false,
+		showCity = false,
+		cityName = '',
 		animationDelay = 0,
-		animationDuration = 0,
+		animationDuration = 300,
 		onIntroEnd
 	}: Props = $props();
 
 	const meetingSlug = $derived(generateMeetingSlug(meeting));
+	const relativeTime = $derived(formatRelativeTime(meeting.date));
+	const urgency = $derived(getUrgencyLevel(meeting.date));
 
-	const date = $derived(meeting.date ? new Date(meeting.date) : null);
-	const isValidDate = $derived(date && !isNaN(date.getTime()) && date.getTime() !== 0);
-	const dayOfWeek = $derived(isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null);
-	const monthDay = $derived(isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
-	const timeStr = $derived(extractTime(meeting.date));
+	// Participation info
+	const participation = $derived(meeting.participation || {});
+	const canEmail = $derived(Boolean(participation.email));
+	const canWatch = $derived(Boolean(participation.virtual_url || participation.streaming_urls?.length));
+	const canAttend = $derived(!participation.is_virtual_only);
 
-	// Track mobile state for topic limiting (performance: check once, not on every render)
-	let isMobile = $state(false);
+	// Primary action - the most useful participation method
+	const primaryAction = $derived(
+		canEmail ? 'email' :
+		canWatch ? 'watch' :
+		canAttend ? 'attend' : null
+	);
 
-	onMount(() => {
-		isMobile = window.innerWidth <= 640;
-		const handleResize = () => {
-			isMobile = window.innerWidth <= 640;
-		};
-		window.addEventListener('resize', handleResize);
-		return () => window.removeEventListener('resize', handleResize);
-	});
+	// Single topic for clean display
+	const primaryTopic = $derived(meeting.topics?.[0] || null);
 
-	function getStatusClass(meeting: Meeting): string {
-		if (meeting.items?.length > 0 && meeting.items.some(item => item.summary)) {
-			return 'status-border-ai';
-		} else if (meeting.summary) {
-			return 'status-border-ai';
-		} else if (meeting.agenda_url) {
-			return 'status-border-agenda';
-		} else if (meeting.packet_url) {
-			return 'status-border-packet';
+	function handleActionClick(e: MouseEvent) {
+		// Prevent navigation when clicking action button
+		e.preventDefault();
+		e.stopPropagation();
+
+		if (primaryAction === 'email' && participation.email) {
+			window.location.href = `mailto:${participation.email}?subject=${encodeURIComponent(meeting.title)}`;
+		} else if (primaryAction === 'watch' && participation.virtual_url) {
+			window.open(participation.virtual_url, '_blank');
 		}
-		return 'status-border-none';
 	}
 </script>
 
 <a
 	href="/{cityUrl}/{meetingSlug}"
-	class="meeting-card {isPast ? 'past-meeting' : 'upcoming-meeting'} {meeting.meeting_status ? 'has-alert' : ''} {getStatusClass(meeting)}"
+	class="card"
+	class:past={isPast}
+	class:urgent={urgency === 'urgent'}
+	class:soon={urgency === 'soon'}
 	data-sveltekit-preload-data="tap"
 	in:fly={{ y: 20, duration: animationDuration, delay: animationDelay }}
 	onintroend={onIntroEnd}
 >
-	<div class="meeting-card-header">
-		<div class="left-column">
-			<h2 class="meeting-title">
-				{meeting.title}
-			</h2>
-		</div>
-		<div class="right-column">
-			{#if isValidDate}
-				<div class="meeting-date-time">
-					<time datetime={meeting.date}>
-						{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
-					</time>
-				</div>
-			{/if}
-		</div>
-	</div>
+	{#if showCity && cityName}
+		<div class="city-label">{cityName}</div>
+	{/if}
 
-	<div class="meeting-card-body">
-		<div class="left-column">
-			{#if meeting.topics && meeting.topics.length > 0}
-				{@const maxTopics = isMobile ? 3 : 5}
-				{@const displayTopics = meeting.topics.slice(0, maxTopics)}
-				{@const remainingCount = meeting.topics.length - maxTopics}
-				<div class="meeting-topics">
-					{#each displayTopics as topic}
-						<span class="topic-tag">{topic}</span>
-					{/each}
-					{#if remainingCount > 0}
-						<span class="topic-tag topic-more">+{remainingCount} more</span>
+	<div class="card-content">
+		<div class="main">
+			<h2 class="title">{meeting.title}</h2>
+			<time class="time" datetime={meeting.date}>{relativeTime}</time>
+		</div>
+
+		<div class="actions">
+			{#if !isPast && primaryAction}
+				<button
+					class="action-btn"
+					class:pulse={urgency === 'urgent' || urgency === 'soon'}
+					onclick={handleActionClick}
+					aria-label={primaryAction === 'email' ? 'Email council' : primaryAction === 'watch' ? 'Watch live' : 'Attend meeting'}
+				>
+					{#if primaryAction === 'email'}
+						Email Council
+					{:else if primaryAction === 'watch'}
+						Watch Live
+					{:else}
+						Attend
 					{/if}
-				</div>
-			{/if}
-		</div>
-
-		<div class="right-column">
-			{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
-				<div class="meeting-status status-items">
-					<span class="status-icon">✓</span> AI Summary
-				</div>
-			{:else if meeting.summary}
-				<div class="meeting-status {isPast ? 'status-ready' : 'status-summary'}">
-					<span class="status-icon">✓</span> AI Summary
-				</div>
-			{:else if meeting.agenda_url}
-				<div class="meeting-status status-agenda">
-					<span class="status-icon">📄</span> Agenda Available
-				</div>
-			{:else if meeting.packet_url}
-				<div class="meeting-status status-packet">
-					<span class="status-icon">📋</span> Meeting Packet
-				</div>
-			{:else}
-				<div class="meeting-status status-none">
-					<span class="status-icon">⏳</span> {isPast ? 'No Documents' : 'Coming Soon'}
-				</div>
+				</button>
 			{/if}
 
-			{#if meeting.meeting_status}
-				<div class="meeting-alert">
-					This meeting has been {meeting.meeting_status}
-				</div>
+			{#if primaryTopic}
+				<span class="topic">{primaryTopic}</span>
 			{/if}
 		</div>
 	</div>
+
+	{#if urgency === 'urgent' && !isPast}
+		<div class="urgency-badge">Today</div>
+	{:else if urgency === 'soon' && !isPast}
+		<div class="urgency-badge soon">Soon</div>
+	{/if}
 </a>
 
 <style>
-	.meeting-card.has-alert {
-		border-left: 4px solid #dc2626;
+	.card {
+		display: block;
+		background: var(--surface-card);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-lg);
+		padding: var(--space-lg);
+		text-decoration: none;
+		color: inherit;
+		transition: all var(--transition-normal);
+		position: relative;
 	}
 
-	.meeting-card.status-border-ai {
-		border-left: 4px solid var(--civic-green);
+	.card:hover {
+		border-color: var(--border-hover);
+		background: var(--surface-card-hover);
 	}
 
-	.meeting-card.status-border-agenda {
-		border-left: 4px solid var(--civic-yellow);
+	.card.past {
+		opacity: 0.7;
 	}
 
-	.meeting-card.status-border-packet {
-		border-left: 4px solid var(--civic-orange);
+	.card.past:hover {
+		opacity: 1;
 	}
 
-	.meeting-card.status-border-none {
-		border-left: 4px solid var(--civic-border);
+	.card.urgent {
+		border-left: 3px solid var(--action-coral);
 	}
 
-	.meeting-card-body {
+	.card.soon {
+		border-left: 3px solid var(--urgent-amber);
+	}
+
+	.city-label {
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		font-weight: var(--font-medium);
+		color: var(--text-muted);
+		margin-bottom: var(--space-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.card-content {
 		display: flex;
-		gap: 1rem;
-		margin-top: 0.5rem;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: var(--space-lg);
 	}
 
-	.left-column {
+	.main {
 		flex: 1;
+		min-width: 0;
 	}
 
-	.right-column {
+	.title {
+		font-family: var(--font-body);
+		font-size: var(--text-lg);
+		font-weight: var(--font-semibold);
+		color: var(--text);
+		line-height: var(--leading-snug);
+		margin: 0 0 var(--space-xs) 0;
+	}
+
+	.time {
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		display: block;
+	}
+
+	.actions {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--space-sm);
 		flex-shrink: 0;
-		text-align: right;
 	}
 
-	.status-icon {
-		display: inline-block;
-		margin-right: 0.25rem;
-		font-size: 0.9em;
+	.action-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.5rem 1rem;
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		font-weight: var(--font-semibold);
+		color: white;
+		background: var(--action-coral);
+		border: none;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		white-space: nowrap;
 	}
 
-	.meeting-alert {
-		color: #ef4444;
-		font-weight: 600;
-		font-size: 0.85rem;
-		margin-top: 0.25rem;
-		text-transform: capitalize;
+	.action-btn:hover {
+		background: var(--action-coral-hover);
+		transform: translateY(-1px);
+	}
+
+	.action-btn.pulse {
+		animation: action-pulse 2.5s ease-in-out infinite;
+	}
+
+	@keyframes action-pulse {
+		0%, 100% {
+			box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
+		}
+		50% {
+			box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25),
+			            0 0 0 4px rgba(249, 115, 22, 0.1);
+		}
+	}
+
+	.topic {
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		color: var(--text-subtle);
+		padding: 0.25rem 0.5rem;
+		background: var(--surface-warm);
+		border-radius: var(--radius-sm);
+	}
+
+	.urgency-badge {
+		position: absolute;
+		top: var(--space-sm);
+		right: var(--space-sm);
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		font-weight: var(--font-semibold);
+		color: white;
+		background: var(--action-coral);
+		padding: 0.125rem 0.5rem;
+		border-radius: var(--radius-sm);
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+	}
+
+	.urgency-badge.soon {
+		background: var(--urgent-amber);
+		color: #1a1a1a;
 	}
 
 	@media (max-width: 640px) {
-		.meeting-card-header {
+		.card-content {
 			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.5rem;
+			gap: var(--space-md);
 		}
 
-		.meeting-card-body {
-			flex-direction: column;
-			gap: 0.75rem;
+		.actions {
+			flex-direction: row;
+			align-items: center;
+			width: 100%;
 		}
 
-		.right-column {
-			text-align: left;
+		.action-btn {
+			flex: 1;
 		}
 	}
 </style>

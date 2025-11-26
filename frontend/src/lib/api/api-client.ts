@@ -8,7 +8,9 @@ import type {
 	MatterTimelineResponse,
 	GetMeetingResponse,
 	GetCityMattersResponse,
-	GetStateMattersResponse
+	GetStateMattersResponse,
+	UpcomingMeetingsResponse,
+	TrendingTopicsResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -271,6 +273,30 @@ export const apiClient = {
 			clientIp
 		);
 
+		return response.json();
+	},
+
+	async getUpcomingMeetings(hours: number = 168, limit: number = 12, state?: string, clientIp?: string): Promise<UpcomingMeetingsResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/meetings/upcoming`);
+		url.searchParams.set('hours', hours.toString());
+		url.searchParams.set('limit', limit.toString());
+		if (state) {
+			url.searchParams.set('state', state);
+		}
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+		return response.json();
+	},
+
+	async getTrendingTopics(period: string = 'week', limit: number = 8, state?: string, clientIp?: string): Promise<TrendingTopicsResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/topics/trending`);
+		url.searchParams.set('period', period);
+		url.searchParams.set('limit', limit.toString());
+		if (state) {
+			url.searchParams.set('state', state);
+		}
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
 		return response.json();
 	}
 };

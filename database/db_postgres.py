@@ -967,3 +967,36 @@ class Database:
                 }
 
         return stats
+
+    # New facade methods for frontend redesign (Phase 4)
+
+    async def get_upcoming_meetings(
+        self,
+        hours: int = 168,
+        limit: int = 20,
+        state: Optional[str] = None
+    ) -> List[dict]:
+        """Get upcoming meetings within the next N hours
+
+        Facade method for server routes - delegates to MeetingRepository.
+        """
+        return await self.meetings.get_upcoming_meetings(hours, limit, state)
+
+    async def get_city_activity(self, banana: str) -> Optional[dict]:
+        """Get city activity summary for landing page
+
+        Facade method for server routes - delegates to MeetingRepository.
+        """
+        return await self.meetings.get_city_activity(banana)
+
+    async def get_trending_topics(
+        self,
+        period: str = "week",
+        limit: int = 8,
+        state: Optional[str] = None
+    ) -> List[dict]:
+        """Get trending topics with trend direction
+
+        Facade method for server routes - delegates to SearchRepository.
+        """
+        return await self.search.get_trending_topics(period, limit, state)

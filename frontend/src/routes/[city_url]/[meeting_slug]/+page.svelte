@@ -238,25 +238,24 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 1rem;
+		margin-bottom: var(--space-md);
 	}
 
 	.back-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-blue);
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 		text-decoration: none;
-		font-weight: 500;
-		transition: all 0.2s;
+		font-weight: var(--font-medium);
+		transition: color var(--transition-fast);
 	}
 
 	.back-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
+		color: var(--action-coral);
 	}
 
 	.compact-logo {
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-fast);
 	}
 
 	.compact-logo:hover {
@@ -266,58 +265,54 @@
 	.logo-icon {
 		width: 48px;
 		height: 48px;
-		border-radius: 12px;
+		border-radius: var(--radius-md);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 
 	.meeting-detail {
-		padding: 2rem;
-		background: var(--surface-primary);
-		border-radius: 16px;
+		padding: var(--space-xl);
+		background: var(--surface-card);
+		border-radius: var(--radius-xl);
 		border: 1px solid var(--border-primary);
-		box-shadow: 0 4px 16px var(--shadow-sm);
-		transition: background 0.3s ease, border-color 0.3s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.meeting-header {
-		margin-bottom: 1.5rem;
+		margin-bottom: var(--space-lg);
 	}
 
 	.meeting-header-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
-		gap: 1.5rem;
-		margin-bottom: 0.75rem;
+		gap: var(--space-lg);
+		margin-bottom: var(--space-sm);
 	}
 
 	.meeting-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 2rem;
-		color: var(--text-primary);
+		font-family: var(--font-body);
+		font-size: var(--text-2xl);
+		color: var(--text);
 		margin: 0;
-		font-weight: 700;
-		line-height: 1.3;
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
+		font-weight: var(--font-bold);
+		line-height: var(--leading-snug);
+		letter-spacing: -0.02em;
 		flex: 1;
 		min-width: 0;
 	}
 
 	.meeting-date {
-		font-family: 'IBM Plex Mono', monospace;
-		color: var(--civic-blue);
-		font-size: 1.05rem;
-		font-weight: 600;
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
+		font-family: var(--font-body);
+		color: var(--action-coral);
+		font-size: var(--text-base);
+		font-weight: var(--font-semibold);
 	}
 
 	.meeting-meta-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 1rem;
+		gap: var(--space-md);
 	}
 
 	.meeting-meta-left {
@@ -328,7 +323,7 @@
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		gap: var(--space-sm);
 	}
 
 	.meeting-helper {
@@ -336,24 +331,24 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.35rem 0.75rem;
-		background: #eff6ff;
-		border: 1px solid #93c5fd;
-		border-radius: 6px;
+		background: var(--surface-warm);
+		border: 1px solid var(--action-coral);
+		border-radius: var(--radius-sm);
 	}
 
 	.helper-dot {
 		width: 8px;
 		height: 8px;
-		background: #3b82f6;
+		background: var(--action-coral);
 		border-radius: 50%;
 		flex-shrink: 0;
 	}
 
 	.helper-text-inline {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		color: #1e40af;
-		font-weight: 500;
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		color: var(--action-coral);
+		font-weight: var(--font-medium);
 	}
 
 	.document-link {
@@ -361,22 +356,22 @@
 		align-items: center;
 		gap: 0.35rem;
 		padding: 0.5rem 0.85rem;
-		background: var(--civic-blue);
-		color: white;
+		background: var(--surface-secondary);
+		color: var(--text);
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
-		font-weight: 600;
-		font-size: 0.8rem;
-		border-radius: 6px;
-		transition: all 0.2s ease;
-		box-shadow: 0 1px 3px rgba(79, 70, 229, 0.2);
+		font-family: var(--font-body);
+		font-weight: var(--font-semibold);
+		font-size: var(--text-xs);
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border-primary);
+		transition: all var(--transition-fast);
 		flex-shrink: 0;
 		align-self: flex-start;
 	}
 
 	.document-link:hover {
-		background: var(--civic-accent);
-		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+		border-color: var(--action-coral);
+		color: var(--action-coral);
 	}
 
 	.document-link:active {
@@ -388,60 +383,57 @@
 	}
 
 	.toggle-procedural-btn {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: var(--civic-gray);
-		background: var(--surface-primary);
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		font-weight: var(--font-medium);
+		color: var(--text-muted);
+		background: transparent;
 		border: 1px solid var(--border-primary);
-		border-radius: 5px;
+		border-radius: var(--radius-sm);
 		padding: 0.25rem 0.75rem;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.toggle-procedural-btn:hover {
-		background: var(--surface-secondary);
-		border-color: var(--civic-gray);
-		color: var(--text-primary);
+		border-color: var(--action-coral);
+		color: var(--action-coral);
 	}
 
 	.agenda-items {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
-		margin-top: 2rem;
+		gap: var(--space-md);
+		margin-top: var(--space-xl);
 	}
 
 	.agenda-item-error {
-		padding: 1rem;
+		padding: var(--space-md);
 		background: var(--surface-secondary);
-		border: 2px solid #ef4444;
-		border-radius: 8px;
+		border: 1px solid #ef4444;
+		border-radius: var(--radius-md);
 		text-align: center;
-		margin: 1rem 0;
+		margin: var(--space-md) 0;
 	}
 
 	.agenda-item-error p {
-		margin: 0.25rem 0;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--text-primary);
+		margin: var(--space-xs) 0;
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		color: var(--text);
 	}
 
 	.error-detail-small {
 		color: #ef4444;
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 	}
 
 	.meeting-summary {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		line-height: 1.8;
-		font-size: 1.05rem;
-		color: var(--text-primary);
-		padding: 0 2rem;
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
+		font-family: var(--font-body);
+		line-height: var(--leading-relaxed);
+		font-size: var(--text-base);
+		color: var(--text);
+		padding: 0 var(--space-xl);
 	}
 
 	.meeting-summary :global(h1),
@@ -450,18 +442,18 @@
 	.meeting-summary :global(h4),
 	.meeting-summary :global(h5),
 	.meeting-summary :global(h6) {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		color: var(--text-primary);
-		margin-top: 2.5rem;
-		margin-bottom: 1rem;
-		line-height: 1.3;
-		font-weight: 600;
+		font-family: var(--font-body);
+		color: var(--text);
+		margin-top: var(--space-2xl);
+		margin-bottom: var(--space-md);
+		line-height: var(--leading-snug);
+		font-weight: var(--font-semibold);
 	}
 
-	.meeting-summary :global(h1) { font-size: 1.75rem; }
-	.meeting-summary :global(h2) { font-size: 1.5rem; }
-	.meeting-summary :global(h3) { font-size: 1.25rem; }
-	.meeting-summary :global(h4) { font-size: 1.1rem; }
+	.meeting-summary :global(h1) { font-size: var(--text-xl); }
+	.meeting-summary :global(h2) { font-size: var(--text-lg); }
+	.meeting-summary :global(h3) { font-size: var(--text-base); }
+	.meeting-summary :global(h4) { font-size: var(--text-sm); }
 
 	.meeting-summary :global(h1:first-child),
 	.meeting-summary :global(h2:first-child),
@@ -471,44 +463,44 @@
 	}
 
 	.meeting-summary :global(p) {
-		margin: 1.5rem 0;
+		margin: var(--space-lg) 0;
 	}
 
 	.meeting-summary :global(ul),
 	.meeting-summary :global(ol) {
-		margin: 1.5rem 0;
-		padding-left: 2rem;
+		margin: var(--space-lg) 0;
+		padding-left: var(--space-xl);
 	}
 
 	.meeting-summary :global(li) {
-		margin: 0.5rem 0;
+		margin: var(--space-sm) 0;
 	}
 
 	.meeting-summary :global(blockquote) {
-		margin: 2rem 0;
-		padding-left: 1.5rem;
-		border-left: 4px solid var(--text-secondary);
-		color: var(--text-secondary);
+		margin: var(--space-xl) 0;
+		padding-left: var(--space-lg);
+		border-left: 3px solid var(--action-coral);
+		color: var(--text-muted);
 		font-style: italic;
 	}
 
 	.meeting-summary :global(code) {
-		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9em;
 		background: var(--surface-secondary);
-		color: var(--text-primary);
+		color: var(--text);
 		padding: 0.2rem 0.4rem;
-		border-radius: 3px;
+		border-radius: var(--radius-sm);
 	}
 
 	.meeting-summary :global(pre) {
-		margin: 2rem 0;
-		padding: 1.5rem;
+		margin: var(--space-xl) 0;
+		padding: var(--space-lg);
 		background: var(--surface-secondary);
-		color: var(--text-primary);
+		color: var(--text);
 		overflow-x: auto;
-		line-height: 1.5;
-		border-radius: 6px;
+		line-height: var(--leading-normal);
+		border-radius: var(--radius-md);
 	}
 
 	.meeting-summary :global(pre code) {
@@ -517,12 +509,12 @@
 	}
 
 	.meeting-summary :global(a) {
-		color: var(--civic-blue);
+		color: var(--action-coral);
 		text-decoration: underline;
 	}
 
 	.meeting-summary :global(strong) {
-		font-weight: 600;
+		font-weight: var(--font-semibold);
 	}
 
 	.meeting-summary :global(em) {
@@ -530,7 +522,7 @@
 	}
 
 	.meeting-summary :global(hr) {
-		margin: 3rem 0;
+		margin: var(--space-2xl) 0;
 		border: none;
 		border-top: 1px solid var(--border-primary);
 	}
@@ -538,56 +530,54 @@
 	.meeting-summary :global(img) {
 		max-width: 100%;
 		height: auto;
-		margin: 2rem 0;
+		margin: var(--space-xl) 0;
 	}
 
 	.no-summary {
 		text-align: center;
-		padding: 4rem 2rem;
-		background: var(--surface-secondary);
-		border-radius: 12px;
-		border: 2px solid var(--border-primary);
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		padding: var(--space-3xl) var(--space-xl);
+		background: var(--surface-warm);
+		border-radius: var(--radius-lg);
+		border: 1px solid var(--border-primary);
 	}
 
 	.processing-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.3rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		margin-bottom: 1rem;
+		font-family: var(--font-body);
+		font-size: var(--text-xl);
+		font-weight: var(--font-semibold);
+		color: var(--action-coral);
+		margin-bottom: var(--space-md);
 	}
 
 	.processing-message {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 1.05rem;
-		line-height: 1.7;
-		color: var(--text-primary);
-		margin: 0 auto 1rem;
+		font-family: var(--font-body);
+		font-size: var(--text-base);
+		line-height: var(--leading-relaxed);
+		color: var(--text);
+		margin: 0 auto var(--space-md);
 		max-width: 500px;
 	}
 
 	.processing-hint {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		line-height: 1.6;
-		color: var(--civic-gray);
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		line-height: var(--leading-relaxed);
+		color: var(--text-muted);
 		margin: 0 auto;
 		max-width: 500px;
 		font-style: italic;
 	}
 
 	.error-message {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: var(--font-body);
 		color: #92400e;
-		padding: 1.2rem;
+		padding: var(--space-md);
 		background: #fef3c7;
 		border: 1px solid #fde68a;
-		border-radius: 12px;
-		margin-top: 1rem;
-		font-size: 0.95rem;
-		line-height: 1.6;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		border-radius: var(--radius-md);
+		margin-top: var(--space-md);
+		font-size: var(--text-sm);
+		line-height: var(--leading-relaxed);
 	}
 
 	@media (max-width: 640px) {
