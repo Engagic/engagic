@@ -100,9 +100,6 @@ class CityRepository(BaseRepository):
             )
             zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
 
-            # Deserialize JSONB participation to typed model
-            participation = CityParticipation(**row["participation"]) if row["participation"] else None
-
             return City(
                 banana=row["banana"],
                 name=row["name"],
@@ -111,7 +108,7 @@ class CityRepository(BaseRepository):
                 slug=row["slug"],
                 county=row["county"],
                 status=row["status"],
-                participation=participation,
+                participation=CityParticipation(**row["participation"]) if row["participation"] else None,
                 zipcodes=zipcodes,
             )
 
@@ -146,9 +143,6 @@ class CityRepository(BaseRepository):
             )
             zipcodes = [str(r["zipcode"]) for r in zip_rows]
 
-            # Deserialize JSONB participation to typed model
-            participation = CityParticipation(**row["participation"]) if row["participation"] else None
-
             return City(
                 banana=row["banana"],
                 name=row["name"],
@@ -157,7 +151,7 @@ class CityRepository(BaseRepository):
                 slug=row["slug"],
                 county=row["county"],
                 status=row["status"],
-                participation=participation,
+                participation=CityParticipation(**row["participation"]) if row["participation"] else None,
                 zipcodes=zipcodes,
             )
 
@@ -195,9 +189,6 @@ class CityRepository(BaseRepository):
                     )
                     zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
 
-                # Deserialize JSONB participation to typed model
-                participation = CityParticipation(**row["participation"]) if row["participation"] else None
-
                 cities.append(
                     City(
                         banana=row["banana"],
@@ -207,7 +198,7 @@ class CityRepository(BaseRepository):
                         slug=row["slug"],
                         county=row["county"],
                         status=row["status"],
-                        participation=participation,
+                        participation=CityParticipation(**row["participation"]) if row["participation"] else None,
                         zipcodes=zipcodes,
                     )
                 )
@@ -282,9 +273,6 @@ class CityRepository(BaseRepository):
                     )
                     zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
 
-                # Deserialize JSONB participation to typed model
-                participation = CityParticipation(**row["participation"]) if row["participation"] else None
-
                 cities.append(
                     City(
                         banana=row["banana"],
@@ -294,7 +282,7 @@ class CityRepository(BaseRepository):
                         slug=row["slug"],
                         county=row["county"],
                         status=row["status"],
-                        participation=participation,
+                        participation=CityParticipation(**row["participation"]) if row["participation"] else None,
                         zipcodes=zipcodes,
                     )
                 )

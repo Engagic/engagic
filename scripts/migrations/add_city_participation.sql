@@ -11,6 +11,6 @@ UPDATE cities
 SET participation = '{
   "testimony_url": "https://council.nyc.gov/testify/",
   "testimony_email": "testimony@council.nyc.gov",
-  "process_url": "https://council.nyc.gov/testify/"
+  "process_url": "https://council.nyc.gov/procedures-governing-member-and-public-remote-attendance/"
 }'::jsonb
 WHERE banana = 'newyorkNY';
