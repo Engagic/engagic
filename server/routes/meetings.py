@@ -10,6 +10,7 @@ from server.dependencies import get_db
 from database.db_postgres import Database
 
 from config import get_logger
+from scripts.summary_quality_checker import SummaryQualityChecker
 
 logger = get_logger(__name__)
 
@@ -42,6 +43,7 @@ async def get_meeting(meeting_id: str, db: Database = Depends(get_db)):
             "city_name": city.name if city else None,
             "state": city.state if city else None,
             "banana": meeting.banana,
+            "participation": city.participation.model_dump(exclude_none=True) if city and city.participation else None,
         }
 
     except HTTPException:
@@ -75,8 +77,6 @@ async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)
 async def get_random_best_meeting():
     """Get a random high-quality meeting summary for showcasing"""
     try:
-        from scripts.summary_quality_checker import SummaryQualityChecker
-
         checker = SummaryQualityChecker()
         random_meeting = checker.get_random_best_summary()
 

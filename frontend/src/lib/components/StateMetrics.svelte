@@ -198,7 +198,7 @@
 				{#if selectedTopic}
 					<div class="filter-indicator">
 						Showing {metrics.total_matters} matters about <strong>{selectedTopic}</strong>
-						<button class="clear-filter" onclick={() => filterByTopic(selectedTopic)}>Clear</button>
+						<button class="clear-filter" onclick={() => selectedTopic && filterByTopic(selectedTopic)}>Clear</button>
 					</div>
 				{/if}
 			</div>

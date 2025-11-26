@@ -6,17 +6,15 @@
 set -e
 
 # Configuration
-PROJECT_DIR="/root/engagic"
+PROJECT_DIR="/opt/engagic"
 API_SERVICE="engagic-api"
 PROMETHEUS_SERVICE="prometheus"
 
-# Source environment variables
-if [ -f "$PROJECT_DIR/.env" ]; then
+# Source environment variables (optional - systemd service loads these directly)
+if [ -f "$PROJECT_DIR/.env" ] && [ -r "$PROJECT_DIR/.env" ]; then
     set -a
     source "$PROJECT_DIR/.env"
     set +a
-else
-    echo "Warning: .env file not found at $PROJECT_DIR/.env"
 fi
 
 # Colors

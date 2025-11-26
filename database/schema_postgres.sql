@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS cities (
     slug TEXT NOT NULL,
     county TEXT,
     status TEXT DEFAULT 'active',
+    participation JSONB,  -- City-level participation config: {testimony_url, testimony_email, process_url}
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(name, state)
