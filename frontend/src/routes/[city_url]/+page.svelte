@@ -474,6 +474,7 @@
 	.view-toggle {
 		display: flex;
 		gap: 0.5rem;
+		margin-bottom: 2rem;
 		background: var(--surface-secondary);
 		padding: 0.35rem;
 		border-radius: 12px;
@@ -512,7 +513,7 @@
 		border: none;
 		cursor: pointer;
 		padding: 0;
-		opacity: 0.7;
+		opacity: 0.85;
 		transition: all 0.2s ease;
 	}
 
