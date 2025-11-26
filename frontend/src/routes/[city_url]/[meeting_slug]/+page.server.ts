@@ -3,7 +3,7 @@ import { extractMeetingIdFromSlug, parseCityUrl, generateMeetingSlug } from '$li
 import type { PageServerLoad } from './$types';
 import type { Meeting } from '$lib/api/types';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
 	const { city_url, meeting_slug } = params;
 
 	try {
@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		const meetingId = extractMeetingIdFromSlug(meeting_slug);
 
 		if (meetingId) {
-			const result = await getMeeting(meetingId);
+			const result = await getMeeting(meetingId, locals.clientIp);
 
 			if (result.success && result.meeting) {
 				return {
@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		}
 
 		const searchQuery = `${parsed.cityName}, ${parsed.state}`;
-		const searchResults = await searchMeetings(searchQuery);
+		const searchResults = await searchMeetings(searchQuery, locals.clientIp);
 
 		if (searchResults.success && searchResults.meetings) {
 			// Find meeting by slug
