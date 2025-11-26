@@ -26,16 +26,21 @@ async def rate_limit_middleware(
     # X-Is-Cloudflare: "1" if request came from Cloudflare IP range, "0" otherwise
     #   - Used for logging/debugging but not for IP extraction (nginx handles that)
     #
-    # Fallback chain for non-nginx scenarios (local dev, tests):
-    # X-Forwarded-User-IP: Set by our Cloudflare Worker for SSR requests
-    # CF-Connecting-IP: Direct Cloudflare requests (only trust in dev)
-    # X-Real-IP: Standard nginx header
-    # X-Forwarded-For: Standard proxy header
-    # request.client.host: Direct connection fallback
+    # Header priority for IP extraction:
+    # 1. X-Forwarded-User-IP: Set by our frontend SSR (trusted, explicit user IP)
+    # 2. X-Real-Client-IP: nginx-validated from CF-Connecting-IP (direct API calls)
+    # 3. CF-Connecting-IP: Direct Cloudflare requests (dev only)
+    # 4. X-Real-IP: Standard nginx header
+    # 5. X-Forwarded-For: Standard proxy header
+    # 6. request.client.host: Direct connection fallback
+    #
+    # IMPORTANT: X-Forwarded-User-IP must come FIRST because for SSR requests,
+    # Cloudflare sets CF-Connecting-IP to the Pages worker IP, not the real user.
+    # Our frontend explicitly passes the real user IP via X-Forwarded-User-IP.
     is_cloudflare = request.headers.get("X-Is-Cloudflare") == "1"
     client_ip_raw = (
-        request.headers.get("X-Real-Client-IP")  # nginx-validated (production)
-        or request.headers.get("X-Forwarded-User-IP")  # Cloudflare Worker (SSR)
+        request.headers.get("X-Forwarded-User-IP")  # Frontend SSR (trusted, explicit)
+        or request.headers.get("X-Real-Client-IP")  # nginx-validated (direct API calls)
         or request.headers.get("CF-Connecting-IP")  # Direct Cloudflare (dev only)
         or request.headers.get("X-Real-IP")
         or (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() if request.headers.get("X-Forwarded-For") else None)
