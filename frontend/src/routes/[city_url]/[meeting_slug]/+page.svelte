@@ -121,7 +121,10 @@
 		</div>
 
 	{#if selectedMeeting?.participation}
-		<ParticipationBox participation={selectedMeeting.participation} />
+		<ParticipationBox
+			participation={selectedMeeting.participation}
+			cityParticipation={searchResults?.success ? searchResults.participation : undefined}
+		/>
 	{/if}
 
 	{#if error}

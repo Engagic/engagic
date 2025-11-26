@@ -53,6 +53,21 @@ class ParticipationInfo(BaseModel):
     streaming_urls: Optional[List[StreamingUrl]] = None  # YouTube, cable, etc.
 
 
+class CityParticipation(BaseModel):
+    """
+    Typed JSONB for cities.participation field.
+
+    City-level participation config for centralized testimony processes.
+    When set, replaces meeting-level participation for testimony/contact info.
+    Cities like NYC have a single testimony portal for all committees.
+    """
+    model_config = ConfigDict(extra="ignore")  # Allow future fields without breaking
+
+    testimony_url: Optional[str] = None    # Portal to submit testimony (council.nyc.gov/testify/)
+    testimony_email: Optional[str] = None  # Official testimony email (testimony@council.nyc.gov)
+    process_url: Optional[str] = None      # Link to "how to testify" instructions
+
+
 class MatterMetadata(BaseModel):
     """
     Typed JSONB for city_matters.metadata field.
@@ -90,6 +105,7 @@ class City:
     slug: str  # cityofpaloalto (vendor-specific)
     county: Optional[str] = None
     status: str = "active"
+    participation: Optional[CityParticipation] = None  # City-level testimony config
     zipcodes: Optional[List[str]] = None  # Associated ZIP codes
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -101,6 +117,9 @@ class City:
             data["created_at"] = self.created_at.isoformat()
         if self.updated_at:
             data["updated_at"] = self.updated_at.isoformat()
+        # Serialize participation if present
+        if self.participation:
+            data["participation"] = self.participation.model_dump(exclude_none=True)
         return data
 
 
