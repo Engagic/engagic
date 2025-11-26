@@ -1127,3 +1127,24 @@ body {
 
 .text-muted { color: var(--text-muted); }
 .text-subtle { color: var(--text-subtle); }
+
+/* ===== REDUCED MOTION ===== */
+/* Respect user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+/* For users who prefer reduced motion, disable the pulse animation */
+@media (prefers-reduced-motion: reduce) {
+	.action-btn.pulse,
+	.action-button.pulse {
+		animation: none;
+	}
+}

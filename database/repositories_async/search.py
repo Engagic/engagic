@@ -232,9 +232,9 @@ class SearchRepository(BaseRepository):
         Returns:
             List of dicts with topic info and trend direction
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
 
         # Define periods
         period_days = {"day": 1, "week": 7, "month": 30}

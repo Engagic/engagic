@@ -474,9 +474,9 @@ class MeetingRepository(BaseRepository):
         Returns:
             List of meeting dicts with city info and participation
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         cutoff = now + timedelta(hours=hours)
 
         async with self.pool.acquire() as conn:
@@ -587,9 +587,9 @@ class MeetingRepository(BaseRepository):
         Returns:
             Activity summary dict, or None if city not found
         """
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
 
         async with self.pool.acquire() as conn:
             # Get city info

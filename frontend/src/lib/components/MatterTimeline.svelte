@@ -9,46 +9,38 @@
 
 	let { timelineData, matterFile }: Props = $props();
 
-	let expandedAppearances = $state<Set<number>>(new Set());
-
 	function formatDate(dateStr: string): string {
 		if (!dateStr) return '';
 		const date = new Date(dateStr);
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 	}
 
-	function extractMeetingType(title: string): { name: string; type: 'committee' | 'council' | 'board' | 'other' } {
-		// Extract committee/meeting type from title
+	function extractMeetingType(title: string): { short: string; type: 'committee' | 'council' | 'board' | 'other' } {
 		const lower = title.toLowerCase();
-		if (lower.includes('committee')) {
-			const match = title.match(/([\w\s]+committee)/i);
-			return { name: match ? match[1] : 'Committee', type: 'committee' };
-		}
-		if (lower.includes('council')) {
-			return { name: 'City Council', type: 'council' };
-		}
-		if (lower.includes('board')) {
-			const match = title.match(/([\w\s]+board)/i);
-			return { name: match ? match[1] : 'Board', type: 'board' };
-		}
-		if (lower.includes('commission')) {
-			const match = title.match(/([\w\s]+commission)/i);
-			return { name: match ? match[1] : 'Commission', type: 'committee' };
-		}
-		return { name: 'Meeting', type: 'other' };
-	}
 
-	function getDateContext(index: number, total: number): string {
-		// Show truthful date context instead of fake legislative status
-		if (total === 1) return 'Only appearance';
-		if (index === 0) return 'First discussed';
-		if (index === total - 1) return 'Most recent';
-		return `Step ${index + 1}`;
+		// Specific patterns first (more precise)
+		if (lower.includes('planning commission')) return { short: 'Planning', type: 'committee' };
+		if (lower.includes('city council')) return { short: 'Council', type: 'council' };
+		if (lower.includes('town council')) return { short: 'Council', type: 'council' };
+		if (lower.includes('board of supervisors')) return { short: 'Supervisors', type: 'board' };
+		if (lower.includes('school board')) return { short: 'School Board', type: 'board' };
+		if (lower.includes('zoning board')) return { short: 'Zoning', type: 'board' };
+
+		// Generic patterns
+		if (lower.includes('commission')) return { short: 'Commission', type: 'committee' };
+		if (lower.includes('committee')) return { short: 'Committee', type: 'committee' };
+		if (lower.includes('council')) return { short: 'Council', type: 'council' };
+		if (lower.includes('board')) return { short: 'Board', type: 'board' };
+
+		// Fallback: first two meaningful words
+		const words = title.split(/\s+/).filter(w => w.length > 2);
+		if (words.length >= 2) {
+			return { short: words.slice(0, 2).join(' '), type: 'other' };
+		}
+		return { short: title.slice(0, 12) || 'Meeting', type: 'other' };
 	}
 
 	function buildItemAnchor(appearance: MatterTimelineAppearance): string {
-		// Build anchor ID with full hierarchy: agenda_number > matter_file > item_id
-		// Use matter_file from the matter object (all appearances share the same matter_file)
 		return generateAnchorId({
 			id: appearance.item_id,
 			agenda_number: appearance.agenda_number,
@@ -57,61 +49,121 @@
 	}
 
 	function buildMeetingLink(appearance: MatterTimelineAppearance): string {
-		// Build meeting slug from date and ID
 		const date = new Date(appearance.meeting_date);
 		const year = date.getFullYear();
 		const month = String(date.getMonth() + 1).padStart(2, '0');
 		const day = String(date.getDate()).padStart(2, '0');
 		const meetingSlug = `${year}-${month}-${day}-${appearance.meeting_id}`;
-
-		// Build full meeting URL with anchor
 		const anchor = buildItemAnchor(appearance);
 		return `/${appearance.banana}/${meetingSlug}#${anchor}`;
 	}
+
+	// Group appearances by date (handles same-day multiple committees)
+	interface DateGroup {
+		date: string;
+		appearances: MatterTimelineAppearance[];
+		isFuture: boolean;
+	}
+
+	const groupedTimeline = $derived.by((): DateGroup[] => {
+		const groups: Record<string, MatterTimelineAppearance[]> = {};
+		const now = new Date();
+
+		timelineData.timeline.forEach(appearance => {
+			const dateKey = appearance.meeting_date.split('T')[0];
+			if (!groups[dateKey]) groups[dateKey] = [];
+			groups[dateKey].push(appearance);
+		});
+
+		return Object.entries(groups).map(([date, appearances]) => ({
+			date,
+			appearances,
+			isFuture: new Date(date) > now
+		}));
+	});
+
+	// Check if any appearance is in the future (upcoming vote)
+	const isUpcoming = $derived(groupedTimeline.some(g => g.isFuture));
+
+	// Use list view if too many nodes (prevents cramped horizontal)
+	const useListView = $derived(groupedTimeline.length > 6);
 </script>
 
 {#if timelineData.timeline.length > 0}
-	<div class="matter-timeline">
+	<div class="matter-timeline" class:has-upcoming={isUpcoming}>
 		<div class="timeline-header">
-			<div class="timeline-title">
+			<div class="timeline-meta">
 				{#if matterFile}
 					<span class="matter-id">{matterFile}</span>
 				{/if}
-				<span class="appearance-count">{timelineData.appearance_count} appearance{timelineData.appearance_count === 1 ? '' : 's'}</span>
+				<span class="appearance-count">{timelineData.appearance_count} step{timelineData.appearance_count === 1 ? '' : 's'}</span>
 			</div>
-			<div class="timeline-subtitle">Legislative Journey</div>
+			{#if isUpcoming}
+				<span class="upcoming-badge">Upcoming</span>
+			{/if}
 		</div>
 
-		<div class="timeline-flow">
-			{#each timelineData.timeline as appearance, index}
-				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
-				{@const dateContext = getDateContext(index, timelineData.timeline.length)}
-				{@const isExpanded = expandedAppearances.has(index)}
+		<!-- Horizontal progress bar (desktop, not too many nodes) -->
+		{#if !useListView}
+			<div class="timeline-track">
+				<div class="track-line"></div>
+				<div class="track-progress" style="width: {Math.min(100, (groupedTimeline.filter(g => !g.isFuture).length / Math.max(groupedTimeline.length, 3)) * 100)}%"></div>
 
-				<div class="flow-step" class:selected={isExpanded}>
+				{#each groupedTimeline as group, index}
+					{@const isFirst = index === 0}
+					{@const isLast = index === groupedTimeline.length - 1}
+					{@const isActive = isLast && !group.isFuture}
+					{@const firstAppearance = group.appearances[0]}
+					{@const meetingInfo = extractMeetingType(firstAppearance.meeting_title)}
+					{@const hasMultiple = group.appearances.length > 1}
+
 					<a
-						href={buildMeetingLink(appearance)}
-						class="step-card"
-						class:committee={meetingInfo.type === 'committee'}
-						class:council={meetingInfo.type === 'council'}
-						class:board={meetingInfo.type === 'board'}
-						class:has-summary={!!appearance.summary}
+						href={buildMeetingLink(firstAppearance)}
+						class="track-node"
+						class:active={isActive}
+						class:future={group.isFuture}
+						class:first={isFirst}
+						class:last={isLast}
+						style="left: {groupedTimeline.length === 1 ? 50 : (index / (groupedTimeline.length - 1)) * 100}%"
 						data-sveltekit-preload-data="tap"
+						title={hasMultiple ? `${group.appearances.length} meetings on this date` : firstAppearance.meeting_title}
 					>
-						<div class="step-number">{index + 1}</div>
-						<div class="step-content">
-							<div class="step-header">
-								<div class="step-type">{meetingInfo.name}</div>
-								<div class="step-status">{dateContext}</div>
-							</div>
-							<div class="step-date">{formatDate(appearance.meeting_date)}</div>
-							{#if appearance.agenda_number}
-								<div class="step-agenda">Item {appearance.agenda_number}</div>
+						<div class="node-dot" class:committee={meetingInfo.type === 'committee'} class:council={meetingInfo.type === 'council'} class:board={meetingInfo.type === 'board'} class:multiple={hasMultiple}>
+							{#if hasMultiple}
+								<span class="node-count">{group.appearances.length}</span>
 							{/if}
 						</div>
-						<div class="step-arrow">→</div>
+						<div class="node-label">
+							<span class="node-type">{hasMultiple ? 'Multiple' : meetingInfo.short}</span>
+							<span class="node-date">{formatDate(group.date)}</span>
+						</div>
 					</a>
-				</div>
+				{/each}
+			</div>
+		{/if}
+
+		<!-- Compact list for mobile or many nodes -->
+		<div class="timeline-list" class:force-show={useListView}>
+			{#each timelineData.timeline as appearance, index}
+				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
+				{@const isLast = index === timelineData.timeline.length - 1}
+				{@const isFuture = new Date(appearance.meeting_date) > new Date()}
+
+				<a
+					href={buildMeetingLink(appearance)}
+					class="list-item"
+					class:active={isLast && !isFuture}
+					class:future={isFuture}
+					data-sveltekit-preload-data="tap"
+				>
+					<span class="list-dot" class:committee={meetingInfo.type === 'committee'} class:council={meetingInfo.type === 'council'} class:board={meetingInfo.type === 'board'}></span>
+					<span class="list-type">{meetingInfo.short}</span>
+					<span class="list-date">{formatDate(appearance.meeting_date)}</span>
+					{#if appearance.agenda_number}
+						<span class="list-agenda">#{appearance.agenda_number}</span>
+					{/if}
+					<span class="list-arrow">-></span>
+				</a>
 			{/each}
 		</div>
 	</div>
@@ -120,252 +172,334 @@
 {/if}
 
 <style>
-	.timeline-loading,
-	.timeline-error,
 	.timeline-empty {
 		text-align: center;
-		padding: 2rem;
-		color: var(--civic-gray);
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-	}
-
-	.timeline-error {
-		color: var(--civic-red);
+		padding: var(--space-lg);
+		color: var(--text-muted);
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
 	}
 
 	.matter-timeline {
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
-		border-radius: 12px;
-		padding: 1.5rem;
-		margin: 1.5rem 0;
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-lg);
+		padding: var(--space-lg);
+		margin: var(--space-md) 0;
 	}
 
+	.matter-timeline.has-upcoming {
+		border-color: var(--action-coral);
+		background: var(--surface-warm);
+	}
+
+	/* Header row */
 	.timeline-header {
-		margin-bottom: 2rem;
-		border-bottom: 2px solid var(--border-primary);
-		padding-bottom: 1rem;
-	}
-
-	.timeline-title {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
+		justify-content: space-between;
+		gap: var(--space-sm);
+		margin-bottom: var(--space-md);
+	}
+
+	.timeline-meta {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
 		flex-wrap: wrap;
-		margin-bottom: 0.5rem;
 	}
 
 	.matter-id {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.1rem;
-		font-weight: 700;
-		color: var(--badge-blue-text);
-		padding: 0.35rem 0.75rem;
-		background: var(--badge-blue-bg);
-		border: 2px solid var(--badge-blue-border);
-		border-radius: 8px;
+		font-family: var(--font-mono);
+		font-size: var(--text-sm);
+		font-weight: var(--font-semibold);
+		color: var(--text);
+		padding: 0.2rem 0.5rem;
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-sm);
 	}
 
 	.appearance-count {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-gray);
-		font-weight: 500;
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		font-weight: var(--font-medium);
 	}
 
-	.timeline-subtitle {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+	.upcoming-badge {
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		font-weight: var(--font-semibold);
+		color: white;
+		background: var(--action-coral);
+		padding: 0.2rem 0.5rem;
+		border-radius: var(--radius-full);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		color: var(--civic-gray);
-		font-weight: 600;
+		letter-spacing: 0.02em;
 	}
 
-	/* Vertical flow timeline */
-	.timeline-flow {
+	/* Horizontal track (desktop) */
+	.timeline-track {
+		position: relative;
+		height: 90px;
+		margin: var(--space-sm) 0;
+		padding: 0 40px; /* Increased padding for edge labels */
+	}
+
+	.track-line {
+		position: absolute;
+		top: 12px;
+		left: 40px;
+		right: 40px;
+		height: 3px;
+		background: var(--border-primary);
+		border-radius: 2px;
+	}
+
+	.track-progress {
+		position: absolute;
+		top: 12px;
+		left: 40px;
+		height: 3px;
+		background: var(--text-muted);
+		border-radius: 2px;
+		transition: width var(--transition-normal);
+	}
+
+	.matter-timeline.has-upcoming .track-progress {
+		background: var(--action-coral);
+	}
+
+	.track-node {
+		position: absolute;
+		transform: translateX(-50%);
 		display: flex;
 		flex-direction: column;
-		gap: 0;
-		position: relative;
-	}
-
-	.flow-step {
-		position: relative;
-		animation: fadeIn 0.3s ease-out;
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	.step-card {
-		width: 100%;
-		display: flex;
 		align-items: center;
-		gap: 1rem;
-		padding: 1rem 1.25rem;
-		background: var(--surface-secondary);
-		border: 2px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		font-family: 'IBM Plex Mono', monospace;
+		gap: 6px;
+		text-decoration: none;
+		transition: transform var(--transition-fast);
+		z-index: 1;
+	}
+
+	/* Align first node label to left edge */
+	.track-node.first {
+		align-items: flex-start;
+	}
+	.track-node.first .node-label {
 		text-align: left;
+		align-items: flex-start;
 	}
 
-	.step-card:hover {
-		transform: translateX(4px);
-		border-left-width: 6px;
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+	/* Align last node label to right edge */
+	.track-node.last {
+		align-items: flex-end;
+	}
+	.track-node.last .node-label {
+		text-align: right;
+		align-items: flex-end;
 	}
 
-	.step-card.committee {
-		border-left-color: var(--committee-color);
+	.track-node:hover {
+		transform: translateX(-50%) translateY(-2px);
+		z-index: 2;
 	}
 
-	.step-card.council {
-		border-left-color: var(--council-color);
-	}
-
-	.step-card.board {
-		border-left-color: var(--board-color);
-	}
-
-	.step-card.has-summary {
-		background: linear-gradient(135deg, var(--surface-secondary) 0%, rgba(16, 185, 129, 0.05) 100%);
-	}
-
-	.flow-step.selected .step-card {
-		border-left-width: 6px;
-		box-shadow: 0 6px 16px rgba(79, 70, 229, 0.2);
-	}
-
-	.step-number {
-		flex-shrink: 0;
-		width: 36px;
-		height: 36px;
+	.node-dot {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: var(--surface-primary);
+		border: 3px solid var(--text-muted);
+		transition: all var(--transition-fast);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--civic-blue);
-		color: var(--civic-white);
-		border-radius: 50%;
-		font-weight: 700;
-		font-size: 0.9rem;
 	}
 
-	.step-card.committee .step-number {
-		background: var(--committee-color);
+	.node-dot.multiple {
+		width: 26px;
+		height: 26px;
 	}
 
-	.step-card.council .step-number {
-		background: var(--council-color);
+	.node-count {
+		font-family: var(--font-body);
+		font-size: 0.6rem;
+		font-weight: var(--font-bold);
+		color: var(--text-muted);
 	}
 
-	.step-card.board .step-number {
-		background: var(--board-color);
+	.track-node:hover .node-dot {
+		transform: scale(1.1);
 	}
 
-	.step-content {
-		flex: 1;
+	.track-node.active .node-dot {
+		background: var(--action-coral);
+		border-color: var(--action-coral);
 	}
 
-	.step-header {
+	.track-node.active .node-count {
+		color: white;
+	}
+
+	.track-node.future .node-dot {
+		background: var(--surface-warm);
+		border-color: var(--action-coral);
+		border-style: dashed;
+	}
+
+	/* Meeting type colors for dots */
+	.node-dot.committee { border-color: var(--committee-color, #8b5cf6); }
+	.node-dot.council { border-color: var(--council-color, #3b82f6); }
+	.node-dot.board { border-color: var(--board-color, #10b981); }
+	.track-node.active .node-dot.committee,
+	.track-node.active .node-dot.council,
+	.track-node.active .node-dot.board {
+		background: var(--action-coral);
+		border-color: var(--action-coral);
+	}
+
+	.node-label {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1px;
+		text-align: center;
+		max-width: 70px;
+	}
+
+	.node-type {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: var(--font-semibold);
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 70px;
+	}
+
+	.node-date {
+		font-family: var(--font-body);
+		font-size: 0.6rem;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.track-node.future .node-type,
+	.track-node.future .node-date {
+		color: var(--action-coral);
+	}
+
+	/* List view (mobile fallback + many nodes) */
+	.timeline-list {
+		display: none;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.timeline-list.force-show {
+		display: flex;
+	}
+
+	.list-item {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
-		margin-bottom: 0.25rem;
-	}
-
-	.step-type {
-		font-weight: 700;
-		font-size: 1rem;
-		color: var(--text-primary);
-		font-family: 'IBM Plex Mono', monospace;
-	}
-
-	.step-status {
-		font-size: 0.7rem;
-		padding: 0.2rem 0.5rem;
-		background: var(--civic-blue);
-		color: var(--civic-white);
-		border-radius: 4px;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		font-weight: 700;
-		border: 1.5px solid currentColor;
-	}
-
-	.step-card.committee .step-status {
+		gap: var(--space-sm);
+		padding: var(--space-sm) var(--space-md);
 		background: var(--surface-primary);
-		color: var(--committee-color);
-		border-color: var(--committee-color);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-md);
+		text-decoration: none;
+		transition: all var(--transition-fast);
 	}
 
-	.step-card.council .step-status {
-		background: var(--surface-primary);
-		color: var(--council-color);
-		border-color: var(--council-color);
+	.list-item:hover {
+		border-color: var(--action-coral);
+		background: var(--surface-warm);
 	}
 
-	.step-card.board .step-status {
-		background: var(--surface-primary);
-		color: var(--board-color);
-		border-color: var(--board-color);
+	.list-item.active {
+		border-color: var(--action-coral);
+		border-width: 2px;
 	}
 
-	.step-date {
-		font-size: 0.8rem;
-		color: var(--civic-gray);
-		font-weight: 500;
+	.list-item.future {
+		border-style: dashed;
+		border-color: var(--action-coral);
+		background: var(--surface-warm);
 	}
 
-	.step-agenda {
-		font-size: 0.75rem;
-		color: var(--civic-gray);
-		margin-top: 0.25rem;
-	}
-
-	.step-arrow {
+	.list-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--text-muted);
 		flex-shrink: 0;
-		font-size: 1.2rem;
-		color: var(--civic-blue);
-		transition: transform 0.2s ease;
 	}
 
+	.list-item.active .list-dot {
+		background: var(--action-coral);
+	}
+
+	.list-dot.committee { background: var(--committee-color, #8b5cf6); }
+	.list-dot.council { background: var(--council-color, #3b82f6); }
+	.list-dot.board { background: var(--board-color, #10b981); }
+
+	.list-type {
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		font-weight: var(--font-medium);
+		color: var(--text);
+		flex: 1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.list-date {
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.list-agenda {
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+
+	.list-arrow {
+		font-family: var(--font-mono);
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		transition: color var(--transition-fast);
+	}
+
+	.list-item:hover .list-arrow {
+		color: var(--action-coral);
+	}
+
+	/* Responsive: show list, hide track on mobile or when force-show */
 	@media (max-width: 640px) {
+		.timeline-track {
+			display: none;
+		}
+
+		.timeline-list {
+			display: flex;
+		}
+
 		.matter-timeline {
-			padding: 1rem;
+			padding: var(--space-md);
 		}
+	}
 
-		.step-card {
-			padding: 0.75rem 1rem;
-			gap: 0.75rem;
-		}
-
-		.step-number {
-			width: 28px;
-			height: 28px;
-			font-size: 0.8rem;
-		}
-
-		.step-type {
-			font-size: 0.85rem;
-		}
-
-		.step-status {
-			font-size: 0.65rem;
-			padding: 0.15rem 0.4rem;
-		}
+	/* Hide track when list is force-shown (many nodes) */
+	.timeline-list.force-show ~ .timeline-track,
+	.timeline-track:has(~ .timeline-list.force-show) {
+		display: none;
 	}
 </style>

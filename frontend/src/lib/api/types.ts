@@ -271,14 +271,17 @@ export interface GetMeetingResponse {
 
 export interface MatterSummary {
 	id: string;
+	banana: string;
+	matter_id?: string;
 	matter_file?: string;
 	matter_type?: string;
 	title: string;
 	canonical_summary?: string;
-	canonical_topics?: string;
+	canonical_topics?: string[];
 	appearance_count: number;
 	first_seen: string;
 	last_seen: string;
+	timeline?: MatterTimelineAppearance[];
 }
 
 export interface GetCityMattersResponse {
@@ -298,7 +301,7 @@ export interface StateMatterSummary {
 	matter_type?: string;
 	title: string;
 	canonical_summary?: string;
-	canonical_topics?: string;
+	canonical_topics?: string[];
 	appearance_count: number;
 	first_seen: string;
 	last_seen: string;

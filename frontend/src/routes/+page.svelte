@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { fly, fade } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import { apiClient } from '$lib/api/api-client';
 	import type { SearchResult, CityOption, Meeting, AnalyticsData, UpcomingMeeting, TrendingTopic } from '$lib/api/types';
 	import { isSearchSuccess, isSearchAmbiguous } from '$lib/api/types';
@@ -339,15 +341,18 @@
 	{/if}
 
 	{#if searchResults}
-		<div class="results-section">
+		<div class="results-section" in:fly={{ y: 20, duration: 300, easing: cubicOut }}>
 			{#if searchResults.success === false && searchResults.ambiguous && searchResults.city_options}
 				<div class="ambiguous-cities">
-					<div class="ambiguous-message">
+					<div class="ambiguous-message" in:fade={{ duration: 200 }}>
 						{@html searchResults.message}
 					</div>
 					<div class="city-options">
-						{#each searchResults.city_options as cityOption}
-							<div class="city-option-row">
+						{#each searchResults.city_options as cityOption, index}
+							<div
+								class="city-option-row"
+								in:fly={{ y: 15, duration: 250, delay: 100 + index * 50, easing: cubicOut }}
+							>
 								<button
 									class="city-option"
 									onclick={() => handleCityOptionClick(cityOption)}
@@ -366,10 +371,10 @@
 					</div>
 				</div>
 			{:else if !searchResults.success}
-				<div class="error-message">
+				<div class="error-message" in:fly={{ y: 10, duration: 250, easing: cubicOut }}>
 					{searchResults.message || 'Search failed'}
 				</div>
-				<div class="request-city-cta">
+				<div class="request-city-cta" in:fly={{ y: 15, duration: 300, delay: 150, easing: cubicOut }}>
 					<p class="cta-text">Looking for a city we don't track yet?</p>
 					<a href="/dashboard" class="cta-link">Create an account and request it</a>
 					<p class="cta-subtext">Cities with active watchers get priority coverage.</p>
@@ -384,13 +389,18 @@
 
 	<!-- Happening This Week Section -->
 	{#if !searchResults}
-		<section class="happening-section">
+		<section class="happening-section" in:fade={{ duration: 300, delay: 100 }}>
 			{#if trendingTopics.length > 0}
 				<div class="trending-topics">
 					<h2 class="section-title">What America is Discussing</h2>
 					<div class="topic-chips">
-						{#each trendingTopics as topic}
-							<span class="topic-chip" class:trending-up={topic.trend === 'up'} class:trending-new={topic.trend === 'new'}>
+						{#each trendingTopics as topic, index}
+							<span
+								class="topic-chip"
+								class:trending-up={topic.trend === 'up'}
+								class:trending-new={topic.trend === 'new'}
+								in:fly={{ y: 10, duration: 200, delay: 150 + index * 30, easing: cubicOut }}
+							>
 								{topic.display_name}
 								{#if topic.trend === 'up'}
 									<span class="trend-indicator">+</span>

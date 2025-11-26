@@ -21,11 +21,11 @@
 	const city_banana = $derived($page.params.city_url);
 	let showPastMeetings = $state(false);
 	let isInitialLoad = $state(true);
-	let viewMode = $state<'meetings' | 'matters'>('meetings');
 	let cityMatters = $state<any>(null);
 	let mattersLoading = $state(false);
 	let mattersChecked = $state(false);
 	let showWatchModal = $state(false);
+	let showAllMatters = $state(false);
 
 	// Data comes from server-side load function - reactive to navigation
 	const searchResults = $derived(data.searchResults);
@@ -39,7 +39,13 @@
 		// Reset matters when city changes
 		cityMatters = null;
 		mattersChecked = false;
-		viewMode = 'meetings';
+	});
+
+	// Auto-load matters on mount (for preview section)
+	$effect(() => {
+		if (!mattersChecked && city_banana) {
+			loadCityMatters();
+		}
 	});
 
 	// Derived: Check if city has qualifying matters (2+ appearances)
@@ -74,11 +80,6 @@
 				data: result,
 				timestamp: now
 			});
-
-			// If no qualifying matters, switch back to meetings view
-			if (result.total_count === 0) {
-				viewMode = 'meetings';
-			}
 		} catch (err) {
 			console.error('Failed to load city matters:', err);
 			mattersChecked = true;
@@ -87,28 +88,28 @@
 		}
 	}
 
-	async function switchToMatters() {
-		viewMode = 'matters';
-		await loadCityMatters();
-	}
+	// Derived: preview matters (first 4) vs all
+	const previewMatters = $derived(
+		cityMatters?.matters?.slice(0, showAllMatters ? undefined : 4) || []
+	);
+	const hasMoreMatters = $derived(
+		cityMatters?.matters?.length > 4
+	);
 
 	// Snapshot: Preserve UI state and data during navigation
 	export const snapshot = {
 		capture: () => ({
 			showPastMeetings,
-			viewMode,
+			showAllMatters,
 			scrollY: typeof window !== 'undefined' ? window.scrollY : 0
 		}),
 		restore: (values: {
 			showPastMeetings: boolean;
-			viewMode: 'meetings' | 'matters';
+			showAllMatters: boolean;
 			scrollY: number;
 		}) => {
 			showPastMeetings = values.showPastMeetings;
-			viewMode = values.viewMode;
-			if (viewMode === 'matters') {
-				loadCityMatters();
-			}
+			showAllMatters = values.showAllMatters ?? false;
 			isInitialLoad = false;
 			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
 				setTimeout(() => window.scrollTo(0, values.scrollY), 0);
@@ -169,96 +170,60 @@
 	{/if}
 
 	{#if searchResults && searchResults.success}
-		{#if hasQualifyingMatters()}
-			<div class="view-toggle" role="tablist" aria-label="View mode selection">
-				<button
-					class="toggle-btn"
-					class:active={viewMode === 'meetings'}
-					onclick={() => viewMode = 'meetings'}
-					role="tab"
-					aria-selected={viewMode === 'meetings'}
-					aria-controls="content-panel"
-				>
-					Meetings
-				</button>
-				<button
-					class="toggle-btn"
-					class:active={viewMode === 'matters'}
-					onclick={() => switchToMatters()}
-					role="tab"
-					aria-selected={viewMode === 'matters'}
-					aria-controls="content-panel"
-				>
-					Matters
-				</button>
-			</div>
-		{/if}
-
-		{#if viewMode === 'meetings'}
-			{#if searchResults.meetings && searchResults.meetings.length > 0}
-				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
-					<div class="meetings-filter">
-						{#if upcomingMeetings.length > 0}
-							<h2 class="meetings-section-title">Upcoming Meetings</h2>
-						{/if}
-						{#if pastMeetings.length > 0 && upcomingMeetings.length === 0}
-							<h2 class="meetings-section-title">No Upcoming Meetings</h2>
-						{/if}
-						{#if pastMeetings.length > 0}
-							<button
-								class="toggle-past-btn"
-								onclick={() => showPastMeetings = !showPastMeetings}
-								aria-label={showPastMeetings ? `Hide ${pastMeetings.length} past meetings` : `Show ${pastMeetings.length} past meetings`}
-								aria-expanded={showPastMeetings}
-							>
-								{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({pastMeetings.length})
-							</button>
-						{/if}
-					</div>
-
-					<div class="meeting-list">
-				{#each upcomingMeetings as meeting, index}
-					<MeetingCard
-						{meeting}
-						cityUrl={city_banana}
-						isPast={false}
-						animationDuration={isInitialLoad ? 300 : 0}
-						animationDelay={isInitialLoad ? index * 50 : 0}
-						onIntroEnd={() => { if (index === upcomingMeetings.length - 1 && !showPastMeetings) isInitialLoad = false; }}
-					/>
-				{/each}
-
-				{#if showPastMeetings}
-					{#if pastMeetings.length > 0}
-						<h3 class="past-meetings-divider">Past Meetings</h3>
+		<!-- Meetings Section -->
+		{#if searchResults.meetings && searchResults.meetings.length > 0}
+			{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
+				<div class="meetings-filter">
+					{#if upcomingMeetings.length > 0}
+						<h2 class="meetings-section-title">Upcoming Meetings</h2>
 					{/if}
-					{#each pastMeetings as meeting, index}
+					{#if pastMeetings.length > 0 && upcomingMeetings.length === 0}
+						<h2 class="meetings-section-title">No Upcoming Meetings</h2>
+					{/if}
+					{#if pastMeetings.length > 0}
+						<button
+							class="toggle-past-btn"
+							onclick={() => showPastMeetings = !showPastMeetings}
+							aria-label={showPastMeetings ? `Hide ${pastMeetings.length} past meetings` : `Show ${pastMeetings.length} past meetings`}
+							aria-expanded={showPastMeetings}
+						>
+							{showPastMeetings ? 'Hide' : 'Show'} Past Meetings ({pastMeetings.length})
+						</button>
+					{/if}
+				</div>
+
+				<div class="meeting-list">
+					{#each upcomingMeetings as meeting, index}
 						<MeetingCard
 							{meeting}
 							cityUrl={city_banana}
-							isPast={true}
+							isPast={false}
 							animationDuration={isInitialLoad ? 300 : 0}
 							animationDelay={isInitialLoad ? index * 50 : 0}
-							onIntroEnd={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
+							onIntroEnd={() => { if (index === upcomingMeetings.length - 1 && !showPastMeetings) isInitialLoad = false; }}
 						/>
 					{/each}
-				{/if}
-					</div>
-				{:else}
-					<div class="no-meetings">
-						<p class="empty-state-title">No meetings found</p>
-						<p class="empty-state-message">This city might not have any upcoming meetings scheduled yet. Check back soon!</p>
-						<div class="request-city-cta">
-							<p class="cta-text">Want priority updates for this city?</p>
-							<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
-							<p class="cta-subtext">Cities with active watchers get synced more frequently.</p>
-						</div>
-					</div>
-				{/if}
+
+					{#if showPastMeetings}
+						{#if pastMeetings.length > 0}
+							<h3 class="past-meetings-divider">Past Meetings</h3>
+						{/if}
+						{#each pastMeetings as meeting, index}
+							<MeetingCard
+								{meeting}
+								cityUrl={city_banana}
+								isPast={true}
+								animationDuration={isInitialLoad ? 300 : 0}
+								animationDelay={isInitialLoad ? index * 50 : 0}
+								onIntroEnd={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
+							/>
+						{/each}
+					{/if}
+				</div>
 			{:else}
 				<div class="no-meetings">
 					<p class="empty-state-title">No meetings found</p>
-					<p class="empty-state-message">{'message' in searchResults ? searchResults.message : 'We could not find any meetings for this city. Agendas are typically posted 48 hours before meetings.'}</p>
+					<p class="empty-state-message">This city might not have any upcoming meetings scheduled yet. Check back soon!</p>
 					<div class="request-city-cta">
 						<p class="cta-text">Want priority updates for this city?</p>
 						<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
@@ -266,85 +231,98 @@
 					</div>
 				</div>
 			{/if}
-		{:else if viewMode === 'matters'}
-			{#if mattersLoading}
-				<div class="loading-matters">
-					<p>Loading matters timeline...</p>
+		{:else}
+			<div class="no-meetings">
+				<p class="empty-state-title">No meetings found</p>
+				<p class="empty-state-message">{'message' in searchResults ? searchResults.message : 'We could not find any meetings for this city. Agendas are typically posted 48 hours before meetings.'}</p>
+				<div class="request-city-cta">
+					<p class="cta-text">Want priority updates for this city?</p>
+					<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
+					<p class="cta-subtext">Cities with active watchers get synced more frequently.</p>
 				</div>
-			{:else if cityMatters && cityMatters.matters && cityMatters.matters.length > 0}
-				<div class="matters-view">
-					<div class="matters-header">
-						<h2 class="matters-title">Legislative Matters</h2>
-						<div class="matters-stats">
-							<span class="stat">{cityMatters.total_count} matters tracked</span>
-						</div>
+			</div>
+		{/if}
+
+		<!-- Active Matters Section (always visible) -->
+		{#if previewMatters.length > 0}
+			<section class="matters-section">
+				<div class="matters-section-header">
+					<div class="matters-section-title-row">
+						<h2 class="matters-section-title">Active Matters</h2>
+						<span class="matters-count">{cityMatters?.total_count || previewMatters.length} tracked</span>
 					</div>
-					<div class="matters-list">
-						{#each cityMatters.matters as matter}
-							{@const hasMultipleAppearances = matter.appearance_count > 1}
-							<a href="/matter/{matter.id}" class="matter-card-link">
-								<div class="matter-card">
-									<div class="matter-card-header">
-										{#if matter.matter_file}
-											<span class="matter-file-badge">{matter.matter_file}</span>
-										{/if}
-										{#if matter.matter_type}
-											<span class="matter-type-label">{matter.matter_type}</span>
-										{/if}
-										{#if hasMultipleAppearances}
-											<span class="appearances-badge">{matter.appearance_count} appearances</span>
-										{/if}
-									</div>
-									<h3 class="matter-card-title">{matter.title}</h3>
-									{#if matter.canonical_topics && matter.canonical_topics.length > 0}
-										<div class="matter-card-topics">
-											{#each matter.canonical_topics.slice(0, 4) as topic}
-												<span class="matter-topic-tag">{topic}</span>
-											{/each}
-										</div>
+					<p class="matters-section-subtitle">Legislative items moving through this city's government</p>
+				</div>
+
+				<div class="matters-list">
+					{#each previewMatters as matter}
+						{@const hasMultipleAppearances = matter.appearance_count > 1}
+						<a href="/matter/{matter.id}" class="matter-card-link">
+							<div class="matter-card">
+								<div class="matter-card-header">
+									{#if matter.matter_file}
+										<span class="matter-file-badge">{matter.matter_file}</span>
 									{/if}
-									{#if matter.canonical_summary}
-										<div class="matter-card-summary">
-											{matter.canonical_summary.substring(0, 200)}{matter.canonical_summary.length > 200 ? '...' : ''}
-										</div>
+									{#if matter.matter_type}
+										<span class="matter-type-label">{matter.matter_type}</span>
 									{/if}
-									{#if hasMultipleAppearances && matter.timeline}
-										<div class="matter-timeline-container">
-											<MatterTimeline
-												matterId={matter.id}
-												matterFile={matter.matter_file}
-												timelineData={{
-													success: true,
-													matter: {
-														id: matter.id,
-														banana: matter.banana,
-														matter_id: matter.matter_id,
-														matter_file: matter.matter_file,
-														matter_type: matter.matter_type,
-														title: matter.title,
-														canonical_summary: matter.canonical_summary,
-														canonical_topics: matter.canonical_topics,
-														first_seen: matter.first_seen,
-														last_seen: matter.last_seen,
-														appearance_count: matter.appearance_count
-													},
-													timeline: matter.timeline,
-													appearance_count: matter.appearance_count
-												}}
-											/>
-										</div>
+									{#if hasMultipleAppearances}
+										<span class="appearances-badge">{matter.appearance_count} appearances</span>
 									{/if}
 								</div>
-							</a>
-						{/each}
-					</div>
+								<h3 class="matter-card-title">{matter.title}</h3>
+								{#if matter.canonical_topics && matter.canonical_topics.length > 0}
+									<div class="matter-card-topics">
+										{#each matter.canonical_topics.slice(0, 4) as topic}
+											<span class="matter-topic-tag">{topic}</span>
+										{/each}
+									</div>
+								{/if}
+								{#if hasMultipleAppearances && matter.timeline}
+									<div class="matter-timeline-container">
+										<MatterTimeline
+											matterFile={matter.matter_file}
+											timelineData={{
+												success: true,
+												matter: {
+													id: matter.id,
+													banana: matter.banana,
+													matter_id: matter.matter_id,
+													matter_file: matter.matter_file,
+													matter_type: matter.matter_type,
+													title: matter.title,
+													canonical_summary: matter.canonical_summary,
+													canonical_topics: matter.canonical_topics,
+													first_seen: matter.first_seen,
+													last_seen: matter.last_seen,
+													appearance_count: matter.appearance_count
+												},
+												timeline: matter.timeline,
+												appearance_count: matter.appearance_count
+											}}
+										/>
+									</div>
+								{/if}
+							</div>
+						</a>
+					{/each}
 				</div>
-			{:else}
-				<div class="no-meetings">
-					<p class="empty-state-title">No matters found</p>
-					<p class="empty-state-message">This city doesn't have any tracked legislative matters yet.</p>
+
+				{#if hasMoreMatters && !showAllMatters}
+					<button class="show-more-matters" onclick={() => showAllMatters = true}>
+						Show all {cityMatters?.total_count} matters
+					</button>
+				{/if}
+			</section>
+		{:else if mattersLoading}
+			<section class="matters-section">
+				<div class="matters-section-header">
+					<h2 class="matters-section-title">Active Matters</h2>
 				</div>
-			{/if}
+				<div class="loading-matters">
+					<p>Loading matters...</p>
+				</div>
+			</section>
 		{/if}
 	{/if}
 	</div>
@@ -473,40 +451,6 @@
 		border-bottom-color: var(--civic-accent);
 	}
 
-	.view-toggle {
-		display: flex;
-		gap: var(--space-xs);
-		margin-bottom: var(--space-xl);
-		background: var(--surface-secondary);
-		padding: 0.35rem;
-		border-radius: var(--radius-lg);
-		width: fit-content;
-	}
-
-	.toggle-btn {
-		padding: 0.65rem 1.5rem;
-		background: transparent;
-		border: none;
-		border-radius: var(--radius-md);
-		font-family: var(--font-body);
-		font-size: var(--text-sm);
-		font-weight: var(--font-semibold);
-		color: var(--text-muted);
-		cursor: pointer;
-		transition: all var(--transition-fast);
-	}
-
-	.toggle-btn:hover {
-		color: var(--action-coral);
-		background: rgba(249, 115, 22, 0.08);
-	}
-
-	.toggle-btn.active {
-		background: var(--action-coral);
-		color: white;
-		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
-	}
-
 	.priority-hint {
 		font-family: var(--font-body);
 		font-size: var(--text-xs);
@@ -526,34 +470,54 @@
 
 	.loading-matters {
 		text-align: center;
-		padding: 4rem 2rem;
+		padding: var(--space-xl) var(--space-lg);
 		color: var(--text-muted);
 		font-family: var(--font-body);
+		font-size: var(--text-sm);
 	}
 
-	.matters-view {
-		margin-top: 1rem;
+	/* Matters Section (always visible) */
+	.matters-section {
+		margin-top: var(--space-3xl);
+		padding-top: var(--space-xl);
+		border-top: 1px solid var(--border-primary);
 	}
 
-	.matters-header {
+	.matters-section-header {
 		margin-bottom: var(--space-xl);
-		border-bottom: 1px solid var(--border-primary);
-		padding-bottom: var(--space-md);
 	}
 
-	.matters-title {
+	.matters-section-title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-md);
+		margin-bottom: var(--space-xs);
+	}
+
+	.matters-section-title {
 		font-family: var(--font-body);
 		font-size: var(--text-xl);
 		font-weight: var(--font-bold);
 		color: var(--text);
-		margin: 0 0 var(--space-xs) 0;
+		margin: 0;
 		letter-spacing: -0.01em;
 	}
 
-	.matters-stats {
+	.matters-count {
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		font-weight: var(--font-medium);
+		color: var(--text-muted);
+		background: var(--surface-secondary);
+		padding: 0.2rem 0.5rem;
+		border-radius: var(--radius-sm);
+	}
+
+	.matters-section-subtitle {
 		font-family: var(--font-body);
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+		margin: 0;
 	}
 
 	.matters-list {
@@ -661,6 +625,28 @@
 
 	.matter-timeline-container {
 		margin-top: 1rem;
+	}
+
+	.show-more-matters {
+		display: block;
+		width: 100%;
+		margin-top: var(--space-lg);
+		padding: var(--space-md) var(--space-lg);
+		background: transparent;
+		border: 2px dashed var(--border-primary);
+		border-radius: var(--radius-lg);
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		font-weight: var(--font-semibold);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.show-more-matters:hover {
+		border-color: var(--action-coral);
+		color: var(--action-coral);
+		background: var(--surface-warm);
 	}
 
 	.request-city-cta {
