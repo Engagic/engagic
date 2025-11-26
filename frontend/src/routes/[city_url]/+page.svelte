@@ -138,19 +138,24 @@
 					Get weekly updates
 				</button>
 			</div>
-			{#if searchResults.source_url && searchResults.vendor_display_name}
-				<div class="source-attribution">
-					<span class="attribution-text">Data sourced from</span>
-					<a
-						href={searchResults.source_url}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="source-link"
-					>
-						{searchResults.vendor_display_name}
-					</a>
-				</div>
-			{/if}
+			<div class="source-row">
+				{#if searchResults.source_url && searchResults.vendor_display_name}
+					<div class="source-attribution">
+						<span class="attribution-text">Data sourced from</span>
+						<a
+							href={searchResults.source_url}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="source-link"
+						>
+							{searchResults.vendor_display_name}
+						</a>
+					</div>
+				{/if}
+				<button class="priority-hint" onclick={() => showWatchModal = true}>
+					Watching this city will give it sync priority
+				</button>
+			</div>
 		{/if}
 	</div>
 
@@ -164,36 +169,30 @@
 	{/if}
 
 	{#if searchResults && searchResults.success}
-		<div class="controls-row">
-			{#if hasQualifyingMatters()}
-				<div class="view-toggle" role="tablist" aria-label="View mode selection">
-					<button
-						class="toggle-btn"
-						class:active={viewMode === 'meetings'}
-						onclick={() => viewMode = 'meetings'}
-						role="tab"
-						aria-selected={viewMode === 'meetings'}
-						aria-controls="content-panel"
-					>
-						Meetings
-					</button>
-					<button
-						class="toggle-btn"
-						class:active={viewMode === 'matters'}
-						onclick={() => switchToMatters()}
-						role="tab"
-						aria-selected={viewMode === 'matters'}
-						aria-controls="content-panel"
-					>
-						Matters
-					</button>
-				</div>
-			{/if}
-
-			<p class="priority-hint">
-				<button class="hint-link" onclick={() => showWatchModal = true}>Watching this city</button> will give it sync priority
-			</p>
-		</div>
+		{#if hasQualifyingMatters()}
+			<div class="view-toggle" role="tablist" aria-label="View mode selection">
+				<button
+					class="toggle-btn"
+					class:active={viewMode === 'meetings'}
+					onclick={() => viewMode = 'meetings'}
+					role="tab"
+					aria-selected={viewMode === 'meetings'}
+					aria-controls="content-panel"
+				>
+					Meetings
+				</button>
+				<button
+					class="toggle-btn"
+					class:active={viewMode === 'matters'}
+					onclick={() => switchToMatters()}
+					role="tab"
+					aria-selected={viewMode === 'matters'}
+					aria-controls="content-panel"
+				>
+					Matters
+				</button>
+			</div>
+		{/if}
 
 		{#if viewMode === 'meetings'}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
@@ -437,6 +436,15 @@
 		transform: translateY(0);
 	}
 
+	.source-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		margin-top: 0.5rem;
+		flex-wrap: wrap;
+	}
+
 	.source-attribution {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
@@ -444,7 +452,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		margin-top: 0.5rem;
 	}
 
 	.attribution-text {
@@ -462,15 +469,6 @@
 	.source-link:hover {
 		color: var(--civic-accent);
 		border-bottom-color: var(--civic-accent);
-	}
-
-	.controls-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 2rem;
-		gap: 1rem;
-		flex-wrap: wrap;
 	}
 
 	.view-toggle {
@@ -508,23 +506,19 @@
 
 	.priority-hint {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
+		font-size: 0.85rem;
 		color: var(--civic-gray);
-		margin: 0;
-	}
-
-	.hint-link {
 		background: none;
 		border: none;
-		color: var(--civic-blue);
 		cursor: pointer;
 		padding: 0;
-		font: inherit;
-		text-decoration: underline;
+		opacity: 0.7;
+		transition: all 0.2s ease;
 	}
 
-	.hint-link:hover {
-		color: var(--civic-accent);
+	.priority-hint:hover {
+		opacity: 1;
+		color: var(--civic-blue);
 	}
 
 	.loading-matters {
@@ -727,11 +721,6 @@
 			font-size: 1.5rem;
 		}
 
-		.controls-row {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-
 		.view-toggle {
 			width: 100%;
 			justify-content: center;
@@ -741,10 +730,6 @@
 			flex: 1;
 			padding: 0.6rem 1rem;
 			font-size: 0.85rem;
-		}
-
-		.priority-hint {
-			align-self: flex-end;
 		}
 
 		.matter-card {
