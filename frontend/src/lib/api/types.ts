@@ -11,6 +11,14 @@ export interface CityOption {
 	summarized_meetings: number;
 }
 
+// City-level participation config for centralized testimony processes (e.g., NYC)
+// When set, replaces meeting-level participation for testimony/contact info
+export interface CityParticipation {
+	testimony_url?: string;    // Portal to submit testimony (council.nyc.gov/testify/)
+	testimony_email?: string;  // Official testimony email (testimony@council.nyc.gov)
+	process_url?: string;      // Link to "how to testify" instructions
+}
+
 export interface AgendaItem {
 	id: string;
 	meeting_id: string;
@@ -107,6 +115,7 @@ interface SearchSuccess {
 	vendor: string;
 	vendor_display_name: string;
 	source_url: string | null;
+	participation?: CityParticipation;  // City-level testimony config (replaces meeting-level for NYC, etc.)
 	meetings: Meeting[];
 	cached: boolean;
 	query: string;
@@ -267,6 +276,7 @@ export interface GetMeetingResponse {
 	city_name: string | null;
 	state: string | null;
 	banana: string;
+	participation?: CityParticipation;  // City-level testimony config
 }
 
 export interface MatterSummary {

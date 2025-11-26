@@ -130,10 +130,10 @@
 			<h2 class="section-title">Legislative Journey</h2>
 			<svelte:boundary onerror={(e) => console.error('Timeline error:', e)}>
 				<MatterTimeline timelineData={data.timeline} matterFile={matter.matter_file} />
-				{#snippet failed(error)}
+				{#snippet failed(error: unknown, reset: () => void)}
 					<div class="error-message">
 						<p>Unable to load legislative timeline</p>
-						<p class="error-detail">{error.message}</p>
+						<p class="error-detail">{error instanceof Error ? error.message : String(error)}</p>
 					</div>
 				{/snippet}
 			</svelte:boundary>

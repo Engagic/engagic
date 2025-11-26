@@ -11,10 +11,15 @@ from typing import Any, List, Optional
 from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
-from database.models import City
+from database.models import City, CityParticipation
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="city_repository")
+
+
+def _hydrate_participation(row) -> Optional[CityParticipation]:
+    """Hydrate CityParticipation from JSONB column"""
+    return CityParticipation(**row["participation"]) if row["participation"] else None
 
 
 class CityRepository(BaseRepository):
@@ -79,7 +84,7 @@ class CityRepository(BaseRepository):
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT banana, name, state, vendor, slug, county, status
+                SELECT banana, name, state, vendor, slug, county, status, participation
                 FROM cities
                 WHERE banana = $1
                 """,
@@ -108,6 +113,7 @@ class CityRepository(BaseRepository):
                 slug=row["slug"],
                 county=row["county"],
                 status=row["status"],
+                participation=_hydrate_participation(row),
                 zipcodes=zipcodes,
             )
 
@@ -123,7 +129,7 @@ class CityRepository(BaseRepository):
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT c.banana, c.name, c.state, c.vendor, c.slug, c.county, c.status
+                SELECT c.banana, c.name, c.state, c.vendor, c.slug, c.county, c.status, c.participation
                 FROM cities c
                 INNER JOIN zipcodes z ON c.banana = z.banana
                 WHERE z.zipcode = $1
@@ -150,6 +156,7 @@ class CityRepository(BaseRepository):
                 slug=row["slug"],
                 county=row["county"],
                 status=row["status"],
+                participation=_hydrate_participation(row),
                 zipcodes=zipcodes,
             )
 
@@ -169,7 +176,7 @@ class CityRepository(BaseRepository):
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT banana, name, state, vendor, slug, county, status
+                SELECT banana, name, state, vendor, slug, county, status, participation
                 FROM cities
                 WHERE status = $1
                 ORDER BY name
@@ -196,6 +203,7 @@ class CityRepository(BaseRepository):
                         slug=row["slug"],
                         county=row["county"],
                         status=row["status"],
+                        participation=_hydrate_participation(row),
                         zipcodes=zipcodes,
                     )
                 )
@@ -250,7 +258,7 @@ class CityRepository(BaseRepository):
             params.append(limit)
 
         query = f"""
-            SELECT banana, name, state, vendor, slug, county, status
+            SELECT banana, name, state, vendor, slug, county, status, participation
             FROM cities
             WHERE {where_clause}
             ORDER BY state, name
@@ -279,6 +287,7 @@ class CityRepository(BaseRepository):
                         slug=row["slug"],
                         county=row["county"],
                         status=row["status"],
+                        participation=_hydrate_participation(row),
                         zipcodes=zipcodes,
                     )
                 )

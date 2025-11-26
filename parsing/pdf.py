@@ -10,6 +10,7 @@ Legislative formatting detection (strikethrough/underline):
 """
 
 import io
+import re
 import time
 import warnings
 import requests
@@ -136,13 +137,55 @@ def _match_lines_to_text(page: fitz.Page, lines: List[Tuple[float, float, float]
     return result
 
 
-def _has_legislative_legend(doc: fitz.Document) -> bool:
-    """Check if document contains legislative formatting legend (any page)."""
+def _has_legislative_legend(doc: fitz.Document, proximity_chars: int = 200) -> bool:
+    """Check if document contains legislative formatting legend (clustered keywords).
+
+    A true legislative legend has all 4 keyword types appearing close together,
+    like: "Additions shown as underline, deletions shown as strikethrough"
+
+    False positives occur when keywords are scattered throughout ordinance text
+    describing what amendments do (e.g., "the addition of Section 12-345...").
+
+    Args:
+        doc: PyMuPDF document
+        proximity_chars: Maximum distance between keywords to consider clustered (default 200)
+
+    Returns:
+        True only if all 4 keyword types appear within proximity_chars of each other
+    """
+    # Keyword patterns for each category
+    addition_pattern = re.compile(r'\b(addition|added)\b')
+    deletion_pattern = re.compile(r'\b(deletion|deleted)\b')
+    underline_pattern = re.compile(r'\bunderline\b')
+    strikethrough_pattern = re.compile(r'\bstrikethrough\b')
+
     for page_num in range(len(doc)):
         text = doc[page_num].get_text().lower()  # type: ignore[attr-defined]
-        if (("addition" in text or "added" in text) and "underline" in text and
-            ("deletion" in text or "deleted" in text) and "strikethrough" in text):
-            return True
+
+        # Find all positions of each keyword type
+        addition_positions = [m.start() for m in addition_pattern.finditer(text)]
+        deletion_positions = [m.start() for m in deletion_pattern.finditer(text)]
+        underline_positions = [m.start() for m in underline_pattern.finditer(text)]
+        strikethrough_positions = [m.start() for m in strikethrough_pattern.finditer(text)]
+
+        # All 4 types must be present on this page
+        if not (addition_positions and deletion_positions and
+                underline_positions and strikethrough_positions):
+            continue
+
+        # Check if any combination of positions clusters within proximity_chars
+        # Use underline as anchor since it's least likely to appear in normal text
+        for u_pos in underline_positions:
+            window_start = u_pos - proximity_chars
+            window_end = u_pos + proximity_chars
+
+            has_addition = any(window_start <= p <= window_end for p in addition_positions)
+            has_deletion = any(window_start <= p <= window_end for p in deletion_positions)
+            has_strikethrough = any(window_start <= p <= window_end for p in strikethrough_positions)
+
+            if has_addition and has_deletion and has_strikethrough:
+                return True
+
     return False
 
 

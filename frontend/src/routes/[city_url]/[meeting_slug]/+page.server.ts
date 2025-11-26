@@ -17,10 +17,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				return {
 					selectedMeeting: result.meeting,
 					searchResults: {
-						success: true,
-						city_name: result.city_name,
-						state: result.state,
+						success: true as const,
+						city_name: result.city_name ?? '',
+						state: result.state ?? '',
 						banana: result.banana,
+						vendor: '',
+						vendor_display_name: '',
+						source_url: null,
+						participation: result.participation,
 						meetings: [result.meeting],
 						cached: true,
 						query: city_url,

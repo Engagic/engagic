@@ -18,7 +18,7 @@
 	let { data }: { data: PageData } = $props();
 
 
-	const city_banana = $derived($page.params.city_url);
+	const city_banana = $derived($page.params.city_url ?? '');
 	let showPastMeetings = $state(false);
 	let isInitialLoad = $state(true);
 	let viewMode = $state<'meetings' | 'matters'>('meetings');
@@ -159,7 +159,7 @@
 		{/if}
 	</div>
 
-	{#if searchResults && 'city_name' in searchResults}
+	{#if searchResults && 'city_name' in searchResults && searchResults.city_name}
 		<WatchCityModal
 			cityName={searchResults.city_name}
 			cityBanana={city_banana}
@@ -311,7 +311,6 @@
 									{#if hasMultipleAppearances && matter.timeline}
 										<div class="matter-timeline-container">
 											<MatterTimeline
-												matterId={matter.id}
 												matterFile={matter.matter_file}
 												timelineData={{
 													success: true,
