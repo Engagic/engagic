@@ -13,4 +13,4 @@ SET participation = '{
   "testimony_email": "testimony@council.nyc.gov",
   "process_url": "https://council.nyc.gov/testify/"
 }'::jsonb
-WHERE banana = 'newyorkcityNY';
+WHERE banana = 'newyorkNY';
