@@ -161,7 +161,7 @@
 					const meetingSlug = generateMeetingSlug(meeting);
 					logger.trackEvent('random_meeting_click', {
 						city: banana,
-						quality_score: result.meeting.quality_score
+						item_count: result.meeting.item_count
 					});
 
 					goto(`/${cityUrl}/${meetingSlug}`);

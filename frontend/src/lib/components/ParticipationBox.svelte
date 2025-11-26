@@ -110,7 +110,7 @@
 							<span class="streaming-label-mobile">Watch Live</span>
 						</div>
 						<div class="streaming-content-mobile">
-							{#each p.streaming_urls as stream}
+							{#each p.streaming_urls ?? [] as stream}
 								<div class="streaming-item">
 									<span class="viewing-icon">📺</span>
 									{#if stream.url}
@@ -136,7 +136,7 @@
 					<span class="viewing-label">Watch Live</span>
 				</div>
 				<div class="viewing-content">
-					{#each p.streaming_urls as stream}
+					{#each p.streaming_urls ?? [] as stream}
 						<div class="streaming-item">
 							<span class="viewing-icon">📺</span>
 							{#if stream.url}

@@ -17,6 +17,11 @@ from config import get_logger
 logger = get_logger(__name__).bind(component="city_repository")
 
 
+def _hydrate_participation(row) -> Optional[CityParticipation]:
+    """Hydrate CityParticipation from JSONB column"""
+    return CityParticipation(**row["participation"]) if row["participation"] else None
+
+
 class CityRepository(BaseRepository):
     """Repository for city operations
 
@@ -108,7 +113,7 @@ class CityRepository(BaseRepository):
                 slug=row["slug"],
                 county=row["county"],
                 status=row["status"],
-                participation=CityParticipation(**row["participation"]) if row["participation"] else None,
+                participation=_hydrate_participation(row),
                 zipcodes=zipcodes,
             )
 
@@ -151,7 +156,7 @@ class CityRepository(BaseRepository):
                 slug=row["slug"],
                 county=row["county"],
                 status=row["status"],
-                participation=CityParticipation(**row["participation"]) if row["participation"] else None,
+                participation=_hydrate_participation(row),
                 zipcodes=zipcodes,
             )
 
@@ -198,7 +203,7 @@ class CityRepository(BaseRepository):
                         slug=row["slug"],
                         county=row["county"],
                         status=row["status"],
-                        participation=CityParticipation(**row["participation"]) if row["participation"] else None,
+                        participation=_hydrate_participation(row),
                         zipcodes=zipcodes,
                     )
                 )
@@ -282,7 +287,7 @@ class CityRepository(BaseRepository):
                         slug=row["slug"],
                         county=row["county"],
                         status=row["status"],
-                        participation=CityParticipation(**row["participation"]) if row["participation"] else None,
+                        participation=_hydrate_participation(row),
                         zipcodes=zipcodes,
                     )
                 )

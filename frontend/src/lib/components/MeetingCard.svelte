@@ -27,8 +27,8 @@
 
 	const date = $derived(meeting.date ? new Date(meeting.date) : null);
 	const isValidDate = $derived(date && !isNaN(date.getTime()) && date.getTime() !== 0);
-	const dayOfWeek = $derived(isValidDate ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null);
-	const monthDay = $derived(isValidDate ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
+	const dayOfWeek = $derived(isValidDate && date ? date.toLocaleDateString('en-US', { weekday: 'short' }) : null);
+	const monthDay = $derived(isValidDate && date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
 	const timeStr = $derived(extractTime(meeting.date));
 
 	// Track mobile state for topic limiting (performance: check once, not on every render)
@@ -44,7 +44,7 @@
 	});
 
 	function getStatusClass(meeting: Meeting): string {
-		if (meeting.items?.length > 0 && meeting.items.some(item => item.summary)) {
+		if (meeting.items && meeting.items.length > 0 && meeting.items.some(item => item.summary)) {
 			return 'status-border-ai';
 		} else if (meeting.summary) {
 			return 'status-border-ai';
@@ -99,7 +99,7 @@
 		</div>
 
 		<div class="right-column">
-			{#if meeting.items?.length > 0 && meeting.items.some(item => item.summary)}
+			{#if meeting.items && meeting.items.length > 0 && meeting.items.some(item => item.summary)}
 				<div class="meeting-status status-items">
 					<span class="status-icon">✓</span> AI Summary
 				</div>
