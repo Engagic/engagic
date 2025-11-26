@@ -3,6 +3,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
 	import type { SearchResult, Meeting } from '$lib/api/index';
+	import { isSearchSuccess } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
 	import { findItemByAnchor } from '$lib/utils/anchor';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
@@ -19,51 +20,57 @@
 	let selectedMeeting: Meeting | null = $state(data.selectedMeeting || null);
 	let error = $state(data.error || '');
 	let showProceduralItems = $state(false);
-	let expandedTitles = $state(new SvelteSet<string>());
-	let expandedItems = $state(new SvelteSet<string>());
+	let expandedTitles = new SvelteSet<string>();
+	let expandedItems = new SvelteSet<string>();
 	let flyerGenerating = $state(false);
 
 	// Handle deep linking to specific items (supports both #item-5-e and #2025-5470 formats)
+	function scrollToAnchoredItem(hash: string) {
+		if (!hash) return;
+
+		const matchingItem = findItemByAnchor(selectedMeeting!.items!, hash);
+		if (!matchingItem) {
+			console.warn(`No matching item found for hash: #${hash}`);
+			return;
+		}
+
+		// Show procedural items if needed
+		if (!matchingItem.summary && !showProceduralItems) {
+			showProceduralItems = true;
+		}
+
+		expandedItems.add(matchingItem.id);
+
+		// Scroll after DOM renders
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				const element = document.getElementById(hash);
+				if (!element) {
+					console.warn(`Anchor element not found: #${hash}`);
+					return;
+				}
+
+				element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				const isDark = document.documentElement.classList.contains('dark');
+				element.style.backgroundColor = isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(14, 165, 233, 0.1)';
+				setTimeout(() => {
+					element.style.backgroundColor = '';
+					element.style.transition = 'background-color 1s ease';
+				}, 2000);
+			});
+		});
+	}
+
 	$effect(() => {
 		if (typeof window !== 'undefined' && window.location.hash && selectedMeeting?.items) {
-			const hash = window.location.hash.substring(1); // Remove #
-
-			if (hash) {
-				// Find the matching item using shared utility
-				const matchingItem = findItemByAnchor(selectedMeeting.items, hash);
-
-				if (matchingItem) {
-					// If item has no summary and procedural items are hidden, show them
-					if (!matchingItem.summary && !showProceduralItems) {
-						showProceduralItems = true;
-					}
-
-					// Expand the item
-					expandedItems.add(matchingItem.id);
-
-					// Wait for DOM to render (use requestAnimationFrame for more reliable timing)
-					requestAnimationFrame(() => {
-						requestAnimationFrame(() => {
-							const element = document.getElementById(hash);
-							if (element) {
-								element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-								const isDark = document.documentElement.classList.contains('dark');
-								element.style.backgroundColor = isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(14, 165, 233, 0.1)';
-								setTimeout(() => {
-									element.style.backgroundColor = '';
-									element.style.transition = 'background-color 1s ease';
-								}, 2000);
-							} else {
-								console.warn(`Anchor element not found: #${hash}`);
-							}
-						});
-					});
-				} else {
-					console.warn(`No matching item found for hash: #${hash}`);
-				}
-			}
+			scrollToAnchoredItem(window.location.hash.substring(1));
 		}
 	});
+
+	// Extract city participation using type guard for proper narrowing
+	const cityParticipation = $derived(
+		searchResults && isSearchSuccess(searchResults) ? searchResults.participation : undefined
+	);
 
 	// Filter items by whether they have summaries
 	const summarizedItems = $derived(
@@ -77,6 +84,19 @@
 			? selectedMeeting?.items || []
 			: summarizedItems
 	);
+
+	// Pre-compute formatted date to avoid deep nesting in template
+	const formattedDate = $derived.by(() => {
+		if (!selectedMeeting?.date) return null;
+		const date = new Date(selectedMeeting.date);
+		if (isNaN(date.getTime()) || date.getTime() === 0) return null;
+
+		const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' });
+		const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+		const timeStr = extractTime(selectedMeeting.date);
+
+		return { dayOfWeek, monthDay, timeStr };
+	});
 
 	function handleFlyerGenerateChange(generating: boolean) {
 		flyerGenerating = generating;
@@ -97,8 +117,10 @@
 			scrollY: number;
 		}) => {
 			showProceduralItems = values.showProceduralItems;
-			expandedTitles = new SvelteSet(values.expandedTitles);
-			expandedItems = new SvelteSet(values.expandedItems);
+			expandedTitles.clear();
+			values.expandedTitles.forEach(t => expandedTitles.add(t));
+			expandedItems.clear();
+			values.expandedItems.forEach(i => expandedItems.add(i));
 			if (typeof window !== 'undefined' && typeof values.scrollY === 'number') {
 				setTimeout(() => window.scrollTo(0, values.scrollY), 0);
 			}
@@ -114,16 +136,16 @@
 <div class="container">
 	<div class="main-content">
 		<div class="top-nav">
-			<a href="/{city_banana}" class="back-link" data-sveltekit-preload-data="hover">← {searchResults && searchResults.success ? searchResults.city_name : 'Back'}</a>
+			<a href="/{city_banana}" class="back-link" data-sveltekit-preload-data="hover">← {searchResults && isSearchSuccess(searchResults) ? searchResults.city_name : 'Back'}</a>
 			<a href="/" class="compact-logo" aria-label="Return to engagic homepage" data-sveltekit-preload-data="hover">
 				<img src="/icon-64.png" alt="engagic" class="logo-icon" />
 			</a>
 		</div>
 
-	{#if selectedMeeting?.participation}
+	{#if selectedMeeting?.participation || cityParticipation}
 		<ParticipationBox
-			participation={selectedMeeting.participation}
-			cityParticipation={searchResults?.success ? searchResults.participation : undefined}
+			participation={selectedMeeting?.participation ?? {}}
+			{cityParticipation}
 		/>
 	{/if}
 
@@ -148,33 +170,32 @@
 
 				<div class="meeting-meta-row">
 					<div class="meeting-meta-left">
-						{#if selectedMeeting.date}
-							{@const date = new Date(selectedMeeting.date)}
-							{@const isValidDate = !isNaN(date.getTime()) && date.getTime() !== 0}
-							{#if isValidDate}
-								{@const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' })}
-								{@const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-								{@const timeStr = extractTime(selectedMeeting.date)}
-								<div class="meeting-date">
-									{dayOfWeek}, {monthDay}{#if timeStr} • {timeStr}{/if}
-								</div>
+						<div class="meeting-date">
+							{#if formattedDate}
+								{formattedDate.dayOfWeek}, {formattedDate.monthDay}{#if formattedDate.timeStr} - {formattedDate.timeStr}{/if}
 							{:else}
-								<div class="meeting-date">Date TBD</div>
+								Date TBD
 							{/if}
-						{:else}
-							<div class="meeting-date">Date TBD</div>
-						{/if}
+						</div>
 					</div>
 					<div class="meeting-meta-right">
 						{#if selectedMeeting.agenda_url}
 							<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="document-link">
-								<span class="document-icon">📄</span>
+								<svg class="document-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+									<path d="M14 2v6h6"/>
+									<line x1="16" y1="13" x2="8" y2="13"/>
+									<line x1="16" y1="17" x2="8" y2="17"/>
+								</svg>
 								<span>View Agenda</span>
 							</a>
 						{:else if selectedMeeting.packet_url}
 							{@const urls = Array.isArray(selectedMeeting.packet_url) ? selectedMeeting.packet_url : [selectedMeeting.packet_url]}
 							<a href={urls[0]} target="_blank" rel="noopener noreferrer" class="document-link">
-								<span class="document-icon">📋</span>
+								<svg class="document-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+									<rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+								</svg>
 								<span>View Packet</span>
 							</a>
 						{/if}
@@ -204,10 +225,10 @@
 								{flyerGenerating}
 								onFlyerGenerate={handleFlyerGenerateChange}
 							/>
-							{#snippet failed(error)}
+							{#snippet failed(error: unknown, reset: () => void)}
 								<div class="agenda-item-error">
 									<p>Unable to display agenda item</p>
-									<p class="error-detail-small">{item.agenda_number || item.sequence}: {error.message}</p>
+									<p class="error-detail-small">{item.agenda_number || item.sequence}: {error instanceof Error ? error.message : String(error)}</p>
 								</div>
 							{/snippet}
 						</svelte:boundary>
@@ -387,7 +408,10 @@
 	}
 
 	.document-icon {
-		font-size: 0.85rem;
+		width: 1em;
+		height: 1em;
+		vertical-align: -0.125em;
+		flex-shrink: 0;
 	}
 
 	.toggle-procedural-btn {
