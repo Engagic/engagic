@@ -164,34 +164,36 @@
 	{/if}
 
 	{#if searchResults && searchResults.success}
-		{#if hasQualifyingMatters()}
-			<div class="view-toggle" role="tablist" aria-label="View mode selection">
-				<button
-					class="toggle-btn"
-					class:active={viewMode === 'meetings'}
-					onclick={() => viewMode = 'meetings'}
-					role="tab"
-					aria-selected={viewMode === 'meetings'}
-					aria-controls="content-panel"
-				>
-					Meetings
-				</button>
-				<button
-					class="toggle-btn"
-					class:active={viewMode === 'matters'}
-					onclick={() => switchToMatters()}
-					role="tab"
-					aria-selected={viewMode === 'matters'}
-					aria-controls="content-panel"
-				>
-					Matters
-				</button>
-			</div>
-		{/if}
+		<div class="controls-row">
+			{#if hasQualifyingMatters()}
+				<div class="view-toggle" role="tablist" aria-label="View mode selection">
+					<button
+						class="toggle-btn"
+						class:active={viewMode === 'meetings'}
+						onclick={() => viewMode = 'meetings'}
+						role="tab"
+						aria-selected={viewMode === 'meetings'}
+						aria-controls="content-panel"
+					>
+						Meetings
+					</button>
+					<button
+						class="toggle-btn"
+						class:active={viewMode === 'matters'}
+						onclick={() => switchToMatters()}
+						role="tab"
+						aria-selected={viewMode === 'matters'}
+						aria-controls="content-panel"
+					>
+						Matters
+					</button>
+				</div>
+			{/if}
 
-		<p class="priority-hint">
-			<button class="hint-link" onclick={() => showWatchModal = true}>Watching this city</button> will give it sync priority
-		</p>
+			<p class="priority-hint">
+				<button class="hint-link" onclick={() => showWatchModal = true}>Watching this city</button> will give it sync priority
+			</p>
+		</div>
 
 		{#if viewMode === 'meetings'}
 			{#if searchResults.meetings && searchResults.meetings.length > 0}
@@ -462,10 +464,18 @@
 		border-bottom-color: var(--civic-accent);
 	}
 
+	.controls-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 2rem;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
 	.view-toggle {
 		display: flex;
 		gap: 0.5rem;
-		margin-bottom: 2rem;
 		background: var(--surface-secondary);
 		padding: 0.35rem;
 		border-radius: 12px;
@@ -500,7 +510,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		color: var(--civic-gray);
-		margin: 0 0 1.5rem 0;
+		margin: 0;
 	}
 
 	.hint-link {
@@ -717,6 +727,11 @@
 			font-size: 1.5rem;
 		}
 
+		.controls-row {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+
 		.view-toggle {
 			width: 100%;
 			justify-content: center;
@@ -726,6 +741,10 @@
 			flex: 1;
 			padding: 0.6rem 1rem;
 			font-size: 0.85rem;
+		}
+
+		.priority-hint {
+			align-self: flex-end;
 		}
 
 		.matter-card {
