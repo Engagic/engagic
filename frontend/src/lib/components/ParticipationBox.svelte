@@ -1,13 +1,21 @@
 <script lang="ts">
-	import type { Meeting } from '$lib/api/types';
+	import type { Meeting, CityParticipation } from '$lib/api/types';
 
 	interface Props {
 		participation: NonNullable<Meeting['participation']>;
+		cityParticipation?: CityParticipation;  // City-level config (replaces meeting-level for testimony)
 	}
 
-	let { participation: p }: Props = $props();
+	let { participation: p, cityParticipation: cp }: Props = $props();
 
-	const hasParticipation = $derived(p.virtual_url || p.email || p.phone);
+	// City-level participation takes priority for testimony/contact
+	const hasCityParticipation = $derived(cp?.testimony_url || cp?.testimony_email);
+
+	// Meeting-level contact info (used as fallback when no city config)
+	const hasMeetingContact = $derived(p.virtual_url || p.email || p.phone);
+
+	// Always show something if we have any participation data
+	const hasParticipation = $derived(hasCityParticipation || hasMeetingContact);
 	const hasStreaming = $derived(p.streaming_urls && p.streaming_urls.length > 0);
 	let showStreamingOnMobile = $state(false);
 </script>
@@ -36,6 +44,52 @@
 					{/if}
 				</div>
 				<div class="participation-content">
+					{#if hasCityParticipation}
+						<!-- City-level participation (official testimony process) -->
+						{#if cp?.testimony_url}
+							<div class="participation-item">
+								<span class="participation-icon">📝</span>
+								<a href={cp.testimony_url} target="_blank" rel="noopener noreferrer" class="participation-link">
+									Submit Testimony
+								</a>
+							</div>
+						{/if}
+						{#if cp?.testimony_email}
+							<div class="participation-item">
+								<span class="participation-icon">✉️</span>
+								<a href="mailto:{cp.testimony_email}" class="participation-link">
+									{cp.testimony_email}
+								</a>
+							</div>
+						{/if}
+						{#if cp?.process_url && cp.process_url !== cp.testimony_url}
+							<div class="participation-item">
+								<span class="participation-icon">📖</span>
+								<a href={cp.process_url} target="_blank" rel="noopener noreferrer" class="participation-link">
+									How to Testify
+								</a>
+							</div>
+						{/if}
+					{:else}
+						<!-- Fallback: meeting-level contact info -->
+						{#if p.email}
+							<div class="participation-item">
+								<span class="participation-icon">✉️</span>
+								<a href="mailto:{p.email}" class="participation-link">
+									{p.email}
+								</a>
+							</div>
+						{/if}
+						{#if p.phone}
+							<div class="participation-item">
+								<span class="participation-icon">📞</span>
+								<a href="tel:{p.phone}" class="participation-link">
+									{p.phone}
+								</a>
+							</div>
+						{/if}
+					{/if}
+					<!-- Always show meeting-specific virtual link (Zoom, etc.) -->
 					{#if p.virtual_url}
 						<div class="participation-item">
 							<span class="participation-icon">📹</span>
@@ -45,22 +99,6 @@
 							{#if p.meeting_id}
 								<span class="meeting-id">Meeting ID: {p.meeting_id}</span>
 							{/if}
-						</div>
-					{/if}
-					{#if p.email}
-						<div class="participation-item">
-							<span class="participation-icon">✉️</span>
-							<a href="mailto:{p.email}" class="participation-link">
-								{p.email}
-							</a>
-						</div>
-					{/if}
-					{#if p.phone}
-						<div class="participation-item">
-							<span class="participation-icon">📞</span>
-							<a href="tel:{p.phone}" class="participation-link">
-								{p.phone}
-							</a>
 						</div>
 					{/if}
 				</div>

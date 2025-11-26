@@ -42,6 +42,7 @@ async def get_meeting(meeting_id: str, db: Database = Depends(get_db)):
             "city_name": city.name if city else None,
             "state": city.state if city else None,
             "banana": meeting.banana,
+            "participation": city.participation if city else None,
         }
 
     except HTTPException:
