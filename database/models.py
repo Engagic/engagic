@@ -105,7 +105,7 @@ class City:
     slug: str  # cityofpaloalto (vendor-specific)
     county: Optional[str] = None
     status: str = "active"
-    participation: Optional[CityParticipation] = None  # City-level testimony config
+    participation: Optional[CityParticipation] = None
     zipcodes: Optional[List[str]] = None  # Associated ZIP codes
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -117,7 +117,6 @@ class City:
             data["created_at"] = self.created_at.isoformat()
         if self.updated_at:
             data["updated_at"] = self.updated_at.isoformat()
-        # Serialize participation if present
         if self.participation:
             data["participation"] = self.participation.model_dump(exclude_none=True)
         return data
