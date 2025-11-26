@@ -719,6 +719,36 @@
 
 		.city-title {
 			font-size: 1.5rem;
+			order: 1;
+		}
+
+		.city-header {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 0.5rem;
+		}
+
+		.back-link {
+			order: 0;
+		}
+
+		.city-title-row,
+		.source-row {
+			display: contents;
+		}
+
+		.source-attribution {
+			order: 2;
+		}
+
+		.watch-city-btn {
+			order: 3;
+			justify-self: start;
+		}
+
+		.priority-hint {
+			order: 4;
+			justify-self: start;
 		}
 
 		.view-toggle {
