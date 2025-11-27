@@ -1,28 +1,37 @@
 """
-CivicPlus Adapter - Complex discovery and scraping for CivicPlus sites
+Async CivicPlus Adapter - Complex discovery and scraping for CivicPlus sites
 
 CivicPlus cities often redirect to other platforms (Granicus, Municode, etc.)
 This adapter handles:
 - Homepage scraping to detect external agenda systems
 - Multiple agenda URL patterns
 - PDF extraction from agenda pages
+
+Async version with:
+- aiohttp for async HTTP requests
+- asyncio.to_thread for CPU-bound BeautifulSoup parsing
+- Non-blocking I/O for concurrent city fetching
 """
 
 import re
-import requests
+import asyncio
+import hashlib
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Iterator
+from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, urljoin
+
+import aiohttp
 from bs4 import BeautifulSoup
-from vendors.adapters.base_adapter import BaseAdapter, logger
+
+from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 
 
-class CivicPlusAdapter(BaseAdapter):
-    """Adapter for cities using CivicPlus CMS (often with external agenda systems)"""
+class AsyncCivicPlusAdapter(AsyncBaseAdapter):
+    """Async adapter for cities using CivicPlus CMS (often with external agenda systems)"""
 
     def __init__(self, city_slug: str):
         """
-        Initialize CivicPlus adapter.
+        Initialize async CivicPlus adapter.
 
         Args:
             city_slug: CivicPlus subdomain (e.g., "cityname" for cityname.civicplus.com)
@@ -30,17 +39,16 @@ class CivicPlusAdapter(BaseAdapter):
         super().__init__(city_slug, vendor="civicplus")
         self.base_url = f"https://{self.slug}.civicplus.com"
 
-        # Detect if city uses external agenda system
-        self._check_for_external_system()
-
-    def _check_for_external_system(self):
+    async def _check_for_external_system(self) -> None:
         """
-        Check homepage for external agenda system links.
+        Check homepage for external agenda system links (async).
 
         Many CivicPlus cities link to Granicus, Municode, Legistar, etc.
         """
         try:
-            soup = self._fetch_html(self.base_url)
+            response = await self._get(self.base_url)
+            html = await response.text()
+            soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
             known_systems = {
                 "municodemeetings.com": "municode",
@@ -72,7 +80,7 @@ class CivicPlusAdapter(BaseAdapter):
                                 )
                                 break
 
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.debug(
                 "could not check for external system",
                 vendor="civicplus",
@@ -80,9 +88,9 @@ class CivicPlusAdapter(BaseAdapter):
                 error=str(e)
             )
 
-    def _find_agenda_url(self) -> Optional[str]:
+    async def _find_agenda_url(self) -> Optional[str]:
         """
-        Discover agenda page URL from common CivicPlus patterns.
+        Discover agenda page URL from common CivicPlus patterns (async).
 
         Returns:
             Agenda page URL or None
@@ -99,22 +107,23 @@ class CivicPlusAdapter(BaseAdapter):
         for pattern in patterns:
             test_url = f"{self.base_url}{pattern}"
             try:
-                response = self._get(test_url)
-                if response.status_code == 200 and (
-                    "agenda" in response.text.lower()
-                    or "meeting" in response.text.lower()
+                response = await self._get(test_url)
+                html = await response.text()
+                if response.status == 200 and (
+                    "agenda" in html.lower()
+                    or "meeting" in html.lower()
                 ):
                     logger.info("found agenda page", vendor="civicplus", slug=self.slug, pattern=pattern)
                     return test_url
-            except (requests.RequestException, ConnectionError, TimeoutError):
+            except (aiohttp.ClientError, asyncio.TimeoutError):
                 continue
 
         logger.warning("could not find agenda page", vendor="civicplus", slug=self.slug)
         return None
 
-    def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
-        Fetch meetings from CivicPlus site with date filtering.
+        Fetch meetings from CivicPlus site with date filtering (async).
 
         Scrapes AgendaCenter HTML and filters by date range.
 
@@ -122,25 +131,31 @@ class CivicPlusAdapter(BaseAdapter):
             days_back: Days to look backward (default 7)
             days_forward: Days to look forward (default 14)
 
-        Yields:
-            Meeting dictionaries with meeting_id, title, start, packet_url
+        Returns:
+            List of meeting dictionaries with meeting_id, title, start, packet_url
         """
+        # Check for external system first
+        await self._check_for_external_system()
+
         # Calculate date range
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
-        agenda_url = self._find_agenda_url()
+
+        agenda_url = await self._find_agenda_url()
         if not agenda_url:
             logger.error(
                 "no agenda page found - cannot fetch meetings",
                 vendor="civicplus",
                 slug=self.slug
             )
-            return
+            return []
 
         try:
-            # Use regular AgendaCenter page (Search endpoint doesn't work reliably)
-            soup = self._fetch_html(agenda_url)
+            # Fetch and parse agenda page
+            response = await self._get(agenda_url)
+            html = await response.text()
+            soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
             # Extract meeting links from the agenda page
             meeting_links = self._extract_meeting_links(soup, agenda_url)
@@ -152,35 +167,36 @@ class CivicPlusAdapter(BaseAdapter):
                 count=len(meeting_links)
             )
 
-            meetings_in_range = 0
+            results = []
             for link_data in meeting_links:
                 # For ViewFile links, we can yield directly without scraping
                 if '/ViewFile/Agenda/' in link_data['url']:
                     # Extract meeting info from the link itself
                     meeting = self._create_meeting_from_viewfile_link(link_data)
                     if meeting and self._is_meeting_in_range(meeting, start_date, end_date):
-                        meetings_in_range += 1
-                        yield meeting
+                        results.append(meeting)
                 else:
                     # For other links, scrape the page for PDFs
-                    meeting = self._scrape_meeting_page(
+                    meeting = await self._scrape_meeting_page(
                         link_data["url"], link_data["title"]
                     )
                     if meeting and self._is_meeting_in_range(meeting, start_date, end_date):
-                        meetings_in_range += 1
-                        yield meeting
+                        results.append(meeting)
 
             logger.info(
                 "filtered meetings in date range",
                 vendor="civicplus",
                 slug=self.slug,
-                count=meetings_in_range,
+                count=len(results),
                 start_date=str(start_date.date()),
                 end_date=str(end_date.date())
             )
 
-        except Exception as e:
+            return results
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("failed to fetch meetings", vendor="civicplus", slug=self.slug, error=str(e))
+            return []
 
     def _is_meeting_in_range(
         self, meeting: Dict[str, Any], start_date: datetime, end_date: datetime
@@ -221,7 +237,6 @@ class CivicPlusAdapter(BaseAdapter):
         Returns:
             List of dicts with 'url' and 'title'
         """
-        import re
         links = []
 
         # Look for links that either:
@@ -232,7 +247,7 @@ class CivicPlusAdapter(BaseAdapter):
             href = link["href"]
 
             # Skip navigation links
-            if text.startswith("◄") or text.startswith("Back to") or text == "Agendas & Minutes":
+            if text.startswith("<<<") or text.startswith("Back to") or text == "Agendas & Minutes":
                 continue
 
             # Check if it's a ViewFile link (direct meeting link)
@@ -283,9 +298,9 @@ class CivicPlusAdapter(BaseAdapter):
 
         return result
 
-    def _scrape_meeting_page(self, url: str, title: str) -> Optional[Dict[str, Any]]:
+    async def _scrape_meeting_page(self, url: str, title: str) -> Optional[Dict[str, Any]]:
         """
-        Scrape individual meeting page for metadata and PDF links.
+        Scrape individual meeting page for metadata and PDF links (async).
 
         Args:
             url: Meeting detail page URL
@@ -295,7 +310,9 @@ class CivicPlusAdapter(BaseAdapter):
             Meeting dict or None if scraping fails
         """
         try:
-            soup = self._fetch_html(url)
+            response = await self._get(url)
+            html = await response.text()
+            soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
             # Extract date string from page or title
             date_text = self._extract_date_from_page(soup)
@@ -307,7 +324,7 @@ class CivicPlusAdapter(BaseAdapter):
             parsed_date = self._parse_date(date_text) if date_text else None
 
             # Find PDF links
-            pdfs = self._discover_pdfs(url, keywords=["agenda", "packet", "minutes"])
+            pdfs = await self._discover_pdfs_async(url, soup)
 
             # Generate meeting ID from URL
             meeting_id = self._extract_meeting_id(url)
@@ -331,9 +348,47 @@ class CivicPlusAdapter(BaseAdapter):
 
             return result
 
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.warning("failed to scrape meeting page", vendor="civicplus", slug=self.slug, url=url, error=str(e))
             return None
+
+    async def _discover_pdfs_async(
+        self, url: str, soup: BeautifulSoup, keywords: Optional[List[str]] = None
+    ) -> List[str]:
+        """
+        Discover PDF links on a page, optionally filtering by keywords.
+
+        Args:
+            url: Base URL for relative links
+            soup: BeautifulSoup object (already parsed)
+            keywords: Optional list of keywords to filter PDF links
+
+        Returns:
+            List of absolute PDF URLs
+        """
+        if keywords is None:
+            keywords = ["agenda", "packet"]
+
+        pdfs = []
+
+        for link in soup.find_all("a", href=True):
+            href = link["href"]
+            text = link.get_text().lower()
+
+            # Check if link points to PDF
+            is_pdf = (
+                ".pdf" in href.lower()
+                or "pdf" in link.get("type", "").lower()
+                or any(kw in text for kw in keywords)
+            )
+
+            if is_pdf:
+                # Convert to absolute URL
+                absolute_url = urljoin(url, href)
+                pdfs.append(absolute_url)
+
+        logger.debug("found PDFs", vendor="civicplus", slug=self.slug, pdf_count=len(pdfs), url=url[:100])
+        return pdfs
 
     def _extract_date_from_page(self, soup: BeautifulSoup) -> Optional[str]:
         """Extract meeting date from page using common patterns"""
@@ -369,9 +424,6 @@ class CivicPlusAdapter(BaseAdapter):
 
     def _extract_meeting_id(self, url: str) -> str:
         """Extract meeting ID from URL or generate from hash"""
-        # Try to extract ID from URL parameters
-        import hashlib
-
         parsed = urlparse(url)
 
         # Look for common ID parameters

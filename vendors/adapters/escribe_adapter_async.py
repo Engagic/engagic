@@ -1,24 +1,33 @@
 """
-Escribe Adapter - HTML scraping for Escribe meeting management systems
+Async Escribe Adapter - HTML scraping for Escribe meeting management systems
 
 Escribe (eScribe) is used by cities for agenda/meeting management.
 Example: Beaumont, CA uses pub-beaumont.escribemeetings.com
+
+Async version with:
+- aiohttp for async HTTP requests
+- asyncio.to_thread for CPU-bound BeautifulSoup parsing
+- Non-blocking I/O for concurrent city fetching
 """
 
 import re
 import hashlib
-from typing import Dict, Any, Optional, Iterator
+import asyncio
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
-from vendors.adapters.base_adapter import BaseAdapter, logger
+
+from bs4 import BeautifulSoup
+
+from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 
 
-class EscribeAdapter(BaseAdapter):
-    """Adapter for cities using Escribe meeting management system"""
+class AsyncEscribeAdapter(AsyncBaseAdapter):
+    """Async adapter for cities using Escribe meeting management system"""
 
     def __init__(self, city_slug: str):
         """
-        Initialize Escribe adapter.
+        Initialize async Escribe adapter.
 
         Args:
             city_slug: Escribe subdomain (e.g., "pub-beaumont" for pub-beaumont.escribemeetings.com)
@@ -26,16 +35,16 @@ class EscribeAdapter(BaseAdapter):
         super().__init__(city_slug, vendor="escribe")
         self.base_url = f"https://{self.slug}.escribemeetings.com"
 
-    def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
-        Scrape meetings from Escribe HTML with date filtering.
+        Scrape meetings from Escribe HTML with date filtering (async).
 
         Args:
             days_back: Days to look back (default 7)
             days_forward: Days to look ahead (default 14)
 
-        Yields:
-            Meeting dictionaries with meeting_id, title, start, packet_url
+        Returns:
+            List of meeting dictionaries with meeting_id, title, start, packet_url
         """
         # Calculate date range
         today = datetime.now()
@@ -47,29 +56,52 @@ class EscribeAdapter(BaseAdapter):
 
         logger.info("fetching meetings", vendor="escribe", slug=self.slug, url=list_url)
 
-        soup = self._fetch_html(list_url)
+        # Fetch HTML (async)
+        response = await self._get(list_url)
+        html = await response.text()
+
+        # Parse HTML (CPU-bound, run in thread pool)
+        soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
+
+        meeting_containers = []
 
         # Find "Upcoming Meetings" section
         upcoming_section = soup.find(
             "div", {"role": "region", "aria-label": "List of Upcoming Meetings"}
         )
+        if upcoming_section:
+            upcoming_containers = upcoming_section.find_all(
+                "div", class_="upcoming-meeting-container"
+            )
+            meeting_containers.extend(upcoming_containers)
+            logger.info(
+                "found upcoming meetings",
+                vendor="escribe",
+                slug=self.slug,
+                count=len(upcoming_containers)
+            )
 
-        if not upcoming_section:
-            logger.warning("no upcoming meetings section found", vendor="escribe", slug=self.slug)
-            return
-
-        # Parse meeting containers
-        meeting_containers = upcoming_section.find_all(
-            "div", class_="upcoming-meeting-container"
+        # Find "Previous Meetings" section for days_back window
+        previous_section = soup.find(
+            "div", {"role": "region", "aria-label": "List of Previous Meetings"}
         )
+        if previous_section:
+            previous_containers = previous_section.find_all(
+                "div", class_="previous-meeting-container"
+            )
+            meeting_containers.extend(previous_containers)
+            logger.info(
+                "found previous meetings",
+                vendor="escribe",
+                slug=self.slug,
+                count=len(previous_containers)
+            )
 
-        logger.info(
-            "found upcoming meetings",
-            vendor="escribe",
-            slug=self.slug,
-            count=len(meeting_containers)
-        )
+        if not meeting_containers:
+            logger.warning("no meeting sections found", vendor="escribe", slug=self.slug)
+            return []
 
+        results = []
         for container in meeting_containers:
             meeting = self._parse_meeting_container(container)
             if meeting:
@@ -95,7 +127,9 @@ class EscribeAdapter(BaseAdapter):
                     except (ValueError, TypeError):
                         # If date parsing fails, include the meeting anyway
                         pass
-                yield meeting
+                results.append(meeting)
+
+        return results
 
     def _parse_meeting_container(self, container) -> Optional[Dict[str, Any]]:
         """
@@ -145,10 +179,8 @@ class EscribeAdapter(BaseAdapter):
         # Extract meeting ID from URL (format: Meeting.aspx?Id=UUID)
         meeting_id = self._extract_meeting_id(meeting_url, title, date_text)
 
-        # Determine packet_url
-        packet_url = None
-        if pdf_links:
-            packet_url = pdf_links[0] if len(pdf_links) == 1 else pdf_links
+        # Determine packet_url (always first PDF, single string)
+        packet_url = pdf_links[0] if pdf_links else None
 
         # Parse meeting status from title and date
         meeting_status = self._parse_meeting_status(title, date_text)
@@ -156,7 +188,7 @@ class EscribeAdapter(BaseAdapter):
         result = {
             "meeting_id": meeting_id,
             "title": title,
-            "start": parsed_date or date_text,
+            "start": parsed_date.isoformat() if parsed_date else date_text,
             "packet_url": packet_url,
         }
 

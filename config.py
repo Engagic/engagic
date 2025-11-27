@@ -38,23 +38,15 @@ class Config:
     """Configuration management for engagic"""
 
     def __init__(self):
-        # Database configuration - PostgreSQL (migrated, production)
-        # Default to VPS path if it exists, otherwise repo-relative for local dev
+        # Database configuration - PostgreSQL only (SQLite removed Nov 2025)
+        # Data directory still used for rate limiter SQLite, logs, etc.
         vps_path = "/root/engagic/data"
         local_path = os.path.join(os.getcwd(), "data")
         default_data_dir = vps_path if os.path.exists(vps_path) else local_path
         self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", default_data_dir)
 
-        # DEPRECATED: Old SQLite paths (kept for migration script reference only)
-        self.UNIFIED_DB_PATH = os.getenv(
-            "ENGAGIC_UNIFIED_DB", f"{self.DB_DIR}/engagic.db"
-        )
-        self.LOCATIONS_DB_PATH = f"{self.DB_DIR}/locations.db"
-        self.MEETINGS_DB_PATH = f"{self.DB_DIR}/meetings.db"
-        self.ANALYTICS_DB_PATH = f"{self.DB_DIR}/analytics.db"
-
-        # PostgreSQL configuration (production database)
-        self.USE_POSTGRES = os.getenv("ENGAGIC_USE_POSTGRES", "false").lower() == "true"
+        # PostgreSQL configuration (production database - default enabled)
+        self.USE_POSTGRES = os.getenv("ENGAGIC_USE_POSTGRES", "true").lower() == "true"
         self.POSTGRES_HOST = os.getenv("ENGAGIC_POSTGRES_HOST", "localhost")
         self.POSTGRES_PORT = int(os.getenv("ENGAGIC_POSTGRES_PORT", "5432"))
         self.POSTGRES_DB = os.getenv("ENGAGIC_POSTGRES_DB", "engagic")
@@ -218,7 +210,6 @@ class Config:
         """Get a summary of current configuration (excluding secrets)"""
         return {
             "db_dir": self.DB_DIR,
-            "database": os.path.basename(self.UNIFIED_DB_PATH),
             "postgres_enabled": self.USE_POSTGRES,
             "postgres_host": self.POSTGRES_HOST if self.USE_POSTGRES else None,
             "postgres_db": self.POSTGRES_DB if self.USE_POSTGRES else None,

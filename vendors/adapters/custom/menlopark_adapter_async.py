@@ -1,5 +1,5 @@
 """
-Menlo Park City Council Adapter - Custom table-based website with PDF item extraction
+Async Menlo Park City Council Adapter - Custom table-based website with PDF item extraction
 
 URL patterns:
 - Meetings list: https://menlopark.gov/Agendas-and-minutes
@@ -17,54 +17,44 @@ PDF agenda structure:
 - Hyperlinked attachments: (Attachment), (Staff Report #XX-XXX-CC), (Presentation)
 - Example: "J1. Waive the second reading and adopt an ordinance... (Staff Report #25-167-CC)"
 
-Processing approach:
-- Extract PDF text + hyperlinks using PyMuPDF
-- Parse items from text using regex patterns
-- Map hyperlinks to items based on page location
-- Return item-level structure (agenda_url + items)
+Async version with:
+- aiohttp for async HTTP requests
+- asyncio.to_thread for CPU-bound PDF parsing
+- Non-blocking I/O for concurrent fetching
 
 Confidence: 8/10 - PDF parsing reliable, link mapping based on page proximity
 """
 
-from typing import Dict, Any, Iterator, Optional
+import asyncio
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
+import aiohttp
 from bs4 import BeautifulSoup
 
-from vendors.adapters.base_adapter import BaseAdapter
+from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from parsing.pdf import PdfExtractor
 from parsing.menlopark_pdf import parse_menlopark_pdf_agenda
 
-from config import get_logger
 
-logger = get_logger(__name__).bind(component="vendor")
-
-
-
-class MenloParkAdapter(BaseAdapter):
-    """Menlo Park City Council - PDF agenda with item extraction"""
+class AsyncMenloParkAdapter(AsyncBaseAdapter):
+    """Async Menlo Park City Council - PDF agenda with item extraction"""
 
     def __init__(self, city_slug: str):
-        super().__init__(city_slug, "menlopark")
+        super().__init__(city_slug, vendor="menlopark")
         self.base_url = "https://menlopark.gov"
         self.pdf_extractor = PdfExtractor()
 
-    def fetch_meetings(self, max_meetings: int = 10) -> Iterator[Dict[str, Any]]:
+    async def fetch_meetings(self, max_meetings: int = 10) -> List[Dict[str, Any]]:
         """
-        Fetch meetings from Menlo Park's table-based website and extract items from PDFs.
+        Fetch meetings from Menlo Park's table-based website and extract items from PDFs (async).
 
         Args:
             max_meetings: Maximum number of meetings to fetch (default 10)
 
-        Yields:
-            {
-                'meeting_id': str,
-                'date': datetime,
-                'title': str,
-                'agenda_url': str,  # PDF URL (source document)
-                'items': [...]      # Extracted from PDF
-            }
+        Returns:
+            List of meeting dictionaries with meeting_id, title, start, agenda_url, items
         """
         # Date range: today to 2 weeks from now
         today = datetime.now().date()
@@ -75,20 +65,21 @@ class MenloParkAdapter(BaseAdapter):
         logger.info("fetching meetings list", adapter="menlopark", slug=self.slug, url=meetings_url)
 
         try:
-            response = self.session.get(meetings_url, timeout=30)
-            response.raise_for_status()
-        except Exception as e:
+            response = await self._get(meetings_url)
+            html = await response.text()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("failed to fetch meetings list", adapter="menlopark", slug=self.slug, error=str(e))
-            return
+            return []
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Parse HTML (CPU-bound, run in thread pool)
+        soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
         # Find all table rows
         rows = soup.find_all('tr')
 
-        meetings_found = 0
+        results = []
         for row in rows:
-            if meetings_found >= max_meetings:
+            if len(results) >= max_meetings:
                 break
 
             cells = row.find_all('td')
@@ -101,12 +92,12 @@ class MenloParkAdapter(BaseAdapter):
                 continue
 
             # Parse date
-            meeting_date = self._parse_date(date_text)
+            meeting_date = self._parse_menlopark_date(date_text)
             if not meeting_date:
                 logger.debug("could not parse date", adapter="menlopark", slug=self.slug, date_text=date_text)
                 continue
 
-            # Filter to meetings from date range (calculated at method start)
+            # Filter to meetings from date range
             meeting_date_only = meeting_date.date()
 
             if meeting_date_only < today or meeting_date_only > two_weeks_from_now:
@@ -131,18 +122,26 @@ class MenloParkAdapter(BaseAdapter):
 
             meeting_data = {
                 'meeting_id': meeting_id,
-                'date': meeting_date,
+                'start': meeting_date.isoformat(),
                 'title': "City Council Meeting",
                 'agenda_url': pdf_link,  # PDF is the source document
             }
 
-            # Extract items from PDF
+            # Extract items from PDF (sync PDF extraction wrapped in to_thread)
             try:
                 logger.info("extracting items from PDF", adapter="menlopark", slug=self.slug, url=pdf_link)
-                pdf_result = self.pdf_extractor.extract_from_url(pdf_link, extract_links=True)
+
+                # Run sync PDF extraction in thread pool
+                pdf_result = await asyncio.to_thread(
+                    self.pdf_extractor.extract_from_url,
+                    pdf_link,
+                    extract_links=True
+                )
 
                 if pdf_result['success']:
-                    parsed = parse_menlopark_pdf_agenda(
+                    # Parse PDF text (also CPU-bound)
+                    parsed = await asyncio.to_thread(
+                        parse_menlopark_pdf_agenda,
                         pdf_result['text'],
                         pdf_result.get('links', [])
                     )
@@ -152,28 +151,39 @@ class MenloParkAdapter(BaseAdapter):
                         item_count = len(parsed['items'])
                         attachment_count = sum(len(item.get('attachments', [])) for item in parsed['items'])
                         logger.info(
-                            f"[menlopark:{self.slug}] Extracted {item_count} items, "
-                            f"{attachment_count} attachments for {meeting_date.strftime('%Y-%m-%d')}"
+                            "extracted items from PDF",
+                            adapter="menlopark",
+                            slug=self.slug,
+                            item_count=item_count,
+                            attachment_count=attachment_count,
+                            date=meeting_date.strftime('%Y-%m-%d')
                         )
                     else:
                         logger.warning(
-                            f"[menlopark:{self.slug}] No items extracted from PDF for {meeting_id}"
+                            "no items extracted from PDF",
+                            adapter="menlopark",
+                            slug=self.slug,
+                            meeting_id=meeting_id
                         )
                 else:
                     logger.error(
-                        f"[menlopark:{self.slug}] PDF extraction failed for {meeting_id}: "
-                        f"{pdf_result.get('error', 'unknown error')}"
+                        "PDF extraction failed",
+                        adapter="menlopark",
+                        slug=self.slug,
+                        meeting_id=meeting_id,
+                        error=pdf_result.get('error', 'unknown error')
                     )
                     # Continue anyway - we have basic meeting data
 
-            except Exception as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
                 logger.warning("failed to parse PDF items", adapter="menlopark", slug=self.slug, meeting_id=meeting_id, error=str(e))
                 # Continue anyway - we have basic meeting data
 
-            yield meeting_data
-            meetings_found += 1
+            results.append(meeting_data)
 
-    def _parse_date(self, date_str: str) -> Optional[datetime]:
+        return results
+
+    def _parse_menlopark_date(self, date_str: str) -> Optional[datetime]:
         """
         Parse Menlo Park date formats:
         - "Nov. 4, 2025"

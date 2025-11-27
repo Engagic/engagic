@@ -1,5 +1,5 @@
 """
-Berkeley City Council Adapter - Custom Drupal CMS
+Async Berkeley City Council Adapter - Custom Drupal CMS
 
 URL patterns:
 - Meetings list: https://berkeleyca.gov/your-government/city-council/city-council-agendas
@@ -15,49 +15,42 @@ HTML structure (verified Nov 2025):
 - Item metadata: From, Recommendation, Financial Implications, Contact
 - Participation: Zoom, phone, email in intro paragraph
 
+Async version with:
+- aiohttp for async HTTP requests
+- asyncio.to_thread for CPU-bound BeautifulSoup parsing
+- Non-blocking I/O for concurrent fetching
+
 Confidence: 9/10 - Verified working with item-level extraction
 """
 
 import re
-from typing import Dict, Any, List, Iterator, Optional
+import asyncio
+from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
+import aiohttp
 from bs4 import BeautifulSoup
 
-from vendors.adapters.base_adapter import BaseAdapter
-
-from config import get_logger
-
-logger = get_logger(__name__).bind(component="vendor")
+from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 
 
-
-class BerkeleyAdapter(BaseAdapter):
-    """Berkeley City Council - Custom Drupal CMS adapter"""
+class AsyncBerkeleyAdapter(AsyncBaseAdapter):
+    """Async Berkeley City Council - Custom Drupal CMS adapter"""
 
     def __init__(self, city_slug: str):
-        super().__init__(city_slug, "berkeley")
+        super().__init__(city_slug, vendor="berkeley")
         self.base_url = "https://berkeleyca.gov"
 
-    def fetch_meetings(self, max_meetings: int = 10) -> Iterator[Dict[str, Any]]:
+    async def fetch_meetings(self, max_meetings: int = 10) -> List[Dict[str, Any]]:
         """
-        Fetch meetings from Berkeley's Drupal-based website.
+        Fetch meetings from Berkeley's Drupal-based website (async).
 
         Args:
             max_meetings: Maximum number of meetings to fetch (default 10)
 
-        Yields:
-            {
-                'meeting_id': str,
-                'date': datetime,
-                'time': str,
-                'title': str,
-                'agenda_url': str,     # HTML agenda (preferred)
-                'packet_url': str,     # PDF packet (fallback)
-                'participation': {...},
-                'items': [...]
-            }
+        Returns:
+            List of meeting dictionaries with meeting_id, title, start, agenda_url, items
         """
         # Date range: today to 2 weeks from now
         today = datetime.now().date()
@@ -68,43 +61,30 @@ class BerkeleyAdapter(BaseAdapter):
         logger.info("fetching meetings list", adapter="berkeley", slug=self.slug, url=meetings_url)
 
         try:
-            response = self.session.get(meetings_url, timeout=30)
-            response.raise_for_status()
-        except Exception as e:
+            response = await self._get(meetings_url)
+            html = await response.text()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("failed to fetch meetings list", adapter="berkeley", slug=self.slug, error=str(e))
-            return
+            return []
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Parse HTML (CPU-bound, run in thread pool)
+        soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
         # Find table rows with meeting data
-        # Structure: <tr> with <td> for date, agenda link, minutes, video
         rows = soup.find_all('tr')
 
-        meetings_found = 0
+        results = []
         for row in rows:
-            if meetings_found >= max_meetings:
+            if len(results) >= max_meetings:
                 break
 
             cells = row.find_all('td')
-            if len(cells) < 2:
-                continue
-
-            # New structure (as of Nov 2025):
-            # Cell 0: Meeting name/title
-            # Cell 1: Date (with <time> tag)
-            # Cell 2: Agenda (HTML link)
-            # Cell 3: Agenda Packet (PDF link)
-            # Cell 4: Annotated Agenda
-            # Cell 5: Video
-            # Cell 6: Download
-
             if len(cells) < 4:  # Need at least title, date, and agenda columns
                 continue
 
             # Cell 1: Date (with <time> tag)
             time_tag = cells[1].find('time')
             if not time_tag:
-                # Try parsing raw text
                 date_text = cells[1].get_text(strip=True)
             else:
                 date_text = time_tag.get('datetime') or time_tag.get_text(strip=True)
@@ -112,13 +92,13 @@ class BerkeleyAdapter(BaseAdapter):
             if not date_text:
                 continue
 
-            # Parse date
+            # Parse date using base adapter's parser
             meeting_date = self._parse_date(date_text)
             if not meeting_date:
                 logger.debug("could not parse date", adapter="berkeley", slug=self.slug, date_text=date_text)
                 continue
 
-            # Filter to meetings from date range (calculated at method start)
+            # Filter to meetings from date range
             meeting_date_only = meeting_date.date()
 
             if meeting_date_only < today or meeting_date_only > two_weeks_from_now:
@@ -146,16 +126,18 @@ class BerkeleyAdapter(BaseAdapter):
 
             meeting_data = {
                 'meeting_id': meeting_id,
-                'date': meeting_date,
-                'time': meeting_time,
-                'title': "City Council Meeting",  # Berkeley doesn't include titles in table
+                'start': meeting_date.isoformat(),
+                'title': "City Council Meeting",
                 'agenda_url': html_link,
             }
 
-            # Fetch HTML agenda detail to extract items (Berkeley always has HTML agendas)
+            if meeting_time:
+                meeting_data['time'] = meeting_time
+
+            # Fetch HTML agenda detail to extract items
             try:
                 logger.info("fetching HTML agenda detail", adapter="berkeley", slug=self.slug, url=html_link)
-                detail = self._fetch_meeting_detail(html_link)
+                detail = await self._fetch_meeting_detail(html_link)
                 if detail:
                     if detail.get('participation'):
                         meeting_data['participation'] = detail['participation']
@@ -164,40 +146,42 @@ class BerkeleyAdapter(BaseAdapter):
                         logger.info("extracted items from HTML agenda", adapter="berkeley", slug=self.slug, item_count=len(detail['items']))
                     if detail.get('title'):
                         meeting_data['title'] = detail['title']
-            except Exception as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 logger.warning("failed to fetch detail", adapter="berkeley", slug=self.slug, meeting_id=meeting_id, error=str(e))
                 # Continue anyway - we have basic meeting data even without items
 
             item_count = len(meeting_data.get('items', []))
             attachment_count = sum(len(item.get('attachments', [])) for item in meeting_data.get('items', []))
             logger.info(
-                f"[berkeley:{self.slug}] Found {item_count} items, {attachment_count} attachments for "
-                f"{meeting_date.strftime('%Y-%m-%d')}"
+                "found items and attachments",
+                adapter="berkeley",
+                slug=self.slug,
+                item_count=item_count,
+                attachment_count=attachment_count,
+                date=meeting_date.strftime('%Y-%m-%d')
             )
 
-            yield meeting_data
-            meetings_found += 1
+            results.append(meeting_data)
 
-    def _fetch_meeting_detail(self, agenda_url: str) -> Dict[str, Any]:
+        return results
+
+    async def _fetch_meeting_detail(self, agenda_url: str) -> Dict[str, Any]:
         """
-        Fetch and parse HTML agenda detail page.
+        Fetch and parse HTML agenda detail page (async).
 
         Args:
             agenda_url: URL to HTML agenda page
 
         Returns:
-            {
-                'title': str,
-                'participation': {...},
-                'items': [...]
-            }
+            Dict with title, participation, and items
         """
         logger.debug("fetching detail page", adapter="berkeley", slug=self.slug, url=agenda_url)
 
-        response = self.session.get(agenda_url, timeout=30)
-        response.raise_for_status()
+        response = await self._get(agenda_url)
+        html = await response.text()
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Parse HTML (CPU-bound, run in thread pool)
+        soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
         # Extract title from header
         title = None
@@ -205,11 +189,11 @@ class BerkeleyAdapter(BaseAdapter):
         if title_tag:
             title = title_tag.get_text(strip=True)
 
-        # Extract participation info
-        participation = self._extract_participation(soup)
+        # Extract participation info (CPU-bound, but small)
+        participation = await asyncio.to_thread(self._extract_participation, soup)
 
-        # Extract agenda items
-        items = self._extract_items(soup)
+        # Extract agenda items (CPU-bound)
+        items = await asyncio.to_thread(self._extract_items, soup)
 
         return {
             'title': title,
@@ -267,20 +251,11 @@ class BerkeleyAdapter(BaseAdapter):
             soup: BeautifulSoup object of agenda page
 
         Returns:
-            List of agenda item dictionaries with structure:
-            [{
-                'item_id': str,
-                'title': str,
-                'sequence': int,
-                'attachments': [{'name': str, 'url': str, 'type': str}],
-                'sponsor': str (optional),
-                'recommendation': str (optional)
-            }]
+            List of agenda item dictionaries
         """
         items = []
 
         # Find all <strong> tags that contain item numbers (1., 2., etc.)
-        # These mark the start of each item
         strong_tags = soup.find_all('strong')
 
         for strong in strong_tags:
@@ -350,36 +325,3 @@ class BerkeleyAdapter(BaseAdapter):
 
         logger.debug("extracted items", adapter="berkeley", slug=self.slug, item_count=len(items))
         return items
-
-    def _parse_date(self, date_str: str) -> Optional[datetime]:
-        """
-        Parse Berkeley date formats:
-        - ISO 8601: "2025-11-11T02:00:00Z"
-        - US format: "11/10/2025 - 6:00 pm"
-        """
-        date_str = date_str.strip()
-
-        # Try ISO 8601 first
-        if 'T' in date_str:
-            try:
-                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            except ValueError:
-                pass
-
-        # Try US format (MM/DD/YYYY)
-        match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-        if match:
-            month, day, year = match.groups()
-            try:
-                return datetime(int(year), int(month), int(day))
-            except (ValueError, OverflowError):
-                pass
-
-        return None
-
-
-# Confidence: 7/10
-# HTML structure parsed from provided example. Need to verify:
-# - Meetings list URL pattern
-# - Item extraction reliability across different meeting types
-# - Edge cases for special meetings vs regular meetings

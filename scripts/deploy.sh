@@ -506,6 +506,21 @@ preview_queue() {
     uv run engagic-conductor preview-queue "${1:-}"
 }
 
+preview_watchlist() {
+    load_env
+    uv run engagic-conductor preview-watchlist
+}
+
+sync_watchlist() {
+    load_env
+    uv run engagic-conductor sync-watchlist
+}
+
+process_watchlist() {
+    load_env
+    uv run engagic-conductor process-watchlist
+}
+
 extract_text() {
     if [ -z "$1" ]; then
         error "Meeting ID required"
@@ -580,6 +595,11 @@ show_help() {
     echo ""
     echo "  Batch Operations:"
     echo "    process-unprocessed            - Process all unprocessed meetings in queue"
+    echo ""
+    echo "  Watchlist (User-Demanded Cities):"
+    echo "    preview-watchlist              - Show cities users are watching"
+    echo "    sync-watchlist                 - Fetch + process watchlist cities"
+    echo "    process-watchlist              - Process queued jobs for watchlist cities"
     echo ""
     echo "  Preview & Inspection:"
     echo "    preview-queue [CITY]                    - Show queued jobs (no processing)"
@@ -686,6 +706,11 @@ case "$COMMAND" in
 
     # Batch operations
     process-unprocessed) process_unprocessed ;;
+
+    # Watchlist operations
+    preview-watchlist)   preview_watchlist ;;
+    sync-watchlist)      sync_watchlist ;;
+    process-watchlist)   process_watchlist ;;
 
     # Preview and inspection
     preview-queue)       preview_queue "$2" ;;
