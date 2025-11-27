@@ -8,34 +8,28 @@
 
 ## Overview
 
-The vendors module provides adapters for fetching meeting data from civic technology platforms used by local governments. Each adapter implements a common interface (`AsyncBaseAdapter` for async, `BaseAdapter` for sync) while handling vendor-specific quirks in HTML parsing, API integration, and data extraction.
+The vendors module provides adapters for fetching meeting data from civic technology platforms used by local governments. Each adapter implements the `AsyncBaseAdapter` interface while handling vendor-specific quirks in HTML parsing, API integration, and data extraction.
 
-**Architecture Pattern:** AsyncBaseAdapter (primary) + BaseAdapter (deprecated) + Vendor-Specific Parsers + Shared Utilities
+**Architecture Pattern:** AsyncBaseAdapter + Vendor-Specific Parsers + Shared Utilities
 
-**Migration Status:** 5 vendors fully async (Legistar, PrimeGov, Granicus, IQM2, NovusAgenda), 6 vendors pending (CivicClerk, CivicPlus, eScribe, Berkeley, Chicago, Menlo Park)
+**Migration Status:** All 11 adapters async (migration complete Nov 2025)
 
 ```
 vendors/
-├── adapters/           # 19 adapter files (11 unique vendors, 5 with async versions)
-│   ├── base_adapter.py             # Sync base (457 lines) - DEPRECATED
-│   ├── base_adapter_async.py       # Async base (398 lines) - PRIMARY
-│   ├── legistar_adapter.py         # Legistar sync (973 lines) - DEPRECATED
+├── adapters/           # 11 async adapters
+│   ├── base_adapter_async.py       # Async base (398 lines)
 │   ├── legistar_adapter_async.py   # Legistar async (947 lines)
-│   ├── primegov_adapter.py         # PrimeGov sync (287 lines) - DEPRECATED
 │   ├── primegov_adapter_async.py   # PrimeGov async (345 lines)
-│   ├── granicus_adapter.py         # Granicus sync (518 lines) - DEPRECATED
 │   ├── granicus_adapter_async.py   # Granicus async (148 lines)
-│   ├── iqm2_adapter.py             # IQM2 sync (613 lines) - DEPRECATED
 │   ├── iqm2_adapter_async.py       # IQM2 async (621 lines)
-│   ├── novusagenda_adapter.py      # NovusAgenda sync (207 lines) - DEPRECATED
 │   ├── novusagenda_adapter_async.py # NovusAgenda async (223 lines)
-│   ├── escribe_adapter.py          # eScribe (155 lines) - Sync only
-│   ├── civicclerk_adapter.py       # CivicClerk (113 lines) - Sync only
-│   ├── civicplus_adapter.py        # CivicPlus (368 lines) - Sync only
+│   ├── escribe_adapter_async.py    # eScribe async (222 lines)
+│   ├── civicclerk_adapter_async.py # CivicClerk async (99 lines)
+│   ├── civicplus_adapter_async.py  # CivicPlus async (390 lines)
 │   ├── custom/
-│   │   ├── berkeley_adapter.py     # Berkeley (385 lines) - Sync only
-│   │   ├── chicago_adapter.py      # Chicago (416 lines) - Sync only
-│   │   └── menlopark_adapter.py    # Menlo Park (195 lines) - Sync only
+│   │   ├── berkeley_adapter_async.py  # Berkeley async (327 lines)
+│   │   ├── chicago_adapter_async.py   # Chicago async (436 lines)
+│   │   └── menlopark_adapter_async.py # Menlo Park async (227 lines)
 │   └── parsers/        # 4 vendor-specific HTML parsers
 │       ├── legistar_parser.py      # Legistar HTML tables - 359 lines
 │       ├── primegov_parser.py      # PrimeGov HTML tables - 282 lines
@@ -46,43 +40,41 @@ vendors/
 │   └── attachments.py     # Attachment deduplication (162 lines)
 ├── factory.py          # Adapter dispatcher (142 lines)
 ├── rate_limiter_async.py  # Async vendor rate limiting (53 lines)
-├── session_manager.py     # Sync HTTP pooling (127 lines) - DEPRECATED
 ├── session_manager_async.py  # Async HTTP pooling (139 lines)
 ├── validator.py        # Meeting validation (269 lines)
 └── schemas.py          # Pydantic validation schemas (145 lines)
 
-**Total:** 9,484 lines (current with both sync + async during migration)
-**Post-migration:** ~6,302 lines (after removing 3,182 lines of deprecated sync code)
+**Total:** ~6,300 lines (all async, sync code removed Nov 2025)
 ```
 
 ---
 
 ## Architecture
 
-### BaseAdapter Pattern
+### AsyncBaseAdapter Pattern
 
-All vendor adapters inherit from `BaseAdapter`, which provides:
-- **HTTP client** with retry logic and timeout handling
+All vendor adapters inherit from `AsyncBaseAdapter`, which provides:
+- **Async HTTP client** (aiohttp) with retry logic and timeout handling
 - **Date parsing** utilities (handles various formats)
-- **Rate limiting** integration
+- **Rate limiting** integration (async-aware)
 - **Error handling** with context (vendor, city, URL)
-- **Common interface** (`fetch_meetings()`, `fetch_meeting_details()`)
+- **Common interface** (`fetch_meetings()` async method)
 
 ```python
-# vendors/adapters/base_adapter.py
-class BaseAdapter:
-    def __init__(self, city_slug: str, http_client: Optional[httpx.Client] = None):
-        self.city_slug = city_slug
-        self.http_client = http_client or httpx.Client(timeout=30.0)
-        self.logger = get_logger(__name__).bind(vendor=self.__class__.__name__)
+# vendors/adapters/base_adapter_async.py
+class AsyncBaseAdapter:
+    def __init__(self, city_slug: str, vendor: str):
+        self.slug = city_slug
+        self.vendor = vendor
+        self.session: Optional[aiohttp.ClientSession] = None
 
-    def fetch_meetings(self, start_date: datetime, end_date: datetime) -> List[Meeting]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict]:
         """Fetch meetings for date range. MUST be implemented by subclass."""
         raise NotImplementedError
 
-    def _get_with_retry(self, url: str, retries: int = 3) -> httpx.Response:
-        """HTTP GET with exponential backoff retry."""
-        # Shared retry logic
+    async def _get(self, url: str, params: Optional[Dict] = None) -> aiohttp.ClientResponse:
+        """Async HTTP GET with retry and rate limiting."""
+        # Shared async retry logic
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
         """Parse date from various vendor formats."""
@@ -351,39 +343,31 @@ class VendorRateLimiter:
 
 ## Vendor Factory (factory.py)
 
-**Adapter dispatcher:** Maps vendor name → adapter class.
+**Adapter dispatcher:** Maps vendor name → async adapter class.
 
 ```python
 # vendors/factory.py
-from vendors.adapters import (
-    LegistarAdapter,
-    PrimeGovAdapter,
-    GranicusAdapter,
-    IQM2Adapter,
-    NovusAgendaAdapter,
-    EScribeAdapter,
-    CivicClerkAdapter,
-    CivicPlusAdapter,
-)
-from vendors.adapters.custom import BerkeleyAdapter, ChicagoAdapter, MenloParkAdapter
+from vendors.adapters.legistar_adapter_async import AsyncLegistarAdapter
+from vendors.adapters.primegov_adapter_async import AsyncPrimeGovAdapter
+# ... all 11 async adapters
 
 VENDOR_ADAPTERS = {
-    "legistar": LegistarAdapter,
-    "primegov": PrimeGovAdapter,
-    "granicus": GranicusAdapter,
-    "iqm2": IQM2Adapter,
-    "novusagenda": NovusAgendaAdapter,
-    "escribe": EScribeAdapter,
-    "civicclerk": CivicClerkAdapter,
-    "civicplus": CivicPlusAdapter,
-    "berkeley": BerkeleyAdapter,
-    "chicago": ChicagoAdapter,
-    "menlopark": MenloParkAdapter,
+    "legistar": AsyncLegistarAdapter,
+    "primegov": AsyncPrimeGovAdapter,
+    "granicus": AsyncGranicusAdapter,
+    "iqm2": AsyncIQM2Adapter,
+    "novusagenda": AsyncNovusAgendaAdapter,
+    "escribe": AsyncEscribeAdapter,
+    "civicclerk": AsyncCivicClerkAdapter,
+    "civicplus": AsyncCivicPlusAdapter,
+    "berkeley": AsyncBerkeleyAdapter,
+    "chicago": AsyncChicagoAdapter,
+    "menlopark": AsyncMenloParkAdapter,
 }
 
-def get_adapter(vendor: str, city_slug: str, **kwargs) -> BaseAdapter:
+def get_async_adapter(vendor: str, city_slug: str, **kwargs) -> AsyncBaseAdapter:
     """
-    Get adapter instance for vendor.
+    Get async adapter instance for vendor.
 
     Args:
         vendor: Vendor identifier (e.g., "legistar", "primegov")
@@ -391,7 +375,7 @@ def get_adapter(vendor: str, city_slug: str, **kwargs) -> BaseAdapter:
         **kwargs: Additional arguments (api_token, etc.)
 
     Returns:
-        Adapter instance
+        Async adapter instance
 
     Raises:
         VendorError: If vendor not supported
@@ -406,10 +390,10 @@ def get_adapter(vendor: str, city_slug: str, **kwargs) -> BaseAdapter:
 **Usage:**
 ```python
 # In pipeline/fetcher.py
-from vendors.factory import get_adapter
+from vendors.factory import get_async_adapter
 
-adapter = get_adapter(vendor="legistar", city_slug="nyc")
-meetings = adapter.fetch_meetings(start_date, end_date)
+adapter = get_async_adapter(vendor="legistar", city_slug="nyc")
+meetings = await adapter.fetch_meetings(days_back=7, days_forward=14)
 ```
 
 ---
@@ -459,76 +443,75 @@ def validate_meeting(meeting_data: Dict) -> Meeting:
 
 **Step-by-step guide for adding support for a new civic tech platform.**
 
-### 1. Create Adapter Class
+### 1. Create Async Adapter Class
 
 ```python
-# vendors/adapters/newvendor_adapter.py
-from vendors.adapters.base_adapter import BaseAdapter
-from typing import List
-from datetime import datetime
+# vendors/adapters/newvendor_adapter_async.py
+from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
+from typing import List, Dict, Any
+import asyncio
 
-class NewVendorAdapter(BaseAdapter):
-    """Adapter for NewVendor civic tech platform."""
+class AsyncNewVendorAdapter(AsyncBaseAdapter):
+    """Async adapter for NewVendor civic tech platform."""
 
-    def __init__(self, city_slug: str, **kwargs):
-        super().__init__(city_slug, **kwargs)
+    def __init__(self, city_slug: str):
+        super().__init__(city_slug, vendor="newvendor")
         self.base_url = f"https://{city_slug}.newvendor.com"
 
-    def fetch_meetings(self, start_date: datetime, end_date: datetime) -> List[Dict]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
-        Fetch meetings from NewVendor platform.
+        Fetch meetings from NewVendor platform (async).
 
         Returns:
             [
                 {
-                    "id": "meeting_12345",
+                    "meeting_id": "meeting_12345",
                     "title": "City Council Meeting",
-                    "date": datetime(2025, 11, 20, 19, 0),
+                    "start": "2025-11-20T19:00:00",
                     "agenda_url": "https://...",  # If available
                     "packet_url": "https://...",  # Fallback
+                    "items": [...]  # If item-level
                 },
                 ...
             ]
         """
-        # Implementation:
         # 1. Construct URL for meeting list
-        url = f"{self.base_url}/meetings?start={start_date}&end={end_date}"
+        url = f"{self.base_url}/meetings"
 
-        # 2. Fetch with retry
-        response = self._get_with_retry(url)
+        # 2. Fetch with async retry
+        response = await self._get(url)
+        html = await response.text()
 
-        # 3. Parse response (JSON or HTML)
-        meetings = self._parse_meetings(response.text)
+        # 3. Parse response (CPU-bound, run in thread pool)
+        meetings = await asyncio.to_thread(self._parse_meetings, html)
 
-        # 4. Fetch details if needed
-        for meeting in meetings:
-            details = self._fetch_meeting_details(meeting["id"])
-            meeting.update(details)
+        # 4. Fetch details concurrently
+        detail_tasks = [self._fetch_meeting_details(m["meeting_id"]) for m in meetings]
+        details = await asyncio.gather(*detail_tasks, return_exceptions=True)
+
+        for meeting, detail in zip(meetings, details):
+            if not isinstance(detail, Exception):
+                meeting.update(detail)
 
         return meetings
 
-    def _fetch_meeting_details(self, meeting_id: str) -> Dict:
-        """Fetch agenda items for a meeting (if item-level)."""
-        # If NewVendor provides structured items:
+    async def _fetch_meeting_details(self, meeting_id: str) -> Dict[str, Any]:
+        """Fetch agenda items for a meeting (async)."""
         url = f"{self.base_url}/meetings/{meeting_id}/items"
-        response = self._get_with_retry(url)
-        items = self._parse_items(response.text)
-
-        return {
-            "items": items,  # List of agenda items
-            "agenda_url": url,
-        }
-
-        # If NewVendor only provides PDF packets:
-        # return {"packet_url": "https://..."}
+        response = await self._get(url)
+        html = await response.text()
+        items = await asyncio.to_thread(self._parse_items, html)
+        return {"items": items, "agenda_url": url}
 
     def _parse_meetings(self, html: str) -> List[Dict]:
-        """Parse meeting list from HTML/JSON."""
-        # Use BeautifulSoup for HTML or json.loads() for JSON
+        """Parse meeting list (sync, run in thread pool)."""
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, 'html.parser')
+        # Extract meetings...
         ...
 
     def _parse_items(self, html: str) -> List[Dict]:
-        """Parse agenda items from detail page."""
+        """Parse agenda items (sync, run in thread pool)."""
         # If complex, extract to vendors/adapters/parsers/newvendor_parser.py
         ...
 ```
@@ -537,11 +520,11 @@ class NewVendorAdapter(BaseAdapter):
 
 ```python
 # vendors/factory.py
-from vendors.adapters.newvendor_adapter import NewVendorAdapter
+from vendors.adapters.newvendor_adapter_async import AsyncNewVendorAdapter
 
 VENDOR_ADAPTERS = {
     ...
-    "newvendor": NewVendorAdapter,
+    "newvendor": AsyncNewVendorAdapter,
 }
 ```
 
@@ -562,7 +545,7 @@ db.add_city(
 ### 4. Test Adapter
 
 ```bash
-# Sync one meeting to verify
+# Sync one city to verify
 python -m pipeline.conductor sync-city examplecityCA --force
 ```
 
@@ -700,4 +683,4 @@ sqlite3 data/engagic.db "SELECT COUNT(*) FROM meetings WHERE banana = 'paloaltoC
 - [database/README.md](../database/README.md) - How meeting data is stored
 - [VISION.md](../docs/VISION.md) - Product roadmap and vendor expansion plans
 
-**Last Updated:** 2025-11-20 (Initial documentation)
+**Last Updated:** 2025-11-26 (Async migration complete, sync code removed)
