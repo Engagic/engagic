@@ -66,6 +66,17 @@ class Conductor:
             self.fetcher.is_running = old_state
             self.processor.is_running = old_state
 
+    async def close(self):
+        """Cleanup resources (HTTP sessions)"""
+        await self.processor.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+        return False
+
     async def get_sync_status(self) -> Dict[str, Any]:
         """Get current sync status"""
         stats = await self.db.get_stats()
@@ -374,9 +385,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                result = await conductor.force_sync_city(banana)
-                return result
+                async with Conductor(db) as conductor:
+                    return await conductor.force_sync_city(banana)
             finally:
                 await db.close()
 
@@ -390,9 +400,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                result = await conductor.sync_and_process_city(banana)
-                return result
+                async with Conductor(db) as conductor:
+                    return await conductor.sync_and_process_city(banana)
             finally:
                 await db.close()
 
@@ -409,9 +418,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                results = await conductor.sync_cities(city_list)
-                return results
+                async with Conductor(db) as conductor:
+                    return await conductor.sync_cities(city_list)
             finally:
                 await db.close()
 
@@ -428,9 +436,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                results = await conductor.process_cities(city_list)
-                return results
+                async with Conductor(db) as conductor:
+                    return await conductor.process_cities(city_list)
             finally:
                 await db.close()
 
@@ -447,9 +454,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                results = await conductor.sync_and_process_cities(city_list)
-                return results
+                async with Conductor(db) as conductor:
+                    return await conductor.sync_and_process_cities(city_list)
             finally:
                 await db.close()
 
@@ -462,9 +468,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                results = await conductor.fetcher.sync_all()
-                return results
+                async with Conductor(db) as conductor:
+                    return await conductor.fetcher.sync_all()
             finally:
                 await db.close()
 
@@ -508,13 +513,13 @@ def main():
                 click.echo(f"Syncing {len(valid_cities)} watchlist cities: {', '.join(valid_cities)}")
 
                 # Sync and process
-                conductor = Conductor(db)
-                results = await conductor.sync_and_process_cities(valid_cities)
-                return {
-                    "cities_synced": len(valid_cities),
-                    "unknown_cities": unknown_cities,
-                    "results": results
-                }
+                async with Conductor(db) as conductor:
+                    results = await conductor.sync_and_process_cities(valid_cities)
+                    return {
+                        "cities_synced": len(valid_cities),
+                        "unknown_cities": unknown_cities,
+                        "results": results
+                    }
             finally:
                 await db.close()
 
@@ -557,9 +562,9 @@ def main():
 
                 click.echo(f"Processing {len(valid_cities)} watchlist cities: {', '.join(valid_cities)}")
 
-                conductor = Conductor(db)
-                results = await conductor.process_cities(valid_cities)
-                return {"cities_processed": len(valid_cities), "results": results}
+                async with Conductor(db) as conductor:
+                    results = await conductor.process_cities(valid_cities)
+                    return {"cities_processed": len(valid_cities), "results": results}
             finally:
                 await db.close()
 
@@ -603,9 +608,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                sync_status = await conductor.get_sync_status()
-                return sync_status
+                async with Conductor(db) as conductor:
+                    return await conductor.get_sync_status()
             finally:
                 await db.close()
 
@@ -660,6 +664,7 @@ def main():
                                 break
                             await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
             finally:
+                await conductor.close()
                 await db.close()
 
         asyncio.run(run())
@@ -671,9 +676,8 @@ def main():
         async def run():
             db = await Database.create()
             try:
-                conductor = Conductor(db)
-                result = await conductor.preview_queue(city_banana=banana)
-                return result
+                async with Conductor(db) as conductor:
+                    return await conductor.preview_queue(city_banana=banana)
             finally:
                 await db.close()
 
@@ -793,6 +797,7 @@ def main():
                 logger.info("[Daemon] Shutdown complete")
 
             finally:
+                await conductor.close()
                 await db.close()
 
         asyncio.run(run())

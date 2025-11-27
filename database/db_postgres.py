@@ -446,6 +446,8 @@ class Database:
             # Skip procedural matter types
             if matter_type and should_skip_matter(matter_type):
                 stats['skipped_procedural'] += 1
+                # Clear FK reference since we're not creating the matter record
+                agenda_item.matter_id = None
                 logger.debug(
                     "skipping procedural matter",
                     matter=agenda_item.matter_file or raw_vendor_matter_id,
