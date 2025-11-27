@@ -28,6 +28,8 @@ import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
+import aiohttp
+
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.utils.item_filters import should_skip_procedural_item
 
@@ -75,7 +77,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         try:
             response = await self._get(api_url, params=params)
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("network error fetching meetings", slug=self.slug, error=str(e))
             return []
 
@@ -96,7 +98,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 result = await self._process_meeting(meeting)
                 if result:
                     results.append(result)
-            except Exception as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
                 logger.error(
                     "error processing meeting",
                     slug=self.slug,
@@ -200,7 +202,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         try:
             response = await self._get(detail_url)
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.warning("network error fetching meeting detail", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None
 
@@ -360,7 +362,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         try:
             response = await self._get(matter_url)
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.debug("network error fetching matter", slug=self.slug, matter_id=matter_id, error=str(e))
             return {"attachments": [], "sponsors": []}
 
@@ -430,6 +432,6 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
             else:
                 return datetime.fromisoformat(date_str)
-        except Exception as e:
+        except (ValueError, AttributeError) as e:
             logger.warning("could not parse date", slug=self.slug, date_str=date_str, error=str(e))
             return None

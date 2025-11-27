@@ -110,7 +110,7 @@ def _parse_date(self, date_str: str) -> datetime:
     for fmt in ["%b. %d, %Y", "%B %d, %Y", "%m/%d/%Y"]:
         try:
             return datetime.strptime(date_str, fmt)
-        except:
+        except ValueError:
             continue
     return None
 ```

@@ -29,6 +29,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
+import aiohttp
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
@@ -62,7 +63,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
         try:
             response = await self._get(meetings_url)
             html = await response.text()
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("failed to fetch meetings list", adapter="berkeley", slug=self.slug, error=str(e))
             return []
 
@@ -145,7 +146,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
                         logger.info("extracted items from HTML agenda", adapter="berkeley", slug=self.slug, item_count=len(detail['items']))
                     if detail.get('title'):
                         meeting_data['title'] = detail['title']
-            except Exception as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 logger.warning("failed to fetch detail", adapter="berkeley", slug=self.slug, meeting_id=meeting_id, error=str(e))
                 # Continue anyway - we have basic meeting data even without items
 
