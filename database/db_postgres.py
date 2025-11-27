@@ -16,6 +16,7 @@ from database.id_generation import generate_matter_id
 from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata, AttachmentInfo
 from database.repositories_async import (
     CityRepository,
+    CouncilMemberRepository,
     MeetingRepository,
     ItemRepository,
     MatterRepository,
@@ -71,6 +72,7 @@ class Database:
 
     # Repository attributes
     cities: CityRepository
+    council_members: CouncilMemberRepository
     meetings: MeetingRepository
     items: ItemRepository
     matters: MatterRepository
@@ -87,6 +89,7 @@ class Database:
 
         # Instantiate all repositories with shared pool
         self.cities = CityRepository(pool)
+        self.council_members = CouncilMemberRepository(pool)
         self.meetings = MeetingRepository(pool)
         self.items = ItemRepository(pool)
         self.matters = MatterRepository(pool)
@@ -520,6 +523,26 @@ class Database:
                         matter=agenda_item.matter_file or raw_vendor_matter_id,
                         matter_type=matter_type,
                         sponsor_count=len(sponsors)
+                    )
+
+                    # Link sponsors to matter (normalize JSONB array into relational table)
+                    if sponsors:
+                        await self.council_members.link_sponsors_to_matter(
+                            banana=meeting.banana,
+                            matter_id=matter_composite_id,
+                            sponsor_names=sponsors,
+                            appeared_at=meeting.date,
+                        )
+
+                # Record votes for this matter/meeting (both new and existing matters)
+                votes = raw_item.get("votes", [])
+                if votes:
+                    await self.council_members.record_votes_for_matter(
+                        banana=meeting.banana,
+                        matter_id=matter_composite_id,
+                        meeting_id=meeting.id,
+                        votes=votes,
+                        vote_date=meeting.date,
                     )
 
             except Exception as e:
