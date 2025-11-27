@@ -1,6 +1,6 @@
 // Input sanitization utilities
 
-const ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'blockquote'];
+const ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'blockquote', 'mark'];
 const ALLOWED_ATTRS: { [tag: string]: string[] } = {};
 
 export function sanitizeHtml(input: string): string {
