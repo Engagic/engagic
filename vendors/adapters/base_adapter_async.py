@@ -371,7 +371,7 @@ class AsyncBaseAdapter:
         Parse date string from various vendor formats.
 
         Supports common municipal calendar formats:
-        - ISO 8601: "2025-01-22T18:00:00Z"
+        - ISO 8601: "2025-01-22T18:00:00Z", "2025-01-22T18:00:00+00:00"
         - US formats: "Jan 22, 2025 6:00 PM", "01/22/2025 6:00 PM"
         - Verbose: "January 22, 2025 at 6:00 PM"
 
@@ -379,21 +379,29 @@ class AsyncBaseAdapter:
             date_str: Date string in various formats
 
         Returns:
-            datetime object or None if parsing fails
+            Naive datetime object (tzinfo stripped) or None if parsing fails
 
-        NOTE: Returning None for empty input is intentional - graceful handling of missing dates
+        NOTE: Always returns naive datetimes for database compatibility.
+        Timezone info is stripped after parsing to avoid offset-aware/naive mixing.
         """
         if not date_str:
             return None
 
+        date_str = date_str.strip()
+
+        # Try ISO 8601 first using fromisoformat (handles timezone properly)
+        if 'T' in date_str or date_str.count('-') >= 2:
+            try:
+                # Handle 'Z' suffix (UTC)
+                iso_str = date_str.replace('Z', '+00:00')
+                dt = datetime.fromisoformat(iso_str)
+                # Strip timezone for database compatibility
+                return dt.replace(tzinfo=None)
+            except ValueError:
+                pass
+
         # Common formats used by municipal calendar systems
         formats = [
-            # ISO formats
-            "%Y-%m-%dT%H:%M:%S.%fZ",
-            "%Y-%m-%dT%H:%M:%SZ",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
             # US formats with 12-hour time
             "%b %d, %Y %I:%M %p",
             "%B %d, %Y %I:%M %p",
@@ -404,16 +412,19 @@ class AsyncBaseAdapter:
             "%B %d, %Y %H:%M",
             "%m/%d/%Y %H:%M",
             # Date only formats
+            "%Y-%m-%d",
             "%b %d, %Y",
             "%B %d, %Y",
             "%m/%d/%Y",
             # Verbose formats
             "%B %d, %Y at %I:%M %p",
+            # Escribe format: "Tuesday, December 02, 2025 @ 5:30 PM"
+            "%A, %B %d, %Y @ %I:%M %p",
         ]
 
         for fmt in formats:
             try:
-                return datetime.strptime(date_str.strip(), fmt)
+                return datetime.strptime(date_str, fmt)
             except (ValueError, AttributeError):
                 continue
 

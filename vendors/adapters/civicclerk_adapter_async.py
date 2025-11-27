@@ -1,20 +1,26 @@
 """
-CivicClerk Adapter - OData API integration for CivicClerk platform
+Async CivicClerk Adapter - OData API integration for CivicClerk platform
 
 Cities using CivicClerk: Montpelier VT, Burlington VT, and others
+
+Async version with:
+- aiohttp for async HTTP requests
+- AsyncSessionManager for connection pooling
+- Non-blocking I/O for concurrent city fetching
 """
 
-from typing import Dict, Any, Iterator
+from typing import Dict, Any, List
 from datetime import datetime, timedelta
-from vendors.adapters.base_adapter import BaseAdapter, logger
+
+from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 
 
-class CivicClerkAdapter(BaseAdapter):
-    """Adapter for cities using CivicClerk platform"""
+class AsyncCivicClerkAdapter(AsyncBaseAdapter):
+    """Async adapter for cities using CivicClerk platform"""
 
     def __init__(self, city_slug: str):
         """
-        Initialize CivicClerk adapter.
+        Initialize async CivicClerk adapter.
 
         Args:
             city_slug: CivicClerk subdomain (e.g., "montpelliervt" for montpelliervt.api.civicclerk.com)
@@ -35,9 +41,9 @@ class CivicClerkAdapter(BaseAdapter):
         file_id = doc.get("fileId")
         return f"{self.base_url}/v1/Meetings/GetMeetingFileStream(fileId={file_id},plainText=false)"
 
-    def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> Iterator[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
-        Fetch meetings from CivicClerk OData API within date range.
+        Fetch meetings from CivicClerk OData API within date range (async).
 
         Uses OData $filter and $orderby parameters to get meetings in range.
 
@@ -45,8 +51,8 @@ class CivicClerkAdapter(BaseAdapter):
             days_back: Days to look backward (default 7)
             days_forward: Days to look forward (default 14)
 
-        Yields:
-            Meeting dictionaries with meeting_id, title, start, packet_url
+        Returns:
+            List of meeting dictionaries with meeting_id, title, start, packet_url
         """
         # Calculate date range
         today = datetime.now()
@@ -62,18 +68,28 @@ class CivicClerkAdapter(BaseAdapter):
         }
 
         logger.debug(
-            f"[civicclerk:{self.slug}] Fetching meetings from {start_date.date()} to {end_date.date()}"
+            "fetching meetings",
+            vendor="civicclerk",
+            slug=self.slug,
+            start_date=str(start_date.date()),
+            end_date=str(end_date.date())
         )
 
-        # Fetch from CivicClerk API
+        # Fetch from CivicClerk API (async)
         api_url = f"{self.base_url}/v1/Events"
-        response = self._get(api_url, params=params)
-        data = response.json()
+        response = await self._get(api_url, params=params)
+        data = await response.json()
 
-        meetings = data.get("value", [])
-        logger.info("retrieved meetings from API", vendor="civicclerk", slug=self.slug, meeting_count=len(meetings))
+        meetings_data = data.get("value", [])
+        logger.info(
+            "retrieved meetings from API",
+            vendor="civicclerk",
+            slug=self.slug,
+            meeting_count=len(meetings_data)
+        )
 
-        for meeting in meetings:
+        results = []
+        for meeting in meetings_data:
             # Find agenda packet in published files
             packet = next(
                 (
@@ -96,8 +112,11 @@ class CivicClerkAdapter(BaseAdapter):
                     doc.get("type") for doc in meeting.get("publishedFiles", [])
                 ]
                 logger.debug(
-                    f"[civicclerk:{self.slug}] No packet for: {event_name}, "
-                    f"available files: {file_types}"
+                    "no packet for meeting",
+                    vendor="civicclerk",
+                    slug=self.slug,
+                    event_name=event_name,
+                    available_files=file_types
                 )
 
             result = {
@@ -110,4 +129,6 @@ class CivicClerkAdapter(BaseAdapter):
             if meeting_status:
                 result["meeting_status"] = meeting_status
 
-            yield result
+            results.append(result)
+
+        return results

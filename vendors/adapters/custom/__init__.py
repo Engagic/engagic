@@ -8,18 +8,16 @@ Trade-off: High maintenance cost per city, but captures high-value targets
 (Berkeley, Menlo Park, etc) that wouldn't otherwise be accessible.
 
 Pattern:
-- Inherit from BaseAdapter
-- Implement fetch_meetings()
+- Inherit from AsyncBaseAdapter
+- Implement async fetch_meetings()
 - Register in factory.py with vendor="custom_{city}"
 - Document URL patterns and HTML structure in adapter docstring
+
+All custom adapters are async (migration complete Nov 2025).
 """
 
-from vendors.adapters.custom.berkeley_adapter import BerkeleyAdapter
-from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
-from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
+from vendors.adapters.custom.berkeley_adapter_async import AsyncBerkeleyAdapter
+from vendors.adapters.custom.chicago_adapter_async import AsyncChicagoAdapter
+from vendors.adapters.custom.menlopark_adapter_async import AsyncMenloParkAdapter
 
-from config import get_logger
-
-logger = get_logger(__name__).bind(component="vendor")
-
-__all__ = ["BerkeleyAdapter", "ChicagoAdapter", "MenloParkAdapter"]
+__all__ = ["AsyncBerkeleyAdapter", "AsyncChicagoAdapter", "AsyncMenloParkAdapter"]
