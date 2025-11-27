@@ -6,6 +6,7 @@ Routes, services, and utilities are organized into focused modules.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import stripe
@@ -88,7 +89,7 @@ app.add_middleware(RequestIDMiddleware)
 
 # Initialize global instances (non-async)
 rate_limiter = SQLiteRateLimiter(
-    db_path=str(config.UNIFIED_DB_PATH).replace("engagic.db", "rate_limits.db"),
+    db_path=os.path.join(config.DB_DIR, "rate_limits.db"),
     requests_limit=config.RATE_LIMIT_REQUESTS,
     window_seconds=config.RATE_LIMIT_WINDOW,
 )

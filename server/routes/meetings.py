@@ -10,7 +10,6 @@ from server.dependencies import get_db
 from database.db_postgres import Database
 
 from config import get_logger
-from scripts.summary_quality_checker import SummaryQualityChecker
 
 logger = get_logger(__name__)
 
@@ -71,40 +70,6 @@ async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
-
-
-@router.get("/random-best-meeting")
-async def get_random_best_meeting():
-    """Get a random high-quality meeting summary for showcasing"""
-    try:
-        checker = SummaryQualityChecker()
-        random_meeting = checker.get_random_best_summary()
-
-        if not random_meeting:
-            raise HTTPException(
-                status_code=404,
-                detail="No high-quality meeting summaries available yet",
-            )
-
-        # Format for frontend consumption
-        return {
-            "status": "success",
-            "meeting": {
-                "id": random_meeting["id"],
-                "banana": random_meeting["banana"],
-                "city_url": f"/city/{random_meeting['banana']}",
-                "title": random_meeting["title"],
-                "date": random_meeting["date"],
-                "packet_url": random_meeting["packet_url"],
-                "summary": random_meeting["summary"],
-                "quality_score": random_meeting["quality_score"],
-            },
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("error getting random best meeting", error=str(e))
-        raise HTTPException(status_code=500, detail="Error retrieving meeting summary")
 
 
 @router.get("/random-meeting-with-items")
