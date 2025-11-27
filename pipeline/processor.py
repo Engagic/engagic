@@ -25,6 +25,7 @@ from parsing.participation import parse_participation_info
 from config import config, get_logger
 from server.metrics import metrics
 from vendors.utils.item_filters import should_skip_processing, is_public_comment_attachment
+from vendors.session_manager_async import AsyncSessionManager
 
 logger = get_logger(__name__).bind(component="processor")
 
@@ -1175,7 +1176,7 @@ class Processor:
 
         # PHASE 2: Filter already-processed items from those needing processing
         already_processed, need_processing = await self._filter_processed_items(agenda_items)
-        processed_items = already_processed  # Start with pre-processed items
+        processed_items = list(already_processed)  # Copy - don't alias or stats break
 
         if not need_processing:
             logger.info(
@@ -1291,3 +1292,5 @@ class Processor:
         if self.analyzer:
             await self.analyzer.close()
             logger.debug("analyzer http session closed")
+        await AsyncSessionManager.close_all()
+        logger.debug("vendor http sessions closed")
