@@ -63,26 +63,43 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         # Parse HTML (CPU-bound, run in thread pool)
         soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
+        meeting_containers = []
+
         # Find "Upcoming Meetings" section
         upcoming_section = soup.find(
             "div", {"role": "region", "aria-label": "List of Upcoming Meetings"}
         )
+        if upcoming_section:
+            upcoming_containers = upcoming_section.find_all(
+                "div", class_="upcoming-meeting-container"
+            )
+            meeting_containers.extend(upcoming_containers)
+            logger.info(
+                "found upcoming meetings",
+                vendor="escribe",
+                slug=self.slug,
+                count=len(upcoming_containers)
+            )
 
-        if not upcoming_section:
-            logger.warning("no upcoming meetings section found", vendor="escribe", slug=self.slug)
+        # Find "Previous Meetings" section for days_back window
+        previous_section = soup.find(
+            "div", {"role": "region", "aria-label": "List of Previous Meetings"}
+        )
+        if previous_section:
+            previous_containers = previous_section.find_all(
+                "div", class_="previous-meeting-container"
+            )
+            meeting_containers.extend(previous_containers)
+            logger.info(
+                "found previous meetings",
+                vendor="escribe",
+                slug=self.slug,
+                count=len(previous_containers)
+            )
+
+        if not meeting_containers:
+            logger.warning("no meeting sections found", vendor="escribe", slug=self.slug)
             return []
-
-        # Parse meeting containers
-        meeting_containers = upcoming_section.find_all(
-            "div", class_="upcoming-meeting-container"
-        )
-
-        logger.info(
-            "found upcoming meetings",
-            vendor="escribe",
-            slug=self.slug,
-            count=len(meeting_containers)
-        )
 
         results = []
         for container in meeting_containers:
@@ -162,10 +179,8 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         # Extract meeting ID from URL (format: Meeting.aspx?Id=UUID)
         meeting_id = self._extract_meeting_id(meeting_url, title, date_text)
 
-        # Determine packet_url
-        packet_url = None
-        if pdf_links:
-            packet_url = pdf_links[0] if len(pdf_links) == 1 else pdf_links
+        # Determine packet_url (always first PDF, single string)
+        packet_url = pdf_links[0] if pdf_links else None
 
         # Parse meeting status from title and date
         meeting_status = self._parse_meeting_status(title, date_text)

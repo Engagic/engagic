@@ -91,8 +91,8 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
             if not date_text:
                 continue
 
-            # Parse date
-            meeting_date = self._parse_berkeley_date(date_text)
+            # Parse date using base adapter's parser
+            meeting_date = self._parse_date(date_text)
             if not meeting_date:
                 logger.debug("could not parse date", adapter="berkeley", slug=self.slug, date_text=date_text)
                 continue
@@ -324,29 +324,3 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
 
         logger.debug("extracted items", adapter="berkeley", slug=self.slug, item_count=len(items))
         return items
-
-    def _parse_berkeley_date(self, date_str: str) -> Optional[datetime]:
-        """
-        Parse Berkeley date formats:
-        - ISO 8601: "2025-11-11T02:00:00Z"
-        - US format: "11/10/2025 - 6:00 pm"
-        """
-        date_str = date_str.strip()
-
-        # Try ISO 8601 first
-        if 'T' in date_str:
-            try:
-                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            except ValueError:
-                pass
-
-        # Try US format (MM/DD/YYYY)
-        match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-        if match:
-            month, day, year = match.groups()
-            try:
-                return datetime(int(year), int(month), int(day))
-            except (ValueError, OverflowError):
-                pass
-
-        return None

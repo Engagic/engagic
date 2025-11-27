@@ -476,6 +476,48 @@ def main():
         results = asyncio.run(run())
         click.echo(f"Full sync complete: {len(results)} cities processed")
 
+    @cli.command("preview-watchlist")
+    def preview_watchlist():
+        """Show cities that users are watching (no sync or processing)
+
+        Displays which cities have active alert subscriptions from users.
+        """
+        async def run():
+            db = await Database.create()
+            try:
+                demanded = await db.userland.get_demanded_cities()
+                if not demanded:
+                    return {"message": "No cities in user watchlists", "valid": [], "unknown": []}
+
+                valid_cities = []
+                unknown_cities = []
+                for banana in demanded:
+                    city = await db.cities.get_city(banana)
+                    if city:
+                        valid_cities.append({"banana": banana, "name": city.name, "state": city.state})
+                    else:
+                        unknown_cities.append(banana)
+
+                return {
+                    "total": len(demanded),
+                    "valid": valid_cities,
+                    "unknown": unknown_cities
+                }
+            finally:
+                await db.close()
+
+        result = asyncio.run(run())
+        if "message" in result:
+            click.echo(result["message"])
+        else:
+            click.echo(f"Watchlist: {result['total']} cities")
+            if result["valid"]:
+                click.echo(f"\nValid ({len(result['valid'])}):")
+                for city in result["valid"]:
+                    click.echo(f"  {city['banana']} - {city['name']}, {city['state']}")
+            if result["unknown"]:
+                click.echo(f"\nUnknown (need setup): {', '.join(result['unknown'])}")
+
     @cli.command("sync-watchlist")
     def sync_watchlist():
         """Sync and process cities that users are watching
