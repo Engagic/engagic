@@ -368,13 +368,18 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if agenda_number:
                 item["agenda_number"] = agenda_number
 
-            # Fetch matter metadata and attachments if matter exists
+            # Fetch matter metadata, attachments, and votes concurrently
+            # Votes keyed by event_item_id, metadata/attachments by matter_id
+            votes_task = asyncio.create_task(self._fetch_event_item_votes_api(int(item_id)))
+
             if matter_id:
                 # Fetch metadata and attachments concurrently
                 metadata_task = asyncio.create_task(self._fetch_matter_metadata_async(matter_id))
                 attachments_task = asyncio.create_task(self._fetch_matter_attachments_async(matter_id))
 
-                metadata, attachments = await asyncio.gather(metadata_task, attachments_task, return_exceptions=True)
+                votes, metadata, attachments = await asyncio.gather(
+                    votes_task, metadata_task, attachments_task, return_exceptions=True
+                )
 
                 # Handle metadata
                 if isinstance(metadata, dict):
@@ -386,6 +391,13 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 # Handle attachments
                 if isinstance(attachments, list) and attachments:
                     item["attachments"] = attachments
+            else:
+                # No matter_id - still fetch votes
+                votes = await votes_task
+
+            # Handle votes (keyed by event_item_id, not matter_id)
+            if isinstance(votes, list) and votes:
+                item["votes"] = votes
 
             return item
 
@@ -436,6 +448,78 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             logger.debug("could not fetch matter metadata", matter_id=matter_id, error=str(e))
 
         return metadata
+
+    async def _fetch_event_item_votes_api(self, event_item_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch votes for a specific event item from API.
+
+        Args:
+            event_item_id: Legistar EventItemId
+
+        Returns:
+            List of votes: [{'name': str, 'vote': str, 'sequence': int, 'person_id': int}]
+        """
+        try:
+            votes_url = f"{self.base_url}/EventItems/{event_item_id}/Votes"
+            params = {"token": self.api_token} if self.api_token else {}
+
+            response = await self._get(votes_url, params=params)
+
+            content_type = response.headers.get('content-type', '').lower()
+            if 'json' in content_type:
+                raw_votes = await response.json()
+            else:
+                # XML fallback - not common for votes but handle it
+                return []
+
+            votes = []
+            for vote in raw_votes:
+                name = vote.get("VotePersonName", "").strip()
+                vote_value = vote.get("VoteValueName", "").strip()
+                person_id = vote.get("VotePersonId")
+                sequence = vote.get("VoteSort", 0)
+
+                if not name or not vote_value:
+                    continue
+
+                # Normalize vote value to our standard format
+                vote_normalized = self._normalize_vote_value(vote_value)
+
+                votes.append({
+                    "name": name,
+                    "vote": vote_normalized,
+                    "sequence": sequence,
+                    "person_id": person_id,
+                })
+
+            return votes
+
+        except (VendorHTTPError, aiohttp.ClientError, JSONDecodeError, ValueError) as e:
+            logger.debug("could not fetch event item votes", event_item_id=event_item_id, error=str(e))
+            return []
+
+    def _normalize_vote_value(self, value: str) -> str:
+        """Normalize Legistar vote value to standard format"""
+        value_lower = value.lower()
+        vote_map = {
+            "affirmative": "yes",
+            "aye": "yes",
+            "yea": "yes",
+            "yes": "yes",
+            "negative": "no",
+            "nay": "no",
+            "no": "no",
+            "absent": "absent",
+            "excused": "absent",
+            "not present": "absent",
+            "abstain": "abstain",
+            "abstained": "abstain",
+            "present": "present",
+            "recused": "recused",
+            "recuse": "recused",
+            "conflict": "recused",
+        }
+        return vote_map.get(value_lower, "not_voting")
 
     async def _fetch_matter_attachments_async(self, matter_id: int) -> List[Dict[str, Any]]:
         """

@@ -285,9 +285,10 @@ class CouncilMember:
     title: Optional[str] = None  # Role: Council Member, Mayor, Alderman
     district: Optional[str] = None  # Ward/district number
     status: str = "active"  # active, former, unknown
-    first_seen: Optional[datetime] = None  # First sponsorship date
-    last_seen: Optional[datetime] = None  # Most recent sponsorship
+    first_seen: Optional[datetime] = None  # First activity (sponsor or vote)
+    last_seen: Optional[datetime] = None  # Most recent activity
     sponsorship_count: int = 0  # Denormalized for quick stats
+    vote_count: int = 0  # Denormalized count of votes cast
     metadata: Optional[dict] = None  # Vendor-specific fields
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -303,6 +304,34 @@ class CouncilMember:
             data["first_seen"] = self.first_seen.isoformat()
         if self.last_seen:
             data["last_seen"] = self.last_seen.isoformat()
+        return data
+
+
+@dataclass
+class Vote:
+    """Vote entity - individual voting record per member per matter per meeting
+
+    Tracks how each council member voted on each matter at each meeting.
+    Same matter may be voted on multiple times (readings, amendments).
+    """
+
+    id: Optional[int] = None  # BIGSERIAL primary key
+    council_member_id: str = ""  # FK to council_members
+    matter_id: str = ""  # FK to city_matters
+    meeting_id: str = ""  # FK to meetings (critical: votes are per-meeting)
+    vote: str = ""  # yes, no, abstain, absent, present, recused, not_voting
+    vote_date: Optional[datetime] = None  # Date of vote (usually meeting date)
+    sequence: Optional[int] = None  # Order in roll call
+    metadata: Optional[dict] = None  # Vendor-specific (motion_id, etc.)
+    created_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        data = asdict(self)
+        if self.vote_date:
+            data["vote_date"] = self.vote_date.isoformat()
+        if self.created_at:
+            data["created_at"] = self.created_at.isoformat()
         return data
 
 
