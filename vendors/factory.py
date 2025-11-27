@@ -3,56 +3,38 @@
 from config import get_logger
 from exceptions import VendorError
 
-# Sync adapters (unmigrated vendors only)
-from vendors.adapters.civicclerk_adapter import CivicClerkAdapter
-from vendors.adapters.civicplus_adapter import CivicPlusAdapter
-from vendors.adapters.escribe_adapter import EscribeAdapter
-
-from vendors.adapters.custom.berkeley_adapter import BerkeleyAdapter
-from vendors.adapters.custom.chicago_adapter import ChicagoAdapter
-from vendors.adapters.custom.menlopark_adapter import MenloParkAdapter
-
-# Async adapters (primary - all migrated vendors)
+# Async adapters (primary - all vendors now migrated)
 from vendors.adapters.granicus_adapter_async import AsyncGranicusAdapter
 from vendors.adapters.iqm2_adapter_async import AsyncIQM2Adapter
 from vendors.adapters.legistar_adapter_async import AsyncLegistarAdapter
 from vendors.adapters.novusagenda_adapter_async import AsyncNovusAgendaAdapter
 from vendors.adapters.primegov_adapter_async import AsyncPrimeGovAdapter
+from vendors.adapters.civicclerk_adapter_async import AsyncCivicClerkAdapter
+from vendors.adapters.civicplus_adapter_async import AsyncCivicPlusAdapter
+from vendors.adapters.escribe_adapter_async import AsyncEscribeAdapter
+from vendors.adapters.custom.berkeley_adapter_async import AsyncBerkeleyAdapter
+from vendors.adapters.custom.chicago_adapter_async import AsyncChicagoAdapter
+from vendors.adapters.custom.menlopark_adapter_async import AsyncMenloParkAdapter
 
 logger = get_logger(__name__).bind(component="vendor")
 
-# VENDOR_ADAPTERS: Sync adapters for unmigrated vendors + async for migrated
-# Used by get_adapter() - prefer get_async_adapter() for production
+# VENDOR_ADAPTERS: All async now (migration complete Nov 2025)
 VENDOR_ADAPTERS = {
-    # Migrated to async
     "granicus": AsyncGranicusAdapter,
     "iqm2": AsyncIQM2Adapter,
     "legistar": AsyncLegistarAdapter,
     "novusagenda": AsyncNovusAgendaAdapter,
     "primegov": AsyncPrimeGovAdapter,
-    # Unmigrated (sync)
-    "civicclerk": CivicClerkAdapter,
-    "civicplus": CivicPlusAdapter,
-    "escribe": EscribeAdapter,
-    "berkeley": BerkeleyAdapter,
-    "chicago": ChicagoAdapter,
-    "menlopark": MenloParkAdapter,
+    "civicclerk": AsyncCivicClerkAdapter,
+    "civicplus": AsyncCivicPlusAdapter,
+    "escribe": AsyncEscribeAdapter,
+    "berkeley": AsyncBerkeleyAdapter,
+    "chicago": AsyncChicagoAdapter,
+    "menlopark": AsyncMenloParkAdapter,
 }
 
-ASYNC_VENDOR_ADAPTERS = {
-    "granicus": AsyncGranicusAdapter,
-    "iqm2": AsyncIQM2Adapter,
-    "legistar": AsyncLegistarAdapter,
-    "novusagenda": AsyncNovusAgendaAdapter,
-    "primegov": AsyncPrimeGovAdapter,
-    # Remaining vendors use sync adapters (will be migrated in Priority 2/3)
-    "civicclerk": CivicClerkAdapter,
-    "civicplus": CivicPlusAdapter,
-    "escribe": EscribeAdapter,
-    "berkeley": BerkeleyAdapter,
-    "chicago": ChicagoAdapter,
-    "menlopark": MenloParkAdapter,
-}
+# ASYNC_VENDOR_ADAPTERS: Same as VENDOR_ADAPTERS (all async now)
+ASYNC_VENDOR_ADAPTERS = VENDOR_ADAPTERS
 
 
 def get_adapter(vendor: str, city_slug: str, **kwargs):
@@ -91,8 +73,7 @@ def get_adapter(vendor: str, city_slug: str, **kwargs):
 def get_async_adapter(vendor: str, city_slug: str, **kwargs):
     """Get appropriate async adapter for vendor
 
-    Returns async adapters for migrated vendors (Legistar, PrimeGov, Granicus).
-    Falls back to sync adapters for unmigrated vendors with a warning.
+    All vendors now use async adapters (migration complete Nov 2025).
 
     Args:
         vendor: Vendor name (primegov, legistar, etc.) or custom city adapter (berkeley, menlopark)
@@ -100,21 +81,23 @@ def get_async_adapter(vendor: str, city_slug: str, **kwargs):
         **kwargs: Additional adapter-specific arguments (e.g., api_token)
 
     Returns:
-        Async adapter instance (or sync adapter if not yet migrated)
+        Async adapter instance
 
     Raises:
         VendorError: If vendor is not supported
 
-    Migrated to async (Priority 1 complete):
-        - legistar: Legistar API/HTML (async)
-        - primegov: PrimeGov API/HTML (async)
-        - granicus: Granicus HTML scraping (async)
-        - iqm2: IQM2 HTML scraping (async)
-        - novusagenda: NovusAgenda HTML scraping (async)
-
-    Pending migration (Priority 2/3):
-        - civicclerk, civicplus, escribe (monolithic adapters - may add item-level)
-        - berkeley, chicago, menlopark (custom adapters)
+    Supported vendors (all async):
+        - legistar: Legistar API/HTML
+        - primegov: PrimeGov API/HTML
+        - granicus: Granicus HTML scraping
+        - iqm2: IQM2 HTML scraping
+        - novusagenda: NovusAgenda HTML scraping
+        - civicclerk: CivicClerk OData API
+        - civicplus: CivicPlus HTML scraping
+        - escribe: Escribe HTML scraping
+        - berkeley: Berkeley Drupal CMS
+        - chicago: Chicago REST API
+        - menlopark: Menlo Park PDF extraction
     """
     if vendor not in ASYNC_VENDOR_ADAPTERS:
         raise VendorError(
@@ -124,15 +107,6 @@ def get_async_adapter(vendor: str, city_slug: str, **kwargs):
         )
 
     adapter_cls = ASYNC_VENDOR_ADAPTERS[vendor]
-
-    # Log if using sync fallback
-    if vendor not in ["legistar", "primegov", "granicus", "iqm2", "novusagenda"]:
-        logger.warning(
-            "sync adapter fallback",
-            vendor=vendor,
-            city_slug=city_slug,
-            reason="async migration pending"
-        )
 
     # Handle Legistar api_token
     if vendor == "legistar" and kwargs.get("api_token"):
