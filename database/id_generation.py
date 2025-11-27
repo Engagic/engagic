@@ -330,3 +330,107 @@ def hash_meeting_id(meeting_id: str) -> str:
 # the number of matters we'll ever track (millions at most).
 # The only edge case is if a city changes their matter ID scheme mid-year,
 # but that would break their own systems too, so unlikely.
+
+
+def normalize_sponsor_name(name: str) -> str:
+    """Normalize sponsor name for council member matching
+
+    Handles vendor variations like:
+    - "John Smith" vs "JOHN SMITH" vs "Smith, John"
+    - "Council Member Smith" vs "CM Smith" vs "Smith"
+    - Leading/trailing whitespace, multiple spaces
+
+    Args:
+        name: Raw sponsor name from vendor data
+
+    Returns:
+        Lowercase, trimmed, collapsed whitespace name
+
+    Examples:
+        >>> normalize_sponsor_name("  John   Smith  ")
+        'john smith'
+
+        >>> normalize_sponsor_name("SMITH, JOHN")
+        'smith, john'
+    """
+    if not name:
+        return ""
+
+    # Collapse whitespace and lowercase
+    normalized = re.sub(r'\s+', ' ', name.strip().lower())
+
+    return normalized
+
+
+def generate_council_member_id(banana: str, name: str) -> str:
+    """Generate deterministic council member ID
+
+    Uses same pattern as generate_matter_id() for consistency.
+    ID includes city_banana to prevent cross-city collisions.
+
+    Args:
+        banana: City identifier (e.g., "chicagoIL")
+        name: Council member name (will be normalized)
+
+    Returns:
+        Composite ID: {banana}_cm_{16-char-hex}
+
+    Examples:
+        >>> generate_council_member_id("chicagoIL", "John Smith")
+        'chicagoIL_cm_a1b2c3d4e5f6g7h8'
+
+        >>> generate_council_member_id("chicagoIL", "SMITH, JOHN")
+        'chicagoIL_cm_a1b2c3d4e5f6g7h8'  # Different name, different hash
+    """
+    if not banana or not name:
+        raise ValueError("Both banana and name are required")
+
+    normalized = normalize_sponsor_name(name)
+    if not normalized:
+        raise ValueError("Name cannot be empty after normalization")
+
+    key = f"{banana}:council_member:{normalized}"
+    hash_bytes = hashlib.sha256(key.encode('utf-8')).digest()
+    hash_hex = hash_bytes.hex()[:16]
+
+    return f"{banana}_cm_{hash_hex}"
+
+
+def validate_council_member_id(member_id: str) -> bool:
+    """Validate council member ID format
+
+    Args:
+        member_id: Council member ID to validate
+
+    Returns:
+        True if valid format, False otherwise
+
+    Valid format: {banana}_cm_{16-char-hex}
+    Example: "chicagoIL_cm_7a8f3b2c1d9e4f5a"
+    """
+    if not member_id:
+        return False
+
+    parts = member_id.split('_')
+    if len(parts) != 3:
+        return False
+
+    banana, prefix, hash_part = parts
+
+    # Banana should be alphanumeric
+    if not banana.isalnum():
+        return False
+
+    # Prefix must be "cm"
+    if prefix != "cm":
+        return False
+
+    # Hash should be 16 hex characters
+    if len(hash_part) != 16:
+        return False
+
+    try:
+        int(hash_part, 16)
+        return True
+    except ValueError:
+        return False
