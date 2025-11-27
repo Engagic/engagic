@@ -663,7 +663,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		padding: 0.6rem 2rem 0.6rem 1rem;
-		border: 1px solid var(--border-subtle);
+		border: 1px solid var(--border-primary);
 		border-radius: 8px;
 		background: var(--surface-secondary);
 		color: var(--text-primary);
@@ -802,9 +802,9 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 		font-weight: 700;
-		color: #1e40af;
-		background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-		border: 1.5px solid #3b82f6;
+		color: var(--badge-matter-text);
+		background: linear-gradient(135deg, var(--badge-matter-bg-start) 0%, var(--badge-matter-bg-end) 100%);
+		border: 1.5px solid var(--badge-matter-border);
 		padding: 0.35rem 0.75rem;
 		border-radius: 8px;
 	}
@@ -824,9 +824,9 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
 		font-weight: 700;
-		color: var(--civic-green);
-		background: #d1fae5;
-		border: 1px solid #86efac;
+		color: var(--badge-green-text);
+		background: var(--badge-green-bg);
+		border: 1px solid var(--badge-green-border);
 		padding: 0.3rem 0.65rem;
 		border-radius: 6px;
 	}
