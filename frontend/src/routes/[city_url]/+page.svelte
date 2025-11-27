@@ -7,10 +7,11 @@
 
 <script lang="ts">
 	import { page } from '$app/stores';
-	import type { Meeting } from '$lib/api/index';
+	import type { Meeting, CitySearchItemResult, CitySearchMatterResult } from '$lib/api/index';
 	import { getCityMatters, searchCityMeetings, searchCityMatters } from '$lib/api/index';
 	import MeetingCard from '$lib/components/MeetingCard.svelte';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
+	import SearchResultCard from '$lib/components/SearchResultCard.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import WatchCityModal from '$lib/components/WatchCityModal.svelte';
 	import type { PageData } from './$types';
@@ -29,8 +30,8 @@
 
 	// Text search state
 	let searchQuery = $state('');
-	let searchMeetingsResults = $state<Meeting[] | null>(null);
-	let searchMattersResults = $state<any[] | null>(null);
+	let searchMeetingsResults = $state<CitySearchItemResult[] | null>(null);
+	let searchMattersResults = $state<CitySearchMatterResult[] | null>(null);
 	let searchLoading = $state(false);
 	let activeSearchQuery = $state(''); // The query that produced current results
 
@@ -125,10 +126,10 @@
 		try {
 			if (viewMode === 'meetings') {
 				const result = await searchCityMeetings(city_banana, query);
-				searchMeetingsResults = result.meetings;
+				searchMeetingsResults = result.results;
 			} else {
 				const result = await searchCityMatters(city_banana, query);
-				searchMattersResults = result.matters;
+				searchMattersResults = result.results;
 			}
 		} catch (err) {
 			console.error('Search failed:', err);
@@ -289,14 +290,12 @@
 					<div class="search-results-header">
 						<p class="search-results-count">{searchMeetingsResults.length} result{searchMeetingsResults.length === 1 ? '' : 's'} for "{activeSearchQuery}"</p>
 					</div>
-					<div class="meeting-list">
-						{#each searchMeetingsResults as meeting}
-							<MeetingCard
-								{meeting}
+					<div class="search-results-list">
+						{#each searchMeetingsResults as result}
+							<SearchResultCard
+								{result}
+								query={activeSearchQuery}
 								cityUrl={city_banana}
-								isPast={false}
-								animationDuration={0}
-								animationDelay={0}
 							/>
 						{/each}
 					</div>
@@ -389,39 +388,14 @@
 					<div class="search-results-header">
 						<p class="search-results-count">{searchMattersResults.length} result{searchMattersResults.length === 1 ? '' : 's'} for "{activeSearchQuery}"</p>
 					</div>
-					<div class="matters-view">
-						<div class="matters-list">
-							{#each searchMattersResults as matter}
-								<a href="/matter/{matter.id}" class="matter-card-link">
-									<div class="matter-card">
-										<div class="matter-card-header">
-											{#if matter.matter_file}
-												<span class="matter-file-badge">{matter.matter_file}</span>
-											{/if}
-											{#if matter.matter_type}
-												<span class="matter-type-label">{matter.matter_type}</span>
-											{/if}
-											{#if matter.appearance_count && matter.appearance_count > 1}
-												<span class="appearances-badge">{matter.appearance_count} appearances</span>
-											{/if}
-										</div>
-										<h3 class="matter-card-title">{matter.title}</h3>
-										{#if matter.canonical_topics && matter.canonical_topics.length > 0}
-											<div class="matter-card-topics">
-												{#each matter.canonical_topics.slice(0, 4) as topic}
-													<span class="matter-topic-tag">{topic}</span>
-												{/each}
-											</div>
-										{/if}
-										{#if matter.canonical_summary}
-											<div class="matter-card-summary">
-												{matter.canonical_summary.substring(0, 200)}{matter.canonical_summary.length > 200 ? '...' : ''}
-											</div>
-										{/if}
-									</div>
-								</a>
-							{/each}
-						</div>
+					<div class="search-results-list">
+						{#each searchMattersResults as result}
+							<SearchResultCard
+								{result}
+								query={activeSearchQuery}
+								cityUrl={city_banana}
+							/>
+						{/each}
 					</div>
 				{:else}
 					<div class="no-meetings">
@@ -732,6 +706,12 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		color: var(--civic-gray);
+	}
+
+	.search-results-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
 	}
 
 	.priority-hint {

@@ -397,7 +397,7 @@ class MatterRepository(BaseRepository):
     ) -> List[Matter]:
         """Full-text search on matters using PostgreSQL FTS
 
-        Searches title + canonical_summary fields.
+        Searches title, canonical_summary, and matter_file fields.
 
         Args:
             query: Search query (plain text, automatically converted to tsquery)
@@ -421,8 +421,11 @@ class MatterRepository(BaseRepository):
                     ) AS rank
                 FROM city_matters
                 WHERE banana = $2
-                  AND to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, ''))
-                      @@ plainto_tsquery('english', $1)
+                  AND (
+                      to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, ''))
+                          @@ plainto_tsquery('english', $1)
+                      OR matter_file ILIKE '%' || $1 || '%'
+                  )
                 ORDER BY rank DESC, last_seen DESC
                 LIMIT $3
                 """,

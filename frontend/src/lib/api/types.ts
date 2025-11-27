@@ -337,12 +337,51 @@ export interface GetStateMattersResponse {
 	};
 }
 
-// City-scoped search response types
+// City-scoped search response types with rich results
+export interface CitySearchItemResult {
+	type: 'item';
+	item_id: string;
+	item_title?: string;
+	item_sequence?: number;
+	agenda_number?: string;
+	summary?: string;
+	topics?: string[];
+	matter_id?: string;
+	matter_file?: string;
+	matter_type?: string;
+	attachments?: Array<{ name: string; url: string; type: string }>;
+	meeting_id: string;
+	meeting_title?: string;
+	meeting_date?: string;
+	agenda_url?: string;
+	context: string; // Snippet centered on keyword
+}
+
+export interface CitySearchMatterResult {
+	type: 'matter';
+	id: string;
+	banana: string;
+	matter_id?: string;
+	matter_file?: string;
+	matter_type?: string;
+	title?: string;
+	canonical_summary?: string;
+	canonical_topics?: string[];
+	sponsors?: string[];
+	attachments?: Array<{ name: string; url: string; type: string }>;
+	first_seen: string;
+	last_seen: string;
+	appearance_count?: number;
+	context: string; // Snippet centered on keyword
+}
+
+export type CitySearchResult = CitySearchItemResult | CitySearchMatterResult;
+
 export interface SearchCityMeetingsResponse {
 	success: boolean;
 	query: string;
 	banana: string;
-	meetings: Meeting[];
+	results: CitySearchItemResult[];
 	count: number;
 }
 
@@ -350,6 +389,6 @@ export interface SearchCityMattersResponse {
 	success: boolean;
 	query: string;
 	banana: string;
-	matters: Matter[];
+	results: CitySearchMatterResult[];
 	count: number;
 }

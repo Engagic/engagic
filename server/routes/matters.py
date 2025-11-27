@@ -1,13 +1,10 @@
-"""
-Matter API routes
-
-Handles matter tracking, timelines, and cross-meeting aggregation
-"""
+"""Matter API routes - handles matter tracking, timelines, and cross-meeting aggregation."""
 
 import random
 from fastapi import APIRouter, HTTPException, Depends
 from server.metrics import metrics
 from server.dependencies import get_db
+from server.utils.text import extract_context
 from database.db_postgres import Database
 
 from config import get_logger
@@ -226,7 +223,11 @@ async def search_city_matters(
     limit: int = 50,
     db: Database = Depends(get_db)
 ):
-    """Full-text search matters within a city using PostgreSQL FTS."""
+    """Full-text search matters within a city using PostgreSQL FTS.
+
+    Returns matter results with context snippets for highlighting.
+    Searches title, canonical_summary, and matter_file.
+    """
     query = q.strip()
     if not query:
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
@@ -238,10 +239,20 @@ async def search_city_matters(
     logger.debug("city matter search", banana=banana, query=query)
 
     try:
-        results = await db.matters.search_matters_fulltext(query, banana=banana, limit=limit)
+        matters = await db.matters.search_matters_fulltext(query, banana=banana, limit=limit)
     except Exception as e:
         logger.error("city matter search error", error=str(e), banana=banana)
         raise HTTPException(status_code=500, detail="Search failed")
+
+    # Transform to rich results with context snippets
+    results = []
+    for m in matters:
+        matter_dict = m.to_dict()
+        # Add context snippet from canonical_summary or title
+        context_source = m.canonical_summary or m.title or ""
+        matter_dict["context"] = extract_context(context_source, query)
+        matter_dict["type"] = "matter"
+        results.append(matter_dict)
 
     metrics.search_queries.labels(query_type='city_matters').inc()
 
@@ -249,7 +260,7 @@ async def search_city_matters(
         "success": True,
         "query": query,
         "banana": banana,
-        "matters": [m.to_dict() for m in results],
+        "results": results,
         "count": len(results)
     }
 
