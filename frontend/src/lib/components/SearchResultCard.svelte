@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { highlightMatch } from '$lib/utils/sanitize';
+	import { highlightMatch, sanitizeHtml } from '$lib/utils/sanitize';
 	import { marked } from 'marked';
 	import type { CitySearchResult, CitySearchItemResult, CitySearchMatterResult } from '$lib/api/types';
 	import { generateMeetingSlug } from '$lib/utils/utils';
@@ -45,6 +45,9 @@
 	}
 
 	function getHighlightedContext(): string {
+		if (result.context?.includes('<mark>')) {
+			return sanitizeHtml(result.context);
+		}
 		return highlightMatch(result.context, query);
 	}
 

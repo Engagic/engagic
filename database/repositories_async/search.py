@@ -256,7 +256,13 @@ class SearchRepository(BaseRepository):
                     ts_rank(
                         to_tsvector('english', COALESCE(i.title, '') || ' ' || COALESCE(i.summary, '')),
                         plainto_tsquery('english', $1)
-                    ) AS rank
+                    ) AS rank,
+                    ts_headline(
+                        'english',
+                        COALESCE(i.summary, i.title, ''),
+                        plainto_tsquery('english', $1),
+                        'MaxWords=60, MinWords=30, StartSel=<mark>, StopSel=</mark>, HighlightAll=false'
+                    ) AS context_headline
                 FROM items i
                 JOIN meetings m ON i.meeting_id = m.id
                 WHERE m.banana = $2
@@ -295,6 +301,7 @@ class SearchRepository(BaseRepository):
                     "meeting_title": row["meeting_title"],
                     "meeting_date": row["meeting_date"].isoformat() if row["meeting_date"] else None,
                     "agenda_url": row["agenda_url"],
+                    "context_headline": row["context_headline"],
                 })
 
             return results

@@ -1,5 +1,22 @@
 """Text utilities for search result processing."""
 
+import re
+
+
+def strip_markdown(text: str) -> str:
+    """Remove markdown syntax while preserving text content and <mark> tags."""
+    if not text:
+        return ""
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)  # headers
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # bold **
+    text = re.sub(r'__(.+?)__', r'\1', text)  # bold __
+    text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'\1', text)  # italic *
+    text = re.sub(r'(?<!_)_([^_]+)_(?!_)', r'\1', text)  # italic _
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)  # links
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # inline code
+    text = re.sub(r'\s+', ' ', text)  # collapse whitespace
+    return text.strip()
+
 
 def extract_context(text: str, keyword: str, length: int = 300) -> str:
     """Extract a snippet centered on the keyword match."""

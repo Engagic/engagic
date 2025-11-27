@@ -8,7 +8,7 @@ from server.services.search import (
     handle_state_search,
 )
 from server.utils.geo import is_state_query
-from server.utils.text import extract_context
+from server.utils.text import extract_context, strip_markdown
 from server.metrics import metrics
 from server.dependencies import get_db
 from database.db_postgres import Database
@@ -97,11 +97,14 @@ async def search_city_meetings(
         logger.error("city item search error", error=str(e), banana=banana)
         raise HTTPException(status_code=500, detail="Search failed")
 
-    # Add context snippets to each result
     for result in results:
-        # Try to extract context from summary first, then title
-        context_source = result.get("summary") or result.get("item_title") or ""
-        result["context"] = extract_context(context_source, query)
+        context_headline = result.get("context_headline")
+        if context_headline:
+            result["context"] = strip_markdown(context_headline)
+        else:
+            # Fallback for ILIKE matches (no FTS match)
+            context_source = result.get("summary") or result.get("item_title") or ""
+            result["context"] = strip_markdown(extract_context(context_source, query))
 
     metrics.search_queries.labels(query_type='city_meetings').inc()
 
