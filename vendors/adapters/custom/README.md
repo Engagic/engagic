@@ -24,6 +24,7 @@ Custom adapters are 1:1 with specific high-value cities that don't use standard 
 
 **Implemented:**
 - Berkeley, CA (118k population) - Drupal CMS, item-level extraction
+- Chicago, IL (2.7M population) - REST API, concurrent matter fetches
 - Menlo Park, CA (35k population) - Simple table, monolithic processing
 
 **Potential Future:**
@@ -38,12 +39,12 @@ Custom adapters are 1:1 with specific high-value cities that don't use standard 
 ### 1. Create adapter file
 
 ```python
-# vendors/adapters/custom/cityname_adapter.py
+# vendors/adapters/custom/cityname_adapter_async.py
 
-from vendors.adapters.base_adapter import BaseAdapter
+from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 
-class CityNameAdapter(BaseAdapter):
-    """City Name - Custom [CMS type] adapter
+class AsyncCityNameAdapter(AsyncBaseAdapter):
+    """City Name - Custom [CMS type] adapter (async)
 
     URL patterns:
     - Meetings list: https://city.gov/meetings
@@ -56,12 +57,16 @@ class CityNameAdapter(BaseAdapter):
     """
 
     def __init__(self, city_slug: str):
-        super().__init__(city_slug, "cityname")
+        super().__init__(city_slug, vendor="cityname")
         self.base_url = "https://city.gov"
 
-    def fetch_meetings(self, max_meetings: int = 10):
-        """Fetch and parse meetings"""
-        # Implement parsing logic
+    async def fetch_meetings(self, max_meetings: int = 10):
+        """Fetch and parse meetings (async)"""
+        response = await self._get(f"{self.base_url}/meetings")
+        html = await response.text()
+        # Parse with asyncio.to_thread for CPU-bound work
+        soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
+        # Extract meetings
         pass
 ```
 
@@ -69,25 +74,21 @@ class CityNameAdapter(BaseAdapter):
 
 ```python
 # Add import
-from vendors.adapters.custom.cityname_adapter import CityNameAdapter
+from vendors.adapters.custom.cityname_adapter_async import AsyncCityNameAdapter
 
-# Add to supported_vendors set
-supported_vendors = {
+# Add to VENDOR_ADAPTERS dict
+VENDOR_ADAPTERS = {
     ...
-    "cityname",
+    "cityname": AsyncCityNameAdapter,
 }
-
-# Add elif branch
-elif vendor == "cityname":
-    return CityNameAdapter(city_slug)
 ```
 
 ### 3. Update custom/__init__.py
 
 ```python
-from vendors.adapters.custom.cityname_adapter import CityNameAdapter
+from vendors.adapters.custom.cityname_adapter_async import AsyncCityNameAdapter
 
-__all__ = [..., "CityNameAdapter"]
+__all__ = [..., "AsyncCityNameAdapter"]
 ```
 
 ### 4. Add city to database
@@ -171,9 +172,12 @@ Before deploying custom adapter:
 
 ```bash
 # Manual test in Python REPL
-from vendors.factory import get_adapter
-adapter = get_adapter("custom_berkeley", "berkeley")
-meetings = list(adapter.fetch_meetings(max_meetings=3))
+from vendors.factory import get_async_adapter
+adapter = get_async_adapter("berkeley", "berkeley")
+
+# Run async fetch
+import asyncio
+meetings = asyncio.run(adapter.fetch_meetings(max_meetings=3))
 print(meetings)
 ```
 
@@ -189,6 +193,7 @@ Target: >90% success rate or deprecate adapter.
 
 ---
 
-**Last Updated**: 2025-11-02
-**Active Adapters**: 2 (Berkeley, Menlo Park)
-**Total Cities Covered**: 2
+**Last Updated**: 2025-11-26
+**Active Adapters**: 3 (Berkeley, Chicago, Menlo Park)
+**Total Cities Covered**: 3
+**Architecture**: All async (migration complete Nov 2025)
