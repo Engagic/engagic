@@ -25,7 +25,7 @@ Confidence: 9/10 - Verified working with item-level extraction
 
 import re
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
