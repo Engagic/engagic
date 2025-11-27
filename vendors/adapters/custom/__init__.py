@@ -20,8 +20,4 @@ from vendors.adapters.custom.berkeley_adapter_async import AsyncBerkeleyAdapter
 from vendors.adapters.custom.chicago_adapter_async import AsyncChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter_async import AsyncMenloParkAdapter
 
-from config import get_logger
-
-logger = get_logger(__name__).bind(component="vendor")
-
 __all__ = ["AsyncBerkeleyAdapter", "AsyncChicagoAdapter", "AsyncMenloParkAdapter"]

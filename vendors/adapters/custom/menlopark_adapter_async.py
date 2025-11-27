@@ -30,6 +30,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
+import aiohttp
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
@@ -66,7 +67,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
         try:
             response = await self._get(meetings_url)
             html = await response.text()
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("failed to fetch meetings list", adapter="menlopark", slug=self.slug, error=str(e))
             return []
 
@@ -174,7 +175,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                     )
                     # Continue anyway - we have basic meeting data
 
-            except Exception as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
                 logger.warning("failed to parse PDF items", adapter="menlopark", slug=self.slug, meeting_id=meeting_id, error=str(e))
                 # Continue anyway - we have basic meeting data
 

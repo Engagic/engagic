@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, urljoin
 
+import aiohttp
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
@@ -79,7 +80,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                                 )
                                 break
 
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.debug(
                 "could not check for external system",
                 vendor="civicplus",
@@ -114,7 +115,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                 ):
                     logger.info("found agenda page", vendor="civicplus", slug=self.slug, pattern=pattern)
                     return test_url
-            except Exception:
+            except (aiohttp.ClientError, asyncio.TimeoutError):
                 continue
 
         logger.warning("could not find agenda page", vendor="civicplus", slug=self.slug)
@@ -193,7 +194,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
             return results
 
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("failed to fetch meetings", vendor="civicplus", slug=self.slug, error=str(e))
             return []
 
@@ -347,7 +348,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
             return result
 
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.warning("failed to scrape meeting page", vendor="civicplus", slug=self.slug, url=url, error=str(e))
             return None
 

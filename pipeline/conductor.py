@@ -146,7 +146,7 @@ class Conductor:
         # Step 2: Process all queued jobs for this city
         if not self.processor.analyzer:
             logger.warning(
-                "[Conductor] Analyzer not available - meetings queued but not processed"
+                "analyzer not available - meetings queued but not processed"
             )
             return {
                 "sync_status": sync_result.status.value,
@@ -205,7 +205,7 @@ class Conductor:
 
         if not self.processor.analyzer:
             logger.warning(
-                "[Conductor] Analyzer not available - cannot process meetings"
+                "analyzer not available - cannot process meetings"
             )
             return {
                 "cities_count": len(city_bananas),
@@ -295,7 +295,7 @@ class Conductor:
         Returns:
             List of queued jobs with meeting info
         """
-        logger.info("[Conductor] Previewing queue...")
+        logger.info("previewing queue")
 
         # Get pending jobs from queue
         jobs = []
@@ -671,28 +671,28 @@ def main():
                     logger.info("received signal - graceful shutdown", signal=sig_name)
                     conductor.is_running = False
                     conductor.fetcher.is_running = False
-                    logger.info("[Fetcher] Shutdown complete")
+                    logger.info("shutdown complete")
                     sys.exit(0)
 
                 signal.signal(signal.SIGTERM, signal_handler)
                 signal.signal(signal.SIGINT, signal_handler)
 
-                logger.info("[Fetcher] Starting fetcher service (sync only, no processing)")
-                logger.info("[Fetcher] Sync interval: 72 hours")
+                logger.info("starting fetcher service (sync only, no processing)")
+                logger.info("sync interval: 72 hours")
 
                 conductor.is_running = True
                 conductor.fetcher.is_running = True
 
                 while conductor.is_running:
                     try:
-                        logger.info("[Fetcher] Starting city sync cycle...")
+                        logger.info("starting city sync cycle")
                         results = await conductor.fetcher.sync_all()
 
                         succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
                         failed = len([r for r in results if r.status == SyncStatus.FAILED])
                         logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
 
-                        logger.info("[Fetcher] Sleeping for 72 hours until next sync...")
+                        logger.info("sleeping for 72 hours until next sync")
                         for _ in range(72 * 60 * 60):
                             if not conductor.is_running:
                                 break
@@ -700,7 +700,7 @@ def main():
 
                     except Exception as e:
                         logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
-                        logger.info("[Fetcher] Sleeping for 2 hours after error...")
+                        logger.info("sleeping for 2 hours after error")
                         for _ in range(2 * 60 * 60):
                             if not conductor.is_running:
                                 break
@@ -770,13 +770,13 @@ def main():
                     conductor.is_running = False
                     conductor.fetcher.is_running = False
                     conductor.processor.is_running = False
-                    logger.info("[Daemon] Shutdown initiated")
+                    logger.info("shutdown initiated")
 
                 signal.signal(signal.SIGTERM, signal_handler)
                 signal.signal(signal.SIGINT, signal_handler)
 
-                logger.info("[Daemon] Starting combined daemon (sync + processing)")
-                logger.info("[Daemon] Sync interval: 72 hours")
+                logger.info("starting combined daemon (sync + processing)")
+                logger.info("sync interval: 72 hours")
 
                 conductor.is_running = True
                 conductor.fetcher.is_running = True
@@ -787,14 +787,14 @@ def main():
                     """Sync loop - runs every 72 hours"""
                     while conductor.is_running:
                         try:
-                            logger.info("[Daemon] Starting city sync cycle...")
+                            logger.info("starting city sync cycle")
                             results = await conductor.fetcher.sync_all()
 
                             succeeded = len([r for r in results if r.status == SyncStatus.COMPLETED])
                             failed = len([r for r in results if r.status == SyncStatus.FAILED])
                             logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
 
-                            logger.info("[Daemon] Sleeping for 72 hours until next sync...")
+                            logger.info("sleeping for 72 hours until next sync")
                             for _ in range(72 * 60 * 60):
                                 if not conductor.is_running:
                                     break
@@ -802,7 +802,7 @@ def main():
 
                         except Exception as e:
                             logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
-                            logger.info("[Daemon] Sleeping for 2 hours after error...")
+                            logger.info("sleeping for 2 hours after error")
                             for _ in range(2 * 60 * 60):
                                 if not conductor.is_running:
                                     break
@@ -812,11 +812,11 @@ def main():
                 async def processing_task():
                     """Processing loop - continuously processes queue"""
                     if not conductor.processor.analyzer:
-                        logger.warning("[Daemon] Analyzer not available - processing disabled")
+                        logger.warning("analyzer not available - processing disabled")
                         return
 
                     try:
-                        logger.info("[Daemon] Starting processing loop...")
+                        logger.info("starting processing loop")
                         await conductor.processor.process_queue()
                     except Exception as e:
                         logger.error("processing loop error", error=str(e), error_type=type(e).__name__)
@@ -829,14 +829,14 @@ def main():
                 try:
                     await asyncio.gather(sync_loop, processing_loop)
                 except asyncio.CancelledError:
-                    logger.info("[Daemon] Tasks cancelled")
+                    logger.info("tasks cancelled")
                 except Exception as e:
-                    logger.error("[Daemon] Task failed", error=str(e), error_type=type(e).__name__)
+                    logger.error("task failed", error=str(e), error_type=type(e).__name__)
                     # Cancel the other task to prevent resource leak
                     sync_loop.cancel()
                     processing_loop.cancel()
 
-                logger.info("[Daemon] Shutdown complete")
+                logger.info("shutdown complete")
 
             finally:
                 await conductor.close()
