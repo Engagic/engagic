@@ -336,3 +336,20 @@ export interface GetStateMattersResponse {
 		with_summaries: number;
 	};
 }
+
+// City-scoped search response types
+export interface SearchCityMeetingsResponse {
+	success: boolean;
+	query: string;
+	banana: string;
+	meetings: Meeting[];
+	count: number;
+}
+
+export interface SearchCityMattersResponse {
+	success: boolean;
+	query: string;
+	banana: string;
+	matters: Matter[];
+	count: number;
+}

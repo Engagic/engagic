@@ -219,6 +219,41 @@ async def get_city_matters(
         raise HTTPException(status_code=500, detail="Error retrieving city matters")
 
 
+@router.get("/city/{banana}/search/matters")
+async def search_city_matters(
+    banana: str,
+    q: str,
+    limit: int = 50,
+    db: Database = Depends(get_db)
+):
+    """Full-text search matters within a city using PostgreSQL FTS."""
+    query = q.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+
+    city = await db.get_city(banana=banana)
+    if not city:
+        raise HTTPException(status_code=404, detail="City not found")
+
+    logger.debug("city matter search", banana=banana, query=query)
+
+    try:
+        results = await db.matters.search_matters_fulltext(query, banana=banana, limit=limit)
+    except Exception as e:
+        logger.error("city matter search error", error=str(e), banana=banana)
+        raise HTTPException(status_code=500, detail="Search failed")
+
+    metrics.search_queries.labels(query_type='city_matters').inc()
+
+    return {
+        "success": True,
+        "query": query,
+        "banana": banana,
+        "matters": [m.to_dict() for m in results],
+        "count": len(results)
+    }
+
+
 @router.get("/state/{state_code}/matters")
 async def get_state_matters(
     state_code: str,
