@@ -388,3 +388,89 @@ class MatterRepository(BaseRepository):
             )
 
         logger.debug("created matter appearance", matter_id=matter_id, meeting_id=meeting_id)
+
+    async def search_matters_fulltext(
+        self,
+        query: str,
+        banana: str,
+        limit: int = 50
+    ) -> List[Matter]:
+        """Full-text search on matters using PostgreSQL FTS
+
+        Searches title + canonical_summary fields.
+
+        Args:
+            query: Search query (plain text, automatically converted to tsquery)
+            banana: City filter (required for scoped search)
+            limit: Maximum results (default: 50)
+
+        Returns:
+            List of matching matters ordered by relevance then last_seen
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id, banana, matter_id, matter_file, matter_type,
+                    title, sponsors, canonical_summary, canonical_topics,
+                    attachments, metadata, first_seen, last_seen,
+                    appearance_count, status,
+                    ts_rank(
+                        to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, '')),
+                        plainto_tsquery('english', $1)
+                    ) AS rank
+                FROM city_matters
+                WHERE banana = $2
+                  AND to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, ''))
+                      @@ plainto_tsquery('english', $1)
+                ORDER BY rank DESC, last_seen DESC
+                LIMIT $3
+                """,
+                query,
+                banana,
+                limit,
+            )
+
+            if not rows:
+                return []
+
+            # Batch fetch ALL topics for ALL matters (eliminates N+1)
+            matter_ids = [row["id"] for row in rows]
+            topic_rows = await conn.fetch(
+                "SELECT matter_id, topic FROM matter_topics WHERE matter_id = ANY($1::text[])",
+                matter_ids,
+            )
+
+            # Group topics by matter
+            topics_by_matter: Dict[str, List[str]] = defaultdict(list)
+            for tr in topic_rows:
+                topics_by_matter[tr["matter_id"]].append(tr["topic"])
+
+            # Build matter objects
+            matters = []
+            for row in rows:
+                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
+                metadata = MatterMetadata(**row["metadata"]) if row["metadata"] else None
+                topics = topics_by_matter.get(row["id"], []) or row["canonical_topics"]
+
+                matters.append(
+                    Matter(
+                        id=row["id"],
+                        banana=row["banana"],
+                        matter_id=row["matter_id"],
+                        matter_file=row["matter_file"],
+                        matter_type=row["matter_type"],
+                        title=row["title"],
+                        sponsors=row["sponsors"],
+                        canonical_summary=row["canonical_summary"],
+                        canonical_topics=topics,
+                        attachments=attachments,
+                        metadata=metadata,
+                        first_seen=row["first_seen"],
+                        last_seen=row["last_seen"],
+                        appearance_count=row["appearance_count"],
+                        status=row["status"],
+                    )
+                )
+
+            return matters

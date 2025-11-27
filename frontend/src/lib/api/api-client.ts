@@ -8,7 +8,9 @@ import type {
 	MatterTimelineResponse,
 	GetMeetingResponse,
 	GetCityMattersResponse,
-	GetStateMattersResponse
+	GetStateMattersResponse,
+	SearchCityMeetingsResponse,
+	SearchCityMattersResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -270,6 +272,26 @@ export const apiClient = {
 			config.maxRetries,
 			clientIp
 		);
+
+		return response.json();
+	},
+
+	async searchCityMeetings(banana: string, query: string, limit: number = 50, clientIp?: string): Promise<SearchCityMeetingsResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/search/meetings`);
+		url.searchParams.set('q', query);
+		url.searchParams.set('limit', limit.toString());
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+
+		return response.json();
+	},
+
+	async searchCityMatters(banana: string, query: string, limit: number = 50, clientIp?: string): Promise<SearchCityMattersResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/search/matters`);
+		url.searchParams.set('q', query);
+		url.searchParams.set('limit', limit.toString());
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
 
 		return response.json();
 	}

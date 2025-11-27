@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import type { Meeting } from '$lib/api/index';
-	import { getCityMatters } from '$lib/api/index';
+	import { getCityMatters, searchCityMeetings, searchCityMatters } from '$lib/api/index';
 	import MeetingCard from '$lib/components/MeetingCard.svelte';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -27,12 +27,19 @@
 	let mattersChecked = $state(false);
 	let showWatchModal = $state(false);
 
+	// Text search state
+	let searchQuery = $state('');
+	let searchMeetingsResults = $state<Meeting[] | null>(null);
+	let searchMattersResults = $state<any[] | null>(null);
+	let searchLoading = $state(false);
+	let activeSearchQuery = $state(''); // The query that produced current results
+
 	// Data comes from server-side load function - reactive to navigation
 	const searchResults = $derived(data.searchResults);
 	const upcomingMeetings = $derived(data.upcomingMeetings || []);
 	const pastMeetings = $derived(data.pastMeetings || []);
 
-	// Reset matters state when city changes (client-side navigation)
+	// Reset matters and search state when city changes (client-side navigation)
 	$effect(() => {
 		// Access city_banana to create dependency
 		const currentCity = city_banana;
@@ -40,6 +47,11 @@
 		cityMatters = null;
 		mattersChecked = false;
 		viewMode = 'meetings';
+		// Reset search state
+		searchQuery = '';
+		searchMeetingsResults = null;
+		searchMattersResults = null;
+		activeSearchQuery = '';
 	});
 
 	// Derived: Check if city has qualifying matters (2+ appearances)
@@ -90,6 +102,62 @@
 	async function switchToMatters() {
 		viewMode = 'matters';
 		await loadCityMatters();
+		// Re-search if there's an active query
+		if (activeSearchQuery) {
+			await performSearch();
+		}
+	}
+
+	// Search function - calls appropriate endpoint based on viewMode
+	async function performSearch() {
+		const query = searchQuery.trim();
+		if (!query) {
+			// Clear search results
+			searchMeetingsResults = null;
+			searchMattersResults = null;
+			activeSearchQuery = '';
+			return;
+		}
+
+		searchLoading = true;
+		activeSearchQuery = query;
+
+		try {
+			if (viewMode === 'meetings') {
+				const result = await searchCityMeetings(city_banana, query);
+				searchMeetingsResults = result.meetings;
+			} else {
+				const result = await searchCityMatters(city_banana, query);
+				searchMattersResults = result.matters;
+			}
+		} catch (err) {
+			console.error('Search failed:', err);
+		} finally {
+			searchLoading = false;
+		}
+	}
+
+	// Handle Enter key in search input
+	function handleSearchKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			performSearch();
+		}
+	}
+
+	// Clear search and return to default view
+	function clearSearch() {
+		searchQuery = '';
+		searchMeetingsResults = null;
+		searchMattersResults = null;
+		activeSearchQuery = '';
+	}
+
+	// Re-search when switching tabs (if there's an active query)
+	async function switchToMeetings() {
+		viewMode = 'meetings';
+		if (activeSearchQuery) {
+			await performSearch();
+		}
 	}
 
 	// Snapshot: Preserve UI state and data during navigation
@@ -169,33 +237,77 @@
 	{/if}
 
 	{#if searchResults && searchResults.success}
-		{#if hasQualifyingMatters()}
-			<div class="view-toggle" role="tablist" aria-label="View mode selection">
-				<button
-					class="toggle-btn"
-					class:active={viewMode === 'meetings'}
-					onclick={() => viewMode = 'meetings'}
-					role="tab"
-					aria-selected={viewMode === 'meetings'}
-					aria-controls="content-panel"
-				>
-					Meetings
-				</button>
-				<button
-					class="toggle-btn"
-					class:active={viewMode === 'matters'}
-					onclick={() => switchToMatters()}
-					role="tab"
-					aria-selected={viewMode === 'matters'}
-					aria-controls="content-panel"
-				>
-					Matters
-				</button>
+		<div class="controls-row">
+			{#if hasQualifyingMatters()}
+				<div class="view-toggle" role="tablist" aria-label="View mode selection">
+					<button
+						class="toggle-btn"
+						class:active={viewMode === 'meetings'}
+						onclick={() => switchToMeetings()}
+						role="tab"
+						aria-selected={viewMode === 'meetings'}
+						aria-controls="content-panel"
+					>
+						Meetings
+					</button>
+					<button
+						class="toggle-btn"
+						class:active={viewMode === 'matters'}
+						onclick={() => switchToMatters()}
+						role="tab"
+						aria-selected={viewMode === 'matters'}
+						aria-controls="content-panel"
+					>
+						Matters
+					</button>
+				</div>
+			{/if}
+			<div class="search-container">
+				<input
+					type="text"
+					class="city-search"
+					placeholder="Search {viewMode}..."
+					bind:value={searchQuery}
+					onkeydown={handleSearchKeydown}
+				/>
+				{#if activeSearchQuery}
+					<button class="clear-search" onclick={clearSearch} aria-label="Clear search">
+						x
+					</button>
+				{/if}
 			</div>
-		{/if}
+		</div>
 
 		{#if viewMode === 'meetings'}
-			{#if searchResults.meetings && searchResults.meetings.length > 0}
+			{#if searchLoading}
+				<div class="loading-matters">
+					<p>Searching meetings...</p>
+				</div>
+			{:else if activeSearchQuery && searchMeetingsResults !== null}
+				<!-- Search results view -->
+				{#if searchMeetingsResults.length > 0}
+					<div class="search-results-header">
+						<p class="search-results-count">{searchMeetingsResults.length} result{searchMeetingsResults.length === 1 ? '' : 's'} for "{activeSearchQuery}"</p>
+					</div>
+					<div class="meeting-list">
+						{#each searchMeetingsResults as meeting}
+							<MeetingCard
+								{meeting}
+								cityUrl={city_banana}
+								isPast={false}
+								animationDuration={0}
+								animationDelay={0}
+							/>
+						{/each}
+					</div>
+				{:else}
+					<div class="no-meetings">
+						<p class="empty-state-title">No results</p>
+						<p class="empty-state-message">No meetings found for "{activeSearchQuery}"</p>
+					</div>
+				{/if}
+			{:else if searchResults.meetings && searchResults.meetings.length > 0}
+				<!-- Default view -->
 				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
 					<div class="meetings-filter">
 						{#if upcomingMeetings.length > 0}
@@ -267,7 +379,57 @@
 				</div>
 			{/if}
 		{:else if viewMode === 'matters'}
-			{#if mattersLoading}
+			{#if searchLoading}
+				<div class="loading-matters">
+					<p>Searching matters...</p>
+				</div>
+			{:else if activeSearchQuery && searchMattersResults !== null}
+				<!-- Search results view -->
+				{#if searchMattersResults.length > 0}
+					<div class="search-results-header">
+						<p class="search-results-count">{searchMattersResults.length} result{searchMattersResults.length === 1 ? '' : 's'} for "{activeSearchQuery}"</p>
+					</div>
+					<div class="matters-view">
+						<div class="matters-list">
+							{#each searchMattersResults as matter}
+								<a href="/matter/{matter.id}" class="matter-card-link">
+									<div class="matter-card">
+										<div class="matter-card-header">
+											{#if matter.matter_file}
+												<span class="matter-file-badge">{matter.matter_file}</span>
+											{/if}
+											{#if matter.matter_type}
+												<span class="matter-type-label">{matter.matter_type}</span>
+											{/if}
+											{#if matter.appearance_count && matter.appearance_count > 1}
+												<span class="appearances-badge">{matter.appearance_count} appearances</span>
+											{/if}
+										</div>
+										<h3 class="matter-card-title">{matter.title}</h3>
+										{#if matter.canonical_topics && matter.canonical_topics.length > 0}
+											<div class="matter-card-topics">
+												{#each matter.canonical_topics.slice(0, 4) as topic}
+													<span class="matter-topic-tag">{topic}</span>
+												{/each}
+											</div>
+										{/if}
+										{#if matter.canonical_summary}
+											<div class="matter-card-summary">
+												{matter.canonical_summary.substring(0, 200)}{matter.canonical_summary.length > 200 ? '...' : ''}
+											</div>
+										{/if}
+									</div>
+								</a>
+							{/each}
+						</div>
+					</div>
+				{:else}
+					<div class="no-meetings">
+						<p class="empty-state-title">No results</p>
+						<p class="empty-state-message">No matters found for "{activeSearchQuery}"</p>
+					</div>
+				{/if}
+			{:else if mattersLoading}
 				<div class="loading-matters">
 					<p>Loading matters timeline...</p>
 				</div>
@@ -504,6 +666,74 @@
 		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
 	}
 
+	.controls-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 2rem;
+		flex-wrap: wrap;
+	}
+
+	.controls-row .view-toggle {
+		margin-bottom: 0;
+	}
+
+	.search-container {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.city-search {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		padding: 0.6rem 2rem 0.6rem 1rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 8px;
+		background: var(--surface-secondary);
+		color: var(--text-primary);
+		width: 200px;
+		transition: border-color 0.2s ease, box-shadow 0.2s ease;
+	}
+
+	.city-search:focus {
+		outline: none;
+		border-color: var(--civic-blue);
+		box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+	}
+
+	.city-search::placeholder {
+		color: var(--civic-gray);
+	}
+
+	.clear-search {
+		position: absolute;
+		right: 0.5rem;
+		background: none;
+		border: none;
+		color: var(--civic-gray);
+		cursor: pointer;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1rem;
+		padding: 0.25rem;
+		line-height: 1;
+	}
+
+	.clear-search:hover {
+		color: var(--text-primary);
+	}
+
+	.search-results-header {
+		margin-bottom: 1rem;
+	}
+
+	.search-results-count {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		color: var(--civic-gray);
+	}
+
 	.priority-hint {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
@@ -719,6 +949,41 @@
 
 		.city-title {
 			font-size: 1.5rem;
+			order: 1;
+		}
+
+		.city-header {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 0.5rem;
+		}
+
+		.back-link {
+			order: 0;
+		}
+
+		.city-title-row,
+		.source-row {
+			display: contents;
+		}
+
+		.source-attribution {
+			order: 2;
+		}
+
+		.watch-city-btn {
+			order: 3;
+			justify-self: start;
+		}
+
+		.priority-hint {
+			order: 4;
+			justify-self: start;
+		}
+
+		.controls-row {
+			flex-direction: column;
+			align-items: stretch;
 		}
 
 		.view-toggle {
@@ -730,6 +995,14 @@
 			flex: 1;
 			padding: 0.6rem 1rem;
 			font-size: 0.85rem;
+		}
+
+		.search-container {
+			width: 100%;
+		}
+
+		.city-search {
+			width: 100%;
 		}
 
 		.matter-card {
