@@ -271,6 +271,42 @@ class Matter:
         return data
 
 @dataclass
+class CouncilMember:
+    """Council member entity - elected officials tracked across matters
+
+    Normalizes sponsor data from city_matters.sponsors JSONB arrays.
+    ID includes city_banana to prevent cross-city collisions.
+    """
+
+    id: str  # Hash of (banana + normalized_name)
+    banana: str  # Foreign key to City
+    name: str  # Display name as extracted from vendor
+    normalized_name: str  # Lowercase, trimmed for matching
+    title: Optional[str] = None  # Role: Council Member, Mayor, Alderman
+    district: Optional[str] = None  # Ward/district number
+    status: str = "active"  # active, former, unknown
+    first_seen: Optional[datetime] = None  # First sponsorship date
+    last_seen: Optional[datetime] = None  # Most recent sponsorship
+    sponsorship_count: int = 0  # Denormalized for quick stats
+    metadata: Optional[dict] = None  # Vendor-specific fields
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        data = asdict(self)
+        if self.created_at:
+            data["created_at"] = self.created_at.isoformat()
+        if self.updated_at:
+            data["updated_at"] = self.updated_at.isoformat()
+        if self.first_seen:
+            data["first_seen"] = self.first_seen.isoformat()
+        if self.last_seen:
+            data["last_seen"] = self.last_seen.isoformat()
+        return data
+
+
+@dataclass
 class AgendaItem:
     """Agenda item entity - individual items within a meeting
 
