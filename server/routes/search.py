@@ -69,3 +69,38 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: D
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
+
+
+@router.get("/city/{banana}/search/meetings")
+async def search_city_meetings(
+    banana: str,
+    q: str,
+    limit: int = 50,
+    db: Database = Depends(get_db)
+):
+    """Full-text search meetings within a city using PostgreSQL FTS."""
+    query = q.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+
+    city = await db.get_city(banana=banana)
+    if not city:
+        raise HTTPException(status_code=404, detail="City not found")
+
+    logger.debug("city meeting search", banana=banana, query=query)
+
+    try:
+        results = await db.search.search_meetings_fulltext(query, banana=banana, limit=limit)
+    except Exception as e:
+        logger.error("city meeting search error", error=str(e), banana=banana)
+        raise HTTPException(status_code=500, detail="Search failed")
+
+    metrics.search_queries.labels(query_type='city_meetings').inc()
+
+    return {
+        "success": True,
+        "query": query,
+        "banana": banana,
+        "meetings": [m.to_dict() for m in results],
+        "count": len(results)
+    }
