@@ -1,6 +1,4 @@
-"""
-Search API routes
-"""
+"""Search API routes."""
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from server.models.requests import SearchRequest
@@ -10,6 +8,7 @@ from server.services.search import (
     handle_state_search,
 )
 from server.utils.geo import is_state_query
+from server.utils.text import extract_context
 from server.metrics import metrics
 from server.dependencies import get_db
 from database.db_postgres import Database
@@ -17,7 +16,6 @@ from database.db_postgres import Database
 from config import get_logger
 
 logger = get_logger(__name__)
-
 
 router = APIRouter(prefix="/api")
 
@@ -78,7 +76,11 @@ async def search_city_meetings(
     limit: int = 50,
     db: Database = Depends(get_db)
 ):
-    """Full-text search meetings within a city using PostgreSQL FTS."""
+    """Full-text search items within a city using PostgreSQL FTS.
+
+    Returns item-level results with meeting context and highlighted snippets.
+    Searches item title, summary, and matter_file.
+    """
     query = q.strip()
     if not query:
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
@@ -87,13 +89,19 @@ async def search_city_meetings(
     if not city:
         raise HTTPException(status_code=404, detail="City not found")
 
-    logger.debug("city meeting search", banana=banana, query=query)
+    logger.debug("city item search", banana=banana, query=query)
 
     try:
-        results = await db.search.search_meetings_fulltext(query, banana=banana, limit=limit)
+        results = await db.search.search_items_fulltext(query, banana=banana, limit=limit)
     except Exception as e:
-        logger.error("city meeting search error", error=str(e), banana=banana)
+        logger.error("city item search error", error=str(e), banana=banana)
         raise HTTPException(status_code=500, detail="Search failed")
+
+    # Add context snippets to each result
+    for result in results:
+        # Try to extract context from summary first, then title
+        context_source = result.get("summary") or result.get("item_title") or ""
+        result["context"] = extract_context(context_source, query)
 
     metrics.search_queries.labels(query_type='city_meetings').inc()
 
@@ -101,6 +109,6 @@ async def search_city_meetings(
         "success": True,
         "query": query,
         "banana": banana,
-        "meetings": [m.to_dict() for m in results],
+        "results": results,
         "count": len(results)
     }
