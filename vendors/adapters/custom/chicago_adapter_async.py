@@ -126,8 +126,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             logger.warning("meeting missing id or date", slug=self.slug, meeting_id=meeting.get('meetingId'))
             return None
 
-        # Parse date
-        meeting_date = self._parse_iso_date(date_str)
+        # Parse date using base adapter's parser
+        meeting_date = self._parse_date(date_str)
         if not meeting_date:
             logger.warning("meeting invalid date", slug=self.slug, meeting_id=meeting_id, date_str=date_str)
             return None
