@@ -80,7 +80,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             return []
 
         try:
-            response_data = await response.json()
+            # content_type=None: Chicago API sometimes returns text/plain with JSON body
+            response_data = await response.json(content_type=None)
         except ValueError as e:
             logger.error("invalid json response", slug=self.slug, error=str(e))
             return []
@@ -204,7 +205,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             return None
 
         try:
-            return await response.json()
+            # content_type=None: Chicago API sometimes returns text/plain with JSON body
+            return await response.json(content_type=None)
         except ValueError as e:
             logger.warning("invalid json in meeting detail", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None
@@ -363,7 +365,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             return {"attachments": [], "sponsors": []}
 
         try:
-            matter_data = await response.json()
+            # content_type=None: Chicago API sometimes returns text/plain with JSON body
+            matter_data = await response.json(content_type=None)
         except ValueError as e:
             logger.debug("invalid json in matter", slug=self.slug, matter_id=matter_id, error=str(e))
             return {"attachments": [], "sponsors": []}
