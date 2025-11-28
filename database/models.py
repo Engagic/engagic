@@ -336,6 +336,61 @@ class Vote:
 
 
 @dataclass
+class Committee:
+    """Committee entity - legislative bodies (Planning Commission, Budget Committee, etc.)
+
+    Tracks committee roster and enables committee-level vote analysis.
+    ID includes city_banana to prevent cross-city collisions.
+    """
+
+    id: str  # Hash of (banana + normalized_name)
+    banana: str  # Foreign key to City
+    name: str  # Display name: "Planning Commission", "Budget Committee"
+    normalized_name: str  # Lowercase for matching
+    description: Optional[str] = None
+    status: str = "active"  # active, inactive, unknown
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        data = asdict(self)
+        if self.created_at:
+            data["created_at"] = self.created_at.isoformat()
+        if self.updated_at:
+            data["updated_at"] = self.updated_at.isoformat()
+        return data
+
+
+@dataclass
+class CommitteeMember:
+    """Committee member entity - tracks which council members serve on which committees
+
+    Historical tracking via joined_at/left_at enables time-aware queries
+    (e.g., "who was on Planning Commission when matter X was voted?").
+    """
+
+    id: Optional[int] = None  # BIGSERIAL primary key
+    committee_id: str = ""  # FK to committees
+    council_member_id: str = ""  # FK to council_members
+    role: Optional[str] = None  # Chair, Vice-Chair, Member
+    joined_at: Optional[datetime] = None  # When they joined this committee
+    left_at: Optional[datetime] = None  # NULL = currently serving
+    created_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization"""
+        data = asdict(self)
+        if self.joined_at:
+            data["joined_at"] = self.joined_at.isoformat()
+        if self.left_at:
+            data["left_at"] = self.left_at.isoformat()
+        if self.created_at:
+            data["created_at"] = self.created_at.isoformat()
+        return data
+
+
+@dataclass
 class AgendaItem:
     """Agenda item entity - individual items within a meeting
 
