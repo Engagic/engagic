@@ -108,7 +108,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         # API parameters
         params = {
             "$filter": filter_str,
-            "$orderby": "EventDate asc",
+            "$orderby": "EventDate desc",
             "$top": 1000,  # API max
         }
 
