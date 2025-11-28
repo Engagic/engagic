@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
 	import { apiClient } from '$lib/api/api-client';
-	import type { SearchResult, CityOption, Meeting, AnalyticsData } from '$lib/api/types';
+	import type { SearchResult, CityOption, Meeting } from '$lib/api/types';
 	import { isSearchSuccess, isSearchAmbiguous } from '$lib/api/types';
 	import { generateCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
-	import { getAnalytics } from '$lib/api/index';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
 
@@ -19,37 +17,6 @@
 	let loadingRandom = $state(false);
 	let loadingRandomPolicy = $state(false);
 	let error = $state('');
-	let currentStatIndex = $state(0);
-
-	// Analytics fetched client-side (not blocking SSR)
-	let analytics: AnalyticsData | null = $state(null);
-
-	const stats = $derived.by(() => {
-		if (!analytics) return [];
-		return [
-			{ label: 'cities tracked', value: analytics.real_metrics.cities_covered.toLocaleString() },
-			{ label: 'meetings summarized', value: analytics.real_metrics.agendas_summarized.toLocaleString() },
-			{ label: 'total meetings', value: analytics.real_metrics.meetings_tracked.toLocaleString() }
-		];
-	});
-
-	onMount(() => {
-		// Fetch analytics client-side (non-blocking)
-		getAnalytics().then((data) => {
-			analytics = data;
-		}).catch((err) => {
-			logger.error('Analytics fetch failed', err as Error);
-		});
-
-		// Rotate stats every 3 seconds
-		const interval = setInterval(() => {
-			if (stats.length > 0) {
-				currentStatIndex = (currentStatIndex + 1) % stats.length;
-			}
-		}, 3000);
-
-		return () => clearInterval(interval);
-	});
 
 	// Snapshot: Preserve search state during navigation
 	// When user searches for a city, gets ambiguous results, clicks one, and navigates back,
@@ -255,15 +222,16 @@
 				<a href="/" class="logo">engagic</a>
 			</div>
 			<p class="tagline">civic engagement made simple</p>
-			{#if stats.length > 0}
-				{#key currentStatIndex}
-					<p class="hero-stat">
-						<span class="stat-value">{stats[currentStatIndex].value}</span>
-						<span class="stat-label">{stats[currentStatIndex].label}</span>
-					</p>
-				{/key}
-			{/if}
 		</header>
+
+		<section class="value-prop">
+			<p class="value-headline">AI summaries of local government meetings</p>
+			<p class="value-subtext">
+				Your city council decides zoning, taxes, and public safety<br />
+				We read the 100-page PDFs so you don't have to
+			</p>
+			<a href="/about/general" class="learn-more">How it works</a>
+		</section>
 
 		<div class="search-section">
 		<input 
@@ -362,6 +330,51 @@
 </div>
 
 <style>
+	.value-prop {
+		text-align: center;
+		margin-bottom: 2rem;
+	}
+
+	.value-headline {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin: 0 0 0.5rem 0;
+	}
+
+	.value-subtext {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 1rem;
+		color: var(--text-secondary);
+		margin: 0 0 0.75rem 0;
+		line-height: 1.5;
+		max-width: 480px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.learn-more {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--civic-blue);
+		text-decoration: none;
+	}
+
+	.learn-more:hover {
+		text-decoration: underline;
+	}
+
+	@media (max-width: 640px) {
+		.value-headline {
+			font-size: 1.1rem;
+		}
+
+		.value-subtext {
+			font-size: 0.95rem;
+		}
+	}
+
 	.logo-container {
 		display: flex;
 		align-items: center;
