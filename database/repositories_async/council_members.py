@@ -137,8 +137,8 @@ class CouncilMemberRepository(BaseRepository):
     ) -> bool:
         """Create sponsorship link between council member and matter
 
-        Uses UPSERT to handle duplicate sponsorships gracefully.
-        Increments sponsorship_count on the council member.
+        Uses UPSERT with RETURNING to detect if insert succeeded.
+        Only increments sponsorship_count when a new row is actually created.
 
         Args:
             council_member_id: Council member ID
@@ -150,25 +150,13 @@ class CouncilMemberRepository(BaseRepository):
             True if new sponsorship created, False if already exists
         """
         async with self.transaction() as conn:
-            # Check if sponsorship already exists
-            existing = await conn.fetchval(
-                """
-                SELECT 1 FROM sponsorships
-                WHERE council_member_id = $1 AND matter_id = $2
-                """,
-                council_member_id,
-                matter_id,
-            )
-
-            if existing:
-                return False
-
-            # Create sponsorship
-            await conn.execute(
+            # Use RETURNING to detect if insert succeeded (no redundant SELECT)
+            result = await conn.fetchval(
                 """
                 INSERT INTO sponsorships (council_member_id, matter_id, is_primary, sponsor_order)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (council_member_id, matter_id) DO NOTHING
+                RETURNING id
                 """,
                 council_member_id,
                 matter_id,
@@ -176,7 +164,11 @@ class CouncilMemberRepository(BaseRepository):
                 sponsor_order,
             )
 
-            # Increment sponsorship count
+            if not result:
+                # ON CONFLICT triggered - sponsorship already exists
+                return False
+
+            # Only increment count when INSERT actually succeeded
             await conn.execute(
                 """
                 UPDATE council_members
@@ -441,8 +433,8 @@ class CouncilMemberRepository(BaseRepository):
     ) -> bool:
         """Record a single vote for a council member on a matter in a meeting
 
-        Uses UPSERT to handle re-processing gracefully.
-        Increments vote_count on the council member.
+        Uses UPSERT with RETURNING to detect if insert succeeded.
+        Only increments vote_count when a new row is actually created.
 
         Args:
             council_member_id: Council member ID
@@ -457,26 +449,13 @@ class CouncilMemberRepository(BaseRepository):
             True if new vote recorded, False if already exists
         """
         async with self.transaction() as conn:
-            # Check if vote already exists
-            existing = await conn.fetchval(
-                """
-                SELECT 1 FROM votes
-                WHERE council_member_id = $1 AND matter_id = $2 AND meeting_id = $3
-                """,
-                council_member_id,
-                matter_id,
-                meeting_id,
-            )
-
-            if existing:
-                return False
-
-            # Record vote
-            await conn.execute(
+            # Use RETURNING to detect if insert succeeded (no redundant SELECT)
+            result = await conn.fetchval(
                 """
                 INSERT INTO votes (council_member_id, matter_id, meeting_id, vote, vote_date, sequence, metadata)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (council_member_id, matter_id, meeting_id) DO NOTHING
+                RETURNING id
                 """,
                 council_member_id,
                 matter_id,
@@ -487,7 +466,11 @@ class CouncilMemberRepository(BaseRepository):
                 metadata,
             )
 
-            # Increment vote count and update last_seen
+            if not result:
+                # ON CONFLICT triggered - vote already exists
+                return False
+
+            # Only increment count when INSERT actually succeeded
             await conn.execute(
                 """
                 UPDATE council_members

@@ -434,3 +434,102 @@ def validate_council_member_id(member_id: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def normalize_committee_name(name: str) -> str:
+    """Normalize committee name for consistent matching
+
+    Args:
+        name: Committee name (e.g., "Planning Commission", "budget committee")
+
+    Returns:
+        Normalized lowercase name with standardized whitespace
+
+    Examples:
+        >>> normalize_committee_name("  Planning Commission  ")
+        'planning commission'
+        >>> normalize_committee_name("BUDGET  COMMITTEE")
+        'budget committee'
+    """
+    if not name:
+        return ""
+
+    # Strip and collapse whitespace
+    normalized = " ".join(name.split())
+
+    # Lowercase for consistent matching
+    return normalized.lower()
+
+
+def generate_committee_id(banana: str, name: str) -> str:
+    """Generate deterministic committee ID
+
+    Uses same pattern as generate_council_member_id() for consistency.
+    ID includes city_banana to prevent cross-city collisions.
+
+    Args:
+        banana: City identifier (e.g., "chicagoIL")
+        name: Committee name (will be normalized)
+
+    Returns:
+        Composite ID: {banana}_comm_{16-char-hex}
+
+    Examples:
+        >>> generate_committee_id("chicagoIL", "Planning Commission")
+        'chicagoIL_comm_a1b2c3d4e5f6g7h8'
+
+        >>> generate_committee_id("chicagoIL", "PLANNING COMMISSION")
+        'chicagoIL_comm_a1b2c3d4e5f6g7h8'  # Same hash (normalized)
+    """
+    if not banana or not name:
+        raise ValueError("Both banana and name are required")
+
+    normalized = normalize_committee_name(name)
+    if not normalized:
+        raise ValueError("Name cannot be empty after normalization")
+
+    key = f"{banana}:committee:{normalized}"
+    hash_bytes = hashlib.sha256(key.encode('utf-8')).digest()
+    hash_hex = hash_bytes.hex()[:16]
+
+    return f"{banana}_comm_{hash_hex}"
+
+
+def validate_committee_id(committee_id: str) -> bool:
+    """Validate committee ID format
+
+    Args:
+        committee_id: Committee ID to validate
+
+    Returns:
+        True if valid format, False otherwise
+
+    Valid format: {banana}_comm_{16-char-hex}
+    Example: "chicagoIL_comm_7a8f3b2c1d9e4f5a"
+    """
+    if not committee_id:
+        return False
+
+    parts = committee_id.split('_')
+    if len(parts) != 3:
+        return False
+
+    banana, prefix, hash_part = parts
+
+    # Banana should be alphanumeric
+    if not banana.isalnum():
+        return False
+
+    # Prefix must be "comm"
+    if prefix != "comm":
+        return False
+
+    # Hash should be 16 hex characters
+    if len(hash_part) != 16:
+        return False
+
+    try:
+        int(hash_part, 16)
+        return True
+    except ValueError:
+        return False

@@ -16,6 +16,7 @@ from database.id_generation import generate_matter_id
 from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata, AttachmentInfo
 from database.repositories_async import (
     CityRepository,
+    CommitteeRepository,
     CouncilMemberRepository,
     MeetingRepository,
     ItemRepository,
@@ -89,6 +90,7 @@ class Database:
 
         # Instantiate all repositories with shared pool
         self.cities = CityRepository(pool)
+        self.committees = CommitteeRepository(pool)
         self.council_members = CouncilMemberRepository(pool)
         self.meetings = MeetingRepository(pool)
         self.items = ItemRepository(pool)

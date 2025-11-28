@@ -428,6 +428,12 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 matter_data = await response.json()
                 if matter_data:
                     metadata["matter_type"] = matter_data.get("MatterTypeName")
+            else:
+                # XML fallback - NYC returns XML from Legistar API
+                text = await response.text()
+                matter_data = self._parse_xml_matter(text)
+                if matter_data:
+                    metadata["matter_type"] = matter_data.get("MatterTypeName")
 
             # Fetch sponsors
             sponsors_url = f"{self.base_url}/matters/{matter_id}/sponsors"
@@ -436,13 +442,18 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             content_type = response.headers.get('content-type', '').lower()
             if 'json' in content_type:
                 sponsors_data = await response.json()
-                if sponsors_data:
-                    # Extract sponsor names, sorted by sequence
-                    metadata["sponsors"] = [
-                        s.get("MatterSponsorName")
-                        for s in sorted(sponsors_data, key=lambda x: x.get("MatterSponsorSequence", 999))
-                        if s.get("MatterSponsorName")
-                    ]
+            else:
+                # XML fallback - NYC returns XML from Legistar API
+                text = await response.text()
+                sponsors_data = self._parse_xml_sponsors(text)
+
+            if sponsors_data:
+                # Extract sponsor names, sorted by sequence
+                metadata["sponsors"] = [
+                    s.get("MatterSponsorName")
+                    for s in sorted(sponsors_data, key=lambda x: x.get("MatterSponsorSequence", 999))
+                    if s.get("MatterSponsorName")
+                ]
 
         except (VendorHTTPError, aiohttp.ClientError, JSONDecodeError, ValueError) as e:
             logger.debug("could not fetch matter metadata", matter_id=matter_id, error=str(e))
@@ -469,8 +480,9 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if 'json' in content_type:
                 raw_votes = await response.json()
             else:
-                # XML fallback - not common for votes but handle it
-                return []
+                # XML fallback - NYC returns XML from Legistar API
+                text = await response.text()
+                raw_votes = self._parse_xml_votes(text)
 
             votes = []
             for vote in raw_votes:
@@ -612,6 +624,161 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         except ET.ParseError as e:
             logger.error("XML parsing error for attachments", error=str(e))
             raise
+
+    def _parse_xml_votes(self, xml_text: str) -> List[Dict[str, Any]]:
+        """
+        Parse Legistar XML response for event item votes.
+        NYC and some other cities return XML instead of JSON from the API.
+
+        Args:
+            xml_text: Raw XML response text
+
+        Returns:
+            List of vote dictionaries matching JSON structure:
+            [{'VotePersonName': str, 'VoteValueName': str, 'VotePersonId': int, 'VoteSort': int}]
+        """
+        votes = []
+
+        try:
+            root = ET.fromstring(xml_text)
+
+            # Handle Legistar namespace
+            ns = {'ns': 'http://schemas.datacontract.org/2004/07/LegistarWebAPI.Models.v1'}
+
+            # Find all GranicusEventItemVote elements (may also be EventItemVote)
+            vote_elements = root.findall('.//ns:GranicusEventItemVote', ns)
+            if not vote_elements:
+                vote_elements = root.findall('.//ns:EventItemVote', ns)
+
+            for vote_elem in vote_elements:
+                vote = {}
+
+                # Map XML fields to JSON field names
+                field_map = {
+                    'VotePersonName': 'VotePersonName',
+                    'VoteValueName': 'VoteValueName',
+                    'VotePersonId': 'VotePersonId',
+                    'VoteSort': 'VoteSort',
+                }
+
+                for xml_field, json_field in field_map.items():
+                    elem = vote_elem.find(f'ns:{xml_field}', ns)
+                    if elem is not None and elem.text:
+                        # Convert numeric fields
+                        if xml_field in ('VotePersonId', 'VoteSort'):
+                            try:
+                                vote[json_field] = int(elem.text)
+                            except ValueError:
+                                vote[json_field] = 0
+                        else:
+                            vote[json_field] = elem.text
+
+                # Only add votes that have person name and vote value
+                if vote.get('VotePersonName') and vote.get('VoteValueName'):
+                    votes.append(vote)
+
+            logger.debug("parsed xml votes", count=len(votes))
+            return votes
+
+        except ET.ParseError as e:
+            logger.warning("XML parsing error for votes", error=str(e))
+            return []
+
+    def _parse_xml_matter(self, xml_text: str) -> Dict[str, Any]:
+        """
+        Parse Legistar XML response for single matter details.
+        NYC returns XML instead of JSON from the API.
+
+        Args:
+            xml_text: Raw XML response text
+
+        Returns:
+            Dict with matter fields matching JSON structure
+        """
+        try:
+            root = ET.fromstring(xml_text)
+
+            # Handle Legistar namespace
+            ns = {'ns': 'http://schemas.datacontract.org/2004/07/LegistarWebAPI.Models.v1'}
+
+            # Find matter element (may be GranicusMatter or Matter)
+            matter_elem = root.find('.//ns:GranicusMatter', ns)
+            if matter_elem is None:
+                matter_elem = root.find('.//ns:Matter', ns)
+            if matter_elem is None:
+                return {}
+
+            matter = {}
+            field_map = {
+                'MatterTypeName': 'MatterTypeName',
+                'MatterName': 'MatterName',
+                'MatterFile': 'MatterFile',
+                'MatterId': 'MatterId',
+            }
+
+            for xml_field, json_field in field_map.items():
+                elem = matter_elem.find(f'ns:{xml_field}', ns)
+                if elem is not None and elem.text:
+                    matter[json_field] = elem.text
+
+            return matter
+
+        except ET.ParseError as e:
+            logger.warning("XML parsing error for matter", error=str(e))
+            return {}
+
+    def _parse_xml_sponsors(self, xml_text: str) -> List[Dict[str, Any]]:
+        """
+        Parse Legistar XML response for matter sponsors.
+        NYC returns XML instead of JSON from the API.
+
+        Args:
+            xml_text: Raw XML response text
+
+        Returns:
+            List of sponsor dictionaries matching JSON structure
+        """
+        sponsors = []
+
+        try:
+            root = ET.fromstring(xml_text)
+
+            # Handle Legistar namespace
+            ns = {'ns': 'http://schemas.datacontract.org/2004/07/LegistarWebAPI.Models.v1'}
+
+            # Find all sponsor elements
+            sponsor_elements = root.findall('.//ns:GranicusMatterSponsor', ns)
+            if not sponsor_elements:
+                sponsor_elements = root.findall('.//ns:MatterSponsor', ns)
+
+            for sponsor_elem in sponsor_elements:
+                sponsor = {}
+
+                field_map = {
+                    'MatterSponsorName': 'MatterSponsorName',
+                    'MatterSponsorSequence': 'MatterSponsorSequence',
+                }
+
+                for xml_field, json_field in field_map.items():
+                    elem = sponsor_elem.find(f'ns:{xml_field}', ns)
+                    if elem is not None and elem.text:
+                        if xml_field == 'MatterSponsorSequence':
+                            try:
+                                sponsor[json_field] = int(elem.text)
+                            except ValueError:
+                                sponsor[json_field] = 999
+                        else:
+                            sponsor[json_field] = elem.text
+
+                if sponsor.get('MatterSponsorName'):
+                    sponsors.append(sponsor)
+
+            logger.debug("parsed xml sponsors", count=len(sponsors))
+            return sponsors
+
+        except ET.ParseError as e:
+            logger.warning("XML parsing error for sponsors", error=str(e))
+            return []
 
     async def _fetch_meetings_html(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
