@@ -9,8 +9,8 @@
 		<NavSection>
 			<NavTab path="/about/general" title="What is Engagic?" iconColor="blue" />
 			<NavTab path="/about/metrics" title="Impact Metrics" iconColor="green" />
-			<NavTab path="/about/community" title="Community & Support" iconColor="purple" />
-			<NavTab path="/about/donate" title="Support Engagic" iconColor="red" />
+			<NavTab path="/about/community" title="Community & Ecosystem" iconColor="purple" />
+			<NavTab path="/about/donate" title="Donate" iconColor="red" />
 			<NavTab path="/about/terms" title="Terms of Service" iconColor="orange" />
 		</NavSection>
 	{/snippet}
