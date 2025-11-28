@@ -109,7 +109,7 @@
 </script>
 
 <svelte:head>
-	<title>Support Engagic</title>
+	<title>Donate - Engagic</title>
 	<meta name="description" content="Support civic infrastructure that keeps democracy accessible" />
 </svelte:head>
 
@@ -127,7 +127,7 @@
 	{/if}
 
 	<section class="section">
-		<h1 class="section-heading">Support Engagic</h1>
+		<h1 class="section-heading">Donate</h1>
 		<p>Democracy shouldn't have a paywall. Help us keep it free.</p>
 		<div class="what-it-funds">
 			<span>Server infrastructure</span>

@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-	<title>Community & Support - Engagic</title>
+	<title>Community & Ecosystem - Engagic</title>
 	<meta name="description" content="Get help, contribute code, or connect with the Engagic community" />
 </svelte:head>
 
