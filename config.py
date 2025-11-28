@@ -252,10 +252,10 @@ def configure_structlog(is_development: bool = False, log_level: str = "INFO"):
     ]
 
     if is_development:
-        # Development: Simple key-value output without padding
+        # Development: Colored console output with readable formatting
         processors = shared_processors + [
             structlog.processors.format_exc_info,
-            structlog.processors.KeyValueRenderer(key_order=["event"], drop_missing=True),
+            structlog.dev.ConsoleRenderer(colors=True),
         ]
     else:
         # Production: JSON output for log aggregation

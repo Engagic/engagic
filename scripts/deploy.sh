@@ -57,6 +57,8 @@ load_env() {
         source ~/.llm_secrets
         set +a
     fi
+    # Use colored dev logs for interactive CLI (systemd services use JSON)
+    export ENGAGIC_LOG_FORMAT=dev
 }
 
 setup_env() {
