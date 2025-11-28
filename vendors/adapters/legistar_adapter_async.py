@@ -253,7 +253,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                         agenda_match = re.search(r'href="([^"]*Agenda\.pdf[^"]*)"', html, re.IGNORECASE)
                         if agenda_match:
                             agenda_url = f"https://{self.slug}.legistar.com/{agenda_match.group(1)}"
-                except (AttributeError, IndexError):
+                except (AttributeError, IndexError, VendorHTTPError, aiohttp.ClientError):
                     pass
 
             # Wait for items to finish fetching
