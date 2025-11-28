@@ -482,13 +482,16 @@ class Database:
                         increment_appearance_count=not appearance_exists
                     )
                     stats['duplicate'] += 1
-                    appearance_status = "new appearance" if not appearance_exists else "reprocess"
-                    logger.info(
-                        "matter tracking update",
-                        status=appearance_status,
-                        matter=agenda_item.matter_file or raw_vendor_matter_id,
-                        matter_type=matter_type
-                    )
+
+                    # Only log interesting cases (new appearances), skip reprocessing noise
+                    if not appearance_exists:
+                        matter_display = agenda_item.matter_file or raw_vendor_matter_id
+                        if matter_display:  # Skip items without matter identifiers
+                            logger.info(
+                                "matter new appearance",
+                                matter=matter_display,
+                                matter_type=matter_type
+                            )
                 else:
                     # Guard: Skip matter creation if no identifiers available
                     # At least one of matter_file, raw_vendor_matter_id, or title must exist
@@ -520,12 +523,16 @@ class Database:
 
                     await self.matters.store_matter(matter_obj)
                     stats['tracked'] += 1
-                    logger.info(
-                        "new matter tracked",
-                        matter=agenda_item.matter_file or raw_vendor_matter_id,
-                        matter_type=matter_type,
-                        sponsor_count=len(sponsors)
-                    )
+
+                    # Only log if we have a displayable matter identifier
+                    matter_display = agenda_item.matter_file or raw_vendor_matter_id
+                    if matter_display:
+                        logger.info(
+                            "new matter tracked",
+                            matter=matter_display,
+                            matter_type=matter_type,
+                            sponsor_count=len(sponsors)
+                        )
 
                     # Link sponsors to matter (normalize JSONB array into relational table)
                     if sponsors:

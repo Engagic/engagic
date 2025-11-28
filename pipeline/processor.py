@@ -578,6 +578,11 @@ class Processor:
             unique_attachments=len(all_attachments)
         )
 
+        # Early exit if no attachments to process
+        if not all_attachments:
+            logger.debug("matter skipped - no attachments", matter_id=matter_id)
+            return
+
         # Process item with ALL aggregated attachments (extract PDFs and summarize)
         try:
             result = await self._process_single_item(representative_item)
@@ -591,8 +596,8 @@ class Processor:
             metrics.record_error("processor", e)
             return
 
+        # If no result, skip reason was already logged by _process_single_item
         if not result:
-            logger.warning("no result for matter", matter_id=matter_id)
             return
 
         summary = result.get("summary")
