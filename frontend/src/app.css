@@ -3,28 +3,6 @@
 @import '@fontsource/ibm-plex-mono/500.css';
 @import '@fontsource/ibm-plex-mono/600.css';
 
-<<<<<<< Updated upstream
-/* Outfit - one voice, geometric but soft */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
-
-/* JetBrains Mono - technical elements only, sparingly */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
-
-:root {
-	/* Typography - One Voice */
-	--font-body: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-	--font-mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
-
-	/* Font sizes - fluid scale */
-	--text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
-	--text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
-	--text-base: clamp(1rem, 0.9rem + 0.5vw, 1.125rem);
-	--text-lg: clamp(1.125rem, 1rem + 0.6vw, 1.25rem);
-	--text-xl: clamp(1.25rem, 1.1rem + 0.75vw, 1.5rem);
-	--text-2xl: clamp(1.5rem, 1.25rem + 1.25vw, 2rem);
-	--text-3xl: clamp(1.875rem, 1.5rem + 1.875vw, 2.5rem);
-	--text-4xl: clamp(2.25rem, 1.75rem + 2.5vw, 3rem);
-=======
 /* Outfit - body and headings */
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
 
@@ -37,7 +15,7 @@
 	--font-body: 'Outfit', system-ui, -apple-system, sans-serif;
 	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
-	/* Type scale - fluid */
+	/* Type scale - fixed for clarity */
 	--text-xs: 0.75rem;
 	--text-sm: 0.875rem;
 	--text-base: 1rem;
@@ -51,36 +29,15 @@
 	--font-medium: 500;
 	--font-semibold: 600;
 	--font-bold: 700;
->>>>>>> Stashed changes
 
 	/* Line heights */
 	--leading-tight: 1.25;
 	--leading-snug: 1.375;
 	--leading-normal: 1.5;
 	--leading-relaxed: 1.625;
-<<<<<<< Updated upstream
-	--leading-loose: 1.75;
-
-	/* Font weights */
-	--font-light: 300;
-	--font-normal: 400;
-	--font-medium: 500;
-	--font-semibold: 600;
-	--font-bold: 700;
-
-	/* Action color - THE accent, means "click here" */
-	--action-coral: #f97316;
-	--action-coral-hover: #ea580c;
-	--action-coral-soft: rgba(249, 115, 22, 0.1);
-
-	/* Urgency - <72 hours */
-	--urgent-amber: #f59e0b;
-	--urgent-amber-soft: rgba(245, 158, 11, 0.1);
-	/* Progressive widths: search -> meetings -> detail -> state */
-=======
 
 	/* ===================
-	   COLORS - Semantic only
+	   COLORS - Semantic
 	   =================== */
 
 	/* Primary action - coral */
@@ -126,7 +83,6 @@
 	/* ===================
 	   LAYOUT - Progressive widths
 	   =================== */
->>>>>>> Stashed changes
 	--width-search: 600px;
 	--width-meetings: 800px;
 	--width-detail: 1000px;
@@ -137,45 +93,6 @@
    LIGHT THEME
    =================== */
 :root.light {
-<<<<<<< Updated upstream
-	/* Legacy colors (keeping for compatibility) */
-	--civic-blue: #4f46e5;
-	--civic-green: #10b981;
-	--civic-gray: #475569;
-	--civic-dark: #0f172a;
-	--civic-light: #f8fafc;
-	--civic-white: #ffffff;
-	--civic-border: #e2e8f0;
-	--civic-red: #ef4444;
-	--civic-accent: #8b5cf6;
-	--civic-yellow: #eab308;
-	--civic-orange: #f97316;
-	--civic-magenta: #ec4899;
-
-	/* New warm palette */
-	--surface: #fafafa;
-	--surface-warm: #fffbf7;
-	--surface-card: #ffffff;
-	--surface-card-hover: #fffdf9;
-	--text: #1a1a1a;
-	--text-muted: #6b7280;
-	--text-subtle: #9ca3af;
-
-	/* Legacy (keeping for gradual migration) */
-	--bg-gradient-start: #fafafa;
-	--bg-gradient-end: #f5f5f5;
-	--text-primary: #1a1a1a;
-	--text-secondary: #6b7280;
-	--text-link: #4f46e5;
-	--surface-primary: #ffffff;
-	--surface-secondary: #fafafa;
-	--surface-hover: #fffbf7;
-	--border-primary: #e5e7eb;
-	--border-hover: var(--action-coral);
-	--shadow-sm: rgba(0, 0, 0, 0.03);
-	--shadow-md: rgba(0, 0, 0, 0.08);
-	--shadow-lg: rgba(249, 115, 22, 0.08);
-=======
 	--bg: #fafafa;
 	--bg-warm: #fffbf7;
 	--surface: #ffffff;
@@ -185,7 +102,6 @@
 	--text: #171717;
 	--text-secondary: #525252;
 	--text-muted: #737373;
->>>>>>> Stashed changes
 
 	--border: #e5e5e5;
 	--border-hover: #d4d4d4;
@@ -194,6 +110,20 @@
 	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
 	--shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
 	--shadow-action: 0 4px 12px rgba(249, 115, 22, 0.2);
+
+	/* Legacy civic-* aliases for backward compat */
+	--civic-blue: #4f46e5;
+	--civic-green: #10b981;
+	--civic-gray: #525252;
+	--civic-dark: #171717;
+	--civic-light: #f5f5f5;
+	--civic-white: #ffffff;
+	--civic-border: #e5e5e5;
+	--civic-red: #ef4444;
+	--civic-accent: #8b5cf6;
+	--civic-yellow: #eab308;
+	--civic-orange: #f97316;
+	--civic-magenta: #ec4899;
 
 	/* Badge variants - light mode */
 	--badge-neutral-bg: #f5f5f5;
@@ -217,83 +147,16 @@
 	--badge-matter-text: #1e40af;
 	--badge-matter-border: #3b82f6;
 
-<<<<<<< Updated upstream
-	--badge-procedural-bg: #fef3c7;
-	--badge-procedural-text: #92400e;
-	--badge-procedural-border: #fbbf24;
-
-	--badge-sponsor-bg-start: #fef3c7;
-	--badge-sponsor-bg-end: #fde68a;
-	--badge-sponsor-text: #92400e;
-	--badge-sponsor-border: #f59e0b;
-
-	--badge-timeline-bg-start: #dcfce7;
-	--badge-timeline-bg-end: #bbf7d0;
-	--badge-timeline-text: #065f46;
-	--badge-timeline-border: #10b981;
-	--badge-timeline-shadow: rgba(16, 185, 129, 0.2);
-
-	/* Agenda item indicators */
-	--item-summary-border: #93c5fd;
-	--item-type-bg: #f3f4f6;
-	--item-type-text: #4b5563;
-	--item-type-border: #d1d5db;
-
-	/* Committee type colors */
-	--committee-color: #8b5cf6;
-	--council-color: #10b981;
-	--board-color: #f59e0b;
-=======
 	/* Green badges (appearances, timeline) */
 	--badge-green-bg: #d1fae5;
 	--badge-green-text: #065f46;
 	--badge-green-border: #86efac;
->>>>>>> Stashed changes
 }
 
 /* ===================
    DARK THEME
    =================== */
 :root.dark {
-<<<<<<< Updated upstream
-	/* Legacy colors (keeping for compatibility) */
-	--civic-blue: #a78bfa;
-	--civic-green: #34d399;
-	--civic-gray: #94a3b8;
-	--civic-dark: #f8fafc;
-	--civic-light: #1e293b;
-	--civic-white: #0f172a;
-	--civic-border: #334155;
-	--civic-red: #f87171;
-	--civic-accent: #c4b5fd;
-	--civic-yellow: #fbbf24;
-	--civic-orange: #fb923c;
-	--civic-magenta: #f472b6;
-
-	/* New warm palette (dark mode) */
-	--surface: #0f0f0f;
-	--surface-warm: #141210;
-	--surface-card: #1a1a1a;
-	--surface-card-hover: #1f1d1a;
-	--text: #fafafa;
-	--text-muted: #a1a1aa;
-	--text-subtle: #71717a;
-
-	/* Legacy (keeping for gradual migration) */
-	--bg-gradient-start: #0f0f0f;
-	--bg-gradient-end: #171717;
-	--text-primary: #fafafa;
-	--text-secondary: #a1a1aa;
-	--text-link: #fb923c;
-	--surface-primary: #1a1a1a;
-	--surface-secondary: #262626;
-	--surface-hover: #1f1d1a;
-	--border-primary: #2a2a2a;
-	--border-hover: var(--action-coral);
-	--shadow-sm: rgba(0, 0, 0, 0.4);
-	--shadow-md: rgba(0, 0, 0, 0.6);
-	--shadow-lg: rgba(249, 115, 22, 0.15);
-=======
 	--bg: #0a0a0a;
 	--bg-warm: #141210;
 	--surface: #171717;
@@ -303,7 +166,6 @@
 	--text: #fafafa;
 	--text-secondary: #a3a3a3;
 	--text-muted: #737373;
->>>>>>> Stashed changes
 
 	--border: #2a2a2a;
 	--border-hover: #404040;
@@ -312,6 +174,20 @@
 	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
 	--shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
 	--shadow-action: 0 4px 12px rgba(249, 115, 22, 0.3);
+
+	/* Legacy civic-* aliases for backward compat */
+	--civic-blue: #a78bfa;
+	--civic-green: #34d399;
+	--civic-gray: #a3a3a3;
+	--civic-dark: #fafafa;
+	--civic-light: #262626;
+	--civic-white: #171717;
+	--civic-border: #2a2a2a;
+	--civic-red: #f87171;
+	--civic-accent: #c4b5fd;
+	--civic-yellow: #fbbf24;
+	--civic-orange: #fb923c;
+	--civic-magenta: #f472b6;
 
 	/* Badge variants - dark mode */
 	--badge-neutral-bg: #262626;
@@ -335,38 +211,10 @@
 	--badge-matter-text: #93c5fd;
 	--badge-matter-border: #3b82f6;
 
-<<<<<<< Updated upstream
-	--badge-procedural-bg: #78350f;
-	--badge-procedural-text: #fde68a;
-	--badge-procedural-border: #f59e0b;
-
-	--badge-sponsor-bg-start: #78350f;
-	--badge-sponsor-bg-end: #92400e;
-	--badge-sponsor-text: #fde68a;
-	--badge-sponsor-border: #f59e0b;
-
-	--badge-timeline-bg-start: #064e3b;
-	--badge-timeline-bg-end: #065f46;
-	--badge-timeline-text: #6ee7b7;
-	--badge-timeline-border: #10b981;
-	--badge-timeline-shadow: rgba(16, 185, 129, 0.3);
-
-	/* Agenda item indicators */
-	--item-summary-border: #3b82f6;
-	--item-type-bg: #334155;
-	--item-type-text: #cbd5e1;
-	--item-type-border: #475569;
-
-	/* Committee type colors */
-	--committee-color: #c4b5fd;
-	--council-color: #34d399;
-	--board-color: #fbbf24;
-=======
 	/* Green badges (appearances, timeline) */
 	--badge-green-bg: #064e3b;
 	--badge-green-text: #6ee7b7;
 	--badge-green-border: #10b981;
->>>>>>> Stashed changes
 }
 
 /* ===================
@@ -386,15 +234,9 @@ html {
 body {
 	font-family: var(--font-body);
 	font-size: var(--text-base);
-<<<<<<< Updated upstream
-	background: var(--surface);
-	color: var(--text);
-	line-height: var(--leading-relaxed);
-=======
 	line-height: var(--leading-relaxed);
 	background: var(--bg);
 	color: var(--text);
->>>>>>> Stashed changes
 	min-height: 100vh;
 	transition: background var(--transition-slow), color var(--transition-slow);
 }
@@ -415,23 +257,12 @@ body {
 	position: absolute;
 	top: -100px;
 	left: 0;
-<<<<<<< Updated upstream
-	background: var(--action-coral);
-	color: white;
-	padding: 0.75rem 1.5rem;
-	text-decoration: none;
-	font-family: var(--font-body);
-	font-weight: var(--font-semibold);
-	z-index: 1000;
-	border-radius: 0 0 var(--radius-md) 0;
-=======
 	background: var(--color-action);
 	color: white;
 	padding: 0.75rem 1.5rem;
 	text-decoration: none;
 	font-weight: var(--font-semibold);
 	z-index: 1000;
->>>>>>> Stashed changes
 }
 
 .skip-to-main:focus {
@@ -475,82 +306,6 @@ body {
 	font-weight: var(--font-bold);
 	color: var(--text);
 	text-decoration: none;
-<<<<<<< Updated upstream
-	margin-bottom: 0.5rem;
-	display: inline-block;
-	transition: all var(--transition-normal);
-	letter-spacing: -0.02em;
-}
-
-.logo:hover {
-	color: var(--action-coral);
-}
-
-.tagline {
-	font-family: var(--font-body);
-	color: var(--text-muted);
-	font-size: var(--text-base);
-	font-weight: var(--font-normal);
-	margin-bottom: 1rem;
-}
-
-.hero-stat {
-	font-family: var(--font-body);
-	margin-top: 0.5rem;
-	display: flex;
-	align-items: baseline;
-	justify-content: center;
-	gap: 0.5rem;
-	animation: fadeIn 0.6s ease-in;
-}
-
-.stat-value {
-	font-size: var(--text-xl);
-	font-weight: var(--font-bold);
-	color: var(--text);
-}
-
-.stat-label {
-	font-size: var(--text-sm);
-	color: var(--text-muted);
-	font-weight: var(--font-normal);
-}
-
-@keyframes fadeIn {
-	from {
-		opacity: 0;
-		transform: translateY(-5px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-/* Navigation loading indicator */
-.navigation-loading {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	height: 3px;
-	background: rgba(255, 255, 255, 0.9);
-	z-index: 9999;
-	animation: navigation-progress 1s ease-in-out;
-	transform-origin: left;
-}
-
-@keyframes navigation-progress {
-	0% {
-		transform: scaleX(0);
-	}
-	50% {
-		transform: scaleX(0.7);
-	}
-	100% {
-		transform: scaleX(0.95);
-	}
-=======
 	letter-spacing: -0.02em;
 	transition: color var(--transition-fast);
 }
@@ -563,7 +318,6 @@ body {
 	font-size: var(--text-base);
 	color: var(--text-secondary);
 	margin-top: var(--space-xs);
->>>>>>> Stashed changes
 }
 
 /* ===================
@@ -575,19 +329,6 @@ body {
 
 .search-input {
 	width: 100%;
-<<<<<<< Updated upstream
-	padding: 1.25rem 1.5rem;
-	font-size: var(--text-lg);
-	font-family: var(--font-body);
-	border: 1px solid var(--border-primary);
-	border-radius: var(--radius-lg);
-	background: var(--surface-card);
-	color: var(--text);
-	transition: all var(--transition-normal);
-	box-shadow: 0 2px 8px var(--shadow-sm);
-	resize: vertical;
-	min-height: 60px;
-=======
 	padding: var(--space-md) var(--space-lg);
 	font-family: var(--font-body);
 	font-size: var(--text-lg);
@@ -600,45 +341,16 @@ body {
 
 .search-input::placeholder {
 	color: var(--text-muted);
->>>>>>> Stashed changes
-}
-
-.search-input::placeholder {
-	color: var(--text-subtle);
 }
 
 .search-input:focus {
 	outline: none;
-<<<<<<< Updated upstream
-	border-color: var(--action-coral);
-	box-shadow: 0 4px 16px var(--action-coral-soft);
-=======
 	border-color: var(--color-action);
 	box-shadow: 0 0 0 3px var(--color-action-soft);
->>>>>>> Stashed changes
 }
 
 .search-button {
 	width: 100%;
-<<<<<<< Updated upstream
-	padding: 1rem;
-	font-size: var(--text-base);
-	font-family: var(--font-body);
-	font-weight: var(--font-semibold);
-	background: var(--action-coral);
-	color: white;
-	border: none;
-	border-radius: var(--radius-md);
-	cursor: pointer;
-	transition: all var(--transition-fast);
-	box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25);
-}
-
-.search-button:hover {
-	background: var(--action-coral-hover);
-	transform: translateY(-1px);
-	box-shadow: 0 6px 16px rgba(249, 115, 22, 0.35);
-=======
 	margin-top: var(--space-md);
 	padding: var(--space-md);
 	font-family: var(--font-body);
@@ -656,7 +368,6 @@ body {
 .search-button:hover {
 	background: var(--color-action-hover);
 	transform: translateY(-1px);
->>>>>>> Stashed changes
 }
 
 .search-button:active {
@@ -697,17 +408,6 @@ body {
 
 .random-button {
 	flex: 1;
-<<<<<<< Updated upstream
-	padding: 1rem;
-	font-size: var(--text-sm);
-	font-family: var(--font-body);
-	font-weight: var(--font-medium);
-	color: white;
-	border: none;
-	border-radius: var(--radius-md);
-	cursor: pointer;
-	transition: all var(--transition-normal);
-=======
 	padding: var(--space-md);
 	font-family: var(--font-body);
 	font-size: var(--text-sm);
@@ -718,7 +418,6 @@ body {
 	border-radius: var(--radius-md);
 	cursor: pointer;
 	transition: all var(--transition-fast);
->>>>>>> Stashed changes
 }
 
 .random-button:hover {
@@ -739,155 +438,6 @@ body {
 	.random-buttons {
 		flex-direction: column;
 	}
-<<<<<<< Updated upstream
-
-	.random-button {
-		padding: 0.85rem;
-		font-size: 0.95rem;
-	}
-}
-
-.results-section {
-	margin-top: 3rem;
-}
-
-.ambiguous-cities {
-	background: var(--surface-primary);
-	border-radius: 12px;
-	border: 1px solid var(--border-primary);
-	padding: 2rem;
-	box-shadow: 0 2px 8px var(--shadow-sm);
-	transition: background 0.3s ease, border-color 0.3s ease;
-}
-
-.ambiguous-message {
-	font-family: var(--font-body);
-	font-size: var(--text-base);
-	color: var(--text);
-	margin-bottom: 1.5rem;
-	line-height: var(--leading-relaxed);
-}
-
-.city-options {
-	display: flex;
-	flex-direction: column;
-	gap: 0.75rem;
-}
-
-.city-option-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 1rem;
-	padding: 1rem;
-	background: var(--surface-secondary);
-	border-radius: 8px;
-	transition: all 0.2s ease;
-	border: 1px solid var(--border-primary);
-}
-
-.city-option-row:hover {
-	background: var(--surface-hover);
-	border-color: var(--border-hover);
-}
-
-.city-option {
-	flex: 1;
-	text-align: left;
-	font-family: var(--font-body);
-	font-size: var(--text-base);
-	font-weight: var(--font-semibold);
-	color: var(--text);
-	background: none;
-	border: none;
-	cursor: pointer;
-	padding: 0;
-	transition: color var(--transition-fast);
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.city-option:hover {
-	color: var(--action-coral);
-}
-
-.city-stats {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	font-family: var(--font-mono);
-	font-size: var(--text-xs);
-	color: var(--text-muted);
-	flex-shrink: 0;
-}
-
-.stat-total {
-	font-weight: 600;
-	color: var(--text-primary);
-}
-
-.stat-packets {
-	color: var(--civic-orange);
-}
-
-.stat-summaries {
-	color: var(--civic-green);
-	font-weight: 600;
-}
-
-.stat-separator {
-	color: var(--civic-border);
-}
-
-@media (max-width: 640px) {
-	.ambiguous-cities {
-		padding: 1.5rem;
-	}
-
-	.city-option-row {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.5rem;
-	}
-
-	.city-option {
-		white-space: normal;
-		word-break: break-word;
-	}
-
-	.city-stats {
-		width: 100%;
-		justify-content: flex-start;
-	}
-}
-
-.city-info {
-	text-align: center;
-	margin-bottom: 2rem;
-	padding: 1.5rem;
-	background: var(--surface-primary);
-	border-radius: 12px;
-	border: 1px solid var(--border-primary);
-	box-shadow: 0 2px 8px var(--shadow-sm);
-	transition: background 0.3s ease, border-color 0.3s ease;
-}
-
-.city-name {
-	font-size: 1.2rem;
-	font-weight: 600;
-	color: var(--text-primary);
-}
-
-.meeting-list {
-	display: grid;
-	gap: 1rem;
-	grid-template-columns: 1fr;
-	width: 100%;
-	min-width: 100%;
-=======
->>>>>>> Stashed changes
 }
 
 /* ===================
@@ -895,37 +445,18 @@ body {
    =================== */
 .meeting-card {
 	display: block;
-<<<<<<< Updated upstream
-	width: 100%;
-	max-width: none;
-	box-sizing: border-box;
-	background: var(--surface-card);
-	border: 1px solid var(--border-primary);
-	border-radius: var(--radius-lg);
-	padding: var(--space-lg);
-	cursor: pointer;
-	transition: all var(--transition-normal);
-	box-shadow: 0 1px 3px var(--shadow-sm);
-=======
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: var(--radius-lg);
 	padding: var(--space-lg);
->>>>>>> Stashed changes
 	text-decoration: none;
 	color: inherit;
 	transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .meeting-card:hover {
-<<<<<<< Updated upstream
-	border-color: var(--border-hover);
-	background: var(--surface-card-hover);
-	box-shadow: 0 4px 12px var(--shadow-md);
-=======
 	border-color: var(--color-action);
 	box-shadow: var(--shadow-md);
->>>>>>> Stashed changes
 }
 
 .meeting-card-header {
@@ -941,39 +472,20 @@ body {
 	font-weight: var(--font-semibold);
 	color: var(--text);
 	line-height: var(--leading-snug);
-<<<<<<< Updated upstream
-	letter-spacing: -0.01em;
-	flex: 1;
-	min-width: 0;
-=======
->>>>>>> Stashed changes
 	margin: 0;
 }
 
 .meeting-date-time {
-<<<<<<< Updated upstream
-	font-family: var(--font-body);
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
-	color: var(--text-muted);
-	white-space: nowrap;
-	flex-shrink: 0;
-=======
 	font-family: var(--font-mono);
 	font-size: var(--text-sm);
 	color: var(--text-muted);
 	white-space: nowrap;
->>>>>>> Stashed changes
 }
 
 .meeting-status {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
 	font-weight: var(--font-medium);
-<<<<<<< Updated upstream
-	color: var(--text-subtle);
-=======
->>>>>>> Stashed changes
 }
 
 .status-items,
@@ -1003,17 +515,6 @@ body {
 }
 
 .topic-tag {
-<<<<<<< Updated upstream
-	font-family: var(--font-body);
-	font-size: var(--text-xs);
-	padding: 0.25rem 0.625rem;
-	background: var(--surface-warm);
-	color: var(--text-muted);
-	border: none;
-	border-radius: var(--radius-sm);
-	font-weight: var(--font-medium);
-	transition: all var(--transition-fast);
-=======
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
 	font-weight: var(--font-medium);
@@ -1021,63 +522,10 @@ body {
 	background: var(--bg-warm);
 	color: var(--text-secondary);
 	border-radius: var(--radius-sm);
->>>>>>> Stashed changes
 }
 
 .topic-tag.topic-more {
 	background: transparent;
-<<<<<<< Updated upstream
-	color: var(--text-subtle);
-	font-weight: var(--font-normal);
-}
-
-.meetings-filter {
-	margin-bottom: 1.5rem;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 1rem;
-	width: 100%;
-}
-
-.meetings-section-title {
-	font-family: var(--font-body);
-	font-size: var(--text-xl);
-	font-weight: var(--font-semibold);
-	color: var(--text);
-	margin: 0;
-	letter-spacing: -0.01em;
-}
-
-.toggle-past-btn {
-	padding: 0.5rem 1rem;
-	background: transparent;
-	color: var(--text-muted);
-	border: 1px solid var(--border-primary);
-	border-radius: var(--radius-sm);
-	cursor: pointer;
-	font-family: var(--font-body);
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
-	transition: all var(--transition-fast);
-}
-
-.toggle-past-btn:hover {
-	background: var(--surface-warm);
-	border-color: var(--action-coral);
-	color: var(--action-coral);
-}
-
-.past-meetings-divider {
-	margin: var(--space-xl) 0 var(--space-md) 0;
-	padding-bottom: var(--space-sm);
-	border-bottom: 1px solid var(--border-primary);
-	color: var(--text-muted);
-	font-family: var(--font-body);
-	font-size: var(--text-base);
-	font-weight: var(--font-medium);
-=======
 	color: var(--text-muted);
 }
 
@@ -1087,7 +535,6 @@ body {
 .meeting-list {
 	display: grid;
 	gap: var(--space-md);
->>>>>>> Stashed changes
 }
 
 .past-meeting {
@@ -1177,29 +624,6 @@ body {
    MESSAGES
    =================== */
 .error-message {
-<<<<<<< Updated upstream
-	font-family: var(--font-body);
-	color: #92400e;
-	padding: var(--space-md);
-	background: #fef3c7;
-	border: 1px solid #fde68a;
-	border-radius: var(--radius-md);
-	margin-top: 1rem;
-	font-size: var(--text-sm);
-	line-height: var(--leading-relaxed);
-}
-
-.info-message {
-	font-family: var(--font-body);
-	color: var(--civic-blue);
-	padding: var(--space-md);
-	background: #eff6ff;
-	border: 1px solid #dbeafe;
-	border-radius: var(--radius-md);
-	margin-top: 1rem;
-	font-size: var(--text-sm);
-	line-height: var(--leading-relaxed);
-=======
 	padding: var(--space-md);
 	background: var(--color-error-soft);
 	color: var(--color-error);
@@ -1215,17 +639,12 @@ body {
 	border: 1px solid var(--color-info);
 	border-radius: var(--radius-md);
 	font-size: var(--text-sm);
->>>>>>> Stashed changes
 }
 
 .loading {
 	text-align: center;
 	padding: var(--space-2xl);
 	color: var(--text-muted);
-<<<<<<< Updated upstream
-	font-family: var(--font-body);
-=======
->>>>>>> Stashed changes
 }
 
 /* ===================
@@ -1233,32 +652,6 @@ body {
    =================== */
 .no-meetings {
 	text-align: center;
-<<<<<<< Updated upstream
-	padding: var(--space-2xl) var(--space-xl);
-	background: var(--surface-card);
-	border-radius: var(--radius-lg);
-	border: 1px solid var(--border-primary);
-	transition: all var(--transition-normal);
-}
-
-.empty-state-title {
-	font-family: var(--font-body);
-	font-size: var(--text-lg);
-	font-weight: var(--font-semibold);
-	color: var(--text);
-	margin-bottom: 0.75rem;
-}
-
-.empty-state-message {
-	font-family: var(--font-body);
-	font-size: var(--text-base);
-	line-height: var(--leading-relaxed);
-	color: var(--text-muted);
-	margin: 0;
-	max-width: 500px;
-	margin-left: auto;
-	margin-right: auto;
-=======
 	padding: var(--space-2xl);
 	background: var(--surface);
 	border: 1px solid var(--border);
@@ -1275,7 +668,6 @@ body {
 	color: var(--text-secondary);
 	max-width: 400px;
 	margin: 0 auto;
->>>>>>> Stashed changes
 }
 
 /* ===================
@@ -1311,90 +703,6 @@ body {
 	color: var(--text-muted);
 }
 
-<<<<<<< Updated upstream
-/* ===== ACTION BUTTONS - The Coral Accent ===== */
-/* Use sparingly: only for primary participation CTAs */
-
-.action-button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 0.5rem;
-	padding: 0.75rem 1.25rem;
-	font-family: var(--font-body);
-	font-size: var(--text-sm);
-	font-weight: var(--font-semibold);
-	color: white;
-	background: var(--action-coral);
-	border: none;
-	border-radius: var(--radius-md);
-	cursor: pointer;
-	text-decoration: none;
-	transition: all var(--transition-fast);
-	box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
-}
-
-.action-button:hover {
-	background: var(--action-coral-hover);
-	transform: translateY(-1px);
-	box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
-}
-
-.action-button:active {
-	transform: translateY(0);
-	box-shadow: 0 1px 4px rgba(249, 115, 22, 0.2);
-}
-
-/* Subtle pulse for "act now" moments - use on upcoming meetings */
-.action-button--pulse {
-	animation: action-pulse 2.5s ease-in-out infinite;
-}
-
-@keyframes action-pulse {
-	0%, 100% {
-		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
-	}
-	50% {
-		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25),
-		            0 0 0 6px rgba(249, 115, 22, 0.08);
-	}
-}
-
-/* Secondary action - for additional participation options */
-.action-button--secondary {
-	background: transparent;
-	color: var(--text);
-	border: 1px solid var(--border-primary);
-	box-shadow: none;
-}
-
-.action-button--secondary:hover {
-	background: var(--surface-warm);
-	border-color: var(--action-coral);
-	color: var(--action-coral);
-	box-shadow: none;
-}
-
-/* Urgent badge for <72h meetings */
-.urgent-badge {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.25rem;
-	padding: 0.25rem 0.5rem;
-	font-family: var(--font-body);
-	font-size: var(--text-xs);
-	font-weight: var(--font-semibold);
-	color: #92400e;
-	background: var(--urgent-amber-soft);
-	border: 1px solid var(--urgent-amber);
-	border-radius: var(--radius-sm);
-	text-transform: uppercase;
-	letter-spacing: 0.02em;
-}
-
-/* ===== UTILITY CLASSES ===== */
-
-=======
 /* ===================
    NAVIGATION LOADING
    =================== */
@@ -1418,7 +726,6 @@ body {
 /* ===================
    UTILITY CLASSES
    =================== */
->>>>>>> Stashed changes
 .font-body { font-family: var(--font-body); }
 .font-mono { font-family: var(--font-mono); }
 
@@ -1428,48 +735,10 @@ body {
 .text-lg { font-size: var(--text-lg); }
 .text-xl { font-size: var(--text-xl); }
 .text-2xl { font-size: var(--text-2xl); }
-<<<<<<< Updated upstream
-.text-3xl { font-size: var(--text-3xl); }
 
-.font-light { font-weight: var(--font-light); }
-.font-normal { font-weight: var(--font-normal); }
-=======
-
->>>>>>> Stashed changes
 .font-medium { font-weight: var(--font-medium); }
 .font-semibold { font-weight: var(--font-semibold); }
 .font-bold { font-weight: var(--font-bold); }
 
-<<<<<<< Updated upstream
-.leading-tight { line-height: var(--leading-tight); }
-.leading-snug { line-height: var(--leading-snug); }
-.leading-normal { line-height: var(--leading-normal); }
-.leading-relaxed { line-height: var(--leading-relaxed); }
-
-.text-muted { color: var(--text-muted); }
-.text-subtle { color: var(--text-subtle); }
-
-/* ===== REDUCED MOTION ===== */
-/* Respect user preference for reduced motion */
-@media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 0.01ms !important;
-		scroll-behavior: auto !important;
-	}
-}
-
-/* For users who prefer reduced motion, disable the pulse animation */
-@media (prefers-reduced-motion: reduce) {
-	.action-btn.pulse,
-	.action-button.pulse {
-		animation: none;
-	}
-}
-=======
 .text-muted { color: var(--text-muted); }
 .text-secondary { color: var(--text-secondary); }
->>>>>>> Stashed changes
