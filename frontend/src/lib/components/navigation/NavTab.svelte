@@ -41,8 +41,8 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 0.75rem 1rem;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 8px;
 		text-decoration: none;
 		transition: all 0.2s ease;
@@ -50,7 +50,7 @@
 	}
 
 	.nav-tab-link:hover {
-		background: var(--surface-hover);
+		background: var(--surface-secondary);
 		border-color: var(--civic-blue);
 		box-shadow: 0 2px 8px var(--shadow-md);
 	}

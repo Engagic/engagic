@@ -451,11 +451,62 @@
 </div>
 
 <style>
+<<<<<<< Updated upstream
+=======
+	.value-prop {
+		text-align: center;
+		margin-bottom: var(--space-xl);
+	}
+
+	.value-headline {
+		font-size: var(--text-xl);
+		font-weight: var(--font-semibold);
+		color: var(--text);
+		margin: 0 0 var(--space-sm) 0;
+	}
+
+	.value-subtext {
+		font-size: var(--text-base);
+		color: var(--text-secondary);
+		margin: 0 0 var(--space-md) 0;
+		line-height: var(--leading-relaxed);
+		max-width: 480px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.learn-more {
+		font-size: var(--text-sm);
+		color: var(--color-action);
+		text-decoration: none;
+		transition: color var(--transition-fast);
+	}
+
+	.learn-more:hover {
+		color: var(--color-action-hover);
+		text-decoration: underline;
+	}
+
+	@media (max-width: 640px) {
+		.value-headline {
+			font-size: var(--text-lg);
+		}
+
+		.value-subtext {
+			font-size: var(--text-sm);
+		}
+	}
+
+>>>>>>> Stashed changes
 	.logo-container {
 		display: flex;
 		align-items: center;
 		justify-content: center;
+<<<<<<< Updated upstream
 		gap: 1rem;
+=======
+		gap: var(--space-md);
+>>>>>>> Stashed changes
 		margin-bottom: var(--space-sm);
 	}
 
@@ -463,28 +514,44 @@
 		width: 64px;
 		height: 64px;
 		border-radius: var(--radius-lg);
+<<<<<<< Updated upstream
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+=======
+		box-shadow: var(--shadow-md);
+>>>>>>> Stashed changes
 	}
 
 	@media (max-width: 640px) {
 		.logo-icon {
 			width: 48px;
 			height: 48px;
+<<<<<<< Updated upstream
 			border-radius: var(--radius-md);
+=======
+			border-radius: var(--radius-lg);
+>>>>>>> Stashed changes
 		}
 	}
 
 	.request-city-cta {
 		margin-top: var(--space-lg);
 		padding: var(--space-lg);
+<<<<<<< Updated upstream
 		background: var(--surface-warm);
 		border: 1px solid var(--border-primary);
+=======
+		background: var(--bg-warm);
+		border: 1px solid var(--border);
+>>>>>>> Stashed changes
 		border-radius: var(--radius-lg);
 		text-align: center;
 	}
 
 	.cta-text {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
+=======
+>>>>>>> Stashed changes
 		font-size: var(--text-base);
 		font-weight: var(--font-semibold);
 		color: var(--text);
@@ -493,20 +560,29 @@
 
 	.cta-link {
 		display: inline-block;
+<<<<<<< Updated upstream
 		color: var(--action-coral);
 		font-family: var(--font-body);
+=======
+		color: var(--color-action);
+>>>>>>> Stashed changes
 		font-size: var(--text-sm);
 		font-weight: var(--font-medium);
 		text-decoration: underline;
 		text-underline-offset: 3px;
+<<<<<<< Updated upstream
 		transition: opacity var(--transition-fast);
+=======
+		transition: color var(--transition-fast);
+>>>>>>> Stashed changes
 	}
 
 	.cta-link:hover {
-		opacity: 0.8;
+		color: var(--color-action-hover);
 	}
 
 	.cta-subtext {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
 		font-size: var(--text-xs);
 		color: var(--text-muted);
@@ -597,5 +673,10 @@
 		.meetings-grid {
 			grid-template-columns: repeat(2, 1fr);
 		}
+=======
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		margin: var(--space-sm) 0 0 0;
+>>>>>>> Stashed changes
 	}
 </style>

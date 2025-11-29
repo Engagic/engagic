@@ -172,20 +172,41 @@
 {/if}
 
 <style>
+<<<<<<< Updated upstream
 	.timeline-empty {
 		text-align: center;
 		padding: var(--space-lg);
+=======
+	/* Meeting type colors - semantic */
+	.matter-timeline {
+		--committee-color: var(--color-warning);
+		--council-color: var(--color-action);
+		--board-color: var(--color-success);
+	}
+
+	.timeline-empty {
+		text-align: center;
+		padding: var(--space-xl);
+>>>>>>> Stashed changes
 		color: var(--text-muted);
 		font-family: var(--font-body);
 		font-size: var(--text-sm);
 	}
 
 	.matter-timeline {
+<<<<<<< Updated upstream
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-lg);
 		padding: var(--space-lg);
 		margin: var(--space-md) 0;
+=======
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		padding: var(--space-lg);
+		margin: var(--space-lg) 0;
+>>>>>>> Stashed changes
 	}
 
 	.matter-timeline.has-upcoming {
@@ -195,6 +216,15 @@
 
 	/* Header row */
 	.timeline-header {
+<<<<<<< Updated upstream
+=======
+		margin-bottom: var(--space-xl);
+		border-bottom: 1px solid var(--border);
+		padding-bottom: var(--space-md);
+	}
+
+	.timeline-title {
+>>>>>>> Stashed changes
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -211,6 +241,7 @@
 
 	.matter-id {
 		font-family: var(--font-mono);
+<<<<<<< Updated upstream
 		font-size: var(--text-sm);
 		font-weight: var(--font-semibold);
 		color: var(--text);
@@ -218,15 +249,29 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-sm);
+=======
+		font-size: var(--text-lg);
+		font-weight: var(--font-bold);
+		color: var(--badge-neutral-text);
+		padding: 0.35rem 0.75rem;
+		background: var(--badge-neutral-bg);
+		border: 2px solid var(--badge-neutral-border);
+		border-radius: var(--radius-md);
+>>>>>>> Stashed changes
 	}
 
 	.appearance-count {
 		font-family: var(--font-body);
+<<<<<<< Updated upstream
 		font-size: var(--text-xs);
+=======
+		font-size: var(--text-sm);
+>>>>>>> Stashed changes
 		color: var(--text-muted);
 		font-weight: var(--font-medium);
 	}
 
+<<<<<<< Updated upstream
 	.upcoming-badge {
 		font-family: var(--font-body);
 		font-size: var(--text-xs);
@@ -237,6 +282,15 @@
 		border-radius: var(--radius-full);
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
+=======
+	.timeline-subtitle {
+		font-family: var(--font-body);
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--text-muted);
+		font-weight: var(--font-semibold);
+>>>>>>> Stashed changes
 	}
 
 	/* Horizontal track (desktop) */
@@ -277,6 +331,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+<<<<<<< Updated upstream
 		gap: 6px;
 		text-decoration: none;
 		transition: transform var(--transition-fast);
@@ -299,6 +354,25 @@
 	.track-node.last .node-label {
 		text-align: right;
 		align-items: flex-end;
+=======
+		gap: 1rem;
+		padding: 1rem 1.25rem;
+		background: var(--surface-secondary);
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--color-action);
+		border-radius: var(--radius-md);
+		cursor: pointer;
+		transition: all var(--transition-normal);
+		font-family: var(--font-body);
+		text-align: left;
+		text-decoration: none;
+	}
+
+	.step-card:hover {
+		transform: translateX(4px);
+		border-left-width: 5px;
+		box-shadow: 0 4px 12px var(--shadow-md);
+>>>>>>> Stashed changes
 	}
 
 	.track-node:hover {
@@ -316,6 +390,14 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+<<<<<<< Updated upstream
+=======
+		background: var(--color-info);
+		color: white;
+		border-radius: 50%;
+		font-weight: var(--font-bold);
+		font-size: var(--text-sm);
+>>>>>>> Stashed changes
 	}
 
 	.node-dot.multiple {
@@ -406,6 +488,7 @@
 	.list-item {
 		display: flex;
 		align-items: center;
+<<<<<<< Updated upstream
 		gap: var(--space-sm);
 		padding: var(--space-sm) var(--space-md);
 		background: var(--surface-primary);
@@ -437,6 +520,66 @@
 		border-radius: 50%;
 		background: var(--text-muted);
 		flex-shrink: 0;
+=======
+		gap: 1rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.step-type {
+		font-weight: var(--font-bold);
+		font-size: var(--text-base);
+		color: var(--text);
+		font-family: var(--font-mono);
+	}
+
+	.step-status {
+		font-size: var(--text-xs);
+		padding: 0.2rem 0.5rem;
+		background: var(--color-action);
+		color: white;
+		border-radius: var(--radius-sm);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		font-weight: var(--font-bold);
+		border: 1.5px solid currentColor;
+	}
+
+	.step-card.committee .step-status {
+		background: var(--surface);
+		color: var(--committee-color);
+		border-color: var(--committee-color);
+	}
+
+	.step-card.council .step-status {
+		background: var(--surface);
+		color: var(--council-color);
+		border-color: var(--council-color);
+	}
+
+	.step-card.board .step-status {
+		background: var(--surface);
+		color: var(--board-color);
+		border-color: var(--board-color);
+	}
+
+	.step-date {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		font-weight: var(--font-medium);
+	}
+
+	.step-agenda {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		margin-top: 0.25rem;
+	}
+
+	.step-arrow {
+		flex-shrink: 0;
+		font-size: var(--text-lg);
+		color: var(--color-action);
+		transition: transform var(--transition-fast);
+>>>>>>> Stashed changes
 	}
 
 	.list-item.active .list-dot {
@@ -497,9 +640,31 @@
 		}
 	}
 
+<<<<<<< Updated upstream
 	/* Hide track when list is force-shown (many nodes) */
 	.timeline-list.force-show ~ .timeline-track,
 	.timeline-track:has(~ .timeline-list.force-show) {
 		display: none;
+=======
+		.step-card {
+			padding: 0.75rem 1rem;
+			gap: 0.75rem;
+		}
+
+		.step-number {
+			width: 28px;
+			height: 28px;
+			font-size: var(--text-sm);
+		}
+
+		.step-type {
+			font-size: var(--text-sm);
+		}
+
+		.step-status {
+			font-size: 0.65rem;
+			padding: 0.15rem 0.4rem;
+		}
+>>>>>>> Stashed changes
 	}
 </style>

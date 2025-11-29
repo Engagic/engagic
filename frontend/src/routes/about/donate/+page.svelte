@@ -221,7 +221,7 @@
 		flex-direction: column;
 		gap: var(--space-xl);
 		padding-bottom: var(--space-xl);
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.section {
@@ -234,7 +234,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 		line-height: 1.2;
 	}
@@ -246,7 +246,7 @@
 	.about-content p {
 		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 	}
 
@@ -267,7 +267,7 @@
 	.alert-info {
 		background: var(--surface-secondary);
 		border: 2px solid var(--civic-blue);
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.what-it-funds {
@@ -292,8 +292,8 @@
 		flex-direction: column;
 		gap: var(--space-lg);
 		padding: var(--space-2xl);
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		background: var(--surface);
+		border: 2px solid var(--border);
 		border-radius: var(--radius-lg);
 		transition: all var(--transition-normal);
 	}
@@ -331,8 +331,8 @@
 	}
 
 	.toggle-button:not(.active):hover {
-		background: var(--surface-primary);
-		color: var(--text-primary);
+		background: var(--surface);
+		color: var(--text);
 	}
 
 	.card-subtitle {
@@ -355,9 +355,9 @@
 		font-size: 1rem;
 		font-weight: 600;
 		border-radius: var(--radius-md);
-		border: 2px solid var(--border-primary);
-		background: var(--surface-primary);
-		color: var(--text-primary);
+		border: 2px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
 		cursor: pointer;
 		transition: all var(--transition-fast);
 	}
@@ -393,7 +393,7 @@
 		top: 50%;
 		transform: translateY(-50%);
 		font-family: 'IBM Plex Mono', monospace;
-		color: var(--text-primary);
+		color: var(--text);
 		pointer-events: none;
 	}
 
@@ -402,10 +402,10 @@
 		padding: var(--space-md) var(--space-md) var(--space-md) var(--space-xl);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1rem;
-		border: 2px solid var(--border-primary);
+		border: 2px solid var(--border);
 		border-radius: var(--radius-md);
-		background: var(--surface-primary);
-		color: var(--text-primary);
+		background: var(--surface);
+		color: var(--text);
 		transition: border-color var(--transition-fast);
 	}
 
@@ -461,7 +461,7 @@
 		font-size: 1.1rem;
 		line-height: 1.7;
 		padding-top: var(--space-lg);
-		border-top: 1px solid var(--border-primary);
+		border-top: 1px solid var(--border);
 		text-align: center;
 	}
 

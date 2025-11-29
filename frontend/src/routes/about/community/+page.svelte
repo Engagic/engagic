@@ -89,7 +89,7 @@
 		flex-direction: column;
 		gap: var(--space-xl);
 		padding-bottom: var(--space-xl);
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.section {
@@ -102,7 +102,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 		line-height: 1.2;
 	}
@@ -122,8 +122,8 @@
 		flex-direction: column;
 		gap: var(--space-md);
 		padding: var(--space-xl);
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		background: var(--surface);
+		border: 2px solid var(--border);
 		border-radius: var(--radius-md);
 		text-decoration: none;
 		transition: all var(--transition-normal);
@@ -168,14 +168,14 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.25rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 	}
 
 	.contact-card p {
 		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 	}
 
@@ -184,8 +184,8 @@
 		flex-direction: column;
 		gap: var(--space-sm);
 		padding: var(--space-lg);
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 	}
 
@@ -200,14 +200,14 @@
 	.guideline p {
 		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 	}
 
 	.guideline ul {
 		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 		padding-left: var(--space-lg);
 	}
@@ -219,7 +219,7 @@
 	.note {
 		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text);
 		background: var(--surface-secondary);
 		border-left: 3px solid var(--civic-blue);
 		padding: var(--space-md);
@@ -229,7 +229,7 @@
 	}
 
 	.note strong {
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	@media (max-width: 768px) {

@@ -283,14 +283,14 @@
 		flex-direction: column;
 		gap: var(--space-xl);
 		padding-bottom: var(--space-xl);
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.page-heading {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2.5rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 		line-height: 1.2;
 	}
@@ -298,70 +298,11 @@
 	.last-updated {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		margin: 0;
 	}
 
-	.back-link {
-		position: absolute;
-		top: 0;
-		left: 0;
-		color: var(--civic-blue);
-		text-decoration: none;
-		font-weight: 500;
-		transition: color 0.2s ease;
-	}
-
-	.back-link:hover {
-		text-decoration: underline;
-		color: var(--civic-accent);
-	}
-
-	/* Table of Contents */
-	.toc {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: 12px;
-		padding: 1.5rem;
-		margin-bottom: 3rem;
-		box-shadow: 0 2px 8px var(--shadow-sm);
-	}
-
-	.toc-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.1rem;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin-bottom: 1rem;
-	}
-
-	.toc-list {
-		list-style: none;
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 0.5rem;
-	}
-
-	.toc-list button {
-		width: 100%;
-		text-align: left;
-		background: none;
-		border: none;
-		color: var(--civic-blue);
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		font-size: 0.95rem;
-		padding: 0.5rem 0.75rem;
-		cursor: pointer;
-		border-radius: 6px;
-		transition: all 0.2s ease;
-	}
-
-	.toc-list button:hover {
-		background: var(--surface-hover);
-		color: var(--civic-accent);
-	}
-
-	/* Content Sections - removed center alignment */
+	/* Content Sections */
 
 	.terms-section {
 		display: flex;
@@ -374,7 +315,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.8rem;
 		font-weight: 600;
-		color: var(--civic-dark);
+		color: var(--text);
 		margin: 0;
 		scroll-margin-top: 2rem;
 	}
@@ -383,7 +324,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.3rem;
 		font-weight: 600;
-		color: var(--civic-blue);
+		color: var(--color-info);
 		margin: 0;
 	}
 
@@ -391,7 +332,7 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 	}
 
@@ -399,7 +340,7 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 1.1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 		padding-left: 1.5rem;
 	}
@@ -409,13 +350,13 @@
 	}
 
 	.terms-section a {
-		color: var(--text-link);
+		color: var(--color-action);
 		text-decoration: underline;
 		transition: color 0.2s ease;
 	}
 
 	.terms-section a:hover {
-		color: var(--civic-accent);
+		color: var(--color-action);
 	}
 
 	/* Tier Cards */
@@ -426,8 +367,8 @@
 	}
 
 	.tier-card {
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		background: var(--surface);
+		border: 2px solid var(--border);
 		border-radius: 12px;
 		padding: 1.5rem;
 		transition: all 0.3s ease;
@@ -435,19 +376,19 @@
 
 	.tier-card:hover {
 		transform: translateY(-4px);
-		box-shadow: 0 8px 24px var(--shadow-lg);
+		box-shadow: 0 8px 24px var(--shadow-md);
 	}
 
 	.tier-free {
-		border-color: var(--civic-green);
+		border-color: var(--color-success);
 	}
 
 	.tier-hacktivist {
-		border-color: var(--civic-accent);
+		border-color: var(--color-action);
 	}
 
 	.tier-enterprise {
-		border-color: var(--civic-orange);
+		border-color: var(--color-warning);
 	}
 
 	.tier-name {
@@ -458,15 +399,15 @@
 	}
 
 	.tier-free .tier-name {
-		color: var(--civic-green);
+		color: var(--color-success);
 	}
 
 	.tier-hacktivist .tier-name {
-		color: var(--civic-accent);
+		color: var(--color-action);
 	}
 
 	.tier-enterprise .tier-name {
-		color: var(--civic-orange);
+		color: var(--color-warning);
 	}
 
 	.tier-limits {
@@ -489,17 +430,17 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.5rem;
 		font-weight: 600;
-		color: var(--civic-blue);
+		color: var(--color-info);
 	}
 
 	.limit-unit {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	.limit-divider {
-		color: var(--civic-border);
+		color: var(--border);
 		font-size: 1.2rem;
 	}
 
@@ -519,7 +460,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin-bottom: 0.5rem;
 	}
 
@@ -532,7 +473,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1rem;
 		font-weight: 600;
-		color: var(--civic-blue);
+		color: var(--color-info);
 		margin-top: 1rem;
 		margin-bottom: 0.5rem;
 	}
@@ -540,7 +481,7 @@
 	.tier-requirement {
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 0.9rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		font-style: italic;
 	}
 
@@ -548,7 +489,7 @@
 		display: inline-block;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
-		color: var(--civic-blue);
+		color: var(--color-info);
 		text-decoration: none;
 		padding: 0.5rem 1rem;
 		background: var(--surface-secondary);
@@ -558,14 +499,14 @@
 	}
 
 	.tier-contact:hover {
-		background: var(--civic-blue);
-		color: var(--civic-white);
+		background: var(--color-info);
+		color: var(white);
 	}
 
 	/* Code Blocks */
 	.code-block {
 		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
+		border: 1px solid var(--border);
 		border-radius: 8px;
 		padding: 1rem;
 		margin: 1rem 0;
@@ -574,19 +515,19 @@
 
 	.code-label {
 		font-size: 0.85rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		margin-bottom: 0.5rem;
 	}
 
 	.code-block code {
 		display: block;
 		font-size: 0.95rem;
-		color: var(--text-primary);
+		color: var(--text);
 		line-height: 1.6;
 	}
 
 	.code-block a {
-		color: var(--civic-blue);
+		color: var(--color-info);
 		text-decoration: underline;
 	}
 
@@ -599,8 +540,8 @@
 	}
 
 	.rule-group {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 1.5rem;
 	}
@@ -609,7 +550,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.1rem;
 		font-weight: 600;
-		color: var(--civic-blue);
+		color: var(--color-info);
 		margin-top: 0;
 		margin-bottom: 1rem;
 	}
@@ -629,26 +570,26 @@
 
 	.policy-allowed,
 	.policy-prohibited {
-		background: var(--surface-primary);
+		background: var(--surface);
 		border: 2px solid;
 		border-radius: 12px;
 		padding: 1.5rem;
 	}
 
 	.policy-allowed {
-		border-color: var(--civic-green);
+		border-color: var(--color-success);
 	}
 
 	.policy-prohibited {
-		border-color: var(--civic-red);
+		border-color: var(--color-error);
 	}
 
 	.policy-allowed h3 {
-		color: var(--civic-green);
+		color: var(--color-success);
 	}
 
 	.policy-prohibited h3 {
-		color: var(--civic-red);
+		color: var(--color-error);
 	}
 
 	/* Contact Buttons */
@@ -664,10 +605,10 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.75rem 1.25rem;
-		background: var(--surface-primary);
-		border: 2px solid var(--civic-blue);
+		background: var(--surface);
+		border: 2px solid var(--color-info);
 		border-radius: 8px;
-		color: var(--civic-blue);
+		color: var(--color-info);
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.95rem;
@@ -676,8 +617,8 @@
 	}
 
 	.contact-button:hover {
-		background: var(--civic-blue);
-		color: var(--civic-white);
+		background: var(--color-info);
+		color: var(white);
 		transform: translateY(-2px);
 		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
 	}
@@ -688,19 +629,19 @@
 
 	/* Text Variants */
 	.warning-text {
-		color: var(--civic-orange);
+		color: var(--color-warning);
 		font-weight: 600;
 	}
 
 	.casual-text {
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		font-style: italic;
 	}
 
 	/* Philosophy Section (highlighted) */
 	.philosophy-section {
 		background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
-		border: 2px solid var(--civic-blue);
+		border: 2px solid var(--color-info);
 		border-radius: 12px;
 		padding: 2rem;
 		margin-top: 4rem;
@@ -711,7 +652,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2rem;
 		font-weight: 600;
-		color: var(--civic-blue);
+		color: var(--color-info);
 		margin-bottom: 1rem;
 		scroll-margin-top: 2rem;
 	}
@@ -720,7 +661,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.2rem;
 		font-weight: 500;
-		color: var(--text-primary);
+		color: var(--text);
 		margin-bottom: 2rem;
 	}
 
@@ -736,9 +677,9 @@
 		line-height: 1.8;
 		color: var(--text-secondary);
 		padding: 1rem;
-		background: var(--surface-primary);
+		background: var(--surface);
 		border-radius: 8px;
-		border-left: 4px solid var(--civic-blue);
+		border-left: 4px solid var(--color-info);
 	}
 
 	.philosophy-footer {
@@ -746,18 +687,18 @@
 		color: var(--text-secondary);
 		margin-top: 2rem;
 		padding-top: 1.5rem;
-		border-top: 1px solid var(--border-primary);
+		border-top: 1px solid var(--border);
 	}
 
 	.philosophy-footer a {
-		color: var(--civic-blue);
+		color: var(--color-info);
 		text-decoration: none;
 		font-weight: 600;
 	}
 
 	.philosophy-footer a:hover {
 		text-decoration: underline;
-		color: var(--civic-accent);
+		color: var(--color-action);
 	}
 
 	/* Back to Top */
@@ -768,9 +709,9 @@
 	.back-to-top button {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.95rem;
-		color: var(--civic-blue);
+		color: var(--color-info);
 		background: none;
-		border: 2px solid var(--civic-blue);
+		border: 2px solid var(--color-info);
 		border-radius: 8px;
 		padding: 0.75rem 1.5rem;
 		cursor: pointer;
@@ -778,36 +719,13 @@
 	}
 
 	.back-to-top button:hover {
-		background: var(--civic-blue);
-		color: var(--civic-white);
+		background: var(--color-info);
+		color: white;
 		transform: translateY(-2px);
 	}
 
-	/* Responsive Design (mobile-first) */
+	/* Responsive Design */
 	@media (max-width: 640px) {
-		.terms-container {
-			padding: 2rem 1rem;
-		}
-
-		.terms-header h1 {
-			font-size: 2rem;
-		}
-
-		.back-link {
-			position: static;
-			display: block;
-			margin-bottom: 1rem;
-			text-align: left;
-		}
-
-		.toc {
-			padding: 1rem;
-		}
-
-		.toc-list {
-			grid-template-columns: 1fr;
-		}
-
 		.tier-grid {
 			grid-template-columns: 1fr;
 		}

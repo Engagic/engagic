@@ -11,40 +11,37 @@
 		flex-direction: column;
 		align-items: center;
 		gap: var(--space-md);
-		padding: var(--space-2xl) 0;
+		padding: var(--space-xl) 0;
 		margin-top: var(--space-3xl);
-		border-top: 1px solid var(--border-primary);
+		border-top: 1px solid var(--border);
 	}
 
 	.footer-message {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.875rem;
-		color: var(--text-secondary);
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 		text-align: center;
 		margin: 0;
-		line-height: 1.6;
 	}
 
 	.terms-link {
-		color: var(--civic-blue);
+		color: var(--color-action);
 		text-decoration: underline;
 		transition: color var(--transition-fast);
 	}
 
 	.terms-link:hover {
-		color: var(--civic-accent);
+		color: var(--color-action-hover);
 	}
 
 	.about-nav-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.875rem;
-		color: var(--civic-blue);
+		font-size: var(--text-sm);
+		color: var(--color-action);
 		text-decoration: none;
 		transition: color var(--transition-fast);
 	}
 
 	.about-nav-link:hover {
-		color: var(--civic-accent);
+		color: var(--color-action-hover);
 		text-decoration: underline;
 	}
 </style>

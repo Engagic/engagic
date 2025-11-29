@@ -57,8 +57,8 @@
 
 <style>
 	.main-nav {
-		background: var(--surface-primary);
-		border-bottom: 1px solid var(--border-primary);
+		background: var(--surface);
+		border-bottom: 1px solid var(--border);
 		padding: 1rem 0;
 		position: sticky;
 		top: 0;
@@ -107,7 +107,7 @@
 
 	.nav-link:hover {
 		color: var(--civic-blue);
-		background: var(--surface-hover);
+		background: var(--surface-secondary);
 	}
 
 	.nav-link-primary {

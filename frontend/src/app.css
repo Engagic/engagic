@@ -1,7 +1,9 @@
+/* IBM Plex Mono - the ONE mono font */
 @import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/ibm-plex-mono/500.css';
 @import '@fontsource/ibm-plex-mono/600.css';
 
+<<<<<<< Updated upstream
 /* Outfit - one voice, geometric but soft */
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
@@ -22,12 +24,41 @@
 	--text-2xl: clamp(1.5rem, 1.25rem + 1.25vw, 2rem);
 	--text-3xl: clamp(1.875rem, 1.5rem + 1.875vw, 2.5rem);
 	--text-4xl: clamp(2.25rem, 1.75rem + 2.5vw, 3rem);
+=======
+/* Outfit - body and headings */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+
+:root {
+	/* ===================
+	   TYPOGRAPHY
+	   - Outfit: headings, body, UI text
+	   - IBM Plex Mono: identifiers, stats, badges, code
+	   =================== */
+	--font-body: 'Outfit', system-ui, -apple-system, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+	/* Type scale - fluid */
+	--text-xs: 0.75rem;
+	--text-sm: 0.875rem;
+	--text-base: 1rem;
+	--text-lg: 1.125rem;
+	--text-xl: 1.25rem;
+	--text-2xl: 1.5rem;
+	--text-3xl: 2rem;
+
+	/* Font weights */
+	--font-normal: 400;
+	--font-medium: 500;
+	--font-semibold: 600;
+	--font-bold: 700;
+>>>>>>> Stashed changes
 
 	/* Line heights */
 	--leading-tight: 1.25;
 	--leading-snug: 1.375;
 	--leading-normal: 1.5;
 	--leading-relaxed: 1.625;
+<<<<<<< Updated upstream
 	--leading-loose: 1.75;
 
 	/* Font weights */
@@ -46,32 +77,67 @@
 	--urgent-amber: #f59e0b;
 	--urgent-amber-soft: rgba(245, 158, 11, 0.1);
 	/* Progressive widths: search -> meetings -> detail -> state */
+=======
+
+	/* ===================
+	   COLORS - Semantic only
+	   =================== */
+
+	/* Primary action - coral */
+	--color-action: #f97316;
+	--color-action-hover: #ea580c;
+	--color-action-soft: rgba(249, 115, 22, 0.1);
+
+	/* Semantic status */
+	--color-success: #10b981;
+	--color-success-soft: rgba(16, 185, 129, 0.1);
+	--color-warning: #f59e0b;
+	--color-warning-soft: rgba(245, 158, 11, 0.1);
+	--color-error: #ef4444;
+	--color-error-soft: rgba(239, 68, 68, 0.1);
+	--color-info: #3b82f6;
+	--color-info-soft: rgba(59, 130, 246, 0.1);
+
+	/* ===================
+	   SPACING
+	   =================== */
+	--space-xs: 0.5rem;    /* 8px */
+	--space-sm: 0.75rem;   /* 12px */
+	--space-md: 1rem;      /* 16px */
+	--space-lg: 1.5rem;    /* 24px */
+	--space-xl: 2rem;      /* 32px */
+	--space-2xl: 3rem;     /* 48px */
+	--space-3xl: 4rem;     /* 64px */
+
+	/* ===================
+	   SHAPE
+	   =================== */
+	--radius-sm: 6px;
+	--radius-md: 11px;
+	--radius-lg: 16px;
+
+	/* ===================
+	   MOTION
+	   =================== */
+	--transition-fast: 0.15s ease-out;
+	--transition-normal: 0.2s ease-out;
+	--transition-slow: 0.3s ease-out;
+
+	/* ===================
+	   LAYOUT - Progressive widths
+	   =================== */
+>>>>>>> Stashed changes
 	--width-search: 600px;
 	--width-meetings: 800px;
 	--width-detail: 1000px;
 	--width-state: 1400px;
-
-	/* Spacing scale */
-	--space-xs: 0.5rem;   /* 8px */
-	--space-sm: 0.75rem;  /* 12px */
-	--space-md: 1rem;     /* 16px */
-	--space-lg: 1.5rem;   /* 24px */
-	--space-xl: 2rem;     /* 32px */
-	--space-2xl: 3rem;    /* 48px */
-	--space-3xl: 4rem;    /* 64px */
-
-	/* Border radius */
-	--radius-sm: 6px;    /* Small elements (tags, badges) */
-	--radius-md: 11px;   /* Standard (cards, buttons) */
-	--radius-lg: 16px;   /* Large containers */
-
-	/* Transitions */
-	--transition-fast: 0.15s ease-out;    /* Micro-interactions */
-	--transition-normal: 0.2s ease-out;   /* Standard hover */
-	--transition-slow: 0.3s ease-out;     /* Page transitions */
 }
 
+/* ===================
+   LIGHT THEME
+   =================== */
 :root.light {
+<<<<<<< Updated upstream
 	/* Legacy colors (keeping for compatibility) */
 	--civic-blue: #4f46e5;
 	--civic-green: #10b981;
@@ -109,25 +175,49 @@
 	--shadow-sm: rgba(0, 0, 0, 0.03);
 	--shadow-md: rgba(0, 0, 0, 0.08);
 	--shadow-lg: rgba(249, 115, 22, 0.08);
+=======
+	--bg: #fafafa;
+	--bg-warm: #fffbf7;
+	--surface: #ffffff;
+	--surface-secondary: #f5f5f5;
+	--surface-hover: #fafafa;
 
-	/* Badge colors */
-	--badge-blue-bg: #dbeafe;
-	--badge-blue-border: #bfdbfe;
-	--badge-blue-text: #1e40af;
-	--badge-green-bg: #d1fae5;
-	--badge-green-border: #86efac;
-	--badge-green-text: #065f46;
-	--badge-info-bg: #eff6ff;
-	--badge-info-border: #bfdbfe;
-	--badge-info-text: #1e40af;
+	--text: #171717;
+	--text-secondary: #525252;
+	--text-muted: #737373;
+>>>>>>> Stashed changes
 
-	/* Component-specific badge tokens */
-	--badge-matter-bg-start: #dbeafe;
-	--badge-matter-bg-end: #bfdbfe;
+	--border: #e5e5e5;
+	--border-hover: #d4d4d4;
+
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+	--shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+	--shadow-action: 0 4px 12px rgba(249, 115, 22, 0.2);
+
+	/* Badge variants - light mode */
+	--badge-neutral-bg: #f5f5f5;
+	--badge-neutral-text: #525252;
+	--badge-neutral-border: #e5e5e5;
+
+	--badge-primary-bg: #dbeafe;
+	--badge-primary-text: #1e40af;
+	--badge-primary-border: #93c5fd;
+
+	--badge-success-bg: #dcfce7;
+	--badge-success-text: #166534;
+	--badge-success-border: #86efac;
+
+	--badge-warning-bg: #fef3c7;
+	--badge-warning-text: #92400e;
+	--badge-warning-border: #fcd34d;
+
+	/* Matter badges (blue legislative style) */
+	--badge-matter-bg: #dbeafe;
 	--badge-matter-text: #1e40af;
 	--badge-matter-border: #3b82f6;
-	--badge-matter-shadow: rgba(59, 130, 246, 0.2);
 
+<<<<<<< Updated upstream
 	--badge-procedural-bg: #fef3c7;
 	--badge-procedural-text: #92400e;
 	--badge-procedural-border: #fbbf24;
@@ -153,9 +243,19 @@
 	--committee-color: #8b5cf6;
 	--council-color: #10b981;
 	--board-color: #f59e0b;
+=======
+	/* Green badges (appearances, timeline) */
+	--badge-green-bg: #d1fae5;
+	--badge-green-text: #065f46;
+	--badge-green-border: #86efac;
+>>>>>>> Stashed changes
 }
 
+/* ===================
+   DARK THEME
+   =================== */
 :root.dark {
+<<<<<<< Updated upstream
 	/* Legacy colors (keeping for compatibility) */
 	--civic-blue: #a78bfa;
 	--civic-green: #34d399;
@@ -193,25 +293,49 @@
 	--shadow-sm: rgba(0, 0, 0, 0.4);
 	--shadow-md: rgba(0, 0, 0, 0.6);
 	--shadow-lg: rgba(249, 115, 22, 0.15);
+=======
+	--bg: #0a0a0a;
+	--bg-warm: #141210;
+	--surface: #171717;
+	--surface-secondary: #262626;
+	--surface-hover: #1f1f1f;
 
-	/* Badge colors */
-	--badge-blue-bg: #1e3a8a;
-	--badge-blue-border: #3b82f6;
-	--badge-blue-text: #93c5fd;
-	--badge-green-bg: #064e3b;
-	--badge-green-border: #10b981;
-	--badge-green-text: #6ee7b7;
-	--badge-info-bg: #1e3a5f;
-	--badge-info-border: #3b82f6;
-	--badge-info-text: #93c5fd;
+	--text: #fafafa;
+	--text-secondary: #a3a3a3;
+	--text-muted: #737373;
+>>>>>>> Stashed changes
 
-	/* Component-specific badge tokens */
-	--badge-matter-bg-start: #1e3a8a;
-	--badge-matter-bg-end: #1e40af;
+	--border: #2a2a2a;
+	--border-hover: #404040;
+
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+	--shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+	--shadow-action: 0 4px 12px rgba(249, 115, 22, 0.3);
+
+	/* Badge variants - dark mode */
+	--badge-neutral-bg: #262626;
+	--badge-neutral-text: #a3a3a3;
+	--badge-neutral-border: #404040;
+
+	--badge-primary-bg: #1e3a5f;
+	--badge-primary-text: #93c5fd;
+	--badge-primary-border: #3b82f6;
+
+	--badge-success-bg: #14532d;
+	--badge-success-text: #86efac;
+	--badge-success-border: #22c55e;
+
+	--badge-warning-bg: #78350f;
+	--badge-warning-text: #fcd34d;
+	--badge-warning-border: #f59e0b;
+
+	/* Matter badges (blue legislative style) */
+	--badge-matter-bg: #1e3a8a;
 	--badge-matter-text: #93c5fd;
 	--badge-matter-border: #3b82f6;
-	--badge-matter-shadow: rgba(59, 130, 246, 0.3);
 
+<<<<<<< Updated upstream
 	--badge-procedural-bg: #78350f;
 	--badge-procedural-text: #fde68a;
 	--badge-procedural-border: #f59e0b;
@@ -237,57 +361,61 @@
 	--committee-color: #c4b5fd;
 	--council-color: #34d399;
 	--board-color: #fbbf24;
+=======
+	/* Green badges (appearances, timeline) */
+	--badge-green-bg: #064e3b;
+	--badge-green-text: #6ee7b7;
+	--badge-green-border: #10b981;
+>>>>>>> Stashed changes
 }
 
-* {
+/* ===================
+   BASE RESET
+   =================== */
+*, *::before, *::after {
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;
 }
 
 html {
-	overflow-x: hidden;
-	width: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 body {
 	font-family: var(--font-body);
 	font-size: var(--text-base);
+<<<<<<< Updated upstream
 	background: var(--surface);
 	color: var(--text);
 	line-height: var(--leading-relaxed);
+=======
+	line-height: var(--leading-relaxed);
+	background: var(--bg);
+	color: var(--text);
+>>>>>>> Stashed changes
 	min-height: 100vh;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-	/* Safe area insets for iPhone notch/dynamic island */
-	padding-top: env(safe-area-inset-top);
-	padding-bottom: env(safe-area-inset-bottom);
-	padding-left: env(safe-area-inset-left);
-	padding-right: env(safe-area-inset-right);
-	margin: 0;
-	width: 100%;
-	overflow-x: hidden;
 	transition: background var(--transition-slow), color var(--transition-slow);
 }
 
-/* Accessibility: Focus indicators */
-/* Remove focus outline for mouse users */
+/* ===================
+   ACCESSIBILITY
+   =================== */
 *:focus:not(:focus-visible) {
 	outline: none;
 }
 
-/* Show outline only for keyboard navigation */
 *:focus-visible {
-	outline: 3px solid var(--civic-accent);
+	outline: 2px solid var(--color-action);
 	outline-offset: 2px;
-	border-radius: var(--radius-sm);
 }
 
-/* Accessibility: Skip to main content link */
 .skip-to-main {
 	position: absolute;
 	top: -100px;
 	left: 0;
+<<<<<<< Updated upstream
 	background: var(--action-coral);
 	color: white;
 	padding: 0.75rem 1.5rem;
@@ -296,38 +424,49 @@ body {
 	font-weight: var(--font-semibold);
 	z-index: 1000;
 	border-radius: 0 0 var(--radius-md) 0;
+=======
+	background: var(--color-action);
+	color: white;
+	padding: 0.75rem 1.5rem;
+	text-decoration: none;
+	font-weight: var(--font-semibold);
+	z-index: 1000;
+>>>>>>> Stashed changes
 }
 
 .skip-to-main:focus {
 	top: 0;
-	outline: 3px solid var(--civic-accent);
-	outline-offset: 3px;
 }
 
-/* Accessibility: Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
+	*, *::before, *::after {
 		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
-		scroll-behavior: auto !important;
 	}
 }
 
+/* ===================
+   LAYOUT CONTAINERS
+   =================== */
 .container {
-	width: var(--width-search);
-	padding: 4rem 1rem;
-	min-height: 100vh;
-	display: flex;
-	flex-direction: column;
+	width: 100%;
+	max-width: var(--width-search);
 	margin: 0 auto;
+	padding: var(--space-xl) var(--space-md);
 }
 
+@media (max-width: 640px) {
+	.container {
+		padding: var(--space-lg) var(--space-md);
+	}
+}
+
+/* ===================
+   HEADER
+   =================== */
 .header {
 	text-align: center;
-	margin-bottom: 2rem;
+	margin-bottom: var(--space-xl);
 }
 
 .logo {
@@ -336,6 +475,7 @@ body {
 	font-weight: var(--font-bold);
 	color: var(--text);
 	text-decoration: none;
+<<<<<<< Updated upstream
 	margin-bottom: 0.5rem;
 	display: inline-block;
 	transition: all var(--transition-normal);
@@ -410,14 +550,32 @@ body {
 	100% {
 		transform: scaleX(0.95);
 	}
+=======
+	letter-spacing: -0.02em;
+	transition: color var(--transition-fast);
 }
 
+.logo:hover {
+	color: var(--color-action);
+}
+
+.tagline {
+	font-size: var(--text-base);
+	color: var(--text-secondary);
+	margin-top: var(--space-xs);
+>>>>>>> Stashed changes
+}
+
+/* ===================
+   SEARCH
+   =================== */
 .search-section {
-	margin-bottom: 3rem;
+	margin-bottom: var(--space-2xl);
 }
 
 .search-input {
 	width: 100%;
+<<<<<<< Updated upstream
 	padding: 1.25rem 1.5rem;
 	font-size: var(--text-lg);
 	font-family: var(--font-body);
@@ -429,6 +587,20 @@ body {
 	box-shadow: 0 2px 8px var(--shadow-sm);
 	resize: vertical;
 	min-height: 60px;
+=======
+	padding: var(--space-md) var(--space-lg);
+	font-family: var(--font-body);
+	font-size: var(--text-lg);
+	background: var(--surface);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.search-input::placeholder {
+	color: var(--text-muted);
+>>>>>>> Stashed changes
 }
 
 .search-input::placeholder {
@@ -437,13 +609,18 @@ body {
 
 .search-input:focus {
 	outline: none;
+<<<<<<< Updated upstream
 	border-color: var(--action-coral);
 	box-shadow: 0 4px 16px var(--action-coral-soft);
+=======
+	border-color: var(--color-action);
+	box-shadow: 0 0 0 3px var(--color-action-soft);
+>>>>>>> Stashed changes
 }
 
 .search-button {
-	margin-top: 1rem;
 	width: 100%;
+<<<<<<< Updated upstream
 	padding: 1rem;
 	font-size: var(--text-base);
 	font-family: var(--font-body);
@@ -461,29 +638,48 @@ body {
 	background: var(--action-coral-hover);
 	transform: translateY(-1px);
 	box-shadow: 0 6px 16px rgba(249, 115, 22, 0.35);
+=======
+	margin-top: var(--space-md);
+	padding: var(--space-md);
+	font-family: var(--font-body);
+	font-size: var(--text-base);
+	font-weight: var(--font-semibold);
+	color: white;
+	background: var(--color-action);
+	border: none;
+	border-radius: var(--radius-md);
+	cursor: pointer;
+	transition: background var(--transition-fast), transform var(--transition-fast);
+	box-shadow: var(--shadow-action);
 }
 
-/* Active/press state (cobalt-inspired) */
+.search-button:hover {
+	background: var(--color-action-hover);
+	transform: translateY(-1px);
+>>>>>>> Stashed changes
+}
+
 .search-button:active {
 	transform: translateY(0);
-	box-shadow: inset 0 2px 4px var(--shadow-md);
 }
 
 .search-button:disabled {
-	background: var(--civic-gray);
+	background: var(--text-muted);
 	cursor: not-allowed;
 	transform: none;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-	opacity: 0.6;
+	box-shadow: none;
 }
 
+/* ===================
+   BUTTON VARIANTS
+   =================== */
 .button-divider {
-	text-align: center;
-	margin: 1.5rem 0 1rem;
-	position: relative;
 	display: flex;
 	align-items: center;
-	gap: 1rem;
+	gap: var(--space-md);
+	margin: var(--space-lg) 0;
+	color: var(--text-muted);
+	font-size: var(--text-sm);
 }
 
 .button-divider::before,
@@ -491,23 +687,17 @@ body {
 	content: '';
 	flex: 1;
 	height: 1px;
-	background: var(--civic-border);
-}
-
-.button-divider span {
-	color: var(--civic-gray);
-	font-size: 0.9rem;
-	padding: 0 0.5rem;
+	background: var(--border);
 }
 
 .random-buttons {
 	display: flex;
-	gap: 1rem;
-	width: 100%;
+	gap: var(--space-md);
 }
 
 .random-button {
 	flex: 1;
+<<<<<<< Updated upstream
 	padding: 1rem;
 	font-size: var(--text-sm);
 	font-family: var(--font-body);
@@ -517,85 +707,39 @@ body {
 	border-radius: var(--radius-md);
 	cursor: pointer;
 	transition: all var(--transition-normal);
+=======
+	padding: var(--space-md);
+	font-family: var(--font-body);
+	font-size: var(--text-sm);
+	font-weight: var(--font-medium);
+	color: var(--color-action);
+	background: transparent;
+	border: 1px solid var(--color-action);
+	border-radius: var(--radius-md);
+	cursor: pointer;
+	transition: all var(--transition-fast);
+>>>>>>> Stashed changes
 }
 
-.random-meeting {
-	background: #0ea570;
-	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
-}
-
-.random-meeting:hover {
-	background: var(--civic-green);
-	transform: translateY(-2px);
-	box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
-}
-
-.random-policy {
-	background: #7c3aed;
-	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
-}
-
-.random-policy:hover {
-	background: var(--civic-accent);
-	transform: translateY(-2px);
-	box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
+.random-button:hover {
+	background: var(--color-action);
+	color: white;
+	transform: translateY(-1px);
 }
 
 .random-button:disabled {
-	background: var(--civic-gray);
+	color: var(--text-muted);
+	border-color: var(--border);
+	background: transparent;
 	cursor: not-allowed;
 	transform: none;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 @media (max-width: 640px) {
-	body {
-		padding-top: env(safe-area-inset-top);
-	}
-
-	.container {
-		width: 100%;
-		max-width: 100%;
-		padding: 2rem 1rem;
-	}
-
-	.header {
-		margin-bottom: 1.5rem;
-	}
-
-	.logo {
-		font-size: 1.8rem;
-	}
-
-	.tagline {
-		font-size: 0.85rem;
-	}
-
-	.hero-stat {
-		gap: 0.4rem;
-	}
-
-	.stat-value {
-		font-size: 1.2rem;
-	}
-
-	.stat-label {
-		font-size: 0.8rem;
-	}
-
-	.search-input {
-		padding: 1rem;
-		font-size: 1rem;
-	}
-
-	.search-button {
-		padding: 0.85rem;
-		font-size: 0.95rem;
-	}
-
 	.random-buttons {
 		flex-direction: column;
 	}
+<<<<<<< Updated upstream
 
 	.random-button {
 		padding: 0.85rem;
@@ -742,10 +886,16 @@ body {
 	grid-template-columns: 1fr;
 	width: 100%;
 	min-width: 100%;
+=======
+>>>>>>> Stashed changes
 }
 
+/* ===================
+   CARDS
+   =================== */
 .meeting-card {
 	display: block;
+<<<<<<< Updated upstream
 	width: 100%;
 	max-width: none;
 	box-sizing: border-box;
@@ -756,22 +906,33 @@ body {
 	cursor: pointer;
 	transition: all var(--transition-normal);
 	box-shadow: 0 1px 3px var(--shadow-sm);
+=======
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-lg);
+>>>>>>> Stashed changes
 	text-decoration: none;
 	color: inherit;
+	transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .meeting-card:hover {
+<<<<<<< Updated upstream
 	border-color: var(--border-hover);
 	background: var(--surface-card-hover);
 	box-shadow: 0 4px 12px var(--shadow-md);
+=======
+	border-color: var(--color-action);
+	box-shadow: var(--shadow-md);
+>>>>>>> Stashed changes
 }
 
 .meeting-card-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
-	gap: 1rem;
-	margin-bottom: 0.5rem;
+	gap: var(--space-md);
 }
 
 .meeting-title {
@@ -780,56 +941,69 @@ body {
 	font-weight: var(--font-semibold);
 	color: var(--text);
 	line-height: var(--leading-snug);
+<<<<<<< Updated upstream
 	letter-spacing: -0.01em;
 	flex: 1;
 	min-width: 0;
+=======
+>>>>>>> Stashed changes
 	margin: 0;
 }
 
 .meeting-date-time {
+<<<<<<< Updated upstream
 	font-family: var(--font-body);
 	font-size: var(--text-sm);
 	font-weight: var(--font-medium);
 	color: var(--text-muted);
 	white-space: nowrap;
 	flex-shrink: 0;
+=======
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	color: var(--text-muted);
+	white-space: nowrap;
+>>>>>>> Stashed changes
 }
 
 .meeting-status {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
 	font-weight: var(--font-medium);
+<<<<<<< Updated upstream
 	color: var(--text-subtle);
+=======
+>>>>>>> Stashed changes
 }
 
-.status-items {
-	color: var(--civic-accent);
-}
-
-.status-summary {
-	color: var(--civic-green);
+.status-items,
+.status-summary,
+.status-ready {
+	color: var(--color-success);
 }
 
 .status-agenda {
-	color: var(--civic-yellow);
+	color: var(--color-warning);
 }
 
 .status-packet {
-	color: var(--civic-orange);
+	color: var(--color-action);
 }
 
 .status-none {
-	color: var(--civic-gray);
+	color: var(--text-muted);
 }
 
+/* Topic tags */
 .meeting-topics {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.5rem;
-	margin-top: 0.75rem;
+	gap: var(--space-sm);
+	margin-top: var(--space-sm);
 }
 
 .topic-tag {
+<<<<<<< Updated upstream
 	font-family: var(--font-body);
 	font-size: var(--text-xs);
 	padding: 0.25rem 0.625rem;
@@ -839,10 +1013,20 @@ body {
 	border-radius: var(--radius-sm);
 	font-weight: var(--font-medium);
 	transition: all var(--transition-fast);
+=======
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	font-weight: var(--font-medium);
+	padding: 0.2rem 0.5rem;
+	background: var(--bg-warm);
+	color: var(--text-secondary);
+	border-radius: var(--radius-sm);
+>>>>>>> Stashed changes
 }
 
 .topic-tag.topic-more {
 	background: transparent;
+<<<<<<< Updated upstream
 	color: var(--text-subtle);
 	font-weight: var(--font-normal);
 }
@@ -893,18 +1077,107 @@ body {
 	font-family: var(--font-body);
 	font-size: var(--text-base);
 	font-weight: var(--font-medium);
+=======
+	color: var(--text-muted);
+}
+
+/* ===================
+   MEETING LIST
+   =================== */
+.meeting-list {
+	display: grid;
+	gap: var(--space-md);
+>>>>>>> Stashed changes
 }
 
 .past-meeting {
-	opacity: 0.8;
-	border-color: var(--border-primary);
+	opacity: 0.7;
 }
 
 .past-meeting:hover {
 	opacity: 1;
 }
 
+.past-meetings-divider {
+	margin: var(--space-xl) 0 var(--space-md);
+	padding-bottom: var(--space-sm);
+	border-bottom: 1px solid var(--border);
+	font-size: var(--text-sm);
+	color: var(--text-muted);
+}
+
+/* ===================
+   AMBIGUOUS CITIES
+   =================== */
+.ambiguous-cities {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-xl);
+}
+
+.ambiguous-message {
+	margin-bottom: var(--space-lg);
+	line-height: var(--leading-relaxed);
+}
+
+.city-options {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-sm);
+}
+
+.city-option-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-md);
+	padding: var(--space-md);
+	background: var(--surface-secondary);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	transition: border-color var(--transition-fast);
+}
+
+.city-option-row:hover {
+	border-color: var(--color-action);
+}
+
+.city-option {
+	flex: 1;
+	font-family: var(--font-body);
+	font-size: var(--text-base);
+	font-weight: var(--font-semibold);
+	color: var(--text);
+	background: none;
+	border: none;
+	text-align: left;
+	cursor: pointer;
+	transition: color var(--transition-fast);
+}
+
+.city-option:hover {
+	color: var(--color-action);
+}
+
+.city-stats {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	display: flex;
+	gap: var(--space-sm);
+}
+
+.stat-total { font-weight: var(--font-semibold); color: var(--text); }
+.stat-packets { color: var(--color-warning); }
+.stat-summaries { color: var(--color-success); font-weight: var(--font-semibold); }
+.stat-separator { color: var(--border); }
+
+/* ===================
+   MESSAGES
+   =================== */
 .error-message {
+<<<<<<< Updated upstream
 	font-family: var(--font-body);
 	color: #92400e;
 	padding: var(--space-md);
@@ -926,17 +1199,41 @@ body {
 	margin-top: 1rem;
 	font-size: var(--text-sm);
 	line-height: var(--leading-relaxed);
+=======
+	padding: var(--space-md);
+	background: var(--color-error-soft);
+	color: var(--color-error);
+	border: 1px solid var(--color-error);
+	border-radius: var(--radius-md);
+	font-size: var(--text-sm);
+}
+
+.info-message {
+	padding: var(--space-md);
+	background: var(--color-info-soft);
+	color: var(--color-info);
+	border: 1px solid var(--color-info);
+	border-radius: var(--radius-md);
+	font-size: var(--text-sm);
+>>>>>>> Stashed changes
 }
 
 .loading {
 	text-align: center;
 	padding: var(--space-2xl);
 	color: var(--text-muted);
+<<<<<<< Updated upstream
 	font-family: var(--font-body);
+=======
+>>>>>>> Stashed changes
 }
 
+/* ===================
+   EMPTY STATES
+   =================== */
 .no-meetings {
 	text-align: center;
+<<<<<<< Updated upstream
 	padding: var(--space-2xl) var(--space-xl);
 	background: var(--surface-card);
 	border-radius: var(--radius-lg);
@@ -961,66 +1258,60 @@ body {
 	max-width: 500px;
 	margin-left: auto;
 	margin-right: auto;
+=======
+	padding: var(--space-2xl);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
 }
 
-/* Meeting detail and agenda styles moved to component-level scoped styles */
+.empty-state-title {
+	font-size: var(--text-lg);
+	font-weight: var(--font-semibold);
+	margin-bottom: var(--space-sm);
+}
 
-/* ===== FOOTER ===== */
+.empty-state-message {
+	color: var(--text-secondary);
+	max-width: 400px;
+	margin: 0 auto;
+>>>>>>> Stashed changes
+}
 
+/* ===================
+   FOOTER
+   =================== */
 .footer {
-	margin-top: 4rem;
-	padding: 2rem 0;
+	margin-top: var(--space-3xl);
+	padding: var(--space-xl) 0;
+	border-top: 1px solid var(--border);
 	text-align: center;
-	border-top: 1px solid var(--border-primary);
 }
 
 .footer-links {
 	display: flex;
-	align-items: center;
 	justify-content: center;
-	gap: 1rem;
-	margin-bottom: 1rem;
+	gap: var(--space-md);
+	margin-bottom: var(--space-md);
 }
 
-.about-link,
-.terms-link,
-.github-link {
-	color: var(--text-link);
+.footer-links a {
+	color: var(--text-muted);
 	text-decoration: none;
-	font-size: 0.95rem;
-	font-weight: 500;
-	transition: color 0.2s;
+	font-size: var(--text-sm);
+	transition: color var(--transition-fast);
 }
 
-.about-link:hover,
-.terms-link:hover,
-.github-link:hover {
-	color: var(--civic-accent);
-}
-
-.github-link {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-}
-
-.github-icon {
-	width: 18px;
-	height: 18px;
-	fill: currentColor;
-}
-
-.divider {
-	color: var(--civic-border);
-	font-size: 0.9rem;
+.footer-links a:hover {
+	color: var(--color-action);
 }
 
 .footer-text {
-	color: var(--civic-gray);
-	font-size: 0.9rem;
-	margin: 0;
+	font-size: var(--text-sm);
+	color: var(--text-muted);
 }
 
+<<<<<<< Updated upstream
 /* ===== ACTION BUTTONS - The Coral Accent ===== */
 /* Use sparingly: only for primary participation CTAs */
 
@@ -1103,6 +1394,31 @@ body {
 
 /* ===== UTILITY CLASSES ===== */
 
+=======
+/* ===================
+   NAVIGATION LOADING
+   =================== */
+.navigation-loading {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: var(--color-action);
+	z-index: 9999;
+	animation: loading-progress 1s ease-in-out;
+}
+
+@keyframes loading-progress {
+	0% { transform: scaleX(0); transform-origin: left; }
+	50% { transform: scaleX(0.7); }
+	100% { transform: scaleX(0.95); }
+}
+
+/* ===================
+   UTILITY CLASSES
+   =================== */
+>>>>>>> Stashed changes
 .font-body { font-family: var(--font-body); }
 .font-mono { font-family: var(--font-mono); }
 
@@ -1112,14 +1428,19 @@ body {
 .text-lg { font-size: var(--text-lg); }
 .text-xl { font-size: var(--text-xl); }
 .text-2xl { font-size: var(--text-2xl); }
+<<<<<<< Updated upstream
 .text-3xl { font-size: var(--text-3xl); }
 
 .font-light { font-weight: var(--font-light); }
 .font-normal { font-weight: var(--font-normal); }
+=======
+
+>>>>>>> Stashed changes
 .font-medium { font-weight: var(--font-medium); }
 .font-semibold { font-weight: var(--font-semibold); }
 .font-bold { font-weight: var(--font-bold); }
 
+<<<<<<< Updated upstream
 .leading-tight { line-height: var(--leading-tight); }
 .leading-snug { line-height: var(--leading-snug); }
 .leading-normal { line-height: var(--leading-normal); }
@@ -1148,3 +1469,7 @@ body {
 		animation: none;
 	}
 }
+=======
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+>>>>>>> Stashed changes

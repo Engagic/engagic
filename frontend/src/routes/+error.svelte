@@ -91,7 +91,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.75rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 1rem 0;
 	}
 

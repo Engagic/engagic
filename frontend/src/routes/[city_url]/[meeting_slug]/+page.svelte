@@ -231,6 +231,12 @@
 <style>
 	.container {
 		width: var(--width-detail);
+		max-width: 100%;
+		margin: 0 auto;
+		padding: var(--space-xl) var(--space-md);
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
 		position: relative;
 	}
 
@@ -242,6 +248,7 @@
 	}
 
 	.back-link {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
 		font-size: var(--text-sm);
 		color: var(--text-muted);
@@ -252,6 +259,19 @@
 
 	.back-link:hover {
 		color: var(--action-coral);
+=======
+		font-family: var(--font-mono);
+		font-size: var(--text-sm);
+		color: var(--color-action);
+		text-decoration: none;
+		font-weight: var(--font-medium);
+		transition: all var(--transition-fast);
+	}
+
+	.back-link:hover {
+		color: var(--color-action-hover);
+		text-decoration: underline;
+>>>>>>> Stashed changes
 	}
 
 	.compact-logo {
@@ -265,6 +285,7 @@
 	.logo-icon {
 		width: 48px;
 		height: 48px;
+<<<<<<< Updated upstream
 		border-radius: var(--radius-md);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
@@ -275,6 +296,19 @@
 		border-radius: var(--radius-xl);
 		border: 1px solid var(--border-primary);
 		transition: all var(--transition-normal);
+=======
+		border-radius: var(--radius-lg);
+		box-shadow: 0 2px 8px var(--shadow-sm);
+	}
+
+	.meeting-detail {
+		padding: 2rem;
+		background: var(--surface);
+		border-radius: var(--radius-xl);
+		border: 1px solid var(--border);
+		box-shadow: 0 4px 16px var(--shadow-sm);
+		transition: background var(--transition-slow), border-color var(--transition-slow);
+>>>>>>> Stashed changes
 	}
 
 	.meeting-header {
@@ -290,8 +324,13 @@
 	}
 
 	.meeting-title {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
 		font-size: var(--text-2xl);
+=======
+		font-family: Georgia, 'Times New Roman', serif;
+		font-size: 2rem;
+>>>>>>> Stashed changes
 		color: var(--text);
 		margin: 0;
 		font-weight: var(--font-bold);
@@ -302,10 +341,19 @@
 	}
 
 	.meeting-date {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
 		color: var(--action-coral);
 		font-size: var(--text-base);
 		font-weight: var(--font-semibold);
+=======
+		font-family: var(--font-mono);
+		color: var(--color-action);
+		font-size: var(--text-base);
+		font-weight: var(--font-semibold);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+>>>>>>> Stashed changes
 	}
 
 	.meeting-meta-row {
@@ -331,23 +379,38 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.35rem 0.75rem;
+<<<<<<< Updated upstream
 		background: var(--surface-warm);
 		border: 1px solid var(--action-coral);
+=======
+		background: var(--color-action-soft);
+		border: 1px solid var(--color-action);
+>>>>>>> Stashed changes
 		border-radius: var(--radius-sm);
 	}
 
 	.helper-dot {
 		width: 8px;
 		height: 8px;
+<<<<<<< Updated upstream
 		background: var(--action-coral);
+=======
+		background: var(--color-action);
+>>>>>>> Stashed changes
 		border-radius: 50%;
 		flex-shrink: 0;
 	}
 
 	.helper-text-inline {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
 		font-size: var(--text-xs);
 		color: var(--action-coral);
+=======
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		color: var(--color-action-hover);
+>>>>>>> Stashed changes
 		font-weight: var(--font-medium);
 	}
 
@@ -356,6 +419,7 @@
 		align-items: center;
 		gap: 0.35rem;
 		padding: 0.5rem 0.85rem;
+<<<<<<< Updated upstream
 		background: var(--surface-secondary);
 		color: var(--text);
 		text-decoration: none;
@@ -365,13 +429,29 @@
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--border-primary);
 		transition: all var(--transition-fast);
+=======
+		background: var(--color-action);
+		color: white;
+		text-decoration: none;
+		font-family: var(--font-mono);
+		font-weight: var(--font-semibold);
+		font-size: var(--text-sm);
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-fast);
+		box-shadow: 0 1px 3px rgba(249, 115, 22, 0.2);
+>>>>>>> Stashed changes
 		flex-shrink: 0;
 		align-self: flex-start;
 	}
 
 	.document-link:hover {
+<<<<<<< Updated upstream
 		border-color: var(--action-coral);
 		color: var(--action-coral);
+=======
+		background: var(--color-action-hover);
+		box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
+>>>>>>> Stashed changes
 	}
 
 	.document-link:active {
@@ -383,12 +463,21 @@
 	}
 
 	.toggle-procedural-btn {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
 		font-size: var(--text-xs);
 		font-weight: var(--font-medium);
 		color: var(--text-muted);
 		background: transparent;
 		border: 1px solid var(--border-primary);
+=======
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		font-weight: var(--font-medium);
+		color: var(--text-muted);
+		background: var(--surface);
+		border: 1px solid var(--border);
+>>>>>>> Stashed changes
 		border-radius: var(--radius-sm);
 		padding: 0.25rem 0.75rem;
 		cursor: pointer;
@@ -396,8 +485,14 @@
 	}
 
 	.toggle-procedural-btn:hover {
+<<<<<<< Updated upstream
 		border-color: var(--action-coral);
 		color: var(--action-coral);
+=======
+		background: var(--surface-secondary);
+		border-color: var(--color-action);
+		color: var(--color-action);
+>>>>>>> Stashed changes
 	}
 
 	.agenda-items {
@@ -410,30 +505,52 @@
 	.agenda-item-error {
 		padding: var(--space-md);
 		background: var(--surface-secondary);
+<<<<<<< Updated upstream
 		border: 1px solid #ef4444;
+=======
+		border: 2px solid var(--color-error);
+>>>>>>> Stashed changes
 		border-radius: var(--radius-md);
 		text-align: center;
 		margin: var(--space-md) 0;
 	}
 
 	.agenda-item-error p {
+<<<<<<< Updated upstream
 		margin: var(--space-xs) 0;
 		font-family: var(--font-body);
+=======
+		margin: 0.25rem 0;
+		font-family: var(--font-mono);
+>>>>>>> Stashed changes
 		font-size: var(--text-sm);
 		color: var(--text);
 	}
 
 	.error-detail-small {
+<<<<<<< Updated upstream
 		color: #ef4444;
+=======
+		color: var(--color-error);
+>>>>>>> Stashed changes
 		font-size: var(--text-xs);
 	}
 
 	.meeting-summary {
 		font-family: var(--font-body);
+<<<<<<< Updated upstream
 		line-height: var(--leading-relaxed);
 		font-size: var(--text-base);
 		color: var(--text);
 		padding: 0 var(--space-xl);
+=======
+		line-height: var(--leading-loose);
+		font-size: var(--text-base);
+		color: var(--text);
+		padding: 0 2rem;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+>>>>>>> Stashed changes
 	}
 
 	.meeting-summary :global(h1),
@@ -444,9 +561,15 @@
 	.meeting-summary :global(h6) {
 		font-family: var(--font-body);
 		color: var(--text);
+<<<<<<< Updated upstream
 		margin-top: var(--space-2xl);
 		margin-bottom: var(--space-md);
 		line-height: var(--leading-snug);
+=======
+		margin-top: 2.5rem;
+		margin-bottom: 1rem;
+		line-height: var(--leading-tight);
+>>>>>>> Stashed changes
 		font-weight: var(--font-semibold);
 	}
 
@@ -509,7 +632,11 @@
 	}
 
 	.meeting-summary :global(a) {
+<<<<<<< Updated upstream
 		color: var(--action-coral);
+=======
+		color: var(--color-action);
+>>>>>>> Stashed changes
 		text-decoration: underline;
 	}
 
@@ -524,7 +651,7 @@
 	.meeting-summary :global(hr) {
 		margin: var(--space-2xl) 0;
 		border: none;
-		border-top: 1px solid var(--border-primary);
+		border-top: 1px solid var(--border);
 	}
 
 	.meeting-summary :global(img) {
@@ -535,6 +662,7 @@
 
 	.no-summary {
 		text-align: center;
+<<<<<<< Updated upstream
 		padding: var(--space-3xl) var(--space-xl);
 		background: var(--surface-warm);
 		border-radius: var(--radius-lg);
@@ -547,6 +675,21 @@
 		font-weight: var(--font-semibold);
 		color: var(--action-coral);
 		margin-bottom: var(--space-md);
+=======
+		padding: 4rem 2rem;
+		background: var(--surface-secondary);
+		border-radius: var(--radius-lg);
+		border: 2px solid var(--border);
+		box-shadow: 0 2px 8px var(--shadow-sm);
+	}
+
+	.processing-title {
+		font-family: var(--font-mono);
+		font-size: var(--text-xl);
+		font-weight: var(--font-semibold);
+		color: var(--color-action);
+		margin-bottom: 1rem;
+>>>>>>> Stashed changes
 	}
 
 	.processing-message {
@@ -554,12 +697,20 @@
 		font-size: var(--text-base);
 		line-height: var(--leading-relaxed);
 		color: var(--text);
+<<<<<<< Updated upstream
 		margin: 0 auto var(--space-md);
+=======
+		margin: 0 auto 1rem;
+>>>>>>> Stashed changes
 		max-width: 500px;
 	}
 
 	.processing-hint {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
+=======
+		font-family: var(--font-mono);
+>>>>>>> Stashed changes
 		font-size: var(--text-sm);
 		line-height: var(--leading-relaxed);
 		color: var(--text-muted);
@@ -570,6 +721,7 @@
 
 	.error-message {
 		font-family: var(--font-body);
+<<<<<<< Updated upstream
 		color: #92400e;
 		padding: var(--space-md);
 		background: #fef3c7;
@@ -578,12 +730,23 @@
 		margin-top: var(--space-md);
 		font-size: var(--text-sm);
 		line-height: var(--leading-relaxed);
+=======
+		color: var(--urgent-amber);
+		padding: 1.2rem;
+		background: #fef3c7;
+		border: 1px solid #fde68a;
+		border-radius: var(--radius-lg);
+		margin-top: 1rem;
+		font-size: var(--text-sm);
+		line-height: var(--leading-relaxed);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+>>>>>>> Stashed changes
 	}
 
 	@media (max-width: 640px) {
 		.container {
 			width: 100%;
-			padding: 1rem 0.75rem;
+			padding: var(--space-md) 0.75rem;
 		}
 
 		.compact-logo {
@@ -593,7 +756,7 @@
 		.logo-icon {
 			width: 40px;
 			height: 40px;
-			border-radius: 10px;
+			border-radius: var(--radius-md);
 		}
 
 		.toggle-procedural-btn {
@@ -602,11 +765,11 @@
 		}
 
 		.meeting-detail {
-			padding: 1.5rem;
+			padding: var(--space-lg);
 		}
 
 		.back-link {
-			font-size: 0.75rem;
+			font-size: var(--text-xs);
 		}
 
 		.top-nav {
@@ -614,7 +777,7 @@
 		}
 
 		.meeting-header {
-			margin-bottom: 1.5rem;
+			margin-bottom: var(--space-lg);
 		}
 
 		.meeting-header-row {
@@ -625,13 +788,13 @@
 		}
 
 		.meeting-title {
-			font-size: 1.3rem;
+			font-size: var(--text-xl);
 			word-wrap: break-word;
 			overflow-wrap: break-word;
 		}
 
 		.meeting-date {
-			font-size: 0.85rem;
+			font-size: var(--text-sm);
 		}
 
 		.meeting-meta-row {
@@ -647,7 +810,7 @@
 		.document-link {
 			width: auto;
 			padding: 0.4rem 0.7rem;
-			font-size: 0.75rem;
+			font-size: var(--text-xs);
 		}
 
 		.meeting-helper {
@@ -665,45 +828,45 @@
 
 		.meeting-summary {
 			padding: 0 0.5rem;
-			font-size: 1rem;
-			line-height: 1.7;
+			font-size: var(--text-base);
+			line-height: var(--leading-relaxed);
 			overflow-wrap: break-word;
 			word-wrap: break-word;
 		}
 
 		.meeting-summary :global(h1) {
-			font-size: 1.4rem;
-			margin-top: 1.5rem;
+			font-size: var(--text-xl);
+			margin-top: var(--space-lg);
 		}
 		.meeting-summary :global(h2) {
-			font-size: 1.25rem;
-			margin-top: 1.5rem;
+			font-size: var(--text-lg);
+			margin-top: var(--space-lg);
 		}
 		.meeting-summary :global(h3) {
-			font-size: 1.1rem;
-			margin-top: 1.25rem;
+			font-size: var(--text-base);
+			margin-top: var(--space-md);
 		}
 
 		.meeting-summary :global(p) {
-			margin: 1rem 0;
+			margin: var(--space-md) 0;
 		}
 
 		.meeting-summary :global(ul),
 		.meeting-summary :global(ol) {
-			padding-left: 1rem;
-			margin: 1rem 0;
+			padding-left: var(--space-md);
+			margin: var(--space-md) 0;
 		}
 
 		.meeting-summary :global(blockquote) {
-			margin: 1rem 0;
-			padding-left: 1rem;
+			margin: var(--space-md) 0;
+			padding-left: var(--space-md);
 		}
 
 		.meeting-summary :global(pre) {
-			margin: 1rem 0;
+			margin: var(--space-md) 0;
 			padding: 0.75rem;
 			overflow-x: auto;
-			font-size: 0.85rem;
+			font-size: var(--text-sm);
 		}
 	}
 </style>

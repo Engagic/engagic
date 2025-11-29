@@ -104,7 +104,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.5rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0;
 	}
 
@@ -213,8 +213,8 @@
 		}
 
 		.mobile-back-button:hover {
-			color: var(--text-primary);
-			background: var(--surface-hover);
+			color: var(--text);
+			background: var(--surface-secondary);
 			border-radius: var(--radius-sm);
 		}
 	}

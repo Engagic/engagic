@@ -111,6 +111,7 @@
 </a>
 
 <style>
+<<<<<<< Updated upstream
 	.card {
 		display: block;
 		background: var(--surface-card);
@@ -138,6 +139,37 @@
 
 	.card.urgent {
 		border-left: 3px solid var(--action-coral);
+=======
+	/* Status border indicates document availability */
+	.meeting-card.status-border-ai {
+		border-left: 3px solid var(--color-success);
+	}
+
+	.meeting-card.status-border-agenda {
+		border-left: 3px solid var(--color-warning);
+	}
+
+	.meeting-card.status-border-packet {
+		border-left: 3px solid var(--color-action);
+	}
+
+	.meeting-card.status-border-none {
+		border-left: 3px solid var(--border);
+	}
+
+	/* Alert state takes precedence */
+	.meeting-card.has-alert {
+		border-left: 3px solid var(--color-error);
+	}
+
+	/* Past meetings are de-emphasized */
+	.meeting-card.past-meeting {
+		opacity: 0.7;
+	}
+
+	.meeting-card.past-meeting:hover {
+		opacity: 1;
+>>>>>>> Stashed changes
 	}
 
 	.card.soon {
@@ -156,9 +188,14 @@
 
 	.card-content {
 		display: flex;
+<<<<<<< Updated upstream
 		justify-content: space-between;
 		align-items: flex-start;
 		gap: var(--space-lg);
+=======
+		gap: var(--space-md);
+		margin-top: var(--space-sm);
+>>>>>>> Stashed changes
 	}
 
 	.main {
@@ -190,6 +227,7 @@
 		flex-shrink: 0;
 	}
 
+<<<<<<< Updated upstream
 	.action-btn {
 		display: inline-flex;
 		align-items: center;
@@ -253,11 +291,23 @@
 	.urgency-badge.soon {
 		background: var(--urgent-amber);
 		color: #1a1a1a;
+=======
+	.status-icon {
+		margin-right: 0.25rem;
+	}
+
+	.meeting-alert {
+		color: var(--color-error);
+		font-weight: var(--font-semibold);
+		font-size: var(--text-sm);
+		margin-top: var(--space-xs);
+>>>>>>> Stashed changes
 	}
 
 	@media (max-width: 640px) {
 		.card-content {
 			flex-direction: column;
+<<<<<<< Updated upstream
 			gap: var(--space-md);
 		}
 
@@ -265,6 +315,15 @@
 			flex-direction: row;
 			align-items: center;
 			width: 100%;
+=======
+			align-items: flex-start;
+			gap: var(--space-sm);
+		}
+
+		.meeting-card-body {
+			flex-direction: column;
+			gap: var(--space-sm);
+>>>>>>> Stashed changes
 		}
 
 		.action-btn {

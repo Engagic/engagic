@@ -40,58 +40,95 @@
 	<meta name="description" content="Track legislative matters and civic activity across {stateName}" />
 </svelte:head>
 
-<div class="state-page">
-	<div class="state-container">
-		<div class="breadcrumb">
-			<a href="/" class="breadcrumb-link">← Back to Search</a>
-		</div>
+<div class="container">
+	<a href="/" class="compact-logo">
+		<img src="/icon-64.png" alt="engagic" class="logo-icon" />
+	</a>
 
-		<StateMetrics
-			stateCode={data.stateCode}
-			stateName={stateName}
-			initialMetrics={data.metrics}
-		/>
+	<div class="state-header">
+		<a href="/" class="back-link">← Back to search</a>
+		<h1 class="state-title">{stateName}</h1>
 	</div>
+
+	<StateMetrics
+		stateCode={data.stateCode}
+		stateName={stateName}
+		initialMetrics={data.metrics}
+	/>
 
 	<Footer />
 </div>
 
 <style>
-	.state-page {
-		width: 100%;
+	.container {
+		width: var(--width-state);
+		max-width: 100%;
+		margin: 0 auto;
+		padding: var(--space-xl) var(--space-md);
 		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
-		padding: 2rem 1rem;
+		position: relative;
 	}
 
-	.state-container {
-		width: 100%;
-		max-width: 1400px;
-		margin: 0 auto;
+	.compact-logo {
+		position: absolute;
+		top: 0;
+		right: 1rem;
+		z-index: 10;
+		transition: transform var(--transition-fast);
 	}
 
-	.breadcrumb {
-		margin-bottom: 1.5rem;
+	.compact-logo:hover {
+		transform: scale(1.05);
 	}
 
-	.breadcrumb-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-		color: var(--text-link);
+	.logo-icon {
+		width: 48px;
+		height: 48px;
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-md);
+	}
+
+	.state-header {
+		margin-bottom: var(--space-xl);
+	}
+
+	.back-link {
+		display: inline-block;
+		margin-bottom: var(--space-md);
+		color: var(--color-action);
 		text-decoration: none;
-		transition: color 0.2s ease;
-		font-weight: 500;
+		font-family: var(--font-mono);
+		font-weight: var(--font-medium);
+		transition: color var(--transition-fast);
 	}
 
-	.breadcrumb-link:hover {
-		color: var(--civic-accent);
+	.back-link:hover {
+		color: var(--color-action-hover);
 		text-decoration: underline;
 	}
 
+	.state-title {
+		font-family: var(--font-mono);
+		font-size: var(--text-3xl);
+		color: var(--text);
+		margin: 0;
+		font-weight: var(--font-semibold);
+	}
+
 	@media (max-width: 768px) {
-		.state-page {
-			padding: 1rem 0.5rem;
+		.container {
+			padding: var(--space-lg) var(--space-md);
+		}
+
+		.logo-icon {
+			width: 40px;
+			height: 40px;
+		}
+
+		.state-title {
+			font-size: var(--text-2xl);
 		}
 	}
 </style>

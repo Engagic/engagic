@@ -303,8 +303,8 @@
 
 <style>
 	.state-metrics {
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		background: var(--surface);
+		border: 2px solid var(--border);
 		border-radius: 16px;
 		padding: 2rem;
 		margin: 2rem 0;
@@ -321,25 +321,25 @@
 	.error-text {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	.error-text {
-		color: var(--civic-red);
+		color: var(--color-error);
 	}
 
 	/* Dashboard Header */
 	.dashboard-header {
 		margin-bottom: 2rem;
 		padding-bottom: 1.5rem;
-		border-bottom: 1px solid var(--border-primary);
+		border-bottom: 1px solid var(--border);
 	}
 
 	.dashboard-title {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 1.75rem;
 		font-weight: 700;
-		color: var(--text-primary);
+		color: var(--text);
 		margin: 0 0 0.5rem 0;
 		letter-spacing: -0.5px;
 	}
@@ -349,7 +349,7 @@
 		font-size: 0.8rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		font-weight: 500;
 	}
 
@@ -362,8 +362,8 @@
 	}
 
 	.metric-card {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 1.25rem;
 		transition: all 0.2s ease;
@@ -371,7 +371,7 @@
 	}
 
 	.metric-card:hover {
-		border-color: var(--civic-blue);
+		border-color: var(--color-action);
 		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
 		transform: translateY(-2px);
 	}
@@ -381,7 +381,7 @@
 		font-size: 0.7rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		font-weight: 600;
 		margin-bottom: 0.75rem;
 	}
@@ -390,7 +390,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 2.5rem;
 		font-weight: 700;
-		color: var(--text-primary);
+		color: var(--text);
 		margin-bottom: 0.25rem;
 		line-height: 1;
 	}
@@ -398,7 +398,7 @@
 	.metric-change {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	/* Cities Section */
@@ -406,7 +406,7 @@
 		margin: 2rem 0;
 		padding: 1.5rem;
 		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
+		border: 1px solid var(--border);
 		border-radius: 12px;
 	}
 
@@ -420,8 +420,8 @@
 	.city-card {
 		display: block;
 		padding: 1rem;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 8px;
 		text-decoration: none;
 		transition: all 0.2s ease;
@@ -429,7 +429,7 @@
 	}
 
 	.city-card:hover {
-		border-color: var(--civic-blue);
+		border-color: var(--color-action);
 		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
 		transform: translateY(-2px);
 	}
@@ -438,14 +438,14 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 		margin-bottom: 0.25rem;
 	}
 
 	.city-vendor {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
@@ -454,7 +454,7 @@
 		margin-top: 2rem;
 		padding: 2rem;
 		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
+		border: 1px solid var(--border);
 		border-radius: 8px;
 		text-align: center;
 	}
@@ -463,12 +463,12 @@
 		margin: 0 0 0.5rem 0;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.no-matters-message .explanation {
 		font-size: 0.8rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	.topics-section {
@@ -479,7 +479,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 		font-weight: 600;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 		margin: 0 0 1rem 0;
@@ -496,8 +496,8 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem 1rem;
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		background: var(--surface);
+		border: 2px solid var(--border);
 		border-radius: 24px;
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -505,30 +505,30 @@
 	}
 
 	.topic-pill:hover {
-		border-color: var(--civic-blue);
+		border-color: var(--color-action);
 		transform: translateY(-2px);
 		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
 	}
 
 	.topic-pill.selected {
-		background: var(--civic-blue);
-		border-color: var(--civic-blue);
+		background: var(--color-action);
+		border-color: var(--color-action);
 	}
 
 	.pill-label {
 		font-size: 0.85rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.topic-pill.selected .pill-label {
-		color: var(--civic-white);
+		color: white;
 	}
 
 	.pill-count {
 		font-size: 0.75rem;
 		font-weight: 700;
-		color: var(--civic-blue);
+		color: var(--color-action);
 		background: var(--surface-hover);
 		padding: 0.15rem 0.5rem;
 		border-radius: 12px;
@@ -537,19 +537,19 @@
 	}
 
 	.topic-pill.selected .pill-count {
-		color: var(--civic-blue);
-		background: var(--surface-primary);
+		color: var(--color-action);
+		background: var(--surface);
 	}
 
 	.filter-indicator {
 		margin-top: 1rem;
 		padding: 0.75rem 1rem;
-		background: var(--badge-info-bg);
-		border: 1px solid var(--badge-info-border);
+		background: var(--color-info-soft);
+		border: 1px solid var(--color-info);
 		border-radius: 8px;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
-		color: var(--badge-info-text);
+		color: var(--color-info);
 		display: flex;
 		align-items: center;
 		gap: 1rem;
@@ -558,8 +558,8 @@
 
 	.clear-filter {
 		padding: 0.25rem 0.75rem;
-		background: var(--civic-blue);
-		color: var(--civic-white);
+		background: var(--color-action);
+		color: white;
 		border: none;
 		border-radius: 6px;
 		font-family: 'IBM Plex Mono', monospace;
@@ -570,7 +570,7 @@
 	}
 
 	.clear-filter:hover {
-		background: var(--civic-accent);
+		background: var(--color-action-hover);
 	}
 
 	.recent-matters {
@@ -581,9 +581,9 @@
 
 	.recent-matter {
 		display: block;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-left: 4px solid var(--color-action);
 		border-radius: 8px;
 		padding: 1rem 1.25rem;
 		transition: all 0.2s ease;
@@ -592,7 +592,7 @@
 	}
 
 	.recent-matter:hover {
-		border-left-color: var(--civic-accent);
+		border-left-color: var(--color-action-hover);
 		box-shadow: 0 2px 8px var(--shadow-md);
 		transform: translateX(2px);
 	}
@@ -628,13 +628,13 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 600;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	.matter-date {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	.appearance-badge {
@@ -652,7 +652,7 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 0.95rem;
 		line-height: 1.4;
-		color: var(--text-primary);
+		color: var(--text);
 		margin-bottom: 0.5rem;
 	}
 
@@ -667,7 +667,7 @@
 		font-size: 0.65rem;
 		padding: 0.2rem 0.5rem;
 		background: var(--surface-secondary);
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		border-radius: 4px;
 		font-weight: 500;
 	}
@@ -681,8 +681,8 @@
 	}
 
 	.intel-panel {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 1.5rem;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -701,7 +701,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 		font-weight: 600;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 		margin: 0 0 1.25rem 0;
@@ -717,7 +717,7 @@
 	.intel-item {
 		display: block;
 		padding-bottom: 1rem;
-		border-bottom: 1px solid var(--border-primary);
+		border-bottom: 1px solid var(--border);
 		text-decoration: none;
 		cursor: pointer;
 		transition: all 0.2s ease;
@@ -767,14 +767,14 @@
 		font-family: Georgia, 'Times New Roman', Times, serif;
 		font-size: 0.9rem;
 		line-height: 1.4;
-		color: var(--text-primary);
+		color: var(--text);
 		margin-bottom: 0.25rem;
 	}
 
 	.intel-meta {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	/* City Ranking */
@@ -809,8 +809,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--civic-blue);
-		color: var(--civic-white);
+		background: var(--color-action);
+		color: white;
 		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 700;
 		font-size: 0.9rem;
@@ -825,13 +825,13 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.rank-count {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		color: var(--civic-gray);
+		color: var(--text-muted);
 	}
 
 	/* Type Breakdown */
@@ -853,7 +853,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 600;
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	.type-bar-container {
@@ -866,7 +866,7 @@
 
 	.type-bar {
 		height: 100%;
-		background: linear-gradient(90deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
+		background: linear-gradient(90deg, var(--color-action) 0%, var(--color-action-hover) 100%);
 		transition: width 0.3s ease;
 		border-radius: 4px;
 	}
@@ -878,7 +878,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 		font-weight: 700;
-		color: var(--text-primary);
+		color: var(--text);
 	}
 
 	@media (max-width: 1024px) {

@@ -43,14 +43,14 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.75rem 1.25rem;
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		background: var(--surface);
+		border: 2px solid var(--border);
 		border-radius: 50px;
 		cursor: pointer;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 500;
-		color: var(--text-primary);
+		color: var(--text);
 		box-shadow: 0 4px 12px var(--shadow-sm);
 		transition: all 0.3s ease;
 		z-index: 999;

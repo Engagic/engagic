@@ -124,12 +124,19 @@
 		gap: 0;
 		margin: var(--space-lg) 0;
 		align-items: stretch;
+<<<<<<< Updated upstream
 		border-radius: var(--radius-lg);
 		overflow: hidden;
+=======
+		border-radius: var(--radius-md);
+		overflow: hidden;
+		box-shadow: 0 4px 12px var(--shadow-md);
+>>>>>>> Stashed changes
 	}
 
 	.participation-box {
 		flex: 1;
+<<<<<<< Updated upstream
 		padding: var(--space-lg);
 		background: var(--surface-warm);
 		border: 2px solid var(--action-coral);
@@ -141,6 +148,22 @@
 	:global(.dark) .participation-box {
 		background: rgba(249, 115, 22, 0.1);
 		border-color: var(--action-coral);
+=======
+		padding: 1.25rem 1.5rem;
+		background: var(--surface-warm);
+		border: 2px solid var(--color-action);
+		border-right: 1px solid var(--color-action);
+		border-radius: var(--radius-md) 0 0 var(--radius-md);
+		box-shadow: none;
+		transition: all var(--transition-slow);
+	}
+
+	:global(.dark) .participation-box {
+		background: var(--surface-card);
+		border: 2px solid var(--color-action);
+		border-right: 1px solid var(--color-action);
+		box-shadow: none;
+>>>>>>> Stashed changes
 	}
 
 	.viewing-box {
@@ -166,6 +189,7 @@
 	}
 
 	.viewing-label {
+<<<<<<< Updated upstream
 		font-family: var(--font-body);
 		font-weight: var(--font-semibold);
 		color: var(--text-muted);
@@ -177,6 +201,19 @@
 
 	:global(.dark) .viewing-label {
 		color: var(--text-muted);
+=======
+		font-family: var(--font-mono);
+		font-weight: var(--font-semibold);
+		color: var(--badge-blue-text);
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		transition: color var(--transition-slow);
+	}
+
+	:global(.dark) .viewing-label {
+		color: var(--badge-blue-text);
+>>>>>>> Stashed changes
 	}
 
 	.viewing-content {
@@ -192,15 +229,22 @@
 	}
 
 	.viewing-link {
+<<<<<<< Updated upstream
 		color: var(--text);
 		text-decoration: none;
 		font-family: var(--font-body);
+=======
+		color: var(--badge-blue-text);
+		text-decoration: none;
+		font-family: var(--font-mono);
+>>>>>>> Stashed changes
 		font-size: var(--text-sm);
 		font-weight: var(--font-medium);
 		transition: color var(--transition-fast);
 	}
 
 	:global(.dark) .viewing-link {
+<<<<<<< Updated upstream
 		color: var(--text);
 	}
 
@@ -214,6 +258,30 @@
 		font-family: var(--font-body);
 		font-size: var(--text-sm);
 		font-weight: var(--font-medium);
+=======
+		color: var(--badge-blue-text);
+	}
+
+	.viewing-link:hover {
+		color: var(--color-action);
+		text-decoration: underline;
+	}
+
+	:global(.dark) .viewing-link:hover {
+		color: var(--color-action);
+	}
+
+	.viewing-text {
+		color: var(--badge-blue-text);
+		font-family: var(--font-mono);
+		font-size: var(--text-sm);
+		font-weight: var(--font-medium);
+		transition: color var(--transition-slow);
+	}
+
+	:global(.dark) .viewing-text {
+		color: var(--badge-blue-text);
+>>>>>>> Stashed changes
 	}
 
 	.viewing-icon {
@@ -262,6 +330,7 @@
 
 	.participation-label {
 		font-family: var(--font-body);
+<<<<<<< Updated upstream
 		font-weight: var(--font-bold);
 		color: var(--action-coral);
 		font-size: var(--text-sm);
@@ -271,6 +340,18 @@
 
 	:global(.dark) .participation-label {
 		color: var(--action-coral);
+=======
+		font-weight: var(--font-semibold);
+		color: var(--color-action);
+		font-size: var(--text-sm);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		transition: color var(--transition-slow);
+	}
+
+	:global(.dark) .participation-label {
+		color: var(--color-action);
+>>>>>>> Stashed changes
 	}
 
 	.streaming-toggle-mobile {
@@ -341,7 +422,11 @@
 
 	.participation-badge {
 		padding: 0.2rem 0.6rem;
+<<<<<<< Updated upstream
 		border-radius: var(--radius-full);
+=======
+		border-radius: var(--radius-sm);
+>>>>>>> Stashed changes
 		font-size: var(--text-xs);
 		font-weight: var(--font-medium);
 		font-family: var(--font-body);
@@ -378,7 +463,11 @@
 	}
 
 	.participation-link {
+<<<<<<< Updated upstream
 		color: var(--text);
+=======
+		color: var(--color-action);
+>>>>>>> Stashed changes
 		text-decoration: none;
 		font-family: var(--font-body);
 		font-size: var(--text-sm);
@@ -387,6 +476,7 @@
 	}
 
 	:global(.dark) .participation-link {
+<<<<<<< Updated upstream
 		color: var(--text);
 	}
 
@@ -395,11 +485,30 @@
 		text-decoration: underline;
 	}
 
+=======
+		color: var(--color-action);
+	}
+
+	.participation-link:hover {
+		color: var(--color-action-hover);
+		text-decoration: underline;
+	}
+
+	:global(.dark) .participation-link:hover {
+		color: var(--civic-orange);
+	}
+
+>>>>>>> Stashed changes
 	.meeting-id {
 		color: var(--text-muted);
 		font-size: var(--text-xs);
 		font-family: var(--font-mono);
+<<<<<<< Updated upstream
 		margin-left: var(--space-sm);
+=======
+		margin-left: 0.5rem;
+		transition: color var(--transition-slow);
+>>>>>>> Stashed changes
 	}
 
 	:global(.dark) .meeting-id {
@@ -407,6 +516,7 @@
 	}
 
 	.participation-text {
+<<<<<<< Updated upstream
 		color: var(--text);
 		font-family: var(--font-body);
 		font-size: var(--text-sm);
@@ -415,5 +525,16 @@
 
 	:global(.dark) .participation-text {
 		color: var(--text);
+=======
+		color: var(--color-action);
+		font-family: var(--font-body);
+		font-size: var(--text-sm);
+		font-weight: var(--font-medium);
+		transition: color var(--transition-slow);
+	}
+
+	:global(.dark) .participation-text {
+		color: var(--color-action);
+>>>>>>> Stashed changes
 	}
 </style>
