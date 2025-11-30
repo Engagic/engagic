@@ -89,7 +89,7 @@ cmd_restart_api() {
 
 cmd_logs_api() {
     log_info "Streaming API logs (Ctrl+C to exit)..."
-    sudo journalctl -u $API_SERVICE -f
+    sudo journalctl -u $API_SERVICE -n 50 -f
 }
 
 cmd_status_api() {
