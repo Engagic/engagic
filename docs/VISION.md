@@ -1,6 +1,6 @@
 # Engagic Vision
 
-**Last Updated:** November 20, 2025
+**Last Updated:** December 1, 2025
 
 ---
 
@@ -89,7 +89,7 @@ Features (to build):
 
 ---
 
-## Current State (November 2025)
+## Current State (December 2025)
 
 **What Works:**
 - ✅ 500+ cities, 374+ with item-level processing (58% coverage)
@@ -97,21 +97,22 @@ Features (to build):
 - ✅ Topic extraction (16 canonical topics, frontend displays)
 - ✅ Participation info (email/phone/Zoom, one-click civic action)
 - ✅ Cache-first API (<100ms response times)
-- ✅ Modular architecture (6 logical clusters, Repository Pattern, clean separation)
-- ✅ Production-ready codebase (82% readiness): Zero linting errors, zero critical anti-patterns, 141+ explicit exception raises, transaction context managers universal, parameterized SQL throughout
-- ✅ Architectural consistency (68%): Error handling (65%), data models (85%), logging (38%), transactions (100%), validation (50%)
-- ✅ Matter evolution timeline (architectural surprise): Matters-first architecture gives legislative timeline tracking for free - items store frozen summaries, matter_appearances tracks each occurrence, enabling "this bill was amended between readings" intelligence without migrations
+- ✅ Modular architecture (7 logical clusters, Repository Pattern, clean separation)
+- ✅ Production-ready codebase (82% readiness): Zero linting errors, zero critical anti-patterns
+- ✅ **User accounts/profiles** (magic link auth, city + keyword subscriptions)
+- ✅ **Weekly digest emails** (Sundays 9am via Mailgun, keyword matching)
+- ✅ **Council member + voting infrastructure** (schema, repos, Legistar extraction)
+
+**In Progress:**
+- Council member API endpoints and frontend pages
+- Vote extraction for more adapters
 
 **What's Missing:**
-- ❌ User accounts/profiles
-- ❌ Email notifications/alerts
-- ❌ Weekly digest emails
 - ❌ Mobile PWA notifications
+- ❌ Unsubscribe flow
+- ❌ Campaign finance / donor tracking
 
-**Most Requested:**
-"Email me when my city discusses zoning/housing/budget"
-
-**Current Users:** Civic hackers and researchers. Average citizens can browse but can't subscribe yet.
+**Current Users:** Civilians can now subscribe to cities and keywords and receive weekly digests.
 
 See `CLAUDE.md` for detailed architecture and `CHANGELOG.md` for historical changes.
 
@@ -135,27 +136,29 @@ See `CLAUDE.md` for detailed architecture and `CHANGELOG.md` for historical chan
 **Implementation:** Reactive Svelte templating, collapsible thinking sections
 **Impact:** Users can verify AI reasoning, builds trust
 
-### Phase 2: User Profiles (Core Growth)
+### Phase 2: User Profiles (Core Growth) - COMPLETE
 **Goal:** Let civilians subscribe to cities and topics
+**Status:** DEPLOYED (November 2025)
 
-**Implementation:**
-- Simple profile: city + topics (no passwords yet, just email-based magic links?)
-- Database: `user_profiles`, `user_subscriptions`
-- Minimal onboarding: "Enter your email and city"
-- Topic selection from extracted taxonomy
+**Implemented:**
+- Magic link authentication (JWT, 15-min expiry)
+- User profiles with city + keyword subscriptions
+- Dashboard API and frontend integration
+- PostgreSQL `userland` schema
 
-**Why:** Unlocks alert system and retention
-
-### Phase 3: Alerts & Notifications
+### Phase 3: Alerts & Notifications - COMPLETE
 **Goal:** Notify users when relevant meetings happen
+**Status:** DEPLOYED (November 2025)
 
-**Implementation:**
-- Topic matching: compare meeting topics to user subscriptions
-- Email alerts: "Your city is discussing zoning tonight"
-- PWA push notifications: iOS/Android via service workers
-- Weekly digest: summary of all relevant meetings
+**Implemented:**
+- Weekly digest emails (Sundays 9am via Mailgun)
+- Keyword matching on item summaries
+- Matter-based deduplication
+- Keyword highlighting in emails
 
-**Why:** Core user value, drives engagement
+**Remaining:**
+- PWA push notifications (future)
+- Unsubscribe flow
 
 ### Phase 4: Integrations (Decentralized Discourse)
 **Goal:** Enable community discussion on decentralized platforms
