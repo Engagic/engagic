@@ -24,6 +24,8 @@ from database.repositories_async import (
     QueueRepository,
     SearchRepository,
 )
+from database.repositories_async.engagement import EngagementRepository
+from database.repositories_async.feedback import FeedbackRepository
 from database.repositories_async.userland import UserlandRepository
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
@@ -98,6 +100,8 @@ class Database:
         self.queue = QueueRepository(pool)
         self.search = SearchRepository(pool)
         self.userland = UserlandRepository(pool)
+        self.engagement = EngagementRepository(pool)
+        self.feedback = FeedbackRepository(pool)
 
         logger.info("database initialized with repositories", pool_size=f"{pool._minsize}-{pool._maxsize}")
 
@@ -185,6 +189,58 @@ class Database:
             await conn.execute(userland_schema_sql)
 
         logger.info("userland schema initialized")
+
+    # ==================
+    # VOTE TALLY HELPERS
+    # ==================
+
+    def _compute_vote_tally(self, votes: List[Dict]) -> Dict[str, int]:
+        """Compute vote tally from raw vote data
+
+        Args:
+            votes: List of vote dicts with 'vote' key
+
+        Returns:
+            Dict with counts: {yes, no, abstain, absent}
+        """
+        tally = {"yes": 0, "no": 0, "abstain": 0, "absent": 0}
+
+        for vote in votes:
+            vote_value = vote.get("vote", "").lower().strip()
+
+            # Map to canonical values
+            if vote_value in ("yes", "aye", "yea"):
+                tally["yes"] += 1
+            elif vote_value in ("no", "nay"):
+                tally["no"] += 1
+            elif vote_value in ("abstain", "abstained"):
+                tally["abstain"] += 1
+            elif vote_value in ("absent", "excused", "not present", "present", "recused", "not_voting"):
+                tally["absent"] += 1
+
+        return tally
+
+    def _determine_vote_outcome(self, tally: Dict[str, int]) -> str:
+        """Determine vote outcome from tally
+
+        Args:
+            tally: Dict with vote counts
+
+        Returns:
+            Outcome string: passed, failed, tabled, no_vote
+        """
+        yes_count = tally.get("yes", 0)
+        no_count = tally.get("no", 0)
+
+        if yes_count == 0 and no_count == 0:
+            return "no_vote"
+
+        if yes_count > no_count:
+            return "passed"
+        elif no_count > yes_count:
+            return "failed"
+        else:
+            return "tabled"  # Tie
 
     # ==================
     # ORCHESTRATION METHODS
@@ -552,6 +608,26 @@ class Database:
                         meeting_id=meeting.id,
                         votes=votes,
                         vote_date=meeting.date,
+                    )
+
+                    # Compute vote tally and outcome for matter_appearances
+                    vote_tally = self._compute_vote_tally(votes)
+                    vote_outcome = self._determine_vote_outcome(vote_tally)
+
+                    # Update matter_appearances with outcome (closed loop tracking)
+                    await self.matters.update_appearance_outcome(
+                        matter_id=matter_composite_id,
+                        meeting_id=meeting.id,
+                        item_id=agenda_item.id,
+                        vote_outcome=vote_outcome,
+                        vote_tally=vote_tally,
+                    )
+
+                    logger.debug(
+                        "recorded vote outcome",
+                        matter_id=matter_composite_id,
+                        outcome=vote_outcome,
+                        tally=vote_tally,
                     )
 
             except Exception as e:

@@ -7,9 +7,10 @@ Handles CRUD operations for matters (recurring legislative items):
 - Timeline tracking (first_seen, last_seen, appearance_count)
 """
 
-from typing import Dict, List, Optional
+import json
 from collections import defaultdict
 from datetime import datetime
+from typing import Dict, List, Optional
 
 from database.repositories_async.base import BaseRepository
 from database.models import Matter, AttachmentInfo, MatterMetadata
@@ -477,3 +478,134 @@ class MatterRepository(BaseRepository):
                 )
 
             return matters
+
+    async def update_appearance_outcome(
+        self,
+        matter_id: str,
+        meeting_id: str,
+        item_id: str,
+        vote_outcome: str,
+        vote_tally: dict
+    ) -> None:
+        """Update matter appearance with vote outcome and tally
+
+        Called after processing votes for an item. Records the
+        per-meeting outcome (passed/failed/etc) and vote counts.
+
+        Args:
+            matter_id: Composite matter ID
+            meeting_id: Meeting identifier
+            item_id: Item identifier
+            vote_outcome: Result: passed, failed, tabled, referred, amended, no_vote
+            vote_tally: Vote counts dict: {yes: N, no: N, abstain: N, absent: N}
+        """
+        async with self.transaction() as conn:
+            await conn.execute(
+                """
+                UPDATE matter_appearances
+                SET vote_outcome = $1, vote_tally = $2::jsonb
+                WHERE matter_id = $3 AND meeting_id = $4 AND item_id = $5
+                """,
+                vote_outcome,
+                json.dumps(vote_tally),
+                matter_id,
+                meeting_id,
+                item_id,
+            )
+
+        logger.debug(
+            "updated appearance outcome",
+            matter_id=matter_id,
+            meeting_id=meeting_id,
+            outcome=vote_outcome
+        )
+
+    async def update_status(
+        self,
+        matter_id: str,
+        status: str,
+        final_vote_date: Optional[datetime] = None
+    ) -> None:
+        """Update matter disposition status
+
+        Called when a matter reaches a terminal state (passed, failed, etc).
+        Sets the status and records when the final vote occurred.
+
+        Args:
+            matter_id: Composite matter ID
+            status: Disposition: passed, failed, tabled, withdrawn, etc.
+            final_vote_date: Date of final vote (optional)
+        """
+        async with self.transaction() as conn:
+            await conn.execute(
+                """
+                UPDATE city_matters
+                SET status = $1,
+                    final_vote_date = COALESCE($2, final_vote_date),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $3
+                """,
+                status,
+                final_vote_date,
+                matter_id,
+            )
+
+        logger.info(
+            "updated matter status",
+            matter_id=matter_id,
+            status=status,
+            final_vote_date=final_vote_date
+        )
+
+    async def get_matter_with_votes(self, matter_id: str) -> Optional[dict]:
+        """Get matter with full vote history across all meetings
+
+        Returns matter data enriched with vote timeline showing
+        each appearance, outcome, and tally.
+
+        Args:
+            matter_id: Composite matter ID
+
+        Returns:
+            Dict with matter data and vote_history array, or None
+        """
+        async with self.pool.acquire() as conn:
+            # Get matter
+            matter = await self.get_matter(matter_id)
+            if not matter:
+                return None
+
+            # Get vote history from appearances
+            appearances = await conn.fetch(
+                """
+                SELECT
+                    ma.meeting_id,
+                    ma.appeared_at,
+                    ma.committee,
+                    ma.vote_outcome,
+                    ma.vote_tally,
+                    m.title as meeting_title
+                FROM matter_appearances ma
+                JOIN meetings m ON m.id = ma.meeting_id
+                WHERE ma.matter_id = $1
+                ORDER BY ma.appeared_at DESC
+                """,
+                matter_id,
+            )
+
+            vote_history = [
+                {
+                    "meeting_id": row["meeting_id"],
+                    "meeting_title": row["meeting_title"],
+                    "date": row["appeared_at"].isoformat() if row["appeared_at"] else None,
+                    "committee": row["committee"],
+                    "outcome": row["vote_outcome"],
+                    "tally": row["vote_tally"],
+                }
+                for row in appearances
+            ]
+
+            return {
+                "matter": matter,
+                "vote_history": vote_history,
+            }
