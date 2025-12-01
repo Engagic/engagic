@@ -3,6 +3,7 @@ Monitoring and health check API routes
 """
 
 from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 

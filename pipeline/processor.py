@@ -18,6 +18,7 @@ from typing import List, Optional, Dict, Any
 from database.db_postgres import Database
 from database.models import Meeting, Matter, MatterMetadata, ParticipationInfo
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
+from pipeline.utils import hash_attachments
 from exceptions import ProcessingError, ExtractionError, LLMError
 from analysis.analyzer_async import AsyncAnalyzer
 from analysis.topics.normalizer import get_normalizer
@@ -1104,6 +1105,13 @@ class Processor:
                         topics=normalized_topics,
                     )
 
+                    if item.matter_id:
+                        await self._store_canonical_summary(
+                            item=item,
+                            summary=result["summary"],
+                            topics=normalized_topics,
+                        )
+
                     processed_items.append({
                         "sequence": item.sequence,
                         "title": item.title,
@@ -1121,6 +1129,44 @@ class Processor:
                     )
 
         return processed_items, failed_items
+
+    async def _store_canonical_summary(
+        self,
+        item,
+        summary: str,
+        topics: List[str],
+    ) -> None:
+        """Store canonical summary for matter deduplication across meetings."""
+        banana = extract_banana_from_matter_id(item.matter_id)
+        if not banana:
+            logger.warning(
+                "could not extract banana from matter_id",
+                matter_id=item.matter_id
+            )
+            return
+
+        attachment_hash = hash_attachments(item.attachments or [])
+        existing_matter = await self.db.matters.get_matter(item.matter_id)
+
+        matter_obj = Matter(
+            id=item.matter_id,
+            banana=banana,
+            matter_id=existing_matter.matter_id if existing_matter else None,
+            matter_file=item.matter_file,
+            matter_type=item.matter_type,
+            title=item.title,
+            sponsors=getattr(item, 'sponsors', []),
+            canonical_summary=summary,
+            canonical_topics=topics,
+            attachments=item.attachments,
+            metadata=MatterMetadata(attachment_hash=attachment_hash),
+            first_seen=None,
+            last_seen=None,
+            appearance_count=1,
+        )
+
+        await self.db.matters.store_matter(matter_obj)
+        logger.info("stored canonical summary", matter_id=item.matter_id)
 
     def _aggregate_meeting_topics(self, processed_items: List[Dict]) -> List[str]:
         """Aggregate topics from processed items, sorted by frequency"""

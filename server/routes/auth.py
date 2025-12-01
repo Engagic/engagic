@@ -8,7 +8,7 @@ import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
@@ -249,9 +249,11 @@ async def verify_magic_link(token: str, response: Response, request: Request):
     # Set secure cookie
     cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
     cookie_samesite_str = os.getenv("COOKIE_SAMESITE", "lax").lower()
-    # Type-safe samesite value
+    # Type-safe samesite value - validate then cast
     cookie_samesite: Literal["lax", "strict", "none"] = (
-        "lax" if cookie_samesite_str not in ("lax", "strict", "none") else cookie_samesite_str  # type: ignore
+        cast(Literal["lax", "strict", "none"], cookie_samesite_str)
+        if cookie_samesite_str in ("lax", "strict", "none")
+        else "lax"
     )
 
     response.set_cookie(
@@ -322,7 +324,9 @@ async def refresh_access_token(request: Request, response: Response):
     cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
     cookie_samesite_str = os.getenv("COOKIE_SAMESITE", "lax").lower()
     cookie_samesite: Literal["lax", "strict", "none"] = (
-        "lax" if cookie_samesite_str not in ("lax", "strict", "none") else cookie_samesite_str  # type: ignore
+        cast(Literal["lax", "strict", "none"], cookie_samesite_str)
+        if cookie_samesite_str in ("lax", "strict", "none")
+        else "lax"
     )
 
     response.set_cookie(

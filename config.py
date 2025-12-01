@@ -198,7 +198,7 @@ class Config:
         Note: Only creates directories when actually needed, not at import time
         """
         if not os.path.exists(self.DB_DIR):
-            logger.info("creating data directory", path=self.DB_DIR)
+            get_logger("engagic.config").info("creating data directory", path=self.DB_DIR)
             os.makedirs(self.DB_DIR, exist_ok=True)
         return self.DB_DIR
 

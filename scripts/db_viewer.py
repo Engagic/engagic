@@ -89,10 +89,10 @@ class DatabaseViewer:
             # Search for matching cities
             all_cities = await self.db.cities.get_cities(status="active", limit=1000)
             matching_bananas = [
-                c['banana']
+                c.banana
                 for c in all_cities
-                if city_filter.lower() in c['name'].lower()
-                or city_filter.lower() in c['banana'].lower()
+                if city_filter.lower() in c.name.lower()
+                or city_filter.lower() in c.banana.lower()
             ]
 
             if not matching_bananas:

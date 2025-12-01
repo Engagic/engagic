@@ -148,15 +148,12 @@ class VendorHTTPError(VendorError):
         self.status_code = status_code
         self.url = url
 
-        context = {'vendor': vendor}
-        if status_code:
-            context['status_code'] = status_code
-        if url:
-            context['url'] = url
-        if city_slug:
-            context['city_slug'] = city_slug
+        super().__init__(message, vendor, city_slug)
 
-        super().__init__(message, context)
+        if status_code:
+            self.context['status_code'] = status_code
+        if url:
+            self.context['url'] = url
 
     @property
     def is_retryable(self) -> bool:
