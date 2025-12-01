@@ -28,6 +28,7 @@ ADAPTER_SKIP_PATTERNS = [
     r'invocation',
     r'pledge of allegiance',
     r'approval of (minutes|agenda)',
+    r'approve the minutes',  # Austin variant ("approve the minutes of...")
     r'adopt minutes',
     r'review of minutes',
     r'^minutes of',  # Standalone minutes items
@@ -35,6 +36,8 @@ ADAPTER_SKIP_PATTERNS = [
     r'public comment',  # The period itself, not the content
     r'communications',  # Generic communications period
     r'time fixed for next',
+    r'identify items (to|for)',  # Future items placeholder ("identify items to discuss")
+    r'meeting schedule for',  # Calendar scheduling items
 ]
 
 # =============================================================================
