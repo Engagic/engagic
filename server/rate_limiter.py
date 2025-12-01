@@ -612,6 +612,7 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
             last_error = None
+            func_name = getattr(func, "__name__", repr(func))
 
             for attempt in range(handler.max_retries):
                 try:
@@ -623,7 +624,7 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
                     last_error = e
 
                     if not handler.should_retry(e):
-                        logger.error("non-retryable error", func=func.__name__, error=str(e))
+                        logger.error("non-retryable error", func=func_name, error=str(e))
                         raise
 
                     if "529" in str(e) or "overloaded" in str(e).lower():
@@ -633,7 +634,7 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
                         delay = handler.calculate_delay(attempt)
                         logger.warning(
                             "rate limit hit, retrying",
-                            func=func.__name__,
+                            func=func_name,
                             attempt=attempt + 1,
                             max_retries=handler.max_retries,
                             retry_delay=round(delay, 1),
@@ -643,7 +644,7 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
                     else:
                         logger.error(
                             "max retries exceeded",
-                            func=func.__name__,
+                            func=func_name,
                             max_retries=handler.max_retries
                         )
 
@@ -651,7 +652,7 @@ def with_rate_limit_retry(handler: Optional[RateLimitHandler] = None):
                 raise last_error
             else:
                 raise RuntimeError(
-                    f"Max retries exceeded in {func.__name__} with no error recorded"
+                    f"Max retries exceeded in {func_name} with no error recorded"
                 )
 
         return wrapper

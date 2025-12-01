@@ -318,12 +318,12 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
 
         return parsed
 
-    def _parse_meeting_status(self, title: str, date_time: str) -> str:
+    def _parse_meeting_status(self, title: str, date_str: Optional[str] = None) -> Optional[str]:
         """Parse meeting status from title and datetime"""
         title_lower = title.lower()
         if "cancel" in title_lower or "recess" in title_lower:
             return "cancelled"
-        return ""
+        return None
 
     async def download_attachment_async(self, history_id: str) -> bytes:
         """

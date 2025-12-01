@@ -13,7 +13,7 @@ import argparse
 import asyncio
 import sys
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -66,7 +66,7 @@ async def get_queue_stats_async(db: Database) -> Dict[str, Any]:
     }
 
 
-async def reset_queue_async(db: Database, status: str = None) -> int:
+async def reset_queue_async(db: Database, status: Optional[str] = None) -> int:
     """Delete queue items by status
 
     Args:
@@ -90,7 +90,7 @@ async def reset_queue_async(db: Database, status: str = None) -> int:
     return deleted
 
 
-def get_queue_stats(dsn: str = None) -> Dict[str, Any]:
+def get_queue_stats(dsn: Optional[str] = None) -> Dict[str, Any]:
     """Sync wrapper for get_queue_stats_async"""
     async def _run():
         db = await Database.create(dsn or config.get_postgres_dsn())
@@ -102,7 +102,7 @@ def get_queue_stats(dsn: str = None) -> Dict[str, Any]:
     return asyncio.run(_run())
 
 
-def reset_queue(dsn: str = None, status: str = None) -> int:
+def reset_queue(dsn: Optional[str] = None, status: Optional[str] = None) -> int:
     """Sync wrapper for reset_queue_async"""
     async def _run():
         db = await Database.create(dsn or config.get_postgres_dsn())
