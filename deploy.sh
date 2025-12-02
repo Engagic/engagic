@@ -65,6 +65,7 @@ Commands:
   System:
   status            Show status of all services
   logs              Show all logs
+  security          Show security posture (UFW, fail2ban, SSH, backups)
 EOF
 }
 
@@ -155,6 +156,30 @@ cmd_logs() {
     sudo journalctl -u $API_SERVICE -u $PROMETHEUS_SERVICE -f
 }
 
+cmd_security() {
+    log_info "Security Status:"
+    echo ""
+    echo "Firewall (UFW):"
+    ufw status | head -5
+    echo ""
+    echo "Fail2ban:"
+    echo "  Status: $(systemctl is-active fail2ban)"
+    fail2ban-client status 2>/dev/null | grep "Jail list" || echo "  (could not query jails)"
+    echo ""
+    echo "SSH:"
+    echo "  Password auth: $(grep -E '^PasswordAuthentication' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || echo 'default (check main config)')"
+    echo ""
+    echo "Backups:"
+    local latest_backup=$(ls -t /opt/engagic/data/backups/engagic_*.sql.gz 2>/dev/null | head -1)
+    if [ -n "$latest_backup" ]; then
+        echo "  Latest: $latest_backup"
+        echo "  Size: $(du -h "$latest_backup" | cut -f1)"
+    else
+        echo "  No backups found (will run at 3 AM daily)"
+    fi
+    echo "  Total backup space: $(du -sh /opt/engagic/data/backups 2>/dev/null | cut -f1)"
+}
+
 # Main command router
 main() {
     local cmd="${1:-help}"
@@ -212,6 +237,9 @@ main() {
             ;;
         logs)
             cmd_logs
+            ;;
+        security)
+            cmd_security
             ;;
 
         *)
