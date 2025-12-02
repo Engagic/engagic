@@ -292,16 +292,77 @@ def matter_ids_match(
         return False
 
 
+def generate_meeting_id(
+    banana: str,
+    vendor_id: str,
+    date: "datetime",
+    title: str
+) -> str:
+    """Generate deterministic meeting ID from inputs.
+
+    All adapters use this single function. No fallback hierarchy.
+
+    Args:
+        banana: City identifier (e.g., "paloaltoCA")
+        vendor_id: Vendor's native meeting ID (EventId, UUID, extracted from URL, etc.)
+        date: Meeting datetime
+        title: Meeting title
+
+    Returns:
+        Composite ID: {banana}_{8-char-md5-hash}
+        Example: "chicagoIL_a3f2c1d4"
+
+    Examples:
+        >>> from datetime import datetime
+        >>> generate_meeting_id("chicagoIL", "12345", datetime(2025, 1, 15, 10, 0), "City Council")
+        'chicagoIL_...'
+
+    Confidence: 9/10 - Deterministic, collision-resistant for practical use
+    """
+    from datetime import datetime as dt
+    if not banana or not vendor_id or not date or not title:
+        raise ValueError("All arguments required: banana, vendor_id, date, title")
+
+    date_str = date.strftime("%Y%m%dT%H%M%S")
+    key = f"{banana}:{vendor_id}:{date_str}:{title}"
+    hash_hex = hashlib.md5(key.encode()).hexdigest()[:8]
+    return f"{banana}_{hash_hex}"
+
+
+def validate_meeting_id(meeting_id: str) -> bool:
+    """Validate meeting ID format.
+
+    Valid format: {banana}_{8-char-hex}
+    Example: "chicagoIL_a3f2c1d4"
+    """
+    if not meeting_id:
+        return False
+
+    parts = meeting_id.split('_')
+    if len(parts) != 2:
+        return False
+
+    banana, hash_part = parts
+
+    if not banana.isalnum():
+        return False
+
+    if len(hash_part) != 8:
+        return False
+
+    try:
+        int(hash_part, 16)
+        return True
+    except ValueError:
+        return False
+
+
 def hash_meeting_id(meeting_id: str) -> str:
-    """Generate deterministic hash from meeting ID for URL slugs
+    """Generate deterministic hash from meeting ID for URL slugs.
 
     CRITICAL: Must match frontend hashMeetingId() in utils.ts!
 
-    Algorithm: SHA-256 → hex → first 16 chars
-    - Same pattern as generate_matter_id()
-    - Handles meeting IDs with dashes/special chars (Chicago UUIDs, etc.)
-    - Deterministic: Same ID always produces same hash
-    - Collision-resistant: 64 bits (16 hex chars)
+    Algorithm: SHA-256 -> hex -> first 16 chars
 
     Args:
         meeting_id: Meeting ID (can contain dashes, UUIDs, etc.)
@@ -309,19 +370,10 @@ def hash_meeting_id(meeting_id: str) -> str:
     Returns:
         16-character hex hash
 
-    Examples:
-        >>> hash_meeting_id("71CAEB7D-4BC6-F011-BBD2-001DD8020E93")
-        'a3f2c1d4e5b6a7c8'  # 16 hex chars
-
-        >>> hash_meeting_id("12345")
-        '5994471abb01112a'
-
-    Frontend reference: frontend/src/lib/utils/utils.ts:hashMeetingId()
-
     Confidence: 10/10 - Standard crypto hash
     """
     hash_bytes = hashlib.sha256(meeting_id.encode('utf-8')).digest()
-    return hash_bytes.hex()[:16]  # First 16 hex chars (64 bits)
+    return hash_bytes.hex()[:16]
 
 
 # Confidence level: 9/10
