@@ -81,7 +81,14 @@ CREATE TABLE IF NOT EXISTS city_matters (
     first_seen TIMESTAMP,
     last_seen TIMESTAMP,
     appearance_count INTEGER DEFAULT 1,
+<<<<<<< Updated upstream
     status TEXT DEFAULT 'active',
+=======
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'vetoed', 'enacted')),
+    final_vote_date TIMESTAMP,  -- Date when matter reached terminal disposition
+    quality_score REAL,    -- Denormalized from ratings for efficient queries
+    rating_count INTEGER DEFAULT 0,
+>>>>>>> Stashed changes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
@@ -112,6 +119,8 @@ CREATE TABLE IF NOT EXISTS items (
     sponsors JSONB,        -- Array of sponsor names
     summary TEXT,
     topics JSONB,          -- Will normalize to item_topics table
+    quality_score REAL,    -- Denormalized from ratings for efficient queries
+    rating_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
     FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE SET NULL
@@ -135,12 +144,19 @@ CREATE TABLE IF NOT EXISTS matter_appearances (
     appeared_at TIMESTAMP NOT NULL,
     committee TEXT,
     action TEXT,
+<<<<<<< Updated upstream
     vote_tally TEXT,
+=======
+    vote_outcome TEXT CHECK (vote_outcome IS NULL OR vote_outcome IN ('passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'unknown', 'no_vote')),
+    vote_tally JSONB,  -- {yes: N, no: N, abstain: N, absent: N}
+    committee_id TEXT,  -- FK to committees for relational queries
+>>>>>>> Stashed changes
     sequence INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE,
     FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+    FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE SET NULL,
     UNIQUE(matter_id, meeting_id, item_id)
 );
 
@@ -307,6 +323,39 @@ CREATE TABLE IF NOT EXISTS votes (
 );
 
 -- =======================
+-- COMMITTEES (Phase 2)
+-- =======================
+-- Registry of legislative bodies per city
+
+CREATE TABLE IF NOT EXISTS committees (
+    id TEXT PRIMARY KEY,  -- {banana}_comm_{16-char-hash}
+    banana TEXT NOT NULL,
+    name TEXT NOT NULL,  -- "Planning Commission", "Budget Committee", "City Council"
+    normalized_name TEXT NOT NULL,  -- Lowercase for matching
+    description TEXT,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'unknown')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    UNIQUE(banana, normalized_name)
+);
+
+-- Committee Members: Tracks which council members serve on which committees
+-- Historical tracking via joined_at/left_at enables time-aware queries
+CREATE TABLE IF NOT EXISTS committee_members (
+    id BIGSERIAL PRIMARY KEY,
+    committee_id TEXT NOT NULL,
+    council_member_id TEXT NOT NULL,
+    role TEXT,  -- "Chair", "Vice-Chair", "Member"
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    left_at TIMESTAMP,  -- NULL = currently serving
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE,
+    FOREIGN KEY (council_member_id) REFERENCES council_members(id) ON DELETE CASCADE,
+    UNIQUE(committee_id, council_member_id, joined_at)
+);
+
+-- =======================
 -- PERFORMANCE INDICES
 -- =======================
 
@@ -395,6 +444,20 @@ CREATE INDEX IF NOT EXISTS idx_votes_meeting ON votes(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_votes_member_date ON votes(council_member_id, vote_date DESC);
 CREATE INDEX IF NOT EXISTS idx_votes_value ON votes(vote);
 
+-- Committees
+CREATE INDEX IF NOT EXISTS idx_committees_banana ON committees(banana);
+CREATE INDEX IF NOT EXISTS idx_committees_name ON committees(normalized_name);
+CREATE INDEX IF NOT EXISTS idx_committees_status ON committees(status);
+
+-- Committee members
+CREATE INDEX IF NOT EXISTS idx_committee_members_committee ON committee_members(committee_id);
+CREATE INDEX IF NOT EXISTS idx_committee_members_member ON committee_members(council_member_id);
+CREATE INDEX IF NOT EXISTS idx_committee_members_active ON committee_members(committee_id) WHERE left_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_committee_members_dates ON committee_members(joined_at, left_at);
+
+-- Matter appearances (committee_id)
+CREATE INDEX IF NOT EXISTS idx_matter_appearances_committee_id ON matter_appearances(committee_id);
+
 -- =======================
 -- FULL-TEXT SEARCH (PostgreSQL GIN indexes)
 -- =======================
@@ -413,6 +476,10 @@ USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonica
 
 -- Full-text search on council_members (name)
 CREATE INDEX IF NOT EXISTS idx_council_members_fts ON council_members
+USING gin(to_tsvector('english', name));
+
+-- Full-text search on committees (name)
+CREATE INDEX IF NOT EXISTS idx_committees_fts ON committees
 USING gin(to_tsvector('english', name));
 
 -- =======================
@@ -436,3 +503,13 @@ COMMENT ON COLUMN council_members.normalized_name IS 'Lowercase, trimmed name fo
 COMMENT ON TABLE sponsorships IS 'Links council members to matters they sponsor. Normalizes city_matters.sponsors JSONB array.';
 
 COMMENT ON TABLE votes IS 'Individual voting records per member per matter per meeting. Same matter may be voted on multiple times across meetings.';
+
+COMMENT ON TABLE committees IS 'Committee registry per city. ID includes city_banana to prevent cross-city collisions. Enables committee-level vote analysis.';
+
+COMMENT ON TABLE committee_members IS 'Tracks council member committee assignments. left_at NULL means currently serving. Historical tracking enables time-aware queries.';
+
+COMMENT ON COLUMN matter_appearances.committee_id IS 'FK to committees table. Enables "how did Committee X vote" queries. TEXT committee field preserved for backward compat.';
+
+COMMENT ON COLUMN matter_appearances.vote_outcome IS 'Result of committee vote: passed, failed, tabled, withdrawn, referred, amended, unknown, no_vote.';
+
+COMMENT ON COLUMN matter_appearances.vote_tally IS 'JSON vote counts: {"yes": N, "no": N, "abstain": N, "absent": N}. Populated from votes table.';
