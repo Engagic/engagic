@@ -4,25 +4,24 @@
 	import { themeState } from '$lib/stores/theme.svelte';
 	import { authState } from '$lib/stores/auth.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { onMount } from 'svelte';
 
 	// Only show nav on homepage
 	const showNav = $derived($page.url.pathname === '/');
 
-	onMount(() => {
-		document.documentElement.classList.add(themeState.effectiveTheme);
-	});
+	// Theme is applied via:
+	// 1. Inline script in svelte:head (prevents flash)
+	// 2. ThemeState constructor when Svelte hydrates
 </script>
 
 <svelte:head>
 	{@html `<script>
 		(function() {
-			const theme = localStorage.getItem('theme') || 'system';
-			const effectiveTheme = theme === 'system'
-				? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-				: theme;
-			document.documentElement.classList.add(effectiveTheme);
-			document.documentElement.setAttribute('data-theme', effectiveTheme);
+			var t = localStorage.getItem('theme') || 'system';
+			document.documentElement.classList.add(
+				t === 'system'
+					? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+					: t
+			);
 		})();
 	</script>`}
 </svelte:head>
