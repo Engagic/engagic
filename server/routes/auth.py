@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from config import get_logger
 from database.db_postgres import Database
-from server.dependencies import get_db
+from server.dependencies import get_current_user, get_db
 from userland.auth.jwt import (
     generate_access_token,
     generate_magic_link_token,
@@ -38,54 +38,6 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def hash_token(token: str) -> str:
     """Hash magic link token for storage (security: don't store raw tokens)"""
     return hashlib.sha256(token.encode()).hexdigest()
-
-
-async def get_current_user(request: Request) -> User:
-    """
-    FastAPI dependency to extract and validate current user from JWT token.
-
-    Accepts either:
-    - Access token in Authorization header (preferred)
-    - Refresh token from httpOnly cookie (fallback on page load)
-
-    Returns:
-        User object
-
-    Raises:
-        HTTPException 401 if not authenticated or token invalid
-        HTTPException 404 if user not found
-    """
-    user_id = None
-
-    # Try access token from Authorization header first
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        access_token = auth_header.replace("Bearer ", "")
-        payload = verify_token(access_token, expected_type="access")
-        if payload:
-            user_id = payload.get("user_id")
-
-    # Fallback to refresh token from cookie
-    if not user_id:
-        refresh_token = request.cookies.get("refresh_token")
-        if refresh_token:
-            payload = verify_token(refresh_token, expected_type="refresh")
-            if payload:
-                user_id = payload.get("user_id")
-
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
-        )
-
-    db: Database = request.app.state.db
-    user = await db.userland.get_user(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-
-    return user
 
 
 @router.post("/signup", response_model=MagicLinkResponse)
