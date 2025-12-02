@@ -40,11 +40,8 @@ class ThemeState {
 
 	private applyTheme() {
 		const root = document.documentElement;
-		const effective = this.effectiveTheme;
-
 		root.classList.remove('light', 'dark');
-		root.classList.add(effective);
-		root.setAttribute('data-theme', effective);
+		root.classList.add(this.effectiveTheme);
 	}
 
 	private watchSystemTheme() {

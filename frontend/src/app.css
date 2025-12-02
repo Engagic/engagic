@@ -1,6 +1,7 @@
-@import '@fontsource/ibm-plex-mono/400.css';
-@import '@fontsource/ibm-plex-mono/500.css';
-@import '@fontsource/ibm-plex-mono/600.css';
+/* Latin-only subset: ~12KB per weight vs ~50KB for all subsets */
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
 
 :root {
 	/* Progressive widths: search -> meetings -> detail -> state */
