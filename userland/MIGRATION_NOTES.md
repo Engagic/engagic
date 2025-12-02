@@ -114,8 +114,8 @@ The userland schema must be applied to PostgreSQL before the system can function
 ```bash
 # On VPS
 ssh root@engagic
-cd /root/engagic
-python3 -m userland.scripts.setup_db
+cd /opt/engagic
+uv run python -m userland.scripts.setup_db
 ```
 
 This creates the `userland` schema and all required tables. See `userland/DEPLOYMENT.md` for full instructions.

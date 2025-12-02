@@ -11,7 +11,7 @@ Usage:
     python3 -m userland.scripts.weekly_digest
 
 Cron:
-    0 9 * * 0 cd /root/engagic && .venv/bin/python -m userland.scripts.weekly_digest
+    0 9 * * 0 cd /opt/engagic && uv run python -m userland.scripts.weekly_digest
 """
 
 import asyncio
