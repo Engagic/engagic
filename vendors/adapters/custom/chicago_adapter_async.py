@@ -412,26 +412,3 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         logger.debug("matter data fetched", slug=self.slug, matter_id=matter_id, attachment_count=len(attachments), sponsor_count=len(sponsors))
         return {"attachments": attachments, "sponsors": sponsors}
-
-    def _parse_iso_date(self, date_str: str) -> Optional[datetime]:
-        """
-        Parse Chicago's ISO 8601 date format.
-
-        Args:
-            date_str: ISO 8601 date string (e.g., "2025-11-20T18:00:00Z")
-
-        Returns:
-            datetime object or None if parsing fails
-        """
-        if not date_str:
-            return None
-
-        try:
-            # Handle both Z and timezone offsets
-            if date_str.endswith("Z"):
-                return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-            else:
-                return datetime.fromisoformat(date_str)
-        except (ValueError, AttributeError) as e:
-            logger.warning("could not parse date", slug=self.slug, date_str=date_str, error=str(e))
-            return None
