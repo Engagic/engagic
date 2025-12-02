@@ -37,6 +37,14 @@ from vendors.utils.item_filters import should_skip_procedural_item
 class AsyncChicagoAdapter(AsyncBaseAdapter):
     """Async Chicago City Council - REST API adapter"""
 
+    # Default matter data returned when fetch fails or matter_id is absent
+    _EMPTY_MATTER: Dict[str, Any] = {
+        "attachments": [],
+        "sponsors": [],
+        "matter_status": None,
+        "vote_outcome": None,
+    }
+
     def __init__(self, city_slug: str):
         super().__init__(city_slug, vendor="chicago")
         self.base_url = "https://api.chicityclerkelms.chicago.gov"
@@ -54,6 +62,30 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             "total_votes": 0,
             "api_requests": 0,
         }
+
+    def _normalize_vote_value(self, value: str) -> str:
+        """
+        Normalize Chicago vote value to standard format.
+
+        Chicago API returns: "Yea", "Nay", "Abstain", "Absent", etc.
+        System expects lowercase: "yes", "no", "abstain", "absent", etc.
+        """
+        value_lower = value.lower()
+        vote_map = {
+            "yea": "yes",
+            "yes": "yes",
+            "aye": "yes",
+            "nay": "no",
+            "no": "no",
+            "abstain": "abstain",
+            "abstained": "abstain",
+            "absent": "absent",
+            "excused": "absent",
+            "present": "present",
+            "recused": "recused",
+            "conflict": "recused",
+        }
+        return vote_map.get(value_lower, "not_voting")
 
     async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
@@ -81,38 +113,65 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         # Build OData filter (no datetime wrapper needed per API docs)
         filter_str = f"date ge {start_date} and date lt {end_date}"
 
-        # API parameters
-        params = {
-            "filter": filter_str,
-            "sort": "date desc",
-            "top": 500,  # API max
-        }
-
-        # Fetch meetings
+        # Fetch meetings with pagination (API max 500 per page)
         api_url = f"{self.base_url}/meeting-agenda"
         logger.info("fetching meetings", slug=self.slug, api_url=api_url)
 
-        try:
-            response = await self._get(api_url, params=params)
-            self._sync_stats["api_requests"] += 1
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.error("network error fetching meetings", slug=self.slug, error=str(e))
-            return []
+        all_meetings = []
+        skip = 0
+        top = 500
+        max_meetings = 2000  # Safety cap
 
-        try:
-            # content_type=None: Chicago API sometimes returns text/plain with JSON body
-            response_data = await response.json(content_type=None)
-        except ValueError as e:
-            logger.error("invalid json response", slug=self.slug, error=str(e))
-            return []
+        while len(all_meetings) < max_meetings:
+            params = {
+                "filter": filter_str,
+                "sort": "date desc",
+                "top": top,
+                "skip": skip,
+            }
 
-        # Extract meetings from response
-        meetings = response_data.get("data", [])
-        self._sync_stats["meetings_total"] = len(meetings)
-        logger.info("retrieved meetings", slug=self.slug, count=len(meetings))
+            try:
+                response = await self._get(api_url, params=params)
+                self._sync_stats["api_requests"] += 1
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                logger.error("network error fetching meetings", slug=self.slug, error=str(e), skip=skip)
+                break
+
+            try:
+                response_data = await response.json(content_type=None)
+            except ValueError as e:
+                logger.error("invalid json response", slug=self.slug, error=str(e), skip=skip)
+                break
+
+            page_meetings = response_data.get("data", [])
+            all_meetings.extend(page_meetings)
+
+            # Check if more pages exist
+            meta = response_data.get("meta", {})
+            total_count = meta.get("count", len(page_meetings))
+
+            logger.debug(
+                "fetched meeting page",
+                slug=self.slug,
+                skip=skip,
+                page_count=len(page_meetings),
+                total_so_far=len(all_meetings),
+                api_total=total_count
+            )
+
+            if len(page_meetings) < top or len(all_meetings) >= total_count:
+                break
+
+            skip += top
+
+        if len(all_meetings) >= max_meetings:
+            logger.warning("hit pagination cap", slug=self.slug, cap=max_meetings)
+
+        self._sync_stats["meetings_total"] = len(all_meetings)
+        logger.info("retrieved meetings", slug=self.slug, count=len(all_meetings))
 
         results = []
-        for meeting in meetings:
+        for meeting in all_meetings:
             try:
                 result = await self._process_meeting(meeting)
                 if result:
@@ -159,15 +218,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         return results
 
     async def _process_meeting(self, meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Process a single meeting, fetching detail and extracting items.
-
-        Args:
-            meeting: Meeting summary from list API
-
-        Returns:
-            Processed meeting dictionary or None
-        """
+        """Process a single meeting, fetching detail and extracting items."""
         # Extract basic meeting data
         meeting_id = meeting.get("meetingId")
         body = meeting.get("body", "")
@@ -209,6 +260,24 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         if location:
             result["location"] = location
+
+        # Extract meeting status from API status field
+        api_status = meeting_detail.get("status", "").lower()
+        status_map = {
+            "canceled": "cancelled",
+            "cancelled": "cancelled",
+            "postponed": "postponed",
+            "draft": None,
+            "final": None,
+        }
+        meeting_status = status_map.get(api_status)
+
+        # Fallback: Check title for status keywords
+        if not meeting_status:
+            meeting_status = self._parse_meeting_status(body, date_str)
+
+        if meeting_status:
+            result["meeting_status"] = meeting_status
 
         # Architecture: items extracted -> agenda_url, no items -> packet_url
         if items:
@@ -265,15 +334,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         return result
 
     async def _fetch_meeting_detail(self, meeting_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Fetch full meeting detail including agenda structure (async).
-
-        Args:
-            meeting_id: Chicago meeting ID
-
-        Returns:
-            Meeting detail dictionary with agenda.groups[].items[] structure
-        """
+        """Fetch full meeting detail with agenda.groups[].items[] structure."""
         detail_url = f"{self.base_url}/meeting-agenda/{meeting_id}"
         logger.debug("fetching meeting detail", slug=self.slug, detail_url=detail_url)
 
@@ -292,17 +353,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             return None
 
     async def _extract_agenda_items(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Extract agenda items from meeting detail's nested structure (async).
-
-        Fetches matter data concurrently for all items with matterId.
-
-        Args:
-            meeting_detail: Full meeting detail from API
-
-        Returns:
-            List of agenda item dictionaries
-        """
+        """Extract agenda items; fetches matter data concurrently for items with matterId."""
         items = []
         items_filtered = 0
         item_counter = 0
@@ -387,7 +438,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             for mid, result in zip(items_needing_matter, matter_results):
                 if isinstance(result, Exception):
                     logger.debug("matter fetch failed", slug=self.slug, matter_id=mid, error=str(result))
-                    matter_data_map[mid] = {"attachments": [], "sponsors": []}
+                    matter_data_map[mid] = self._EMPTY_MATTER
                 else:
                     matter_data_map[mid] = result
 
@@ -419,7 +470,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         # Build final items
         for idx, pitem in enumerate(preliminary_items):
             matter_id = pitem["matter_id"]
-            matter_data = matter_data_map.get(matter_id, {"attachments": [], "sponsors": []}) if matter_id else {"attachments": [], "sponsors": []}
+            matter_data = matter_data_map.get(matter_id, self._EMPTY_MATTER) if matter_id else self._EMPTY_MATTER
 
             item_data = {
                 "item_id": pitem["item_id"],
@@ -440,13 +491,19 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             if matter_data["sponsors"]:
                 item_data["sponsors"] = matter_data["sponsors"]
 
-            # Chicago-specific metadata (not in schema but useful)
-            if pitem["action_name"] or pitem["group_title"]:
-                item_data["metadata"] = {}
-                if pitem["action_name"]:
-                    item_data["metadata"]["action_name"] = pitem["action_name"]
-                if pitem["group_title"]:
-                    item_data["metadata"]["section"] = pitem["group_title"]
+            # Build metadata (Chicago-specific fields + matter status for closed-loop)
+            metadata = {}
+            if pitem["action_name"]:
+                metadata["action_name"] = pitem["action_name"]
+            if pitem["group_title"]:
+                metadata["section"] = pitem["group_title"]
+            if matter_data.get("matter_status"):
+                metadata["matter_status"] = matter_data["matter_status"]
+            if matter_data.get("vote_outcome"):
+                metadata["vote_outcome"] = matter_data["vote_outcome"]
+
+            if metadata:
+                item_data["metadata"] = metadata
 
             # Attach votes if available
             if idx in votes_map:
@@ -461,15 +518,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         return items
 
     async def _fetch_matter_data(self, matter_id: str) -> Dict[str, Any]:
-        """
-        Fetch matter data including attachments and sponsors (async).
-
-        Args:
-            matter_id: Chicago matter ID
-
-        Returns:
-            Dict with 'attachments' and 'sponsors' keys
-        """
+        """Fetch matter attachments, sponsors, and status. Returns _EMPTY_MATTER on failure."""
         matter_url = f"{self.base_url}/matter/{matter_id}"
 
         try:
@@ -477,14 +526,14 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             self._sync_stats["api_requests"] += 1
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.debug("network error fetching matter", slug=self.slug, matter_id=matter_id, error=str(e))
-            return {"attachments": [], "sponsors": []}
+            return self._EMPTY_MATTER
 
         try:
             # content_type=None: Chicago API sometimes returns text/plain with JSON body
             matter_data = await response.json(content_type=None)
         except ValueError as e:
             logger.debug("invalid json in matter", slug=self.slug, matter_id=matter_id, error=str(e))
-            return {"attachments": [], "sponsors": []}
+            return self._EMPTY_MATTER
 
         # Extract attachments
         raw_attachments = matter_data.get("attachments", [])
@@ -523,28 +572,47 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             if sponsor_name:
                 sponsors.append(sponsor_name)
 
-        logger.debug("matter data fetched", slug=self.slug, matter_id=matter_id, attachment_count=len(attachments), sponsor_count=len(sponsors))
-        return {"attachments": attachments, "sponsors": sponsors}
+        # Extract matter status for closed-loop tracking (convert empty string to None)
+        matter_status = matter_data.get("status") or None
+
+        # Map status to vote outcome
+        status_lower = matter_status.lower() if matter_status else ""
+        outcome_map = {
+            "adopted": "passed",
+            "approved": "passed",
+            "passed": "passed",
+            "failed": "failed",
+            "rejected": "failed",
+            "withdrawn": "withdrawn",
+            "tabled": "tabled",
+            "deferred": "tabled",
+            "referred": None,  # Still in progress
+            "pending": None,
+        }
+        vote_outcome = outcome_map.get(status_lower)
+
+        logger.debug(
+            "matter data fetched",
+            slug=self.slug,
+            matter_id=matter_id,
+            attachment_count=len(attachments),
+            sponsor_count=len(sponsors),
+            matter_status=matter_status,
+            vote_outcome=vote_outcome
+        )
+        return {
+            "attachments": attachments,
+            "sponsors": sponsors,
+            "matter_status": matter_status,
+            "vote_outcome": vote_outcome,
+        }
 
     async def _fetch_item_votes(
         self,
         meeting_id: str,
         line_id: str
     ) -> Optional[List[Dict[str, Any]]]:
-        """
-        Fetch vote data for a specific agenda item.
-
-        Uses the /meeting-agenda/{meetingId}/matter/{lineId}/votes endpoint.
-        Note: lineId is from the agenda item, NOT the matterId.
-
-        Args:
-            meeting_id: Chicago meeting ID
-            line_id: Item line ID from agenda structure
-
-        Returns:
-            List of vote dicts with keys: name, vote, sequence, metadata
-            Or None if no votes available or endpoint fails
-        """
+        """Fetch votes for agenda item. Note: line_id is from agenda, NOT matter_id."""
         votes_url = f"{self.base_url}/meeting-agenda/{meeting_id}/matter/{line_id}/votes"
 
         try:
@@ -574,7 +642,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
             votes.append({
                 "name": person_name,
-                "vote": vote_value,  # "Yea", "Nay", "Abstain", "Absent", etc.
+                "vote": self._normalize_vote_value(vote_value),
                 "sequence": idx,
                 "metadata": {
                     "person_id": str(vote_record.get("personId")) if vote_record.get("personId") else None
