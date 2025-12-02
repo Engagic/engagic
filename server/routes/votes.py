@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 
 from database.db_postgres import Database
+from database.vote_utils import compute_vote_tally, determine_vote_outcome
 from server.dependencies import get_db
 from server.metrics import metrics
 
@@ -100,24 +101,9 @@ async def get_meeting_votes(meeting_id: str, db: Database = Depends(get_db)):
     for mid, matter_votes in votes_by_matter.items():
         matter_info = matters_data.get(mid, {})
 
-        # Compute tally for this matter in this meeting
-        tally = {"yes": 0, "no": 0, "abstain": 0, "absent": 0}
-        for v in matter_votes:
-            vote_value = v.get("vote", "absent")
-            if vote_value in tally:
-                tally[vote_value] += 1
-            else:
-                tally["absent"] += 1
-
-        # Determine outcome
-        if tally["yes"] > tally["no"]:
-            outcome = "passed"
-        elif tally["no"] > tally["yes"]:
-            outcome = "failed"
-        elif tally["yes"] == 0 and tally["no"] == 0:
-            outcome = "no_vote"
-        else:
-            outcome = "tabled"
+        # Use shared vote tally and outcome functions
+        tally = compute_vote_tally(matter_votes)
+        outcome = determine_vote_outcome(tally)
 
         matters_with_votes.append({
             "matter_id": mid,
@@ -154,14 +140,8 @@ async def get_member_votes(
 
     voting_record = await db.council_members.get_member_voting_record(member_id, limit=limit)
 
-    # Compute voting statistics
-    vote_counts = {"yes": 0, "no": 0, "abstain": 0, "absent": 0}
-    for v in voting_record:
-        vote_value = v.get("vote", "absent")
-        if vote_value in vote_counts:
-            vote_counts[vote_value] += 1
-        else:
-            vote_counts["absent"] += 1
+    # Compute voting statistics using shared function
+    vote_counts = compute_vote_tally(voting_record)
 
     return {
         "success": True,

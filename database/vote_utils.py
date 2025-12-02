@@ -14,19 +14,19 @@ VOTE_MAP = {
     "absent": "absent",
     "excused": "absent",
     "not present": "absent",
-    "present": "absent",
-    "recused": "absent",
-    "not_voting": "absent",
+    "present": "present",
+    "recused": "abstain",
+    "not_voting": "present",
 }
 
 
 def compute_vote_tally(votes: List[Dict]) -> Dict[str, int]:
     """Compute vote tally from raw vote data."""
-    tally = {"yes": 0, "no": 0, "abstain": 0, "absent": 0}
+    tally = {"yes": 0, "no": 0, "abstain": 0, "absent": 0, "present": 0}
 
     for vote in votes:
         vote_value = vote.get("vote", "").lower().strip()
-        normalized = VOTE_MAP.get(vote_value, "absent")
+        normalized = VOTE_MAP.get(vote_value, "present")
         tally[normalized] += 1
 
     return tally
