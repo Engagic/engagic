@@ -27,6 +27,8 @@ from database.repositories_async import (
 from database.repositories_async.engagement import EngagementRepository
 from database.repositories_async.feedback import FeedbackRepository
 from database.repositories_async.userland import UserlandRepository
+from database.repositories_async.engagement import EngagementRepository
+from database.repositories_async.feedback import FeedbackRepository
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
 
