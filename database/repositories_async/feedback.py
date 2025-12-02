@@ -93,12 +93,12 @@ class FeedbackRepository(BaseRepository):
             )
         else:
             # Anonymous rating - upsert by session_id (partial unique index)
+            # Note: WHERE clause is in the index definition, not in ON CONFLICT
             await self._execute(
                 """
                 INSERT INTO userland.ratings (user_id, session_id, entity_type, entity_id, rating)
                 VALUES (NULL, $1, $2, $3, $4)
                 ON CONFLICT (session_id, entity_type, entity_id)
-                WHERE user_id IS NULL AND session_id IS NOT NULL
                 DO UPDATE SET rating = $4, created_at = NOW()
                 """,
                 session_id,
