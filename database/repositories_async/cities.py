@@ -248,8 +248,8 @@ class CityRepository(BaseRepository):
             param_counter += 1
 
         if name:
-            conditions.append(f"name = ${param_counter}")
-            params.append(name)
+            conditions.append(f"LOWER(name) = ${param_counter}")
+            params.append(name.lower())
             param_counter += 1
 
         where_clause = " AND ".join(conditions)

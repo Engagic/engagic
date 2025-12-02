@@ -231,10 +231,17 @@ async def handle_ambiguous_city_search(
         close_matches = get_close_matches(city_name.lower(), [n.lower() for n in all_names], n=5, cutoff=0.8)
 
         if close_matches:
+            # Prefer exact case-insensitive match if present in fuzzy results
+            exact_match = next(
+                (m for m in close_matches if m.lower() == city_name.lower()), None
+            )
+            if exact_match:
+                close_matches = [exact_match]
+
             # Get cities matching the fuzzy results (no zipcodes needed)
             fuzzy_cities = []
             for match in close_matches:
-                matched_cities = await db.get_cities(name=match.title())
+                matched_cities = await db.get_cities(name=match)
                 fuzzy_cities.extend(matched_cities)
 
             if fuzzy_cities:
