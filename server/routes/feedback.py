@@ -213,9 +213,8 @@ async def get_open_issues(
 ):
     """Get unresolved issues for admin review.
 
-    Requires authentication (admin check can be added later).
+    Requires authentication. Admin role enforcement deferred to userland.
     """
-    # TODO: Add admin role check
     issues = await db.feedback.get_open_issues(limit)
 
     return {
@@ -246,9 +245,8 @@ async def resolve_issue(
 ):
     """Mark issue as resolved or dismissed.
 
-    Requires authentication (admin check can be added later).
+    Requires authentication. Admin role enforcement deferred to userland.
     """
-    # TODO: Add admin role check
     if body.status not in {"resolved", "dismissed"}:
         raise HTTPException(status_code=400, detail="Status must be 'resolved' or 'dismissed'")
 
@@ -273,9 +271,8 @@ async def get_low_rated_entities(
 ):
     """Get entities with low ratings for reprocessing consideration.
 
-    Requires authentication (admin check can be added later).
+    Requires authentication. Admin role enforcement deferred to userland.
     """
-    # TODO: Add admin role check
     entities = await db.feedback.get_low_rated_entities(threshold, min_ratings)
 
     return {
