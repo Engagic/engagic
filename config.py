@@ -40,7 +40,7 @@ class Config:
     def __init__(self):
         # Database configuration - PostgreSQL only (SQLite removed Nov 2025)
         # Data directory still used for rate limiter SQLite, logs, etc.
-        vps_path = "/root/engagic/data"
+        vps_path = "/opt/engagic/data"
         local_path = os.path.join(os.getcwd(), "data")
         default_data_dir = vps_path if os.path.exists(vps_path) else local_path
         self.DB_DIR = os.getenv("ENGAGIC_DB_DIR", default_data_dir)
