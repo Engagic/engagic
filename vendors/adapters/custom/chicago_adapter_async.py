@@ -40,6 +40,20 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
     def __init__(self, city_slug: str):
         super().__init__(city_slug, vendor="chicago")
         self.base_url = "https://api.chicityclerkelms.chicago.gov"
+        self._sync_stats: Dict[str, int] = {}
+
+    def _reset_stats(self) -> None:
+        """Reset stats for a new sync operation."""
+        self._sync_stats = {
+            "meetings_total": 0,
+            "meetings_with_items": 0,
+            "meetings_with_votes": 0,
+            "meetings_with_deadline": 0,
+            "total_items": 0,
+            "total_attachments": 0,
+            "total_votes": 0,
+            "api_requests": 0,
+        }
 
     async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
@@ -52,6 +66,9 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         Returns:
             List of meeting dictionaries with meeting_id, title, start, location, items
         """
+        # Reset stats for this sync
+        self._reset_stats()
+
         # Build date range (7 days back, 14 days forward)
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         start_date_dt = today - timedelta(days=days_back)
@@ -77,6 +94,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         try:
             response = await self._get(api_url, params=params)
+            self._sync_stats["api_requests"] += 1
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("network error fetching meetings", slug=self.slug, error=str(e))
             return []
@@ -90,6 +108,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         # Extract meetings from response
         meetings = response_data.get("data", [])
+        self._sync_stats["meetings_total"] = len(meetings)
         logger.info("retrieved meetings", slug=self.slug, count=len(meetings))
 
         results = []
@@ -98,6 +117,21 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 result = await self._process_meeting(meeting)
                 if result:
                     results.append(result)
+                    # Track stats from processed meeting
+                    if result.get("items"):
+                        self._sync_stats["meetings_with_items"] += 1
+                        self._sync_stats["total_items"] += len(result["items"])
+                        # Count items with votes
+                        items_with_votes = sum(1 for item in result["items"] if item.get("votes"))
+                        if items_with_votes > 0:
+                            self._sync_stats["meetings_with_votes"] += 1
+                            total_votes = sum(len(item.get("votes", [])) for item in result["items"])
+                            self._sync_stats["total_votes"] += total_votes
+                        # Count attachments
+                        for item in result["items"]:
+                            self._sync_stats["total_attachments"] += len(item.get("attachments", []))
+                    if result.get("participation"):
+                        self._sync_stats["meetings_with_deadline"] += 1
             except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
                 logger.error(
                     "error processing meeting",
@@ -106,6 +140,21 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                     error=str(e)
                 )
                 continue
+
+        # Log comprehensive stats summary
+        logger.info(
+            "chicago adapter sync complete",
+            slug=self.slug,
+            meetings_total=self._sync_stats["meetings_total"],
+            meetings_processed=len(results),
+            meetings_with_items=self._sync_stats["meetings_with_items"],
+            meetings_with_votes=self._sync_stats["meetings_with_votes"],
+            meetings_with_deadline=self._sync_stats["meetings_with_deadline"],
+            total_items=self._sync_stats["total_items"],
+            total_attachments=self._sync_stats["total_attachments"],
+            total_votes=self._sync_stats["total_votes"],
+            api_requests=self._sync_stats["api_requests"],
+        )
 
         return results
 
@@ -174,15 +223,43 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             logger.debug("meeting no data skipping", slug=self.slug, meeting_id=meeting_id)
             return None
 
-        # Add video/transcript links if available
+        # Extract public comment deadline for civic engagement
+        public_comment_deadline = meeting_detail.get("publicCommentDeadline")
+        comment_text = meeting_detail.get("comment", "")
+        if public_comment_deadline or comment_text:
+            participation = {}
+            if public_comment_deadline:
+                participation["public_comment_deadline"] = public_comment_deadline
+            if comment_text:
+                participation["instructions"] = comment_text
+            result["participation"] = participation
+
+        # Build metadata with video/transcript links and body info
+        metadata = {}
         video_links = meeting_detail.get("videoLink", [])
         transcript_links = meeting_detail.get("transcriptLink", [])
-        if video_links or transcript_links:
-            metadata = {}
-            if video_links:
-                metadata["video_links"] = video_links
-            if transcript_links:
-                metadata["transcript_links"] = transcript_links
+        if video_links:
+            metadata["video_links"] = video_links
+        if transcript_links:
+            metadata["transcript_links"] = transcript_links
+
+        # Add committee/body identifiers for tracking
+        body_id = meeting_detail.get("bodyId")
+        body_abbreviation = meeting_detail.get("bodyAbbreviation")
+        if body_id:
+            metadata["body_id"] = str(body_id)
+        if body_abbreviation:
+            metadata["body_abbreviation"] = body_abbreviation
+
+        # Add related meetings for longitudinal tracking
+        related_meetings = meeting_detail.get("relatedMeetings", [])
+        if related_meetings:
+            metadata["related_meetings"] = [
+                str(rm.get("meetingId") if isinstance(rm, dict) else rm)
+                for rm in related_meetings
+            ]
+
+        if metadata:
             result["metadata"] = metadata
 
         return result
@@ -202,6 +279,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         try:
             response = await self._get(detail_url)
+            self._sync_stats["api_requests"] += 1
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.warning("network error fetching meeting detail", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None
@@ -229,6 +307,9 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         items_filtered = 0
         item_counter = 0
 
+        # Get meeting ID for vote fetching
+        meeting_id = meeting_detail.get("meetingId")
+
         # Get agenda structure
         agenda = meeting_detail.get("agenda", {})
         groups = agenda.get("groups", [])
@@ -249,6 +330,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 # Extract item data
                 matter_id = item.get("matterId")
                 comment_id = item.get("commentId")
+                line_id = item.get("lineId")  # Needed for vote fetching
                 title = item.get("matterTitle", "").strip()
                 sequence = int(item.get("sort") or 0)
                 record_number = item.get("recordNumber")
@@ -284,6 +366,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                     "title": title,
                     "sequence": sequence,
                     "matter_id": matter_id,
+                    "line_id": str(line_id) if line_id else None,  # Track for vote fetching
                     "record_number": record_number,
                     "matter_type": matter_type,
                     "action_name": action_name,
@@ -308,8 +391,33 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 else:
                     matter_data_map[mid] = result
 
+        # Fetch votes concurrently for items with lineId
+        votes_map = {}  # Maps item index to votes list
+        if meeting_id:
+            items_for_votes = [
+                (idx, pitem["line_id"])
+                for idx, pitem in enumerate(preliminary_items)
+                if pitem.get("line_id") and pitem.get("matter_id")  # Only fetch votes for substantive items
+            ]
+            if items_for_votes:
+                vote_tasks = [
+                    self._fetch_item_votes(str(meeting_id), line_id)
+                    for idx, line_id in items_for_votes
+                ]
+                vote_results = await asyncio.gather(*vote_tasks, return_exceptions=True)
+                for (idx, _), result in zip(items_for_votes, vote_results):
+                    if isinstance(result, list) and result:
+                        votes_map[idx] = result
+                if votes_map:
+                    logger.debug(
+                        "votes fetched for items",
+                        slug=self.slug,
+                        items_with_votes=len(votes_map),
+                        total_votes=sum(len(v) for v in votes_map.values())
+                    )
+
         # Build final items
-        for pitem in preliminary_items:
+        for idx, pitem in enumerate(preliminary_items):
             matter_id = pitem["matter_id"]
             matter_data = matter_data_map.get(matter_id, {"attachments": [], "sponsors": []}) if matter_id else {"attachments": [], "sponsors": []}
 
@@ -340,6 +448,10 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 if pitem["group_title"]:
                     item_data["metadata"]["section"] = pitem["group_title"]
 
+            # Attach votes if available
+            if idx in votes_map:
+                item_data["votes"] = votes_map[idx]
+
             items.append(item_data)
 
         if items_filtered > 0:
@@ -362,6 +474,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         try:
             response = await self._get(matter_url)
+            self._sync_stats["api_requests"] += 1
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.debug("network error fetching matter", slug=self.slug, matter_id=matter_id, error=str(e))
             return {"attachments": [], "sponsors": []}
@@ -412,3 +525,63 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         logger.debug("matter data fetched", slug=self.slug, matter_id=matter_id, attachment_count=len(attachments), sponsor_count=len(sponsors))
         return {"attachments": attachments, "sponsors": sponsors}
+
+    async def _fetch_item_votes(
+        self,
+        meeting_id: str,
+        line_id: str
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fetch vote data for a specific agenda item.
+
+        Uses the /meeting-agenda/{meetingId}/matter/{lineId}/votes endpoint.
+        Note: lineId is from the agenda item, NOT the matterId.
+
+        Args:
+            meeting_id: Chicago meeting ID
+            line_id: Item line ID from agenda structure
+
+        Returns:
+            List of vote dicts with keys: name, vote, sequence, metadata
+            Or None if no votes available or endpoint fails
+        """
+        votes_url = f"{self.base_url}/meeting-agenda/{meeting_id}/matter/{line_id}/votes"
+
+        try:
+            response = await self._get(votes_url)
+            self._sync_stats["api_requests"] += 1
+            # content_type=None: Chicago API sometimes returns text/plain with JSON body
+            data = await response.json(content_type=None)
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.debug("no votes available", slug=self.slug, meeting_id=meeting_id, line_id=line_id, error=str(e))
+            return None
+        except ValueError as e:
+            logger.debug("vote fetch invalid json", slug=self.slug, meeting_id=meeting_id, line_id=line_id, error=str(e))
+            return None
+
+        # Extract votes from response
+        raw_votes = data.get("data", []) if isinstance(data, dict) else data if isinstance(data, list) else []
+        if not raw_votes:
+            return None
+
+        votes = []
+        for idx, vote_record in enumerate(raw_votes, 1):
+            person_name = vote_record.get("personName")
+            vote_value = vote_record.get("vote")
+
+            if not person_name or not vote_value:
+                continue
+
+            votes.append({
+                "name": person_name,
+                "vote": vote_value,  # "Yea", "Nay", "Abstain", "Absent", etc.
+                "sequence": idx,
+                "metadata": {
+                    "person_id": str(vote_record.get("personId")) if vote_record.get("personId") else None
+                }
+            })
+
+        if votes:
+            logger.debug("votes fetched", slug=self.slug, meeting_id=meeting_id, line_id=line_id, vote_count=len(votes))
+
+        return votes if votes else None
