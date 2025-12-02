@@ -9,7 +9,6 @@ Usage:
 
 import argparse
 import asyncio
-import json
 
 from config import get_logger
 from database.db_postgres import Database
@@ -29,35 +28,19 @@ async def backfill_outcomes(dry_run: bool = False, limit: int | None = None) -> 
     try:
         async with db.pool.acquire() as conn:
             # Find matter_appearances that have votes but no outcome
+            query = """
+                SELECT DISTINCT ma.matter_id, ma.meeting_id, ma.item_id
+                FROM matter_appearances ma
+                WHERE ma.vote_outcome IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM votes v
+                    WHERE v.matter_id = ma.matter_id AND v.meeting_id = ma.meeting_id
+                )
+            """
             if limit:
-                appearances = await conn.fetch("""
-                    SELECT DISTINCT
-                        ma.matter_id,
-                        ma.meeting_id,
-                        ma.item_id
-                    FROM matter_appearances ma
-                    WHERE ma.vote_outcome IS NULL
-                    AND EXISTS (
-                        SELECT 1 FROM votes v
-                        WHERE v.matter_id = ma.matter_id
-                        AND v.meeting_id = ma.meeting_id
-                    )
-                    LIMIT $1
-                """, limit)
+                appearances = await conn.fetch(query + " LIMIT $1", limit)
             else:
-                appearances = await conn.fetch("""
-                    SELECT DISTINCT
-                        ma.matter_id,
-                        ma.meeting_id,
-                        ma.item_id
-                    FROM matter_appearances ma
-                    WHERE ma.vote_outcome IS NULL
-                    AND EXISTS (
-                        SELECT 1 FROM votes v
-                        WHERE v.matter_id = ma.matter_id
-                        AND v.meeting_id = ma.meeting_id
-                    )
-                """)
+                appearances = await conn.fetch(query)
 
             logger.info(
                 "found appearances needing backfill",
@@ -110,7 +93,7 @@ async def backfill_outcomes(dry_run: bool = False, limit: int | None = None) -> 
                         WHERE matter_id = $3 AND meeting_id = $4 AND item_id = $5
                         """,
                         outcome,
-                        json.dumps(tally),
+                        tally,
                         matter_id,
                         meeting_id,
                         item_id,

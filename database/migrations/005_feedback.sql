@@ -11,12 +11,18 @@ CREATE TABLE IF NOT EXISTS userland.ratings (
     entity_id TEXT NOT NULL,
     rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
     created_at TIMESTAMP DEFAULT NOW(),
-    -- One rating per user/session per entity
+    -- One rating per user per entity (authenticated)
     CONSTRAINT ratings_unique_user UNIQUE(user_id, entity_type, entity_id),
-    CONSTRAINT ratings_unique_session CHECK (
+    -- Require either user_id or session_id
+    CONSTRAINT ratings_has_identity CHECK (
         (user_id IS NOT NULL) OR (session_id IS NOT NULL)
     )
 );
+
+-- One rating per session per entity (anonymous) - partial unique index
+CREATE UNIQUE INDEX IF NOT EXISTS ratings_unique_session_idx
+    ON userland.ratings(session_id, entity_type, entity_id)
+    WHERE user_id IS NULL AND session_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS ratings_entity_idx ON userland.ratings(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS ratings_user_idx ON userland.ratings(user_id) WHERE user_id IS NOT NULL;

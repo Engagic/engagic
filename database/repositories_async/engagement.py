@@ -6,7 +6,7 @@ Handles user engagement tracking for the closed loop architecture:
 - Trending: Materialized view of hot content
 """
 
-import json
+import asyncpg
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -40,24 +40,22 @@ class EngagementRepository(BaseRepository):
 
     async def watch(self, user_id: str, entity_type: str, entity_id: str) -> bool:
         """Add entity to user's watch list. Returns True if created, False if already watching."""
-        try:
-            await self._execute(
-                """
-                INSERT INTO userland.watches (user_id, entity_type, entity_id)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (user_id, entity_type, entity_id) DO NOTHING
-                """,
-                user_id,
-                entity_type,
-                entity_id,
-            )
-            # Log the watch action
+        row = await self._fetchrow(
+            """
+            INSERT INTO userland.watches (user_id, entity_type, entity_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, entity_type, entity_id) DO NOTHING
+            RETURNING id
+            """,
+            user_id,
+            entity_type,
+            entity_id,
+        )
+        created = row is not None
+        if created:
             await self.log_activity(user_id, None, "watch", entity_type, entity_id)
             logger.info("user watching entity", user_id=user_id, entity_type=entity_type, entity_id=entity_id)
-            return True
-        except Exception as e:
-            logger.error("failed to create watch", error=str(e))
-            return False
+        return created
 
     async def unwatch(self, user_id: str, entity_type: str, entity_id: str) -> bool:
         """Remove entity from user's watch list. Returns True if removed."""
@@ -171,7 +169,7 @@ class EngagementRepository(BaseRepository):
             action,
             entity_type,
             entity_id,
-            json.dumps(metadata) if metadata else None,
+            metadata,
         )
 
     async def get_trending_matters(self, limit: int = 20) -> list[TrendingMatter]:
@@ -194,6 +192,6 @@ class EngagementRepository(BaseRepository):
         try:
             await self._execute("REFRESH MATERIALIZED VIEW CONCURRENTLY userland.trending_matters")
             logger.info("refreshed trending materialized view")
-        except Exception as e:
+        except asyncpg.PostgresError as e:
             # May fail if view doesn't exist yet or no unique index
             logger.warning("failed to refresh trending view", error=str(e))

@@ -7,7 +7,6 @@ Handles CRUD operations for matters (recurring legislative items):
 - Timeline tracking (first_seen, last_seen, appearance_count)
 """
 
-import json
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -476,11 +475,11 @@ class MatterRepository(BaseRepository):
             await conn.execute(
                 """
                 UPDATE matter_appearances
-                SET vote_outcome = $1, vote_tally = $2::jsonb
+                SET vote_outcome = $1, vote_tally = $2
                 WHERE matter_id = $3 AND meeting_id = $4 AND item_id = $5
                 """,
                 vote_outcome,
-                json.dumps(vote_tally),
+                vote_tally,
                 matter_id,
                 meeting_id,
                 item_id,

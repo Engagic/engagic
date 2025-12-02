@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS userland.activity_log (
 CREATE INDEX IF NOT EXISTS activity_log_entity_idx ON userland.activity_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS activity_log_time_idx ON userland.activity_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS activity_log_user_idx ON userland.activity_log(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS activity_log_session_idx ON userland.activity_log(session_id) WHERE session_id IS NOT NULL;
 
 -- Trending matters (materialized view, refresh every 15 min)
 CREATE MATERIALIZED VIEW IF NOT EXISTS userland.trending_matters AS

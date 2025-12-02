@@ -76,51 +76,47 @@ class FeedbackRepository(BaseRepository):
             logger.warning("rating rejected - invalid value", rating=rating)
             return False
 
-        try:
-            # Upsert rating (use user_id if available, else session_id for unique constraint)
-            if user_id:
-                await self._execute(
-                    """
-                    INSERT INTO userland.ratings (user_id, session_id, entity_type, entity_id, rating)
-                    VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT (user_id, entity_type, entity_id)
-                    DO UPDATE SET rating = $5, created_at = NOW()
-                    """,
-                    user_id,
-                    session_id,
-                    entity_type,
-                    entity_id,
-                    rating,
-                )
-            else:
-                # Anonymous rating - just insert (no upsert for session-based)
-                await self._execute(
-                    """
-                    INSERT INTO userland.ratings (user_id, session_id, entity_type, entity_id, rating)
-                    VALUES ($1, $2, $3, $4, $5)
-                    """,
-                    None,
-                    session_id,
-                    entity_type,
-                    entity_id,
-                    rating,
-                )
-
-            # Update denormalized quality score
-            await self._update_quality_score(entity_type, entity_id)
-
-            logger.info(
-                "rating submitted",
-                entity_type=entity_type,
-                entity_id=entity_id,
-                rating=rating,
-                authenticated=user_id is not None,
+        # Upsert rating (use user_id if available, else session_id for unique constraint)
+        if user_id:
+            await self._execute(
+                """
+                INSERT INTO userland.ratings (user_id, session_id, entity_type, entity_id, rating)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (user_id, entity_type, entity_id)
+                DO UPDATE SET rating = $5, created_at = NOW()
+                """,
+                user_id,
+                session_id,
+                entity_type,
+                entity_id,
+                rating,
             )
-            return True
+        else:
+            # Anonymous rating - upsert by session_id (partial unique index)
+            await self._execute(
+                """
+                INSERT INTO userland.ratings (user_id, session_id, entity_type, entity_id, rating)
+                VALUES (NULL, $1, $2, $3, $4)
+                ON CONFLICT (session_id, entity_type, entity_id)
+                WHERE user_id IS NULL AND session_id IS NOT NULL
+                DO UPDATE SET rating = $4, created_at = NOW()
+                """,
+                session_id,
+                entity_type,
+                entity_id,
+                rating,
+            )
 
-        except Exception as e:
-            logger.error("failed to submit rating", error=str(e))
-            return False
+        await self._update_quality_score(entity_type, entity_id)
+
+        logger.info(
+            "rating submitted",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            rating=rating,
+            authenticated=user_id is not None,
+        )
+        return True
 
     async def _update_quality_score(self, entity_type: str, entity_id: str) -> None:
         """Recalculate and update denormalized quality score on entity table."""
@@ -207,7 +203,7 @@ class FeedbackRepository(BaseRepository):
         issue_type: str,
         description: str,
     ) -> Optional[int]:
-        """Report an issue with a summary. Returns issue ID or None if failed."""
+        """Report an issue with a summary. Returns issue ID or None if validation fails."""
         if not user_id and not session_id:
             logger.warning("issue rejected - no user or session")
             return None
@@ -217,37 +213,32 @@ class FeedbackRepository(BaseRepository):
             logger.warning("issue rejected - invalid type", issue_type=issue_type)
             return None
 
-        try:
-            row = await self._fetchrow(
-                """
-                INSERT INTO userland.issues
-                    (user_id, session_id, entity_type, entity_id, issue_type, description)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                RETURNING id
-                """,
-                user_id,
-                session_id,
-                entity_type,
-                entity_id,
-                issue_type,
-                description,
-            )
-            if not row:
-                return None
-            issue_id = row["id"]
-
-            logger.info(
-                "issue reported",
-                issue_id=issue_id,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                issue_type=issue_type,
-            )
-            return issue_id
-
-        except Exception as e:
-            logger.error("failed to report issue", error=str(e))
+        row = await self._fetchrow(
+            """
+            INSERT INTO userland.issues
+                (user_id, session_id, entity_type, entity_id, issue_type, description)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id
+            """,
+            user_id,
+            session_id,
+            entity_type,
+            entity_id,
+            issue_type,
+            description,
+        )
+        if not row:
             return None
+        issue_id = row["id"]
+
+        logger.info(
+            "issue reported",
+            issue_id=issue_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            issue_type=issue_type,
+        )
+        return issue_id
 
     async def get_open_issues(self, limit: int = 100) -> list[Issue]:
         """Get unresolved issues for admin review."""
