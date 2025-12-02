@@ -11,8 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from config import get_logger
 from database.db_postgres import Database
-from server.dependencies import get_db
-from server.routes.auth import get_current_user
+from server.dependencies import get_current_user, get_db
 from userland.database.models import User
 from userland.server.models import AlertUpdateRequest
 

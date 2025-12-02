@@ -12,8 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Cookie
 
 from database.db_postgres import Database
-from server.dependencies import get_db, get_optional_user
-from server.routes.auth import get_current_user
+from server.dependencies import get_current_user, get_db, get_optional_user
 from userland.database.models import User
 
 router = APIRouter(prefix="/api", tags=["engagement"])
