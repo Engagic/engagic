@@ -25,6 +25,8 @@ from database.repositories_async import (
     SearchRepository,
 )
 from database.repositories_async.userland import UserlandRepository
+from database.repositories_async.engagement import EngagementRepository
+from database.repositories_async.feedback import FeedbackRepository
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
 
@@ -98,6 +100,8 @@ class Database:
         self.queue = QueueRepository(pool)
         self.search = SearchRepository(pool)
         self.userland = UserlandRepository(pool)
+        self.engagement = EngagementRepository(pool)
+        self.feedback = FeedbackRepository(pool)
 
         logger.info("database initialized with repositories", pool_size=f"{pool._minsize}-{pool._maxsize}")
 
