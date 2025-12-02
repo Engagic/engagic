@@ -68,7 +68,7 @@ async def force_sync_city(banana: str, is_admin: bool = Depends(verify_admin_tok
         "success": False,
         "banana": banana,
         "message": "Background processing runs as separate service. Use daemon directly:",
-        "command": f"python /root/engagic/app/daemon.py --sync-city {banana}",
+        "command": f"cd /opt/engagic && uv run python -m pipeline.conductor --sync-city {banana}",
         "alternative": "systemctl status engagic-daemon",
     }
 
@@ -84,7 +84,7 @@ async def force_process_meeting(
         "success": False,
         "packet_url": request.packet_url,
         "message": "Background processing runs as separate service. Use daemon directly:",
-        "command": f"python /root/engagic/app/daemon.py --process-meeting {request.packet_url}",
+        "command": f"cd /opt/engagic && uv run python -m pipeline.conductor --process-url {request.packet_url}",
         "alternative": "systemctl status engagic-daemon",
     }
 
