@@ -2,7 +2,86 @@
 
 All notable changes to the Engagic project are documented here.
 
-Format: [Date] - [Component] - [Change Description]
+For architectural context, see CLAUDE.md and module READMEs.
+
+---
+
+## Current Focus
+
+**Council Member + Voting Completion**
+- Backend infrastructure done (schema, repos, Legistar extraction)
+- Missing: API endpoints, frontend pages, vote extraction for more adapters
+
+**userland/ Polish**
+- Unsubscribe flow, email tracking, PWA push notifications
+
+**Future**
+- Campaign finance and donor tracking
+- Intelligence layer (Phase 6)
+- Remaining vendors: CivicClerk, NovusAgenda, CivicPlus item-level
+
+---
+
+## [2025-12-01] userland/ Civic Alerts System (Phase 2-3 COMPLETE)
+
+**Free civic alerts now live.** Magic link authentication, city + keyword subscriptions, weekly email digests.
+
+- Magic link auth (JWT tokens, 15-min expiry, single-use)
+- User profiles with city + keyword subscriptions (PostgreSQL `userland` schema)
+- Weekly digest emails (Sundays 9am via Mailgun, keyword highlighting)
+- Dashboard API endpoints (signup, login, verify, alert management)
+- Dual-track keyword matching (string-based + matter-based deduplication)
+- Services: `engagic-api.service`, `engagic-digest.timer`
+- Files: `userland/` (~1,900 lines), `database/repositories_async/userland.py` (582 lines)
+
+---
+
+## [2025-12-01] Council Member + Voting Infrastructure (IN PROGRESS)
+
+**Legislative accountability foundation.** Schema and repositories for tracking council member votes.
+
+- Schema: `council_members`, `sponsorships`, `votes`, `committees`, `committee_members`
+- Models: CouncilMember, Vote, Committee, CommitteeMember dataclasses
+- Repository: CouncilMemberRepository (731 lines) - sponsorship + voting methods
+- ID generation: `normalize_sponsor_name()`, `generate_council_member_id()`
+- Legistar adapter: vote extraction complete (`_fetch_event_item_votes_api`)
+- Missing: API endpoints, frontend pages
+
+---
+
+## [2025-11-23] Comprehensive Cleanup & Documentation Audit
+
+**Documentation accuracy: 75% -> 95%.** Dead code deleted, session artifacts archived.
+
+- Deleted dead code: vendors/adapters/all_adapters.py
+- Archived session artifacts to docs/archive/sessions/2024-11/
+- Updated CLAUDE.md with accurate line counts (21,800 -> 27,100 lines)
+- Documented all 10 route modules
+- Total cleanup: -369 lines from root, +848 lines archived
+
+---
+
+## [2025-11-23] Architectural Consolidation
+
+**Consistency score: 6.5/10 -> 8/10.** Pure async conductor, standardized DI, custom exceptions.
+
+- Conductor: pure async with asyncio.create_task(), single event loop
+- Standardized dependency injection (centralized in server.dependencies)
+- Custom exceptions throughout (VendorHTTPError, ExtractionError, LLMError)
+- Centralized config access (USERLAND_DB, USERLAND_JWT_SECRET -> config.py)
+- New `daemon` CLI command (sync + processing concurrently)
+
+---
+
+## [2025-11-21] Title-Based Matter Tracking
+
+**98.9% title uniqueness.** Enables matter tracking for cities without stable vendor IDs.
+
+- Added intelligent fallback hierarchy for matter identification
+- New: `normalize_title_for_matter_id()` strips reading prefixes, excludes generic titles
+- Enables tracking for Palo Alto and 8 other PrimeGov cities
+- Fixed cross-city collision bug in backfill script
+- Files: `database/id_generation.py` (+90 lines)
 
 ---
 

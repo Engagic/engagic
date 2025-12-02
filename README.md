@@ -39,7 +39,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
                (11 Adapters)
 ```
 
-**~27,100 lines Python backend** organized into focused modules:
+**~29,000 lines Python backend** organized into focused modules:
 
 | Module | Purpose | Details |
 |--------|---------|---------|
@@ -48,6 +48,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 | [pipeline/](pipeline/README.md) | Processing orchestration | Sync scheduling, queue management, batch processing |
 | [database/](database/README.md) | PostgreSQL repository pattern | 8 async repositories, matters tracking, userland schema |
 | [server/](server/README.md) | FastAPI public API | 10 route modules, tiered rate limiting, middleware |
+| [userland/](userland/README.md) | Civic alerts system | Magic link auth, email digests, keyword matching |
 
 ---
 
