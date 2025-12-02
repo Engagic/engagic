@@ -368,6 +368,9 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         items_filtered = 0
         item_counter = 0
 
+        # Get meeting ID for vote fetching
+        meeting_id = meeting_detail.get("meetingId")
+
         # Get agenda structure
         agenda = meeting_detail.get("agenda", {})
         groups = agenda.get("groups", [])
