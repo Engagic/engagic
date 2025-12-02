@@ -119,3 +119,109 @@ COMMENT ON COLUMN userland.alerts.cities IS 'JSONB array of city bananas to moni
 COMMENT ON COLUMN userland.alerts.criteria IS 'JSONB object with matching criteria (e.g., {"keywords": ["housing"]})';
 COMMENT ON COLUMN userland.alert_matches.confidence IS 'Match confidence score 0.0-1.0 (1.0 = exact match)';
 COMMENT ON COLUMN userland.alert_matches.matched_criteria IS 'JSONB object with match details for user display';
+
+-- ============================================================
+-- ENGAGEMENT TABLES (Closed Loop Phase 2)
+-- ============================================================
+-- User engagement tracking: watches, activity, trending
+
+-- User watches (matters, meetings, topics, cities, council members)
+CREATE TABLE IF NOT EXISTS userland.watches (
+    id BIGSERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES userland.users(id) ON DELETE CASCADE,
+    entity_type TEXT NOT NULL CHECK (
+        entity_type IN ('matter', 'meeting', 'topic', 'city', 'council_member')
+    ),
+    entity_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, entity_type, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_userland_watches_entity ON userland.watches(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_userland_watches_user ON userland.watches(user_id);
+
+-- Activity log (views, watches, searches, shares)
+CREATE TABLE IF NOT EXISTS userland.activity_log (
+    id BIGSERIAL PRIMARY KEY,
+    user_id TEXT,                    -- NULL for anonymous
+    session_id TEXT,                 -- For anonymous tracking
+    action TEXT NOT NULL CHECK (
+        action IN ('view', 'watch', 'unwatch', 'search', 'share', 'rate', 'report')
+    ),
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    metadata JSONB,                  -- Search query, referrer, etc.
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_userland_activity_entity ON userland.activity_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_userland_activity_time ON userland.activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_userland_activity_user ON userland.activity_log(user_id) WHERE user_id IS NOT NULL;
+
+-- Trending matters (materialized view, refresh every 15 min)
+CREATE MATERIALIZED VIEW IF NOT EXISTS userland.trending_matters AS
+SELECT
+    entity_id AS matter_id,
+    COUNT(*) AS engagement,
+    COUNT(DISTINCT COALESCE(user_id, session_id)) AS unique_users
+FROM userland.activity_log
+WHERE entity_type = 'matter'
+  AND created_at > NOW() - INTERVAL '7 days'
+GROUP BY entity_id
+ORDER BY engagement DESC
+LIMIT 100;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_userland_trending_matters ON userland.trending_matters(matter_id);
+
+-- ============================================================
+-- FEEDBACK TABLES (Closed Loop Phase 3)
+-- ============================================================
+-- User feedback: ratings, issue reports, quality signals
+
+-- Summary ratings (1-5 stars)
+CREATE TABLE IF NOT EXISTS userland.ratings (
+    id BIGSERIAL PRIMARY KEY,
+    user_id TEXT,                    -- NULL for anonymous
+    session_id TEXT,                 -- For anonymous rating
+    entity_type TEXT NOT NULL CHECK (entity_type IN ('item', 'meeting', 'matter')),
+    entity_id TEXT NOT NULL,
+    rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    created_at TIMESTAMP DEFAULT NOW(),
+    -- One rating per user/session per entity
+    CONSTRAINT ratings_unique_user UNIQUE(user_id, entity_type, entity_id),
+    CONSTRAINT ratings_unique_session CHECK (
+        (user_id IS NOT NULL) OR (session_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_userland_ratings_entity ON userland.ratings(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_userland_ratings_user ON userland.ratings(user_id) WHERE user_id IS NOT NULL;
+
+-- Issue reports
+CREATE TABLE IF NOT EXISTS userland.issues (
+    id BIGSERIAL PRIMARY KEY,
+    user_id TEXT,
+    session_id TEXT,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    issue_type TEXT NOT NULL CHECK (
+        issue_type IN ('inaccurate', 'incomplete', 'misleading', 'offensive', 'other')
+    ),
+    description TEXT NOT NULL,
+    status TEXT DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dismissed')),
+    admin_notes TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    resolved_at TIMESTAMP,
+    CONSTRAINT issues_has_reporter CHECK (
+        (user_id IS NOT NULL) OR (session_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_userland_issues_status ON userland.issues(status);
+CREATE INDEX IF NOT EXISTS idx_userland_issues_entity ON userland.issues(entity_type, entity_id);
+
+-- Comments for engagement/feedback tables
+COMMENT ON TABLE userland.watches IS 'User watchlist for entities (matters, meetings, topics, cities, council members)';
+COMMENT ON TABLE userland.activity_log IS 'User activity tracking for analytics and trending calculations';
+COMMENT ON TABLE userland.ratings IS 'User ratings (1-5 stars) for items, meetings, and matters';
+COMMENT ON TABLE userland.issues IS 'User-reported issues (inaccurate, incomplete, etc.) for admin review';
