@@ -84,7 +84,8 @@ class EngagementRepository(BaseRepository):
             entity_type,
             entity_id,
         )
-        return row["count"] if row else 0
+        assert row is not None  # COUNT(*) always returns exactly one row
+        return row["count"]
 
     async def is_watching(self, user_id: str, entity_type: str, entity_id: str) -> bool:
         """Check if user is watching an entity."""

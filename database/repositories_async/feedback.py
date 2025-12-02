@@ -285,16 +285,7 @@ class FeedbackRepository(BaseRepository):
         status: str,
         admin_notes: Optional[str] = None,
     ) -> bool:
-        """Mark issue as resolved or dismissed.
-
-        Args:
-            issue_id: Issue ID
-            status: New status (resolved or dismissed)
-            admin_notes: Optional notes about resolution
-
-        Returns:
-            True if issue was updated
-        """
+        """Mark issue as resolved or dismissed. Returns True if updated."""
         if status not in {"resolved", "dismissed"}:
             logger.warning("invalid issue resolution status", status=status)
             return False

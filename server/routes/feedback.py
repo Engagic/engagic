@@ -12,13 +12,10 @@ from typing import Optional
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from config import get_logger
 from database.db_postgres import Database
 from server.dependencies import get_db, get_optional_user
 from server.routes.auth import get_current_user
 from userland.database.models import User
-
-logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["feedback"])
 
