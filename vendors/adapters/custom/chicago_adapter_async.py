@@ -88,7 +88,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         }
         return vote_map.get(value_lower, "not_voting")
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 30, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings in moving window from Chicago's API (async).
 
