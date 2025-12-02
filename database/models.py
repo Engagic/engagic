@@ -41,7 +41,7 @@ class ParticipationInfo(BaseModel):
     Extracted from PDF text before AI summarization.
     Provides structured contact info for civic engagement.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")  # Allow future fields without breaking
 
     email: Optional[str] = None  # Primary contact email
     emails: Optional[List[EmailContext]] = None  # All emails with context
@@ -51,6 +51,8 @@ class ParticipationInfo(BaseModel):
     is_hybrid: Optional[bool] = None  # In-person + virtual
     is_virtual_only: Optional[bool] = None  # Virtual only
     streaming_urls: Optional[List[StreamingUrl]] = None  # YouTube, cable, etc.
+    public_comment_deadline: Optional[str] = None  # ISO datetime for comment deadline
+    instructions: Optional[str] = None  # Human-readable participation instructions
 
 
 class CityParticipation(BaseModel):
