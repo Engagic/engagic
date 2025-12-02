@@ -10,56 +10,12 @@ Usage:
 import argparse
 import asyncio
 import json
-from typing import Dict
 
 from config import get_logger
 from database.db_postgres import Database
+from database.vote_utils import compute_vote_tally, determine_vote_outcome
 
 logger = get_logger(__name__)
-
-
-def compute_vote_tally(votes: list[dict]) -> Dict[str, int]:
-    """Compute vote tally from vote records."""
-    tally = {"yes": 0, "no": 0, "abstain": 0, "absent": 0}
-
-    vote_map = {
-        "yes": "yes",
-        "aye": "yes",
-        "yea": "yes",
-        "no": "no",
-        "nay": "no",
-        "abstain": "abstain",
-        "abstained": "abstain",
-        "absent": "absent",
-        "excused": "absent",
-        "not present": "absent",
-        "present": "abstain",  # Present but no vote = abstain
-        "recused": "abstain",
-        "not_voting": "absent",
-    }
-
-    for v in votes:
-        vote_value = v.get("vote", "").lower().strip()
-        normalized = vote_map.get(vote_value, "absent")
-        tally[normalized] += 1
-
-    return tally
-
-
-def determine_vote_outcome(tally: Dict[str, int]) -> str:
-    """Determine vote outcome from tally."""
-    yes_count = tally.get("yes", 0)
-    no_count = tally.get("no", 0)
-
-    if yes_count == 0 and no_count == 0:
-        return "no_vote"
-    elif yes_count > no_count:
-        return "passed"
-    elif no_count > yes_count:
-        return "failed"
-    else:
-        # Tie - typically fails or goes to tiebreaker
-        return "tabled"
 
 
 async def backfill_outcomes(dry_run: bool = False, limit: int | None = None) -> dict:
@@ -73,23 +29,35 @@ async def backfill_outcomes(dry_run: bool = False, limit: int | None = None) -> 
     try:
         async with db.pool.acquire() as conn:
             # Find matter_appearances that have votes but no outcome
-            query = """
-                SELECT DISTINCT
-                    ma.matter_id,
-                    ma.meeting_id,
-                    ma.item_id
-                FROM matter_appearances ma
-                WHERE ma.vote_outcome IS NULL
-                AND EXISTS (
-                    SELECT 1 FROM votes v
-                    WHERE v.matter_id = ma.matter_id
-                    AND v.meeting_id = ma.meeting_id
-                )
-            """
             if limit:
-                query += f" LIMIT {limit}"
-
-            appearances = await conn.fetch(query)
+                appearances = await conn.fetch("""
+                    SELECT DISTINCT
+                        ma.matter_id,
+                        ma.meeting_id,
+                        ma.item_id
+                    FROM matter_appearances ma
+                    WHERE ma.vote_outcome IS NULL
+                    AND EXISTS (
+                        SELECT 1 FROM votes v
+                        WHERE v.matter_id = ma.matter_id
+                        AND v.meeting_id = ma.meeting_id
+                    )
+                    LIMIT $1
+                """, limit)
+            else:
+                appearances = await conn.fetch("""
+                    SELECT DISTINCT
+                        ma.matter_id,
+                        ma.meeting_id,
+                        ma.item_id
+                    FROM matter_appearances ma
+                    WHERE ma.vote_outcome IS NULL
+                    AND EXISTS (
+                        SELECT 1 FROM votes v
+                        WHERE v.matter_id = ma.matter_id
+                        AND v.meeting_id = ma.meeting_id
+                    )
+                """)
 
             logger.info(
                 "found appearances needing backfill",

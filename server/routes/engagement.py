@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Cookie
 
 from config import get_logger
 from database.db_postgres import Database
-from server.dependencies import get_db
+from server.dependencies import get_db, get_optional_user
 from server.routes.auth import get_current_user
 from userland.database.models import User
 
@@ -22,14 +22,6 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["engagement"])
 
 VALID_ENTITY_TYPES = {"matter", "meeting", "topic", "city", "council_member"}
-
-
-async def get_optional_user(request: Request) -> Optional[User]:
-    """Optional user dependency - returns None if not authenticated."""
-    try:
-        return await get_current_user(request)
-    except HTTPException:
-        return None
 
 
 @router.post("/watch/{entity_type}/{entity_id}")
@@ -112,17 +104,20 @@ async def get_trending_matters(
 
     trending = await db.engagement.get_trending_matters(limit)
 
-    # Get matter details for display
-    result = []
-    for item in trending:
-        matter = await db.get_matter(item.matter_id)
-        result.append({
+    # Batch fetch matter details (single query instead of N)
+    matter_ids = [item.matter_id for item in trending]
+    matters = await db.matters.get_matters_batch(matter_ids) if matter_ids else {}
+
+    result = [
+        {
             "matter_id": item.matter_id,
             "engagement": item.engagement,
             "unique_users": item.unique_users,
-            "title": matter.title if matter else None,
-            "status": matter.status if matter else None,
-        })
+            "title": matters[item.matter_id].title if item.matter_id in matters else None,
+            "status": matters[item.matter_id].status if item.matter_id in matters else None,
+        }
+        for item in trending
+    ]
 
     return {"success": True, "trending": result}
 

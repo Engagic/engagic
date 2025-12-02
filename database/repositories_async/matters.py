@@ -20,14 +20,19 @@ logger = get_logger(__name__).bind(component="matter_repository")
 
 
 class MatterRepository(BaseRepository):
-    """Repository for matter operations
+    """Repository for matter operations."""
 
-    Provides:
-    - Store/update matters with canonical summaries
-    - Retrieve matters by ID
-    - Update summaries with topic normalization
-    - Attachment hash tracking for change detection
-    """
+    async def _sync_topics(self, conn, matter_id: str, topics: Optional[List[str]]) -> None:
+        """Sync topics to matter_topics table (delete and re-insert)."""
+        if not topics:
+            return
+        await conn.execute("DELETE FROM matter_topics WHERE matter_id = $1", matter_id)
+        for topic in topics:
+            await conn.execute(
+                "INSERT INTO matter_topics (matter_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                matter_id,
+                topic,
+            )
 
     async def store_matter(self, matter: Matter) -> None:
         """Store or update a matter
@@ -80,22 +85,7 @@ class MatterRepository(BaseRepository):
                 matter.status or "active",
             )
 
-            # Normalize topics to matter_topics table
-            if matter.canonical_topics:
-                await conn.execute(
-                    "DELETE FROM matter_topics WHERE matter_id = $1",
-                    matter.id,
-                )
-                for topic in matter.canonical_topics:
-                    await conn.execute(
-                        """
-                        INSERT INTO matter_topics (matter_id, topic)
-                        VALUES ($1, $2)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        matter.id,
-                        topic,
-                    )
+            await self._sync_topics(conn, matter.id, matter.canonical_topics)
 
         logger.debug("stored matter", matter_id=matter.id, banana=matter.banana)
 
@@ -257,24 +247,7 @@ class MatterRepository(BaseRepository):
                 attachment_hash,
             )
 
-            # Update topics normalization
-            if canonical_topics:
-                # Delete existing topics
-                await conn.execute(
-                    "DELETE FROM matter_topics WHERE matter_id = $1",
-                    matter_id,
-                )
-                # Insert new topics
-                for topic in canonical_topics:
-                    await conn.execute(
-                        """
-                        INSERT INTO matter_topics (matter_id, topic)
-                        VALUES ($1, $2)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        matter_id,
-                        topic,
-                    )
+            await self._sync_topics(conn, matter_id, canonical_topics)
 
         logger.debug("updated matter with canonical summary", matter_id=matter_id)
 

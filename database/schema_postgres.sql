@@ -83,11 +83,8 @@ CREATE TABLE IF NOT EXISTS city_matters (
     appearance_count INTEGER DEFAULT 1,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'vetoed', 'enacted')),
     final_vote_date TIMESTAMP,  -- Date when matter reached terminal disposition
-<<<<<<< HEAD
-=======
     quality_score REAL,    -- Denormalized from ratings for efficient queries
     rating_count INTEGER DEFAULT 0,
->>>>>>> main
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
@@ -143,14 +140,9 @@ CREATE TABLE IF NOT EXISTS matter_appearances (
     appeared_at TIMESTAMP NOT NULL,
     committee TEXT,
     action TEXT,
-<<<<<<< HEAD
-    vote_outcome TEXT CHECK (vote_outcome IS NULL OR vote_outcome IN ('passed', 'failed', 'tabled', 'referred', 'amended', 'no_vote')),
-    vote_tally JSONB,  -- {yes: N, no: N, abstain: N, absent: N}
-=======
     vote_outcome TEXT CHECK (vote_outcome IS NULL OR vote_outcome IN ('passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'unknown', 'no_vote')),
     vote_tally JSONB,  -- {yes: N, no: N, abstain: N, absent: N}
     committee_id TEXT,  -- FK to committees for relational queries
->>>>>>> main
     sequence INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE,
@@ -406,12 +398,6 @@ CREATE INDEX IF NOT EXISTS idx_matter_appearances_meeting ON matter_appearances(
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_item ON matter_appearances(item_id);
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_date ON matter_appearances(appeared_at);
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_outcome ON matter_appearances(vote_outcome) WHERE vote_outcome IS NOT NULL;
-<<<<<<< HEAD
-
--- City Matters (outcome tracking)
-CREATE INDEX IF NOT EXISTS idx_city_matters_final_vote ON city_matters(final_vote_date) WHERE final_vote_date IS NOT NULL;
-=======
->>>>>>> main
 
 -- Cache
 CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(content_hash);

@@ -39,16 +39,7 @@ class EngagementRepository(BaseRepository):
     """Repository for user engagement operations."""
 
     async def watch(self, user_id: str, entity_type: str, entity_id: str) -> bool:
-        """Add entity to user's watch list.
-
-        Args:
-            user_id: User ID
-            entity_type: Type of entity (matter, meeting, topic, city, council_member)
-            entity_id: Entity identifier
-
-        Returns:
-            True if watch was created, False if already watching
-        """
+        """Add entity to user's watch list. Returns True if created, False if already watching."""
         try:
             await self._execute(
                 """
@@ -69,16 +60,7 @@ class EngagementRepository(BaseRepository):
             return False
 
     async def unwatch(self, user_id: str, entity_type: str, entity_id: str) -> bool:
-        """Remove entity from user's watch list.
-
-        Args:
-            user_id: User ID
-            entity_type: Type of entity
-            entity_id: Entity identifier
-
-        Returns:
-            True if watch was removed, False if wasn't watching
-        """
+        """Remove entity from user's watch list. Returns True if removed."""
         result = await self._execute(
             """
             DELETE FROM userland.watches
@@ -95,15 +77,7 @@ class EngagementRepository(BaseRepository):
         return deleted
 
     async def get_watch_count(self, entity_type: str, entity_id: str) -> int:
-        """Count users watching an entity.
-
-        Args:
-            entity_type: Type of entity
-            entity_id: Entity identifier
-
-        Returns:
-            Number of users watching
-        """
+        """Count users watching an entity."""
         row = await self._fetchrow(
             """
             SELECT COUNT(*) as count FROM userland.watches
@@ -115,16 +89,7 @@ class EngagementRepository(BaseRepository):
         return row["count"] if row else 0
 
     async def is_watching(self, user_id: str, entity_type: str, entity_id: str) -> bool:
-        """Check if user is watching an entity.
-
-        Args:
-            user_id: User ID
-            entity_type: Type of entity
-            entity_id: Entity identifier
-
-        Returns:
-            True if watching, False otherwise
-        """
+        """Check if user is watching an entity."""
         row = await self._fetchrow(
             """
             SELECT 1 FROM userland.watches
@@ -137,15 +102,7 @@ class EngagementRepository(BaseRepository):
         return row is not None
 
     async def get_user_watches(self, user_id: str, entity_type: Optional[str] = None) -> list[Watch]:
-        """Get all entities a user is watching.
-
-        Args:
-            user_id: User ID
-            entity_type: Optional filter by entity type
-
-        Returns:
-            List of Watch objects
-        """
+        """Get all entities a user is watching, optionally filtered by type."""
         if entity_type:
             rows = await self._fetch(
                 """
@@ -179,16 +136,7 @@ class EngagementRepository(BaseRepository):
         ]
 
     async def get_watchers(self, entity_type: str, entity_id: str, limit: int = 100) -> list[str]:
-        """Get user IDs watching an entity.
-
-        Args:
-            entity_type: Type of entity
-            entity_id: Entity identifier
-            limit: Max users to return
-
-        Returns:
-            List of user IDs
-        """
+        """Get user IDs watching an entity."""
         rows = await self._fetch(
             """
             SELECT user_id FROM userland.watches
@@ -211,16 +159,7 @@ class EngagementRepository(BaseRepository):
         entity_id: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> None:
-        """Record user activity for analytics and trending.
-
-        Args:
-            user_id: User ID (None for anonymous)
-            session_id: Session ID for anonymous tracking
-            action: Action type (view, watch, unwatch, search, share, rate, report)
-            entity_type: Type of entity
-            entity_id: Entity identifier
-            metadata: Optional extra data (search query, referrer, etc.)
-        """
+        """Record user activity for analytics and trending."""
         await self._execute(
             """
             INSERT INTO userland.activity_log
@@ -236,14 +175,7 @@ class EngagementRepository(BaseRepository):
         )
 
     async def get_trending_matters(self, limit: int = 20) -> list[TrendingMatter]:
-        """Get trending matters from materialized view.
-
-        Args:
-            limit: Max matters to return
-
-        Returns:
-            List of TrendingMatter objects ordered by engagement
-        """
+        """Get trending matters from materialized view, ordered by engagement."""
         rows = await self._fetch(
             "SELECT matter_id, engagement, unique_users FROM userland.trending_matters LIMIT $1",
             limit,
@@ -258,11 +190,7 @@ class EngagementRepository(BaseRepository):
         ]
 
     async def refresh_trending(self) -> None:
-        """Refresh trending materialized view.
-
-        Should be called every 15 minutes by daemon or systemd timer.
-        Uses CONCURRENTLY to avoid blocking reads.
-        """
+        """Refresh trending materialized view (called every 15 min by daemon)."""
         try:
             await self._execute("REFRESH MATERIALIZED VIEW CONCURRENTLY userland.trending_matters")
             logger.info("refreshed trending materialized view")

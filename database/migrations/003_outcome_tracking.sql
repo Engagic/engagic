@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_city_matters_final_vote
 ALTER TABLE matter_appearances
     ADD COLUMN IF NOT EXISTS vote_outcome TEXT
     CHECK (vote_outcome IS NULL OR vote_outcome IN (
-        'passed', 'failed', 'tabled', 'referred', 'amended', 'no_vote'
+        'passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'unknown', 'no_vote'
     ));
 
 -- Convert vote_tally from TEXT to JSONB if needed
@@ -89,5 +89,5 @@ CREATE INDEX IF NOT EXISTS idx_matter_appearances_outcome
 
 COMMENT ON COLUMN city_matters.status IS 'Legislative disposition: active (in progress), passed, failed, tabled, withdrawn, referred, amended, vetoed, enacted';
 COMMENT ON COLUMN city_matters.final_vote_date IS 'Date when matter reached terminal disposition (passed/failed/etc)';
-COMMENT ON COLUMN matter_appearances.vote_outcome IS 'Per-meeting vote result: passed, failed, tabled, referred, amended, no_vote';
+COMMENT ON COLUMN matter_appearances.vote_outcome IS 'Per-meeting vote result: passed, failed, tabled, withdrawn, referred, amended, unknown, no_vote';
 COMMENT ON COLUMN matter_appearances.vote_tally IS 'Vote counts as JSONB: {yes: N, no: N, abstain: N, absent: N}';
