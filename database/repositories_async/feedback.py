@@ -43,6 +43,22 @@ class Issue:
 class FeedbackRepository(BaseRepository):
     """Repository for user feedback operations."""
 
+    def _row_to_issue(self, row) -> Issue:
+        """Convert database row to Issue object."""
+        return Issue(
+            id=row["id"],
+            user_id=row["user_id"],
+            session_id=row["session_id"],
+            entity_type=row["entity_type"],
+            entity_id=row["entity_id"],
+            issue_type=row["issue_type"],
+            description=row["description"],
+            status=row["status"],
+            admin_notes=row["admin_notes"],
+            created_at=row["created_at"],
+            resolved_at=row["resolved_at"],
+        )
+
     async def submit_rating(
         self,
         user_id: Optional[str],
@@ -51,18 +67,7 @@ class FeedbackRepository(BaseRepository):
         entity_id: str,
         rating: int,
     ) -> bool:
-        """Submit or update a rating.
-
-        Args:
-            user_id: User ID (None for anonymous)
-            session_id: Session ID for anonymous rating
-            entity_type: Type of entity (item, meeting, matter)
-            entity_id: Entity identifier
-            rating: Rating value (1-5)
-
-        Returns:
-            True if rating was created/updated
-        """
+        """Submit or update a rating (1-5). Returns True if successful."""
         if not user_id and not session_id:
             logger.warning("rating rejected - no user or session")
             return False
@@ -118,10 +123,7 @@ class FeedbackRepository(BaseRepository):
             return False
 
     async def _update_quality_score(self, entity_type: str, entity_id: str) -> None:
-        """Recalculate quality score from ratings.
-
-        Updates denormalized score on entity table for efficient queries.
-        """
+        """Recalculate and update denormalized quality score on entity table."""
         stats = await self.get_entity_rating(entity_type, entity_id)
 
         if entity_type == "item":
@@ -149,15 +151,7 @@ class FeedbackRepository(BaseRepository):
         # Meetings don't have denormalized scores currently
 
     async def get_entity_rating(self, entity_type: str, entity_id: str) -> RatingStats:
-        """Get rating statistics for an entity.
-
-        Args:
-            entity_type: Type of entity
-            entity_id: Entity identifier
-
-        Returns:
-            RatingStats with average, count, and distribution
-        """
+        """Get rating statistics (avg, count, distribution) for an entity."""
         rows = await self._fetch(
             """
             SELECT rating, COUNT(*) as count
@@ -192,16 +186,7 @@ class FeedbackRepository(BaseRepository):
         entity_type: str,
         entity_id: str,
     ) -> Optional[int]:
-        """Get user's rating for an entity.
-
-        Args:
-            user_id: User ID
-            entity_type: Type of entity
-            entity_id: Entity identifier
-
-        Returns:
-            Rating value (1-5) or None if not rated
-        """
+        """Get user's rating (1-5) for an entity, or None if not rated."""
         row = await self._fetchrow(
             """
             SELECT rating FROM userland.ratings
@@ -222,19 +207,7 @@ class FeedbackRepository(BaseRepository):
         issue_type: str,
         description: str,
     ) -> Optional[int]:
-        """Report an issue with a summary.
-
-        Args:
-            user_id: User ID (None for anonymous)
-            session_id: Session ID for anonymous reporting
-            entity_type: Type of entity
-            entity_id: Entity identifier
-            issue_type: Type of issue (inaccurate, incomplete, misleading, offensive, other)
-            description: User description of the issue
-
-        Returns:
-            Issue ID or None if failed
-        """
+        """Report an issue with a summary. Returns issue ID or None if failed."""
         if not user_id and not session_id:
             logger.warning("issue rejected - no user or session")
             return None
@@ -259,6 +232,8 @@ class FeedbackRepository(BaseRepository):
                 issue_type,
                 description,
             )
+            if not row:
+                return None
             issue_id = row["id"]
 
             logger.info(
@@ -275,14 +250,7 @@ class FeedbackRepository(BaseRepository):
             return None
 
     async def get_open_issues(self, limit: int = 100) -> list[Issue]:
-        """Get unresolved issues for admin review.
-
-        Args:
-            limit: Max issues to return
-
-        Returns:
-            List of open Issue objects
-        """
+        """Get unresolved issues for admin review."""
         rows = await self._fetch(
             """
             SELECT id, user_id, session_id, entity_type, entity_id,
@@ -295,22 +263,7 @@ class FeedbackRepository(BaseRepository):
             """,
             limit,
         )
-        return [
-            Issue(
-                id=row["id"],
-                user_id=row["user_id"],
-                session_id=row["session_id"],
-                entity_type=row["entity_type"],
-                entity_id=row["entity_id"],
-                issue_type=row["issue_type"],
-                description=row["description"],
-                status=row["status"],
-                admin_notes=row["admin_notes"],
-                created_at=row["created_at"],
-                resolved_at=row["resolved_at"],
-            )
-            for row in rows
-        ]
+        return [self._row_to_issue(row) for row in rows]
 
     async def get_entity_issues(
         self,
@@ -318,60 +271,22 @@ class FeedbackRepository(BaseRepository):
         entity_id: str,
         status: Optional[str] = None,
     ) -> list[Issue]:
-        """Get issues for a specific entity.
-
-        Args:
-            entity_type: Type of entity
-            entity_id: Entity identifier
-            status: Optional filter by status
-
-        Returns:
-            List of Issue objects
+        """Get issues for a specific entity, optionally filtered by status."""
+        query = """
+            SELECT id, user_id, session_id, entity_type, entity_id,
+                   issue_type, description, status, admin_notes,
+                   created_at, resolved_at
+            FROM userland.issues
+            WHERE entity_type = $1 AND entity_id = $2
         """
+        params = [entity_type, entity_id]
         if status:
-            rows = await self._fetch(
-                """
-                SELECT id, user_id, session_id, entity_type, entity_id,
-                       issue_type, description, status, admin_notes,
-                       created_at, resolved_at
-                FROM userland.issues
-                WHERE entity_type = $1 AND entity_id = $2 AND status = $3
-                ORDER BY created_at DESC
-                """,
-                entity_type,
-                entity_id,
-                status,
-            )
-        else:
-            rows = await self._fetch(
-                """
-                SELECT id, user_id, session_id, entity_type, entity_id,
-                       issue_type, description, status, admin_notes,
-                       created_at, resolved_at
-                FROM userland.issues
-                WHERE entity_type = $1 AND entity_id = $2
-                ORDER BY created_at DESC
-                """,
-                entity_type,
-                entity_id,
-            )
+            query += " AND status = $3"
+            params.append(status)
+        query += " ORDER BY created_at DESC"
 
-        return [
-            Issue(
-                id=row["id"],
-                user_id=row["user_id"],
-                session_id=row["session_id"],
-                entity_type=row["entity_type"],
-                entity_id=row["entity_id"],
-                issue_type=row["issue_type"],
-                description=row["description"],
-                status=row["status"],
-                admin_notes=row["admin_notes"],
-                created_at=row["created_at"],
-                resolved_at=row["resolved_at"],
-            )
-            for row in rows
-        ]
+        rows = await self._fetch(query, *params)
+        return [self._row_to_issue(row) for row in rows]
 
     async def resolve_issue(
         self,
@@ -415,15 +330,7 @@ class FeedbackRepository(BaseRepository):
         threshold: float = 2.5,
         min_ratings: int = 3,
     ) -> list[tuple[str, str]]:
-        """Get entities with low ratings for reprocessing consideration.
-
-        Args:
-            threshold: Maximum average rating to include
-            min_ratings: Minimum number of ratings required
-
-        Returns:
-            List of (entity_type, entity_id) tuples
-        """
+        """Get entities with low avg rating for reprocessing consideration."""
         rows = await self._fetch(
             """
             SELECT entity_type, entity_id
@@ -442,15 +349,7 @@ class FeedbackRepository(BaseRepository):
         entity_type: str,
         entity_id: str,
     ) -> int:
-        """Get count of open issues for an entity.
-
-        Args:
-            entity_type: Type of entity
-            entity_id: Entity identifier
-
-        Returns:
-            Number of open issues
-        """
+        """Get count of open issues for an entity."""
         row = await self._fetchrow(
             """
             SELECT COUNT(*) as count FROM userland.issues

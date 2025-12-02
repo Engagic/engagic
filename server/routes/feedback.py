@@ -9,12 +9,12 @@ User feedback endpoints for the closed loop architecture:
 
 from typing import Optional
 
-from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, Request
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from config import get_logger
 from database.db_postgres import Database
-from server.dependencies import get_db
+from server.dependencies import get_db, get_optional_user
 from server.routes.auth import get_current_user
 from userland.database.models import User
 
@@ -24,14 +24,6 @@ router = APIRouter(prefix="/api", tags=["feedback"])
 
 VALID_ENTITY_TYPES = {"item", "meeting", "matter"}
 VALID_ISSUE_TYPES = {"inaccurate", "incomplete", "misleading", "offensive", "other"}
-
-
-async def get_optional_user(request: Request) -> Optional[User]:
-    """Optional user dependency - returns None if not authenticated."""
-    try:
-        return await get_current_user(request)
-    except HTTPException:
-        return None
 
 
 class RatingRequest(BaseModel):
