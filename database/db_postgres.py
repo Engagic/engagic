@@ -24,7 +24,10 @@ from database.repositories_async import (
     QueueRepository,
     SearchRepository,
 )
+from database.repositories_async.engagement import EngagementRepository
+from database.repositories_async.feedback import FeedbackRepository
 from database.repositories_async.userland import UserlandRepository
+from database.vote_utils import compute_vote_tally, determine_vote_outcome
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
 
@@ -98,6 +101,8 @@ class Database:
         self.queue = QueueRepository(pool)
         self.search = SearchRepository(pool)
         self.userland = UserlandRepository(pool)
+        self.engagement = EngagementRepository(pool)
+        self.feedback = FeedbackRepository(pool)
 
         logger.info("database initialized with repositories", pool_size=f"{pool._minsize}-{pool._maxsize}")
 
@@ -552,6 +557,26 @@ class Database:
                         meeting_id=meeting.id,
                         votes=votes,
                         vote_date=meeting.date,
+                    )
+
+                    # Compute vote tally and outcome for matter_appearances
+                    vote_tally = compute_vote_tally(votes)
+                    vote_outcome = determine_vote_outcome(vote_tally)
+
+                    # Update matter_appearances with outcome (closed loop tracking)
+                    await self.matters.update_appearance_outcome(
+                        matter_id=matter_composite_id,
+                        meeting_id=meeting.id,
+                        item_id=agenda_item.id,
+                        vote_outcome=vote_outcome,
+                        vote_tally=vote_tally,
+                    )
+
+                    logger.debug(
+                        "recorded vote outcome",
+                        matter_id=matter_composite_id,
+                        outcome=vote_outcome,
+                        tally=vote_tally,
                     )
 
             except Exception as e:
