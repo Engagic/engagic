@@ -19,16 +19,7 @@ export default defineConfig({
             $components: '/src/components',
             $lib: '/src/lib'
         }
-    },
-    build: {
-        rollupOptions: {
-            output: {
-                // Separate vendor chunks for better caching
-                manualChunks: {
-                    'vendor-date': ['date-fns'],
-                    'vendor-markdown': ['marked']
-                }
-            }
-        }
     }
+    // Note: manualChunks removed - incompatible with SvelteKit Cloudflare adapter
+    // (deps marked as external for SSR)
 });
