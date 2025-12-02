@@ -283,7 +283,6 @@ def _generate_logo_data_url() -> str:
 
         # Fallback to filesystem paths (development mode or manual deployment)
         possible_paths = [
-            Path("/root/engagic/frontend/static/icon-192.png"),
             Path(__file__).parent.parent.parent / "frontend" / "static" / "icon-192.png",
             Path(__file__).parent.parent.parent / "static" / "icon-192.png",
         ]
