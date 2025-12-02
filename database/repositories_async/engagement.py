@@ -14,7 +14,7 @@ from typing import Optional
 from config import get_logger
 from database.repositories_async.base import BaseRepository
 
-logger = get_logger(__name__)
+logger = get_logger(__name__).bind(component="engagement_repository")
 
 
 @dataclass

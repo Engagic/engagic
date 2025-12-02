@@ -97,6 +97,9 @@ async def report_issue(
     Works for both authenticated and anonymous users.
     Anonymous users must have a session_id cookie.
     """
+    if entity_type not in VALID_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+
     if body.issue_type not in VALID_ISSUE_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid issue type. Must be one of: {VALID_ISSUE_TYPES}")
 
