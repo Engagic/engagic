@@ -8,15 +8,21 @@ URL patterns:
 - Meetings list: /meeting-agenda (with OData filtering)
 - Meeting detail: /meeting-agenda/{meetingId}
 - Matter details: /matter/{matterId}
+- Matter by record: /matter/recordNumber/{recordNumber}
 - Votes: /meeting-agenda/{meetingId}/matter/{lineId}/votes
 
-API structure (verified Nov 2025):
+API structure (verified Dec 2025):
 - OData-style filtering: filter=date gt datetime'2025-01-01T00:00:00Z'
 - Pagination: top (max 500), skip
 - Sorting: sort=date desc
 - Meeting agenda has nested structure: agenda.groups[].items[]
-- Items link to matters via matterId
-- Matters have attachments array
+- NOTE: Chicago API returns empty agenda.groups[] for most meetings
+- Fallback: Extract record numbers from agenda PDF, fetch via /matter/recordNumber/
+
+Item extraction hierarchy:
+1. API agenda.groups[].items[] (primary - rarely populated)
+2. PDF extraction (fallback - parse agenda PDF for record numbers)
+3. packet_url (last resort - monolithic LLM processing)
 
 Async version with:
 - aiohttp for async HTTP requests
@@ -30,6 +36,8 @@ from datetime import datetime, timedelta
 
 import aiohttp
 
+from parsing.chicago_pdf import parse_chicago_agenda_pdf
+from parsing.pdf import PdfExtractor
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.utils.item_filters import should_skip_procedural_item
 
@@ -48,6 +56,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
     def __init__(self, city_slug: str):
         super().__init__(city_slug, vendor="chicago")
         self.base_url = "https://api.chicityclerkelms.chicago.gov"
+        self.pdf_extractor = PdfExtractor()
         self._sync_stats: Dict[str, int] = {}
 
     def _reset_stats(self) -> None:
@@ -366,7 +375,17 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         groups = agenda.get("groups", [])
 
         if not groups:
-            logger.debug("no agenda groups found", slug=self.slug)
+            # Fallback: Extract items from agenda PDF
+            pdf_items = await self._extract_items_from_pdf(meeting_detail)
+            if pdf_items:
+                logger.info(
+                    "items extracted from pdf",
+                    slug=self.slug,
+                    meeting_id=meeting_id,
+                    item_count=len(pdf_items)
+                )
+                return pdf_items
+            logger.debug("no agenda groups and pdf extraction failed", slug=self.slug)
             return items
 
         # Collect items that need matter data
@@ -516,6 +535,208 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         logger.debug("extracted substantive items", slug=self.slug, item_count=len(items))
         return items
+
+    async def _extract_items_from_pdf(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Fallback: Extract items from agenda PDF when API agenda.groups is empty.
+
+        Strategy:
+        1. Find Agenda PDF in meeting files
+        2. Extract text from PDF
+        3. Parse record numbers (e.g., O2025-0019668)
+        4. Fetch matter data for each via /matter/recordNumber/
+        5. Build items with title, sponsors, attachments
+        """
+        meeting_id = meeting_detail.get("meetingId")
+        files = meeting_detail.get("files", [])
+
+        # Find Agenda file (prefer "Agenda" type, fallback to first PDF)
+        agenda_file = next(
+            (f for f in files if f.get("attachmentType") == "Agenda"),
+            next((f for f in files if f.get("path", "").lower().endswith(".pdf")), None)
+        )
+
+        if not agenda_file:
+            logger.debug("no agenda pdf found", slug=self.slug, meeting_id=meeting_id)
+            return []
+
+        pdf_url = agenda_file.get("path")
+        if not pdf_url:
+            return []
+
+        # Extract PDF text in thread (sync operation)
+        try:
+            pdf_result = await asyncio.to_thread(
+                self.pdf_extractor.extract_from_url,
+                pdf_url,
+                False  # extract_links not needed
+            )
+        except Exception as e:
+            logger.warning("pdf extraction failed", slug=self.slug, meeting_id=meeting_id, error=str(e))
+            return []
+
+        if not pdf_result.get("success") or not pdf_result.get("text"):
+            logger.debug("pdf extraction empty", slug=self.slug, meeting_id=meeting_id)
+            return []
+
+        # Parse record numbers from PDF text
+        parsed = parse_chicago_agenda_pdf(pdf_result["text"])
+        pdf_items = parsed.get("items", [])
+
+        if not pdf_items:
+            logger.debug("no record numbers found in pdf", slug=self.slug, meeting_id=meeting_id)
+            return []
+
+        logger.debug(
+            "record numbers extracted from pdf",
+            slug=self.slug,
+            meeting_id=meeting_id,
+            record_count=len(pdf_items)
+        )
+
+        # Fetch matter data for each record number concurrently
+        record_numbers = [item["record_number"] for item in pdf_items]
+        matter_results = await asyncio.gather(
+            *[self._fetch_matter_by_record_number(rn) for rn in record_numbers],
+            return_exceptions=True
+        )
+
+        # Build items from matter data
+        items = []
+        for pdf_item, matter_result in zip(pdf_items, matter_results):
+            if isinstance(matter_result, Exception) or not matter_result:
+                logger.debug(
+                    "matter fetch failed for record",
+                    slug=self.slug,
+                    record_number=pdf_item["record_number"]
+                )
+                continue
+
+            matter_data = matter_result
+
+            # Build item with all key identifiers:
+            # - matter_file: public record number (O2025-0019668)
+            # - matter_id: backend UUID from Chicago API
+            # - agenda_number: item position within this meeting (1, 2, 3...)
+            item_data = {
+                "item_id": matter_data.get("matter_id") or pdf_item["record_number"],
+                "title": matter_data.get("title") or pdf_item.get("title_hint", ""),
+                "sequence": pdf_item["sequence"],
+                "agenda_number": str(pdf_item["sequence"]),  # Position within meeting
+                "matter_file": pdf_item["record_number"],  # Public file number
+                "attachments": matter_data.get("attachments", []),
+            }
+
+            if matter_data.get("matter_id"):
+                item_data["matter_id"] = matter_data["matter_id"]  # Backend UUID
+
+            if matter_data.get("sponsors"):
+                item_data["sponsors"] = matter_data["sponsors"]
+
+            if matter_data.get("matter_type"):
+                item_data["matter_type"] = matter_data["matter_type"]
+
+            # Build metadata
+            metadata = {}
+            if matter_data.get("matter_status"):
+                metadata["matter_status"] = matter_data["matter_status"]
+            if matter_data.get("vote_outcome"):
+                metadata["vote_outcome"] = matter_data["vote_outcome"]
+            if matter_data.get("controlling_body"):
+                metadata["controlling_body"] = matter_data["controlling_body"]
+
+            if metadata:
+                item_data["metadata"] = metadata
+
+            items.append(item_data)
+
+        return items
+
+    async def _fetch_matter_by_record_number(self, record_number: str) -> Optional[Dict[str, Any]]:
+        """Fetch full matter data by record number (e.g., O2025-0019668)."""
+        matter_url = f"{self.base_url}/matter/recordNumber/{record_number}"
+
+        try:
+            response = await self._get(matter_url)
+            self._sync_stats["api_requests"] += 1
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.debug("network error fetching matter by record", slug=self.slug, record_number=record_number, error=str(e))
+            return None
+
+        try:
+            matter_data = await response.json(content_type=None)
+        except ValueError as e:
+            logger.debug("invalid json for matter record", slug=self.slug, record_number=record_number, error=str(e))
+            return None
+
+        # Check for API error responses
+        if not matter_data or matter_data.get("error"):
+            return None
+
+        # Extract and normalize matter data
+        matter_id = matter_data.get("matterId")
+        title = matter_data.get("title", "")
+        matter_type = matter_data.get("type")
+        matter_status = matter_data.get("status") or None
+        controlling_body = matter_data.get("controllingBody")
+
+        # Map status to vote outcome
+        status_lower = matter_status.lower() if matter_status else ""
+        outcome_map = {
+            "adopted": "passed",
+            "approved": "passed",
+            "passed": "passed",
+            "failed": "failed",
+            "rejected": "failed",
+            "withdrawn": "withdrawn",
+            "tabled": "tabled",
+            "deferred": "tabled",
+            "referred": None,
+            "pending": None,
+        }
+        vote_outcome = outcome_map.get(status_lower)
+
+        # Extract attachments
+        raw_attachments = matter_data.get("attachments", [])
+        attachments = []
+        for att in raw_attachments:
+            file_name = (att.get("fileName") or "").strip()
+            path = (att.get("path") or "").strip()
+            attachment_type = (att.get("attachmentType") or "").strip()
+
+            if not path:
+                continue
+
+            path_lower = path.lower()
+            if path_lower.endswith(".pdf"):
+                file_type = "pdf"
+            elif path_lower.endswith((".doc", ".docx")):
+                file_type = "doc"
+            elif path_lower.endswith((".xls", ".xlsx")):
+                file_type = "spreadsheet"
+            else:
+                file_type = "unknown"
+
+            attachments.append({
+                "name": file_name or attachment_type or "Attachment",
+                "url": path,
+                "type": file_type,
+            })
+
+        # Extract sponsors
+        raw_sponsors = matter_data.get("sponsors", [])
+        sponsors = [s.get("sponsorName") for s in raw_sponsors if s.get("sponsorName")]
+
+        return {
+            "matter_id": str(matter_id) if matter_id else None,
+            "title": title,
+            "matter_type": matter_type,
+            "matter_status": matter_status,
+            "vote_outcome": vote_outcome,
+            "controlling_body": controlling_body,
+            "attachments": attachments,
+            "sponsors": sponsors,
+        }
 
     async def _fetch_matter_data(self, matter_id: str) -> Dict[str, Any]:
         """Fetch matter attachments, sponsors, and status. Returns _EMPTY_MATTER on failure."""
