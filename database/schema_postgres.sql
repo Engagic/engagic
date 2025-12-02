@@ -81,14 +81,10 @@ CREATE TABLE IF NOT EXISTS city_matters (
     first_seen TIMESTAMP,
     last_seen TIMESTAMP,
     appearance_count INTEGER DEFAULT 1,
-<<<<<<< Updated upstream
-    status TEXT DEFAULT 'active',
-=======
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'vetoed', 'enacted')),
     final_vote_date TIMESTAMP,  -- Date when matter reached terminal disposition
     quality_score REAL,    -- Denormalized from ratings for efficient queries
     rating_count INTEGER DEFAULT 0,
->>>>>>> Stashed changes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
@@ -144,13 +140,9 @@ CREATE TABLE IF NOT EXISTS matter_appearances (
     appeared_at TIMESTAMP NOT NULL,
     committee TEXT,
     action TEXT,
-<<<<<<< Updated upstream
-    vote_tally TEXT,
-=======
     vote_outcome TEXT CHECK (vote_outcome IS NULL OR vote_outcome IN ('passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'unknown', 'no_vote')),
     vote_tally JSONB,  -- {yes: N, no: N, abstain: N, absent: N}
     committee_id TEXT,  -- FK to committees for relational queries
->>>>>>> Stashed changes
     sequence INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE,
@@ -394,6 +386,7 @@ CREATE INDEX IF NOT EXISTS idx_city_matters_matter_file ON city_matters(matter_f
 CREATE INDEX IF NOT EXISTS idx_city_matters_first_seen ON city_matters(first_seen);
 CREATE INDEX IF NOT EXISTS idx_city_matters_status ON city_matters(status);
 CREATE INDEX IF NOT EXISTS idx_city_matters_banana_file ON city_matters(banana, matter_file) WHERE matter_file IS NOT NULL;  -- Composite for matter lookup
+CREATE INDEX IF NOT EXISTS idx_city_matters_final_vote ON city_matters(final_vote_date) WHERE final_vote_date IS NOT NULL;
 
 -- Matter topics (new normalized table)
 CREATE INDEX IF NOT EXISTS idx_matter_topics_topic ON matter_topics(topic);
@@ -404,6 +397,7 @@ CREATE INDEX IF NOT EXISTS idx_matter_appearances_matter ON matter_appearances(m
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_meeting ON matter_appearances(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_item ON matter_appearances(item_id);
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_date ON matter_appearances(appeared_at);
+CREATE INDEX IF NOT EXISTS idx_matter_appearances_outcome ON matter_appearances(vote_outcome) WHERE vote_outcome IS NOT NULL;
 
 -- Cache
 CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(content_hash);
