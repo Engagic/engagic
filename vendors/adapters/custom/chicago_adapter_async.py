@@ -43,6 +43,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         "sponsors": [],
         "matter_status": None,
         "vote_outcome": None,
+        "votes": [],
     }
 
     def __init__(self, city_slug: str):
@@ -358,9 +359,6 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         items_filtered = 0
         item_counter = 0
 
-        # Get meeting ID for vote fetching
-        meeting_id = meeting_detail.get("meetingId")
-
         # Get agenda structure
         agenda = meeting_detail.get("agenda", {})
         groups = agenda.get("groups", [])
@@ -381,13 +379,14 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 # Extract item data
                 matter_id = item.get("matterId")
                 comment_id = item.get("commentId")
-                line_id = item.get("lineId")  # Needed for vote fetching
                 title = item.get("matterTitle", "").strip()
                 sequence = int(item.get("sort") or 0)
                 record_number = item.get("recordNumber")
                 matter_type = item.get("matterType")
                 action_name = item.get("actionName")
                 display_id = item.get("displayId")
+                has_votes = item.get("hasVotes", False)
+                vote_type = item.get("voteType")
 
                 # Use matterId or commentId as item_id
                 item_id = matter_id or comment_id
@@ -417,12 +416,13 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                     "title": title,
                     "sequence": sequence,
                     "matter_id": matter_id,
-                    "line_id": str(line_id) if line_id else None,  # Track for vote fetching
                     "record_number": record_number,
                     "matter_type": matter_type,
                     "action_name": action_name,
                     "display_id": display_id,
                     "group_title": group_title,
+                    "has_votes": has_votes,
+                    "vote_type": vote_type,
                 })
 
                 if matter_id:
@@ -442,33 +442,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 else:
                     matter_data_map[mid] = result
 
-        # Fetch votes concurrently for items with lineId
-        votes_map = {}  # Maps item index to votes list
-        if meeting_id:
-            items_for_votes = [
-                (idx, pitem["line_id"])
-                for idx, pitem in enumerate(preliminary_items)
-                if pitem.get("line_id") and pitem.get("matter_id")  # Only fetch votes for substantive items
-            ]
-            if items_for_votes:
-                vote_tasks = [
-                    self._fetch_item_votes(str(meeting_id), line_id)
-                    for idx, line_id in items_for_votes
-                ]
-                vote_results = await asyncio.gather(*vote_tasks, return_exceptions=True)
-                for (idx, _), result in zip(items_for_votes, vote_results):
-                    if isinstance(result, list) and result:
-                        votes_map[idx] = result
-                if votes_map:
-                    logger.debug(
-                        "votes fetched for items",
-                        slug=self.slug,
-                        items_with_votes=len(votes_map),
-                        total_votes=sum(len(v) for v in votes_map.values())
-                    )
-
-        # Build final items
-        for idx, pitem in enumerate(preliminary_items):
+        # Build final items - votes now come from matter data (no separate API calls)
+        for pitem in preliminary_items:
             matter_id = pitem["matter_id"]
             matter_data = matter_data_map.get(matter_id, self._EMPTY_MATTER) if matter_id else self._EMPTY_MATTER
 
@@ -497,6 +472,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 metadata["action_name"] = pitem["action_name"]
             if pitem["group_title"]:
                 metadata["section"] = pitem["group_title"]
+            if pitem.get("vote_type"):
+                metadata["vote_type"] = pitem["vote_type"]
             if matter_data.get("matter_status"):
                 metadata["matter_status"] = matter_data["matter_status"]
             if matter_data.get("vote_outcome"):
@@ -505,9 +482,9 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             if metadata:
                 item_data["metadata"] = metadata
 
-            # Attach votes if available
-            if idx in votes_map:
-                item_data["votes"] = votes_map[idx]
+            # Attach votes from matter data (embedded in actions[].votes[])
+            if matter_data.get("votes"):
+                item_data["votes"] = matter_data["votes"]
 
             items.append(item_data)
 
@@ -591,6 +568,27 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         }
         vote_outcome = outcome_map.get(status_lower)
 
+        # Extract votes from actions - eliminates need for separate vote API calls
+        votes = []
+        raw_actions = matter_data.get("actions", [])
+        for action in raw_actions:
+            action_votes = action.get("votes", [])
+            for idx, vote_record in enumerate(action_votes, 1):
+                voter_name = vote_record.get("voterName")
+                vote_value = vote_record.get("vote")
+                if not voter_name or not vote_value:
+                    continue
+                votes.append({
+                    "name": voter_name,
+                    "vote": self._normalize_vote_value(vote_value),
+                    "sequence": idx,
+                    "metadata": {
+                        "person_id": str(vote_record.get("personId")) if vote_record.get("personId") else None,
+                        "action_name": action.get("actionName"),
+                        "meeting_id": action.get("meetingId"),
+                    }
+                })
+
         logger.debug(
             "matter data fetched",
             slug=self.slug,
@@ -598,58 +596,14 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             attachment_count=len(attachments),
             sponsor_count=len(sponsors),
             matter_status=matter_status,
-            vote_outcome=vote_outcome
+            vote_outcome=vote_outcome,
+            vote_count=len(votes)
         )
         return {
             "attachments": attachments,
             "sponsors": sponsors,
             "matter_status": matter_status,
             "vote_outcome": vote_outcome,
+            "votes": votes,
         }
 
-    async def _fetch_item_votes(
-        self,
-        meeting_id: str,
-        line_id: str
-    ) -> Optional[List[Dict[str, Any]]]:
-        """Fetch votes for agenda item. Note: line_id is from agenda, NOT matter_id."""
-        votes_url = f"{self.base_url}/meeting-agenda/{meeting_id}/matter/{line_id}/votes"
-
-        try:
-            response = await self._get(votes_url)
-            self._sync_stats["api_requests"] += 1
-            # content_type=None: Chicago API sometimes returns text/plain with JSON body
-            data = await response.json(content_type=None)
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.debug("no votes available", slug=self.slug, meeting_id=meeting_id, line_id=line_id, error=str(e))
-            return None
-        except ValueError as e:
-            logger.debug("vote fetch invalid json", slug=self.slug, meeting_id=meeting_id, line_id=line_id, error=str(e))
-            return None
-
-        # Extract votes from response
-        raw_votes = data.get("data", []) if isinstance(data, dict) else data if isinstance(data, list) else []
-        if not raw_votes:
-            return None
-
-        votes = []
-        for idx, vote_record in enumerate(raw_votes, 1):
-            person_name = vote_record.get("personName")
-            vote_value = vote_record.get("vote")
-
-            if not person_name or not vote_value:
-                continue
-
-            votes.append({
-                "name": person_name,
-                "vote": self._normalize_vote_value(vote_value),
-                "sequence": idx,
-                "metadata": {
-                    "person_id": str(vote_record.get("personId")) if vote_record.get("personId") else None
-                }
-            })
-
-        if votes:
-            logger.debug("votes fetched", slug=self.slug, meeting_id=meeting_id, line_id=line_id, vote_count=len(votes))
-
-        return votes if votes else None
