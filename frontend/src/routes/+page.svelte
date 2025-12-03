@@ -7,6 +7,7 @@
 	import { validateSearchQuery } from '$lib/utils/sanitize';
 	import { logger } from '$lib/services/logger';
 	import Footer from '$lib/components/Footer.svelte';
+	import TrendingMatters from '$lib/components/TrendingMatters.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -275,6 +276,8 @@
 			</button>
 		</div>
 	</div>
+
+	<TrendingMatters limit={5} />
 
 	{#if error}
 		<div class="error-message" id="search-error" role="alert">

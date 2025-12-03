@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
-	import type { SearchResult, Meeting } from '$lib/api/index';
-	import { isSearchSuccess } from '$lib/api/index';
+	import type { SearchResult, Meeting, MeetingVotesResponse, MeetingVoteMatter } from '$lib/api/index';
+	import { isSearchSuccess, getMeetingVotes } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
 	import { findItemByAnchor } from '$lib/utils/anchor';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
@@ -14,6 +15,30 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	// Vote data for this meeting
+	let votesData = $state<MeetingVotesResponse | null>(null);
+
+	// Map matter_id -> vote info for quick lookup
+	const votesByMatter = $derived(() => {
+		if (!votesData?.matters_with_votes) return new Map<string, MeetingVoteMatter>();
+		const map = new Map<string, MeetingVoteMatter>();
+		for (const mv of votesData.matters_with_votes) {
+			map.set(mv.matter_id, mv);
+		}
+		return map;
+	});
+
+	onMount(async () => {
+		if (data.selectedMeeting?.id) {
+			try {
+				votesData = await getMeetingVotes(data.selectedMeeting.id);
+			} catch (e) {
+				// No votes available for this meeting - that's okay
+				console.debug('No votes available for meeting:', data.selectedMeeting.id);
+			}
+		}
+	});
 
 	let city_banana = $page.params.city_url;
 	let searchResults: SearchResult | null = $state(data.searchResults || null);
@@ -216,6 +241,7 @@
 			{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
 				<div class="agenda-items">
 					{#each displayedItems as item (item.id)}
+						{@const voteInfo = item.matter_id ? votesByMatter().get(item.matter_id) : undefined}
 						<svelte:boundary onerror={(e) => console.error('Agenda item error:', e, item.id)}>
 							<AgendaItem
 								{item}
@@ -224,6 +250,7 @@
 								{expandedTitles}
 								{flyerGenerating}
 								onFlyerGenerate={handleFlyerGenerateChange}
+								{voteInfo}
 							/>
 							{#snippet failed(error: unknown, reset: () => void)}
 								<div class="agenda-item-error">

@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { marked } from 'marked';
-	import type { AgendaItem as AgendaItemType, Meeting } from '$lib/api/types';
+	import type { AgendaItem as AgendaItemType, Meeting, MeetingVoteMatter } from '$lib/api/types';
 	import { generateFlyer } from '$lib/api/index';
 	import { generateAnchorId } from '$lib/utils/anchor';
 	import { buildItemShareLink } from '$lib/utils/utils';
 	import { SvelteSet } from 'svelte/reactivity';
+	import VoteBadge from './VoteBadge.svelte';
 
 	interface Props {
 		item: AgendaItemType;
@@ -13,9 +14,10 @@
 		expandedTitles: SvelteSet<string>;
 		flyerGenerating: boolean;
 		onFlyerGenerate: (generating: boolean) => void;
+		voteInfo?: MeetingVoteMatter;
 	}
 
-	let { item, meeting, expandedItems, expandedTitles, flyerGenerating, onFlyerGenerate }: Props = $props();
+	let { item, meeting, expandedItems, expandedTitles, flyerGenerating, onFlyerGenerate, voteInfo }: Props = $props();
 
 	const isExpanded = $derived(expandedItems.has(item.id));
 	const hasSummary = $derived(!!item.summary);
@@ -192,6 +194,9 @@
 						>
 							{item.matter.appearance_count} appearances
 						</a>
+					{/if}
+					{#if voteInfo}
+						<VoteBadge tally={voteInfo.tally} outcome={voteInfo.outcome} size="small" />
 					{/if}
 					{#if !hasSummary}
 						<span class="procedural-badge">Unprocessed</span>
