@@ -61,6 +61,10 @@
 	const votesData = $derived(data.votes as MatterVotesResponse | null);
 	const hasVotes = $derived(votesData?.votes?.length ? votesData.votes.length > 0 : false);
 
+	// Collapsible sections
+	let attachmentsExpanded = $state(false);
+	let votesExpanded = $state(false);
+
 	// Find council member by ID for vote display
 	function findCouncilMemberById(id: string): CouncilMember | undefined {
 		return councilMembers.find(m => m.id === id);
@@ -156,15 +160,19 @@
 
 		{#if attachments.length > 0}
 			<div class="attachments-section">
-				<h2 class="section-title">Attachments</h2>
-				<div class="attachments-list">
-					{#each attachments as attachment}
-						<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
-							<span class="attachment-icon">📎</span>
-							<span class="attachment-name">{attachment.name}</span>
-						</a>
-					{/each}
-				</div>
+				<button class="section-header" onclick={() => attachmentsExpanded = !attachmentsExpanded}>
+					<h2 class="section-title">Attachments ({attachments.length})</h2>
+					<span class="expand-icon" class:expanded={attachmentsExpanded}></span>
+				</button>
+				{#if attachmentsExpanded}
+					<div class="attachments-list">
+						{#each attachments as attachment}
+							<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
+								<span class="attachment-name">{attachment.name}</span>
+							</a>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		{/if}
 
@@ -186,18 +194,20 @@
 
 		{#if hasVotes && votesData}
 			<div class="voting-section">
-				<h2 class="section-title">Voting Record</h2>
+				<button class="section-header" onclick={() => votesExpanded = !votesExpanded}>
+					<div class="vote-header-content">
+						<h2 class="section-title">Voting Record</h2>
+						<VoteBadge
+							tally={votesData.tally}
+							outcome={votesData.outcomes?.[0]?.outcome}
+							size="small"
+							showDetails={true}
+						/>
+					</div>
+					<span class="expand-icon" class:expanded={votesExpanded}></span>
+				</button>
 
-				<div class="vote-summary">
-					<VoteBadge
-						tally={votesData.tally}
-						outcome={votesData.outcomes?.[0]}
-						size="medium"
-						showDetails={true}
-					/>
-				</div>
-
-				{#if votesData.votes.length > 0}
+				{#if votesExpanded && votesData.votes.length > 0}
 					<div class="vote-list">
 						{#each votesData.votes as vote (vote.id)}
 							{@const member = findCouncilMemberById(vote.council_member_id)}
@@ -394,7 +404,45 @@
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 		color: var(--civic-gray);
-		margin: 0 0 1rem 0;
+		margin: 0;
+	}
+
+	.section-header {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0;
+		background: none;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+	}
+
+	.section-header:hover .section-title {
+		color: var(--civic-blue);
+	}
+
+	.vote-header-content {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.expand-icon {
+		width: 0;
+		height: 0;
+		border-left: 6px solid transparent;
+		border-right: 6px solid transparent;
+		border-top: 8px solid var(--civic-gray);
+		transition: transform 0.2s ease;
+		flex-shrink: 0;
+	}
+
+	.expand-icon.expanded {
+		transform: rotate(180deg);
 	}
 
 	.matter-summary {
@@ -509,7 +557,8 @@
 	.attachments-list {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.5rem;
+		margin-top: 1rem;
 	}
 
 	.attachment-link {
@@ -580,6 +629,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+		margin-top: 1rem;
 	}
 
 	.vote-row {
