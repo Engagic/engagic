@@ -73,9 +73,9 @@
 		});
 	}
 
-	const topics = $derived(matter.canonical_topics || []);
-	const attachments = $derived(matter.attachments || []);
-	const sponsors = $derived((matter.sponsors || []).filter((s: string) => s && s.trim()));
+	const topics = $derived(data.timeline.matter.canonical_topics || []);
+	const attachments = $derived(data.timeline.matter.attachments || []);
+	const sponsors = $derived((data.timeline.matter.sponsors || []).filter((s: string) => s && s.trim()));
 
 	// Votes data from server load
 	const votesData = $derived(data.votes as MatterVotesResponse | null);
