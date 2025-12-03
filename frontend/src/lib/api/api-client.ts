@@ -12,6 +12,7 @@ import type {
 	SearchCityMeetingsResponse,
 	SearchCityMattersResponse,
 	MatterVotesResponse,
+	MatterSponsorsResponse,
 	MeetingVotesResponse,
 	CouncilRosterResponse,
 	VotingRecordResponse,
@@ -311,6 +312,17 @@ export const apiClient = {
 	async getMatterVotes(matterId: string, clientIp?: string): Promise<MatterVotesResponse> {
 		const response = await fetchWithRetry(
 			`${config.apiBaseUrl}/api/matters/${matterId}/votes`,
+			{},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	async getMatterSponsors(matterId: string, clientIp?: string): Promise<MatterSponsorsResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/matters/${matterId}/sponsors`,
 			{},
 			config.maxRetries,
 			clientIp
