@@ -14,3 +14,27 @@ export const getCityMatters = apiClient.getCityMatters.bind(apiClient);
 export const getStateMatters = apiClient.getStateMatters.bind(apiClient);
 export const searchCityMeetings = apiClient.searchCityMeetings.bind(apiClient);
 export const searchCityMatters = apiClient.searchCityMatters.bind(apiClient);
+
+// Vote endpoints
+export const getMatterVotes = apiClient.getMatterVotes.bind(apiClient);
+export const getMeetingVotes = apiClient.getMeetingVotes.bind(apiClient);
+
+// Council Member endpoints
+export const getCityCouncilMembers = apiClient.getCityCouncilMembers.bind(apiClient);
+export const getCouncilMemberVotes = apiClient.getCouncilMemberVotes.bind(apiClient);
+
+// Rating endpoints
+export const getRatingStats = apiClient.getRatingStats.bind(apiClient);
+export const submitRating = apiClient.submitRating.bind(apiClient);
+
+// Issue reporting endpoints
+export const getIssues = apiClient.getIssues.bind(apiClient);
+export const reportIssue = apiClient.reportIssue.bind(apiClient);
+
+// Trending endpoints
+export const getTrendingMatters = apiClient.getTrendingMatters.bind(apiClient);
+
+// Engagement endpoints
+export const getMatterEngagement = apiClient.getMatterEngagement.bind(apiClient);
+export const getMeetingEngagement = apiClient.getMeetingEngagement.bind(apiClient);
+export const logView = apiClient.logView.bind(apiClient);

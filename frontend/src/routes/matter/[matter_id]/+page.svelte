@@ -3,6 +3,7 @@
 	import { marked } from 'marked';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
+	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
 
@@ -63,6 +64,9 @@
 				{#if matter.matter_type}
 					<div class="matter-badge type">{matter.matter_type}</div>
 				{/if}
+				{#if matter.status}
+					<StatusBadge status={matter.status} />
+				{/if}
 				<div class="matter-badge count">
 					{data.timeline.appearance_count} appearance{data.timeline.appearance_count === 1 ? '' : 's'}
 				</div>
@@ -81,10 +85,17 @@
 					<span class="meta-label">First Seen:</span>
 					<span class="meta-value">{formatDate(matter.first_seen)}</span>
 				</div>
-				<div class="meta-item">
-					<span class="meta-label">Latest Activity:</span>
-					<span class="meta-value">{formatDate(matter.last_seen)}</span>
-				</div>
+				{#if matter.final_vote_date}
+					<div class="meta-item">
+						<span class="meta-label">Final Vote:</span>
+						<span class="meta-value">{formatDate(matter.final_vote_date)}</span>
+					</div>
+				{:else}
+					<div class="meta-item">
+						<span class="meta-label">Latest Activity:</span>
+						<span class="meta-value">{formatDate(matter.last_seen)}</span>
+					</div>
+				{/if}
 			</div>
 
 			{#if topics.length > 0}

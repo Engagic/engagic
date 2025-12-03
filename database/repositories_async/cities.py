@@ -11,15 +11,11 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
-from database.models import City, CityParticipation
+from database.repositories_async.helpers import deserialize_city_participation
+from database.models import City
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="city_repository")
-
-
-def _hydrate_participation(row) -> Optional[CityParticipation]:
-    """Hydrate CityParticipation from JSONB column"""
-    return CityParticipation(**row["participation"]) if row["participation"] else None
 
 
 def _build_city(row, zipcodes: List[str]) -> City:
@@ -32,7 +28,7 @@ def _build_city(row, zipcodes: List[str]) -> City:
         slug=row["slug"],
         county=row["county"],
         status=row["status"],
-        participation=_hydrate_participation(row),
+        participation=deserialize_city_participation(row["participation"]),
         zipcodes=zipcodes,
     )
 
