@@ -104,7 +104,7 @@
 						<div class="step-number">{index + 1}</div>
 						<div class="step-content">
 							<div class="step-header">
-								<div class="step-type">{meetingInfo.name}</div>
+								<div class="step-type">{appearance.meeting_title}</div>
 								<div class="step-status">{dateContext}</div>
 							</div>
 							<div class="step-date">{formatDate(appearance.meeting_date)}</div>
@@ -285,16 +285,18 @@
 
 	.step-header {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 1rem;
+		gap: 0.5rem;
 		margin-bottom: 0.25rem;
 	}
 
 	.step-type {
 		font-weight: 700;
-		font-size: 1rem;
+		font-size: 0.9rem;
 		color: var(--text-primary);
 		font-family: 'IBM Plex Mono', monospace;
+		line-height: 1.3;
 	}
 
 	.step-status {
