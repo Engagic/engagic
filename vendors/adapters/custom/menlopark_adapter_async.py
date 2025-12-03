@@ -46,19 +46,21 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
         self.base_url = "https://menlopark.gov"
         self.pdf_extractor = PdfExtractor()
 
-    async def fetch_meetings(self, max_meetings: int = 10) -> List[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings from Menlo Park's table-based website and extract items from PDFs (async).
 
         Args:
-            max_meetings: Maximum number of meetings to fetch (default 10)
+            days_back: Days to look backward (default 7)
+            days_forward: Days to look forward (default 14)
 
         Returns:
             List of meeting dictionaries with meeting_id, title, start, agenda_url, items
         """
-        # Date range: today to 2 weeks from now
+        # Date range based on standard window
         today = datetime.now().date()
-        two_weeks_from_now = today + timedelta(days=14)
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
 
         meetings_url = f"{self.base_url}/Agendas-and-minutes"
 
@@ -79,9 +81,6 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
 
         results = []
         for row in rows:
-            if len(results) >= max_meetings:
-                break
-
             cells = row.find_all('td')
             if len(cells) < 2:
                 continue
@@ -97,11 +96,11 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                 logger.debug("could not parse date", adapter="menlopark", slug=self.slug, date_text=date_text)
                 continue
 
-            # Filter to meetings from date range
+            # Filter to meetings within date range
             meeting_date_only = meeting_date.date()
 
-            if meeting_date_only < today or meeting_date_only > two_weeks_from_now:
-                logger.debug("skipping meeting outside 2-week window", adapter="menlopark", slug=self.slug, date=date_text)
+            if meeting_date_only < start_date or meeting_date_only > end_date:
+                logger.debug("skipping meeting outside date window", adapter="menlopark", slug=self.slug, date=date_text)
                 continue
 
             # Cell 1: Agenda packet PDF link
@@ -117,11 +116,10 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                 logger.debug("no PDF packet", adapter="menlopark", slug=self.slug, date=date_text)
                 continue
 
-            # Generate meeting ID from date
-            meeting_id = f"menlopark_{meeting_date.strftime('%Y%m%d')}"
+            vendor_id = meeting_date.strftime('%Y%m%d')
 
             meeting_data = {
-                'meeting_id': meeting_id,
+                'vendor_id': vendor_id,
                 'start': meeting_date.isoformat(),
                 'title': "City Council Meeting",
                 'agenda_url': pdf_link,  # PDF is the source document
@@ -163,20 +161,20 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                             "no items extracted from PDF",
                             adapter="menlopark",
                             slug=self.slug,
-                            meeting_id=meeting_id
+                            vendor_id=vendor_id
                         )
                 else:
                     logger.error(
                         "PDF extraction failed",
                         adapter="menlopark",
                         slug=self.slug,
-                        meeting_id=meeting_id,
+                        vendor_id=vendor_id,
                         error=pdf_result.get('error', 'unknown error')
                     )
                     # Continue anyway - we have basic meeting data
 
             except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
-                logger.warning("failed to parse PDF items", adapter="menlopark", slug=self.slug, meeting_id=meeting_id, error=str(e))
+                logger.warning("failed to parse PDF items", adapter="menlopark", slug=self.slug, vendor_id=vendor_id, error=str(e))
                 # Continue anyway - we have basic meeting data
 
             results.append(meeting_data)

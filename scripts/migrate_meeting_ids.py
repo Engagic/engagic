@@ -21,7 +21,6 @@ import argparse
 import asyncio
 import hashlib
 import logging
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -72,9 +71,17 @@ def extract_vendor_id(old_id: str, vendor: str, date: datetime, title: str) -> s
             return old_id[6:]  # Strip "civic_"
         return old_id
 
-    # Berkeley/Menlo Park: date-only IDs are broken, synthesize from title
+    # Berkeley/Menlo Park: old IDs are "berkeley_YYYYMMDD" or "menlopark_YYYYMMDD"
+    # Extract the date portion as vendor_id (matches new adapter behavior)
     if vendor in {"berkeley", "menlopark"}:
-        # Use title hash as vendor_id since these don't have real vendor IDs
+        # Old format: "{vendor}_{YYYYMMDD}" -> extract date portion
+        parts = old_id.split("_", 1)
+        if len(parts) == 2 and parts[1].isdigit() and len(parts[1]) == 8:
+            return parts[1]  # Return the date string as vendor_id
+        # Fallback: use date from database if ID format unexpected
+        if date:
+            return date.strftime("%Y%m%d")
+        # Last resort: hash the title
         return hashlib.md5(title.encode()).hexdigest()[:8]
 
     # Unknown vendor: use old_id as vendor_id
@@ -104,19 +111,45 @@ async def update_meeting_id(
         return True
 
     async with conn.transaction():
-        # Update items first (FK to meetings)
+        # Update all tables with meeting_id foreign keys (order matters for FK constraints)
+
+        # 1. items (FK to meetings)
         await conn.execute(
             "UPDATE items SET meeting_id = $1 WHERE meeting_id = $2",
             new_id, old_id
         )
 
-        # Update meeting_topics
+        # 2. meeting_topics
         await conn.execute(
             "UPDATE meeting_topics SET meeting_id = $1 WHERE meeting_id = $2",
             new_id, old_id
         )
 
-        # Update the meeting itself
+        # 3. matter_appearances (FK to meetings)
+        await conn.execute(
+            "UPDATE matter_appearances SET meeting_id = $1 WHERE meeting_id = $2",
+            new_id, old_id
+        )
+
+        # 4. queue (FK to meetings, nullable)
+        await conn.execute(
+            "UPDATE queue SET meeting_id = $1 WHERE meeting_id = $2",
+            new_id, old_id
+        )
+
+        # 5. votes (FK to meetings)
+        await conn.execute(
+            "UPDATE votes SET meeting_id = $1 WHERE meeting_id = $2",
+            new_id, old_id
+        )
+
+        # 6. tracked_items (engagement tracking, FK to meetings)
+        await conn.execute(
+            "UPDATE tracked_items SET meeting_id = $1 WHERE meeting_id = $2",
+            new_id, old_id
+        )
+
+        # 7. Update the meeting itself (primary key)
         await conn.execute(
             "UPDATE meetings SET id = $1 WHERE id = $2",
             new_id, old_id
@@ -187,6 +220,8 @@ async def migrate(dry_run: bool = True):
 
 
 def main():
+    global DATABASE_URL
+
     parser = argparse.ArgumentParser(description="Migrate meeting IDs to unified format")
     parser.add_argument(
         "--dry-run",
@@ -200,7 +235,6 @@ def main():
     )
     args = parser.parse_args()
 
-    global DATABASE_URL
     DATABASE_URL = args.database_url
 
     asyncio.run(migrate(dry_run=args.dry_run))

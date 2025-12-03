@@ -4,7 +4,8 @@ Search service layer
 Business logic for handling different search types
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, TypedDict, Literal, Union
+from typing_extensions import NotRequired
 from difflib import get_close_matches
 from database.db_postgres import Database
 from server.services.meeting import get_meetings_with_items
@@ -16,8 +17,68 @@ from config import get_logger
 logger = get_logger(__name__)
 
 
+class CityOption(TypedDict):
+    """City option for ambiguous search results (multiple cities match)."""
+    city_name: str
+    state: str
+    banana: str
+    vendor: str
+    display_name: str
+    total_meetings: int
+    meetings_with_packet: int
+    summarized_meetings: int
 
-async def handle_zipcode_search(zipcode: str, db: Database) -> Dict[str, Any]:
+
+class SearchSuccessResponse(TypedDict):
+    """Response when search finds a city with meetings."""
+    success: Literal[True]
+    city_name: str
+    state: str
+    banana: str
+    vendor: str
+    vendor_display_name: str
+    source_url: Optional[str]
+    participation: Optional[Dict[str, Any]]
+    meetings: List[Dict[str, Any]]
+    cached: bool
+    query: str
+    type: str
+
+
+class SearchNotFoundResponse(TypedDict):
+    """Response when search doesn't find the city or finds city without meetings."""
+    success: Literal[False]
+    message: str
+    query: str
+    type: str
+    meetings: List[Any]
+    ambiguous: NotRequired[Literal[False]]
+    city_name: NotRequired[str]
+    state: NotRequired[str]
+    banana: NotRequired[str]
+    vendor: NotRequired[str]
+    vendor_display_name: NotRequired[str]
+    source_url: NotRequired[Optional[str]]
+    participation: NotRequired[Optional[Dict[str, Any]]]
+    cached: NotRequired[bool]
+
+
+class SearchAmbiguousResponse(TypedDict):
+    """Response when multiple cities match (user must select one)."""
+    success: Literal[False]
+    message: str
+    query: str
+    type: str
+    ambiguous: Literal[True]
+    city_options: List[CityOption]
+    meetings: List[Any]
+
+
+SearchResponse = Union[SearchSuccessResponse, SearchNotFoundResponse, SearchAmbiguousResponse]
+
+
+
+async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
     """Handle zipcode search with cache-first approach
 
     Returns city data with banana field which serves as the city_url.
@@ -81,7 +142,7 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> Dict[str, Any]:
     }
 
 
-async def handle_city_search(city_input: str, db: Database) -> Dict[str, Any]:
+async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
     """Handle city name search with cache-first approach and ambiguous city handling
 
     Returns city data with banana field which serves as the city_url.
@@ -147,7 +208,7 @@ async def handle_city_search(city_input: str, db: Database) -> Dict[str, Any]:
     }
 
 
-async def handle_state_search(state_input: str, db: Database) -> Dict[str, Any]:
+async def handle_state_search(state_input: str, db: Database) -> SearchResponse:
     """Handle state search - return list of cities in that state"""
     # Normalize state input
     state_abbr = get_state_abbreviation(state_input)
@@ -216,7 +277,7 @@ async def handle_state_search(state_input: str, db: Database) -> Dict[str, Any]:
 
 async def handle_ambiguous_city_search(
     city_name: str, original_input: str, db: Database
-) -> Dict[str, Any]:
+) -> SearchResponse:
     """Handle city search when no state is provided - check for ambiguous matches"""
 
     # Look for all cities with this name (exact match, no zipcodes needed)

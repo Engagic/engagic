@@ -15,6 +15,7 @@ Extracts common patterns:
 """
 
 import asyncio
+import hashlib
 import time
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -453,50 +454,23 @@ class AsyncBaseAdapter:
 
         return None
 
-    def _generate_meeting_id(
+    def _generate_fallback_vendor_id(
         self,
         title: str,
         date: Optional[datetime],
         meeting_type: Optional[str] = None
     ) -> str:
-        """Generate deterministic meeting ID when vendor doesn't provide one
+        """Generate 8-char MD5 hash for vendors without native meeting IDs.
 
-        Uses MD5 hash of "{slug}_{date}_{title}_{type}" to create consistent
-        8-character IDs. Ensures same meeting produces same ID across re-syncs.
-
-        This is a FALLBACK for vendors that don't provide meeting IDs.
-        Always prefer vendor-provided IDs when available.
-
-        Args:
-            title: Meeting title
-            date: Meeting date (if available)
-            meeting_type: Optional meeting type (for vendors that separate by type)
-
-        Returns:
-            8-character hexadecimal hash
-
-        Example:
-            >>> adapter._generate_meeting_id("City Council", datetime(2025, 1, 15))
-            'a3f2c8d1'
-
-        Confidence: 9/10 - Proven pattern from NovusAgenda adapter
+        Same inputs always produce same vendor_id for deduplication across re-syncs.
         """
-        import hashlib
-
         date_str = date.strftime("%Y%m%d") if date else "nodate"
         type_str = f"_{meeting_type}" if meeting_type else ""
         id_string = f"{self.slug}_{date_str}_{title}{type_str}"
 
-        meeting_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
-        logger.debug(
-            "generated fallback meeting_id",
-            vendor=self.vendor,
-            slug=self.slug,
-            meeting_id=meeting_id,
-            title=title,
-            date=date_str
-        )
-        return meeting_id
+        vendor_id = hashlib.md5(id_string.encode()).hexdigest()[:8]
+        logger.debug("generated fallback vendor_id", vendor=self.vendor, vendor_id=vendor_id)
+        return vendor_id
 
     def _parse_meeting_status(
         self, title: str, date_str: Optional[str] = None
@@ -558,9 +532,13 @@ class AsyncBaseAdapter:
 
         return current_status
 
-    async def fetch_meetings(self) -> List[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings from vendor (to be implemented by subclasses).
+
+        Args:
+            days_back: Days to look backward from today (default 7)
+            days_forward: Days to look forward from today (default 14)
 
         Returns:
             List of meeting dictionaries

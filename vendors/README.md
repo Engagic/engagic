@@ -81,6 +81,42 @@ class AsyncBaseAdapter:
         # Handles: "11/20/2025", "2025-11-20", "Nov 20, 2025", etc.
 ```
 
+### Adapter ID Contract
+
+Adapters return `vendor_id` (the native vendor identifier), NOT canonical `meeting_id`. The database layer generates canonical meeting IDs.
+
+```python
+# Adapter returns meeting dict with vendor_id
+{
+    "vendor_id": "12345",           # Native ID from vendor (required)
+    "title": "City Council",
+    "start": "2025-11-10T18:00:00",
+    "agenda_url": "https://...",    # HTML agenda (item-level)
+    "packet_url": "https://...",    # PDF packet (monolithic)
+    "items": [...],                 # Optional: extracted agenda items
+}
+```
+
+**vendor_id by Vendor:**
+
+| Vendor | vendor_id Source | Example |
+|--------|-----------------|---------|
+| Legistar | `EventId` from API | `"98765"` |
+| PrimeGov | `id` from API | `"12345"` |
+| Chicago | `meetingId` from API | `"abc-uuid-123"` |
+| NovusAgenda | `MeetingID` from HTML | `"4567"` |
+| CivicClerk | `id` from API | `"789"` |
+| IQM2 | ID extracted from URL | `"meeting_123"` |
+| CivicPlus | ID extracted from URL | `"civic_456"` |
+| Escribe | ID from URL or generated | `"esc_789"` |
+| Granicus | `meeting_id` from API | `"gran_123"` |
+| Berkeley | Date string (no native ID) | `"20251110"` |
+| Menlo Park | Date string (no native ID) | `"20251110"` |
+
+**Database generates canonical ID:** `{banana}_{8-char-md5-hash}`
+
+See `database/README.md` for ID generation details.
+
 ---
 
 ## Vendor Adapters

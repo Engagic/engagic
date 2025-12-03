@@ -13,6 +13,7 @@ Moved from: pipeline/conductor.py (refactored)
 
 import asyncio
 import time
+from collections import Counter
 from typing import List, Optional, Dict, Any
 
 from database.db_postgres import Database
@@ -38,6 +39,13 @@ QUEUE_FATAL_ERROR_BACKOFF = 10  # Longer backoff after fatal queue error
 # File size thresholds (bytes)
 MAX_ATTACHMENT_SIZE_MB = 50  # Skip attachments larger than 50MB (likely compilations)
 MAX_ATTACHMENT_SIZE_BYTES = MAX_ATTACHMENT_SIZE_MB * 1024 * 1024
+
+# Public comment compilation detection thresholds
+# Used by is_likely_public_comment_compilation() to skip low-value bulk documents
+PUBLIC_COMMENT_PAGE_THRESHOLD = 1000  # Documents exceeding this are likely compilations
+PUBLIC_COMMENT_LARGE_DOC_THRESHOLD = 50  # Documents above this checked for OCR ratio
+PUBLIC_COMMENT_OCR_THRESHOLD = 0.3  # OCR ratio above this suggests scanned form letters
+PUBLIC_COMMENT_SIGNATURE_THRESHOLD = 20  # "Sincerely," count above this is likely comments
 
 
 def is_procedural_item(title: str) -> bool:
@@ -67,22 +75,22 @@ def is_likely_public_comment_compilation(
     ocr_pages = extraction_result.get("ocr_pages", 0)
     text = extraction_result.get("text", "")
 
-    # Threshold 1: Excessive page count (> 1000 pages)
+    # Threshold 1: Excessive page count
     # Legislative documents can be hundreds of pages, but 1000+ is likely a compilation
-    if page_count > 1000:
+    if page_count > PUBLIC_COMMENT_PAGE_THRESHOLD:
         logger.info(
             "skipping likely compilation - excessive page count",
             url_path=url_path,
             page_count=page_count,
-            threshold=1000
+            threshold=PUBLIC_COMMENT_PAGE_THRESHOLD
         )
         return True
 
     # Threshold 2: High OCR ratio + large document (suggests bulk scanned form letters)
-    # If >30% of pages needed OCR and doc is >50 pages, likely public comments
-    if page_count > 50 and ocr_pages > 0:
+    # If OCR ratio exceeds threshold and doc is large, likely public comments
+    if page_count > PUBLIC_COMMENT_LARGE_DOC_THRESHOLD and ocr_pages > 0:
         ocr_ratio = ocr_pages / page_count
-        if ocr_ratio > 0.3:
+        if ocr_ratio > PUBLIC_COMMENT_OCR_THRESHOLD:
             logger.info(
                 "skipping likely scanned compilation - high OCR ratio",
                 url_path=url_path,
@@ -96,8 +104,8 @@ def is_likely_public_comment_compilation(
     # Count "Sincerely," occurrences as proxy for individual letters
     if len(text) > 5000:  # Check documents with substantial content
         sincerely_count = text.lower().count("sincerely,")
-        # If >20 signatures, likely public comment compilation
-        if sincerely_count > 20:
+        # Many signatures suggest public comment compilation
+        if sincerely_count > PUBLIC_COMMENT_SIGNATURE_THRESHOLD:
             logger.info(
                 "skipping likely comment compilation - repetitive signatures",
                 url_path=url_path,
@@ -1170,19 +1178,14 @@ class Processor:
 
     def _aggregate_meeting_topics(self, processed_items: List[Dict]) -> List[str]:
         """Aggregate topics from processed items, sorted by frequency"""
-        # Collect all topics from all items
-        all_topics = []
-        for item in processed_items:
-            all_topics.extend(item.get("topics", []))
-
-        # Count topic frequency and sort by frequency (most common first)
-        topic_counts = {}
-        for topic in all_topics:
-            topic_counts[topic] = topic_counts.get(topic, 0) + 1
-
-        meeting_topics = sorted(
-            topic_counts.keys(), key=lambda t: topic_counts[t], reverse=True
+        # Flatten all topics and count frequency
+        topic_counts = Counter(
+            topic for item in processed_items
+            for topic in item.get("topics", [])
         )
+
+        # Sort by frequency (most common first)
+        meeting_topics = [topic for topic, _ in topic_counts.most_common()]
 
         logger.info(
             "aggregated meeting topics",

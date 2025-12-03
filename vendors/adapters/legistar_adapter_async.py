@@ -220,9 +220,8 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             # Parse meeting status from title and agenda status
             meeting_status = self._parse_meeting_status(event_name, event_agenda_status)
 
-            # Build meeting dictionary
             meeting = {
-                "meeting_id": str(event_id),
+                "vendor_id": str(event_id),
                 "title": event_name,
                 "start": start_datetime,
             }
@@ -1024,7 +1023,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             logger.debug("detail page unavailable", slug=self.slug, meeting_id=meeting_id, error=str(e))
 
         meeting_data = {
-            "meeting_id": str(meeting_id),
+            "vendor_id": str(meeting_id),
             "title": title,
             "start": meeting_dt.isoformat(),
         }

@@ -7,12 +7,12 @@ Database class handles only orchestration and high-level operations.
 import asyncpg
 import json
 import traceback
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TypedDict
 from datetime import datetime
 from pathlib import Path
 
 from config import get_logger, config
-from database.id_generation import generate_matter_id
+from database.id_generation import generate_matter_id, generate_meeting_id
 from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata, AttachmentInfo
 from database.repositories_async import (
     CityRepository,
@@ -32,6 +32,22 @@ from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
 
 logger = get_logger(__name__).bind(component="database_postgres")
+
+
+class MeetingStoreStats(TypedDict):
+    """Stats returned by store_meeting_from_sync()."""
+    items_stored: int
+    items_skipped_procedural: int
+    matters_tracked: int
+    matters_duplicate: int
+    meetings_skipped: int
+    skip_reason: Optional[str]
+    skipped_title: Optional[str]
+
+
+# Queue priority calculation constant
+# Meetings closer to today get higher priority (base score minus days away)
+QUEUE_PRIORITY_BASE_SCORE = 150
 
 
 def _jsonb_encoder(obj):
@@ -199,7 +215,7 @@ class Database:
         self,
         meeting_dict: Dict[str, Any],
         city: City
-    ) -> tuple[Optional[Meeting], Dict[str, Any]]:
+    ) -> tuple[Optional[Meeting], MeetingStoreStats]:
         """Transform vendor meeting dict -> validate -> store -> enqueue
 
         This is the primary method called by the fetcher after scraping.
@@ -210,9 +226,9 @@ class Database:
             city: City object for this meeting
 
         Returns:
-            Tuple of (stored Meeting object or None, stats dict)
+            Tuple of (stored Meeting object or None, MeetingStoreStats)
         """
-        stats = {
+        stats: MeetingStoreStats = {
             'items_stored': 0,
             'items_skipped_procedural': 0,
             'matters_tracked': 0,
@@ -224,23 +240,28 @@ class Database:
 
         try:
             meeting_date = self._parse_meeting_date(meeting_dict)
-            meeting_id = meeting_dict.get("meeting_id")
+            title = meeting_dict.get("title", "Meeting")
 
-            if not meeting_id or not meeting_id.strip():
-                logger.error(
-                    "adapter returned blank meeting_id",
-                    city=city.banana,
-                    meeting_title=meeting_dict.get('title', 'Unknown')
-                )
+            vendor_id = meeting_dict.get("vendor_id") or meeting_dict.get("meeting_id")
+
+            if not vendor_id:
+                logger.error("adapter missing vendor_id", city=city.banana, meeting_title=title)
                 stats['meetings_skipped'] = 1
-                stats['skip_reason'] = "missing_meeting_id"
-                stats['skipped_title'] = meeting_dict.get("title", "Unknown")
+                stats['skip_reason'] = "missing_vendor_id"
+                stats['skipped_title'] = title
                 return None, stats
+
+            meeting_id = generate_meeting_id(
+                banana=city.banana,
+                vendor_id=str(vendor_id),
+                date=meeting_date or datetime.now(),
+                title=title
+            )
 
             meeting_obj = Meeting(
                 id=meeting_id,
                 banana=city.banana,
-                title=meeting_dict.get("title", ""),
+                title=title,
                 date=meeting_date,
                 agenda_url=meeting_dict.get("agenda_url"),
                 packet_url=meeting_dict.get("packet_url"),
@@ -280,6 +301,12 @@ class Database:
                         stats['matters_tracked'] = matters_stats.get('tracked', 0)
                         stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
                         stats['items_skipped_procedural'] = matters_stats.get('skipped_procedural', 0)
+
+                        # Clear matter_id for procedural items (explicit mutation after tracking)
+                        skipped_ids = matters_stats.get('skipped_item_ids', set())
+                        for item in agenda_items:
+                            if item.id in skipped_ids:
+                                item.matter_id = None
 
                         # 3. Store items (FK targets exist now)
                         stored_count = await self.items.store_agenda_items(meeting_obj.id, agenda_items)
@@ -403,7 +430,7 @@ class Database:
         meeting: Meeting,
         items_data: List[Dict[str, Any]],
         agenda_items: List[AgendaItem]
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Any]:
         """Track legislative matters across meetings (Matters-First Architecture)
 
         For each agenda item with a matter_file:
@@ -417,11 +444,22 @@ class Database:
             agenda_items: Stored AgendaItem objects
 
         Returns:
-            Dict with 'tracked', 'duplicate', and 'skipped_procedural' counts
+            Dict with:
+            - 'tracked': count of new matters created
+            - 'duplicate': count of existing matters updated
+            - 'skipped_procedural': count of procedural items skipped
+            - 'skipped_item_ids': set of item IDs that should have matter_id cleared
+
+        Note: Caller is responsible for clearing matter_id on skipped items.
         """
         from vendors.utils.item_filters import should_skip_matter
 
-        stats = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0}
+        stats: Dict[str, Any] = {
+            'tracked': 0,
+            'duplicate': 0,
+            'skipped_procedural': 0,
+            'skipped_item_ids': set(),  # Items that should have matter_id cleared
+        }
 
         if not items_data or not agenda_items:
             return stats
@@ -456,8 +494,8 @@ class Database:
             # Skip procedural matter types
             if matter_type and should_skip_matter(matter_type):
                 stats['skipped_procedural'] += 1
-                # Clear FK reference since we're not creating the matter record
-                agenda_item.matter_id = None
+                # Record item ID for caller to clear matter_id (avoids hidden mutation)
+                stats['skipped_item_ids'].add(agenda_item.id)
                 logger.debug(
                     "skipping procedural matter",
                     matter=agenda_item.matter_file or raw_vendor_matter_id,
@@ -736,7 +774,7 @@ class Database:
         else:
             days_distance = 999
 
-        return max(0, 150 - days_distance)
+        return max(0, QUEUE_PRIORITY_BASE_SCORE - days_distance)
 
     # ==================
     # MONITORING & STATS

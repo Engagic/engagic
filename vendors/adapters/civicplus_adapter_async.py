@@ -287,10 +287,10 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         meeting_status = self._parse_meeting_status(title, date_text)
 
         result = {
-            "meeting_id": meeting_id,
+            "vendor_id": meeting_id,
             "title": title,
             "start": parsed_date.isoformat() if parsed_date else None,
-            "packet_url": url,  # ViewFile URL is the packet
+            "packet_url": url,
         }
 
         if meeting_status:
@@ -337,7 +337,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                 logger.debug("no PDFs found for meeting", vendor="civicplus", slug=self.slug, title=title)
 
             result = {
-                "meeting_id": meeting_id,
+                "vendor_id": meeting_id,
                 "title": title,
                 "start": parsed_date.isoformat() if parsed_date else None,
                 "packet_url": pdfs[0] if pdfs else None,
