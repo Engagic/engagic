@@ -6,7 +6,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	const matterId = params.matter_id;
 
 	try {
-		const timeline = await apiClient.getMatterTimeline(matterId, locals.clientIp);
+		const [timeline, votesResponse] = await Promise.all([
+			apiClient.getMatterTimeline(matterId, locals.clientIp),
+			apiClient.getMatterVotes(matterId, locals.clientIp).catch(() => null)
+		]);
 
 		if (!timeline || !timeline.matter) {
 			throw error(404, 'Matter not found');
@@ -14,7 +17,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 		return {
 			matterId,
-			timeline
+			timeline,
+			votes: votesResponse
 		};
 	} catch (err) {
 		console.error('Failed to load matter timeline:', err);
