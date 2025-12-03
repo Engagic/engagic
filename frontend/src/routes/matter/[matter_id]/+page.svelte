@@ -75,7 +75,10 @@
 
 	const topics = $derived(data.timeline.matter.canonical_topics || []);
 	const attachments = $derived(data.timeline.matter.attachments || []);
-	const sponsors = $derived((data.timeline.matter.sponsors || []).filter((s: string) => s && s.trim()));
+	const sponsors = $derived.by(() => {
+		const raw = data.timeline.matter.sponsors || [];
+		return raw.filter((s: string) => s && s.trim());
+	});
 
 	// Votes data from server load
 	const votesData = $derived(data.votes as MatterVotesResponse | null);
