@@ -47,7 +47,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         self.view_id: int = mappings[self.base_url]
         self.list_url: str = f"{self.base_url}/ViewPublisher.php?view_id={self.view_id}"
 
-        logger.info("granicus initialized", slug=self.slug, view_id=self.view_id)
+        logger.info("adapter initialized", vendor="granicus", slug=self.slug, view_id=self.view_id)
 
     def _load_static_view_id_config(self) -> Dict[str, int]:
         """
@@ -139,7 +139,8 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             meetings.append(meeting)
 
         logger.info(
-            "granicus meetings fetched",
+            "meetings fetched",
+            vendor="granicus",
             slug=self.slug,
             count=len(meetings)
         )

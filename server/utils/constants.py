@@ -1,8 +1,19 @@
 """
 Constants for server utilities
 
-Single source of truth for state mappings and special city names
+Single source of truth for state mappings, special city names, and entity types.
 """
+
+# Entity types for engagement (watching)
+# Users can watch matters, meetings, topics, cities, council members
+WATCHABLE_ENTITY_TYPES = {"matter", "meeting", "topic", "city", "council_member"}
+
+# Entity types for feedback (rating/reporting)
+# Users can rate or report issues on items, meetings, matters
+RATABLE_ENTITY_TYPES = {"item", "meeting", "matter"}
+
+# Issue types for reports
+VALID_ISSUE_TYPES = {"inaccurate", "incomplete", "misleading", "offensive", "other"}
 
 # State name to abbreviation mapping
 STATE_MAP = {

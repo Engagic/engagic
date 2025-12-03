@@ -21,19 +21,13 @@ router = APIRouter(prefix="/api")
 async def get_meeting(meeting_id: str, db: Database = Depends(get_db)):
     """Get a single meeting by ID - optimized endpoint to avoid fetching all city meetings"""
     try:
-        # Fetch the specific meeting using db method
         meeting = await db.get_meeting(meeting_id)
-
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
 
-        # Track meeting page view
         metrics.page_views.labels(page_type='meeting').inc()
 
-        # Build response with meeting data
         meeting_dict = await get_meeting_with_items(meeting, db)
-
-        # Get city info for context
         city = await db.get_city(banana=meeting.banana)
 
         return {
@@ -47,28 +41,36 @@ async def get_meeting(meeting_id: str, db: Database = Depends(get_db)):
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("error fetching meeting", meeting_id=meeting_id, error=str(e))
+    except Exception:
+        logger.exception("error fetching meeting", meeting_id=meeting_id)
         raise HTTPException(status_code=500, detail="Error retrieving meeting")
 
 
 @router.post("/process-agenda")
 async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)):
-    """Check if agenda has been processed - no longer processes on-demand"""
+    """INFO-ONLY: Check agenda processing status.
+
+    This endpoint does NOT trigger on-demand processing. All processing happens
+    via the background daemon (conductor.py). Returns estimated wait time.
+
+    To ensure your city gets processed: watch the city to add it to priority queue.
+    Priority cities are synced every 72 hours automatically.
+    """
     try:
-        # No cache - summary not yet available
         return {
             "success": False,
             "message": "Summary not yet available - processing in background",
             "cached": False,
             "packet_url": request.packet_url,
-            "estimated_wait_minutes": 10,  # Rough estimate
+            "estimated_wait_minutes": 10,
+            "note": "Watch this city to ensure priority weekly syncing",
         }
 
-    except Exception as e:
-        logger.error("error retrieving agenda", packet_url=request.packet_url, error=str(e))
+    except Exception:
+        logger.exception("error retrieving agenda", packet_url=request.packet_url)
         raise HTTPException(
-            status_code=500, detail="We humbly thank you for your patience"
+            status_code=500,
+            detail="We're having trouble loading this agenda. Watch this city to ensure priority weekly syncing."
         )
 
 
@@ -90,6 +92,6 @@ async def get_random_meeting_with_items(db: Database = Depends(get_db)):
         }
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("error getting random meeting with items", error=str(e))
+    except Exception:
+        logger.exception("error getting random meeting with items")
         raise HTTPException(status_code=500, detail="Error retrieving meeting")

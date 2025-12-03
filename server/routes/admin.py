@@ -61,9 +61,11 @@ async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
 
 @router.post("/sync-city/{banana}")
 async def force_sync_city(banana: str, is_admin: bool = Depends(verify_admin_token)):
-    """Force sync a specific city (admin endpoint)"""
-    # This endpoint requires the background processor daemon to be running
-    # Admin should use the daemon directly: python daemon.py --sync-city BANANA
+    """INFO-ONLY: Returns CLI command to sync a city.
+
+    This endpoint does NOT trigger processing. Processing runs via systemd daemon.
+    Use the provided CLI command on the VPS to trigger manual sync.
+    """
     return {
         "success": False,
         "banana": banana,
@@ -77,9 +79,11 @@ async def force_sync_city(banana: str, is_admin: bool = Depends(verify_admin_tok
 async def force_process_meeting(
     request: ProcessRequest, is_admin: bool = Depends(verify_admin_token)
 ):
-    """Force process a specific meeting (admin endpoint)"""
-    # This endpoint requires the background processor daemon to be running
-    # Admin should use the daemon directly
+    """INFO-ONLY: Returns CLI command to process a meeting.
+
+    This endpoint does NOT trigger processing. Processing runs via systemd daemon.
+    Use the provided CLI command on the VPS to trigger manual processing.
+    """
     return {
         "success": False,
         "packet_url": request.packet_url,
@@ -101,29 +105,10 @@ async def get_dead_letter_queue(
     """
 
     try:
-        # Get dead letter jobs from queue
-        async with db.pool.acquire() as conn:
-            dead_jobs = await conn.fetch("""
-                SELECT
-                    id,
-                    job_type,
-                    meeting_id,
-                    banana,
-                    source_url,
-                    error_message,
-                    retry_count,
-                    created_at,
-                    started_at,
-                    failed_at
-                FROM queue
-                WHERE status = 'dead_letter'
-                ORDER BY failed_at DESC
-                LIMIT 100
-            """)
+        dead_jobs = await db.queue.get_dead_letter_jobs(limit=100)
 
-        jobs_list = []
-        for job in dead_jobs:
-            jobs_list.append({
+        jobs_list = [
+            {
                 "queue_id": job["id"],
                 "type": job["job_type"],
                 "meeting_id": job["meeting_id"],
@@ -131,11 +116,12 @@ async def get_dead_letter_queue(
                 "source_url": job["source_url"],
                 "error": job["error_message"],
                 "retries": job["retry_count"],
-                "created": str(job["created_at"]),
-                "failed": str(job["failed_at"]) if job["failed_at"] else None,
-            })
+                "created": job["created_at"],
+                "failed": job["failed_at"],
+            }
+            for job in dead_jobs
+        ]
 
-        # Alert if too many failures
         alert_threshold = 50
         needs_attention = len(jobs_list) > alert_threshold
 
@@ -149,11 +135,11 @@ async def get_dead_letter_queue(
             "jobs": jobs_list,
         }
 
-    except Exception as e:
-        logger.error("failed to fetch dead letter queue", error=str(e))
+    except Exception:
+        logger.exception("failed to fetch dead letter queue")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch dead letter queue: {str(e)}"
+            detail="Failed to fetch dead letter queue"
         )
 
 
@@ -177,17 +163,14 @@ async def prometheus_query(
         Prometheus query result in JSON format
     """
     try:
-        # Determine if this is a range query or instant query
         prometheus_url = "http://localhost:9090/api/v1"
 
         if start and end:
-            # Range query
             url = f"{prometheus_url}/query_range"
             params = {"query": query, "start": start, "end": end}
             if step:
                 params["step"] = step
         else:
-            # Instant query
             url = f"{prometheus_url}/query"
             params = {"query": query}
 
@@ -206,11 +189,11 @@ async def prometheus_query(
             status_code=504,
             detail="Prometheus query timeout"
         )
-    except Exception as e:
-        logger.error("prometheus query error", error=str(e))
+    except Exception:
+        logger.exception("prometheus query error")
         raise HTTPException(
             status_code=500,
-            detail=f"Prometheus query failed: {str(e)}"
+            detail="Prometheus query failed"
         )
 
 
@@ -293,9 +276,9 @@ async def get_activity_feed(
             'total': len(activities)
         }
 
-    except Exception as e:
-        logger.error("error retrieving activity feed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve activity feed: {str(e)}")
+    except Exception:
+        logger.exception("error retrieving activity feed")
+        raise HTTPException(status_code=500, detail="Failed to retrieve activity feed")
 
 
 @router.get("/live-metrics")
@@ -336,9 +319,9 @@ async def get_live_metrics(is_admin: bool = Depends(verify_admin_token)):
             "metrics": metrics_data
         }
 
-    except Exception as e:
-        logger.error("error retrieving live metrics", error=str(e))
+    except Exception:
+        logger.exception("error retrieving live metrics")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to retrieve metrics: {str(e)}"
+            detail="Failed to retrieve metrics"
         )

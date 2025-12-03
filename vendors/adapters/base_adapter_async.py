@@ -36,6 +36,13 @@ class AsyncBaseAdapter:
     Async base adapter with shared HTTP session, date parsing, and PDF discovery.
 
     Vendor-specific async adapters extend this and implement fetch_meetings().
+
+    Error Handling Contract:
+    ------------------------
+    - Configuration errors (missing required config) should raise in __init__()
+    - Runtime errors (HTTP failures, parse failures) should log and return []
+    - All adapters should return empty list on failure, never raise from fetch_meetings()
+    - Use vendor= parameter in all logger calls for consistent filtering
     """
 
     def __init__(self, city_slug: str, vendor: str):
@@ -345,11 +352,11 @@ class AsyncBaseAdapter:
                 url=url,
                 city_slug=self.slug
             ) from e
-        except Exception as e:
-            # JSONDecodeError or other parsing issues
+        except (ValueError, KeyError, TypeError) as e:
+            # JSONDecodeError (subclass of ValueError) or malformed response
             try:
                 text = await response.text()
-            except Exception:
+            except aiohttp.ClientError:
                 text = "(unable to read response body)"
             logger.error(
                 "vendor json parse failed",

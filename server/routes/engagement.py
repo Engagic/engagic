@@ -13,11 +13,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Cookie
 
 from database.db_postgres import Database
 from server.dependencies import get_current_user, get_db, get_optional_user
+from server.utils.constants import WATCHABLE_ENTITY_TYPES
 from userland.database.models import User
 
 router = APIRouter(prefix="/api", tags=["engagement"])
-
-VALID_ENTITY_TYPES = {"matter", "meeting", "topic", "city", "council_member"}
 
 
 @router.post("/watch/{entity_type}/{entity_id}")
@@ -31,8 +30,8 @@ async def watch_entity(
 
     Requires authentication.
     """
-    if entity_type not in VALID_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+    if entity_type not in WATCHABLE_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
 
     success = await db.engagement.watch(user.id, entity_type, entity_id)
     return {"success": success, "status": "watching"}
@@ -49,8 +48,8 @@ async def unwatch_entity(
 
     Requires authentication.
     """
-    if entity_type not in VALID_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+    if entity_type not in WATCHABLE_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
 
     success = await db.engagement.unwatch(user.id, entity_type, entity_id)
     return {"success": success, "status": "unwatched"}
@@ -67,8 +66,8 @@ async def get_user_watches(
     Requires authentication.
     Optional filter by entity_type.
     """
-    if entity_type and entity_type not in VALID_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+    if entity_type and entity_type not in WATCHABLE_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
 
     watches = await db.engagement.get_user_watches(user.id, entity_type)
     return {
@@ -182,8 +181,8 @@ async def log_view(
 
     Works for both authenticated and anonymous users.
     """
-    if entity_type not in VALID_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+    if entity_type not in WATCHABLE_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
 
     user = await get_optional_user(request)
     user_id = user.id if user else None

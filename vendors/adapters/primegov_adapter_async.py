@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlencode
 import asyncio
+import aiohttp
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.primegov_parser import parse_html_agenda
 from vendors.utils.item_filters import should_skip_procedural_item
@@ -138,8 +139,11 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         try:
             response = await self._get(url)
             return await response.json()
-        except Exception as e:
-            logger.error("failed to fetch upcoming meetings", slug=self.slug, error=str(e))
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error("failed to fetch upcoming meetings", vendor="primegov", slug=self.slug, error=str(e))
+            return []
+        except ValueError as e:
+            logger.error("invalid json from upcoming meetings", vendor="primegov", slug=self.slug, error=str(e))
             return []
 
     async def _fetch_archived_meetings(self, start_date: datetime, today: datetime) -> List[Dict[str, Any]]:
@@ -164,8 +168,11 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         try:
             response = await self._get(url)
             return await response.json()
-        except Exception as e:
-            logger.error("failed to fetch archived meetings", slug=self.slug, year=year, error=str(e))
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error("failed to fetch archived meetings", vendor="primegov", slug=self.slug, year=year, error=str(e))
+            return []
+        except ValueError as e:
+            logger.error("invalid json from archived meetings", vendor="primegov", slug=self.slug, year=year, error=str(e))
             return []
 
     async def _process_meeting(self, meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -232,9 +239,10 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
                         )
                     if items_data["participation"]:
                         result["participation"] = items_data["participation"]
-                except Exception as e:
+                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError) as e:
                     logger.warning(
                         "failed to fetch HTML agenda items",
+                        vendor="primegov",
                         slug=self.slug,
                         title=title,
                         error=str(e)

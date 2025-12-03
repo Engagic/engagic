@@ -6,7 +6,6 @@ Database class handles only orchestration and high-level operations.
 
 import asyncpg
 import json
-import traceback
 from typing import Optional, List, Dict, Any, TypedDict
 from datetime import datetime
 from pathlib import Path
@@ -325,13 +324,11 @@ class Database:
             return meeting_obj, stats
 
         except (DatabaseError, ValidationError, ValueError) as e:
-            # Business logic and data errors - log with traceback and re-raise
             logger.error(
                 "error storing meeting",
                 packet_url=meeting_dict.get('packet_url', 'unknown'),
                 error=str(e),
                 error_type=type(e).__name__,
-                traceback=traceback.format_exc()
             )
             raise
 
@@ -512,7 +509,7 @@ class Database:
 
                 if existing_matter:
                     # Check if this meeting_id is already counted for this matter
-                    appearance_exists = await self.matters.check_appearance_exists(
+                    appearance_exists = await self.matters.has_appearance(
                         matter_composite_id, meeting.id
                     )
 

@@ -22,23 +22,7 @@ async def get_matter_votes(matter_id: str, db: Database = Depends(get_db)):
 
     votes = await db.council_members.get_votes_for_matter(matter_id)
     tally = await db.council_members.get_vote_tally_for_matter(matter_id)
-
-    async with db.pool.acquire() as conn:
-        appearances = await conn.fetch(
-            """
-            SELECT
-                ma.meeting_id,
-                ma.vote_outcome,
-                ma.vote_tally,
-                ma.appeared_at,
-                m.title as meeting_title
-            FROM matter_appearances ma
-            JOIN meetings m ON m.id = ma.meeting_id
-            WHERE ma.matter_id = $1 AND ma.vote_outcome IS NOT NULL
-            ORDER BY ma.appeared_at DESC
-            """,
-            matter_id
-        )
+    outcomes = await db.matters.get_matter_vote_outcomes(matter_id)
 
     metrics.matter_engagement.labels(action='votes').inc()
 
@@ -48,16 +32,7 @@ async def get_matter_votes(matter_id: str, db: Database = Depends(get_db)):
         "matter_title": matter.title,
         "votes": [v.to_dict() for v in votes],
         "tally": tally,
-        "outcomes": [
-            {
-                "meeting_id": a["meeting_id"],
-                "meeting_title": a["meeting_title"],
-                "date": a["appeared_at"].isoformat() if a["appeared_at"] else None,
-                "outcome": a["vote_outcome"],
-                "tally": a["vote_tally"],
-            }
-            for a in appearances
-        ]
+        "outcomes": outcomes
     }
 
 
@@ -81,20 +56,13 @@ async def get_meeting_votes(meeting_id: str, db: Database = Depends(get_db)):
             votes_by_matter[mid] = []
         votes_by_matter[mid].append(vote.to_dict())
 
-    # Get matter titles for display
+    # Get matter details using repository (batch fetch)
     matter_ids = list(votes_by_matter.keys())
-    matters_data = {}
-    if matter_ids:
-        async with db.pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT id, title, matter_file FROM city_matters WHERE id = ANY($1::text[])",
-                matter_ids
-            )
-            for row in rows:
-                matters_data[row["id"]] = {
-                    "title": row["title"],
-                    "matter_file": row["matter_file"]
-                }
+    matters_batch = await db.matters.get_matters_batch(matter_ids) if matter_ids else {}
+    matters_data = {
+        mid: {"title": m.title, "matter_file": m.matter_file}
+        for mid, m in matters_batch.items()
+    }
 
     # Build response grouped by matter
     matters_with_votes = []

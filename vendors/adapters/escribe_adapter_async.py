@@ -17,7 +17,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 
@@ -131,7 +131,7 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
 
         return results
 
-    def _parse_meeting_container(self, container) -> Optional[Dict[str, Any]]:
+    def _parse_meeting_container(self, container: Tag) -> Optional[Dict[str, Any]]:
         """
         Parse a single meeting container to extract meeting details.
 

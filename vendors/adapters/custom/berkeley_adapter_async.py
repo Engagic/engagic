@@ -60,13 +60,13 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
 
         meetings_url = f"{self.base_url}/your-government/city-council/city-council-agendas"
 
-        logger.info("fetching meetings list", adapter="berkeley", slug=self.slug, url=meetings_url)
+        logger.info("fetching meetings list", vendor="berkeley", slug=self.slug, url=meetings_url)
 
         try:
             response = await self._get(meetings_url)
             html = await response.text()
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.error("failed to fetch meetings list", adapter="berkeley", slug=self.slug, error=str(e))
+            logger.error("failed to fetch meetings list", vendor="berkeley", slug=self.slug, error=str(e))
             return []
 
         # Parse HTML (CPU-bound, run in thread pool)
@@ -94,14 +94,14 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
             # Parse date using base adapter's parser
             meeting_date = self._parse_date(date_text)
             if not meeting_date:
-                logger.debug("could not parse date", adapter="berkeley", slug=self.slug, date_text=date_text)
+                logger.debug("could not parse date", vendor="berkeley", slug=self.slug, date_text=date_text)
                 continue
 
             # Filter to meetings within date range
             meeting_date_only = meeting_date.date()
 
             if meeting_date_only < start_date or meeting_date_only > end_date:
-                logger.debug("skipping meeting outside date window", adapter="berkeley", slug=self.slug, date=date_text)
+                logger.debug("skipping meeting outside date window", vendor="berkeley", slug=self.slug, date=date_text)
                 continue
 
             # Cell 2: HTML Agenda link (Berkeley always has HTML agendas)
@@ -113,10 +113,13 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
 
             # Skip if no HTML agenda (Berkeley should always have one)
             if not html_link:
-                logger.debug("no HTML agenda link", adapter="berkeley", slug=self.slug, date=date_text)
+                logger.debug("no HTML agenda link", vendor="berkeley", slug=self.slug, date=date_text)
                 continue
 
-            vendor_id = meeting_date.strftime('%Y%m%d')
+            # Generate unique vendor_id using hash (date-only IDs collide on same-day meetings)
+            # Use agenda URL path as unique identifier since it contains meeting-specific slug
+            url_path = html_link.replace(self.base_url, '').strip('/')
+            vendor_id = self._generate_fallback_vendor_id(title=url_path, date=meeting_date)
 
             # Extract time from date string (e.g., "11/10/2025 - 6:00 pm")
             time_match = re.search(r'(\d{1,2}:\d{2}\s*[ap]m)', date_text, re.IGNORECASE)
@@ -134,25 +137,25 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
 
             # Fetch HTML agenda detail to extract items
             try:
-                logger.info("fetching HTML agenda detail", adapter="berkeley", slug=self.slug, url=html_link)
+                logger.info("fetching HTML agenda detail", vendor="berkeley", slug=self.slug, url=html_link)
                 detail = await self._fetch_meeting_detail(html_link)
                 if detail:
                     if detail.get('participation'):
                         meeting_data['participation'] = detail['participation']
                     if detail.get('items'):
                         meeting_data['items'] = detail['items']
-                        logger.info("extracted items from HTML agenda", adapter="berkeley", slug=self.slug, item_count=len(detail['items']))
+                        logger.info("extracted items from HTML agenda", vendor="berkeley", slug=self.slug, item_count=len(detail['items']))
                     if detail.get('title'):
                         meeting_data['title'] = detail['title']
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                logger.warning("failed to fetch detail", adapter="berkeley", slug=self.slug, vendor_id=vendor_id, error=str(e))
+                logger.warning("failed to fetch detail", vendor="berkeley", slug=self.slug, vendor_id=vendor_id, error=str(e))
                 # Continue anyway - we have basic meeting data even without items
 
             item_count = len(meeting_data.get('items', []))
             attachment_count = sum(len(item.get('attachments', [])) for item in meeting_data.get('items', []))
             logger.info(
                 "found items and attachments",
-                adapter="berkeley",
+                vendor="berkeley",
                 slug=self.slug,
                 item_count=item_count,
                 attachment_count=attachment_count,
@@ -173,7 +176,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
         Returns:
             Dict with title, participation, and items
         """
-        logger.debug("fetching detail page", adapter="berkeley", slug=self.slug, url=agenda_url)
+        logger.debug("fetching detail page", vendor="berkeley", slug=self.slug, url=agenda_url)
 
         response = await self._get(agenda_url)
         html = await response.text()
@@ -321,5 +324,5 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
 
             items.append(item_data)
 
-        logger.debug("extracted items", adapter="berkeley", slug=self.slug, item_count=len(items))
+        logger.debug("extracted items", vendor="berkeley", slug=self.slug, item_count=len(items))
         return items

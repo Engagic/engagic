@@ -7,7 +7,7 @@ Handles job queue management with PostgreSQL optimizations:
 - Priority-based processing
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from database.repositories_async.base import BaseRepository
 from pipeline.models import QueueJob, MeetingJob, MatterJob
@@ -133,31 +133,20 @@ class QueueRepository(BaseRepository):
         """
         async with self.transaction() as conn:
             # Atomic SELECT-UPDATE with optional city filter
-            if banana:
-                row = await conn.fetchrow(
-                    """
-                    SELECT id, source_url, meeting_id, banana, job_type, payload,
-                           priority, retry_count, status, created_at, started_at
-                    FROM queue
-                    WHERE status = 'pending' AND banana = $1
-                    ORDER BY priority DESC, created_at ASC
-                    LIMIT 1
-                    FOR UPDATE SKIP LOCKED
-                    """,
-                    banana,
-                )
-            else:
-                row = await conn.fetchrow(
-                    """
-                    SELECT id, source_url, meeting_id, banana, job_type, payload,
-                           priority, retry_count, status, created_at, started_at
-                    FROM queue
-                    WHERE status = 'pending'
-                    ORDER BY priority DESC, created_at ASC
-                    LIMIT 1
-                    FOR UPDATE SKIP LOCKED
-                    """
-                )
+            where_clause = "status = 'pending' AND banana = $1" if banana else "status = 'pending'"
+            params = (banana,) if banana else ()
+            row = await conn.fetchrow(
+                f"""
+                SELECT id, source_url, meeting_id, banana, job_type, payload,
+                       priority, retry_count, status, created_at, started_at
+                FROM queue
+                WHERE {where_clause}
+                ORDER BY priority DESC, created_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+                """,
+                *params,
+            )
 
             if not row:
                 return None
@@ -412,3 +401,47 @@ class QueueRepository(BaseRepository):
             stats['avg_processing_seconds'] = float(avg_row['avg_seconds']) if avg_row['avg_seconds'] else 0.0
 
             return stats
+
+    async def get_dead_letter_jobs(self, limit: int = 100) -> List[dict]:
+        """Get jobs in dead letter queue for admin review
+
+        Args:
+            limit: Maximum jobs to return (default: 100)
+
+        Returns:
+            List of dead letter jobs with full details
+        """
+        rows = await self._fetch(
+            """
+            SELECT
+                id,
+                job_type,
+                meeting_id,
+                banana,
+                source_url,
+                error_message,
+                retry_count,
+                created_at,
+                failed_at
+            FROM queue
+            WHERE status = 'dead_letter'
+            ORDER BY failed_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+
+        return [
+            {
+                "id": row["id"],
+                "job_type": row["job_type"],
+                "meeting_id": row["meeting_id"],
+                "banana": row["banana"],
+                "source_url": row["source_url"],
+                "error_message": row["error_message"],
+                "retry_count": row["retry_count"],
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "failed_at": row["failed_at"].isoformat() if row["failed_at"] else None,
+            }
+            for row in rows
+        ]

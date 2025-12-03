@@ -9,9 +9,11 @@ Async version with:
 - Item-level extraction via novusagenda_parser module
 """
 
+import asyncio
 import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
+import aiohttp
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.novusagenda_parser import parse_html_agenda
 from vendors.utils.item_filters import should_skip_procedural_item
@@ -207,7 +209,15 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                         meeting_id=meeting_id,
                         item_count=len(items)
                     )
-                except Exception as e:
+                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                    logger.warning(
+                        "failed to fetch HTML agenda",
+                        vendor="novusagenda",
+                        slug=self.slug,
+                        meeting_id=meeting_id,
+                        error=str(e)
+                    )
+                except (ValueError, KeyError, AttributeError) as e:
                     logger.warning(
                         "failed to parse HTML agenda",
                         vendor="novusagenda",
