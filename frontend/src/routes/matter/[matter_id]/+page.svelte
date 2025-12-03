@@ -4,7 +4,8 @@
 	import { marked } from 'marked';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
 	import { getCityCouncilMembers } from '$lib/api';
-	import type { CouncilMember } from '$lib/api/types';
+	import type { CouncilMember, MatterVotesResponse } from '$lib/api/types';
+	import VoteBadge from '$lib/components/VoteBadge.svelte';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -74,7 +75,16 @@
 
 	const topics = $derived(matter.canonical_topics || []);
 	const attachments = $derived(matter.attachments || []);
-	const sponsors = $derived(matter.sponsors || []);
+	const sponsors = $derived((matter.sponsors || []).filter((s: string) => s && s.trim()));
+
+	// Votes data from server load
+	const votesData = $derived(data.votes as MatterVotesResponse | null);
+	const hasVotes = $derived(votesData?.votes?.length ? votesData.votes.length > 0 : false);
+
+	// Find council member by ID for vote display
+	function findCouncilMemberById(id: string): CouncilMember | undefined {
+		return councilMembers.find(m => m.id === id);
+	}
 
 	// Snapshot: Preserve scroll position during navigation
 	export const snapshot = {
@@ -196,6 +206,41 @@
 						{#if i < sponsors.length - 1}<span class="sponsor-separator">, </span>{/if}
 					{/each}
 				</div>
+			</div>
+		{/if}
+
+		{#if hasVotes && votesData}
+			<div class="voting-section">
+				<h2 class="section-title">Voting Record</h2>
+
+				<div class="vote-summary">
+					<VoteBadge
+						tally={votesData.tally}
+						outcome={votesData.outcomes?.[0]}
+						size="medium"
+						showDetails={true}
+					/>
+				</div>
+
+				{#if votesData.votes.length > 0}
+					<div class="vote-list">
+						{#each votesData.votes as vote (vote.id)}
+							{@const member = findCouncilMemberById(vote.council_member_id)}
+							<div class="vote-row">
+								{#if member}
+									<a href="/{matter.banana}/council/{member.id}"
+									   class="voter-link"
+									   data-sveltekit-preload-data="tap">
+										{member.name}
+									</a>
+								{:else}
+									<span class="voter-name">Unknown member</span>
+								{/if}
+								<span class="vote-value {vote.vote}">{vote.vote}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		{/if}
 
@@ -357,6 +402,7 @@
 	.matter-summary-section,
 	.attachments-section,
 	.sponsors-section,
+	.voting-section,
 	.timeline-section {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
@@ -550,6 +596,63 @@
 		color: var(--civic-gray);
 	}
 
+	/* Voting section styles */
+	.vote-summary {
+		margin-bottom: 1rem;
+	}
+
+	.vote-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.vote-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.5rem 0.75rem;
+		background: var(--surface-secondary);
+		border-radius: 6px;
+	}
+
+	.voter-link {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 500;
+	}
+
+	.voter-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
+	.voter-name {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		color: var(--text-primary);
+	}
+
+	.vote-value {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.75rem;
+		font-weight: 600;
+		padding: 0.2rem 0.5rem;
+		border-radius: 4px;
+		text-transform: uppercase;
+	}
+
+	.vote-value.yes { background: #dcfce7; color: #16a34a; }
+	.vote-value.no { background: #fee2e2; color: #dc2626; }
+	.vote-value.abstain { background: #fef3c7; color: #d97706; }
+	.vote-value.absent { background: var(--surface-secondary); color: var(--civic-gray); }
+
+	:global(.dark) .vote-value.yes { background: #14532d; color: #86efac; }
+	:global(.dark) .vote-value.no { background: #7f1d1d; color: #fca5a5; }
+	:global(.dark) .vote-value.abstain { background: #78350f; color: #fcd34d; }
+
 	.error-message {
 		padding: 1.5rem;
 		background: var(--surface-secondary);
@@ -591,6 +694,7 @@
 		.matter-summary-section,
 		.attachments-section,
 		.sponsors-section,
+		.voting-section,
 		.timeline-section {
 			padding: 1.25rem;
 		}
