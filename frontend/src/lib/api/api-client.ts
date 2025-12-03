@@ -354,7 +354,7 @@ export const apiClient = {
 	// Rating endpoints
 	async getRatingStats(entityType: string, entityId: string, clientIp?: string): Promise<RatingStats> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/${entityType}/${entityId}/rating`,
+			`${config.apiBaseUrl}/api/${entityType}/${entityId}/rating`,
 			{},
 			config.maxRetries,
 			clientIp
@@ -382,7 +382,7 @@ export const apiClient = {
 	// Issue reporting endpoints
 	async getIssues(entityType: string, entityId: string, clientIp?: string): Promise<IssuesResponse> {
 		const response = await fetchWithRetry(
-			`${config.apiBaseUrl}/${entityType}/${entityId}/issues`,
+			`${config.apiBaseUrl}/api/${entityType}/${entityId}/issues`,
 			{},
 			config.maxRetries,
 			clientIp

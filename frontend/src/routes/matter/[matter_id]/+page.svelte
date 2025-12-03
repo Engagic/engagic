@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 	import { marked } from 'marked';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
+	import { getCityCouncilMembers } from '$lib/api';
+	import type { CouncilMember } from '$lib/api/types';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -13,6 +16,51 @@
 	const timeline = $derived(data.timeline.timeline);
 	const firstAppearance = $derived(timeline[0]);
 	const latestAppearance = $derived(timeline[timeline.length - 1]);
+
+	// Council member lookup for sponsor links
+	let councilMembers = $state<CouncilMember[]>([]);
+
+	// Normalize name for matching (remove titles, lowercase)
+	function normalizeName(name: string): string {
+		return name
+			.toLowerCase()
+			.replace(/^(councilmember|council member|cm|alderman|ald\.|commissioner|comm\.|vice mayor|mayor)\s+/i, '')
+			.replace(/,.*$/, '') // Remove anything after comma (like ", Jr.")
+			.trim();
+	}
+
+	// Extract last name for fallback matching
+	function getLastName(name: string): string {
+		const normalized = normalizeName(name);
+		const parts = normalized.split(/\s+/);
+		return parts[parts.length - 1];
+	}
+
+	// Find matching council member for a sponsor name
+	function findCouncilMember(sponsorName: string): CouncilMember | undefined {
+		const normalizedSponsor = normalizeName(sponsorName);
+		const sponsorLastName = getLastName(sponsorName);
+
+		// Try exact normalized match first
+		let match = councilMembers.find(m => normalizeName(m.name) === normalizedSponsor);
+		if (match) return match;
+
+		// Try last name match
+		match = councilMembers.find(m => getLastName(m.name) === sponsorLastName);
+		return match;
+	}
+
+	onMount(async () => {
+		if (matter.banana) {
+			try {
+				const response = await getCityCouncilMembers(matter.banana);
+				councilMembers = response.council_members || [];
+			} catch (e) {
+				// Silently fail - sponsors will just be plain text
+				console.debug('Could not load council members for sponsor links:', e);
+			}
+		}
+	});
 
 	function formatDate(dateStr: string): string {
 		if (!dateStr) return '';
@@ -133,7 +181,21 @@
 		{#if sponsors.length > 0}
 			<div class="sponsors-section">
 				<h2 class="section-title">Sponsors</h2>
-				<div class="sponsors-list">{sponsors.join(', ')}</div>
+				<div class="sponsors-list">
+					{#each sponsors as sponsor, i}
+						{@const member = findCouncilMember(sponsor)}
+						{#if member}
+							<a
+								href="/{matter.banana}/council/{member.id}"
+								class="sponsor-link"
+								data-sveltekit-preload-data="tap"
+							>{sponsor}</a>
+						{:else}
+							<span class="sponsor-name">{sponsor}</span>
+						{/if}
+						{#if i < sponsors.length - 1}<span class="sponsor-separator">, </span>{/if}
+					{/each}
+				</div>
 			</div>
 		{/if}
 
@@ -466,6 +528,26 @@
 		font-size: 0.9rem;
 		color: var(--text-primary);
 		line-height: 1.6;
+	}
+
+	.sponsor-link {
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 500;
+		transition: color 0.2s ease;
+	}
+
+	.sponsor-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
+	.sponsor-name {
+		color: var(--text-primary);
+	}
+
+	.sponsor-separator {
+		color: var(--civic-gray);
 	}
 
 	.error-message {
