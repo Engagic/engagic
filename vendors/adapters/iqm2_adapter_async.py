@@ -234,7 +234,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
             packet_url = urljoin(self.base_url, packet_link["href"])
 
         meeting_data = {
-            "meeting_id": meeting_id,
+            "vendor_id": meeting_id,
             "title": title,
             "start": meeting_dt.isoformat(),
             "agenda_url": detail_url,  # HTML agenda source (Detail_Meeting.aspx)

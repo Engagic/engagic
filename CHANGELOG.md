@@ -22,6 +22,18 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-02] Unified Meeting ID Generation
+
+**Single source of truth for meeting IDs.** All 11 adapters now return `vendor_id`, database layer generates canonical IDs.
+
+- **Pattern**: Adapters return `vendor_id` (native vendor identifier), `db_postgres.py` calls `generate_meeting_id()` to create `{banana}_{8-char-hash}` format
+- **All adapters updated**: Berkeley, Menlo Park, Chicago, PrimeGov, Legistar, NovusAgenda, Granicus, CivicClerk, CivicPlus, IQM2, Escribe
+- **Base adapter**: Renamed `_generate_meeting_id()` to `_generate_fallback_vendor_id()` (clarifies it generates vendor_id, not meeting_id)
+- **Migration script**: `scripts/migrate_meeting_ids.py` handles all FK tables (items, meeting_topics, matter_appearances, queue, votes, tracked_items)
+- **Files modified**: `database/db_postgres.py`, all adapter files, `database/id_generation.py` (imported), migration script
+
+---
+
 ## [2025-12-01] userland/ Civic Alerts System (Phase 2-3 COMPLETE)
 
 **Free civic alerts now live.** Magic link authentication, city + keyword subscriptions, weekly email digests.

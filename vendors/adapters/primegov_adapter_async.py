@@ -206,7 +206,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
                     break
 
         result = {
-            "meeting_id": str(meeting["id"]),
+            "vendor_id": str(meeting["id"]),
             "title": title,
             "start": date_time,
         }

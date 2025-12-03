@@ -186,7 +186,7 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         meeting_status = self._parse_meeting_status(title, date_text)
 
         result = {
-            "meeting_id": meeting_id,
+            "vendor_id": meeting_id,
             "title": title,
             "start": parsed_date.isoformat() if parsed_date else date_text,
             "packet_url": packet_url,

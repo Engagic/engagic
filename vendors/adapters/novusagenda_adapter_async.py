@@ -156,9 +156,9 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                         if meeting_id_match:
                             meeting_id = meeting_id_match.group(1)
 
-            # Generate fallback meeting_id if not found
+            # Generate fallback vendor_id if not found
             if not meeting_id:
-                meeting_id = self._generate_meeting_id(
+                meeting_id = self._generate_fallback_vendor_id(
                     title=meeting_type,
                     date=meeting_date
                 )
@@ -217,7 +217,7 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                     )
 
             result = {
-                "meeting_id": meeting_id,
+                "vendor_id": meeting_id,
                 "title": meeting_type,
                 "start": date_str,
                 "packet_url": packet_url,

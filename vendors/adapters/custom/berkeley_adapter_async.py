@@ -42,19 +42,21 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
         super().__init__(city_slug, vendor="berkeley")
         self.base_url = "https://berkeleyca.gov"
 
-    async def fetch_meetings(self, max_meetings: int = 10) -> List[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings from Berkeley's Drupal-based website (async).
 
         Args:
-            max_meetings: Maximum number of meetings to fetch (default 10)
+            days_back: Days to look backward (default 7)
+            days_forward: Days to look forward (default 14)
 
         Returns:
             List of meeting dictionaries with meeting_id, title, start, agenda_url, items
         """
-        # Date range: today to 2 weeks from now
+        # Date range based on standard window
         today = datetime.now().date()
-        two_weeks_from_now = today + timedelta(days=14)
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
 
         meetings_url = f"{self.base_url}/your-government/city-council/city-council-agendas"
 
@@ -75,9 +77,6 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
 
         results = []
         for row in rows:
-            if len(results) >= max_meetings:
-                break
-
             cells = row.find_all('td')
             if len(cells) < 4:  # Need at least title, date, and agenda columns
                 continue
@@ -98,11 +97,11 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
                 logger.debug("could not parse date", adapter="berkeley", slug=self.slug, date_text=date_text)
                 continue
 
-            # Filter to meetings from date range
+            # Filter to meetings within date range
             meeting_date_only = meeting_date.date()
 
-            if meeting_date_only < today or meeting_date_only > two_weeks_from_now:
-                logger.debug("skipping meeting outside 2-week window", adapter="berkeley", slug=self.slug, date=date_text)
+            if meeting_date_only < start_date or meeting_date_only > end_date:
+                logger.debug("skipping meeting outside date window", adapter="berkeley", slug=self.slug, date=date_text)
                 continue
 
             # Cell 2: HTML Agenda link (Berkeley always has HTML agendas)
@@ -117,15 +116,14 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
                 logger.debug("no HTML agenda link", adapter="berkeley", slug=self.slug, date=date_text)
                 continue
 
-            # Generate meeting ID from date
-            meeting_id = f"berkeley_{meeting_date.strftime('%Y%m%d')}"
+            vendor_id = meeting_date.strftime('%Y%m%d')
 
             # Extract time from date string (e.g., "11/10/2025 - 6:00 pm")
             time_match = re.search(r'(\d{1,2}:\d{2}\s*[ap]m)', date_text, re.IGNORECASE)
             meeting_time = time_match.group(1) if time_match else None
 
             meeting_data = {
-                'meeting_id': meeting_id,
+                'vendor_id': vendor_id,
                 'start': meeting_date.isoformat(),
                 'title': "City Council Meeting",
                 'agenda_url': html_link,
@@ -147,7 +145,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
                     if detail.get('title'):
                         meeting_data['title'] = detail['title']
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                logger.warning("failed to fetch detail", adapter="berkeley", slug=self.slug, meeting_id=meeting_id, error=str(e))
+                logger.warning("failed to fetch detail", adapter="berkeley", slug=self.slug, vendor_id=vendor_id, error=str(e))
                 # Continue anyway - we have basic meeting data even without items
 
             item_count = len(meeting_data.get('items', []))

@@ -21,8 +21,17 @@ logger = get_logger(__name__).bind(component="matter_repository")
 class MatterRepository(BaseRepository):
     """Repository for matter operations."""
 
-    async def _sync_topics(self, conn, matter_id: str, topics: Optional[List[str]]) -> None:
-        """Sync topics to matter_topics table (delete and re-insert)."""
+    async def _replace_topics(self, conn, matter_id: str, topics: Optional[List[str]]) -> None:
+        """Replace all topics for a matter (destructive operation).
+
+        Deletes existing topics then inserts new ones. Use when topics are
+        recomputed and the new list should fully replace the old one.
+
+        Args:
+            conn: Database connection within transaction
+            matter_id: The matter's composite ID
+            topics: New topics to set (None or empty = no change)
+        """
         if not topics:
             return
         await conn.execute("DELETE FROM matter_topics WHERE matter_id = $1", matter_id)
@@ -84,7 +93,7 @@ class MatterRepository(BaseRepository):
                 matter.status or "active",
             )
 
-            await self._sync_topics(conn, matter.id, matter.canonical_topics)
+            await self._replace_topics(conn, matter.id, matter.canonical_topics)
 
         logger.debug("stored matter", matter_id=matter.id, banana=matter.banana)
 
@@ -246,7 +255,7 @@ class MatterRepository(BaseRepository):
                 attachment_hash,
             )
 
-            await self._sync_topics(conn, matter_id, canonical_topics)
+            await self._replace_topics(conn, matter_id, canonical_topics)
 
         logger.debug("updated matter with canonical summary", matter_id=matter_id)
 

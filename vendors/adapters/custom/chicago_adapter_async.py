@@ -97,13 +97,13 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         }
         return vote_map.get(value_lower, "not_voting")
 
-    async def fetch_meetings(self, days_back: int = 30, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings in moving window from Chicago's API (async).
 
         Args:
-            days_back: Days to look backward (default 7, captures recent votes)
-            days_forward: Days to look forward (default 14, captures upcoming meetings)
+            days_back: Days to look backward (default 7)
+            days_forward: Days to look forward (default 14)
 
         Returns:
             List of meeting dictionaries with meeting_id, title, start, location, items
@@ -111,7 +111,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         # Reset stats for this sync
         self._reset_stats()
 
-        # Build date range (7 days back, 14 days forward)
+        # Build date range based on parameters
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         start_date_dt = today - timedelta(days=days_back)
         end_date_dt = today + timedelta(days=days_forward)
@@ -261,9 +261,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             files[0].get("path") if files else None
         )
 
-        # Build meeting data
         result = {
-            "meeting_id": str(meeting_id),
+            "vendor_id": str(meeting_id),
             "title": body or "City Council Meeting",
             "start": meeting_date.isoformat() if meeting_date else None,
         }

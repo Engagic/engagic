@@ -586,6 +586,42 @@ matter_id = db.generate_matter_id(
 # Returns: "sanfranciscoCA_7a8f3b2c1d9e4f5a" (SHA256 hash)
 ```
 
+**Meeting ID Generation:**
+
+Adapters return `vendor_id` (native vendor identifier), and the database layer generates canonical meeting IDs:
+
+```python
+# Adapter returns vendor_id (native format varies by vendor)
+meeting_dict = {
+    "vendor_id": "12345",        # PrimeGov/Legistar: API ID
+    # "vendor_id": "20251110",   # Berkeley/Menlo Park: date string
+    # "vendor_id": "abc-uuid",   # Chicago: UUID from API
+    "title": "City Council Meeting",
+    "start": "2025-11-10T18:00:00",
+    ...
+}
+
+# Database layer generates canonical ID
+from database.id_generation import generate_meeting_id
+
+meeting_id = generate_meeting_id(
+    banana="paloaltoCA",
+    vendor_id="12345",
+    date=datetime(2025, 11, 10),
+    title="City Council Meeting"
+)
+# Returns: "paloaltoCA_a3f2c8d1" (MD5 hash)
+# Hash input: "{banana}:{vendor_id}:{date_iso}:{title}"
+```
+
+**ID Format:** `{banana}_{8-char-md5-hash}`
+
+**Properties:**
+- Deterministic: Same inputs always produce same ID
+- Collision-resistant: 4-component hash prevents duplicates
+- Traceable: Original vendor_id preserved in hash computation
+- Consistent: All vendors, all cities, same format
+
 **Deduplication Pattern:**
 
 ```python

@@ -16,78 +16,81 @@ from config import get_logger
 logger = get_logger(__name__).bind(component="engagic")
 
 
+def hash_attachments_fast(attachments: List[Any]) -> str:
+    """
+    Hash attachments using URL and name only (pure function, no I/O).
+
+    This is the fast path for deduplication. Uses only local data
+    without making network requests.
+
+    Args:
+        attachments: List of AttachmentInfo objects with 'url' and 'name' attrs
+
+    Returns:
+        SHA256 hex digest, or empty string if no attachments
+
+    Confidence: 7/10 - Works but misses CDN rotations where URL stays same
+    """
+    if not attachments:
+        return ""
+    pairs = [(att.url or "", att.name or "") for att in attachments]
+    pairs.sort()
+    content = json.dumps(pairs, sort_keys=True)
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
+def hash_attachments_with_metadata(attachments: List[Any], timeout: int = 3) -> str:
+    """
+    Hash attachments including HTTP metadata (makes network requests).
+
+    This is the slow path for better change detection. Makes HEAD requests
+    to fetch content-length and last-modified headers, which helps detect
+    content changes even when URLs stay the same.
+
+    Args:
+        attachments: List of AttachmentInfo objects with 'url' and 'name' attrs
+        timeout: Timeout for HEAD requests in seconds
+
+    Returns:
+        SHA256 hex digest, or empty string if no attachments
+
+    Confidence: 8/10 - Better detection but adds latency
+    """
+    if not attachments:
+        return ""
+
+    tuples = []
+    for att in attachments:
+        url = att.url or ""
+        name = att.name or ""
+
+        if not url:
+            tuples.append((url, name, "", ""))
+            continue
+
+        # Try to fetch metadata via HEAD request
+        try:
+            metadata = _fetch_attachment_metadata(url, timeout)
+            tuples.append((url, name, metadata['content_length'], metadata['last_modified']))
+        except requests.RequestException as e:
+            # Fallback to URL-only if metadata fetch fails
+            logger.warning("failed to fetch metadata", url=url, error=str(e))
+            tuples.append((url, name, "", ""))
+
+    tuples.sort()
+    content = json.dumps(tuples, sort_keys=True)
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
 def hash_attachments(
     attachments: List[Any],
     include_metadata: bool = False,
     timeout: int = 3
 ) -> str:
-    """
-    Generate stable hash of attachments for deduplication.
-
-    Two modes:
-    1. URL-only (default): Hash (url, name) tuples
-    2. Metadata-enhanced: Hash (url, name, content-length, last-modified) tuples
-
-    Metadata-enhanced mode makes HEAD requests to get content metadata,
-    which better detects content changes even when URLs stay the same.
-    However, it's slower due to network requests.
-
-    Args:
-        attachments: List of attachment dicts with 'url' and 'name' keys
-        include_metadata: If True, fetch and include content-length and last-modified
-        timeout: Timeout for HEAD requests (only used if include_metadata=True)
-
-    Returns:
-        SHA256 hex digest of attachment data
-
-    Example:
-        >>> attachments = [
-        ...     {"url": "https://city.gov/doc1.pdf", "name": "Staff Report"},
-        ...     {"url": "https://city.gov/doc2.pdf", "name": "Ordinance"}
-        ... ]
-        >>> hash_attachments(attachments)  # Fast, URL-only
-        'a3b2c1d4...'
-        >>> hash_attachments(attachments, include_metadata=True)  # Better detection
-        'b5c6d7e8...'
-
-    Confidence: 7/10
-    - URL-only hashing works but misses CDN rotations
-    - Metadata hashing is better but adds latency
-    - Some servers don't provide content-length/last-modified headers
-    """
-    if not attachments:
-        return ""
-
+    """Wrapper for backwards compatibility. Prefer the specific functions."""
     if include_metadata:
-        # Enhanced mode: Include content metadata in hash
-        tuples = []
-        for att in attachments:
-            # Trust Pydantic AttachmentInfo model
-            url = att.url or ""
-            name = att.name or ""
-
-            if not url:
-                tuples.append((url, name, "", ""))
-                continue
-
-            # Try to fetch metadata via HEAD request
-            try:
-                metadata = _fetch_attachment_metadata(url, timeout)
-                tuples.append((url, name, metadata['content_length'], metadata['last_modified']))
-            except Exception as e:
-                # Fallback to URL-only if metadata fetch fails
-                logger.warning("failed to fetch metadata", url=url, error=str(e))
-                tuples.append((url, name, "", ""))
-
-        tuples.sort()
-        content = json.dumps(tuples, sort_keys=True)
-        return hashlib.sha256(content.encode()).hexdigest()
-    else:
-        # Fast mode: URL-only hashing - trust Pydantic AttachmentInfo model
-        pairs = [(att.url or "", att.name or "") for att in attachments]
-        pairs.sort()
-        content = json.dumps(pairs, sort_keys=True)
-        return hashlib.sha256(content.encode()).hexdigest()
+        return hash_attachments_with_metadata(attachments, timeout)
+    return hash_attachments_fast(attachments)
 
 
 def _fetch_attachment_metadata(url: str, timeout: int = 3) -> Dict[str, str]:

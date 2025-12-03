@@ -114,9 +114,8 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 # Include if date parsing fails
                 pass
 
-            # Build meeting dictionary
             meeting = {
-                "meeting_id": meeting_data.get("meeting_id", ""),
+                "vendor_id": meeting_data.get("meeting_id", ""),
                 "title": meeting_data.get("title", ""),
                 "start": date_str,
             }
