@@ -1,6 +1,7 @@
 """Rate limit handling for API requests"""
 
 import hashlib
+import ipaddress
 import time
 import random
 import sqlite3
@@ -337,7 +338,7 @@ class SQLiteRateLimiter:
             return True, max(0, remaining)
 
     def export_blocked_ips(self):
-        """Export currently banned real IPs to nginx-compatible format"""
+        """Export currently banned real IPs to nginx-compatible geo block format"""
         current_time = time.time()
         nginx_conf_file = Path(self.db_path).parent / "blocked_ips_nginx.conf"
 
@@ -347,25 +348,36 @@ class SQLiteRateLimiter:
                     "SELECT real_ip FROM temp_bans WHERE ban_until > ? AND real_ip IS NOT NULL",
                     (current_time,)
                 )
-                blocked_ips = [row[0] for row in cursor.fetchall()]
+                raw_ips = [row[0] for row in cursor.fetchall()]
 
-            # Write nginx geo format
+            # Validate IPs to prevent malformed entries from breaking nginx config
+            valid_ips = []
+            for ip in raw_ips:
+                try:
+                    ipaddress.ip_address(ip)
+                    valid_ips.append(ip)
+                except ValueError:
+                    logger.warning("skipping invalid IP in blocklist", ip=ip)
+
+            # Write complete nginx geo block (required for nginx -t to pass)
             with open(nginx_conf_file, 'w') as f:
                 f.write("# Auto-generated blocked IPs - DO NOT EDIT MANUALLY\n")
-                for ip in blocked_ips:
-                    f.write(f"{ip} 1;\n")
+                f.write("geo $blocked_ip {\n")
+                f.write("    default 0;\n")
+                for ip in valid_ips:
+                    f.write(f"    {ip} 1;\n")
+                f.write("}\n")
 
-            logger.info("exported blocked IPs", count=len(blocked_ips), file=nginx_conf_file)
+            logger.info("exported blocked IPs", count=len(valid_ips), file=nginx_conf_file)
 
-            # Reload nginx if IPs were blocked/unblocked
-            if blocked_ips:
-                import subprocess
-                try:
-                    subprocess.run(["nginx", "-t"], check=True, capture_output=True)
-                    subprocess.run(["systemctl", "reload", "nginx"], check=True)
-                    logger.info("nginx reloaded with updated blocklist")
-                except subprocess.CalledProcessError as e:
-                    logger.error("failed to reload nginx", error=str(e))
+            # Reload nginx to apply changes
+            import subprocess
+            try:
+                subprocess.run(["nginx", "-t"], check=True, capture_output=True)
+                subprocess.run(["systemctl", "reload", "nginx"], check=True)
+                logger.info("nginx reloaded with updated blocklist")
+            except subprocess.CalledProcessError as e:
+                logger.error("failed to reload nginx", error=str(e))
         except Exception as e:
             logger.error("failed to export blocked IPs", error=str(e))
 

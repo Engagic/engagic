@@ -1,9 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import type { MatterTimelineResponse, MatterTimelineAppearance, MatterVotesResponse, VoteTally, VoteOutcome } from '$lib/api/types';
-	import { getMatterVotes } from '$lib/api';
+	import type { MatterTimelineResponse, MatterTimelineAppearance } from '$lib/api/types';
 	import { generateAnchorId } from '$lib/utils/anchor';
-	import VoteBadge from './VoteBadge.svelte';
 
 	interface Props {
 		timelineData: MatterTimelineResponse;
@@ -12,54 +9,8 @@
 
 	let { timelineData, matterFile }: Props = $props();
 
-	// Vote data fetched from API
-	let votesData = $state<MatterVotesResponse | null>(null);
-	let votesLoading = $state(false);
-
-	// Map votes to meetings for quick lookup
-	const votesByMeeting = $derived(() => {
-		if (!votesData?.votes) return new Map<string, { tally: VoteTally; outcome: VoteOutcome }>();
-
-		const map = new Map<string, { tally: VoteTally; outcome: VoteOutcome }>();
-
-		// Group votes by meeting_id and compute tallies
-		const voteGroups = new Map<string, { yes: number; no: number; abstain: number; absent: number }>();
-		for (const vote of votesData.votes) {
-			if (!voteGroups.has(vote.meeting_id)) {
-				voteGroups.set(vote.meeting_id, { yes: 0, no: 0, abstain: 0, absent: 0 });
-			}
-			const group = voteGroups.get(vote.meeting_id)!;
-			if (vote.vote === 'yes') group.yes++;
-			else if (vote.vote === 'no') group.no++;
-			else if (vote.vote === 'abstain' || vote.vote === 'recused') group.abstain++;
-			else if (vote.vote === 'absent') group.absent++;
-		}
-
-		// Determine outcomes
-		for (const [meetingId, tally] of voteGroups) {
-			let outcome: VoteOutcome = 'no_vote';
-			if (tally.yes > tally.no) outcome = 'passed';
-			else if (tally.no > tally.yes) outcome = 'failed';
-			else if (tally.yes > 0 || tally.no > 0) outcome = 'tabled';
-			map.set(meetingId, { tally, outcome });
-		}
-
-		return map;
-	});
-
-	onMount(async () => {
-		if (timelineData.matter?.id) {
-			votesLoading = true;
-			try {
-				votesData = await getMatterVotes(timelineData.matter.id);
-			} catch (e) {
-				// Votes not available for this matter - that's okay
-				console.debug('No votes available for matter:', timelineData.matter.id);
-			} finally {
-				votesLoading = false;
-			}
-		}
-	});
+	// Vote badges removed from timeline to prevent N+1 API requests when listing many matters
+	// Votes are shown on the individual meeting page instead
 
 	let expandedAppearances = $state<Set<number>>(new Set());
 
@@ -139,7 +90,6 @@
 				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
 				{@const dateContext = getDateContext(index, timelineData.timeline.length)}
 				{@const isExpanded = expandedAppearances.has(index)}
-				{@const voteInfo = votesByMeeting().get(appearance.meeting_id)}
 
 				<div class="flow-step" class:selected={isExpanded}>
 					<a
@@ -156,9 +106,6 @@
 							<div class="step-header">
 								<div class="step-type">{meetingInfo.name}</div>
 								<div class="step-status">{dateContext}</div>
-								{#if voteInfo}
-									<VoteBadge tally={voteInfo.tally} outcome={voteInfo.outcome} size="small" />
-								{/if}
 							</div>
 							<div class="step-date">{formatDate(appearance.meeting_date)}</div>
 							{#if appearance.agenda_number}
