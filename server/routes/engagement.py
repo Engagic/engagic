@@ -9,11 +9,11 @@ User engagement endpoints for the closed loop architecture:
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Cookie
+from fastapi import APIRouter, Depends, Request, Cookie
 
 from database.db_postgres import Database
 from server.dependencies import get_current_user, get_db, get_optional_user
-from server.utils.constants import WATCHABLE_ENTITY_TYPES
+from server.utils.validation import validate_watchable_entity
 from userland.database.models import User
 
 router = APIRouter(prefix="/api", tags=["engagement"])
@@ -30,8 +30,7 @@ async def watch_entity(
 
     Requires authentication.
     """
-    if entity_type not in WATCHABLE_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
+    validate_watchable_entity(entity_type)
 
     success = await db.engagement.watch(user.id, entity_type, entity_id)
     return {"success": success, "status": "watching"}
@@ -48,8 +47,7 @@ async def unwatch_entity(
 
     Requires authentication.
     """
-    if entity_type not in WATCHABLE_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
+    validate_watchable_entity(entity_type)
 
     success = await db.engagement.unwatch(user.id, entity_type, entity_id)
     return {"success": success, "status": "unwatched"}
@@ -66,8 +64,8 @@ async def get_user_watches(
     Requires authentication.
     Optional filter by entity_type.
     """
-    if entity_type and entity_type not in WATCHABLE_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
+    if entity_type:
+        validate_watchable_entity(entity_type)
 
     watches = await db.engagement.get_user_watches(user.id, entity_type)
     return {
@@ -181,8 +179,7 @@ async def log_view(
 
     Works for both authenticated and anonymous users.
     """
-    if entity_type not in WATCHABLE_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {WATCHABLE_ENTITY_TYPES}")
+    validate_watchable_entity(entity_type)
 
     user = await get_optional_user(request)
     user_id = user.id if user else None

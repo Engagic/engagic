@@ -10,6 +10,7 @@ Handles CRUD operations for meetings:
 from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
+from database.repositories_async.helpers import build_meeting, fetch_topics_for_ids
 from database.models import Meeting, ParticipationInfo
 from config import get_logger
 
@@ -112,34 +113,11 @@ class MeetingRepository(BaseRepository):
                 return None
 
             # Fetch normalized topics
-            topic_rows = await conn.fetch(
-                """
-                SELECT topic
-                FROM meeting_topics
-                WHERE meeting_id = $1
-                """,
-                meeting_id,
+            topics_map = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", [meeting_id]
             )
-            topics = [r["topic"] for r in topic_rows]
 
-            # Deserialize JSONB participation to typed model
-            participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
-
-            return Meeting(
-                id=row["id"],
-                banana=row["banana"],
-                title=row["title"],
-                date=row["date"],
-                agenda_url=row["agenda_url"],
-                packet_url=row["packet_url"],
-                summary=row["summary"],
-                participation=participation,
-                status=row["status"],
-                processing_status=row["processing_status"],
-                processing_method=row["processing_method"],
-                processing_time=row["processing_time"],
-                topics=topics,
-            )
+            return build_meeting(row, topics_map.get(meeting_id, []))
 
     async def get_meetings_for_city(
         self,
@@ -177,47 +155,16 @@ class MeetingRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch all topics for all meetings (fix N+1 query)
+            # Batch fetch all topics
             meeting_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT meeting_id, topic FROM meeting_topics WHERE meeting_id = ANY($1::text[])",
-                meeting_ids,
+            topics_by_meeting = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", meeting_ids
             )
 
-            # Build topic map: meeting_id -> [topics]
-            topics_by_meeting = {}
-            for topic_row in topic_rows:
-                meeting_id = topic_row["meeting_id"]
-                if meeting_id not in topics_by_meeting:
-                    topics_by_meeting[meeting_id] = []
-                topics_by_meeting[meeting_id].append(topic_row["topic"])
-
-            meetings = []
-            for row in rows:
-                topics = topics_by_meeting.get(row["id"], [])
-
-                # Deserialize JSONB participation to typed model
-                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
-
-                meetings.append(
-                    Meeting(
-                        id=row["id"],
-                        banana=row["banana"],
-                        title=row["title"],
-                        date=row["date"],
-                        agenda_url=row["agenda_url"],
-                        packet_url=row["packet_url"],
-                        summary=row["summary"],
-                        participation=participation,
-                        status=row["status"],
-                        processing_status=row["processing_status"],
-                        processing_method=row["processing_method"],
-                        processing_time=row["processing_time"],
-                        topics=topics,
-                    )
-                )
-
-            return meetings
+            return [
+                build_meeting(row, topics_by_meeting.get(row["id"], []))
+                for row in rows
+            ]
 
     async def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Meeting]:
         """Get meeting by packet_url for cache optimization
@@ -248,34 +195,11 @@ class MeetingRepository(BaseRepository):
                 return None
 
             # Fetch normalized topics
-            topic_rows = await conn.fetch(
-                """
-                SELECT topic
-                FROM meeting_topics
-                WHERE meeting_id = $1
-                """,
-                row["id"],
+            topics_map = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", [row["id"]]
             )
-            topics = [r["topic"] for r in topic_rows]
 
-            # Deserialize JSONB participation to typed model
-            participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
-
-            return Meeting(
-                id=row["id"],
-                banana=row["banana"],
-                title=row["title"],
-                date=row["date"],
-                agenda_url=row["agenda_url"],
-                packet_url=row["packet_url"],
-                summary=row["summary"],
-                participation=participation,
-                status=row["status"],
-                processing_status=row["processing_status"],
-                processing_method=row["processing_method"],
-                processing_time=row["processing_time"],
-                topics=topics,
-            )
+            return build_meeting(row, topics_map.get(row["id"], []))
 
     async def update_meeting_summary(
         self,
@@ -351,44 +275,16 @@ class MeetingRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch all topics for all meetings (avoid N+1 query)
+            # Batch fetch all topics
             meeting_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT meeting_id, topic FROM meeting_topics WHERE meeting_id = ANY($1::text[])",
-                meeting_ids,
+            topics_by_meeting = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", meeting_ids
             )
 
-            # Build topic map: meeting_id -> [topics]
-            topics_by_meeting: dict[str, list[str]] = {}
-            for topic_row in topic_rows:
-                meeting_id = topic_row["meeting_id"]
-                if meeting_id not in topics_by_meeting:
-                    topics_by_meeting[meeting_id] = []
-                topics_by_meeting[meeting_id].append(topic_row["topic"])
-
-            meetings = []
-            for row in rows:
-                topics = topics_by_meeting.get(row["id"], [])
-                # Deserialize JSONB participation to typed model
-                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
-
-                meetings.append(Meeting(
-                    id=row["id"],
-                    banana=row["banana"],
-                    title=row["title"],
-                    date=row["date"],
-                    agenda_url=row["agenda_url"],
-                    packet_url=row["packet_url"],
-                    summary=row["summary"],
-                    participation=participation,
-                    status=row["status"],
-                    processing_status=row["processing_status"],
-                    processing_method=row["processing_method"],
-                    processing_time=row["processing_time"],
-                    topics=topics,
-                ))
-
-            return meetings
+            return [
+                build_meeting(row, topics_by_meeting.get(row["id"], []))
+                for row in rows
+            ]
 
     async def get_random_meeting_with_items(self) -> Optional[Meeting]:
         """Get a random meeting that has items and a summary
@@ -411,28 +307,9 @@ class MeetingRepository(BaseRepository):
             if not row:
                 return None
 
-            # Deserialize JSONB participation to typed model
-            participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
-
-            # Get normalized topics
-            topic_rows = await conn.fetch(
-                "SELECT topic FROM meeting_topics WHERE meeting_id = $1",
-                row["id"]
+            # Fetch normalized topics
+            topics_map = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", [row["id"]]
             )
-            topics = [t["topic"] for t in topic_rows]
 
-            return Meeting(
-                id=row["id"],
-                banana=row["banana"],
-                title=row["title"],
-                date=row["date"],
-                agenda_url=row["agenda_url"],
-                packet_url=row["packet_url"],
-                summary=row["summary"],
-                participation=participation,
-                status=row["status"],
-                processing_status=row["processing_status"],
-                processing_method=row["processing_method"],
-                processing_time=row["processing_time"],
-                topics=topics,
-            )
+            return build_meeting(row, topics_map.get(row["id"], []))

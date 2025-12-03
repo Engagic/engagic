@@ -20,7 +20,7 @@ Confidence: 8/10 - Record number format is consistent across Chicago agendas
 """
 
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 
 # Record number pattern: (O2025-0019668), (R2025-0001234), (SO2025-1234567)

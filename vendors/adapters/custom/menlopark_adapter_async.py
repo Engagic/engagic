@@ -46,7 +46,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
         self.base_url = "https://menlopark.gov"
         self.pdf_extractor = PdfExtractor()
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings from Menlo Park's table-based website and extract items from PDFs (async).
 
@@ -55,7 +55,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
             days_forward: Days to look forward (default 14)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, agenda_url, items
+            List of meeting dictionaries (validation in base class)
         """
         # Date range based on standard window
         today = datetime.now().date()

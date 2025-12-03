@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from database.db_postgres import Database
 from server.dependencies import get_current_user, get_db, get_optional_user
-from server.utils.constants import RATABLE_ENTITY_TYPES, VALID_ISSUE_TYPES
+from server.utils.validation import validate_issue_type, validate_ratable_entity
 from userland.database.models import User
 
 router = APIRouter(prefix="/api", tags=["feedback"])
@@ -51,8 +51,7 @@ async def rate_entity(
     Works for both authenticated and anonymous users.
     Anonymous users must have a session_id cookie.
     """
-    if entity_type not in RATABLE_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {RATABLE_ENTITY_TYPES}")
+    validate_ratable_entity(entity_type)
 
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
@@ -91,11 +90,8 @@ async def report_issue(
     Works for both authenticated and anonymous users.
     Anonymous users must have a session_id cookie.
     """
-    if entity_type not in RATABLE_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {RATABLE_ENTITY_TYPES}")
-
-    if body.issue_type not in VALID_ISSUE_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid issue type. Must be one of: {VALID_ISSUE_TYPES}")
+    validate_ratable_entity(entity_type)
+    validate_issue_type(body.issue_type)
 
     if not body.description or len(body.description) < 10:
         raise HTTPException(status_code=400, detail="Description must be at least 10 characters")
@@ -146,8 +142,7 @@ async def get_entity_rating(
     Public endpoint - no auth required.
     If authenticated, includes user's own rating.
     """
-    if entity_type not in RATABLE_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {RATABLE_ENTITY_TYPES}")
+    validate_ratable_entity(entity_type)
 
     stats = await db.feedback.get_entity_rating(entity_type, entity_id)
 

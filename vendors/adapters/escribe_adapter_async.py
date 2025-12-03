@@ -35,7 +35,7 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         super().__init__(city_slug, vendor="escribe")
         self.base_url = f"https://{self.slug}.escribemeetings.com"
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Scrape meetings from Escribe HTML with date filtering (async).
 
@@ -44,7 +44,7 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             days_forward: Days to look ahead (default 14)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, packet_url
+            List of meeting dictionaries (validation in base class)
         """
         # Calculate date range
         today = datetime.now()

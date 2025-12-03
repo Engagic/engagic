@@ -54,12 +54,11 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
             f"{self.base_url}/Citizens",
             f"{self.base_url}/Citizens/Calendar.aspx",
             f"{self.base_url}/Citizens/Default.aspx",
-            f"{self.base_url}/Citizens/Calendar.aspx",  # Legacy pattern
         ]
 
         logger.info("initialized async IQM2 adapter", vendor="iqm2", slug=self.slug)
 
-    async def fetch_meetings(
+    async def _fetch_meetings_impl(
         self, days_back: int = 7, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         """
@@ -72,7 +71,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
             days_forward: Days to look ahead (default 14)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, items
+            List of meeting dictionaries (validation in base class)
         """
         # Try each calendar URL pattern until one works
         soup = None

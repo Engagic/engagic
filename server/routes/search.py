@@ -1,19 +1,20 @@
 """Search API routes."""
 
 from fastapi import APIRouter, HTTPException, Depends, Request
+
+from config import get_logger
+from database.db_postgres import Database
+from server.dependencies import get_db
+from server.metrics import metrics
 from server.models.requests import SearchRequest
 from server.services.search import (
-    handle_zipcode_search,
     handle_city_search,
     handle_state_search,
+    handle_zipcode_search,
 )
 from server.utils.geo import is_state_query
 from server.utils.text import extract_context, strip_markdown
-from server.metrics import metrics
-from server.dependencies import get_db
-from database.db_postgres import Database
-
-from config import get_logger
+from server.utils.validation import require_city
 
 logger = get_logger(__name__)
 
@@ -83,9 +84,7 @@ async def search_city_meetings(
     if not query:
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-    city = await db.get_city(banana=banana)
-    if not city:
-        raise HTTPException(status_code=404, detail="City not found")
+    await require_city(db, banana)
 
     logger.debug("city item search", banana=banana, query=query)
 
@@ -110,5 +109,5 @@ async def search_city_meetings(
         "query": query,
         "banana": banana,
         "results": results,
-        "count": len(results)
+        "total": len(results)
     }

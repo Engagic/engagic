@@ -7,11 +7,12 @@ Handles CRUD operations for agenda items with PostgreSQL optimizations:
 - Efficient matter-based lookups
 """
 
-from typing import Dict, List, Optional
 from collections import defaultdict
+from typing import Dict, List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.models import AgendaItem, AttachmentInfo
+from database.repositories_async.helpers import build_agenda_item, fetch_topics_for_ids
+from database.models import AgendaItem
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="item_repository")
@@ -149,48 +150,16 @@ class ItemRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch all topics for all items (fix N+1 query)
+            # Batch fetch all topics
             item_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
-                item_ids,
+            topics_by_item = await fetch_topics_for_ids(
+                conn, "item_topics", "item_id", item_ids
             )
 
-            # Build topic map: item_id -> [topics]
-            topics_by_item = {}
-            for topic_row in topic_rows:
-                item_id = topic_row["item_id"]
-                if item_id not in topics_by_item:
-                    topics_by_item[item_id] = []
-                topics_by_item[item_id].append(topic_row["topic"])
-
-            items = []
-            for row in rows:
-                topics = topics_by_item.get(row["id"], [])
-
-                # Deserialize JSONB attachments to typed models
-                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-                sponsors = row["sponsors"] or []
-
-                items.append(
-                    AgendaItem(
-                        id=row["id"],
-                        meeting_id=row["meeting_id"],
-                        title=row["title"],
-                        sequence=row["sequence"],
-                        attachments=attachments,
-                        attachment_hash=row["attachment_hash"],
-                        matter_id=row["matter_id"],
-                        matter_file=row["matter_file"],
-                        matter_type=row["matter_type"],
-                        agenda_number=row["agenda_number"],
-                        sponsors=sponsors,
-                        summary=row["summary"],
-                        topics=topics,  # Single source: normalized item_topics table
-                    )
-                )
-
-            return items
+            return [
+                build_agenda_item(row, topics_by_item.get(row["id"], []))
+                for row in rows
+            ]
 
     async def get_items_for_meetings(
         self, meeting_ids: List[str]
@@ -222,46 +191,21 @@ class ItemRepository(BaseRepository):
             )
 
             if not rows:
-                return {mid: [] for mid in meeting_ids}
+                return {}
 
-            # Single query for ALL item topics
+            # Batch fetch all topics
             item_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
-                item_ids,
+            topics_by_item = await fetch_topics_for_ids(
+                conn, "item_topics", "item_id", item_ids
             )
 
-            # Group topics by item
-            topics_by_item: Dict[str, List[str]] = defaultdict(list)
-            for tr in topic_rows:
-                topics_by_item[tr["item_id"]].append(tr["topic"])
-
             # Build items grouped by meeting
-            items_by_meeting: Dict[str, List[AgendaItem]] = {mid: [] for mid in meeting_ids}
-
+            items_by_meeting: Dict[str, List[AgendaItem]] = defaultdict(list)
             for row in rows:
-                topics = topics_by_item.get(row["id"], [])
-                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-                sponsors = row["sponsors"] or []
-
-                item = AgendaItem(
-                    id=row["id"],
-                    meeting_id=row["meeting_id"],
-                    title=row["title"],
-                    sequence=row["sequence"],
-                    attachments=attachments,
-                    attachment_hash=row["attachment_hash"],
-                    matter_id=row["matter_id"],
-                    matter_file=row["matter_file"],
-                    matter_type=row["matter_type"],
-                    agenda_number=row["agenda_number"],
-                    sponsors=sponsors,
-                    summary=row["summary"],
-                    topics=topics,
-                )
+                item = build_agenda_item(row, topics_by_item.get(row["id"], []))
                 items_by_meeting[row["meeting_id"]].append(item)
 
-            return items_by_meeting
+            return dict(items_by_meeting)
 
     async def get_agenda_item(self, item_id: str) -> Optional[AgendaItem]:
         """Get a single agenda item by ID
@@ -289,31 +233,11 @@ class ItemRepository(BaseRepository):
                 return None
 
             # Fetch normalized topics
-            topic_rows = await conn.fetch(
-                "SELECT topic FROM item_topics WHERE item_id = $1",
-                row["id"],
+            topics_map = await fetch_topics_for_ids(
+                conn, "item_topics", "item_id", [item_id]
             )
-            topics = [r["topic"] for r in topic_rows]
 
-            # Deserialize JSONB attachments to typed models
-            attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-            sponsors = row["sponsors"] or []
-
-            return AgendaItem(
-                id=row["id"],
-                meeting_id=row["meeting_id"],
-                title=row["title"],
-                sequence=row["sequence"],
-                attachments=attachments,
-                attachment_hash=row["attachment_hash"],
-                matter_id=row["matter_id"],
-                matter_file=row["matter_file"],
-                matter_type=row["matter_type"],
-                agenda_number=row["agenda_number"],
-                sponsors=sponsors,
-                summary=row["summary"],
-                topics=topics,  # Single source: normalized item_topics table
-            )
+            return build_agenda_item(row, topics_map.get(item_id, []))
 
     async def update_agenda_item(
         self,
@@ -364,21 +288,20 @@ class ItemRepository(BaseRepository):
 
         # Handle topics normalization
         if "topics" in kwargs and kwargs["topics"]:
+            topic_records = [(item_id, topic) for topic in kwargs["topics"]]
             async with self.transaction() as conn:
                 await conn.execute(
                     "DELETE FROM item_topics WHERE item_id = $1",
                     item_id,
                 )
-                for topic in kwargs["topics"]:
-                    await conn.execute(
-                        """
-                        INSERT INTO item_topics (item_id, topic)
-                        VALUES ($1, $2)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        item_id,
-                        topic,
-                    )
+                await conn.executemany(
+                    """
+                    INSERT INTO item_topics (item_id, topic)
+                    VALUES ($1, $2)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    topic_records,
+                )
 
         logger.debug("updated agenda item", item_id=item_id, fields=list(kwargs.keys()))
 
@@ -413,43 +336,16 @@ class ItemRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch ALL topics for ALL items (eliminates N+1)
+            # Batch fetch all topics
             item_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
-                item_ids,
+            topics_by_item = await fetch_topics_for_ids(
+                conn, "item_topics", "item_id", item_ids
             )
 
-            # Group topics by item
-            topics_by_item: Dict[str, List[str]] = defaultdict(list)
-            for tr in topic_rows:
-                topics_by_item[tr["item_id"]].append(tr["topic"])
-
-            # Build item objects
-            items = []
-            for row in rows:
-                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-                sponsors = row["sponsors"] or []
-
-                items.append(
-                    AgendaItem(
-                        id=row["id"],
-                        meeting_id=row["meeting_id"],
-                        title=row["title"],
-                        sequence=row["sequence"],
-                        attachments=attachments,
-                        attachment_hash=row["attachment_hash"],
-                        matter_id=row["matter_id"],
-                        matter_file=row["matter_file"],
-                        matter_type=row["matter_type"],
-                        agenda_number=row["agenda_number"],
-                        sponsors=sponsors,
-                        summary=row["summary"],
-                        topics=topics_by_item.get(row["id"], []),
-                    )
-                )
-
-            return items
+            return [
+                build_agenda_item(row, topics_by_item.get(row["id"], []))
+                for row in rows
+            ]
 
     async def bulk_update_item_summaries(
         self, item_ids: List[str], summary: str, topics: List[str]
@@ -506,8 +402,7 @@ class ItemRepository(BaseRepository):
                     topic_params,
                 )
 
-        # Parse result tag to get count (e.g., "UPDATE 5" -> 5)
-        updated_count = int(result.split()[-1]) if result else 0
+        updated_count = self._parse_row_count(result)
         logger.debug("bulk updated items with canonical summary", count=updated_count)
         return updated_count
 
@@ -537,39 +432,13 @@ class ItemRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch ALL topics for ALL items (eliminates N+1)
+            # Batch fetch all topics
             item_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT item_id, topic FROM item_topics WHERE item_id = ANY($1::text[])",
-                item_ids,
+            topics_by_item = await fetch_topics_for_ids(
+                conn, "item_topics", "item_id", item_ids
             )
 
-            # Group topics by item
-            topics_by_item: Dict[str, List[str]] = defaultdict(list)
-            for tr in topic_rows:
-                topics_by_item[tr["item_id"]].append(tr["topic"])
-
-            items = []
-            for row in rows:
-                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-                sponsors = row["sponsors"] or []
-
-                items.append(
-                    AgendaItem(
-                        id=row["id"],
-                        meeting_id=row["meeting_id"],
-                        title=row["title"],
-                        sequence=row["sequence"],
-                        attachments=attachments,
-                        summary=row["summary"],
-                        topics=topics_by_item.get(row["id"], []),
-                        matter_id=row["matter_id"],
-                        matter_file=row["matter_file"],
-                        matter_type=row["matter_type"],
-                        agenda_number=row["agenda_number"],
-                        sponsors=sponsors,
-                        attachment_hash=row["attachment_hash"],
-                    )
-                )
-
-            return items
+            return [
+                build_agenda_item(row, topics_by_item.get(row["id"], []))
+                for row in rows
+            ]

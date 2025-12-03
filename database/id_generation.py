@@ -19,6 +19,7 @@ Matter ID Fallback Hierarchy:
 
 import hashlib
 import re
+from datetime import datetime
 from typing import Optional
 
 
@@ -295,7 +296,7 @@ def matter_ids_match(
 def generate_meeting_id(
     banana: str,
     vendor_id: str,
-    date: "datetime",
+    date: datetime,
     title: str
 ) -> str:
     """Generate deterministic meeting ID from inputs.
@@ -319,7 +320,6 @@ def generate_meeting_id(
 
     Confidence: 9/10 - Deterministic, collision-resistant for practical use
     """
-    from datetime import datetime as dt
     if not banana or not vendor_id or not date or not title:
         raise ValueError("All arguments required: banana, vendor_id, date, title")
 

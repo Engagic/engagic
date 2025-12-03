@@ -539,18 +539,101 @@ class AsyncBaseAdapter:
 
         return current_status
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    def _validate_meeting(self, meeting: Dict[str, Any]) -> bool:
+        """Validate meeting dict has required fields.
+
+        Required: meeting_id, title, start
+        At least one URL: agenda_url or packet_url
+
+        Returns True if valid, False if missing required fields.
+        Logs warnings for invalid meetings but doesn't raise.
         """
-        Fetch meetings from vendor (to be implemented by subclasses).
+        required = {"meeting_id", "title", "start"}
+        missing = required - set(meeting.keys())
+
+        if missing:
+            logger.warning(
+                "meeting missing required fields",
+                vendor=self.vendor,
+                slug=self.slug,
+                missing=list(missing),
+                title=str(meeting.get("title", "unknown"))[:50]
+            )
+            return False
+
+        # Warn if no URL at all (but still valid - might be filled later)
+        has_url = meeting.get("agenda_url") or meeting.get("packet_url")
+        if not has_url:
+            logger.debug(
+                "meeting has no agenda_url or packet_url",
+                vendor=self.vendor,
+                slug=self.slug,
+                meeting_id=meeting.get("meeting_id")
+            )
+
+        return True
+
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+        """Fetch meetings from vendor with validation and error handling.
+
+        Wrapper method that:
+        1. Calls _fetch_meetings_impl() (subclass implementation)
+        2. Validates required fields on each meeting
+        3. Handles errors according to contract (log and return [])
 
         Args:
             days_back: Days to look backward from today (default 7)
             days_forward: Days to look forward from today (default 14)
 
         Returns:
-            List of meeting dictionaries
+            List of validated meeting dictionaries.
+            Empty list on failure (never raises).
+        """
+        try:
+            meetings = await self._fetch_meetings_impl(days_back, days_forward)
+
+            # Validate all meetings
+            valid_meetings = [m for m in meetings if self._validate_meeting(m)]
+
+            if len(valid_meetings) < len(meetings):
+                logger.warning(
+                    "filtered invalid meetings",
+                    vendor=self.vendor,
+                    slug=self.slug,
+                    total=len(meetings),
+                    valid=len(valid_meetings),
+                    filtered=len(meetings) - len(valid_meetings)
+                )
+
+            return valid_meetings
+
+        except NotImplementedError:
+            raise  # Let subclass requirement propagate
+        except Exception as e:
+            # Contract: runtime errors log and return []
+            logger.error(
+                "fetch_meetings failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                error=str(e),
+                error_type=type(e).__name__
+            )
+            return []
+
+    async def _fetch_meetings_impl(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
+        """Subclass implementation of meeting fetching.
+
+        Override this method in subclasses, NOT fetch_meetings().
+        Return raw meeting dicts - validation happens in fetch_meetings().
+
+        Args:
+            days_back: Days to look backward from today
+            days_forward: Days to look forward from today
+
+        Returns:
+            List of meeting dicts (validation in wrapper)
 
         Raises:
-            NotImplementedError: Subclass must implement this method
+            NotImplementedError: Subclass must implement this
         """
-        raise NotImplementedError(f"{self.__class__.__name__} must implement fetch_meetings()")
+        raise NotImplementedError(f"{self.__class__.__name__} must implement _fetch_meetings_impl()")
