@@ -41,7 +41,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
         file_id = doc.get("fileId")
         return f"{self.base_url}/v1/Meetings/GetMeetingFileStream(fileId={file_id},plainText=false)"
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings from CivicClerk OData API within date range (async).
 
@@ -52,7 +52,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
             days_forward: Days to look forward (default 14)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, packet_url
+            List of meeting dictionaries (validation in base class)
         """
         # Calculate date range
         today = datetime.now()

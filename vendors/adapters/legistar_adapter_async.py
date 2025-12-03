@@ -39,7 +39,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         self.api_token = api_token
         self.base_url = f"https://webapi.legistar.com/v1/{self.slug}"
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings in moving window (tries API first, falls back to HTML).
 
@@ -48,7 +48,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             days_forward: Days to look forward (default 14, captures upcoming meetings)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, packet_url
+            List of meeting dictionaries (validation in base class)
         """
         meetings = []
         try:
@@ -233,7 +233,6 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 meeting["meeting_status"] = meeting_status
 
             # Fetch agenda items for this event (concurrent with packet URL discovery)
-            import asyncio
             items_task = asyncio.create_task(self._fetch_event_items_api(event_id))
 
             # Try to get agenda PDF URL from API
@@ -1079,47 +1078,6 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         """
         from bs4 import BeautifulSoup
         return BeautifulSoup(html, "html.parser")
-
-    def _parse_meeting_status(
-        self, title: str, date_str: Optional[str] = None
-    ) -> Optional[str]:
-        """
-        Parse meeting title and date/time for status keywords.
-
-        Common patterns:
-        - [CANCELLED] - City Council Meeting
-        - (POSTPONED) Regular Meeting
-        - City Council - REVISED
-        - RESCHEDULED: Planning Commission
-        - Date field: "POSTPONED - TBD"
-
-        Args:
-            title: Meeting title to parse
-            date_str: Optional date/time string to check
-
-        Returns:
-            Status string (cancelled, postponed, revised, rescheduled, deferred) or None
-        """
-        status_keywords = [
-            ("CANCEL", "cancelled"),
-            ("POSTPONE", "postponed"),
-            ("DEFER", "deferred"),
-            ("RESCHEDULE", "rescheduled"),
-            ("REVISED", "revised"),
-            ("AMENDMENT", "revised"),
-            ("UPDATED", "revised"),
-        ]
-        current_status = None
-
-        title_upper = title.upper() if title else ""
-        date_upper = date_str.upper() if date_str else ""
-
-        for keyword, status_value in status_keywords:
-            if keyword in title_upper or keyword in date_upper:
-                current_status = status_value
-                break
-
-        return current_status
 
     async def _fetch_item_attachments_async(
         self, item: Dict[str, Any], base_url: str

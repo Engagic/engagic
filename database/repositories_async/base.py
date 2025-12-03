@@ -5,6 +5,32 @@ All repositories inherit from BaseRepository and share:
 - Transaction context managers
 - Query execution helpers with proper error handling
 - Logging infrastructure
+
+Return Type Conventions
+-----------------------
+All repository methods follow these patterns for consistency:
+
+    get_X(id) -> Optional[T]
+        Single entity lookup by primary key.
+        Returns None if entity not found.
+
+    get_Xs(...) -> List[T]
+        Multiple entity retrieval with filters.
+        Returns empty list [] if none match.
+
+    get_X_batch(ids) -> Dict[str, T]
+        Batch lookup by multiple IDs.
+        Returns dict mapping found IDs to entities.
+        Missing IDs are absent from dict (not errors).
+        Use .get(id) to handle missing keys gracefully.
+
+Connection Patterns
+-------------------
+    self.pool.acquire()
+        Use for read-only queries that don't need atomicity.
+
+    self.transaction()
+        Use for writes or multi-statement reads needing consistency.
 """
 
 import asyncpg

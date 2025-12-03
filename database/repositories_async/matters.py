@@ -7,12 +7,12 @@ Handles CRUD operations for matters (recurring legislative items):
 - Timeline tracking (first_seen, last_seen, appearance_count)
 """
 
-from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.models import Matter, AttachmentInfo, MatterMetadata
+from database.repositories_async.helpers import build_matter, fetch_topics_for_ids
+from database.models import Matter, AttachmentInfo
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="matter_repository")
@@ -123,33 +123,12 @@ class MatterRepository(BaseRepository):
                 return None
 
             # Fetch normalized topics
-            topic_rows = await conn.fetch(
-                "SELECT topic FROM matter_topics WHERE matter_id = $1",
-                matter_id,
+            topics_map = await fetch_topics_for_ids(
+                conn, "matter_topics", "matter_id", [matter_id]
             )
-            topics = [r["topic"] for r in topic_rows]
+            topics = topics_map.get(matter_id, [])
 
-            # Deserialize JSONB fields to typed models
-            attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-            metadata = MatterMetadata(**row["metadata"]) if row["metadata"] else None
-
-            return Matter(
-                id=row["id"],
-                banana=row["banana"],
-                matter_id=row["matter_id"],
-                matter_file=row["matter_file"],
-                matter_type=row["matter_type"],
-                title=row["title"],
-                sponsors=row["sponsors"],
-                canonical_summary=row["canonical_summary"],
-                canonical_topics=topics or row["canonical_topics"],
-                attachments=attachments,
-                metadata=metadata,
-                first_seen=row["first_seen"],
-                last_seen=row["last_seen"],
-                appearance_count=row["appearance_count"],
-                status=row["status"],
-            )
+            return build_matter(row, topics or None)
 
     async def get_matters_batch(self, matter_ids: List[str]) -> Dict[str, Matter]:
         """Batch fetch multiple matters by ID - eliminates N+1
@@ -184,43 +163,18 @@ class MatterRepository(BaseRepository):
             if not rows:
                 return {}
 
-            # Single query for ALL matter topics
-            topic_rows = await conn.fetch(
-                "SELECT matter_id, topic FROM matter_topics WHERE matter_id = ANY($1::text[])",
-                unique_ids,
+            # Batch fetch all topics
+            topics_by_matter = await fetch_topics_for_ids(
+                conn, "matter_topics", "matter_id", unique_ids
             )
 
-            # Group topics by matter
-            topics_by_matter: Dict[str, List[str]] = defaultdict(list)
-            for tr in topic_rows:
-                topics_by_matter[tr["matter_id"]].append(tr["topic"])
-
-            # Build matters dict
-            matters: Dict[str, Matter] = {}
-            for row in rows:
-                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-                metadata = MatterMetadata(**row["metadata"]) if row["metadata"] else None
-                topics = topics_by_matter.get(row["id"], []) or row["canonical_topics"]
-
-                matters[row["id"]] = Matter(
-                    id=row["id"],
-                    banana=row["banana"],
-                    matter_id=row["matter_id"],
-                    matter_file=row["matter_file"],
-                    matter_type=row["matter_type"],
-                    title=row["title"],
-                    sponsors=row["sponsors"],
-                    canonical_summary=row["canonical_summary"],
-                    canonical_topics=topics,
-                    attachments=attachments,
-                    metadata=metadata,
-                    first_seen=row["first_seen"],
-                    last_seen=row["last_seen"],
-                    appearance_count=row["appearance_count"],
-                    status=row["status"],
+            # Build matters dict using helper
+            return {
+                row["id"]: build_matter(
+                    row, topics_by_matter.get(row["id"]) or None
                 )
-
-            return matters
+                for row in rows
+            }
 
     async def update_matter_summary(
         self,
@@ -265,8 +219,11 @@ class MatterRepository(BaseRepository):
         attachments: Optional[List[AttachmentInfo]],
         attachment_hash: str,
         increment_appearance_count: bool = False
-    ) -> None:
+    ) -> Optional[int]:
         """Update matter tracking fields (last_seen, appearance_count, attachments)
+
+        Uses RETURNING to ensure atomic increment and prevent race conditions
+        when multiple workers process the same matter concurrently.
 
         Args:
             matter_id: Composite matter ID
@@ -274,25 +231,49 @@ class MatterRepository(BaseRepository):
             attachments: List of attachment dicts
             attachment_hash: SHA256 hash of attachments
             increment_appearance_count: Whether to increment appearance count
+
+        Returns:
+            New appearance_count if incremented, None otherwise
         """
         async with self.transaction() as conn:
-            appearance_clause = ", appearance_count = appearance_count + 1" if increment_appearance_count else ""
-            await conn.execute(
-                f"""
-                UPDATE city_matters
-                SET last_seen = $2,
-                    attachments = $3::jsonb,
-                    metadata = COALESCE(metadata, '{{}}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
-                    updated_at = CURRENT_TIMESTAMP{appearance_clause}
-                WHERE id = $1
-                """,
-                matter_id,
-                meeting_date,
-                attachments,
-                attachment_hash,
-            )
-
-        logger.debug("updated matter tracking", matter_id=matter_id, increment=increment_appearance_count)
+            if increment_appearance_count:
+                # Use RETURNING to ensure atomic increment - prevents lost updates
+                # when two workers increment simultaneously
+                new_count = await conn.fetchval(
+                    """
+                    UPDATE city_matters
+                    SET last_seen = $2,
+                        attachments = $3::jsonb,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
+                        updated_at = CURRENT_TIMESTAMP,
+                        appearance_count = appearance_count + 1
+                    WHERE id = $1
+                    RETURNING appearance_count
+                    """,
+                    matter_id,
+                    meeting_date,
+                    attachments,
+                    attachment_hash,
+                )
+                logger.debug("updated matter tracking", matter_id=matter_id, new_count=new_count)
+                return new_count
+            else:
+                await conn.execute(
+                    """
+                    UPDATE city_matters
+                    SET last_seen = $2,
+                        attachments = $3::jsonb,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $1
+                    """,
+                    matter_id,
+                    meeting_date,
+                    attachments,
+                    attachment_hash,
+                )
+                logger.debug("updated matter tracking", matter_id=matter_id, increment=False)
+                return None
 
     async def has_appearance(self, matter_id: str, meeting_id: str) -> bool:
         """Check if a matter already has an appearance record for a specific meeting
@@ -305,15 +286,17 @@ class MatterRepository(BaseRepository):
             True if appearance record exists, False otherwise
         """
         async with self.pool.acquire() as conn:
-            count = await conn.fetchval(
+            exists = await conn.fetchval(
                 """
-                SELECT COUNT(*) FROM matter_appearances
-                WHERE matter_id = $1 AND meeting_id = $2
+                SELECT EXISTS(
+                    SELECT 1 FROM matter_appearances
+                    WHERE matter_id = $1 AND meeting_id = $2
+                )
                 """,
                 matter_id,
                 meeting_id,
             )
-            return count > 0
+            return exists
 
     async def create_appearance(
         self,
@@ -401,46 +384,17 @@ class MatterRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch ALL topics for ALL matters (eliminates N+1)
+            # Batch fetch all topics
             matter_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT matter_id, topic FROM matter_topics WHERE matter_id = ANY($1::text[])",
-                matter_ids,
+            topics_by_matter = await fetch_topics_for_ids(
+                conn, "matter_topics", "matter_id", matter_ids
             )
 
-            # Group topics by matter
-            topics_by_matter: Dict[str, List[str]] = defaultdict(list)
-            for tr in topic_rows:
-                topics_by_matter[tr["matter_id"]].append(tr["topic"])
-
-            # Build matter objects
-            matters = []
-            for row in rows:
-                attachments = [AttachmentInfo(**a) for a in (row["attachments"] or [])]
-                metadata = MatterMetadata(**row["metadata"]) if row["metadata"] else None
-                topics = topics_by_matter.get(row["id"], []) or row["canonical_topics"]
-
-                matters.append(
-                    Matter(
-                        id=row["id"],
-                        banana=row["banana"],
-                        matter_id=row["matter_id"],
-                        matter_file=row["matter_file"],
-                        matter_type=row["matter_type"],
-                        title=row["title"],
-                        sponsors=row["sponsors"],
-                        canonical_summary=row["canonical_summary"],
-                        canonical_topics=topics,
-                        attachments=attachments,
-                        metadata=metadata,
-                        first_seen=row["first_seen"],
-                        last_seen=row["last_seen"],
-                        appearance_count=row["appearance_count"],
-                        status=row["status"],
-                    )
-                )
-
-            return matters
+            # Build matter objects using helper
+            return [
+                build_matter(row, topics_by_matter.get(row["id"]) or None)
+                for row in rows
+            ]
 
     async def update_appearance_outcome(
         self,

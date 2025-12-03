@@ -42,7 +42,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
         super().__init__(city_slug, vendor="berkeley")
         self.base_url = "https://berkeleyca.gov"
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings from Berkeley's Drupal-based website (async).
 
@@ -51,7 +51,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
             days_forward: Days to look forward (default 14)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, agenda_url, items
+            List of meeting dictionaries (validation in base class)
         """
         # Date range based on standard window
         today = datetime.now().date()

@@ -1,11 +1,17 @@
 """Vote API routes - handles vote records, tallies, and council member voting history."""
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 
 from database.db_postgres import Database
 from database.vote_utils import compute_vote_tally, determine_vote_outcome
 from server.dependencies import get_db
 from server.metrics import metrics
+from server.utils.validation import (
+    require_city,
+    require_council_member,
+    require_matter,
+    require_meeting,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -16,9 +22,7 @@ async def get_matter_votes(matter_id: str, db: Database = Depends(get_db)):
 
     Returns individual votes and aggregate tally.
     """
-    matter = await db.get_matter(matter_id)
-    if not matter:
-        raise HTTPException(status_code=404, detail="Matter not found")
+    matter = await require_matter(db, matter_id)
 
     votes = await db.council_members.get_votes_for_matter(matter_id)
     tally = await db.council_members.get_vote_tally_for_matter(matter_id)
@@ -42,9 +46,7 @@ async def get_meeting_votes(meeting_id: str, db: Database = Depends(get_db)):
 
     Returns votes grouped by matter.
     """
-    meeting = await db.meetings.get_meeting(meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = await require_meeting(db, meeting_id)
 
     votes = await db.council_members.get_votes_for_meeting(meeting_id)
 
@@ -88,7 +90,7 @@ async def get_meeting_votes(meeting_id: str, db: Database = Depends(get_db)):
         "meeting_title": meeting.title,
         "meeting_date": meeting.date.isoformat() if meeting.date else None,
         "matters_with_votes": matters_with_votes,
-        "total_votes": len(votes)
+        "total": len(votes)
     }
 
 
@@ -102,9 +104,7 @@ async def get_member_votes(
 
     Returns recent votes with matter context.
     """
-    member = await db.council_members.get_member_by_id(member_id)
-    if not member:
-        raise HTTPException(status_code=404, detail="Council member not found")
+    member = await require_council_member(db, member_id)
 
     voting_record = await db.council_members.get_member_voting_record(member_id, limit=limit)
 
@@ -115,7 +115,7 @@ async def get_member_votes(
         "success": True,
         "member": member.to_dict(),
         "voting_record": voting_record,
-        "total_votes": len(voting_record),
+        "total": len(voting_record),
         "statistics": vote_counts
     }
 
@@ -126,9 +126,7 @@ async def get_city_council(banana: str, db: Database = Depends(get_db)):
 
     Returns all council members for a city.
     """
-    city = await db.get_city(banana=banana)
-    if not city:
-        raise HTTPException(status_code=404, detail="City not found")
+    city = await require_city(db, banana)
 
     members = await db.council_members.get_members_by_city(banana)
 
@@ -138,5 +136,5 @@ async def get_city_council(banana: str, db: Database = Depends(get_db)):
         "state": city.state,
         "banana": banana,
         "council_members": [m.to_dict() for m in members],
-        "total_members": len(members)
+        "total": len(members)
     }

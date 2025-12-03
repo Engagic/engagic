@@ -54,6 +54,20 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         "votes": [],
     }
 
+    # Map Chicago status strings to vote outcome
+    _STATUS_TO_OUTCOME: Dict[str, Optional[str]] = {
+        "adopted": "passed",
+        "approved": "passed",
+        "passed": "passed",
+        "failed": "failed",
+        "rejected": "failed",
+        "withdrawn": "withdrawn",
+        "tabled": "tabled",
+        "deferred": "tabled",
+        "referred": None,
+        "pending": None,
+    }
+
     def __init__(self, city_slug: str):
         super().__init__(city_slug, vendor="chicago")
         self.base_url = "https://api.chicityclerkelms.chicago.gov"
@@ -97,7 +111,35 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         }
         return vote_map.get(value_lower, "not_voting")
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    def _extract_attachments(self, raw_attachments: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """Extract and normalize attachment metadata from Chicago API response."""
+        attachments = []
+        for att in raw_attachments:
+            file_name = (att.get("fileName") or "").strip()
+            path = (att.get("path") or "").strip()
+            attachment_type = (att.get("attachmentType") or "").strip()
+
+            if not path:
+                continue
+
+            path_lower = path.lower()
+            if path_lower.endswith(".pdf"):
+                file_type = "pdf"
+            elif path_lower.endswith((".doc", ".docx")):
+                file_type = "doc"
+            elif path_lower.endswith((".xls", ".xlsx")):
+                file_type = "spreadsheet"
+            else:
+                file_type = "unknown"
+
+            attachments.append({
+                "name": file_name or attachment_type or "Attachment",
+                "url": path,
+                "type": file_type,
+            })
+        return attachments
+
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings in moving window from Chicago's API (async).
 
@@ -106,7 +148,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             days_forward: Days to look forward (default 14)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, location, items
+            List of meeting dictionaries (validation in base class)
         """
         # Reset stats for this sync
         self._reset_stats()
@@ -670,46 +712,10 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         # Map status to vote outcome
         status_lower = matter_status.lower() if matter_status else ""
-        outcome_map = {
-            "adopted": "passed",
-            "approved": "passed",
-            "passed": "passed",
-            "failed": "failed",
-            "rejected": "failed",
-            "withdrawn": "withdrawn",
-            "tabled": "tabled",
-            "deferred": "tabled",
-            "referred": None,
-            "pending": None,
-        }
-        vote_outcome = outcome_map.get(status_lower)
+        vote_outcome = self._STATUS_TO_OUTCOME.get(status_lower)
 
         # Extract attachments
-        raw_attachments = matter_data.get("attachments", [])
-        attachments = []
-        for att in raw_attachments:
-            file_name = (att.get("fileName") or "").strip()
-            path = (att.get("path") or "").strip()
-            attachment_type = (att.get("attachmentType") or "").strip()
-
-            if not path:
-                continue
-
-            path_lower = path.lower()
-            if path_lower.endswith(".pdf"):
-                file_type = "pdf"
-            elif path_lower.endswith((".doc", ".docx")):
-                file_type = "doc"
-            elif path_lower.endswith((".xls", ".xlsx")):
-                file_type = "spreadsheet"
-            else:
-                file_type = "unknown"
-
-            attachments.append({
-                "name": file_name or attachment_type or "Attachment",
-                "url": path,
-                "type": file_type,
-            })
+        attachments = self._extract_attachments(matter_data.get("attachments", []))
 
         # Extract sponsors
         raw_sponsors = matter_data.get("sponsors", [])
@@ -745,60 +751,17 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             return self._EMPTY_MATTER
 
         # Extract attachments
-        raw_attachments = matter_data.get("attachments", [])
-        attachments = []
-
-        for att in raw_attachments:
-            file_name = (att.get("fileName") or "").strip()
-            path = (att.get("path") or "").strip()
-            attachment_type = (att.get("attachmentType") or "").strip()
-
-            if not path:
-                continue
-
-            # Determine file type from path
-            path_lower = path.lower()
-            if path_lower.endswith(".pdf"):
-                file_type = "pdf"
-            elif path_lower.endswith((".doc", ".docx")):
-                file_type = "doc"
-            elif path_lower.endswith((".xls", ".xlsx")):
-                file_type = "spreadsheet"
-            else:
-                file_type = "unknown"
-
-            attachments.append({
-                "name": file_name or attachment_type or "Attachment",
-                "url": path,
-                "type": file_type,
-            })
+        attachments = self._extract_attachments(matter_data.get("attachments", []))
 
         # Extract sponsors
-        raw_sponsors = matter_data.get("sponsors", [])
-        sponsors = []
-        for sponsor in raw_sponsors:
-            sponsor_name = sponsor.get("sponsorName")
-            if sponsor_name:
-                sponsors.append(sponsor_name)
+        sponsors = [s.get("sponsorName") for s in matter_data.get("sponsors", []) if s.get("sponsorName")]
 
         # Extract matter status for closed-loop tracking (convert empty string to None)
         matter_status = matter_data.get("status") or None
 
         # Map status to vote outcome
         status_lower = matter_status.lower() if matter_status else ""
-        outcome_map = {
-            "adopted": "passed",
-            "approved": "passed",
-            "passed": "passed",
-            "failed": "failed",
-            "rejected": "failed",
-            "withdrawn": "withdrawn",
-            "tabled": "tabled",
-            "deferred": "tabled",
-            "referred": None,  # Still in progress
-            "pending": None,
-        }
-        vote_outcome = outcome_map.get(status_lower)
+        vote_outcome = self._STATUS_TO_OUTCOME.get(status_lower)
 
         # Extract votes from actions - eliminates need for separate vote API calls
         votes = []

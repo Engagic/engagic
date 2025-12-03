@@ -121,7 +121,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         logger.warning("could not find agenda page", vendor="civicplus", slug=self.slug)
         return None
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """
         Fetch meetings from CivicPlus site with date filtering (async).
 
@@ -132,7 +132,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             days_forward: Days to look forward (default 14)
 
         Returns:
-            List of meeting dictionaries with meeting_id, title, start, packet_url
+            List of meeting dictionaries (validation in base class)
         """
         # Check for external system first
         await self._check_for_external_system()
