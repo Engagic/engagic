@@ -12,7 +12,7 @@ from pathlib import Path
 
 from config import get_logger, config
 from database.id_generation import generate_matter_id, generate_meeting_id
-from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata, AttachmentInfo
+from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata
 from database.repositories_async import (
     CityRepository,
     CommitteeRepository,
@@ -25,6 +25,7 @@ from database.repositories_async import (
 )
 from database.repositories_async.engagement import EngagementRepository
 from database.repositories_async.feedback import FeedbackRepository
+from database.repositories_async.helpers import deserialize_attachments
 from database.repositories_async.userland import UserlandRepository
 from database.vote_utils import compute_vote_tally, determine_vote_outcome
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
@@ -375,9 +376,7 @@ class Database:
             item_id = f"{stored_meeting.id}_{item_data['item_id']}"
 
             # BOUNDARY: Convert raw dicts to Pydantic models
-            # All downstream code can trust AttachmentInfo objects
-            raw_attachments = item_data.get("attachments", [])
-            item_attachments = [AttachmentInfo(**att) for att in raw_attachments] if raw_attachments else []
+            item_attachments = deserialize_attachments(item_data.get("attachments"))
             sponsors = item_data.get("sponsors", [])
 
             attachment_hash = hash_attachments(item_attachments) if item_attachments else None

@@ -10,7 +10,18 @@ import type {
 	GetCityMattersResponse,
 	GetStateMattersResponse,
 	SearchCityMeetingsResponse,
-	SearchCityMattersResponse
+	SearchCityMattersResponse,
+	MatterVotesResponse,
+	MeetingVotesResponse,
+	CouncilRosterResponse,
+	VotingRecordResponse,
+	RatingStats,
+	RatingSubmitResponse,
+	TrendingResponse,
+	EngagementStats,
+	IssuesResponse,
+	ReportIssueResponse,
+	IssueType
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -294,5 +305,151 @@ export const apiClient = {
 		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
 
 		return response.json();
+	},
+
+	// Vote endpoints
+	async getMatterVotes(matterId: string, clientIp?: string): Promise<MatterVotesResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/matters/${matterId}/votes`,
+			{},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	async getMeetingVotes(meetingId: string, clientIp?: string): Promise<MeetingVotesResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/meetings/${meetingId}/votes`,
+			{},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	// Council Member endpoints
+	async getCityCouncilMembers(banana: string, clientIp?: string): Promise<CouncilRosterResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/city/${banana}/council-members`,
+			{},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	async getCouncilMemberVotes(memberId: string, limit: number = 100, clientIp?: string): Promise<VotingRecordResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/council-members/${memberId}/votes`);
+		url.searchParams.set('limit', limit.toString());
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+
+		return response.json();
+	},
+
+	// Rating endpoints
+	async getRatingStats(entityType: string, entityId: string, clientIp?: string): Promise<RatingStats> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/${entityType}/${entityId}/rating`,
+			{},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	async submitRating(entityType: string, entityId: string, rating: number, clientIp?: string): Promise<RatingSubmitResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/rate/${entityType}/${entityId}`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ rating }),
+				credentials: 'include'  // Include session_id cookie for anonymous rating
+			},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	// Issue reporting endpoints
+	async getIssues(entityType: string, entityId: string, clientIp?: string): Promise<IssuesResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/${entityType}/${entityId}/issues`,
+			{},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	async reportIssue(entityType: string, entityId: string, issueType: IssueType, description: string, clientIp?: string): Promise<ReportIssueResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/report/${entityType}/${entityId}`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ issue_type: issueType, description }),
+				credentials: 'include'  // Include session_id cookie
+			},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	// Trending endpoints
+	async getTrendingMatters(limit: number = 20, clientIp?: string): Promise<TrendingResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/trending/matters`);
+		url.searchParams.set('limit', limit.toString());
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+
+		return response.json();
+	},
+
+	// Engagement endpoints
+	async getMatterEngagement(matterId: string, clientIp?: string): Promise<EngagementStats> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/matters/${matterId}/engagement`,
+			{ credentials: 'include' },
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	async getMeetingEngagement(meetingId: string, clientIp?: string): Promise<EngagementStats> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/meetings/${meetingId}/engagement`,
+			{ credentials: 'include' },
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	// Activity logging (for engagement tracking)
+	async logView(entityType: string, entityId: string, clientIp?: string): Promise<void> {
+		await fetchWithRetry(
+			`${config.apiBaseUrl}/api/activity/view/${entityType}/${entityId}`,
+			{
+				method: 'POST',
+				credentials: 'include'
+			},
+			config.maxRetries,
+			clientIp
+		);
 	}
 };

@@ -233,6 +233,9 @@ export function isSearchError(result: SearchResult): result is SearchError {
 	return result.success === false && !result.ambiguous;
 }
 
+// Matter status values
+export type MatterStatus = 'active' | 'passed' | 'failed' | 'tabled' | 'withdrawn' | 'referred' | 'amended' | 'vetoed' | 'enacted';
+
 // Matter types
 export interface Matter {
 	id: string;
@@ -248,6 +251,10 @@ export interface Matter {
 	first_seen: string;
 	last_seen: string;
 	appearance_count?: number;  // Number of times this matter appeared across meetings
+	status?: MatterStatus;  // Legislative disposition
+	final_vote_date?: string;  // Date when matter reached terminal disposition
+	quality_score?: number;  // Denormalized from ratings (1-5 scale)
+	rating_count?: number;  // Count of ratings received
 }
 
 export interface MatterTimelineAppearance {
@@ -391,4 +398,184 @@ export interface SearchCityMattersResponse {
 	banana: string;
 	results: CitySearchMatterResult[];
 	count: number;
+}
+
+// Vote types
+export type VoteValue = 'yes' | 'no' | 'abstain' | 'absent' | 'present' | 'recused' | 'not_voting';
+export type VoteOutcome = 'passed' | 'failed' | 'tabled' | 'withdrawn' | 'referred' | 'amended' | 'unknown' | 'no_vote';
+
+export interface VoteTally {
+	yes: number;
+	no: number;
+	abstain: number;
+	absent: number;
+	present?: number;
+}
+
+export interface Vote {
+	id: number;
+	council_member_id: string;
+	matter_id: string;
+	meeting_id: string;
+	vote: VoteValue;
+	vote_date: string;
+	sequence?: number;
+	metadata?: Record<string, unknown>;
+	created_at?: string;
+}
+
+export interface MatterVotesResponse {
+	success: boolean;
+	matter_id: string;
+	matter_title: string;
+	votes: Vote[];
+	tally: VoteTally;
+	outcomes: VoteOutcome[];
+}
+
+export interface MeetingVoteMatter {
+	matter_id: string;
+	matter_title: string;
+	matter_file?: string;
+	votes: Vote[];
+	tally: VoteTally;
+	outcome: VoteOutcome;
+}
+
+export interface MeetingVotesResponse {
+	success: boolean;
+	meeting_id: string;
+	meeting_title: string;
+	meeting_date?: string;
+	matters_with_votes: MeetingVoteMatter[];
+	total: number;
+}
+
+// Council Member types
+export type CouncilMemberStatus = 'active' | 'former' | 'unknown';
+
+export interface CouncilMember {
+	id: string;
+	banana: string;
+	name: string;
+	normalized_name?: string;
+	title?: string;
+	district?: string;
+	status: CouncilMemberStatus;
+	first_seen: string;
+	last_seen: string;
+	sponsorship_count: number;
+	vote_count: number;
+	metadata?: Record<string, unknown>;
+	created_at?: string;
+	updated_at?: string;
+}
+
+export interface CouncilRosterResponse {
+	success: boolean;
+	city_name: string;
+	state: string;
+	banana: string;
+	council_members: CouncilMember[];
+	total: number;
+}
+
+export interface VoteRecord {
+	id: number;
+	matter_id: string;
+	meeting_id: string;
+	vote: VoteValue;
+	vote_date: string;
+	sequence?: number;
+	matter_file?: string;
+	title: string;
+	matter_type?: string;
+}
+
+export interface VotingRecordResponse {
+	success: boolean;
+	member: CouncilMember;
+	voting_record: VoteRecord[];
+	total: number;
+	statistics: VoteTally;
+}
+
+// Rating types
+export interface RatingStats {
+	success: boolean;
+	entity_type: string;
+	entity_id: string;
+	avg_rating: number;
+	rating_count: number;
+	distribution: Record<string, number>;
+	user_rating?: number;  // Only if authenticated
+}
+
+export interface RatingSubmitResponse {
+	success: boolean;
+	status: string;
+}
+
+// Issue reporting types
+export type IssueType = 'inaccurate' | 'incomplete' | 'misleading' | 'offensive' | 'other';
+export type IssueStatus = 'open' | 'resolved' | 'dismissed';
+
+export interface Issue {
+	id: number;
+	issue_type: IssueType;
+	description: string;
+	status: IssueStatus;
+	created_at: string;
+	resolved_at?: string;
+}
+
+export interface IssuesResponse {
+	success: boolean;
+	entity_type: string;
+	entity_id: string;
+	open_issue_count: number;
+	issues: Issue[];
+}
+
+export interface ReportIssueResponse {
+	success: boolean;
+	issue_id: number;
+}
+
+// Engagement types
+export interface EngagementStats {
+	success: boolean;
+	matter_id?: string;
+	meeting_id?: string;
+	watch_count: number;
+	is_watching: boolean;
+}
+
+export interface TrendingMatter {
+	matter_id: string;
+	engagement: number;
+	unique_users: number;
+	title: string;
+	status?: MatterStatus;
+	city_name?: string;
+	banana?: string;
+}
+
+export interface TrendingResponse {
+	success: boolean;
+	trending: TrendingMatter[];
+}
+
+// Watch types
+export interface Watch {
+	id: number;
+	entity_type: string;
+	entity_id: string;
+	created_at: string;
+}
+
+export interface WatchListResponse {
+	success: boolean;
+	watches: Watch[];
+	total: number;
 }

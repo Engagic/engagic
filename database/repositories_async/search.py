@@ -6,11 +6,11 @@ Handles search operations using PostgreSQL features:
 - Popular topics aggregation
 """
 
-from typing import Dict, List, Optional
-from collections import defaultdict
+from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.models import Meeting, ParticipationInfo
+from database.repositories_async.helpers import build_meeting, fetch_topics_for_ids
+from database.models import Meeting
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="search_repository")
@@ -82,42 +82,17 @@ class SearchRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch ALL topics for ALL meetings (eliminates N+1)
+            # Batch fetch topics
             meeting_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT meeting_id, topic FROM meeting_topics WHERE meeting_id = ANY($1::text[])",
-                meeting_ids,
+            topics_by_meeting = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", meeting_ids
             )
 
-            # Group topics by meeting
-            topics_by_meeting: Dict[str, List[str]] = defaultdict(list)
-            for tr in topic_rows:
-                topics_by_meeting[tr["meeting_id"]].append(tr["topic"])
-
             # Build meeting objects
-            meetings = []
-            for row in rows:
-                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
-
-                meetings.append(
-                    Meeting(
-                        id=row["id"],
-                        banana=row["banana"],
-                        title=row["title"],
-                        date=row["date"],
-                        agenda_url=row["agenda_url"],
-                        packet_url=row["packet_url"],
-                        summary=row["summary"],
-                        participation=participation,
-                        status=row["status"],
-                        processing_status=row["processing_status"],
-                        processing_method=row["processing_method"],
-                        processing_time=row["processing_time"],
-                        topics=topics_by_meeting.get(row["id"], []),
-                    )
-                )
-
-            return meetings
+            return [
+                build_meeting(row, topics_by_meeting.get(row["id"], []))
+                for row in rows
+            ]
 
     async def search_meetings_by_topic(
         self,
@@ -160,40 +135,17 @@ class SearchRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch ALL topics for ALL meetings (eliminates N+1)
+            # Batch fetch topics
             meeting_ids = [row["id"] for row in rows]
-            topic_rows = await conn.fetch(
-                "SELECT meeting_id, topic FROM meeting_topics WHERE meeting_id = ANY($1::text[])",
-                meeting_ids,
+            topics_by_meeting = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", meeting_ids
             )
 
-            # Group topics by meeting
-            topics_by_meeting: Dict[str, List[str]] = defaultdict(list)
-            for tr in topic_rows:
-                topics_by_meeting[tr["meeting_id"]].append(tr["topic"])
-
             # Build meeting objects
-            meetings = []
-            for row in rows:
-                participation = ParticipationInfo(**row["participation"]) if row["participation"] else None
-
-                meetings.append(Meeting(
-                    id=row["id"],
-                    banana=row["banana"],
-                    title=row["title"],
-                    date=row["date"],
-                    agenda_url=row["agenda_url"],
-                    packet_url=row["packet_url"],
-                    summary=row["summary"],
-                    participation=participation,
-                    status=row["status"],
-                    processing_status=row["processing_status"],
-                    processing_method=row["processing_method"],
-                    processing_time=row["processing_time"],
-                    topics=topics_by_meeting.get(row["id"], []),
-                ))
-
-            return meetings
+            return [
+                build_meeting(row, topics_by_meeting.get(row["id"], []))
+                for row in rows
+            ]
 
     async def get_popular_topics(self, limit: int = 20) -> List[dict]:
         """Get most popular topics across all meetings
