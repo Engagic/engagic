@@ -22,6 +22,32 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-02] Code Quality Cleanup (Unslopification)
+
+**Eliminated ~150 lines of duplication and verbosity across adapters and repositories.**
+
+### Vendor Adapters
+- **Legistar**: Removed redundant `_parse_meeting_status()` override (now uses inherited base method with logging)
+- **Legistar**: Removed redundant inline `import asyncio` (already imported at module level)
+- **Chicago**: Extracted `_STATUS_TO_OUTCOME` class constant (was duplicated in two methods)
+- **Chicago**: Extracted `_extract_attachments()` helper (was duplicated in two methods)
+- **IQM2**: Removed duplicate calendar URL pattern
+
+### Database Repositories
+- **helpers.py**: Now uses own `deserialize_participation()` and `deserialize_attachments()` functions internally
+- **items.py**: Uses `defaultdict` for grouping, `executemany` for batch topic inserts, `_parse_row_count()` from base
+- **matters.py**: Uses `SELECT EXISTS` instead of `COUNT(*)` for existence checks (minor perf improvement)
+
+### Server Utils
+- **validation.py**: Trimmed verbose module docstring, removed section banner comments, condensed `require_*` docstrings
+
+### Scaffolding (Not Yet Implemented)
+- **responses.py**: Response helpers for future closed-loop API consistency (unused until adoption)
+
+**No breaking changes.** Legistar now logs meeting status detection (debug level) - previously silent.
+
+---
+
 ## [2025-12-02] Unified Meeting ID Generation
 
 **Single source of truth for meeting IDs.** All 11 adapters now return `vendor_id`, database layer generates canonical IDs.
