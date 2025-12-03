@@ -29,11 +29,72 @@ class ItemRepository(BaseRepository):
     - Topic-based filtering
     """
 
+    def _dedupe_items_by_matter(self, items: List[AgendaItem]) -> List[AgendaItem]:
+        """Deduplicate items by matter_id within the same meeting.
+
+        When multiple items reference the same matter (e.g., Legistar returning
+        duplicate agenda entries), keep only the one with the most data.
+
+        Scoring: prefer items with agenda_number, summary, attachments, topics.
+        """
+        if not items:
+            return items
+
+        # Group items by matter_id (None matter_id items are kept as-is)
+        by_matter: Dict[Optional[str], List[AgendaItem]] = defaultdict(list)
+        no_matter_items = []
+
+        for item in items:
+            if item.matter_id:
+                by_matter[item.matter_id].append(item)
+            else:
+                no_matter_items.append(item)
+
+        # For each matter, keep the item with the most data
+        deduped = []
+        duplicates_removed = 0
+
+        for matter_id, matter_items in by_matter.items():
+            if len(matter_items) == 1:
+                deduped.append(matter_items[0])
+            else:
+                # Score each item by data completeness
+                def score_item(item: AgendaItem) -> int:
+                    score = 0
+                    if item.agenda_number:
+                        score += 10
+                    if item.summary:
+                        score += 5
+                    if item.attachments:
+                        score += len(item.attachments)
+                    if item.topics:
+                        score += len(item.topics)
+                    if item.sponsors:
+                        score += 2
+                    return score
+
+                best_item = max(matter_items, key=score_item)
+                deduped.append(best_item)
+                duplicates_removed += len(matter_items) - 1
+
+        if duplicates_removed > 0:
+            logger.info(
+                "deduplicated items by matter_id",
+                duplicates_removed=duplicates_removed,
+                original_count=len(items),
+                deduped_count=len(deduped) + len(no_matter_items),
+            )
+
+        return deduped + no_matter_items
+
     async def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
         """Store multiple agenda items (bulk insert with topic normalization)
 
         Optimized with executemany() for 2-3x speedup over individual inserts.
         Cannot use COPY due to ON CONFLICT requirement (UPSERT for re-syncs).
+
+        Deduplicates items by matter_id to prevent storing multiple copies of
+        the same legislation from vendors that return duplicate entries.
 
         Args:
             meeting_id: Meeting ID these items belong to
@@ -44,6 +105,9 @@ class ItemRepository(BaseRepository):
         """
         if not items:
             return 0
+
+        # Dedupe items by matter_id before storing
+        items = self._dedupe_items_by_matter(items)
 
         async with self.transaction() as conn:
             # Batch upsert items using executemany()
