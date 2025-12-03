@@ -28,10 +28,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: D
         if not query:
             raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-        # Store query in request state for middleware logging
         request.state.search_query = query
-
-        # Get client hash from middleware (set in rate_limiting.py)
         client_hash = getattr(request.state, 'client_ip_hash', 'unknown')
         logger.debug("search request", query=query, user=client_hash)
 
@@ -62,10 +59,11 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: D
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("search error", error=str(e))
+    except Exception:
+        logger.exception("search error")
         raise HTTPException(
-            status_code=500, detail="We humbly thank you for your patience"
+            status_code=500,
+            detail="We're having trouble loading search results. If this city matters to you, watch it to ensure priority weekly syncing."
         )
 
 
@@ -93,8 +91,8 @@ async def search_city_meetings(
 
     try:
         results = await db.search.search_items_fulltext(query, banana=banana, limit=limit)
-    except Exception as e:
-        logger.error("city item search error", error=str(e), banana=banana)
+    except Exception:
+        logger.exception("city item search error", banana=banana)
         raise HTTPException(status_code=500, detail="Search failed")
 
     for result in results:
@@ -102,7 +100,6 @@ async def search_city_meetings(
         if context_headline:
             result["context"] = strip_markdown(context_headline)
         else:
-            # Fallback for ILIKE matches (no FTS match)
             context_source = result.get("summary") or result.get("item_title") or ""
             result["context"] = strip_markdown(extract_context(context_source, query))
 

@@ -19,10 +19,12 @@ Parity with Legistar/PrimeGov/Granicus:
 - Concurrent meeting/item fetching for faster sync
 """
 
+import asyncio
 import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
+import aiohttp
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.utils.item_filters import should_skip_procedural_item
 from bs4 import BeautifulSoup
@@ -103,7 +105,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
                         slug=self.slug,
                         url=calendar_url
                     )
-            except Exception as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 logger.debug(
                     "failed to fetch calendar URL",
                     vendor="iqm2",
@@ -346,9 +348,18 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
             )
             return metadata
 
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.warning(
                 "failed to fetch matter metadata",
+                vendor="iqm2",
+                slug=self.slug,
+                legifile_id=legifile_id,
+                error=str(e)
+            )
+            return {}
+        except (ValueError, AttributeError, KeyError) as e:
+            logger.warning(
+                "failed to parse matter metadata",
                 vendor="iqm2",
                 slug=self.slug,
                 legifile_id=legifile_id,

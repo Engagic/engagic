@@ -35,14 +35,6 @@ class MeetingRepository(BaseRepository):
         Args:
             meeting: Meeting object with all fields
         """
-        # Debug: Check participation type
-        if meeting.participation:
-            logger.debug(
-                "storing meeting with participation",
-                participation_type=type(meeting.participation).__name__,
-                participation_value=str(meeting.participation)[:100]
-            )
-
         async with self.transaction() as conn:
             # Upsert meeting row
             await conn.execute(
@@ -80,22 +72,17 @@ class MeetingRepository(BaseRepository):
                 meeting.processing_time,
             )
 
-            # Normalize topics to meeting_topics table
+            # Normalize topics to meeting_topics table (batch for efficiency)
             if meeting.topics:
                 await conn.execute(
                     "DELETE FROM meeting_topics WHERE meeting_id = $1",
                     meeting.id,
                 )
-                for topic in meeting.topics:
-                    await conn.execute(
-                        """
-                        INSERT INTO meeting_topics (meeting_id, topic)
-                        VALUES ($1, $2)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        meeting.id,
-                        topic,
-                    )
+                topic_records = [(meeting.id, topic) for topic in meeting.topics]
+                await conn.executemany(
+                    "INSERT INTO meeting_topics (meeting_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                    topic_records,
+                )
 
         logger.info("meeting stored", meeting_id=meeting.id, banana=meeting.banana)
 
@@ -329,22 +316,17 @@ class MeetingRepository(BaseRepository):
                 participation,
             )
 
-            # Normalize topics to meeting_topics table
+            # Normalize topics to meeting_topics table (batch for efficiency)
             if topics:
                 await conn.execute(
                     "DELETE FROM meeting_topics WHERE meeting_id = $1",
                     meeting_id,
                 )
-                for topic in topics:
-                    await conn.execute(
-                        """
-                        INSERT INTO meeting_topics (meeting_id, topic)
-                        VALUES ($1, $2)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        meeting_id,
-                        topic,
-                    )
+                topic_records = [(meeting_id, topic) for topic in topics]
+                await conn.executemany(
+                    "INSERT INTO meeting_topics (meeting_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                    topic_records,
+                )
 
         logger.info("updated meeting summary", meeting_id=meeting_id, topic_count=len(topics) if topics else 0)
 

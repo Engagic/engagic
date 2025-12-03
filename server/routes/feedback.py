@@ -14,12 +14,10 @@ from pydantic import BaseModel
 
 from database.db_postgres import Database
 from server.dependencies import get_current_user, get_db, get_optional_user
+from server.utils.constants import RATABLE_ENTITY_TYPES, VALID_ISSUE_TYPES
 from userland.database.models import User
 
 router = APIRouter(prefix="/api", tags=["feedback"])
-
-VALID_ENTITY_TYPES = {"item", "meeting", "matter"}
-VALID_ISSUE_TYPES = {"inaccurate", "incomplete", "misleading", "offensive", "other"}
 
 
 class RatingRequest(BaseModel):
@@ -53,8 +51,8 @@ async def rate_entity(
     Works for both authenticated and anonymous users.
     Anonymous users must have a session_id cookie.
     """
-    if entity_type not in VALID_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+    if entity_type not in RATABLE_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {RATABLE_ENTITY_TYPES}")
 
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
@@ -93,8 +91,8 @@ async def report_issue(
     Works for both authenticated and anonymous users.
     Anonymous users must have a session_id cookie.
     """
-    if entity_type not in VALID_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+    if entity_type not in RATABLE_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {RATABLE_ENTITY_TYPES}")
 
     if body.issue_type not in VALID_ISSUE_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid issue type. Must be one of: {VALID_ISSUE_TYPES}")
@@ -148,8 +146,8 @@ async def get_entity_rating(
     Public endpoint - no auth required.
     If authenticated, includes user's own rating.
     """
-    if entity_type not in VALID_ENTITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {VALID_ENTITY_TYPES}")
+    if entity_type not in RATABLE_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid entity type. Must be one of: {RATABLE_ENTITY_TYPES}")
 
     stats = await db.feedback.get_entity_rating(entity_type, entity_id)
 

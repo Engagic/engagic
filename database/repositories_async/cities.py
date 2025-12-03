@@ -7,7 +7,7 @@ Handles CRUD operations for cities:
 - Get last sync timestamp
 """
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
@@ -20,6 +20,21 @@ logger = get_logger(__name__).bind(component="city_repository")
 def _hydrate_participation(row) -> Optional[CityParticipation]:
     """Hydrate CityParticipation from JSONB column"""
     return CityParticipation(**row["participation"]) if row["participation"] else None
+
+
+def _build_city(row, zipcodes: List[str]) -> City:
+    """Factory to construct City from database row + zipcodes"""
+    return City(
+        banana=row["banana"],
+        name=row["name"],
+        state=row["state"],
+        vendor=row["vendor"],
+        slug=row["slug"],
+        county=row["county"],
+        status=row["status"],
+        participation=_hydrate_participation(row),
+        zipcodes=zipcodes,
+    )
 
 
 class CityRepository(BaseRepository):
@@ -56,19 +71,17 @@ class CityRepository(BaseRepository):
                 city.status or "active",
             )
 
-            # Insert zipcodes
+            # Insert zipcodes (batch for efficiency)
             if city.zipcodes:
-                for zipcode in city.zipcodes:
-                    await conn.execute(
-                        """
-                        INSERT INTO zipcodes (banana, zipcode, is_primary)
-                        VALUES ($1, $2, $3)
-                        ON CONFLICT (banana, zipcode) DO NOTHING
-                        """,
-                        city.banana,
-                        zipcode,
-                        False,  # TODO: Support primary zipcode designation
-                    )
+                zipcode_records = [(city.banana, z, False) for z in city.zipcodes]
+                await conn.executemany(
+                    """
+                    INSERT INTO zipcodes (banana, zipcode, is_primary)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (banana, zipcode) DO NOTHING
+                    """,
+                    zipcode_records,
+                )
 
         logger.info("city added", banana=city.banana, name=city.name)
 
@@ -105,17 +118,7 @@ class CityRepository(BaseRepository):
             )
             zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
 
-            return City(
-                banana=row["banana"],
-                name=row["name"],
-                state=row["state"],
-                vendor=row["vendor"],
-                slug=row["slug"],
-                county=row["county"],
-                status=row["status"],
-                participation=_hydrate_participation(row),
-                zipcodes=zipcodes,
-            )
+            return _build_city(row, zipcodes)
 
     async def get_city_by_zipcode(self, zipcode: str) -> Optional[City]:
         """Get city by zipcode lookup
@@ -148,17 +151,7 @@ class CityRepository(BaseRepository):
             )
             zipcodes = [str(r["zipcode"]) for r in zip_rows]
 
-            return City(
-                banana=row["banana"],
-                name=row["name"],
-                state=row["state"],
-                vendor=row["vendor"],
-                slug=row["slug"],
-                county=row["county"],
-                status=row["status"],
-                participation=_hydrate_participation(row),
-                zipcodes=zipcodes,
-            )
+            return _build_city(row, zipcodes)
 
     async def get_all_cities(
         self, status: str = "active", include_zipcodes: bool = False
@@ -167,7 +160,7 @@ class CityRepository(BaseRepository):
 
         Args:
             status: City status filter (default: "active")
-            include_zipcodes: If True, fetch zipcodes for each city (N+1 queries).
+            include_zipcodes: If True, batch fetch zipcodes for all cities.
                              Default False for performance in search contexts.
 
         Returns:
@@ -184,31 +177,17 @@ class CityRepository(BaseRepository):
                 status,
             )
 
-            cities = []
-            for row in rows:
-                zipcodes: List[str] = []
-                if include_zipcodes:
-                    zipcodes_rows = await conn.fetch(
-                        "SELECT zipcode FROM zipcodes WHERE banana = $1",
-                        row["banana"],
-                    )
-                    zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
-
-                cities.append(
-                    City(
-                        banana=row["banana"],
-                        name=row["name"],
-                        state=row["state"],
-                        vendor=row["vendor"],
-                        slug=row["slug"],
-                        county=row["county"],
-                        status=row["status"],
-                        participation=_hydrate_participation(row),
-                        zipcodes=zipcodes,
-                    )
+            zipcodes_map: Dict[str, List[str]] = {}
+            if include_zipcodes and rows:
+                bananas = [row["banana"] for row in rows]
+                zipcodes_rows = await conn.fetch(
+                    "SELECT banana, zipcode FROM zipcodes WHERE banana = ANY($1)",
+                    bananas,
                 )
+                for zrow in zipcodes_rows:
+                    zipcodes_map.setdefault(zrow["banana"], []).append(str(zrow["zipcode"]))
 
-            return cities
+            return [_build_city(row, zipcodes_map.get(row["banana"], [])) for row in rows]
 
     async def get_cities(
         self,
@@ -227,7 +206,7 @@ class CityRepository(BaseRepository):
             name: Filter by exact name match
             status: Filter by status (default: "active")
             limit: Maximum number of results
-            include_zipcodes: If True, fetch zipcodes for each city (N+1 queries).
+            include_zipcodes: If True, batch fetch zipcodes for all cities.
                              Default False for performance in search contexts.
 
         Returns:
@@ -268,31 +247,17 @@ class CityRepository(BaseRepository):
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
 
-            cities = []
-            for row in rows:
-                zipcodes: List[str] = []
-                if include_zipcodes:
-                    zipcodes_rows = await conn.fetch(
-                        "SELECT zipcode FROM zipcodes WHERE banana = $1",
-                        row["banana"],
-                    )
-                    zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
-
-                cities.append(
-                    City(
-                        banana=row["banana"],
-                        name=row["name"],
-                        state=row["state"],
-                        vendor=row["vendor"],
-                        slug=row["slug"],
-                        county=row["county"],
-                        status=row["status"],
-                        participation=_hydrate_participation(row),
-                        zipcodes=zipcodes,
-                    )
+            zipcodes_map: Dict[str, List[str]] = {}
+            if include_zipcodes and rows:
+                bananas = [row["banana"] for row in rows]
+                zipcodes_rows = await conn.fetch(
+                    "SELECT banana, zipcode FROM zipcodes WHERE banana = ANY($1)",
+                    bananas,
                 )
+                for zrow in zipcodes_rows:
+                    zipcodes_map.setdefault(zrow["banana"], []).append(str(zrow["zipcode"]))
 
-            return cities
+            return [_build_city(row, zipcodes_map.get(row["banana"], [])) for row in rows]
 
     async def get_city_names(self, status: str = "active") -> List[str]:
         """Get just city names for fuzzy matching (no N+1)

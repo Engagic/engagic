@@ -81,3 +81,10 @@ class BaseRepository:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 yield conn
+
+    @staticmethod
+    def _parse_row_count(result: str) -> int:
+        """Extract row count from PostgreSQL result like 'UPDATE 5' or 'DELETE 3'."""
+        if not result:
+            return 0
+        return int(result.split()[-1])

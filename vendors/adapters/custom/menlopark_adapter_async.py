@@ -64,13 +64,13 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
 
         meetings_url = f"{self.base_url}/Agendas-and-minutes"
 
-        logger.info("fetching meetings list", adapter="menlopark", slug=self.slug, url=meetings_url)
+        logger.info("fetching meetings list", vendor="menlopark", slug=self.slug, url=meetings_url)
 
         try:
             response = await self._get(meetings_url)
             html = await response.text()
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.error("failed to fetch meetings list", adapter="menlopark", slug=self.slug, error=str(e))
+            logger.error("failed to fetch meetings list", vendor="menlopark", slug=self.slug, error=str(e))
             return []
 
         # Parse HTML (CPU-bound, run in thread pool)
@@ -93,14 +93,14 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
             # Parse date
             meeting_date = self._parse_menlopark_date(date_text)
             if not meeting_date:
-                logger.debug("could not parse date", adapter="menlopark", slug=self.slug, date_text=date_text)
+                logger.debug("could not parse date", vendor="menlopark", slug=self.slug, date_text=date_text)
                 continue
 
             # Filter to meetings within date range
             meeting_date_only = meeting_date.date()
 
             if meeting_date_only < start_date or meeting_date_only > end_date:
-                logger.debug("skipping meeting outside date window", adapter="menlopark", slug=self.slug, date=date_text)
+                logger.debug("skipping meeting outside date window", vendor="menlopark", slug=self.slug, date=date_text)
                 continue
 
             # Cell 1: Agenda packet PDF link
@@ -113,10 +113,13 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
 
             # Skip if no PDF packet
             if not pdf_link:
-                logger.debug("no PDF packet", adapter="menlopark", slug=self.slug, date=date_text)
+                logger.debug("no PDF packet", vendor="menlopark", slug=self.slug, date=date_text)
                 continue
 
-            vendor_id = meeting_date.strftime('%Y%m%d')
+            # Generate unique vendor_id using hash (date-only IDs collide on same-day meetings)
+            # Use PDF URL path as unique identifier
+            url_path = pdf_link.replace(self.base_url, '').strip('/')
+            vendor_id = self._generate_fallback_vendor_id(title=url_path, date=meeting_date)
 
             meeting_data = {
                 'vendor_id': vendor_id,
@@ -127,7 +130,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
 
             # Extract items from PDF (sync PDF extraction wrapped in to_thread)
             try:
-                logger.info("extracting items from PDF", adapter="menlopark", slug=self.slug, url=pdf_link)
+                logger.info("extracting items from PDF", vendor="menlopark", slug=self.slug, url=pdf_link)
 
                 # Run sync PDF extraction in thread pool
                 pdf_result = await asyncio.to_thread(
@@ -150,7 +153,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                         attachment_count = sum(len(item.get('attachments', [])) for item in parsed['items'])
                         logger.info(
                             "extracted items from PDF",
-                            adapter="menlopark",
+                            vendor="menlopark",
                             slug=self.slug,
                             item_count=item_count,
                             attachment_count=attachment_count,
@@ -159,14 +162,14 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                     else:
                         logger.warning(
                             "no items extracted from PDF",
-                            adapter="menlopark",
+                            vendor="menlopark",
                             slug=self.slug,
                             vendor_id=vendor_id
                         )
                 else:
                     logger.error(
                         "PDF extraction failed",
-                        adapter="menlopark",
+                        vendor="menlopark",
                         slug=self.slug,
                         vendor_id=vendor_id,
                         error=pdf_result.get('error', 'unknown error')
@@ -174,7 +177,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                     # Continue anyway - we have basic meeting data
 
             except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
-                logger.warning("failed to parse PDF items", adapter="menlopark", slug=self.slug, vendor_id=vendor_id, error=str(e))
+                logger.warning("failed to parse PDF items", vendor="menlopark", slug=self.slug, vendor_id=vendor_id, error=str(e))
                 # Continue anyway - we have basic meeting data
 
             results.append(meeting_data)

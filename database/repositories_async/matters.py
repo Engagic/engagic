@@ -35,12 +35,11 @@ class MatterRepository(BaseRepository):
         if not topics:
             return
         await conn.execute("DELETE FROM matter_topics WHERE matter_id = $1", matter_id)
-        for topic in topics:
-            await conn.execute(
-                "INSERT INTO matter_topics (matter_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                matter_id,
-                topic,
-            )
+        topic_records = [(matter_id, topic) for topic in topics]
+        await conn.executemany(
+            "INSERT INTO matter_topics (matter_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            topic_records,
+        )
 
     async def store_matter(self, matter: Matter) -> None:
         """Store or update a matter
@@ -277,42 +276,25 @@ class MatterRepository(BaseRepository):
             increment_appearance_count: Whether to increment appearance count
         """
         async with self.transaction() as conn:
-            # Build dynamic SQL for appearance count
-            if increment_appearance_count:
-                await conn.execute(
-                    """
-                    UPDATE city_matters
-                    SET last_seen = $2,
-                        attachments = $3::jsonb,
-                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
-                        appearance_count = appearance_count + 1,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = $1
-                    """,
-                    matter_id,
-                    meeting_date,
-                    attachments,
-                    attachment_hash,
-                )
-            else:
-                await conn.execute(
-                    """
-                    UPDATE city_matters
-                    SET last_seen = $2,
-                        attachments = $3::jsonb,
-                        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = $1
-                    """,
-                    matter_id,
-                    meeting_date,
-                    attachments,
-                    attachment_hash,
-                )
+            appearance_clause = ", appearance_count = appearance_count + 1" if increment_appearance_count else ""
+            await conn.execute(
+                f"""
+                UPDATE city_matters
+                SET last_seen = $2,
+                    attachments = $3::jsonb,
+                    metadata = COALESCE(metadata, '{{}}'::jsonb) || jsonb_build_object('attachment_hash', $4::text),
+                    updated_at = CURRENT_TIMESTAMP{appearance_clause}
+                WHERE id = $1
+                """,
+                matter_id,
+                meeting_date,
+                attachments,
+                attachment_hash,
+            )
 
         logger.debug("updated matter tracking", matter_id=matter_id, increment=increment_appearance_count)
 
-    async def check_appearance_exists(self, matter_id: str, meeting_id: str) -> bool:
+    async def has_appearance(self, matter_id: str, meeting_id: str) -> bool:
         """Check if a matter already has an appearance record for a specific meeting
 
         Args:
@@ -590,3 +572,32 @@ class MatterRepository(BaseRepository):
                 "matter": matter,
                 "vote_history": vote_history,
             }
+
+    async def get_matter_vote_outcomes(self, matter_id: str) -> List[dict]:
+        """Get vote outcomes for a matter across all meetings where votes were recorded."""
+        rows = await self._fetch(
+            """
+            SELECT
+                ma.meeting_id,
+                ma.vote_outcome,
+                ma.vote_tally,
+                ma.appeared_at,
+                m.title as meeting_title
+            FROM matter_appearances ma
+            JOIN meetings m ON m.id = ma.meeting_id
+            WHERE ma.matter_id = $1 AND ma.vote_outcome IS NOT NULL
+            ORDER BY ma.appeared_at DESC
+            """,
+            matter_id
+        )
+
+        return [
+            {
+                "meeting_id": row["meeting_id"],
+                "meeting_title": row["meeting_title"],
+                "date": row["appeared_at"].isoformat() if row["appeared_at"] else None,
+                "outcome": row["vote_outcome"],
+                "tally": row["vote_tally"],
+            }
+            for row in rows
+        ]

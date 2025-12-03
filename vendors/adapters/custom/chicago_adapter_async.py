@@ -125,7 +125,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         # Fetch meetings with pagination (API max 500 per page)
         api_url = f"{self.base_url}/meeting-agenda"
-        logger.info("fetching meetings", slug=self.slug, api_url=api_url)
+        logger.info("fetching meetings", vendor="chicago", slug=self.slug, api_url=api_url)
 
         all_meetings = []
         skip = 0
@@ -144,14 +144,17 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 response = await self._get(api_url, params=params)
                 self._sync_stats["api_requests"] += 1
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                logger.error("network error fetching meetings", slug=self.slug, error=str(e), skip=skip)
-                break
+                # Return empty list on pagination failure - partial data is misleading
+                # Base contract: runtime errors should log and return []
+                logger.error("network error fetching meetings", vendor="chicago", slug=self.slug, error=str(e), skip=skip)
+                return []
 
             try:
                 response_data = await response.json(content_type=None)
             except ValueError as e:
-                logger.error("invalid json response", slug=self.slug, error=str(e), skip=skip)
-                break
+                # Return empty list on parse failure - partial data is misleading
+                logger.error("invalid json response", vendor="chicago", slug=self.slug, error=str(e), skip=skip)
+                return []
 
             page_meetings = response_data.get("data", [])
             all_meetings.extend(page_meetings)
@@ -162,6 +165,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
             logger.debug(
                 "fetched meeting page",
+                vendor="chicago",
                 slug=self.slug,
                 skip=skip,
                 page_count=len(page_meetings),
@@ -175,10 +179,10 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             skip += top
 
         if len(all_meetings) >= max_meetings:
-            logger.warning("hit pagination cap", slug=self.slug, cap=max_meetings)
+            logger.warning("hit pagination cap", vendor="chicago", slug=self.slug, cap=max_meetings)
 
         self._sync_stats["meetings_total"] = len(all_meetings)
-        logger.info("retrieved meetings", slug=self.slug, count=len(all_meetings))
+        logger.info("retrieved meetings", vendor="chicago", slug=self.slug, count=len(all_meetings))
 
         results = []
         for meeting in all_meetings:
@@ -204,6 +208,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
                 logger.error(
                     "error processing meeting",
+                    vendor="chicago",
                     slug=self.slug,
                     meeting_id=meeting.get('meetingId'),
                     error=str(e)
@@ -213,6 +218,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         # Log comprehensive stats summary
         logger.info(
             "chicago adapter sync complete",
+            vendor="chicago",
             slug=self.slug,
             meetings_total=self._sync_stats["meetings_total"],
             meetings_processed=len(results),
@@ -236,19 +242,19 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         location = meeting.get("location")
 
         if not meeting_id or not date_str:
-            logger.warning("meeting missing id or date", slug=self.slug, meeting_id=meeting.get('meetingId'))
+            logger.warning("meeting missing id or date", vendor="chicago", slug=self.slug, meeting_id=meeting.get('meetingId'))
             return None
 
         # Parse date using base adapter's parser
         meeting_date = self._parse_date(date_str)
         if not meeting_date:
-            logger.warning("meeting invalid date", slug=self.slug, meeting_id=meeting_id, date_str=date_str)
+            logger.warning("meeting invalid date", vendor="chicago", slug=self.slug, meeting_id=meeting_id, date_str=date_str)
             return None
 
         # Fetch full meeting detail to get agenda structure
         meeting_detail = await self._fetch_meeting_detail(meeting_id)
         if not meeting_detail:
-            logger.warning("could not fetch meeting detail", slug=self.slug, meeting_id=meeting_id)
+            logger.warning("could not fetch meeting detail", vendor="chicago", slug=self.slug, meeting_id=meeting_id)
             return None
 
         # Extract agenda items from meeting detail
@@ -293,12 +299,12 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             if agenda_url:
                 result["agenda_url"] = agenda_url
             result["items"] = items
-            logger.info("meeting items extracted", slug=self.slug, meeting_id=meeting_id, item_count=len(items))
+            logger.info("meeting items extracted", vendor="chicago", slug=self.slug, meeting_id=meeting_id, item_count=len(items))
         elif agenda_url:
             result["packet_url"] = agenda_url
-            logger.info("meeting fallback to packet url", slug=self.slug, meeting_id=meeting_id)
+            logger.info("meeting fallback to packet url", vendor="chicago", slug=self.slug, meeting_id=meeting_id)
         else:
-            logger.debug("meeting no data skipping", slug=self.slug, meeting_id=meeting_id)
+            logger.debug("meeting no data skipping", vendor="chicago", slug=self.slug, meeting_id=meeting_id)
             return None
 
         # Extract public comment deadline for civic engagement
@@ -345,20 +351,20 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
     async def _fetch_meeting_detail(self, meeting_id: str) -> Optional[Dict[str, Any]]:
         """Fetch full meeting detail with agenda.groups[].items[] structure."""
         detail_url = f"{self.base_url}/meeting-agenda/{meeting_id}"
-        logger.debug("fetching meeting detail", slug=self.slug, detail_url=detail_url)
+        logger.debug("fetching meeting detail", vendor="chicago", slug=self.slug, detail_url=detail_url)
 
         try:
             response = await self._get(detail_url)
             self._sync_stats["api_requests"] += 1
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.warning("network error fetching meeting detail", slug=self.slug, meeting_id=meeting_id, error=str(e))
+            logger.warning("network error fetching meeting detail", vendor="chicago", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None
 
         try:
             # content_type=None: Chicago API sometimes returns text/plain with JSON body
             return await response.json(content_type=None)
         except ValueError as e:
-            logger.warning("invalid json in meeting detail", slug=self.slug, meeting_id=meeting_id, error=str(e))
+            logger.warning("invalid json in meeting detail", vendor="chicago", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None
 
     async def _extract_agenda_items(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -380,12 +386,13 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             if pdf_items:
                 logger.info(
                     "items extracted from pdf",
+                    vendor="chicago",
                     slug=self.slug,
                     meeting_id=meeting_id,
                     item_count=len(pdf_items)
                 )
                 return pdf_items
-            logger.debug("no agenda groups and pdf extraction failed", slug=self.slug)
+            logger.debug("no agenda groups and pdf extraction failed", vendor="chicago", slug=self.slug)
             return items
 
         # Collect items that need matter data
@@ -412,13 +419,13 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 # Use matterId or commentId as item_id
                 item_id = matter_id or comment_id
                 if not item_id:
-                    logger.debug("item missing id skipping", slug=self.slug, title_prefix=title[:60])
+                    logger.debug("item missing id skipping", vendor="chicago", slug=self.slug, title_prefix=title[:60])
                     continue
 
                 # Skip procedural items (adapter-level filtering)
                 if should_skip_procedural_item(title, matter_type or ""):
                     items_filtered += 1
-                    logger.debug("skipping procedural item", slug=self.slug, title_prefix=title[:60])
+                    logger.debug("skipping procedural item", vendor="chicago", slug=self.slug, title_prefix=title[:60])
                     continue
 
                 # Increment counter for non-filtered items
@@ -458,7 +465,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             )
             for mid, result in zip(items_needing_matter, matter_results):
                 if isinstance(result, Exception):
-                    logger.debug("matter fetch failed", slug=self.slug, matter_id=mid, error=str(result))
+                    logger.debug("matter fetch failed", vendor="chicago", slug=self.slug, matter_id=mid, error=str(result))
                     matter_data_map[mid] = self._EMPTY_MATTER
                 else:
                     matter_data_map[mid] = result
@@ -510,9 +517,9 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             items.append(item_data)
 
         if items_filtered > 0:
-            logger.info("filtered procedural items", slug=self.slug, filtered_count=items_filtered)
+            logger.info("filtered procedural items", vendor="chicago", slug=self.slug, filtered_count=items_filtered)
 
-        logger.debug("extracted substantive items", slug=self.slug, item_count=len(items))
+        logger.debug("extracted substantive items", vendor="chicago", slug=self.slug, item_count=len(items))
         return items
 
     async def _extract_items_from_pdf(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -536,7 +543,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         )
 
         if not agenda_file:
-            logger.debug("no agenda pdf found", slug=self.slug, meeting_id=meeting_id)
+            logger.debug("no agenda pdf found", vendor="chicago", slug=self.slug, meeting_id=meeting_id)
             return []
 
         pdf_url = agenda_file.get("path")
@@ -550,12 +557,12 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 pdf_url,
                 False  # extract_links not needed
             )
-        except Exception as e:
-            logger.warning("pdf extraction failed", slug=self.slug, meeting_id=meeting_id, error=str(e))
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.warning("pdf extraction failed", vendor="chicago", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return []
 
         if not pdf_result.get("success") or not pdf_result.get("text"):
-            logger.debug("pdf extraction empty", slug=self.slug, meeting_id=meeting_id)
+            logger.debug("pdf extraction empty", vendor="chicago", slug=self.slug, meeting_id=meeting_id)
             return []
 
         # Parse record numbers from PDF text
@@ -563,11 +570,12 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         pdf_items = parsed.get("items", [])
 
         if not pdf_items:
-            logger.debug("no record numbers found in pdf", slug=self.slug, meeting_id=meeting_id)
+            logger.debug("no record numbers found in pdf", vendor="chicago", slug=self.slug, meeting_id=meeting_id)
             return []
 
         logger.debug(
             "record numbers extracted from pdf",
+            vendor="chicago",
             slug=self.slug,
             meeting_id=meeting_id,
             record_count=len(pdf_items)
@@ -586,6 +594,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             if isinstance(matter_result, Exception) or not matter_result:
                 logger.debug(
                     "matter fetch failed for record",
+                    vendor="chicago",
                     slug=self.slug,
                     record_number=pdf_item["record_number"]
                 )
@@ -639,13 +648,13 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             response = await self._get(matter_url)
             self._sync_stats["api_requests"] += 1
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.debug("network error fetching matter by record", slug=self.slug, record_number=record_number, error=str(e))
+            logger.debug("network error fetching matter by record", vendor="chicago", slug=self.slug, record_number=record_number, error=str(e))
             return None
 
         try:
             matter_data = await response.json(content_type=None)
         except ValueError as e:
-            logger.debug("invalid json for matter record", slug=self.slug, record_number=record_number, error=str(e))
+            logger.debug("invalid json for matter record", vendor="chicago", slug=self.slug, record_number=record_number, error=str(e))
             return None
 
         # Check for API error responses
@@ -725,14 +734,14 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             response = await self._get(matter_url)
             self._sync_stats["api_requests"] += 1
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.debug("network error fetching matter", slug=self.slug, matter_id=matter_id, error=str(e))
+            logger.debug("network error fetching matter", vendor="chicago", slug=self.slug, matter_id=matter_id, error=str(e))
             return self._EMPTY_MATTER
 
         try:
             # content_type=None: Chicago API sometimes returns text/plain with JSON body
             matter_data = await response.json(content_type=None)
         except ValueError as e:
-            logger.debug("invalid json in matter", slug=self.slug, matter_id=matter_id, error=str(e))
+            logger.debug("invalid json in matter", vendor="chicago", slug=self.slug, matter_id=matter_id, error=str(e))
             return self._EMPTY_MATTER
 
         # Extract attachments
@@ -814,6 +823,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
         logger.debug(
             "matter data fetched",
+            vendor="chicago",
             slug=self.slug,
             matter_id=matter_id,
             attachment_count=len(attachments),
