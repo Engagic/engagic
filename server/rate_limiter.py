@@ -338,7 +338,7 @@ class SQLiteRateLimiter:
             return True, max(0, remaining)
 
     def export_blocked_ips(self):
-        """Export currently banned real IPs to nginx-compatible geo block format"""
+        """Export currently banned real IPs for nginx geo include"""
         current_time = time.time()
         nginx_conf_file = Path(self.db_path).parent / "blocked_ips_nginx.conf"
 
@@ -359,14 +359,12 @@ class SQLiteRateLimiter:
                 except ValueError:
                     logger.warning("skipping invalid IP in blocklist", ip=ip)
 
-            # Write complete nginx geo block (required for nginx -t to pass)
+            # Write IP lines for nginx geo include (wrapper is in nginx conf)
             with open(nginx_conf_file, 'w') as f:
                 f.write("# Auto-generated blocked IPs - DO NOT EDIT MANUALLY\n")
-                f.write("geo $blocked_ip {\n")
-                f.write("    default 0;\n")
+                f.write("# Included by /etc/nginx/conf.d/engagic-blocked-ips.conf\n")
                 for ip in valid_ips:
-                    f.write(f"    {ip} 1;\n")
-                f.write("}\n")
+                    f.write(f"{ip} 1;\n")
 
             logger.info("exported blocked IPs", count=len(valid_ips), file=nginx_conf_file)
 
