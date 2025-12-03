@@ -143,9 +143,9 @@ async def update_meeting_id(
             new_id, old_id
         )
 
-        # 6. tracked_items (engagement tracking, FK to meetings)
+        # 6. tracked_item_meetings (engagement tracking, FK to meetings)
         await conn.execute(
-            "UPDATE tracked_items SET meeting_id = $1 WHERE meeting_id = $2",
+            "UPDATE tracked_item_meetings SET meeting_id = $1 WHERE meeting_id = $2",
             new_id, old_id
         )
 
