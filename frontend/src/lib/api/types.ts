@@ -433,6 +433,13 @@ export interface MatterVotesResponse {
 	outcomes: VoteOutcome[];
 }
 
+export interface MatterSponsorsResponse {
+	success: boolean;
+	matter_id: string;
+	sponsors: CouncilMember[];
+	total: number;
+}
+
 export interface MeetingVoteMatter {
 	matter_id: string;
 	matter_title: string;

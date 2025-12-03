@@ -85,6 +85,36 @@ async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Error retrieving matter timeline")
 
 
+@router.get("/matters/{matter_id}/sponsors")
+async def get_matter_sponsors(matter_id: str, db: Database = Depends(get_db)):
+    """Get sponsors for a specific matter.
+
+    Returns enriched council member data (IDs, names, stats) for just this matter's sponsors.
+    Much more efficient than fetching all council members for a city.
+    """
+    try:
+        # Verify matter exists
+        matter = await db.get_matter(matter_id)
+        if not matter:
+            raise HTTPException(status_code=404, detail="Matter not found")
+
+        # Get sponsors using existing repository method
+        sponsors = await db.council_members.get_sponsors_for_matter(matter_id)
+
+        return {
+            "success": True,
+            "matter_id": matter_id,
+            "sponsors": [s.to_dict() for s in sponsors],
+            "total": len(sponsors)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("error fetching matter sponsors", matter_id=matter_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Error retrieving matter sponsors")
+
+
 @router.get("/city/{banana}/matters")
 async def get_city_matters(
     banana: str,

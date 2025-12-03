@@ -19,6 +19,9 @@ export const searchCityMatters = apiClient.searchCityMatters.bind(apiClient);
 export const getMatterVotes = apiClient.getMatterVotes.bind(apiClient);
 export const getMeetingVotes = apiClient.getMeetingVotes.bind(apiClient);
 
+// Sponsor endpoints
+export const getMatterSponsors = apiClient.getMatterSponsors.bind(apiClient);
+
 // Council Member endpoints
 export const getCityCouncilMembers = apiClient.getCityCouncilMembers.bind(apiClient);
 export const getCouncilMemberVotes = apiClient.getCouncilMemberVotes.bind(apiClient);

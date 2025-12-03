@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
-	import { getCityCouncilMembers } from '$lib/api';
+	import { getMatterSponsors, getCityCouncilMembers } from '$lib/api';
 	import type { CouncilMember, MatterVotesResponse } from '$lib/api/types';
 	import VoteBadge from '$lib/components/VoteBadge.svelte';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
@@ -18,47 +18,28 @@
 	const firstAppearance = $derived(timeline[0]);
 	const latestAppearance = $derived(timeline[timeline.length - 1]);
 
-	// Council member lookup for sponsor links
+	// Sponsors loaded from dedicated endpoint (not all council members)
+	let sponsors = $state<CouncilMember[]>([]);
+
+	// Council members for vote display (separate from sponsors)
 	let councilMembers = $state<CouncilMember[]>([]);
 
-	// Normalize name for matching (remove titles, lowercase)
-	function normalizeName(name: string): string {
-		return name
-			.toLowerCase()
-			.replace(/^(councilmember|council member|cm|alderman|ald\.|commissioner|comm\.|vice mayor|mayor)\s+/i, '')
-			.replace(/,.*$/, '') // Remove anything after comma (like ", Jr.")
-			.trim();
-	}
-
-	// Extract last name for fallback matching
-	function getLastName(name: string): string {
-		const normalized = normalizeName(name);
-		const parts = normalized.split(/\s+/);
-		return parts[parts.length - 1];
-	}
-
-	// Find matching council member for a sponsor name
-	function findCouncilMember(sponsorName: string): CouncilMember | undefined {
-		const normalizedSponsor = normalizeName(sponsorName);
-		const sponsorLastName = getLastName(sponsorName);
-
-		// Try exact normalized match first
-		let match = councilMembers.find(m => normalizeName(m.name) === normalizedSponsor);
-		if (match) return match;
-
-		// Try last name match
-		match = councilMembers.find(m => getLastName(m.name) === sponsorLastName);
-		return match;
-	}
-
 	onMount(async () => {
-		if (matter.banana) {
+		// Load sponsors for this specific matter (efficient: only sponsors, not all members)
+		try {
+			const response = await getMatterSponsors($page.params.matter_id);
+			sponsors = response.sponsors || [];
+		} catch (e) {
+			console.debug('Could not load sponsors:', e);
+		}
+
+		// Load council members only if there are votes to display
+		if (data.votes?.votes?.length && matter.banana) {
 			try {
 				const response = await getCityCouncilMembers(matter.banana);
 				councilMembers = response.council_members || [];
 			} catch (e) {
-				// Silently fail - sponsors will just be plain text
-				console.debug('Could not load council members for sponsor links:', e);
+				console.debug('Could not load council members for vote display:', e);
 			}
 		}
 	});
@@ -75,10 +56,6 @@
 
 	const topics = $derived(data.timeline.matter.canonical_topics || []);
 	const attachments = $derived(data.timeline.matter.attachments || []);
-	const sponsors = $derived.by(() => {
-		const raw = data.timeline.matter.sponsors || [];
-		return raw.filter((s: string) => s && s.trim());
-	});
 
 	// Votes data from server load
 	const votesData = $derived(data.votes as MatterVotesResponse | null);
@@ -195,17 +172,12 @@
 			<div class="sponsors-section">
 				<h2 class="section-title">Sponsors</h2>
 				<div class="sponsors-list">
-					{#each sponsors as sponsor, i}
-						{@const member = findCouncilMember(sponsor)}
-						{#if member}
-							<a
-								href="/{matter.banana}/council/{member.id}"
-								class="sponsor-link"
-								data-sveltekit-preload-data="tap"
-							>{sponsor}</a>
-						{:else}
-							<span class="sponsor-name">{sponsor}</span>
-						{/if}
+					{#each sponsors as sponsor, i (sponsor.id)}
+						<a
+							href="/{matter.banana}/council/{sponsor.id}"
+							class="sponsor-link"
+							data-sveltekit-preload-data="tap"
+						>{sponsor.name}</a>
 						{#if i < sponsors.length - 1}<span class="sponsor-separator">, </span>{/if}
 					{/each}
 				</div>
