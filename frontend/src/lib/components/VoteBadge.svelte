@@ -30,12 +30,12 @@
 		return 'neutral';
 	});
 
-	const tallyText = $derived(`${tally.yes}-${tally.no}`);
-	const hasVotes = $derived(tally.yes > 0 || tally.no > 0);
+	const tallyText = $derived(`${tally.yes ?? 0}-${tally.no ?? 0}`);
+	const hasVotes = $derived((tally.yes ?? 0) > 0 || (tally.no ?? 0) > 0);
 </script>
 
 {#if hasVotes}
-	<span class="vote-badge {variant} {size}" title="Yes: {tally.yes}, No: {tally.no}{tally.abstain ? `, Abstain: ${tally.abstain}` : ''}{tally.absent ? `, Absent: ${tally.absent}` : ''}">
+	<span class="vote-badge {variant} {size}" title="Yes: {tally.yes ?? 0}, No: {tally.no ?? 0}{tally.abstain ? `, Abstain: ${tally.abstain}` : ''}{tally.absent ? `, Absent: ${tally.absent}` : ''}">
 		{#if outcomeLabel}
 			<span class="outcome">{outcomeLabel}</span>
 		{/if}
