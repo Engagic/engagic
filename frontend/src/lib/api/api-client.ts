@@ -48,6 +48,10 @@ async function fetchWithRetry(
 	const headers = new Headers(options.headers);
 	if (clientIp) {
 		headers.set('X-Forwarded-User-IP', clientIp);
+		// Include SSR auth secret to prevent header spoofing
+		if (config.ssrAuthSecret) {
+			headers.set('X-SSR-Auth', config.ssrAuthSecret);
+		}
 	}
 
 	try {
