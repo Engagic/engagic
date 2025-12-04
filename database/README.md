@@ -6,8 +6,13 @@ Manages:
 - Cities and zipcodes
 - Meetings and agenda items
 - Matters (legislative tracking)
+- Council members and sponsorships
+- Committees and memberships
+- Votes (per member, per matter, per meeting)
 - Processing queue (typed jobs)
 - Search, topics, and caching
+- User engagement (watches, activity, trending)
+- User feedback (ratings, issues)
 - User authentication and alerts (userland schema)
 
 ---
@@ -18,27 +23,32 @@ Manages:
 
 ```
 ┌─────────────────────┐
-│  Database           │  Orchestration (858 lines)
+│  Database           │  Orchestration (1097 lines)
 │  (db_postgres.py)   │
 └──────────┬──────────┘
            │
-           ├──> repositories_async/base.py        (83 lines)  - Base repository with connection pooling
-           ├──> repositories_async/cities.py     (329 lines) - City and zipcode operations
-           ├──> repositories_async/meetings.py   (444 lines) - Meeting storage and retrieval
-           ├──> repositories_async/items.py      (485 lines) - Agenda item operations
-           ├──> repositories_async/matters.py    (314 lines) - Matter operations (matters-first)
-           ├──> repositories_async/queue.py      (414 lines) - Processing queue management
-           ├──> repositories_async/search.py     (198 lines) - PostgreSQL full-text search
-           └──> repositories_async/userland.py   (498 lines) - User auth, alerts, notifications
+           ├──> repositories_async/base.py            (116 lines) - Base repository with connection pooling
+           ├──> repositories_async/cities.py          (318 lines) - City and zipcode operations
+           ├──> repositories_async/meetings.py        (319 lines) - Meeting storage and retrieval
+           ├──> repositories_async/items.py           (508 lines) - Agenda item operations
+           ├──> repositories_async/matters.py         (560 lines) - Matter operations (matters-first)
+           ├──> repositories_async/queue.py           (447 lines) - Processing queue management
+           ├──> repositories_async/search.py          (259 lines) - PostgreSQL full-text search
+           ├──> repositories_async/userland.py        (582 lines) - User auth, alerts, notifications
+           ├──> repositories_async/council_members.py (730 lines) - Council member tracking, sponsorships, votes
+           ├──> repositories_async/committees.py      (516 lines) - Committee management, memberships
+           ├──> repositories_async/engagement.py      (198 lines) - Watches, activity logging, trending
+           ├──> repositories_async/feedback.py        (343 lines) - Ratings, issue reporting
+           └──> repositories_async/helpers.py         (232 lines) - Shared builders, JSONB deserialization
 
 Supporting Modules:
-├── models.py          (263 lines) - Pydantic dataclasses (City, Meeting, AgendaItem, Matter)
-├── id_generation.py   (332 lines) - Deterministic matter ID generation (SHA256)
-├── schema_postgres.sql - Main database schema (cities, meetings, items, matters, queue)
-└── schema_userland.sql - Userland schema (users, alerts, alert_matches)
+├── models.py          (467 lines) - Pydantic dataclasses (City, Meeting, AgendaItem, Matter, CouncilMember, Vote, Committee, CommitteeMember)
+├── id_generation.py   (587 lines) - Deterministic ID generation (matters, members, committees)
+├── schema_postgres.sql - Main database schema (cities, meetings, items, matters, queue, council_members, committees, votes)
+└── schema_userland.sql - Userland schema (users, alerts, alert_matches, watches, ratings, issues)
 ```
 
-**Total: 4,237 lines** (858 orchestration + 2,784 repositories + 595 supporting)
+**Total: 6,806 lines** (1097 orchestration + 5128 repositories + 1054 supporting + 27 init)
 
 **Why Repository Pattern?**
 - **Separation of concerns:** Each repository handles one domain
@@ -354,7 +364,7 @@ CREATE TABLE userland.used_magic_links (
 All entities are **dataclasses** with convenience methods:
 
 ```python
-from database.models import City, Meeting, AgendaItem, Matter
+from database.models import City, Meeting, AgendaItem, Matter, CouncilMember, Vote, Committee, CommitteeMember
 
 # City
 city = City(
@@ -400,6 +410,48 @@ matter = Matter(
     canonical_topics=["housing", "zoning"],
     metadata={"attachment_hash": "abc123"}
 )
+
+# CouncilMember
+member = CouncilMember(
+    id="nashvilleTN_a3f2c8d1",  # Hash of (banana + normalized_name)
+    banana="nashvilleTN",
+    name="Freddie O'Connell",
+    normalized_name="freddie o'connell",
+    title="Council Member",
+    district="District 19",
+    status="active",
+    sponsorship_count=45,
+    vote_count=312
+)
+
+# Vote
+vote = Vote(
+    council_member_id="nashvilleTN_a3f2c8d1",
+    matter_id="nashvilleTN_BL2025-1098",
+    meeting_id="nashvilleTN_2025-11-10",
+    vote="yes",  # yes, no, abstain, absent, present, recused, not_voting
+    vote_date=datetime(2025, 11, 10),
+    sequence=3
+)
+
+# Committee
+committee = Committee(
+    id="sanfranciscoCA_b7d4e9f2",  # Hash of (banana + normalized_name)
+    banana="sanfranciscoCA",
+    name="Planning Commission",
+    normalized_name="planning commission",
+    description="Oversees land use and development",
+    status="active"
+)
+
+# CommitteeMember
+assignment = CommitteeMember(
+    committee_id="sanfranciscoCA_b7d4e9f2",
+    council_member_id="sanfranciscoCA_c8e5f0a3",
+    role="Chair",
+    joined_at=datetime(2024, 1, 15),
+    left_at=None  # Still serving
+)
 ```
 
 **Model Methods:**
@@ -407,6 +459,7 @@ matter = Matter(
 ```python
 # Convert to dict (for JSON serialization)
 city_dict = city.to_dict()
+member_dict = member.to_dict()
 
 # Create from database row
 city = City.from_db_row(db_row)
@@ -814,6 +867,251 @@ is_valid = await db.userland.check_magic_link_valid(token_hash)
 - `userland.alerts` - User-configured alerts (cities + criteria)
 - `userland.alert_matches` - Matched meetings/items that triggered alerts
 - `userland.used_magic_links` - Single-use token tracking (replay attack prevention)
+
+---
+
+### 8. CouncilMemberRepository (730 lines)
+
+**Operations:**
+- Find or create council members from sponsor names
+- Link council members to matters via sponsorships
+- Track votes per member per matter per meeting
+- Update member statistics (sponsorship_count, vote_count, last_seen)
+
+**Methods:**
+
+```python
+# Find or create council member (normalizes name for matching)
+member = await db.council_members.find_or_create_member(
+    banana="nashvilleTN",
+    name="Freddie O'Connell",
+    appeared_at=datetime(2025, 11, 10)
+)
+
+# Link member to matter (sponsorship)
+await db.council_members.add_sponsorship(
+    member_id=member.id,
+    matter_id="nashvilleTN_BL2025-1098",
+    appeared_at=datetime(2025, 11, 10)
+)
+
+# Get members by city
+members = await db.council_members.get_members_by_city("nashvilleTN", active_only=True)
+
+# Get sponsorship history for member
+sponsorships = await db.council_members.get_member_sponsorships(member.id, limit=50)
+
+# Get sponsors for matter
+sponsors = await db.council_members.get_matter_sponsors("nashvilleTN_BL2025-1098")
+
+# Record vote
+await db.council_members.record_vote(
+    council_member_id=member.id,
+    matter_id="nashvilleTN_BL2025-1098",
+    meeting_id="nashvilleTN_2025-11-10",
+    vote="yes",
+    vote_date=datetime(2025, 11, 10)
+)
+
+# Get voting history for member
+votes = await db.council_members.get_member_votes(member.id, limit=100)
+
+# Get all votes for matter
+votes = await db.council_members.get_matter_votes("nashvilleTN_BL2025-1098")
+```
+
+**Name Normalization:**
+- Strips whitespace, lowercases for matching
+- Handles variations: "Freddie O'Connell" = "FREDDIE O'CONNELL" = " Freddie O'connell "
+- ID includes city_banana to prevent cross-city collisions
+
+---
+
+### 9. CommitteeRepository (516 lines)
+
+**Operations:**
+- Find or create committees from meeting titles
+- Track committee membership (which members serve on which committees)
+- Historical tracking via joined_at/left_at for time-aware queries
+- Committee-level vote analysis
+
+**Methods:**
+
+```python
+# Find or create committee
+committee = await db.committees.find_or_create_committee(
+    banana="sanfranciscoCA",
+    name="Planning Commission",
+    description="Oversees land use and development"
+)
+
+# Add member to committee
+await db.committees.add_member(
+    committee_id=committee.id,
+    council_member_id=member.id,
+    role="Chair",
+    joined_at=datetime(2024, 1, 15)
+)
+
+# Get committee roster (current members)
+members = await db.committees.get_committee_members(committee.id, active_only=True)
+
+# Get historical roster (as of specific date)
+members = await db.committees.get_committee_members(
+    committee.id,
+    as_of=datetime(2024, 6, 1)
+)
+
+# Get committees by city
+committees = await db.committees.get_committees_by_city("sanfranciscoCA", status="active")
+
+# Get committees a member serves on
+committees = await db.committees.get_member_committees(member.id, active_only=True)
+
+# Get committee by ID
+committee = await db.committees.get_committee_by_id(committee_id)
+
+# Get voting history for committee
+votes = await db.committees.get_committee_vote_history(committee.id, limit=50)
+```
+
+**Historical Queries:**
+- `joined_at` / `left_at` enable "who was on committee X when matter Y was voted?"
+- `left_at = NULL` means currently serving
+- Time-aware roster queries for accountability analysis
+
+---
+
+### 10. EngagementRepository (198 lines)
+
+**Operations:**
+- Watch/unwatch entities (matters, meetings, topics, cities, council members)
+- Activity logging (anonymous and authenticated)
+- Trending content aggregation
+
+**Methods:**
+
+```python
+# Watch an entity
+created = await db.engagement.watch(
+    user_id="user_123",
+    entity_type="matter",
+    entity_id="nashvilleTN_BL2025-1098"
+)
+
+# Unwatch
+removed = await db.engagement.unwatch(user_id, entity_type, entity_id)
+
+# Check if watching
+watching = await db.engagement.is_watching(user_id, entity_type, entity_id)
+
+# Get watch count for entity
+count = await db.engagement.get_watch_count("matter", matter_id)
+
+# Get user's watches
+watches = await db.engagement.get_user_watches(user_id)
+
+# Log activity (views, actions)
+await db.engagement.log_activity(
+    user_id="user_123",  # or None for anonymous
+    session_id="sess_abc",
+    action="view",
+    entity_type="meeting",
+    entity_id=meeting_id
+)
+
+# Get trending matters
+trending = await db.engagement.get_trending_matters(limit=10)
+```
+
+**Entity Types:** `matter`, `meeting`, `topic`, `city`, `council_member`
+
+---
+
+### 11. FeedbackRepository (343 lines)
+
+**Operations:**
+- Submit ratings (1-5 stars) on entities
+- Report issues (inaccurate, incomplete, misleading content)
+- Quality scores for reprocessing decisions
+
+**Methods:**
+
+```python
+# Submit rating (authenticated or anonymous via session)
+await db.feedback.submit_rating(
+    user_id="user_123",  # or None
+    session_id="sess_abc",
+    entity_type="item",
+    entity_id=item_id,
+    rating=4
+)
+
+# Get rating stats for entity
+stats = await db.feedback.get_rating_stats("item", item_id)
+# RatingStats(avg_rating=3.8, rating_count=25, distribution={1: 2, 2: 3, 3: 5, 4: 8, 5: 7})
+
+# Report issue
+issue_id = await db.feedback.report_issue(
+    user_id="user_123",
+    entity_type="item",
+    entity_id=item_id,
+    issue_type="inaccurate",  # inaccurate, incomplete, misleading, other
+    description="Summary misses key budget details"
+)
+
+# Get issues for entity
+issues = await db.feedback.get_entity_issues("item", item_id, status="open")
+
+# Get all open issues
+open_issues = await db.feedback.get_open_issues(limit=100)
+
+# Resolve issue
+await db.feedback.resolve_issue(issue_id, admin_notes="Fixed in reprocessing")
+
+# Get low-rated entities (candidates for reprocessing)
+low_rated = await db.feedback.get_low_rated_entities(
+    entity_type="item",
+    threshold=2.5,
+    min_ratings=3,
+    limit=50
+)
+```
+
+**Quality Loop:** Low ratings + issue reports trigger reprocessing queue entries.
+
+---
+
+### 12. HelpersRepository (232 lines)
+
+**Shared utilities for consistent object construction across repositories.**
+
+**Functions:**
+
+```python
+from database.repositories_async.helpers import (
+    # JSONB deserialization
+    deserialize_attachments,    # JSONB -> List[AttachmentInfo]
+    deserialize_metadata,       # JSONB -> MatterMetadata
+    deserialize_participation,  # JSONB -> ParticipationInfo
+
+    # Topic fetching (eliminates N+1 queries)
+    fetch_topics_for_ids,       # Batch fetch topics from topic tables
+
+    # Object builders
+    build_matter,               # DB row -> Matter object
+    build_meeting,              # DB row -> Meeting object
+    build_agenda_item,          # DB row -> AgendaItem object
+)
+
+# Batch fetch topics for multiple entities (one query instead of N)
+topics_map = await fetch_topics_for_ids(
+    conn, "meeting_topics", "meeting_id", meeting_ids
+)
+meeting_topics = topics_map.get(meeting.id, [])
+```
+
+**Why:** Eliminates duplication across matters.py, meetings.py, items.py. Each builder centralizes JSONB deserialization and topic handling.
 
 ---
 
@@ -1237,4 +1535,4 @@ banana = extract_banana_from_matter_id("nashvilleTN_7a8f3b2c1d9e4f5a")
 
 ---
 
-**Last Updated:** 2025-12-03 (Fixed queue schema example to PostgreSQL syntax)
+**Last Updated:** 2025-12-03 (Added 5 repositories: council_members, committees, engagement, feedback, helpers; added 4 models: CouncilMember, Vote, Committee, CommitteeMember; updated all line counts)

@@ -19,30 +19,30 @@ Provides:
 ```
 server/
 ├── main.py                 177 lines  - FastAPI app initialization
-├── dependencies.py          25 lines  - Centralized dependency injection
-├── rate_limiter.py         662 lines  - SQLite tiered rate limiting (Basic/Hacktivist/Enterprise)
+├── dependencies.py          86 lines  - Centralized dependency injection
+├── rate_limiter.py         704 lines  - SQLite tiered rate limiting (Basic/Hacktivist/Enterprise)
 ├── metrics.py              240 lines  - Prometheus instrumentation
 │
-├── routes/                3455 lines  - HTTP request handlers (14 modules)
-│   ├── search.py            (71 lines)
-│   ├── meetings.py         (139 lines)
+├── routes/                3850 lines  - HTTP request handlers (14 modules)
+│   ├── search.py           (113 lines)
+│   ├── meetings.py          (97 lines)
 │   ├── topics.py           (126 lines)
-│   ├── admin.py            (342 lines)
-│   ├── monitoring.py       (340 lines)
+│   ├── admin.py            (327 lines)
+│   ├── monitoring.py       (341 lines)
 │   ├── flyer.py             (81 lines)
-│   ├── matters.py          (458 lines)
-│   ├── donate.py            (79 lines) - Stripe donation integration
-│   ├── auth.py             (370 lines) - Magic link authentication
-│   ├── dashboard.py        (494 lines) - User dashboard and alerts
+│   ├── matters.py          (545 lines)
+│   ├── donate.py            (78 lines) - Stripe donation integration
+│   ├── auth.py             (386 lines) - Magic link authentication
+│   ├── dashboard.py        (493 lines) - User dashboard and alerts
 │   ├── votes.py            (192 lines) - Voting records, council member analysis
 │   ├── committees.py       (172 lines) - Committee rosters, voting history
 │   ├── engagement.py       (221 lines) - User watches, trending topics
 │   └── feedback.py         (279 lines) - User ratings, issue reporting
 │
-├── services/                738 lines  - Business logic (+ 369 HTML)
-│   ├── meeting.py           (47 lines)
-│   ├── search.py           (326 lines)
-│   ├── flyer.py            (365 lines)
+├── services/                852 lines  - Business logic (+ 369 HTML)
+│   ├── meeting.py           (82 lines)
+│   ├── search.py           (406 lines)
+│   ├── flyer.py            (364 lines)
 │   └── flyer_template.html (369 lines)
 │
 ├── middleware/              455 lines  - Cross-cutting concerns (4 modules)
@@ -54,14 +54,16 @@ server/
 ├── models/                  131 lines  - Request validation
 │   └── requests.py         (131 lines)
 │
-└── utils/                   454 lines  - Reusable utilities (4 modules)
-    ├── validation.py        (31 lines) - Input sanitization
-    ├── constants.py         (96 lines) - State mappings
+└── utils/                   544 lines  - Reusable utilities (6 modules)
+    ├── validation.py       (101 lines) - Input sanitization, entity validation
+    ├── constants.py        (107 lines) - State mappings
     ├── geo.py              (118 lines) - City/state parsing
-    └── vendor_urls.py      (103 lines) - Vendor attribution URL construction
+    ├── vendor_urls.py      (105 lines) - Vendor attribution URL construction
+    ├── responses.py         (58 lines) - Standard API response helpers
+    └── text.py              (55 lines) - Text processing utilities
 ```
 
-**Total: 35 Python files, 6,543 lines**
+**Total: 37 Python files, 7,910 lines**
 
 **Why this structure?**
 - **177-line main.py** (down from 1,245) - Minimal entry point

@@ -36,7 +36,7 @@ The pipeline consists of **7 focused modules** with clear responsibilities:
 
 ## Module Reference
 
-### 1. `conductor.py` - Orchestration (657 lines)
+### 1. `conductor.py` - Orchestration (851 lines)
 
 **Entry point for all pipeline operations.** Coordinates sync and processing loops.
 
@@ -90,7 +90,7 @@ engagic-daemon --status
 
 ---
 
-### 2. `fetcher.py` - City Sync & Vendor Routing (562 lines)
+### 2. `fetcher.py` - City Sync & Vendor Routing (535 lines)
 
 **Fetches meetings from vendor platforms.** Handles rate limiting, retry logic, and database storage.
 
@@ -161,7 +161,7 @@ class SyncResult:
 
 ---
 
-### 3. `processor.py` - Queue Processing & Item Assembly (1335 lines)
+### 3. `processor.py` - Queue Processing & Item Assembly (1350 lines)
 
 **Processes jobs from the queue.** Extracts text from PDFs, assembles items, orchestrates LLM analysis.
 
@@ -378,7 +378,7 @@ elif job.job_type == "matter":
 
 ---
 
-### 5. `utils.py` - Matter-First Utilities (212 lines)
+### 5. `utils.py` - Matter-First Utilities (216 lines)
 
 **Utilities for matter-first processing.** Attachment hashing and matter key extraction.
 
@@ -472,7 +472,7 @@ get_matter_key(None, "uuid-abc")  # Returns: "uuid-abc"
 
 ---
 
-### 6. `admin.py` - Admin & Debug Utilities (202 lines)
+### 6. `admin.py` - Admin & Debug Utilities (201 lines)
 
 **Debug utilities for manual inspection.** Not used in production daemon, only CLI commands.
 
@@ -799,4 +799,4 @@ engagic-daemon
 
 ---
 
-**Last Updated:** 2025-11-23 (Pipeline documentation audit - removed phantom analyzer.py module, added admin.py and click_types.py sections, updated all line counts, fixed async architecture description)
+**Last Updated:** 2025-12-03 (Updated all line counts: conductor 657→851, processor 1335→1350)
