@@ -23,7 +23,7 @@ server/
 ├── rate_limiter.py         662 lines  - SQLite tiered rate limiting (Basic/Hacktivist/Enterprise)
 ├── metrics.py              240 lines  - Prometheus instrumentation
 │
-├── routes/                2201 lines  - HTTP request handlers (10 modules)
+├── routes/                3455 lines  - HTTP request handlers (14 modules)
 │   ├── search.py            (71 lines)
 │   ├── meetings.py         (139 lines)
 │   ├── topics.py           (126 lines)
@@ -32,8 +32,12 @@ server/
 │   ├── flyer.py             (81 lines)
 │   ├── matters.py          (458 lines)
 │   ├── donate.py            (79 lines) - Stripe donation integration
-│   ├── auth.py             (370 lines) - Magic link authentication (Phase 2/3)
-│   └── dashboard.py        (494 lines) - User dashboard and alerts (Phase 2/3)
+│   ├── auth.py             (370 lines) - Magic link authentication
+│   ├── dashboard.py        (494 lines) - User dashboard and alerts
+│   ├── votes.py            (192 lines) - Voting records, council member analysis
+│   ├── committees.py       (172 lines) - Committee rosters, voting history
+│   ├── engagement.py       (221 lines) - User watches, trending topics
+│   └── feedback.py         (279 lines) - User ratings, issue reporting
 │
 ├── services/                738 lines  - Business logic (+ 369 HTML)
 │   ├── meeting.py           (47 lines)
@@ -57,11 +61,11 @@ server/
     └── vendor_urls.py      (103 lines) - Vendor attribution URL construction
 ```
 
-**Total: 31 Python files, 5,289 lines**
+**Total: 35 Python files, 6,543 lines**
 
 **Why this structure?**
 - **177-line main.py** (down from 1,245) - Minimal entry point
-- **Focused route modules** - Single responsibility per file (10 modules)
+- **Focused route modules** - Single responsibility per file (14 modules)
 - **Service layer** - Business logic separate from HTTP concerns
 - **Dependency injection** - Centralized in dependencies.py
 - **Clean imports** - No circular dependencies
@@ -302,7 +306,7 @@ engagic_llm_api_cost_dollars{model="gemini-2.5-flash"} 15.75
 
 ---
 
-## Route Modules (2201 lines total, 10 modules)
+## Route Modules (3455 lines total, 14 modules)
 
 **Each route module focuses on one domain.** No business logic - delegate to services.
 
@@ -895,6 +899,102 @@ async def update_alert_settings(
 - One-click unsubscribe
 
 **Use case:** Convert passive browsing → active civic engagement through personalized alerts.
+
+---
+
+### 11. `routes/votes.py` (192 lines)
+
+**Voting records and council member analysis.**
+
+```python
+@router.get("/api/matters/{matter_id}/votes")
+async def get_matter_votes(matter_id: str, db: Database = Depends(get_db)):
+    """Get all votes on a matter across all meetings.
+
+    Returns individual votes grouped by meeting/committee, plus aggregate tally.
+    """
+    votes = await db.council_members.get_votes_for_matter(matter_id)
+    tally = await db.council_members.get_vote_tally_for_matter(matter_id)
+
+    return {
+        "success": True,
+        "matter": matter.to_dict(),
+        "votes_by_meeting": votes_by_meeting,
+        "aggregate_tally": tally
+    }
+
+@router.get("/api/council-members/{member_id}/votes")
+async def get_council_member_votes(member_id: str, db: Database = Depends(get_db)):
+    """Get voting history for a council member."""
+```
+
+**Use case:** Track how council members vote on legislation over time.
+
+---
+
+### 12. `routes/committees.py` (172 lines)
+
+**Committee rosters and voting history.**
+
+```python
+@router.get("/api/city/{banana}/committees")
+async def get_city_committees(banana: str, db: Database = Depends(get_db)):
+    """Get all committees for a city with member counts."""
+
+@router.get("/api/committees/{committee_id}")
+async def get_committee(committee_id: str, db: Database = Depends(get_db)):
+    """Get committee details with current roster."""
+
+@router.get("/api/committees/{committee_id}/votes")
+async def get_committee_votes(committee_id: str, db: Database = Depends(get_db)):
+    """Get voting history for a committee."""
+```
+
+**Use case:** Explore legislative body structure and committee-level voting patterns.
+
+---
+
+### 13. `routes/engagement.py` (221 lines)
+
+**User engagement tracking - watches and trending.**
+
+```python
+@router.get("/api/city/{banana}/trending")
+async def get_city_trending(banana: str, db: Database = Depends(get_db)):
+    """Get trending topics and matters for a city."""
+
+@router.post("/api/watch")
+async def watch_item(request: WatchRequest, db: Database = Depends(get_db)):
+    """Add item to user's watch list."""
+
+@router.get("/api/user/watched")
+async def get_watched_items(user: User = Depends(get_current_user)):
+    """Get user's watched items."""
+```
+
+**Use case:** Track user interest in specific topics and matters.
+
+---
+
+### 14. `routes/feedback.py` (279 lines)
+
+**User feedback collection - ratings and issue reporting.**
+
+```python
+@router.post("/api/feedback/rating")
+async def submit_rating(request: RatingRequest, db: Database = Depends(get_db)):
+    """Submit rating for a summary (1-5 stars, optional comment)."""
+
+@router.post("/api/feedback/issue")
+async def report_issue(request: IssueRequest, db: Database = Depends(get_db)):
+    """Report an issue with a summary or meeting data."""
+
+@router.get("/api/admin/feedback")
+async def get_feedback(db: Database = Depends(get_db)):
+    """Admin: Get all feedback for review."""
+```
+
+**Use case:** Collect user feedback to improve summary quality.
 
 ---
 
@@ -1593,6 +1693,37 @@ GET    /api/analytics                 Public dashboard analytics
 POST   /api/flyer/generate            Generate printable flyer (HTML)
 ```
 
+### Votes
+
+```
+GET    /api/matters/{matter_id}/votes         Get all votes on a matter
+GET    /api/council-members/{member_id}/votes Get voting history for council member
+```
+
+### Committees
+
+```
+GET    /api/city/{banana}/committees          Get all committees for a city
+GET    /api/committees/{committee_id}         Get committee details with roster
+GET    /api/committees/{committee_id}/votes   Get committee voting history
+```
+
+### Engagement
+
+```
+GET    /api/city/{banana}/trending            Get trending topics/matters
+POST   /api/watch                             Add item to watch list
+GET    /api/user/watched                      Get user's watched items
+```
+
+### Feedback
+
+```
+POST   /api/feedback/rating                   Submit summary rating (1-5 stars)
+POST   /api/feedback/issue                    Report data issue
+GET    /api/admin/feedback                    Admin: Get all feedback
+```
+
 ---
 
 ## Configuration
@@ -1836,4 +1967,4 @@ hey -n 10000 -c 100 http://localhost:8000/api/health
 
 ---
 
-**Last Updated:** 2025-11-23 (Comprehensive audit - all line counts verified, missing modules documented)
+**Last Updated:** 2025-12-03 (Added votes, committees, engagement, feedback routes - 14 modules total)

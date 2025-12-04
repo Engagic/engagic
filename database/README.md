@@ -234,9 +234,9 @@ ORDER BY appeared_at;
 #### `queue` - Processing Queue (Typed Jobs)
 ```sql
 CREATE TABLE queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     job_type TEXT,                     -- "meeting" or "matter"
-    payload TEXT,                      -- JSON: MeetingJob or MatterJob
+    payload JSONB,                     -- MeetingJob or MatterJob
     source_url TEXT NOT NULL UNIQUE,   -- Deduplication key
     meeting_id TEXT,
     banana TEXT,
@@ -1237,4 +1237,4 @@ banana = extract_banana_from_matter_id("nashvilleTN_7a8f3b2c1d9e4f5a")
 
 ---
 
-**Last Updated:** 2025-11-23 (PostgreSQL migration, accurate line counts, added UserlandRepository)
+**Last Updated:** 2025-12-03 (Fixed queue schema example to PostgreSQL syntax)

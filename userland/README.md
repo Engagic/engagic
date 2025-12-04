@@ -9,7 +9,7 @@ Free civic alerts with passwordless authentication. Every Sunday at 9am, users g
 ## User Flow
 
 1. Visit city page (`/cities/paloaltoCA`)
-2. Click "📬 Get weekly updates" button
+2. Click "Get weekly updates" button
 3. Enter email + optional 1-3 keywords
 4. Verify email via magic link
 5. Every Sunday → Receive digest
@@ -87,7 +87,7 @@ Frontend runs on http://localhost:5173
 
 **Simple Flow (Recommended):**
 1. Visit http://localhost:5173/cities/paloaltoCA (any city)
-2. Click "📬 Get weekly updates" button
+2. Click "Get weekly updates" button
 3. Enter email + name + optional keywords
 4. Check email for magic link
 5. Click link → Dashboard
