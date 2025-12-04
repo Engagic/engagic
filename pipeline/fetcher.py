@@ -80,13 +80,18 @@ class Fetcher:
         cities = await self.db.cities.get_all_cities(status="active")
         logger.info("syncing cities with rate limiting", city_count=len(cities))
 
-        # Group cities by vendor for polite crawling (only supported vendors)
-        # Temporarily disabled: granicus (VPS timeout issues), civicclerk, civicplus
+        # Group cities by vendor for polite crawling
+        # Disabled vendors (re-enable when issues resolved):
+        #   - granicus: VPS timeout issues (large HTML responses)
+        #   - civicclerk: OData API rate limiting needs tuning
+        #   - civicplus: HTML structure changes frequently
+        #   - escribe: Low priority (few cities)
+        # To sync disabled vendors, use sync_cities() with specific city bananas
         supported_vendors = {
             "primegov",
             "legistar",
-            "novusagenda",  # Item-level processing enabled
-            "iqm2",  # Item-level processing enabled
+            "novusagenda",
+            "iqm2",
         }
 
         by_vendor = {}
@@ -216,38 +221,6 @@ class Fetcher:
 
             if result.status == SyncStatus.FAILED:
                 self.failed_cities.add(banana)
-
-        return results
-
-    async def sync_vendors(self, vendor_names: List[str]) -> List[SyncResult]:
-        """Sync all cities for specific vendors
-
-        Args:
-            vendor_names: List of vendor names (e.g., ["legistar", "primegov"])
-
-        Returns:
-            List of SyncResult objects
-        """
-        logger.info("syncing cities for vendors", vendors=vendor_names)
-        results = []
-
-        for vendor in vendor_names:
-            cities = await self.db.cities.get_cities(vendor=vendor, status="active")
-            logger.info("found cities for vendor", vendor=vendor, city_count=len(cities))
-
-            for city in cities:
-                if not self.is_running:
-                    break
-
-                # Apply rate limiting
-                await self.rate_limiter.wait_if_needed(vendor)
-
-                # Sync with retry
-                result = await self._sync_city_with_retry(city)
-                results.append(result)
-
-                if result.status == SyncStatus.FAILED:
-                    self.failed_cities.add(city.banana)
 
         return results
 

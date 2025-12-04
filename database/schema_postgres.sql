@@ -240,24 +240,6 @@ CREATE TABLE IF NOT EXISTS tracked_item_meetings (
     PRIMARY KEY (tracked_item_id, meeting_id)
 );
 
--- User profiles: End-user accounts (Phase 2)
-CREATE TABLE IF NOT EXISTS user_profiles (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- User topic subscriptions: Topics users want alerts for (Phase 2)
-CREATE TABLE IF NOT EXISTS user_topic_subscriptions (
-    user_id TEXT NOT NULL,
-    banana TEXT NOT NULL,
-    topic TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
-    PRIMARY KEY (user_id, banana, topic)
-);
-
 -- =======================
 -- COUNCIL MEMBERS & VOTING (Phase 2)
 -- =======================
@@ -413,12 +395,6 @@ CREATE INDEX IF NOT EXISTS idx_tenant_coverage_city ON tenant_coverage(banana);
 CREATE INDEX IF NOT EXISTS idx_tracked_items_tenant ON tracked_items(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tracked_items_city ON tracked_items(banana);
 CREATE INDEX IF NOT EXISTS idx_tracked_items_status ON tracked_items(status);
-
--- User profiles
-CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON user_profiles(email);
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_topic_subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_city ON user_topic_subscriptions(banana);
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_topic ON user_topic_subscriptions(topic);
 
 -- Council members
 CREATE INDEX IF NOT EXISTS idx_council_members_banana ON council_members(banana);

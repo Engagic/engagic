@@ -13,8 +13,6 @@
 	// Vote badges removed from timeline to prevent N+1 API requests when listing many matters
 	// Votes are shown on the individual meeting page instead
 
-	let expandedAppearances = $state<Set<number>>(new Set());
-
 	function formatDate(dateStr: string): string {
 		if (!dateStr) return '';
 		const date = new Date(dateStr);
@@ -90,9 +88,8 @@
 			{#each timelineData.timeline as appearance, index}
 				{@const meetingInfo = extractMeetingType(appearance.meeting_title)}
 				{@const dateContext = getDateContext(index, timelineData.timeline.length)}
-				{@const isExpanded = expandedAppearances.has(index)}
 
-				<div class="flow-step" class:selected={isExpanded}>
+				<div class="flow-step">
 					<a
 						href={buildMeetingLink(appearance)}
 						class="step-card"

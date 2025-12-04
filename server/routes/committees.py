@@ -1,6 +1,8 @@
 """Committee API routes - handles committees, membership, and committee voting history."""
 
-from fastapi import APIRouter, Depends, Query
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 
 from database.db_postgres import Database
@@ -55,7 +57,6 @@ async def get_committee(committee_id: str, db: Database = Depends(get_db)):
     """
     committee = await db.committees.get_committee_by_id(committee_id)
     if not committee:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Committee not found")
 
     # Get current members
@@ -94,17 +95,14 @@ async def get_committee_members(
     """
     committee = await db.committees.get_committee_by_id(committee_id)
     if not committee:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Committee not found")
 
     # Parse as_of date if provided
     as_of_date = None
     if as_of:
-        from datetime import datetime
         try:
             as_of_date = datetime.fromisoformat(as_of.replace('Z', '+00:00'))
         except ValueError:
-            from fastapi import HTTPException
             raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format.")
 
     members = await db.committees.get_committee_members(
@@ -135,7 +133,6 @@ async def get_committee_votes(
     """
     committee = await db.committees.get_committee_by_id(committee_id)
     if not committee:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Committee not found")
 
     vote_history = await db.committees.get_committee_vote_history(committee_id, limit=limit)
@@ -162,7 +159,6 @@ async def get_member_committees(
     # Verify member exists
     member = await db.council_members.get_member_by_id(member_id)
     if not member:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Council member not found")
 
     committees = await db.committees.get_member_committees(member_id, active_only=active_only)
