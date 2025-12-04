@@ -60,7 +60,7 @@ async def backfill_committees():
                 skipped += 1
                 continue
 
-            committee = await db.committees.find_or_create_committee(
+            await db.committees.find_or_create_committee(
                 banana=banana,
                 name=title,
                 description=None

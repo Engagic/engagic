@@ -305,6 +305,7 @@ class MatterRepository(BaseRepository):
         item_id: str,
         appeared_at: Optional[datetime],
         committee: Optional[str] = None,
+        committee_id: Optional[str] = None,
         sequence: Optional[int] = None
     ) -> None:
         """Create a matter appearance record
@@ -315,15 +316,16 @@ class MatterRepository(BaseRepository):
             item_id: Item identifier
             appeared_at: Datetime when matter appeared
             committee: Committee name (extracted from meeting title)
+            committee_id: FK to committees table (for linking)
             sequence: Item sequence in meeting
         """
         async with self.transaction() as conn:
             await conn.execute(
                 """
                 INSERT INTO matter_appearances (
-                    matter_id, meeting_id, item_id, appeared_at, committee, sequence
+                    matter_id, meeting_id, item_id, appeared_at, committee, committee_id, sequence
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (matter_id, meeting_id, item_id) DO NOTHING
                 """,
                 matter_id,
@@ -331,6 +333,7 @@ class MatterRepository(BaseRepository):
                 item_id,
                 appeared_at,
                 committee,
+                committee_id,
                 sequence,
             )
 
