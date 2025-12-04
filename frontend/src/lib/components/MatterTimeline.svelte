@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MatterTimelineResponse, MatterTimelineAppearance } from '$lib/api/types';
 	import { generateAnchorId } from '$lib/utils/anchor';
+	import { goto } from '$app/navigation';
 	import VoteBadge from './VoteBadge.svelte';
 
 	interface Props {
@@ -70,6 +71,12 @@
 		const anchor = buildItemAnchor(appearance);
 		return `/${appearance.banana}/${meetingSlug}#${anchor}`;
 	}
+
+	function navigateToCommittee(e: MouseEvent, banana: string, committeeId: string) {
+		e.preventDefault();
+		e.stopPropagation();
+		goto(`/${banana}/committees/${committeeId}`);
+	}
 </script>
 
 {#if timelineData.timeline.length > 0}
@@ -107,7 +114,14 @@
 							</div>
 							<div class="step-meta">
 								<span class="step-date">{formatDate(appearance.meeting_date)}</span>
-								{#if appearance.committee}
+								{#if appearance.committee && appearance.committee_id}
+									<button
+									   type="button"
+									   class="step-committee-link"
+									   onclick={(e) => navigateToCommittee(e, appearance.banana, appearance.committee_id!)}>
+										{appearance.committee}
+									</button>
+								{:else if appearance.committee}
 									<span class="step-committee">{appearance.committee}</span>
 								{/if}
 							</div>
@@ -356,6 +370,24 @@
 		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
 		border-radius: 4px;
 		font-weight: 600;
+	}
+
+	.step-committee-link {
+		font-family: inherit;
+		font-size: 0.7rem;
+		padding: 0.15rem 0.5rem;
+		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
+		color: var(--badge-purple-text, #7c3aed);
+		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
+		border-radius: 4px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.step-committee-link:hover {
+		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.2));
+		border-color: var(--badge-purple-text, #7c3aed);
 	}
 
 	.step-agenda {

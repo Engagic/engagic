@@ -117,7 +117,7 @@ class GeminiSummarizer:
                 )
                 return response
 
-            except Exception as e:
+            except Exception as e:  # Intentionally broad: retry logic needs to catch all errors
                 last_error = e
                 error_str = str(e)
 
@@ -212,7 +212,7 @@ class GeminiSummarizer:
 
             return response.text
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
             metrics.record_llm_call(
                 model=model_display,
@@ -345,7 +345,7 @@ class GeminiSummarizer:
 
             return summary, topics
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
             metrics.record_llm_call(
                 model=model_display,
@@ -957,7 +957,7 @@ class GeminiSummarizer:
 
                 return results
 
-            except Exception as e:
+            except Exception as e:  # Intentionally broad: retry logic with specific error checks
                 error_str = str(e)
                 is_quota_error = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
 
@@ -1185,7 +1185,7 @@ class GeminiSummarizer:
             logger.error("failed to parse json response", error=str(e), error_type=type(e).__name__)
             logger.error("full malformed json response", response_text=response_text)
             raise
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: log validation error then propagate
             logger.error("error validating json response", error=str(e), error_type=type(e).__name__)
             logger.error("response that failed validation", response_text=response_text)
             raise

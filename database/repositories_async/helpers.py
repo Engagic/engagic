@@ -194,6 +194,7 @@ def build_meeting(row: Any, topics: Optional[List[str]] = None) -> Meeting:
         processing_status=row["processing_status"],
         processing_method=row["processing_method"],
         processing_time=row["processing_time"],
+        committee_id=row.get("committee_id"),  # FK to committees
         topics=topics or [],
     )
 

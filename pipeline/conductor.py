@@ -698,7 +698,7 @@ def main():
                                 break
                             await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
 
-                    except Exception as e:
+                    except Exception as e:  # Intentionally broad: daemon resilience
                         logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
                         logger.info("sleeping for 2 hours after error")
                         for _ in range(2 * 60 * 60):
@@ -800,7 +800,7 @@ def main():
                                     break
                                 await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
 
-                        except Exception as e:
+                        except Exception as e:  # Intentionally broad: daemon resilience
                             logger.error("sync loop error", error=str(e), error_type=type(e).__name__)
                             logger.info("sleeping for 2 hours after error")
                             for _ in range(2 * 60 * 60):
@@ -818,7 +818,7 @@ def main():
                     try:
                         logger.info("starting processing loop")
                         await conductor.processor.process_queue()
-                    except Exception as e:
+                    except Exception as e:  # Intentionally broad: task isolation
                         logger.error("processing loop error", error=str(e), error_type=type(e).__name__)
 
                 # Run both tasks concurrently (single event loop, shared connection pool)
@@ -830,7 +830,7 @@ def main():
                     await asyncio.gather(sync_loop, processing_loop)
                 except asyncio.CancelledError:
                     logger.info("tasks cancelled")
-                except Exception as e:
+                except Exception as e:  # Intentionally broad: task cleanup on any failure
                     logger.error("task failed", error=str(e), error_type=type(e).__name__)
                     # Cancel the other task to prevent resource leak
                     sync_loop.cancel()

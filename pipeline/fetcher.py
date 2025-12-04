@@ -398,7 +398,7 @@ class Fetcher:
                 duration_seconds=round(result.duration_seconds, 1)
             )
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: operation boundary, record failure
             result.status = SyncStatus.FAILED
             result.error_message = str(e)
             result.duration_seconds = time.time() - start_time
@@ -437,7 +437,7 @@ class Fetcher:
                 # Failed - store error for potential retry
                 last_error = result.error_message or "Sync failed"
 
-            except Exception as e:
+            except Exception as e:  # Intentionally broad: retry logic needs to catch all
                 # Exception - store error for potential retry
                 last_error = str(e)
 
@@ -497,7 +497,7 @@ class Fetcher:
             else:  # Very low activity (no recent meetings)
                 return hours_since_sync >= 168  # Sync weekly
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: graceful degradation, sync on any error
             logger.warning("error checking sync schedule", city=city.banana, error=str(e))
             return True  # Sync on error to be safe
 

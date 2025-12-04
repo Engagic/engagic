@@ -289,7 +289,7 @@ class PdfExtractor:
                 return None
 
             return (pix.tobytes("png"), pix.width, pix.height)
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: graceful degradation, returns None
             logger.error("failed to render page", page_num=page.number + 1, error=str(e))
             return None
 
@@ -371,7 +371,7 @@ class PdfExtractor:
                     else:
                         results[page_num] = original_text
 
-                except Exception as e:
+                except Exception as e:  # Intentionally broad: catch any thread exception
                     logger.error("parallel OCR failed", page_num=page_num, error=str(e))
                     results[page_num] = original_text
 
@@ -554,7 +554,7 @@ class PdfExtractor:
 
             return result
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: API boundary, convert to typed error
             extraction_time = time.time() - start_time
             logger.error("[PyMuPDF] extraction failed", url=url[:100], error=str(e), error_type=type(e).__name__, extraction_time=round(extraction_time, 2))
             raise ExtractionError(
@@ -676,7 +676,7 @@ class PdfExtractor:
 
             return result
 
-        except Exception as e:
+        except Exception as e:  # Intentionally broad: API boundary, convert to typed error
             extraction_time = time.time() - start_time
             logger.error("[PyMuPDF] extraction from bytes failed", error=str(e), error_type=type(e).__name__, extraction_time=round(extraction_time, 2))
             raise ExtractionError(

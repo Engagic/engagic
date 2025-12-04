@@ -202,6 +202,13 @@
 								Date TBD
 							{/if}
 						</div>
+						{#if selectedMeeting.committee_id}
+							<a href="/{city_banana}/committees/{selectedMeeting.committee_id}"
+							   class="committee-link"
+							   data-sveltekit-preload-data="tap">
+								View Committee
+							</a>
+						{/if}
 					</div>
 					<div class="meeting-meta-right">
 						{#if selectedMeeting.agenda_url}
@@ -362,6 +369,27 @@
 		font-weight: 600;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+	}
+
+	.committee-link {
+		display: inline-block;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--badge-purple-text, #7c3aed);
+		text-decoration: none;
+		padding: 0.25rem 0.6rem;
+		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
+		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
+		border-radius: 6px;
+		margin-left: 0.75rem;
+		transition: all 0.15s ease;
+	}
+
+	.committee-link:hover {
+		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.2));
+		border-color: var(--badge-purple-text, #7c3aed);
+		text-decoration: underline;
 	}
 
 	.meeting-meta-row {
