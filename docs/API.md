@@ -8,7 +8,7 @@ Complete reference for the Engagic public API endpoints.
 **Base URL (Local):** `http://localhost:8000`
 
 **Version:** v1
-**Last Updated:** November 20, 2025
+**Last Updated:** December 3, 2025
 
 ---
 
@@ -30,6 +30,10 @@ Complete reference for the Engagic public API endpoints.
 - [Search Endpoints](#search-endpoints)
 - [Topic Endpoints](#topic-endpoints)
 - [Meeting Endpoints](#meeting-endpoints)
+- [Vote Endpoints](#vote-endpoints)
+- [Committee Endpoints](#committee-endpoints)
+- [Engagement Endpoints](#engagement-endpoints)
+- [Feedback Endpoints](#feedback-endpoints)
 - [System Endpoints](#system-endpoints)
 - [Admin Endpoints](#admin-endpoints)
 - [Error Codes](#error-codes)
@@ -444,6 +448,721 @@ curl https://api.engagic.org/api/random-meeting-with-items
 
 ---
 
+## Vote Endpoints
+
+Endpoints for accessing voting records, tallies, and council member voting history.
+
+### Get Matter Votes
+
+Get all votes on a matter across all meetings with per-meeting tallies.
+
+**Endpoint:** `GET /api/matters/{matter_id}/votes`
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/matters/nashvilleTN_BL2025-1098/votes
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "matter_id": "nashvilleTN_BL2025-1098",
+  "matter_title": "Budget Amendment FY2025",
+  "votes": [
+    {
+      "council_member_id": "nashvilleTN_a3f2c8d1",
+      "matter_id": "nashvilleTN_BL2025-1098",
+      "meeting_id": "nashvilleTN_2025-11-10",
+      "vote": "yes",
+      "vote_date": "2025-11-10T00:00:00"
+    }
+  ],
+  "votes_by_meeting": [
+    {
+      "meeting_id": "nashvilleTN_2025-11-10",
+      "meeting_title": "City Council - Regular Meeting",
+      "meeting_date": "2025-11-10T18:00:00",
+      "committee": "Budget Committee",
+      "votes": [...],
+      "computed_tally": {"yes": 25, "no": 5, "abstain": 2, "absent": 3},
+      "vote_outcome": "passed"
+    }
+  ],
+  "tally": {"yes": 25, "no": 5, "abstain": 2, "absent": 3},
+  "outcomes": [...]
+}
+```
+
+### Get Meeting Votes
+
+Get all votes cast in a specific meeting, grouped by matter.
+
+**Endpoint:** `GET /api/meetings/{meeting_id}/votes`
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/meetings/nashvilleTN_2025-11-10/votes
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "meeting_id": "nashvilleTN_2025-11-10",
+  "meeting_title": "City Council - Regular Meeting",
+  "meeting_date": "2025-11-10T18:00:00",
+  "matters_with_votes": [
+    {
+      "matter_id": "nashvilleTN_BL2025-1098",
+      "matter_title": "Budget Amendment FY2025",
+      "matter_file": "BL2025-1098",
+      "votes": [...],
+      "tally": {"yes": 25, "no": 5},
+      "outcome": "passed"
+    }
+  ],
+  "total": 35
+}
+```
+
+### Get Council Member Votes
+
+Get voting record for a specific council member.
+
+**Endpoint:** `GET /api/council-members/{member_id}/votes`
+
+**Query Parameters:**
+- `limit` (optional) - Max votes to return (default: 100)
+
+**Example:**
+```bash
+curl "https://api.engagic.org/api/council-members/nashvilleTN_a3f2c8d1/votes?limit=50"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "member": {
+    "id": "nashvilleTN_a3f2c8d1",
+    "name": "Freddie O'Connell",
+    "title": "Council Member",
+    "district": "District 19",
+    "vote_count": 312
+  },
+  "voting_record": [...],
+  "total": 50,
+  "statistics": {"yes": 280, "no": 20, "abstain": 8, "absent": 4}
+}
+```
+
+### Get City Council Roster
+
+Get all council members for a city.
+
+**Endpoint:** `GET /api/city/{banana}/council-members`
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/city/nashvilleTN/council-members
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "city_name": "Nashville",
+  "state": "TN",
+  "banana": "nashvilleTN",
+  "council_members": [
+    {
+      "id": "nashvilleTN_a3f2c8d1",
+      "name": "Freddie O'Connell",
+      "title": "Mayor",
+      "district": null,
+      "status": "active",
+      "sponsorship_count": 45,
+      "vote_count": 312
+    }
+  ],
+  "total": 40
+}
+```
+
+---
+
+## Committee Endpoints
+
+Endpoints for committee information, rosters, and voting history.
+
+### Get City Committees
+
+Get all committees for a city.
+
+**Endpoint:** `GET /api/city/{banana}/committees`
+
+**Query Parameters:**
+- `status` (optional) - Filter by status: `active`, `inactive`
+
+**Example:**
+```bash
+curl "https://api.engagic.org/api/city/sanfranciscoCA/committees?status=active"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "city_name": "San Francisco",
+  "state": "CA",
+  "banana": "sanfranciscoCA",
+  "committees": [
+    {
+      "id": "sanfranciscoCA_b7d4e9f2",
+      "name": "Planning Commission",
+      "description": "Oversees land use and development",
+      "status": "active",
+      "member_count": 7
+    }
+  ],
+  "total": 15
+}
+```
+
+### Get Committee Details
+
+Get details for a specific committee.
+
+**Endpoint:** `GET /api/committees/{committee_id}`
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/committees/sanfranciscoCA_b7d4e9f2
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "committee": {
+    "id": "sanfranciscoCA_b7d4e9f2",
+    "name": "Planning Commission",
+    "description": "Oversees land use and development",
+    "status": "active",
+    "banana": "sanfranciscoCA"
+  },
+  "city_name": "San Francisco",
+  "state": "CA",
+  "members": [...],
+  "member_count": 7
+}
+```
+
+### Get Committee Members
+
+Get current or historical roster for a committee.
+
+**Endpoint:** `GET /api/committees/{committee_id}/members`
+
+**Query Parameters:**
+- `active_only` (optional) - Only current members (default: true)
+- `as_of` (optional) - Historical date (ISO format)
+
+**Example:**
+```bash
+# Current roster
+curl https://api.engagic.org/api/committees/sanfranciscoCA_b7d4e9f2/members
+
+# Historical roster as of June 2024
+curl "https://api.engagic.org/api/committees/sanfranciscoCA_b7d4e9f2/members?as_of=2024-06-01"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "committee_id": "sanfranciscoCA_b7d4e9f2",
+  "committee_name": "Planning Commission",
+  "as_of": null,
+  "members": [
+    {
+      "council_member_id": "sanfranciscoCA_c8e5f0a3",
+      "name": "Jane Smith",
+      "role": "Chair",
+      "joined_at": "2024-01-15T00:00:00"
+    }
+  ],
+  "total": 7
+}
+```
+
+### Get Committee Voting History
+
+Get voting history for a committee.
+
+**Endpoint:** `GET /api/committees/{committee_id}/votes`
+
+**Query Parameters:**
+- `limit` (optional) - Max votes to return (default: 50, max: 200)
+
+**Example:**
+```bash
+curl "https://api.engagic.org/api/committees/sanfranciscoCA_b7d4e9f2/votes?limit=20"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "committee_id": "sanfranciscoCA_b7d4e9f2",
+  "committee_name": "Planning Commission",
+  "votes": [...],
+  "total": 20
+}
+```
+
+### Get Member's Committee Assignments
+
+Get committees a council member serves on.
+
+**Endpoint:** `GET /api/council-members/{member_id}/committees`
+
+**Query Parameters:**
+- `active_only` (optional) - Only current assignments (default: true)
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/council-members/sanfranciscoCA_c8e5f0a3/committees
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "member_id": "sanfranciscoCA_c8e5f0a3",
+  "member_name": "Jane Smith",
+  "committees": [
+    {
+      "committee_id": "sanfranciscoCA_b7d4e9f2",
+      "name": "Planning Commission",
+      "role": "Chair",
+      "joined_at": "2024-01-15T00:00:00"
+    }
+  ],
+  "total": 3
+}
+```
+
+---
+
+## Engagement Endpoints
+
+User engagement tracking: watches, activity logging, trending content.
+
+### Watch Entity (Requires Auth)
+
+Add entity to user's watch list.
+
+**Endpoint:** `POST /api/watch/{entity_type}/{entity_id}`
+
+**Entity Types:** `matter`, `meeting`, `topic`, `city`, `council_member`
+
+**Example:**
+```bash
+curl -X POST https://api.engagic.org/api/watch/matter/nashvilleTN_BL2025-1098 \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "watching"
+}
+```
+
+### Unwatch Entity (Requires Auth)
+
+Remove entity from user's watch list.
+
+**Endpoint:** `DELETE /api/watch/{entity_type}/{entity_id}`
+
+**Example:**
+```bash
+curl -X DELETE https://api.engagic.org/api/watch/matter/nashvilleTN_BL2025-1098 \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "unwatched"
+}
+```
+
+### Get User's Watch List (Requires Auth)
+
+Get entities the user is watching.
+
+**Endpoint:** `GET /api/me/watching`
+
+**Query Parameters:**
+- `entity_type` (optional) - Filter by entity type
+
+**Example:**
+```bash
+curl "https://api.engagic.org/api/me/watching?entity_type=matter" \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "watches": [
+    {
+      "id": 123,
+      "entity_type": "matter",
+      "entity_id": "nashvilleTN_BL2025-1098",
+      "created_at": "2025-11-10T12:00:00"
+    }
+  ],
+  "total": 5
+}
+```
+
+### Get Trending Matters
+
+Get matters with highest engagement.
+
+**Endpoint:** `GET /api/trending/matters`
+
+**Query Parameters:**
+- `limit` (optional) - Max results (default: 20, max: 100)
+
+**Example:**
+```bash
+curl "https://api.engagic.org/api/trending/matters?limit=10"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "trending": [
+    {
+      "matter_id": "nashvilleTN_BL2025-1098",
+      "title": "Budget Amendment FY2025",
+      "engagement": 145,
+      "unique_users": 42,
+      "status": "active"
+    }
+  ]
+}
+```
+
+### Get Matter Engagement
+
+Get engagement stats for a matter.
+
+**Endpoint:** `GET /api/matters/{matter_id}/engagement`
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/matters/nashvilleTN_BL2025-1098/engagement
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "matter_id": "nashvilleTN_BL2025-1098",
+  "watch_count": 42,
+  "is_watching": false
+}
+```
+
+### Get Meeting Engagement
+
+Get engagement stats for a meeting.
+
+**Endpoint:** `GET /api/meetings/{meeting_id}/engagement`
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/meetings/nashvilleTN_2025-11-10/engagement
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "meeting_id": "nashvilleTN_2025-11-10",
+  "watch_count": 25,
+  "is_watching": false
+}
+```
+
+### Log View (Analytics)
+
+Log a page view for analytics tracking.
+
+**Endpoint:** `POST /api/activity/view/{entity_type}/{entity_id}`
+
+Works for both authenticated and anonymous users.
+
+**Example:**
+```bash
+curl -X POST https://api.engagic.org/api/activity/view/meeting/nashvilleTN_2025-11-10
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+### Log Search (Analytics)
+
+Log a search query for analytics tracking.
+
+**Endpoint:** `POST /api/activity/search`
+
+**Query Parameters:**
+- `query` - The search query
+
+**Example:**
+```bash
+curl -X POST "https://api.engagic.org/api/activity/search?query=affordable%20housing"
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+---
+
+## Feedback Endpoints
+
+User feedback for quality improvement: ratings and issue reporting.
+
+### Rate Entity
+
+Submit a rating (1-5 stars) for an entity.
+
+**Endpoint:** `POST /api/rate/{entity_type}/{entity_id}`
+
+**Entity Types:** `item`, `meeting`, `matter`
+
+**Request Body:**
+```json
+{
+  "rating": 4
+}
+```
+
+Works for authenticated users or anonymous users with `session_id` cookie.
+
+**Example:**
+```bash
+curl -X POST https://api.engagic.org/api/rate/item/paloaltoCA_2025-11-10_item_5 \
+  -H "Content-Type: application/json" \
+  -d '{"rating": 4}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "rated"
+}
+```
+
+### Report Issue
+
+Report an issue with a summary (inaccurate, incomplete, misleading).
+
+**Endpoint:** `POST /api/report/{entity_type}/{entity_id}`
+
+**Request Body:**
+```json
+{
+  "issue_type": "inaccurate",
+  "description": "Summary misses key budget details about the 5% increase"
+}
+```
+
+**Issue Types:** `inaccurate`, `incomplete`, `misleading`, `other`
+
+**Example:**
+```bash
+curl -X POST https://api.engagic.org/api/report/item/paloaltoCA_2025-11-10_item_5 \
+  -H "Content-Type: application/json" \
+  -d '{"issue_type": "incomplete", "description": "Missing info about the amendment..."}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "issue_id": 123
+}
+```
+
+### Get Entity Rating
+
+Get rating statistics for an entity.
+
+**Endpoint:** `GET /api/{entity_type}/{entity_id}/rating`
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/item/paloaltoCA_2025-11-10_item_5/rating
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "entity_type": "item",
+  "entity_id": "paloaltoCA_2025-11-10_item_5",
+  "avg_rating": 3.8,
+  "rating_count": 25,
+  "distribution": {"1": 2, "2": 3, "3": 5, "4": 8, "5": 7},
+  "user_rating": 4
+}
+```
+
+### Get Entity Issues
+
+Get issues reported for an entity.
+
+**Endpoint:** `GET /api/{entity_type}/{entity_id}/issues`
+
+**Query Parameters:**
+- `status` (optional) - Filter by status: `open`, `resolved`, `dismissed`
+
+**Example:**
+```bash
+curl "https://api.engagic.org/api/item/paloaltoCA_2025-11-10_item_5/issues?status=open"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "entity_type": "item",
+  "entity_id": "paloaltoCA_2025-11-10_item_5",
+  "open_issue_count": 2,
+  "issues": [
+    {
+      "id": 123,
+      "issue_type": "incomplete",
+      "description": "Missing info about amendment...",
+      "status": "open",
+      "created_at": "2025-11-10T14:00:00"
+    }
+  ]
+}
+```
+
+### Get Open Issues (Admin)
+
+Get all unresolved issues for admin review.
+
+**Endpoint:** `GET /api/admin/issues`
+
+**Requires:** Authentication
+
+**Query Parameters:**
+- `limit` (optional) - Max issues (default: 100)
+
+**Example:**
+```bash
+curl https://api.engagic.org/api/admin/issues \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "issues": [...],
+  "total": 12
+}
+```
+
+### Resolve Issue (Admin)
+
+Mark an issue as resolved or dismissed.
+
+**Endpoint:** `POST /api/admin/issues/{issue_id}/resolve`
+
+**Requires:** Authentication
+
+**Request Body:**
+```json
+{
+  "status": "resolved",
+  "admin_notes": "Fixed in reprocessing batch #42"
+}
+```
+
+**Example:**
+```bash
+curl -X POST https://api.engagic.org/api/admin/issues/123/resolve \
+  -H "Authorization: Bearer your-jwt-token" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "resolved", "admin_notes": "Fixed"}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "resolved"
+}
+```
+
+### Get Low-Rated Entities (Admin)
+
+Get entities with low ratings for reprocessing consideration.
+
+**Endpoint:** `GET /api/admin/low-rated`
+
+**Requires:** Authentication
+
+**Query Parameters:**
+- `threshold` (optional) - Rating threshold (default: 2.5)
+- `min_ratings` (optional) - Minimum ratings required (default: 3)
+
+**Example:**
+```bash
+curl "https://api.engagic.org/api/admin/low-rated?threshold=2.0&min_ratings=5" \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "threshold": 2.0,
+  "min_ratings": 5,
+  "entities": [
+    {"entity_type": "item", "entity_id": "paloaltoCA_2025-11-10_item_3"}
+  ],
+  "total": 8
+}
+```
+
+---
+
 ## System Endpoints
 
 ### Health Check
@@ -741,6 +1460,6 @@ curl https://api.engagic.org/api/stats
 
 ---
 
-**Last Updated:** November 11, 2025
+**Last Updated:** December 3, 2025 (Added Vote, Committee, Engagement, and Feedback endpoints - 24 new endpoints documented)
 
 **See Also:** [../server/README.md](../server/README.md) for server code architecture and implementation

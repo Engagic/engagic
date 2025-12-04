@@ -17,34 +17,36 @@ The vendors module provides adapters for fetching meeting data from civic techno
 ```
 vendors/
 ├── adapters/           # 11 async adapters
-│   ├── base_adapter_async.py       # Async base (398 lines)
-│   ├── legistar_adapter_async.py   # Legistar async (947 lines)
-│   ├── primegov_adapter_async.py   # PrimeGov async (345 lines)
+│   ├── base_adapter_async.py       # Async base (639 lines)
+│   ├── legistar_adapter_async.py   # Legistar async (1170 lines)
+│   ├── primegov_adapter_async.py   # PrimeGov async (353 lines)
 │   ├── granicus_adapter_async.py   # Granicus async (148 lines)
-│   ├── iqm2_adapter_async.py       # IQM2 async (621 lines)
-│   ├── novusagenda_adapter_async.py # NovusAgenda async (223 lines)
-│   ├── escribe_adapter_async.py    # eScribe async (222 lines)
-│   ├── civicclerk_adapter_async.py # CivicClerk async (99 lines)
-│   ├── civicplus_adapter_async.py  # CivicPlus async (390 lines)
+│   ├── iqm2_adapter_async.py       # IQM2 async (693 lines)
+│   ├── novusagenda_adapter_async.py # NovusAgenda async (254 lines)
+│   ├── escribe_adapter_async.py    # eScribe async (221 lines)
+│   ├── civicclerk_adapter_async.py # CivicClerk async (134 lines)
+│   ├── civicplus_adapter_async.py  # CivicPlus async (436 lines)
 │   ├── custom/
-│   │   ├── berkeley_adapter_async.py  # Berkeley async (327 lines)
-│   │   ├── chicago_adapter_async.py   # Chicago async (436 lines)
-│   │   └── menlopark_adapter_async.py # Menlo Park async (227 lines)
+│   │   ├── berkeley_adapter_async.py  # Berkeley async (328 lines)
+│   │   ├── chicago_adapter_async.py   # Chicago async (805 lines)
+│   │   └── menlopark_adapter_async.py # Menlo Park async (206 lines)
 │   └── parsers/        # 4 vendor-specific HTML parsers
-│       ├── legistar_parser.py      # Legistar HTML tables - 359 lines
-│       ├── primegov_parser.py      # PrimeGov HTML tables - 282 lines
+│       ├── legistar_parser.py      # Legistar HTML tables - 373 lines
+│       ├── primegov_parser.py      # PrimeGov HTML tables - 287 lines
 │       ├── granicus_parser.py      # Granicus HTML tables - 141 lines
 │       └── novusagenda_parser.py   # NovusAgenda HTML - 116 lines
+├── extractors/         # Data extraction utilities
+│   └── council_member_extractor.py # Extract council members from Legistar (281 lines)
 ├── utils/              # Shared utilities
-│   ├── item_filters.py    # Procedural item detection (151 lines)
+│   ├── item_filters.py    # Procedural item detection (277 lines)
 │   └── attachments.py     # Attachment deduplication (162 lines)
-├── factory.py          # Adapter dispatcher (142 lines)
+├── factory.py          # Adapter dispatcher (82 lines)
 ├── rate_limiter_async.py  # Async vendor rate limiting (53 lines)
-├── session_manager_async.py  # Async HTTP pooling (139 lines)
-├── validator.py        # Meeting validation (269 lines)
+├── session_manager_async.py  # Async HTTP pooling (143 lines)
+├── validator.py        # Meeting validation (270 lines)
 └── schemas.py          # Pydantic validation schemas (145 lines)
 
-**Total:** ~6,300 lines (all async, sync code removed Nov 2025)
+**Total:** ~7,758 lines (all async, sync code removed Nov 2025)
 ```
 
 ---
@@ -125,7 +127,7 @@ See `database/README.md` for ID generation details.
 
 These adapters extract **structured agenda items** from HTML agendas or APIs. Items are stored separately with `matter_id`, `matter_file`, titles, and PDF links.
 
-**1. Legistar (980 lines) - 110 cities**
+**1. Legistar (1170 lines) - 110 cities**
 - **Dual mode:** API-first, fallback to HTML scraping
 - **API:** `/events.json` endpoint with structured JSON
 - **HTML:** Calendar view → meeting detail pages → item tables
@@ -136,7 +138,7 @@ These adapters extract **structured agenda items** from HTML agendas or APIs. It
 - **PDF links:** Attachment URLs from `EventItemAgendaFile` or HTML hrefs
 - **City examples:** NYC, Los Angeles, San Francisco, Seattle, Boston
 
-**2. PrimeGov (326 lines) - 64 cities**
+**2. PrimeGov (353 lines) - 64 cities**
 - **HTML scraping only:** Agenda list → detail pages → item tables
 - **Parser:** `primegov_parser.py` handles `<table class="agenda">` structure
 - **Item extraction:**
@@ -146,7 +148,7 @@ These adapters extract **structured agenda items** from HTML agendas or APIs. It
 - **Quirks:** Some cities use non-standard table classes (handled via selectors)
 - **City examples:** Austin TX, Portland OR, San Diego CA
 
-**3. Granicus (584 lines) - 467 cities (200+ with item extraction)**
+**3. Granicus (148 lines) - 467 cities (200+ with item extraction)**
 - **Hybrid:** API for meeting list, HTML scraping for items
 - **API:** `/meetings` JSON endpoint for meeting metadata
 - **HTML:** Meeting detail pages → `granicus_parser.py` parses agenda tables
@@ -157,7 +159,7 @@ These adapters extract **structured agenda items** from HTML agendas or APIs. It
 - **Coverage:** Not all Granicus cities have structured agendas (fallback to monolithic)
 - **City examples:** Sacramento CA, Denver CO, Phoenix AZ
 
-**4. IQM2 (343 lines) - 45 cities**
+**4. IQM2 (693 lines) - 45 cities**
 - **HTML scraping:** Agenda calendar → detail pages → item tables
 - **No dedicated parser:** Inline parsing in adapter (could extract to parser)
 - **Item extraction:**
@@ -166,7 +168,7 @@ These adapters extract **structured agenda items** from HTML agendas or APIs. It
   - PDF links from `<a class="pdf-link">`
 - **City examples:** Fremont CA, Alameda CA
 
-**5. NovusAgenda (410 lines) - 38 cities**
+**5. NovusAgenda (254 lines) - 38 cities**
 - **HTML scraping:** Meeting list → detail → `novusagenda_parser.py`
 - **Parser:** Handles `<table id="agenda">` with rowspan/colspan complexity
 - **Item extraction:**
@@ -176,7 +178,7 @@ These adapters extract **structured agenda items** from HTML agendas or APIs. It
 - **Quirks:** Heavy use of rowspan/colspan requires careful DOM traversal
 - **City examples:** Santa Clara CA, Sunnyvale CA
 
-**6. Chicago (447 lines) - 1 city (custom)**
+**6. Chicago (805 lines) - 1 city (custom)**
 - **Custom scraper** for Chicago's unique Legistar instance
 - **API-based:** Uses Legistar API with Chicago-specific pagination
 - **Item extraction:** Similar to standard Legistar but with custom filters
@@ -190,29 +192,29 @@ These adapters extract **structured agenda items** from HTML agendas or APIs. It
 
 These adapters fetch **PDF packet URLs only** (no structured items). Meetings are processed with comprehensive LLM summarization.
 
-**7. CivicClerk (192 lines) - ~30 cities**
+**7. CivicClerk (134 lines) - ~30 cities**
 - **HTML scraping:** Agenda calendar → packet PDF links
 - **No item extraction:** Only stores `packet_url`
 - **PDF structure:** Single PDF with all agenda items (no separation)
 - **City examples:** Multiple small CA cities
 
-**8. CivicPlus (168 lines) - ~25 cities**
+**8. CivicPlus (436 lines) - ~25 cities**
 - **HTML scraping:** Meeting list → packet PDF links
 - **No item extraction:** Monolithic PDFs
 - **Quirks:** Some cities hide PDFs behind JavaScript modals
 - **City examples:** Various mid-size cities
 
-**9. eScribe (261 lines) - ~20 cities**
+**9. eScribe (221 lines) - ~20 cities**
 - **HTML/API hybrid:** Meeting list API → HTML packet links
 - **No item extraction:** Single PDF per meeting
 - **City examples:** Canadian cities (supports French language)
 
-**10. Berkeley (156 lines) - 1 city (custom)**
+**10. Berkeley (328 lines) - 1 city (custom)**
 - **Custom scraper** for Berkeley CA's unique system
 - **Monolithic:** Fetches packet PDFs only
 - **Special handling:** Berkeley uses custom CMS with non-standard structure
 
-**11. Menlo Park (134 lines) - 1 city (custom)**
+**11. Menlo Park (206 lines) - 1 city (custom)**
 - **Custom scraper** for Menlo Park CA
 - **Monolithic:** Packet URLs only
 - **Historical:** One of the first adapters (predates item-level pattern)
@@ -719,4 +721,4 @@ sqlite3 data/engagic.db "SELECT COUNT(*) FROM meetings WHERE banana = 'paloaltoC
 - [database/README.md](../database/README.md) - How meeting data is stored
 - [VISION.md](../docs/VISION.md) - Product roadmap and vendor expansion plans
 
-**Last Updated:** 2025-11-26 (Async migration complete, sync code removed)
+**Last Updated:** 2025-12-03 (Line counts updated, added extractors/council_member_extractor.py)
