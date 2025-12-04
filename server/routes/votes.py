@@ -20,13 +20,64 @@ router = APIRouter(prefix="/api")
 async def get_matter_votes(matter_id: str, db: Database = Depends(get_db)):
     """Get all votes on a matter across all meetings.
 
-    Returns individual votes and aggregate tally.
+    Returns individual votes grouped by meeting/committee, plus aggregate tally.
     """
     matter = await require_matter(db, matter_id)
 
     votes = await db.council_members.get_votes_for_matter(matter_id)
     tally = await db.council_members.get_vote_tally_for_matter(matter_id)
     outcomes = await db.matters.get_matter_vote_outcomes(matter_id)
+
+    # Group votes by meeting with committee context
+    votes_by_meeting: dict[str, dict] = {}
+    for vote in votes:
+        mid = vote.meeting_id
+        if mid not in votes_by_meeting:
+            votes_by_meeting[mid] = {
+                "meeting_id": mid,
+                "votes": [],
+                "committee": None,
+                "meeting_date": None
+            }
+        votes_by_meeting[mid]["votes"].append(vote.to_dict())
+
+    # Enrich with meeting and committee info
+    if votes_by_meeting:
+        meeting_ids = list(votes_by_meeting.keys())
+        async with db.pool.acquire() as conn:
+            meeting_info = await conn.fetch(
+                """
+                SELECT
+                    m.id as meeting_id,
+                    m.title as meeting_title,
+                    m.date as meeting_date,
+                    ma.committee,
+                    ma.committee_id,
+                    ma.vote_outcome,
+                    ma.vote_tally,
+                    cm.name as committee_name
+                FROM meetings m
+                LEFT JOIN matter_appearances ma ON ma.meeting_id = m.id AND ma.matter_id = $1
+                LEFT JOIN committees cm ON ma.committee_id = cm.id
+                WHERE m.id = ANY($2)
+                ORDER BY m.date ASC
+                """,
+                matter_id, meeting_ids
+            )
+
+        for row in meeting_info:
+            mid = row["meeting_id"]
+            if mid in votes_by_meeting:
+                votes_by_meeting[mid]["meeting_title"] = row["meeting_title"]
+                votes_by_meeting[mid]["meeting_date"] = row["meeting_date"].isoformat() if row["meeting_date"] else None
+                votes_by_meeting[mid]["committee"] = row["committee_name"] or row["committee"]
+                votes_by_meeting[mid]["committee_id"] = row["committee_id"]
+                votes_by_meeting[mid]["vote_outcome"] = row["vote_outcome"]
+                votes_by_meeting[mid]["vote_tally"] = row["vote_tally"]
+
+                # Compute tally from individual votes for this meeting
+                meeting_votes = votes_by_meeting[mid]["votes"]
+                votes_by_meeting[mid]["computed_tally"] = compute_vote_tally(meeting_votes)
 
     metrics.matter_engagement.labels(action='votes').inc()
 
@@ -35,6 +86,7 @@ async def get_matter_votes(matter_id: str, db: Database = Depends(get_db)):
         "matter_id": matter_id,
         "matter_title": matter.title,
         "votes": [v.to_dict() for v in votes],
+        "votes_by_meeting": list(votes_by_meeting.values()),
         "tally": tally,
         "outcomes": outcomes
     }

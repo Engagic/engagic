@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { getCouncilMemberVotes } from '$lib/api';
-	import type { CouncilMember, VoteRecord, VoteTally } from '$lib/api/types';
+	import { getCouncilMemberVotes, getMemberCommittees } from '$lib/api';
+	import type { CouncilMember, VoteRecord, VoteTally, CommitteeAssignment } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
 
 	// Route params are always defined on this page
@@ -12,6 +12,7 @@
 	let member = $state<CouncilMember | null>(null);
 	let votingRecord = $state<VoteRecord[]>([]);
 	let statistics = $state<VoteTally | null>(null);
+	let committees = $state<CommitteeAssignment[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
@@ -24,10 +25,14 @@
 
 	onMount(async () => {
 		try {
-			const response = await getCouncilMemberVotes(member_id, 100);
-			member = response.member;
-			votingRecord = response.voting_record;
-			statistics = response.statistics;
+			const [votesResponse, committeesResponse] = await Promise.all([
+				getCouncilMemberVotes(member_id, 100),
+				getMemberCommittees(member_id, true).catch(() => ({ committees: [] }))
+			]);
+			member = votesResponse.member;
+			votingRecord = votesResponse.voting_record;
+			statistics = votesResponse.statistics;
+			committees = committeesResponse.committees || [];
 		} catch (e) {
 			console.error('Failed to load council member:', e);
 			error = 'Unable to load council member profile.';
@@ -160,6 +165,26 @@
 							<span class="vote-count">{statistics.absent} ({absentPercent}%)</span>
 						</div>
 					{/if}
+				</div>
+			</section>
+		{/if}
+
+		{#if committees.length > 0}
+			<section class="committees-section">
+				<h2 class="section-title">Committee Assignments</h2>
+				<div class="committees-list">
+					{#each committees as committee (committee.committee_id)}
+						<a
+							href="/{city_banana}/committees/{committee.committee_id}"
+							class="committee-chip"
+							data-sveltekit-preload-data="tap"
+						>
+							<span class="committee-name">{committee.committee_name}</span>
+							{#if committee.role}
+								<span class="committee-role">{committee.role}</span>
+							{/if}
+						</a>
+					{/each}
 				</div>
 			</section>
 		{/if}
@@ -436,6 +461,60 @@
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 		width: 80px;
+	}
+
+	/* Committee Assignments */
+	.committees-section {
+		margin-bottom: 2rem;
+		padding: 1.25rem;
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: 12px;
+	}
+
+	.committees-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.committee-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-radius: 8px;
+		text-decoration: none;
+		transition: all 0.2s ease;
+	}
+
+	.committee-chip:hover {
+		background: var(--civic-blue);
+		border-color: var(--civic-blue);
+	}
+
+	.committee-chip:hover .committee-name,
+	.committee-chip:hover .committee-role {
+		color: white;
+	}
+
+	.committee-chip .committee-name {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	.committee-chip .committee-role {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.7rem;
+		padding: 0.1rem 0.4rem;
+		background: var(--civic-blue);
+		color: white;
+		border-radius: 4px;
+		text-transform: uppercase;
 	}
 
 	/* Voting Record Table */

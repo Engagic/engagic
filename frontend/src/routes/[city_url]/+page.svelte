@@ -203,9 +203,17 @@
 		{#if searchResults && 'city_name' in searchResults}
 			<div class="city-title-row">
 				<h1 class="city-title">{searchResults.city_name}, {searchResults.state}</h1>
-				<button class="watch-city-btn" onclick={() => showWatchModal = true}>
-					Get weekly updates
-				</button>
+				<div class="city-actions">
+					<a href="/{city_banana}/council" class="council-link" data-sveltekit-preload-data="tap">
+						Council
+					</a>
+					<a href="/{city_banana}/committees" class="council-link" data-sveltekit-preload-data="tap">
+						Committees
+					</a>
+					<button class="watch-city-btn" onclick={() => showWatchModal = true}>
+						Get weekly updates
+					</button>
+				</div>
 			</div>
 			<div class="source-row">
 				{#if searchResults.source_url && searchResults.vendor_display_name}
@@ -545,6 +553,34 @@
 		color: var(--civic-dark);
 		margin: 0;
 		font-weight: 600;
+	}
+
+	.city-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.council-link {
+		padding: 0.75rem 1.5rem;
+		font-size: 0.9375rem;
+		font-weight: 600;
+		background: var(--surface-secondary);
+		color: var(--civic-blue);
+		border: 1px solid var(--border-primary);
+		border-radius: 8px;
+		text-decoration: none;
+		transition: all 0.2s;
+		white-space: nowrap;
+		font-family: 'IBM Plex Mono', monospace;
+	}
+
+	.council-link:hover {
+		background: var(--civic-blue);
+		color: white;
+		border-color: var(--civic-blue);
+		transform: translateY(-2px);
+		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 	}
 
 	.watch-city-btn {
@@ -947,13 +983,25 @@
 			display: contents;
 		}
 
-		.source-attribution {
+		.city-actions {
 			order: 2;
+			display: flex;
+			gap: 0.5rem;
+		}
+
+		.council-link {
+			padding: 0.5rem 1rem;
+			font-size: 0.85rem;
+		}
+
+		.source-attribution {
+			order: 3;
 		}
 
 		.watch-city-btn {
-			order: 3;
-			justify-self: start;
+			order: 2;
+			padding: 0.5rem 1rem;
+			font-size: 0.85rem;
 		}
 
 		.priority-hint {

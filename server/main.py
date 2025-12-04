@@ -19,7 +19,7 @@ from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
-from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback
+from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback, committees
 from userland.auth import init_jwt
 
 logger = get_logger(__name__)
@@ -137,6 +137,7 @@ app.include_router(admin.router)       # Admin endpoints
 app.include_router(flyer.router)       # Flyer generation endpoints
 app.include_router(matters.router)     # Matter timeline and tracking endpoints
 app.include_router(votes.router)       # Votes and council member endpoints
+app.include_router(committees.router)  # Committee and membership endpoints
 app.include_router(engagement.router)  # User engagement (watches, trending)
 app.include_router(feedback.router)    # User feedback (ratings, issues)
 app.include_router(donate.router)      # Donation and payment endpoints

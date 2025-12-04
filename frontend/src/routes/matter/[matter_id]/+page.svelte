@@ -207,24 +207,71 @@
 					<span class="expand-icon" class:expanded={votesExpanded}></span>
 				</button>
 
-				{#if votesExpanded && votesData.votes.length > 0}
-					<div class="vote-list">
-						{#each votesData.votes as vote (vote.id)}
-							{@const member = findCouncilMemberById(vote.council_member_id)}
-							<div class="vote-row">
-								{#if member}
-									<a href="/{matter.banana}/council/{member.id}"
-									   class="voter-link"
-									   data-sveltekit-preload-data="tap">
-										{member.name}
-									</a>
-								{:else}
-									<span class="voter-name">Unknown member</span>
-								{/if}
-								<span class="vote-value {vote.vote}">{vote.vote}</span>
-							</div>
-						{/each}
-					</div>
+				{#if votesExpanded}
+					{#if votesData.votes_by_meeting && votesData.votes_by_meeting.length > 1}
+						<!-- Multiple meetings: group by committee -->
+						<div class="votes-by-committee">
+							{#each votesData.votes_by_meeting as meetingVotes (meetingVotes.meeting_id)}
+								<div class="committee-vote-group">
+									<div class="committee-vote-header">
+										<div class="committee-info">
+											{#if meetingVotes.committee}
+												<span class="committee-name">{meetingVotes.committee}</span>
+											{:else if meetingVotes.meeting_title}
+												<span class="meeting-name">{meetingVotes.meeting_title}</span>
+											{/if}
+											{#if meetingVotes.meeting_date}
+												<span class="vote-date">{formatDate(meetingVotes.meeting_date)}</span>
+											{/if}
+										</div>
+										{#if meetingVotes.computed_tally}
+											<VoteBadge
+												tally={meetingVotes.computed_tally}
+												outcome={meetingVotes.vote_outcome}
+												size="small"
+											/>
+										{/if}
+									</div>
+									<div class="vote-list">
+										{#each meetingVotes.votes as vote (vote.id)}
+											{@const member = findCouncilMemberById(vote.council_member_id)}
+											<div class="vote-row">
+												{#if member}
+													<a href="/{matter.banana}/council/{member.id}"
+													   class="voter-link"
+													   data-sveltekit-preload-data="tap">
+														{member.name}
+													</a>
+												{:else}
+													<span class="voter-name">Unknown member</span>
+												{/if}
+												<span class="vote-value {vote.vote}">{vote.vote}</span>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<!-- Single meeting: flat list -->
+						<div class="vote-list">
+							{#each votesData.votes as vote (vote.id)}
+								{@const member = findCouncilMemberById(vote.council_member_id)}
+								<div class="vote-row">
+									{#if member}
+										<a href="/{matter.banana}/council/{member.id}"
+										   class="voter-link"
+										   data-sveltekit-preload-data="tap">
+											{member.name}
+										</a>
+									{:else}
+										<span class="voter-name">Unknown member</span>
+									{/if}
+									<span class="vote-value {vote.vote}">{vote.vote}</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 			</div>
 		{/if}
@@ -677,6 +724,61 @@
 	:global(.dark) .vote-value.yes { background: #14532d; color: #86efac; }
 	:global(.dark) .vote-value.no { background: #7f1d1d; color: #fca5a5; }
 	:global(.dark) .vote-value.abstain { background: #78350f; color: #fcd34d; }
+
+	/* Votes grouped by committee */
+	.votes-by-committee {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+		margin-top: 1rem;
+	}
+
+	.committee-vote-group {
+		border: 1px solid var(--border-primary);
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	.committee-vote-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.75rem 1rem;
+		background: var(--surface-secondary);
+		border-bottom: 1px solid var(--border-primary);
+	}
+
+	.committee-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.committee-name {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--badge-purple-text, #7c3aed);
+	}
+
+	.meeting-name {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	.committee-vote-header .vote-date {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.75rem;
+		color: var(--civic-gray);
+	}
+
+	.committee-vote-group .vote-list {
+		margin-top: 0;
+		padding: 0.5rem;
+	}
 
 	.error-message {
 		padding: 1.5rem;

@@ -32,7 +32,7 @@ async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
         metrics.page_views.labels(page_type='matter').inc()
         metrics.matter_engagement.labels(action='timeline').inc()
 
-        # Get all items for this matter across meetings (async PostgreSQL)
+        # Get all items for this matter across meetings with committee context (async PostgreSQL)
         async with db.pool.acquire() as conn:
             items = await conn.fetch(
                 """
@@ -42,10 +42,17 @@ async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
                     m.date as meeting_date,
                     m.banana,
                     c.name as city_name,
-                    c.state
+                    c.state,
+                    ma.committee,
+                    ma.committee_id,
+                    ma.vote_outcome,
+                    ma.vote_tally,
+                    cm.name as committee_name
                 FROM items i
                 JOIN meetings m ON i.meeting_id = m.id
                 JOIN cities c ON m.banana = c.banana
+                LEFT JOIN matter_appearances ma ON ma.item_id = i.id AND ma.matter_id = i.matter_id
+                LEFT JOIN committees cm ON ma.committee_id = cm.id
                 WHERE i.matter_id = $1
                 ORDER BY m.date ASC, i.sequence ASC
                 """,
@@ -68,7 +75,11 @@ async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
                 "banana": item["banana"],
                 "agenda_number": item["agenda_number"],
                 "summary": item["summary"],
-                "topics": item["topics"] or []
+                "topics": item["topics"] or [],
+                "committee": item["committee_name"] or item["committee"],
+                "committee_id": item["committee_id"],
+                "vote_outcome": item["vote_outcome"],
+                "vote_tally": item["vote_tally"]
             })
 
         return {
