@@ -202,6 +202,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         try:
             event_id = event.get("EventId")
             event_guid = event.get("EventGuid")
+            event_body_id = event.get("EventBodyId")  # Legistar body/committee ID
             event_name = event.get("EventBodyName", "Unknown Body")
             event_location = event.get("EventLocation")
             event_agenda_status = event.get("EventAgendaStatusName", "")
@@ -225,6 +226,10 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 "title": event_name,
                 "start": start_datetime,
             }
+
+            # Include body ID for committee linkage
+            if event_body_id:
+                meeting["vendor_body_id"] = str(event_body_id)
 
             if event_location:
                 meeting["location"] = event_location

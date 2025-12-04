@@ -207,6 +207,36 @@ class Database:
 
         logger.info("userland schema initialized")
 
+    async def _lookup_committee_id(self, banana: str, meeting_title: str) -> Optional[str]:
+        """Look up committee_id by matching meeting title to committee name.
+
+        Uses ILIKE substring matching to find the best match (longest committee name).
+
+        Args:
+            banana: City identifier
+            meeting_title: Meeting title to match
+
+        Returns:
+            committee_id if found, None otherwise
+        """
+        if not meeting_title:
+            return None
+
+        async with self.pool.acquire() as conn:
+            # Find best match: committee whose name appears in the meeting title
+            # Prefer longer matches (more specific)
+            row = await conn.fetchrow(
+                """
+                SELECT id FROM committees
+                WHERE banana = $1 AND $2 ILIKE '%' || name || '%'
+                ORDER BY LENGTH(name) DESC
+                LIMIT 1
+                """,
+                banana,
+                meeting_title,
+            )
+            return row["id"] if row else None
+
     # ==================
     # ORCHESTRATION METHODS
     # ==================
@@ -258,6 +288,9 @@ class Database:
                 title=title
             )
 
+            # Look up committee_id by matching meeting title to committee name
+            committee_id = await self._lookup_committee_id(city.banana, title)
+
             meeting_obj = Meeting(
                 id=meeting_id,
                 banana=city.banana,
@@ -269,6 +302,7 @@ class Database:
                 participation=meeting_dict.get("participation"),
                 status=meeting_dict.get("meeting_status"),
                 processing_status="pending",
+                committee_id=committee_id,
             )
 
             # Preserve existing summary if already processed (don't overwrite on re-sync)
@@ -658,6 +692,7 @@ class Database:
                     item_id=agenda_item.id,
                     appeared_at=meeting.date,  # Pass datetime directly, not ISO string
                     committee=committee,
+                    committee_id=meeting.committee_id,  # FK to committees table
                     sequence=agenda_item.sequence
                 )
                 count += 1
