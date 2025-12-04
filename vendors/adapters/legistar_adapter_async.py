@@ -18,7 +18,7 @@ import asyncio
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.legistar_parser import parse_html_agenda, parse_legislation_attachments
-from vendors.utils.item_filters import should_skip_procedural_item
+from pipeline.filters import should_skip_item
 from pipeline.utils import combine_date_time
 from exceptions import VendorHTTPError, VendorParsingError
 import aiohttp
@@ -306,7 +306,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             for idx, item in enumerate(processed_items):
                 if isinstance(item, Exception):
                     logger.warning("item processing failed", event_id=event_id, item_index=idx, error=str(item))
-                elif isinstance(item, dict) and not should_skip_procedural_item(item.get("title", "")):
+                elif isinstance(item, dict) and not should_skip_item(item.get("title", "")):
                     items.append(item)
 
             return items
@@ -994,7 +994,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 item_type = item.get('item_type', '')
 
                 # Skip procedural items
-                if should_skip_procedural_item(item_title, item_type):
+                if should_skip_item(item_title, item_type):
                     items_filtered += 1
                     continue
 

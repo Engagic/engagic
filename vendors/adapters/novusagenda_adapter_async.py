@@ -16,7 +16,7 @@ from typing import Dict, Any, List
 import aiohttp
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.novusagenda_parser import parse_html_agenda
-from vendors.utils.item_filters import should_skip_procedural_item
+from pipeline.filters import should_skip_item
 from bs4 import BeautifulSoup
 
 
@@ -191,7 +191,7 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                     items_before = len(items)
                     items = [
                         item for item in items
-                        if not should_skip_procedural_item(item.get('title', ''))
+                        if not should_skip_item(item.get('title', ''))
                     ]
                     items_filtered = items_before - len(items)
                     if items_filtered > 0:

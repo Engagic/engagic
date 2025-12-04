@@ -25,7 +25,7 @@ from exceptions import VendorError
 from vendors.factory import get_async_adapter
 from vendors.rate_limiter_async import AsyncRateLimiter
 from config import config, get_logger
-from server.metrics import metrics
+from pipeline.protocols import MetricsCollector, NullMetrics
 
 logger = get_logger(__name__).bind(component="fetcher")
 
@@ -56,13 +56,19 @@ class SyncResult:
 class Fetcher:
     """City sync and meeting fetching orchestrator"""
 
-    def __init__(self, db: Database):
+    def __init__(
+        self,
+        db: Database,
+        metrics: Optional[MetricsCollector] = None,
+    ):
         """Initialize the fetcher
 
         Args:
             db: Async Database instance (required)
+            metrics: Metrics collector (uses NullMetrics if not provided)
         """
         self.db = db
+        self.metrics = metrics or NullMetrics()
         self.rate_limiter = AsyncRateLimiter()
         self.failed_cities: Set[str] = set()
         self.is_running = True  # Control flag for external stop
@@ -268,7 +274,7 @@ class Fetcher:
             result.status = SyncStatus.SKIPPED
             result.error_message = str(e)
             logger.warning("vendor not supported", city=city.banana, vendor=city.vendor, error=str(e))
-            metrics.record_error("vendor", e)
+            self.metrics.record_error("vendor", e)
             return result
 
         # Async adapters don't use context managers (session managed by AsyncSessionManager)
@@ -300,8 +306,8 @@ class Fetcher:
                 result.status = SyncStatus.FAILED
                 result.error_message = str(e)
                 # Record vendor failure metrics
-                metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
-                metrics.record_error('vendor', e)
+                self.metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
+                self.metrics.record_error('vendor', e)
                 return result
 
             result.meetings_found = len(all_meetings)
@@ -379,12 +385,12 @@ class Fetcher:
             result.duration_seconds = time.time() - start_time
 
             # Record vendor success metrics
-            metrics.vendor_requests.labels(vendor=city.vendor, status='success').inc()
+            self.metrics.vendor_requests.labels(vendor=city.vendor, status='success').inc()
 
             # Record metrics
-            metrics.meetings_synced.labels(city=city.banana, vendor=city.vendor).inc(processed_count)
-            metrics.items_extracted.labels(city=city.banana, vendor=city.vendor).inc(items_stored_count)
-            metrics.matters_tracked.labels(city.banana).inc(matters_tracked_count)
+            self.metrics.meetings_synced.labels(city=city.banana, vendor=city.vendor).inc(processed_count)
+            self.metrics.items_extracted.labels(city=city.banana, vendor=city.vendor).inc(items_stored_count)
+            self.metrics.matters_tracked.labels(city=city.banana).inc(matters_tracked_count)
 
             logger.info(
                 "sync complete",
@@ -404,11 +410,11 @@ class Fetcher:
             result.duration_seconds = time.time() - start_time
 
             # Record vendor failure metrics
-            metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
-            metrics.record_error('vendor', e)
+            self.metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
+            self.metrics.record_error('vendor', e)
 
             # Record error metrics
-            metrics.record_error(component="fetcher", error=e)
+            self.metrics.record_error(component="fetcher", error=e)
 
             logger.error("sync failed", city=city.banana, vendor=city.vendor, duration_seconds=round(result.duration_seconds, 1), error=str(e), error_type=type(e).__name__)
 
