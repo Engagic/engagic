@@ -3,6 +3,7 @@ Rate limiting middleware
 """
 
 import hashlib
+from urllib.parse import urlparse
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -11,6 +12,52 @@ from server.rate_limiter import SQLiteRateLimiter
 from config import get_logger
 
 logger = get_logger(__name__)
+
+# Frontend origins that get lenient rate limiting (interactive browser users)
+FRONTEND_ORIGINS = {
+    "https://engagic.org",
+    "https://www.engagic.org",
+    "http://localhost:5173",  # Dev
+    "http://localhost:4173",  # Preview
+}
+
+
+def is_frontend_request(request: Request) -> bool:
+    """
+    Detect if request is from the frontend (browser) vs direct API.
+
+    Frontend requests get more lenient rate limiting because:
+    1. SvelteKit preloading triggers multiple requests on hover/navigation
+    2. Interactive users are legitimate, not scrapers
+    3. Frontend SSR explicitly passes X-Forwarded-User-IP header
+
+    Detection strategy (in order):
+    1. Origin header matches known frontend domains
+    2. Referer header matches known frontend domains
+    3. Presence of X-Forwarded-User-IP (only set by our frontend SSR)
+    """
+    # Check Origin header (most reliable for CORS requests)
+    origin = request.headers.get("Origin", "")
+    if origin in FRONTEND_ORIGINS:
+        return True
+
+    # Check Referer header (for navigation requests)
+    referer = request.headers.get("Referer", "")
+    if referer:
+        try:
+            parsed = urlparse(referer)
+            referer_origin = f"{parsed.scheme}://{parsed.netloc}"
+            if referer_origin in FRONTEND_ORIGINS:
+                return True
+        except Exception:
+            pass
+
+    # Presence of X-Forwarded-User-IP indicates frontend SSR
+    # (Our frontend explicitly sets this header with the real user IP)
+    if request.headers.get("X-Forwarded-User-IP"):
+        return True
+
+    return False
 
 
 async def rate_limit_middleware(
@@ -29,8 +76,8 @@ async def rate_limit_middleware(
     # Header priority for IP extraction:
     # 1. X-Forwarded-User-IP: Set by our frontend SSR (trusted, explicit user IP)
     # 2. X-Real-Client-IP: nginx-validated from CF-Connecting-IP (direct API calls)
-    # 3. CF-Connecting-IP: Direct Cloudflare requests (dev only)
-    # 4. X-Real-IP: Standard nginx header
+    # 3. X-Real-IP: Standard nginx header (also nginx-validated)
+    # 4. CF-Connecting-IP: Direct Cloudflare requests (dev only)
     # 5. X-Forwarded-For: Standard proxy header
     # 6. request.client.host: Direct connection fallback
     #
@@ -38,20 +85,38 @@ async def rate_limit_middleware(
     # Cloudflare sets CF-Connecting-IP to the Pages worker IP, not the real user.
     # Our frontend explicitly passes the real user IP via X-Forwarded-User-IP.
     is_cloudflare = request.headers.get("X-Is-Cloudflare") == "1"
-    client_ip_raw = (
-        request.headers.get("X-Forwarded-User-IP")  # Frontend SSR (trusted, explicit)
-        or request.headers.get("X-Real-Client-IP")  # nginx-validated (direct API calls)
-        or request.headers.get("CF-Connecting-IP")  # Direct Cloudflare (dev only)
-        or request.headers.get("X-Real-IP")
-        or (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() if request.headers.get("X-Forwarded-For") else None)
-        or (request.client.host if request.client else "unknown")
-    )
+
+    # Track which header we got the IP from (for debugging)
+    ip_source = "unknown"
+    client_ip_raw = "unknown"
+
+    if request.headers.get("X-Forwarded-User-IP"):
+        client_ip_raw = request.headers.get("X-Forwarded-User-IP") or "unknown"
+        ip_source = "X-Forwarded-User-IP"
+    elif request.headers.get("X-Real-Client-IP"):
+        client_ip_raw = request.headers.get("X-Real-Client-IP") or "unknown"
+        ip_source = "X-Real-Client-IP"
+    elif request.headers.get("X-Real-IP"):
+        client_ip_raw = request.headers.get("X-Real-IP") or "unknown"
+        ip_source = "X-Real-IP"
+    elif request.headers.get("CF-Connecting-IP"):
+        client_ip_raw = request.headers.get("CF-Connecting-IP") or "unknown"
+        ip_source = "CF-Connecting-IP"
+    elif request.headers.get("X-Forwarded-For"):
+        client_ip_raw = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or "unknown"
+        ip_source = "X-Forwarded-For"
+    elif request.client:
+        client_ip_raw = request.client.host
+        ip_source = "request.client.host"
 
     # Log non-Cloudflare requests for monitoring (potential bypass attempts)
     if not is_cloudflare and request.headers.get("X-Real-Client-IP"):
         logger.warning(
             f"Non-Cloudflare request detected from {client_ip_raw[:16]}... (direct VPS access)"
         )
+
+    # Detect if request is from frontend (for lenient rate limiting)
+    is_frontend = is_frontend_request(request)
 
     # Hash IP for privacy (GDPR-friendly, can't reverse to get real IP)
     # Same user = same hash = consistent rate limiting
@@ -79,7 +144,7 @@ async def rate_limit_middleware(
         api_key = request.headers.get("X-API-Key")
 
         is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(
-            client_ip_hash, api_key, client_ip_raw, client_ip_raw
+            client_ip_hash, api_key, client_ip_raw, client_ip_raw, is_frontend
         )
 
         if not is_allowed:
