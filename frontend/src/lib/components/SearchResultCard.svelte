@@ -215,6 +215,15 @@
 							Official Agenda
 						</a>
 					{/if}
+				{:else if isMatterResult(result)}
+					<a
+						href="/matter/{result.id}"
+						class="action-link primary"
+						onclick={(e) => e.stopPropagation()}
+						data-sveltekit-preload-data="tap"
+					>
+						View Matter
+					</a>
 				{/if}
 			</div>
 		</div>

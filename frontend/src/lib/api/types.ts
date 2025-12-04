@@ -268,6 +268,10 @@ export interface MatterTimelineAppearance {
 	agenda_number?: string;
 	summary?: string;
 	topics?: string[];
+	committee?: string;
+	committee_id?: string;
+	vote_outcome?: VoteOutcome;
+	vote_tally?: VoteTally;
 }
 
 export interface MatterTimelineResponse {
@@ -424,11 +428,24 @@ export interface Vote {
 	created_at?: string;
 }
 
+export interface MeetingVoteGroup {
+	meeting_id: string;
+	meeting_title?: string;
+	meeting_date?: string;
+	committee?: string;
+	committee_id?: string;
+	vote_outcome?: VoteOutcome;
+	vote_tally?: VoteTally;
+	computed_tally?: VoteTally;
+	votes: Vote[];
+}
+
 export interface MatterVotesResponse {
 	success: boolean;
 	matter_id: string;
 	matter_title: string;
 	votes: Vote[];
+	votes_by_meeting?: MeetingVoteGroup[];
 	tally: VoteTally;
 	outcomes: VoteOutcome[];
 }
@@ -505,6 +522,95 @@ export interface VotingRecordResponse {
 	voting_record: VoteRecord[];
 	total: number;
 	statistics: VoteTally;
+}
+
+// Committee types
+export type CommitteeStatus = 'active' | 'inactive' | 'unknown';
+
+export interface Committee {
+	id: string;
+	name: string;
+	description?: string;
+	status: CommitteeStatus;
+	banana: string;
+	member_count?: number;
+	created_at?: string;
+}
+
+export interface CommitteeMember {
+	id: number;
+	committee_id: string;
+	council_member_id: string;
+	role?: string;
+	joined_at?: string;
+	left_at?: string;
+	member_name: string;
+	title?: string;
+	district?: string;
+}
+
+export interface CommitteeAssignment {
+	id: number;
+	committee_id: string;
+	committee_name: string;
+	committee_status: CommitteeStatus;
+	role?: string;
+	joined_at?: string;
+	left_at?: string;
+}
+
+export interface CommitteeVoteRecord {
+	matter_id: string;
+	meeting_id: string;
+	item_id: string;
+	appeared_at?: string;
+	vote_outcome?: VoteOutcome;
+	vote_tally?: VoteTally;
+	matter_file?: string;
+	matter_title: string;
+}
+
+export interface CityCommitteesResponse {
+	success: boolean;
+	city_name: string;
+	state: string;
+	banana: string;
+	committees: Committee[];
+	total: number;
+}
+
+export interface CommitteeDetailResponse {
+	success: boolean;
+	committee: Committee;
+	city_name?: string;
+	state?: string;
+	members: CommitteeMember[];
+	member_count: number;
+}
+
+export interface CommitteeMembersResponse {
+	success: boolean;
+	committee_id: string;
+	committee_name: string;
+	as_of?: string;
+	members: CommitteeMember[];
+	total: number;
+}
+
+export interface CommitteeVotesResponse {
+	success: boolean;
+	committee_id: string;
+	committee_name: string;
+	votes: CommitteeVoteRecord[];
+	total: number;
+}
+
+export interface MemberCommitteesResponse {
+	success: boolean;
+	member_id: string;
+	member_name: string;
+	committees: CommitteeAssignment[];
+	total: number;
 }
 
 // Rating types

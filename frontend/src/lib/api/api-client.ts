@@ -16,6 +16,11 @@ import type {
 	MeetingVotesResponse,
 	CouncilRosterResponse,
 	VotingRecordResponse,
+	CityCommitteesResponse,
+	CommitteeDetailResponse,
+	CommitteeMembersResponse,
+	CommitteeVotesResponse,
+	MemberCommitteesResponse,
 	RatingStats,
 	RatingSubmitResponse,
 	TrendingResponse,
@@ -356,6 +361,55 @@ export const apiClient = {
 
 	async getCouncilMemberVotes(memberId: string, limit: number = 100, clientIp?: string): Promise<VotingRecordResponse> {
 		const url = new URL(`${config.apiBaseUrl}/api/council-members/${memberId}/votes`);
+		url.searchParams.set('limit', limit.toString());
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+
+		return response.json();
+	},
+
+	async getMemberCommittees(memberId: string, activeOnly: boolean = true, clientIp?: string): Promise<MemberCommitteesResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/council-members/${memberId}/committees`);
+		url.searchParams.set('active_only', activeOnly.toString());
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+
+		return response.json();
+	},
+
+	// Committee endpoints
+	async getCityCommittees(banana: string, status?: string, clientIp?: string): Promise<CityCommitteesResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/committees`);
+		if (status) url.searchParams.set('status', status);
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+
+		return response.json();
+	},
+
+	async getCommittee(committeeId: string, clientIp?: string): Promise<CommitteeDetailResponse> {
+		const response = await fetchWithRetry(
+			`${config.apiBaseUrl}/api/committees/${committeeId}`,
+			{},
+			config.maxRetries,
+			clientIp
+		);
+
+		return response.json();
+	},
+
+	async getCommitteeMembers(committeeId: string, activeOnly: boolean = true, asOf?: string, clientIp?: string): Promise<CommitteeMembersResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/committees/${committeeId}/members`);
+		url.searchParams.set('active_only', activeOnly.toString());
+		if (asOf) url.searchParams.set('as_of', asOf);
+
+		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);
+
+		return response.json();
+	},
+
+	async getCommitteeVotes(committeeId: string, limit: number = 50, clientIp?: string): Promise<CommitteeVotesResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/committees/${committeeId}/votes`);
 		url.searchParams.set('limit', limit.toString());
 
 		const response = await fetchWithRetry(url.toString(), {}, config.maxRetries, clientIp);

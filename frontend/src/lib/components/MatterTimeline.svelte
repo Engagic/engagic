@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MatterTimelineResponse, MatterTimelineAppearance } from '$lib/api/types';
 	import { generateAnchorId } from '$lib/utils/anchor';
+	import VoteBadge from './VoteBadge.svelte';
 
 	interface Props {
 		timelineData: MatterTimelineResponse;
@@ -107,11 +108,19 @@
 								<div class="step-type">{appearance.meeting_title}</div>
 								<div class="step-status">{dateContext}</div>
 							</div>
-							<div class="step-date">{formatDate(appearance.meeting_date)}</div>
+							<div class="step-meta">
+								<span class="step-date">{formatDate(appearance.meeting_date)}</span>
+								{#if appearance.committee}
+									<span class="step-committee">{appearance.committee}</span>
+								{/if}
+							</div>
 							{#if appearance.agenda_number}
 								<div class="step-agenda">Item {appearance.agenda_number}</div>
 							{/if}
 						</div>
+						{#if appearance.vote_outcome && appearance.vote_tally}
+							<VoteBadge tally={appearance.vote_tally} outcome={appearance.vote_outcome} size="small" />
+						{/if}
 						<div class="step-arrow">→</div>
 					</a>
 				</div>
@@ -329,10 +338,27 @@
 		border-color: var(--board-color);
 	}
 
+	.step-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
 	.step-date {
 		font-size: 0.8rem;
 		color: var(--civic-gray);
 		font-weight: 500;
+	}
+
+	.step-committee {
+		font-size: 0.7rem;
+		padding: 0.15rem 0.5rem;
+		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
+		color: var(--badge-purple-text, #7c3aed);
+		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
+		border-radius: 4px;
+		font-weight: 600;
 	}
 
 	.step-agenda {

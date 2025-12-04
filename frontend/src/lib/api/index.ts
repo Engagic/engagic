@@ -25,6 +25,13 @@ export const getMatterSponsors = apiClient.getMatterSponsors.bind(apiClient);
 // Council Member endpoints
 export const getCityCouncilMembers = apiClient.getCityCouncilMembers.bind(apiClient);
 export const getCouncilMemberVotes = apiClient.getCouncilMemberVotes.bind(apiClient);
+export const getMemberCommittees = apiClient.getMemberCommittees.bind(apiClient);
+
+// Committee endpoints
+export const getCityCommittees = apiClient.getCityCommittees.bind(apiClient);
+export const getCommittee = apiClient.getCommittee.bind(apiClient);
+export const getCommitteeMembers = apiClient.getCommitteeMembers.bind(apiClient);
+export const getCommitteeVotes = apiClient.getCommitteeVotes.bind(apiClient);
 
 // Rating endpoints
 export const getRatingStats = apiClient.getRatingStats.bind(apiClient);
