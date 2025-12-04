@@ -126,7 +126,7 @@ class AsyncSessionManager:
     @classmethod
     def get_stats(cls) -> Dict[str, Any]:
         """Get statistics about active sessions"""
-        stats = {
+        stats: Dict[str, Any] = {
             "total_sessions": len(cls._sessions),
             "closed": cls._closed,
             "vendors": {}

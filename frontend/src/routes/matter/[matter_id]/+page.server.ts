@@ -1,14 +1,46 @@
 import type { PageServerLoad } from './$types';
 import { apiClient } from '$lib/api/api-client';
 import { error } from '@sveltejs/kit';
+import {
+	getDeliberationForMatter,
+	getDeliberation,
+	type Deliberation,
+	type DeliberationComment,
+	type DeliberationStats
+} from '$lib/api/deliberation';
+
+interface DeliberationData {
+	deliberation: Deliberation | null;
+	comments: DeliberationComment[];
+	stats: DeliberationStats | null;
+}
+
+async function fetchDeliberationForMatter(matterId: string): Promise<DeliberationData> {
+	try {
+		const { deliberation } = await getDeliberationForMatter(matterId);
+		if (!deliberation) {
+			return { deliberation: null, comments: [], stats: null };
+		}
+
+		const data = await getDeliberation(deliberation.id);
+		return {
+			deliberation: data.deliberation,
+			comments: data.comments || [],
+			stats: data.stats || null
+		};
+	} catch {
+		return { deliberation: null, comments: [], stats: null };
+	}
+}
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const matterId = params.matter_id;
 
 	try {
-		const [timeline, votesResponse] = await Promise.all([
+		const [timeline, votesResponse, deliberationData] = await Promise.all([
 			apiClient.getMatterTimeline(matterId, locals.clientIp),
-			apiClient.getMatterVotes(matterId, locals.clientIp).catch(() => null)
+			apiClient.getMatterVotes(matterId, locals.clientIp).catch(() => null),
+			fetchDeliberationForMatter(matterId)
 		]);
 
 		if (!timeline || !timeline.matter) {
@@ -18,7 +50,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		return {
 			matterId,
 			timeline,
-			votes: votesResponse
+			votes: votesResponse,
+			deliberation: deliberationData
 		};
 	} catch (err) {
 		console.error('Failed to load matter timeline:', err);

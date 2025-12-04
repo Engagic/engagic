@@ -9,6 +9,7 @@
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import DeliberationPanel from '$lib/components/deliberation/DeliberationPanel.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -62,6 +63,10 @@
 	// Votes data from server load
 	const votesData = $derived(data.votes as MatterVotesResponse | null);
 	const hasVotes = $derived(votesData?.votes?.length ? votesData.votes.length > 0 : false);
+
+	// Deliberation data from server load
+	const deliberationData = $derived(data.deliberation);
+	const hasDeliberation = $derived(!!deliberationData?.deliberation?.id);
 
 	// Collapsible sections
 	let attachmentsExpanded = $state(false);
@@ -284,6 +289,16 @@
 			</div>
 		{/if}
 
+		{#if hasDeliberation && deliberationData?.deliberation}
+			<div class="deliberation-section">
+				<DeliberationPanel
+					deliberationId={deliberationData.deliberation.id}
+					matterId={matter.id}
+					topic={deliberationData.deliberation.topic ?? matter.title}
+				/>
+			</div>
+		{/if}
+
 		<div class="timeline-section">
 			<h2 class="section-title">Legislative Journey</h2>
 			<svelte:boundary onerror={(e) => console.error('Timeline error:', e)}>
@@ -443,6 +458,7 @@
 	.attachments-section,
 	.sponsors-section,
 	.voting-section,
+	.deliberation-section,
 	.timeline-section {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
@@ -450,6 +466,11 @@
 		padding: 1.5rem;
 		margin-bottom: 1.5rem;
 		box-shadow: 0 1px 3px var(--shadow-sm);
+	}
+
+	.deliberation-section {
+		padding: 0;
+		overflow: hidden;
 	}
 
 	.section-title {
@@ -844,8 +865,13 @@
 		.attachments-section,
 		.sponsors-section,
 		.voting-section,
+		.deliberation-section,
 		.timeline-section {
 			padding: 1.25rem;
+		}
+
+		.deliberation-section {
+			padding: 0;
 		}
 	}
 </style>

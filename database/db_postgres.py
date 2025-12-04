@@ -23,6 +23,7 @@ from database.repositories_async import (
     QueueRepository,
     SearchRepository,
 )
+from database.repositories_async.deliberation import DeliberationRepository
 from database.repositories_async.engagement import EngagementRepository
 from database.repositories_async.feedback import FeedbackRepository
 from database.repositories_async.helpers import deserialize_attachments
@@ -41,6 +42,7 @@ class MeetingStoreStats(TypedDict):
     matters_tracked: int
     matters_duplicate: int
     meetings_skipped: int
+    appearances_created: int
     skip_reason: Optional[str]
     skipped_title: Optional[str]
 
@@ -99,6 +101,7 @@ class Database:
     queue: QueueRepository
     search: SearchRepository
     userland: UserlandRepository
+    deliberation: DeliberationRepository
 
     def __init__(self, pool: asyncpg.Pool):
         """Initialize with connection pool and repositories
@@ -119,6 +122,7 @@ class Database:
         self.userland = UserlandRepository(pool)
         self.engagement = EngagementRepository(pool)
         self.feedback = FeedbackRepository(pool)
+        self.deliberation = DeliberationRepository(pool)
 
         logger.info("database initialized with repositories", pool_size=f"{pool._minsize}-{pool._maxsize}")
 
@@ -264,6 +268,7 @@ class Database:
             'matters_tracked': 0,
             'matters_duplicate': 0,
             'meetings_skipped': 0,
+            'appearances_created': 0,
             'skip_reason': None,
             'skipped_title': None,
         }
@@ -395,7 +400,7 @@ class Database:
         self,
         items_data: List[Dict[str, Any]],
         stored_meeting: Meeting,
-        stats: Dict[str, Any]
+        stats: MeetingStoreStats
     ) -> List[AgendaItem]:
         """Process agenda items: preserve summaries if already processed
 
@@ -713,7 +718,7 @@ class Database:
         meeting_date: Optional[datetime],
         agenda_items: List[AgendaItem],
         items_data: Optional[List[Dict[str, Any]]],
-        stats: Dict[str, Any]
+        stats: MeetingStoreStats
     ):
         """Determine if meeting needs processing and enqueue appropriately"""
         has_items = bool(items_data)
