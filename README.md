@@ -13,6 +13,9 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 **Key capabilities:**
 - **Item-level processing:** 86% of cities get structured agenda items (not just PDF blobs)
 - **Matters-first architecture:** Legislative items tracked across meetings with deduplication
+- **Council member profiles:** Elected officials tracked with normalized names, sponsorship history
+- **Committee tracking:** Legislative bodies with rosters and member assignments
+- **Voting records:** Individual votes per member per matter, tallies, outcomes across meetings
 - **Topic extraction:** 16 canonical civic topics for filtering and alerts
 - **Participation info:** Email, phone, Zoom links for civic action
 
@@ -47,7 +50,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 | [analysis/](analysis/README.md) | LLM intelligence | Gemini API, topic extraction, adaptive prompts |
 | [pipeline/](pipeline/README.md) | Processing orchestration | Sync scheduling, queue management, batch processing |
 | [database/](database/README.md) | PostgreSQL repository pattern | 8 async repositories, matters tracking, userland schema |
-| [server/](server/README.md) | FastAPI public API | 10 route modules, tiered rate limiting, middleware |
+| [server/](server/README.md) | FastAPI public API | 14 route modules (votes, committees, etc.), tiered rate limiting |
 | [userland/](userland/README.md) | Civic alerts system | Magic link auth, email digests, keyword matching |
 
 ---
@@ -61,6 +64,8 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 **Cache-First API:** Server never fetches live. Background daemon syncs cities every 72 hours, processes queue continuously.
 
 **Async PostgreSQL:** Connection pooling (asyncpg, 5-20 connections), `FOR UPDATE SKIP LOCKED` for queue processing, UPSERT for idempotent updates.
+
+**Legislative Accountability:** Council members tracked across votes and sponsorships. Committees tracked with rosters. Vote outcomes computed per matter per meeting.
 
 ---
 
