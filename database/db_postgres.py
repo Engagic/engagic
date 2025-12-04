@@ -28,9 +28,9 @@ from database.repositories_async.engagement import EngagementRepository
 from database.repositories_async.feedback import FeedbackRepository
 from database.repositories_async.helpers import deserialize_attachments
 from database.repositories_async.userland import UserlandRepository
-from database.vote_utils import compute_vote_tally, determine_vote_outcome
 from exceptions import DatabaseConnectionError, DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
+from pipeline.orchestrators import MatterFilter, EnqueueDecider, VoteProcessor
 
 logger = get_logger(__name__).bind(component="database_postgres")
 
@@ -487,7 +487,7 @@ class Database:
 
         Note: Caller is responsible for clearing matter_id on skipped items.
         """
-        from vendors.utils.item_filters import should_skip_matter
+        matter_filter = MatterFilter()
 
         stats: Dict[str, Any] = {
             'tracked': 0,
@@ -527,7 +527,7 @@ class Database:
             raw_vendor_matter_id = raw_item.get("matter_id")
 
             # Skip procedural matter types
-            if matter_type and should_skip_matter(matter_type):
+            if matter_filter.should_skip(matter_type):
                 stats['skipped_procedural'] += 1
                 # Record item ID for caller to clear matter_id (avoids hidden mutation)
                 stats['skipped_item_ids'].add(agenda_item.id)
@@ -632,9 +632,11 @@ class Database:
                         vote_date=meeting.date,
                     )
 
-                    # Compute vote tally and outcome for matter_appearances
-                    vote_tally = compute_vote_tally(votes)
-                    vote_outcome = determine_vote_outcome(vote_tally)
+                    # Compute vote tally and outcome using VoteProcessor
+                    vote_processor = VoteProcessor()
+                    result = vote_processor.process_votes(votes)
+                    vote_tally = result["tally"]
+                    vote_outcome = result["outcome"]
 
                     # Update matter_appearances with outcome (closed loop tracking)
                     await self.matters.update_appearance_outcome(
@@ -787,30 +789,22 @@ class Database:
         stored_meeting: Meeting,
         has_items: bool
     ) -> tuple[bool, Optional[str]]:
-        """Determine if meeting should skip enqueueing (already processed)"""
-        # Priority 1: Check for item-level summaries (GOLDEN PATH)
-        if has_items and agenda_items:
-            items_with_summaries = [item for item in agenda_items if item.summary]
-            # Skip only if 100% complete
-            if items_with_summaries and len(items_with_summaries) == len(agenda_items):
-                return True, f"all {len(agenda_items)} items already have summaries"
+        """Determine if meeting should skip enqueueing (already processed)
 
-        # Priority 2: Check for monolithic summary (fallback path)
-        if stored_meeting.summary:
-            return True, "meeting already has summary (monolithic)"
-
-        return False, None
+        Delegates to EnqueueDecider for business logic.
+        """
+        decider = EnqueueDecider()
+        should_enqueue, reason = decider.should_enqueue(stored_meeting, agenda_items, has_items)
+        # Invert: decider returns (should_enqueue, reason), we return (should_skip, reason)
+        return (not should_enqueue, reason)
 
     def _calculate_priority_from_date(self, meeting_date: Optional[datetime]) -> int:
-        """Calculate priority based on meeting date proximity"""
-        if meeting_date:
-            now = datetime.now(meeting_date.tzinfo) if meeting_date.tzinfo else datetime.now()
-            days_from_now = (meeting_date - now).days
-            days_distance = abs(days_from_now)
-        else:
-            days_distance = 999
+        """Calculate priority based on meeting date proximity
 
-        return max(0, QUEUE_PRIORITY_BASE_SCORE - days_distance)
+        Delegates to EnqueueDecider for business logic.
+        """
+        decider = EnqueueDecider()
+        return decider.calculate_priority(meeting_date)
 
     # ==================
     # MONITORING & STATS

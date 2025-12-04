@@ -39,7 +39,7 @@ import aiohttp
 from parsing.chicago_pdf import parse_chicago_agenda_pdf
 from parsing.pdf import PdfExtractor
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.utils.item_filters import should_skip_procedural_item
+from pipeline.filters import should_skip_item
 
 
 class AsyncChicagoAdapter(AsyncBaseAdapter):
@@ -465,7 +465,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                     continue
 
                 # Skip procedural items (adapter-level filtering)
-                if should_skip_procedural_item(title, matter_type or ""):
+                if should_skip_item(title, matter_type or ""):
                     items_filtered += 1
                     logger.debug("skipping procedural item", vendor="chicago", slug=self.slug, title_prefix=title[:60])
                     continue

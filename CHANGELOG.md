@@ -6,6 +6,39 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-04] Architectural Refactoring
+
+Addressed layering violations and god object issues. See REFACTORING.md for full details.
+
+### Phase 1: Metrics Decoupling
+- Created `pipeline/protocols/` with `MetricsCollector` Protocol and `NullMetrics`
+- Pipeline now accepts optional metrics injection (no compile-time server dependency)
+- `python -c "from pipeline.processor import Processor"` works without server
+
+### Phase 4: Filter Relocation
+- Moved `vendors/utils/item_filters.py` to `pipeline/filters/item_filters.py`
+- Correct layering: adapters adapt, pipeline decides what to process
+- Old location re-exports with deprecation warning
+
+### Phase 2: Orchestrator Extraction
+- Created `pipeline/orchestrators/` with `MatterFilter`, `EnqueueDecider`, `VoteProcessor`
+- Database delegates business logic to orchestrators
+- Vote processing, queue priority, and matter filtering now in pipeline layer
+
+### Phase 3: Worker Pattern
+- Created `pipeline/workers/` with `MeetingMetadataBuilder`
+- Establishes pattern for future processor decomposition
+- Remaining workers documented in REFACTORING.md as future work
+
+### Files Added (10)
+- `pipeline/protocols/__init__.py`, `pipeline/protocols/metrics.py`
+- `pipeline/filters/__init__.py`, `pipeline/filters/item_filters.py`
+- `pipeline/orchestrators/__init__.py`, `pipeline/orchestrators/matter_filter.py`
+- `pipeline/orchestrators/enqueue_decider.py`, `pipeline/orchestrators/vote_processor.py`
+- `pipeline/workers/__init__.py`, `pipeline/workers/meeting_metadata.py`
+
+---
+
 ## [2025-12-03] Documentation Audit
 
 Synced READMEs with current codebase after PostgreSQL migration and cleanup:

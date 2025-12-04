@@ -1,36 +1,48 @@
 # Pipeline - Orchestration & Processing
 
-**Purpose:** Orchestrates the complete data flow from vendor fetching to LLM analysis to database storage.
-
-The pipeline handles:
-- Background daemon lifecycle (sync + processing loops)
-- City sync scheduling and vendor routing
-- Processing queue management
-- PDF extraction and LLM analysis
-- Topic normalization and aggregation
+Orchestrates data flow from vendor fetching to LLM analysis to database storage.
 
 ---
 
-## Architecture Overview
-
-The pipeline consists of **7 focused modules** with clear responsibilities:
+## Structure
 
 ```
-┌──────────────┐
-│  Conductor   │  Async orchestration (CLI, daemon lifecycle)
-└──────┬───────┘
-       │
-       ├──────> Fetcher    (City sync, vendor routing, rate limiting)
-       │
-       └──────> Processor  (Queue processing, item assembly)
-                     │
-                     ├──────> Models      (Job type definitions)
-                     ├──────> Utils       (Matter-first utilities)
-                     ├──────> Admin       (Debug/preview commands)
-                     └──────> ClickTypes  (CLI parameter validation)
+pipeline/
+  conductor.py      # Daemon lifecycle, CLI entry point
+  fetcher.py        # City sync, vendor routing
+  processor.py      # Queue processing, item assembly
+  models.py         # Job type definitions
+  utils.py          # Matter-first utilities
+  admin.py          # Debug commands
+  click_types.py    # CLI validation
+
+  protocols/        # Dependency injection interfaces
+  filters/          # Processing decision logic (from vendors/)
+  orchestrators/    # Business logic (from database/)
+  workers/          # Focused processing components (from processor.py)
 ```
 
-**Key Pattern:** Conductor delegates to Fetcher and Processor, which are specialized for their domains. Processor imports analyzer from `analysis/` module. Models define typed job payloads. Utils provide matter-first deduplication utilities.
+See READMEs in subdirectories for details on `protocols/`, `filters/`, `orchestrators/`, `workers/`.
+
+---
+
+## Architecture
+
+```
+Conductor
+  ├─> Fetcher    (city sync, rate limiting)
+  └─> Processor  (queue processing)
+           │
+           ├─> orchestrators/  (business logic)
+           ├─> filters/        (skip decisions)
+           └─> workers/        (focused tasks)
+```
+
+**Key patterns:**
+- Conductor delegates to Fetcher and Processor
+- Processor uses orchestrators for business logic
+- Database delegates decisions to orchestrators
+- Metrics injected via Protocol (no server dependency)
 
 ---
 
@@ -257,25 +269,27 @@ item_request = {
 }
 ```
 
-#### Procedural Filtering
+#### Two-Tier Filtering
 
-**Skip low-value items to save API costs:**
+**Adapter level - discard entirely (zero metadata value):**
 
 ```python
-PROCEDURAL_PATTERNS = [
-    "review of minutes",
-    "approval of minutes",
+ADAPTER_SKIP_PATTERNS = [
     "roll call",
+    "approval of minutes",
     "pledge of allegiance",
     "adjournment"
 ]
+```
 
-PUBLIC_COMMENT_PATTERNS = [
-    "public comment",
-    "public correspondence",
-    "comment letters",
-    "written comment",
-    "petitions and communications"  # SF uses this heavily
+**Processor level - save but skip LLM (searchable metadata):**
+
+```python
+PROCESSOR_SKIP_PATTERNS = [
+    "proclamation",
+    "commendation",
+    "appointment",
+    "liquor license"
 ]
 ```
 

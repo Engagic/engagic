@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.granicus_parser import parse_html_agenda
-from vendors.utils.item_filters import should_skip_procedural_item
+from pipeline.filters import should_skip_item
 
 
 class AsyncGranicusAdapter(AsyncBaseAdapter):
@@ -131,7 +131,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 # Filter procedural items
                 items = [
                     item for item in meeting_data["items"]
-                    if not should_skip_procedural_item(item.get("title", ""))
+                    if not should_skip_item(item.get("title", ""))
                 ]
                 if items:
                     meeting["items"] = items

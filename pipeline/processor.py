@@ -25,8 +25,8 @@ from analysis.analyzer_async import AsyncAnalyzer
 from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
 from config import config, get_logger
-from server.metrics import metrics
-from vendors.utils.item_filters import should_skip_processing, is_public_comment_attachment
+from pipeline.protocols import MetricsCollector, NullMetrics
+from pipeline.filters import should_skip_processing, is_public_comment_attachment
 from vendors.session_manager_async import AsyncSessionManager
 
 logger = get_logger(__name__).bind(component="processor")
@@ -123,14 +123,17 @@ class Processor:
         self,
         db: Database,
         analyzer: Optional[AsyncAnalyzer] = None,
+        metrics: Optional[MetricsCollector] = None,
     ):
         """Initialize the processor
 
         Args:
             db: Database instance (PostgreSQL pool)
             analyzer: LLM analyzer instance (or creates new one if API key available)
+            metrics: Metrics collector (uses NullMetrics if not provided)
         """
         self.db = db
+        self.metrics = metrics or NullMetrics()
         self.is_running = True  # Control flag for external stop
 
         # Initialize analyzer if not provided
@@ -313,10 +316,10 @@ class Processor:
                         if not meeting:
                             await self.db.queue.mark_processing_failed(queue_id, "Meeting not found")
                             failed_count += 1
-                            metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
+                            self.metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
                             continue
                         # Process the meeting (item-aware)
-                        with metrics.processing_duration.labels(job_type="meeting").time():
+                        with self.metrics.processing_duration.labels(job_type="meeting").time():
                             item_stats = await self.process_meeting(meeting)
                         await self.db.queue.mark_processing_complete(queue_id)
                         processed_count += 1
@@ -333,7 +336,7 @@ class Processor:
                 elif job_type == "matter":
                     from pipeline.models import MatterJob
                     if isinstance(job.payload, MatterJob):
-                        with metrics.processing_duration.labels(job_type="matter").time():
+                        with self.metrics.processing_duration.labels(job_type="matter").time():
                             await self.process_matter(
                                 job.payload.matter_id,
                                 job.payload.meeting_id,
@@ -350,7 +353,7 @@ class Processor:
 
                 # Record successful job
                 if job_success:
-                    metrics.queue_jobs_processed.labels(job_type=job_type, status="completed").inc()
+                    self.metrics.queue_jobs_processed.labels(job_type=job_type, status="completed").inc()
 
             except (ProcessingError, LLMError, ExtractionError) as e:
                 # Business logic errors - mark failed and continue
@@ -360,8 +363,8 @@ class Processor:
                 job_duration = time.time() - job_start_time
 
                 # Record metrics
-                metrics.queue_jobs_processed.labels(job_type=job_type, status="failed").inc()
-                metrics.record_error(component="processor", error=e)
+                self.metrics.queue_jobs_processed.labels(job_type=job_type, status="failed").inc()
+                self.metrics.record_error(component="processor", error=e)
 
                 logger.error("job processing failed", queue_id=queue_id, job_type=job_type, duration_seconds=round(job_duration, 1), error=str(e), error_type=type(e).__name__)
 
@@ -602,7 +605,7 @@ class Processor:
                 error=str(e),
                 context=e.context
             )
-            metrics.record_error("processor", e)
+            self.metrics.record_error("processor", e)
             return
 
         # If no result, skip reason was already logged by _process_single_item

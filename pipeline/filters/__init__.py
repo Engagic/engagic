@@ -1,4 +1,4 @@
-"""DEPRECATED: Use pipeline.filters instead"""
+"""Pipeline Filters - Item and matter filtering logic"""
 
 from pipeline.filters.item_filters import (
     should_skip_item,

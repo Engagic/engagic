@@ -39,7 +39,7 @@ Components (6 logical clusters):
 - **parsing/** - PDF text extraction (PyMuPDF) and participation info
 - **analysis/** - LLM intelligence (Gemini) and topic normalization (16 canonical topics)
 - **pipeline/** - Processing orchestration (4 modules: conductor, fetcher, processor, analyzer)
-- **database/** - SQLite with Repository Pattern (cities, meetings, agenda_items, job_queue)
+- **database/** - PostgreSQL with Repository Pattern (cities, meetings, agenda_items, job_queue)
   - UnifiedDatabase facade delegates to 5 focused repositories
   - Clean separation: cities, meetings, items, queue, search operations
 - **server/** - Modular FastAPI (main 98 lines, routes/services/utils in focused modules)
