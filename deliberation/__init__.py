@@ -9,4 +9,7 @@ Core platform for civic deliberation on matters:
 
 from deliberation.clustering import compute_deliberation_clusters
 
-__all__ = ["compute_deliberation_clusters"]
+# Deliberation constants
+CONSENSUS_THRESHOLD = 0.8  # Score above which a comment is considered consensus
+
+__all__ = ["compute_deliberation_clusters", "CONSENSUS_THRESHOLD"]

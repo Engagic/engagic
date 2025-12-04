@@ -8,17 +8,20 @@ Endpoints for citizen deliberation on matters:
 - Moderate pending comments (owner only)
 """
 
-from typing import Literal, Optional
-
-import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
 
-from deliberation import compute_deliberation_clusters
-from database.db_postgres import Database
-from server.dependencies import get_current_user, get_db
-from userland.database.models import User
 from config import get_logger
+from database.db_postgres import Database
+from deliberation import compute_deliberation_clusters
+from server.dependencies import get_current_user, get_db
+from server.models.requests import (
+    CommentCreateRequest,
+    DeliberationCreateRequest,
+    ModerateRequest,
+    VoteRequest,
+)
+from server.routes.admin import verify_admin_token
+from userland.database.models import User
 
 logger = get_logger(__name__).bind(component="deliberation_api")
 
@@ -41,34 +44,6 @@ def _format_comment(c: dict) -> dict:
         "txt": c["txt"],
         "created_at": c["created_at"].isoformat() if c["created_at"] else None,
     }
-
-
-# -----------------------------------------------------------------------------
-# Request Models
-# -----------------------------------------------------------------------------
-
-
-class DeliberationCreateRequest(BaseModel):
-    """Create a new deliberation for a matter."""
-    matter_id: str
-    topic: Optional[str] = None  # Optional custom topic
-
-
-class CommentCreateRequest(BaseModel):
-    """Submit a comment to a deliberation."""
-    txt: str = Field(..., min_length=10, max_length=500)
-
-
-class VoteRequest(BaseModel):
-    """Vote on a comment."""
-    comment_id: int
-    vote: Literal[-1, 0, 1]  # -1=disagree, 0=pass, 1=agree
-
-
-class ModerateRequest(BaseModel):
-    """Moderate a pending comment."""
-    comment_id: int
-    approve: bool  # True=approve (mod_status=1), False=hide (mod_status=-1)
 
 
 # -----------------------------------------------------------------------------
@@ -248,13 +223,13 @@ async def create_comment(
             detail="Deliberation is closed",
         )
 
-    try:
-        comment = await db.deliberation.create_comment(
-            deliberation_id=deliberation_id,
-            user_id=user.id,
-            txt=body.txt,
-        )
-    except asyncpg.UniqueViolationError:
+    comment = await db.deliberation.create_comment(
+        deliberation_id=deliberation_id,
+        user_id=user.id,
+        txt=body.txt,
+    )
+
+    if comment.get("error") == "duplicate":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already submitted this comment",
@@ -306,13 +281,13 @@ async def vote_on_comment(
     # Ensure participant is registered
     await db.deliberation.get_or_assign_participant_number(deliberation_id, user.id)
 
-    try:
-        await db.deliberation.record_vote(
-            comment_id=body.comment_id,
-            user_id=user.id,
-            vote=body.vote,
-        )
-    except asyncpg.ForeignKeyViolationError:
+    result = await db.deliberation.record_vote(
+        comment_id=body.comment_id,
+        user_id=user.id,
+        vote=body.vote,
+    )
+
+    if result and result.get("error") == "not_found":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found",
@@ -351,14 +326,10 @@ async def get_my_votes(
 @router.get("/{deliberation_id}/pending")
 async def get_pending_comments(
     deliberation_id: str,
-    user: User = Depends(get_current_user),
+    is_admin: bool = Depends(verify_admin_token),
     db: Database = Depends(get_db),
 ):
-    """Get pending comments for moderation.
-
-    Returns comments awaiting approval.
-    TODO: Add owner check when we have deliberation ownership.
-    """
+    """Get pending comments for moderation. Admin only."""
     delib = await db.deliberation.get_deliberation(deliberation_id)
     if not delib:
         raise HTTPException(
@@ -375,14 +346,13 @@ async def get_pending_comments(
 async def moderate_comment(
     deliberation_id: str,
     body: ModerateRequest,
-    user: User = Depends(get_current_user),
+    is_admin: bool = Depends(verify_admin_token),
     db: Database = Depends(get_db),
 ):
-    """Approve or hide a pending comment.
+    """Approve or hide a pending comment. Admin only.
 
     When approved, the comment becomes visible and the user is marked
     as trusted for future auto-approval.
-    TODO: Add owner check when we have deliberation ownership.
     """
     delib = await db.deliberation.get_deliberation(deliberation_id)
     if not delib:
@@ -404,7 +374,6 @@ async def moderate_comment(
         "moderated comment",
         comment_id=body.comment_id,
         action=action,
-        moderator_id=user.id,
     )
 
     return {"success": True, "action": action}
@@ -418,13 +387,10 @@ async def moderate_comment(
 @router.post("/{deliberation_id}/compute")
 async def compute_clusters(
     deliberation_id: str,
+    is_admin: bool = Depends(verify_admin_token),
     db: Database = Depends(get_db),
 ):
-    """Trigger clustering computation for a deliberation.
-
-    Can be called manually or by a background job.
-    Computes opinion clusters and saves results.
-    """
+    """Trigger clustering computation for a deliberation. Admin only."""
     delib = await db.deliberation.get_deliberation(deliberation_id)
     if not delib:
         raise HTTPException(

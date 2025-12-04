@@ -9,8 +9,9 @@ Handles CRUD operations for:
 """
 
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
+import asyncpg
 import numpy as np
 
 from database.repositories_async.base import BaseRepository
@@ -263,7 +264,7 @@ class DeliberationRepository(BaseRepository):
         deliberation_id: str,
         user_id: str,
         txt: str,
-    ) -> Dict[str, Any]:
+    ) -> Union[Dict[str, Any], Dict[str, str]]:
         """Create a new comment.
 
         Auto-approves if user is trusted, otherwise queues for moderation.
@@ -275,7 +276,7 @@ class DeliberationRepository(BaseRepository):
             txt: Comment text
 
         Returns:
-            Created comment dict with mod_status
+            Created comment dict with mod_status, or {"error": "duplicate"}
         """
         # Note: participant assignment logic is duplicated from get_or_assign_participant_number()
         # because all operations must use the same connection for transactional atomicity.
@@ -317,19 +318,22 @@ class DeliberationRepository(BaseRepository):
             mod_status = MOD_STATUS_APPROVED if trust_row else MOD_STATUS_PENDING
 
             # Insert comment
-            row = await conn.fetchrow(
-                """
-                INSERT INTO deliberation_comments
-                    (deliberation_id, user_id, participant_number, txt, mod_status, created_at)
-                VALUES ($1, $2, $3, $4, $5, NOW())
-                RETURNING id, deliberation_id, user_id, participant_number, txt, mod_status, created_at
-                """,
-                deliberation_id,
-                user_id,
-                participant_number,
-                txt,
-                mod_status,
-            )
+            try:
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO deliberation_comments
+                        (deliberation_id, user_id, participant_number, txt, mod_status, created_at)
+                    VALUES ($1, $2, $3, $4, $5, NOW())
+                    RETURNING id, deliberation_id, user_id, participant_number, txt, mod_status, created_at
+                    """,
+                    deliberation_id,
+                    user_id,
+                    participant_number,
+                    txt,
+                    mod_status,
+                )
+            except asyncpg.UniqueViolationError:
+                return {"error": "duplicate"}
 
             logger.info(
                 "created comment",
@@ -466,7 +470,7 @@ class DeliberationRepository(BaseRepository):
         comment_id: int,
         user_id: str,
         vote: int,
-    ) -> None:
+    ) -> Optional[Dict[str, str]]:
         """Record a vote on a comment.
 
         Upserts - replaces existing vote if user changes their mind.
@@ -475,22 +479,29 @@ class DeliberationRepository(BaseRepository):
             comment_id: Comment ID
             user_id: User ID
             vote: -1 (disagree), 0 (pass), 1 (agree)
+
+        Returns:
+            None on success, {"error": "not_found"} if comment doesn't exist
         """
         if vote not in (-1, 0, 1):
             raise ValueError(f"Invalid vote value: {vote}. Must be -1, 0, or 1.")
 
-        await self._execute(
-            """
-            INSERT INTO deliberation_votes (comment_id, user_id, vote, created_at)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (comment_id, user_id) DO UPDATE SET
-                vote = EXCLUDED.vote,
-                created_at = NOW()
-            """,
-            comment_id,
-            user_id,
-            vote,
-        )
+        try:
+            await self._execute(
+                """
+                INSERT INTO deliberation_votes (comment_id, user_id, vote, created_at)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (comment_id, user_id) DO UPDATE SET
+                    vote = EXCLUDED.vote,
+                    created_at = NOW()
+                """,
+                comment_id,
+                user_id,
+                vote,
+            )
+            return None
+        except asyncpg.ForeignKeyViolationError:
+            return {"error": "not_found"}
 
     async def get_user_votes(
         self, deliberation_id: str, user_id: str

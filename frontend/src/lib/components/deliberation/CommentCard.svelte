@@ -26,6 +26,7 @@
 	async function vote(value: -1 | 0 | 1) {
 		if (!authState.isAuthenticated) {
 			error = 'Sign in to vote';
+			setTimeout(() => (error = null), 5000);
 			return;
 		}
 
@@ -42,6 +43,7 @@
 		} catch (e: unknown) {
 			currentVote = previousVote;
 			error = e instanceof Error ? e.message : 'Vote failed';
+			setTimeout(() => (error = null), 5000);
 			console.error('Vote error:', e);
 		} finally {
 			voting = false;
@@ -59,15 +61,16 @@
 
 	<p class="comment-text">{comment.txt}</p>
 
-	<div class="vote-buttons">
+	<div class="vote-buttons" role="group" aria-label="Vote on this comment">
 		<button
 			class="vote-btn agree"
 			class:active={currentVote === 1}
 			onclick={() => vote(1)}
 			disabled={voting}
-			title="Agree"
+			aria-label="Agree with this comment"
+			aria-pressed={currentVote === 1}
 		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
 			</svg>
 			<span>Agree</span>
@@ -78,9 +81,10 @@
 			class:active={currentVote === 0}
 			onclick={() => vote(0)}
 			disabled={voting}
-			title="Pass"
+			aria-label="Pass on this comment"
+			aria-pressed={currentVote === 0}
 		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<circle cx="12" cy="12" r="10" />
 				<line x1="8" y1="12" x2="16" y2="12" />
 			</svg>
@@ -92,9 +96,10 @@
 			class:active={currentVote === -1}
 			onclick={() => vote(-1)}
 			disabled={voting}
-			title="Disagree"
+			aria-label="Disagree with this comment"
+			aria-pressed={currentVote === -1}
 		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
 			</svg>
 			<span>Disagree</span>

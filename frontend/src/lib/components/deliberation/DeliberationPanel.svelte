@@ -67,6 +67,7 @@
 
 		if (!authState.isAuthenticated) {
 			submitError = 'Sign in to submit a comment';
+			setTimeout(() => (submitError = null), 5000);
 			return;
 		}
 
@@ -100,6 +101,7 @@
 			}, 3000);
 		} catch (e: unknown) {
 			submitError = e instanceof Error ? e.message : 'Failed to submit comment';
+			setTimeout(() => (submitError = null), 5000);
 		} finally {
 			submitting = false;
 		}
@@ -127,34 +129,45 @@
 			<span>{stats.vote_count} votes</span>
 		</div>
 
-		<div class="tabs">
+		<div class="tabs" role="tablist" aria-label="Deliberation views">
 			<button
+				id="vote-tab"
 				class="tab"
 				class:active={activeTab === 'vote'}
 				onclick={() => (activeTab = 'vote')}
+				role="tab"
+				aria-selected={activeTab === 'vote'}
+				aria-controls="vote-panel"
 			>
 				Vote on Comments
 			</button>
 			<button
+				id="results-tab"
 				class="tab"
 				class:active={activeTab === 'results'}
 				onclick={() => (activeTab = 'results')}
+				role="tab"
+				aria-selected={activeTab === 'results'}
+				aria-controls="results-panel"
 			>
 				Opinion Groups
 			</button>
 		</div>
 
 		{#if activeTab === 'vote'}
-			<div class="tab-content">
+			<div class="tab-content" id="vote-panel" role="tabpanel" aria-labelledby="vote-tab">
 				<div class="submit-section">
+					<label for="comment-input" class="sr-only">Share your perspective</label>
 					<textarea
+						id="comment-input"
 						bind:value={newComment}
 						placeholder="Share your perspective (10-500 characters)..."
 						maxlength="500"
 						disabled={submitting || !authState.isAuthenticated}
+						aria-describedby="char-count"
 					></textarea>
 					<div class="submit-row">
-						<span class="char-count">{newComment.length}/500</span>
+						<span id="char-count" class="char-count">{newComment.length}/500</span>
 						<button
 							class="submit-btn"
 							onclick={handleSubmitComment}
@@ -191,7 +204,7 @@
 				</div>
 			</div>
 		{:else}
-			<div class="tab-content results-tab">
+			<div class="tab-content results-tab" id="results-panel" role="tabpanel" aria-labelledby="results-tab">
 				{#if results}
 					<ClusterViz {results} width={320} height={220} />
 
@@ -441,5 +454,17 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
 		margin-right: 0.5rem;
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 </style>
