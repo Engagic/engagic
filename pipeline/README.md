@@ -111,10 +111,7 @@ fetcher = Fetcher(db=unified_db)
 results: List[SyncResult] = fetcher.sync_all()
 
 # Sync specific cities
-results = fetcher.sync_cities(["paloaltoCA", "oaklandCA"])
-
-# Sync by vendor
-results = fetcher.sync_vendors(["legistar", "primegov"])
+results = await fetcher.sync_cities(["paloaltoCA", "oaklandCA"])
 
 # Single city sync
 result: SyncResult = fetcher.sync_city("paloaltoCA")
@@ -570,7 +567,7 @@ def sync_city(city_banana: str):
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ Processing Queue (SQLite)                                       │
+│ Processing Queue (PostgreSQL)                                   │
 │  ├─ Priority-based (recent meetings first)                      │
 │  ├─ Typed jobs (MeetingJob, MatterJob)                          │
 │  ├─ Retry logic (3 attempts → DLQ)                              │
@@ -692,9 +689,10 @@ priority = max(0, 150 - days_distance)
 **Required Environment Variables:**
 ```bash
 GEMINI_API_KEY=your_api_key_here
-ENGAGIC_DB_DIR=/root/engagic/data
-ENGAGIC_UNIFIED_DB=/root/engagic/data/engagic.db
-ENGAGIC_SYNC_INTERVAL_HOURS=72
+POSTGRES_HOST=localhost
+POSTGRES_DB=engagic
+POSTGRES_USER=engagic
+POSTGRES_PASSWORD=***
 ```
 
 **Optional:**

@@ -37,39 +37,6 @@ VENDOR_ADAPTERS = {
 ASYNC_VENDOR_ADAPTERS = VENDOR_ADAPTERS
 
 
-def get_adapter(vendor: str, city_slug: str, **kwargs):
-    """Get appropriate adapter for vendor
-
-    Args:
-        vendor: Vendor name (primegov, legistar, etc.) or custom city adapter (berkeley, menlopark)
-        city_slug: Vendor-specific city identifier
-        **kwargs: Additional adapter-specific arguments (e.g., api_token)
-
-    Returns:
-        Adapter instance
-
-    Raises:
-        VendorError: If vendor is not supported
-
-    Custom city adapters (1:1, high value):
-        - berkeley: Berkeley City Council (Drupal CMS)
-        - menlopark: Menlo Park City Council (simple table)
-    """
-    if vendor not in VENDOR_ADAPTERS:
-        raise VendorError(
-            f"Unsupported vendor: {vendor}",
-            vendor=vendor,
-            city_slug=city_slug
-        )
-
-    adapter_cls = VENDOR_ADAPTERS[vendor]
-
-    if vendor == "legistar" and kwargs.get("api_token"):
-        return adapter_cls(city_slug, api_token=kwargs["api_token"])
-
-    return adapter_cls(city_slug)
-
-
 def get_async_adapter(vendor: str, city_slug: str, **kwargs):
     """Get appropriate async adapter for vendor
 

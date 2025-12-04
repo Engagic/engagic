@@ -6,6 +6,16 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-03] Documentation Audit
+
+Synced READMEs with current codebase after PostgreSQL migration and cleanup:
+- Removed references to deleted `sync_vendors()` function
+- Updated diagrams and env vars from SQLite to PostgreSQL
+- Fixed outdated import examples in CLAUDE.md
+- Updated privacy section to reflect userland accounts
+
+---
+
 ## Current Focus
 
 **Council Member + Voting Completion**

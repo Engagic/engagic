@@ -25,9 +25,10 @@
 	let councilMembers = $state<CouncilMember[]>([]);
 
 	onMount(async () => {
+		const matterId = $page.params.matter_id;
 		// Load sponsors for this specific matter (efficient: only sponsors, not all members)
 		try {
-			const response = await getMatterSponsors($page.params.matter_id);
+			const response = await getMatterSponsors(matterId);
 			sponsors = response.sponsors || [];
 		} catch (e) {
 			console.debug('Could not load sponsors:', e);
@@ -199,7 +200,7 @@
 						<h2 class="section-title">Voting Record</h2>
 						<VoteBadge
 							tally={votesData.tally}
-							outcome={votesData.outcomes?.[0]?.outcome}
+							outcome={votesData.outcomes?.[0]}
 							size="small"
 							showDetails={true}
 						/>
