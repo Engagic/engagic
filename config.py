@@ -58,6 +58,9 @@ class Config:
         # Userland authentication
         self.USERLAND_JWT_SECRET = os.getenv("USERLAND_JWT_SECRET")
 
+        # SSR authentication (prevents X-Forwarded-User-IP spoofing)
+        self.SSR_AUTH_SECRET = os.getenv("SSR_AUTH_SECRET")
+
         # Default log path to repo-relative
         default_log_path = os.path.join(os.getcwd(), "engagic.log")
         self.LOG_PATH = os.getenv("ENGAGIC_LOG_PATH", default_log_path)

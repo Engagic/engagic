@@ -9,7 +9,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from server.rate_limiter import SQLiteRateLimiter
 
-from config import get_logger
+from config import get_logger, config as app_config
 
 logger = get_logger(__name__)
 
@@ -90,9 +90,36 @@ async def rate_limit_middleware(
     ip_source = "unknown"
     client_ip_raw = "unknown"
 
-    if request.headers.get("X-Forwarded-User-IP"):
+    # Only trust X-Forwarded-User-IP if authenticated by SSR secret
+    # This prevents attackers from spoofing the header to bypass rate limits
+    ssr_auth = request.headers.get("X-SSR-Auth")
+    ssr_secret = app_config.SSR_AUTH_SECRET
+    ssr_authenticated = ssr_secret and ssr_auth == ssr_secret
+
+    if request.headers.get("X-Forwarded-User-IP") and ssr_authenticated:
         client_ip_raw = request.headers.get("X-Forwarded-User-IP") or "unknown"
         ip_source = "X-Forwarded-User-IP"
+    elif request.headers.get("X-Forwarded-User-IP") and not ssr_authenticated:
+        # Log spoofing attempt (someone sent header without auth)
+        logger.warning(
+            f"X-Forwarded-User-IP without valid SSR auth - ignoring spoofed header"
+        )
+        # Fall through to other headers
+        if request.headers.get("X-Real-Client-IP"):
+            client_ip_raw = request.headers.get("X-Real-Client-IP") or "unknown"
+            ip_source = "X-Real-Client-IP (SSR auth failed)"
+        elif request.headers.get("X-Real-IP"):
+            client_ip_raw = request.headers.get("X-Real-IP") or "unknown"
+            ip_source = "X-Real-IP (SSR auth failed)"
+        elif request.headers.get("CF-Connecting-IP"):
+            client_ip_raw = request.headers.get("CF-Connecting-IP") or "unknown"
+            ip_source = "CF-Connecting-IP (SSR auth failed)"
+        elif request.headers.get("X-Forwarded-For"):
+            client_ip_raw = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or "unknown"
+            ip_source = "X-Forwarded-For (SSR auth failed)"
+        elif request.client:
+            client_ip_raw = request.client.host
+            ip_source = "request.client.host (SSR auth failed)"
     elif request.headers.get("X-Real-Client-IP"):
         client_ip_raw = request.headers.get("X-Real-Client-IP") or "unknown"
         ip_source = "X-Real-Client-IP"
@@ -114,6 +141,7 @@ async def rate_limit_middleware(
         logger.warning(
             f"Non-Cloudflare request detected from {client_ip_raw[:16]}... (direct VPS access)"
         )
+
 
     # Detect if request is from frontend (for lenient rate limiting)
     is_frontend = is_frontend_request(request)
