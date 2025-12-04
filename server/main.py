@@ -19,7 +19,7 @@ from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
-from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback, committees
+from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback, committees, deliberation
 from userland.auth import init_jwt
 
 logger = get_logger(__name__)
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="engagic API", description="EGMI", lifespan=lifespan)
 
 # CORS configuration - explicit methods and headers for security
-app.add_middleware(
+app.add_middleware(  # type: ignore[arg-type]
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -85,7 +85,7 @@ app.add_middleware(
 )
 
 # Request ID middleware (must be early in stack for tracing)
-app.add_middleware(RequestIDMiddleware)
+app.add_middleware(RequestIDMiddleware)  # type: ignore[arg-type]
 
 # Initialize global instances (non-async)
 rate_limiter = SQLiteRateLimiter(
@@ -143,6 +143,7 @@ app.include_router(feedback.router)    # User feedback (ratings, issues)
 app.include_router(donate.router)      # Donation and payment endpoints
 app.include_router(auth.router)        # Authentication endpoints (userland)
 app.include_router(dashboard.router)   # User dashboard and alerts (userland)
+app.include_router(deliberation.router)  # Deliberation endpoints
 
 
 if __name__ == "__main__":

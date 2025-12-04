@@ -8,7 +8,7 @@ This is acceptable because the secret is set once and never modified.
 For testing, call init_jwt() before using any token functions.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import JWTError, jwt
@@ -65,7 +65,7 @@ def generate_magic_link_token(user_id: str) -> str:
     payload = {
         "user_id": user_id,
         "type": "magic_link",
-        "exp": datetime.utcnow() + _MAGIC_LINK_EXPIRY,
+        "exp": datetime.now(timezone.utc) + _MAGIC_LINK_EXPIRY,
     }
     return jwt.encode(payload, secret, algorithm=_ALGORITHM)
 
@@ -80,7 +80,7 @@ def generate_access_token(user_id: str) -> str:
     payload = {
         "user_id": user_id,
         "type": "access",
-        "exp": datetime.utcnow() + _ACCESS_TOKEN_EXPIRY,
+        "exp": datetime.now(timezone.utc) + _ACCESS_TOKEN_EXPIRY,
     }
     return jwt.encode(payload, secret, algorithm=_ALGORITHM)
 
@@ -95,7 +95,7 @@ def generate_refresh_token(user_id: str) -> str:
     payload = {
         "user_id": user_id,
         "type": "refresh",
-        "exp": datetime.utcnow() + _REFRESH_TOKEN_EXPIRY,
+        "exp": datetime.now(timezone.utc) + _REFRESH_TOKEN_EXPIRY,
     }
     return jwt.encode(payload, secret, algorithm=_ALGORITHM)
 
@@ -129,7 +129,7 @@ def generate_unsubscribe_token(user_id: str) -> str:
     payload = {
         "user_id": user_id,
         "type": "unsubscribe",
-        "exp": datetime.utcnow() + _UNSUBSCRIBE_TOKEN_EXPIRY,
+        "exp": datetime.now(timezone.utc) + _UNSUBSCRIBE_TOKEN_EXPIRY,
     }
     return jwt.encode(payload, secret, algorithm=_ALGORITHM)
 

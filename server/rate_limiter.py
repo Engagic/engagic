@@ -313,8 +313,8 @@ class SQLiteRateLimiter:
         Returns:
             (is_allowed, remaining_requests)
         """
-        from datetime import datetime
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         limits = TierLimits.get_limits(tier)
         day_limit = limits["day_limit"]
 

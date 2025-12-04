@@ -1,5 +1,6 @@
 // API module exports
 export * from './types';
+export * from './deliberation';
 export { config, errorMessages } from './config';
 
 // Export API functions
