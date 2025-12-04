@@ -3,8 +3,8 @@ Pydantic request models for API validation
 """
 
 import re
-from typing import Any, Optional
-from pydantic import BaseModel, field_validator
+from typing import Any, Literal, Optional
+from pydantic import BaseModel, Field, field_validator
 from config import config
 from server.utils.validation import sanitize_string
 
@@ -138,3 +138,36 @@ class DonateRequest(BaseModel):
         if v > 1000000:
             raise ValueError("Donation amount cannot exceed $10,000.00 (1,000,000 cents)")
         return v
+
+
+# Deliberation request models
+COMMENT_MIN_LENGTH = 10
+COMMENT_MAX_LENGTH = 500
+
+
+class DeliberationCreateRequest(BaseModel):
+    """Create a new deliberation for a matter."""
+    matter_id: str
+    topic: Optional[str] = None
+
+
+class CommentCreateRequest(BaseModel):
+    """Submit a comment to a deliberation."""
+    txt: str = Field(..., min_length=COMMENT_MIN_LENGTH, max_length=COMMENT_MAX_LENGTH)
+
+    @field_validator("txt")
+    @classmethod
+    def validate_txt(cls, v: str) -> str:
+        return sanitize_string(v)
+
+
+class VoteRequest(BaseModel):
+    """Vote on a comment."""
+    comment_id: int
+    vote: Literal[-1, 0, 1]  # -1=disagree, 0=pass, 1=agree
+
+
+class ModerateRequest(BaseModel):
+    """Moderate a pending comment."""
+    comment_id: int
+    approve: bool

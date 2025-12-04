@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS deliberation_participants (
 CREATE TABLE IF NOT EXISTS deliberation_comments (
     id SERIAL PRIMARY KEY,
     deliberation_id TEXT NOT NULL REFERENCES deliberations(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES userland.users(id),
+    user_id TEXT NOT NULL REFERENCES userland.users(id) ON DELETE CASCADE,
     participant_number INTEGER NOT NULL,    -- Pseudonym: "Participant 1", "Participant 2"
     txt TEXT NOT NULL,
     mod_status INTEGER DEFAULT 0,           -- 0=pending, 1=approved, -1=hidden
