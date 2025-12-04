@@ -48,9 +48,11 @@ CREATE TABLE IF NOT EXISTS meetings (
     processing_status TEXT DEFAULT 'pending',
     processing_method TEXT,
     processing_time REAL,
+    committee_id TEXT,  -- FK to committees (a meeting is an occurrence of a committee)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
+    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE SET NULL
 );
 
 -- Meeting topics: Normalized from meetings.topics (was JSON array)
@@ -346,6 +348,7 @@ CREATE INDEX IF NOT EXISTS idx_meetings_banana ON meetings(banana);
 CREATE INDEX IF NOT EXISTS idx_meetings_date ON meetings(date);
 CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(processing_status);
 CREATE INDEX IF NOT EXISTS idx_meetings_banana_date ON meetings(banana, date DESC);  -- Composite for city timeline queries
+CREATE INDEX IF NOT EXISTS idx_meetings_committee ON meetings(committee_id);  -- For committee -> meetings queries
 
 -- Meeting topics (new normalized table)
 CREATE INDEX IF NOT EXISTS idx_meeting_topics_topic ON meeting_topics(topic);
@@ -463,6 +466,8 @@ COMMENT ON COLUMN city_matters.id IS 'Composite hash including city_banana to pr
 COMMENT ON TABLE matter_appearances IS 'Timeline tracking: Links matters to meetings via agenda items. Enables legislative timeline view showing matter evolution across meetings.';
 
 COMMENT ON TABLE meeting_topics IS 'Normalized from meetings.topics JSON array. Enables efficient topic filtering and indexing.';
+
+COMMENT ON COLUMN meetings.committee_id IS 'FK to committees. A meeting is an occurrence of a committee. Enables meeting → committee navigation.';
 
 COMMENT ON TABLE item_topics IS 'Normalized from items.topics JSON array. Enables efficient topic filtering and indexing.';
 

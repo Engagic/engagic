@@ -180,9 +180,19 @@
 						</span>
 					{/if}
 					{#if item.sponsors && item.sponsors.length > 0}
-						<span class="sponsors-badge" title="Sponsors: {item.sponsors.join(', ')}">
-							{item.sponsors.length === 1 ? item.sponsors[0] : `${item.sponsors.length} sponsors`}
-						</span>
+						{#if item.matter_id}
+							<a href="/matter/{item.matter_id}#sponsors"
+							   class="sponsors-badge-link"
+							   title="View sponsor details"
+							   onclick={(e) => e.stopPropagation()}
+							   data-sveltekit-preload-data="tap">
+								{item.sponsors.length === 1 ? item.sponsors[0] : `${item.sponsors.length} sponsors`}
+							</a>
+						{:else}
+							<span class="sponsors-badge" title="Sponsors: {item.sponsors.join(', ')}">
+								{item.sponsors.length === 1 ? item.sponsors[0] : `${item.sponsors.length} sponsors`}
+							</span>
+						{/if}
 					{/if}
 					{#if item.matter && item.matter.appearance_count && item.matter.appearance_count > 1}
 						<a
@@ -433,6 +443,27 @@
 		font-family: 'IBM Plex Mono', monospace;
 		letter-spacing: 0.3px;
 		cursor: help;
+	}
+
+	.sponsors-badge-link {
+		display: inline-block;
+		padding: 0.2rem 0.6rem;
+		background: linear-gradient(135deg, var(--badge-sponsor-bg-start) 0%, var(--badge-sponsor-bg-end) 100%);
+		color: var(--badge-sponsor-text);
+		border: 1.5px solid var(--badge-sponsor-border);
+		border-radius: 12px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		font-family: 'IBM Plex Mono', monospace;
+		letter-spacing: 0.3px;
+		text-decoration: none;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.sponsors-badge-link:hover {
+		border-color: var(--badge-sponsor-text);
+		filter: brightness(1.1);
 	}
 
 	.matter-timeline-badge {

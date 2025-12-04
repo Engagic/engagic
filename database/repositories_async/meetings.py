@@ -43,9 +43,9 @@ class MeetingRepository(BaseRepository):
                 INSERT INTO meetings (
                     id, banana, title, date, agenda_url, packet_url,
                     summary, participation, status, processing_status,
-                    processing_method, processing_time
+                    processing_method, processing_time, committee_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 ON CONFLICT (id) DO UPDATE SET
                     title = EXCLUDED.title,
                     date = EXCLUDED.date,
@@ -57,6 +57,7 @@ class MeetingRepository(BaseRepository):
                     processing_status = COALESCE(EXCLUDED.processing_status, meetings.processing_status),
                     processing_method = COALESCE(EXCLUDED.processing_method, meetings.processing_method),
                     processing_time = COALESCE(EXCLUDED.processing_time, meetings.processing_time),
+                    committee_id = COALESCE(EXCLUDED.committee_id, meetings.committee_id),
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 meeting.id,
@@ -71,6 +72,7 @@ class MeetingRepository(BaseRepository):
                 meeting.processing_status or "pending",
                 meeting.processing_method,
                 meeting.processing_time,
+                meeting.committee_id,
             )
 
             # Normalize topics to meeting_topics table (batch for efficiency)
@@ -102,7 +104,8 @@ class MeetingRepository(BaseRepository):
                 SELECT
                     id, banana, title, date, agenda_url, packet_url,
                     summary, participation, status, processing_status,
-                    processing_method, processing_time, created_at, updated_at
+                    processing_method, processing_time, committee_id,
+                    created_at, updated_at
                 FROM meetings
                 WHERE id = $1
                 """,
@@ -141,7 +144,7 @@ class MeetingRepository(BaseRepository):
                 SELECT
                     id, banana, title, date, agenda_url, packet_url,
                     summary, participation, status, processing_status,
-                    processing_method, processing_time
+                    processing_method, processing_time, committee_id
                 FROM meetings
                 WHERE banana = $1
                 ORDER BY date DESC
@@ -183,7 +186,8 @@ class MeetingRepository(BaseRepository):
                 SELECT
                     id, banana, title, date, agenda_url, packet_url,
                     summary, participation, status, processing_status,
-                    processing_method, processing_time, created_at, updated_at
+                    processing_method, processing_time, committee_id,
+                    created_at, updated_at
                 FROM meetings
                 WHERE packet_url = $1
                 LIMIT 1

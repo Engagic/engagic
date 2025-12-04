@@ -376,7 +376,7 @@ class SQLiteRateLimiter:
                 logger.info("nginx reloaded with updated blocklist")
             except subprocess.CalledProcessError as e:
                 logger.error("failed to reload nginx", error=str(e))
-        except Exception as e:
+        except (sqlite3.Error, OSError, IOError) as e:
             logger.error("failed to export blocked IPs", error=str(e))
 
     def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, whitelist_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
@@ -489,7 +489,7 @@ class SQLiteRateLimiter:
                 conn.commit()
                 if deleted > 0:
                     logger.debug("cleaned up old rate limit entries", deleted=deleted)
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error("failed to cleanup rate limit entries", error=str(e))
 
     def _cleanup_old_bans(self, conn):
@@ -506,7 +506,7 @@ class SQLiteRateLimiter:
                 logger.info("cleaned up expired temp_bans", deleted=deleted, retention_days=90)
                 # Re-export nginx blocklist after cleanup
                 self.export_blocked_ips()
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error("failed to cleanup old temp_bans", error=str(e))
 
     def reset_client(self, client_ip: str):

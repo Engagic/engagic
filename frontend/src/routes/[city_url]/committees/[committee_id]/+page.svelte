@@ -19,7 +19,7 @@
 
 	const chairs = $derived(members.filter(m => m.role?.toLowerCase().includes('chair') && !m.role?.toLowerCase().includes('vice')));
 	const viceChairs = $derived(members.filter(m => m.role?.toLowerCase().includes('vice')));
-	const regularMembers = $derived(members.filter(m => !m.role || (!m.role.toLowerCase().includes('chair'))));
+	const regularMembers = $derived(members.filter(m => !m.role || (!m.role.toLowerCase().includes('chair') && !m.role.toLowerCase().includes('vice'))));
 
 	onMount(async () => {
 		try {

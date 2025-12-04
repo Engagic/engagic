@@ -153,6 +153,7 @@ class Meeting:
         None  # tier1_pypdf2_gemini, multiple_pdfs_N_combined
     )
     processing_time: Optional[float] = None
+    committee_id: Optional[str] = None  # FK to committees (a meeting is an occurrence of a committee)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

@@ -73,6 +73,7 @@ export interface Meeting {
 	processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
 	has_items?: boolean; // True for item-based meetings, false for monolithic
 	items?: AgendaItem[]; // Present for item-based meetings (58% of cities)
+	committee_id?: string; // FK to committees (a meeting is an occurrence of a committee)
 }
 
 export interface RandomMeetingResponse {
@@ -440,6 +441,14 @@ export interface MeetingVoteGroup {
 	votes: Vote[];
 }
 
+export interface MatterVoteOutcome {
+	meeting_id: string;
+	meeting_title: string;
+	date?: string;
+	outcome: VoteOutcome;
+	tally: VoteTally;
+}
+
 export interface MatterVotesResponse {
 	success: boolean;
 	matter_id: string;
@@ -447,7 +456,7 @@ export interface MatterVotesResponse {
 	votes: Vote[];
 	votes_by_meeting?: MeetingVoteGroup[];
 	tally: VoteTally;
-	outcomes: VoteOutcome[];
+	outcomes: MatterVoteOutcome[];
 }
 
 export interface MatterSponsorsResponse {

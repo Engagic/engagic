@@ -26,6 +26,7 @@
 
 	onMount(async () => {
 		const matterId = $page.params.matter_id;
+		if (!matterId) return;
 		// Load sponsors for this specific matter (efficient: only sponsors, not all members)
 		try {
 			const response = await getMatterSponsors(matterId);
@@ -200,7 +201,7 @@
 						<h2 class="section-title">Voting Record</h2>
 						<VoteBadge
 							tally={votesData.tally}
-							outcome={votesData.outcomes?.[0]}
+							outcome={votesData.outcomes?.[0]?.outcome}
 							size="small"
 							showDetails={true}
 						/>
@@ -216,7 +217,13 @@
 								<div class="committee-vote-group">
 									<div class="committee-vote-header">
 										<div class="committee-info">
-											{#if meetingVotes.committee}
+											{#if meetingVotes.committee && meetingVotes.committee_id}
+												<a href="/{matter.banana}/committees/{meetingVotes.committee_id}"
+												   class="committee-name-link"
+												   data-sveltekit-preload-data="tap">
+													{meetingVotes.committee}
+												</a>
+											{:else if meetingVotes.committee}
 												<span class="committee-name">{meetingVotes.committee}</span>
 											{:else if meetingVotes.meeting_title}
 												<span class="meeting-name">{meetingVotes.meeting_title}</span>
@@ -761,6 +768,20 @@
 		font-size: 0.9rem;
 		font-weight: 600;
 		color: var(--badge-purple-text, #7c3aed);
+	}
+
+	.committee-name-link {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--badge-purple-text, #7c3aed);
+		text-decoration: none;
+		transition: all 0.15s ease;
+	}
+
+	.committee-name-link:hover {
+		text-decoration: underline;
+		color: var(--civic-blue);
 	}
 
 	.meeting-name {
