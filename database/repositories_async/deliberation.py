@@ -8,6 +8,7 @@ Handles CRUD operations for:
 - Pseudonymous participant tracking
 """
 
+import re
 import secrets
 from typing import Any, Dict, List, Optional, Union
 
@@ -18,6 +19,10 @@ from database.repositories_async.base import BaseRepository
 from config import get_logger
 
 logger = get_logger(__name__).bind(component="deliberation_repository")
+
+# Deliberation ID format: delib_{matter_id}_{short_hash}
+# Example: delib_nashvilleTN_abc123_x4f9a2
+DELIBERATION_ID_PATTERN = re.compile(r"^delib_.+_.{4,8}$")
 
 # Moderation status constants
 MOD_STATUS_REJECTED = -1  # Hidden/rejected by moderator
@@ -38,6 +43,20 @@ def generate_deliberation_id(matter_id: str) -> str:
     """
     short_hash = secrets.token_urlsafe(4)[:6]
     return f"delib_{matter_id}_{short_hash}"
+
+
+def is_valid_deliberation_id(deliberation_id: str) -> bool:
+    """Validate deliberation ID format.
+
+    Args:
+        deliberation_id: ID to validate
+
+    Returns:
+        True if format is valid (delib_{matter_id}_{hash})
+    """
+    if not deliberation_id or not isinstance(deliberation_id, str):
+        return False
+    return bool(DELIBERATION_ID_PATTERN.match(deliberation_id))
 
 
 class DeliberationRepository(BaseRepository):
@@ -100,6 +119,11 @@ class DeliberationRepository(BaseRepository):
         Returns:
             Deliberation dict or None
         """
+        # Early return for malformed IDs
+        if not is_valid_deliberation_id(deliberation_id):
+            logger.debug("invalid deliberation_id format", deliberation_id=deliberation_id)
+            return None
+
         row = await self._fetchrow(
             """
             SELECT id, matter_id, banana, topic, is_active, created_at, closed_at
@@ -192,12 +216,13 @@ class DeliberationRepository(BaseRepository):
             if existing:
                 return existing["participant_number"]
 
-            # Get next available number
+            # Get next available number with row lock to prevent race condition
             max_row = await conn.fetchrow(
                 """
                 SELECT COALESCE(MAX(participant_number), 0) as max_num
                 FROM deliberation_participants
                 WHERE deliberation_id = $1
+                FOR UPDATE
                 """,
                 deliberation_id,
             )
@@ -292,10 +317,12 @@ class DeliberationRepository(BaseRepository):
             if existing:
                 participant_number = existing["participant_number"]
             else:
+                # Lock rows to prevent race condition on participant number
                 max_row = await conn.fetchrow(
                     """
                     SELECT COALESCE(MAX(participant_number), 0) as max_num
                     FROM deliberation_participants WHERE deliberation_id = $1
+                    FOR UPDATE
                     """,
                     deliberation_id,
                 )
@@ -693,7 +720,7 @@ class DeliberationRepository(BaseRepository):
                  WHERE deliberation_id = $1 AND mod_status = 1) as comment_count,
                 (SELECT COUNT(*) FROM deliberation_votes dv
                  JOIN deliberation_comments dc ON dv.comment_id = dc.id
-                 WHERE dc.deliberation_id = $1) as vote_count,
+                 WHERE dc.deliberation_id = $1 AND dc.mod_status = 1) as vote_count,
                 (SELECT COUNT(*) FROM deliberation_participants
                  WHERE deliberation_id = $1) as participant_count
             """,

@@ -281,14 +281,20 @@ export async function moderateComment(
 
 /**
  * Trigger clustering computation for a deliberation.
- * Public endpoint - no authentication required. Can be called manually or by background job.
+ * Requires admin authentication.
  */
 export async function computeClusters(
-	deliberationId: string
+	deliberationId: string,
+	adminToken: string
 ): Promise<{ success: boolean; results?: { n_participants: number; n_comments: number; k: number } }> {
 	const response = await fetch(
 		`${config.apiBaseUrl}/api/v1/deliberations/${deliberationId}/compute`,
-		{ method: 'POST' }
+		{
+			method: 'POST',
+			headers: {
+				'X-Admin-Token': adminToken
+			}
+		}
 	);
 
 	if (!response.ok) {
