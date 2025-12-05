@@ -9,7 +9,9 @@ from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata
 from database.repositories_async.helpers import deserialize_attachments
 from exceptions import DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
-from pipeline.orchestrators import MatterFilter, EnqueueDecider, VoteProcessor
+from pipeline.orchestrators.matter_filter import MatterFilter
+from pipeline.orchestrators.enqueue_decider import EnqueueDecider
+from pipeline.orchestrators.vote_processor import VoteProcessor
 
 logger = get_logger(__name__).bind(component="meeting_sync")
 
