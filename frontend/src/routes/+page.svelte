@@ -211,7 +211,7 @@
 
 </script>
 
-<svelte:whead>
+<svelte:head>
 	<title>engagic - civic engagement made simple</title>
 	<meta name="description" content="Find your local government meetings and agendas" />
 </svelte:head>
