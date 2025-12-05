@@ -30,7 +30,7 @@ server/
 ├── rate_limiter.py         - SQLite tiered rate limiting (Basic/Hacktivist/Enterprise)
 ├── metrics.py              - Prometheus instrumentation
 │
-├── routes/                 - HTTP request handlers (15 modules)
+├── routes/                 - HTTP request handlers (14 modules, +1 disabled)
 │   ├── search.py           - Universal search endpoint
 │   ├── meetings.py         - Meeting retrieval
 │   ├── topics.py           - Topic browsing
@@ -73,7 +73,7 @@ server/
 
 **Why this structure?**
 - **Minimal main.py** - Just wiring, no business logic
-- **Focused route modules** - Single responsibility per file (15 modules)
+- **Focused route modules** - Single responsibility per file (14 active, deliberation disabled)
 - **Service layer** - Business logic separate from HTTP concerns
 - **Dependency injection** - Centralized in dependencies.py
 - **Clean imports** - No circular dependencies
@@ -262,7 +262,7 @@ GET /metrics  # Returns Prometheus text format
 
 ---
 
-## Route Modules (15 modules)
+## Route Modules (14 active + 1 disabled)
 
 **Each route module focuses on one domain.** No business logic - delegate to services.
 
@@ -707,9 +707,11 @@ async def get_low_rated_entities(threshold: float = 2.5, min_ratings: int = 3):
 
 ---
 
-### 15. `routes/deliberation.py`
+### 15. `routes/deliberation.py` (DISABLED)
 
-**Opinion clustering for civic engagement.**
+**Opinion clustering for civic engagement.** Currently disabled pending table deployment.
+
+To enable: uncomment import and router in `main.py`, deploy deliberation tables from `schema_postgres.sql`.
 
 ```python
 # Public endpoints

@@ -19,7 +19,8 @@ from server.rate_limiter import SQLiteRateLimiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
-from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback, committees, deliberation
+from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback, committees
+# from server.routes import deliberation  # TODO: Enable when deliberation tables are deployed
 from userland.auth import init_jwt
 
 logger = get_logger(__name__)
@@ -143,7 +144,7 @@ app.include_router(feedback.router)    # User feedback (ratings, issues)
 app.include_router(donate.router)      # Donation and payment endpoints
 app.include_router(auth.router)        # Authentication endpoints (userland)
 app.include_router(dashboard.router)   # User dashboard and alerts (userland)
-app.include_router(deliberation.router)  # Deliberation endpoints
+# app.include_router(deliberation.router)  # TODO: Enable when deliberation tables are deployed
 
 
 if __name__ == "__main__":
