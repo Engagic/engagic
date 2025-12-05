@@ -22,6 +22,8 @@ USERLAND_JWT_SECRET=<secret>
 MAILGUN_API_KEY=<key>
 MAILGUN_DOMAIN=mail.engagic.org
 MAILGUN_FROM_EMAIL=digest@engagic.org
+FRONTEND_URL=https://engagic.org
+APP_URL=https://engagic.org
 ```
 
 ## Common Operations
@@ -31,6 +33,13 @@ MAILGUN_FROM_EMAIL=digest@engagic.org
 ```bash
 sudo systemctl start engagic-digest.service
 journalctl -u engagic-digest.service --since "5 minutes ago"
+```
+
+### Test Email Templates
+
+```bash
+# Sends all 3 email types (magic link signup, login, digest) with real DB data
+cd /opt/engagic && uv run userland/scripts/test_emails.py your@email.com
 ```
 
 ### Test Signup Flow

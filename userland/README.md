@@ -59,18 +59,25 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 export USERLAND_JWT_SECRET="<generated-secret>"
 export MAILGUN_API_KEY="<your-key>"
 export MAILGUN_DOMAIN="<your-domain>"
+export MAILGUN_FROM_EMAIL="digest@yourdomain.com"  # Optional, defaults to alerts@DOMAIN
+export FRONTEND_URL="https://engagic.org"          # For magic link emails
+export APP_URL="https://engagic.org"               # For weekly digest links
 ```
 
-Note: `USERLAND_DB` is no longer used - the system now uses the main PostgreSQL database with a `userland` schema.
+Note: Uses main PostgreSQL database with `userland` schema namespace.
 
 ### 3. Run Backend
 
+Auth endpoints are integrated into the main FastAPI server (not a separate userland backend):
+
 ```bash
 # From project root
-python3 -m userland.server.main
+python server/main.py
+# or
+uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
-Backend runs on http://localhost:8001
+Backend runs on http://localhost:8000
 
 ### 4. Run Frontend
 
@@ -120,31 +127,57 @@ systemctl list-timers | grep engagic
 
 ## Database Schema
 
-### users
-- `id`, `name`, `email`, `created_at`, `last_login`
+Uses PostgreSQL `userland` namespace. See `database/schema_userland.sql` for full DDL.
 
-### alerts
-- `id`, `user_id`, `name`, `cities` (JSON), `criteria` (JSON), `frequency`, `active`, `created_at`
+### Core Tables
 
-### alert_matches
-- `id`, `alert_id`, `meeting_id`, `item_id`, `match_type`, `confidence`, `matched_criteria`, `notified`, `created_at`
+| Table | Purpose |
+|-------|---------|
+| `userland.users` | User accounts (id, name, email, created_at, last_login) |
+| `userland.alerts` | Alert configs (cities JSONB, criteria JSONB, frequency, active) |
+| `userland.alert_matches` | Matched meetings/items (match_type, confidence, matched_criteria) |
+| `userland.used_magic_links` | Replay attack prevention (token_hash, expires_at) |
+| `userland.city_requests` | Coverage expansion tracking (request_count, status) |
+
+### Engagement Tables (Phase 2-3)
+
+| Table | Purpose |
+|-------|---------|
+| `userland.watches` | User watchlist (matters, meetings, topics, cities, council members) |
+| `userland.activity_log` | Activity tracking (views, watches, searches, shares) |
+| `userland.trending_matters` | Materialized view, refreshed every 15 min |
+| `userland.ratings` | 1-5 star ratings for items/meetings/matters |
+| `userland.issues` | User-reported data quality issues |
 
 ## API Endpoints
 
-**Auth:**
-- `POST /auth/signup` - Create account
-- `POST /auth/login` - Request magic link
-- `GET /auth/verify?token=...` - Verify magic link
-- `POST /auth/refresh` - Refresh access token
-- `POST /auth/logout` - Log out
+All endpoints prefixed with `/api`.
 
-**Dashboard:**
-- `GET /dashboard` - Get stats, alerts, and recent matches
-- `PATCH /dashboard/alerts/{id}` - Update alert
-- `POST /dashboard/alerts/{id}/keywords` - Add keyword
-- `DELETE /dashboard/alerts/{id}/keywords` - Remove keyword
-- `POST /dashboard/alerts/{id}/cities` - Add city
-- `DELETE /dashboard/alerts/{id}/cities` - Remove city
+**Auth** (`/api/auth`):
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/signup` | Create account + send magic link |
+| POST | `/login` | Request magic link for existing user |
+| GET | `/verify?token=...` | Verify magic link, return tokens |
+| POST | `/refresh` | Refresh access token |
+| POST | `/logout` | Log out (clear cookies) |
+| GET | `/me` | Get current user |
+| GET | `/unsubscribe?token=...` | Unsubscribe from digest |
+| GET | `/unsubscribe-token` | Get unsubscribe token for current user |
+
+**Dashboard** (`/api/dashboard`):
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/` | Get stats + alerts + recent matches |
+| GET | `/stats` | Get subscription stats only |
+| GET | `/activity?limit=10` | Get recent activity |
+| GET | `/config` | Get user configuration |
+| DELETE | `/alert/{id}` | Delete alert |
+| PATCH | `/alerts/{id}` | Update alert |
+| POST | `/alerts/{id}/keywords` | Add keyword |
+| DELETE | `/alerts/{id}/keywords?keyword=...` | Remove keyword |
+| POST | `/alerts/{id}/cities` | Add city |
+| DELETE | `/alerts/{id}/cities?city=...` | Remove city |
 
 ## Admin Utilities
 
@@ -152,10 +185,15 @@ systemctl list-timers | grep engagic
 # Create user manually
 python3 -m userland.scripts.create_user \
     --email user@example.com \
-    --name "Test User"
+    --name "Test User" \
+    --cities paloaltoCA \
+    --keywords housing zoning
 
-# Send weekly digest manually (test)
+# Send weekly digest manually (sends to all active users)
 python3 -m userland.scripts.weekly_digest
+
+# Test all email templates (magic link signup/login + digest with real DB data)
+uv run userland/scripts/test_emails.py your@email.com
 ```
 
 ## Weekly Digest Email
@@ -171,12 +209,25 @@ python3 -m userland.scripts.weekly_digest
 
 ## Features
 
-✅ **Watch button on city pages** - One-click subscription
-✅ **Passwordless auth** - Magic link login, no passwords
-✅ **Simple dashboard** - View subscription, recent matches
-✅ **Weekly digest** - Sunday morning civic updates
-✅ **Keyword tracking** - 1-3 keywords recommended (unlimited supported)
-✅ **Single-city focus** - Most users watch one city (multi-city supported for power users)
+- Watch button on city pages - One-click subscription
+- Passwordless auth - Magic link login, no passwords
+- Simple dashboard - View subscription, recent matches
+- Weekly digest - Sunday morning civic updates
+- Keyword tracking - 1-3 keywords recommended (unlimited supported)
+- Single-city focus - Most users watch one city (multi-city supported)
+- One-click unsubscribe - CAN-SPAM compliant, long-lived tokens
+- Dual-track matching - String + matter-based (deduplicated legislative items)
+- Dark mode emails - Full CSS dark mode support
+
+## Matching Architecture
+
+Dual-track matching for comprehensive coverage:
+
+**String-based** (`match_alert`): Direct keyword search in item summaries. High recall, item-level granularity.
+
+**Matter-based** (`match_matters_for_alert`): Searches deduplicated legislative matters. Same bill in 5 committees = 1 alert (not 5). Includes timeline tracking.
+
+Both run in parallel for every alert via `match_all_alerts_dual_track()`. See `userland/matching/matcher.py`.
 
 ## Production Deployment
 
@@ -191,12 +242,8 @@ python3 -m userland.scripts.weekly_digest
 - `MAILGUN_API_KEY` - Email delivery
 - `MAILGUN_DOMAIN` - Mailgun domain
 - `MAILGUN_FROM_EMAIL` - Sender address
-
-## Next Steps
-
-- [ ] Monitor email deliverability and open rates
-- [ ] Add unsubscribe flow
-- [ ] Add email open/click tracking
+- `FRONTEND_URL` - Magic link email URLs
+- `APP_URL` - Weekly digest link URLs
 
 ---
 

@@ -332,6 +332,66 @@ CREATE TABLE IF NOT EXISTS committee_members (
 );
 
 -- =======================
+-- DELIBERATION (Phase 3)
+-- =======================
+-- Opinion clustering for civic engagement
+-- Requires userland schema (schema_userland.sql) for user references
+
+-- Deliberation sessions linked to matters
+CREATE TABLE IF NOT EXISTS deliberations (
+    id TEXT PRIMARY KEY,                    -- "delib_{matter_id}_{short_hash}"
+    matter_id TEXT NOT NULL REFERENCES city_matters(id) ON DELETE CASCADE,
+    banana TEXT NOT NULL,
+    topic TEXT,                             -- Optional override of matter title
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    closed_at TIMESTAMPTZ
+);
+
+-- Track participant numbers per deliberation (for pseudonyms)
+CREATE TABLE IF NOT EXISTS deliberation_participants (
+    deliberation_id TEXT NOT NULL REFERENCES deliberations(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES userland.users(id) ON DELETE CASCADE,
+    participant_number INTEGER NOT NULL,
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (deliberation_id, user_id)
+);
+
+-- User-submitted comments
+CREATE TABLE IF NOT EXISTS deliberation_comments (
+    id SERIAL PRIMARY KEY,
+    deliberation_id TEXT NOT NULL REFERENCES deliberations(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES userland.users(id) ON DELETE CASCADE,
+    participant_number INTEGER NOT NULL,    -- Pseudonym: "Participant 1", "Participant 2"
+    txt TEXT NOT NULL,
+    mod_status INTEGER DEFAULT 0,           -- 0=pending, 1=approved, -1=hidden
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Votes on comments
+CREATE TABLE IF NOT EXISTS deliberation_votes (
+    comment_id INTEGER NOT NULL REFERENCES deliberation_comments(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES userland.users(id) ON DELETE CASCADE,
+    vote SMALLINT NOT NULL CHECK (vote IN (-1, 0, 1)),  -- -1=disagree, 0=pass, 1=agree
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (comment_id, user_id)
+);
+
+-- Cached clustering results
+CREATE TABLE IF NOT EXISTS deliberation_results (
+    deliberation_id TEXT PRIMARY KEY REFERENCES deliberations(id) ON DELETE CASCADE,
+    n_participants INTEGER NOT NULL,
+    n_comments INTEGER NOT NULL,
+    k INTEGER NOT NULL,                     -- Number of clusters
+    positions JSONB,                        -- [[x,y], ...] per participant
+    clusters JSONB,                         -- {user_id: cluster_id}
+    cluster_centers JSONB,                  -- [[x,y], ...] per cluster
+    consensus JSONB,                        -- {comment_id: score}
+    group_votes JSONB,                      -- Per-cluster vote tallies
+    computed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =======================
 -- PERFORMANCE INDICES
 -- =======================
 
@@ -431,6 +491,14 @@ CREATE INDEX IF NOT EXISTS idx_committee_members_dates ON committee_members(join
 -- Matter appearances (committee_id)
 CREATE INDEX IF NOT EXISTS idx_matter_appearances_committee_id ON matter_appearances(committee_id);
 
+-- Deliberations
+CREATE INDEX IF NOT EXISTS idx_delib_matter ON deliberations(matter_id);
+CREATE INDEX IF NOT EXISTS idx_delib_banana ON deliberations(banana);
+CREATE INDEX IF NOT EXISTS idx_delib_comments_delib ON deliberation_comments(deliberation_id);
+CREATE INDEX IF NOT EXISTS idx_delib_comments_mod ON deliberation_comments(deliberation_id, mod_status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_delib_comments_unique ON deliberation_comments(deliberation_id, user_id, txt);
+CREATE INDEX IF NOT EXISTS idx_delib_votes_comment ON deliberation_votes(comment_id);
+
 -- =======================
 -- FULL-TEXT SEARCH (PostgreSQL GIN indexes)
 -- =======================
@@ -488,3 +556,11 @@ COMMENT ON COLUMN matter_appearances.committee_id IS 'FK to committees table. En
 COMMENT ON COLUMN matter_appearances.vote_outcome IS 'Result of committee vote: passed, failed, tabled, withdrawn, referred, amended, unknown, no_vote.';
 
 COMMENT ON COLUMN matter_appearances.vote_tally IS 'JSON vote counts: {"yes": N, "no": N, "abstain": N, "absent": N}. Populated from votes table.';
+
+COMMENT ON TABLE deliberations IS 'Opinion clustering sessions linked to legislative matters. Citizens submit comments and vote agree/disagree/pass.';
+
+COMMENT ON TABLE deliberation_comments IS 'User-submitted statements. mod_status: 0=pending, 1=approved, -1=hidden. Trusted users auto-approved.';
+
+COMMENT ON TABLE deliberation_votes IS 'Votes on comments: -1=disagree, 0=pass, 1=agree. Vote matrix used for PCA clustering.';
+
+COMMENT ON TABLE deliberation_results IS 'Cached clustering output: 2D positions, cluster assignments, consensus scores. Recomputed on demand.';
