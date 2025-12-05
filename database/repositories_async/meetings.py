@@ -1,16 +1,9 @@
-"""Async MeetingRepository for meeting operations
-
-Handles CRUD operations for meetings:
-- Store/update meetings with topic normalization
-- Retrieve meetings by ID, city, or packet URL
-- Update meeting summaries and processing metadata
-- JSONB for participation data
-"""
+"""Async MeetingRepository for meeting operations."""
 
 from typing import List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.repositories_async.helpers import build_meeting, fetch_topics_for_ids
+from database.repositories_async.helpers import build_meeting, fetch_topics_for_ids, replace_entity_topics
 from database.models import Meeting, ParticipationInfo
 from config import get_logger
 
@@ -18,26 +11,11 @@ logger = get_logger(__name__).bind(component="meeting_repository")
 
 
 class MeetingRepository(BaseRepository):
-    """Repository for meeting operations
-
-    Provides:
-    - Store/update meetings with topic normalization
-    - Retrieve meetings (by ID, city, packet URL)
-    - Update summaries with processing metadata
-    - Random meeting retrieval for testing
-    """
+    """Repository for meeting operations."""
 
     async def store_meeting(self, meeting: Meeting) -> None:
-        """Store or update a meeting
-
-        Uses UPSERT to handle both new meetings and updates.
-        Normalizes topics to meeting_topics table.
-
-        Args:
-            meeting: Meeting object with all fields
-        """
+        """Store or update a meeting with topic normalization."""
         async with self.transaction() as conn:
-            # Upsert meeting row
             await conn.execute(
                 """
                 INSERT INTO meetings (
@@ -75,29 +53,15 @@ class MeetingRepository(BaseRepository):
                 meeting.committee_id,
             )
 
-            # Normalize topics to meeting_topics table (batch for efficiency)
             if meeting.topics:
-                await conn.execute(
-                    "DELETE FROM meeting_topics WHERE meeting_id = $1",
-                    meeting.id,
-                )
-                topic_records = [(meeting.id, topic) for topic in meeting.topics]
-                await conn.executemany(
-                    "INSERT INTO meeting_topics (meeting_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                    topic_records,
+                await replace_entity_topics(
+                    conn, "meeting_topics", "meeting_id", meeting.id, meeting.topics
                 )
 
         logger.info("meeting stored", meeting_id=meeting.id, banana=meeting.banana)
 
     async def get_meeting(self, meeting_id: str) -> Optional[Meeting]:
-        """Get a meeting by ID
-
-        Args:
-            meeting_id: Meeting identifier
-
-        Returns:
-            Meeting object with denormalized topics, or None
-        """
+        """Get a meeting by ID."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -115,7 +79,6 @@ class MeetingRepository(BaseRepository):
             if not row:
                 return None
 
-            # Fetch normalized topics
             topics_map = await fetch_topics_for_ids(
                 conn, "meeting_topics", "meeting_id", [meeting_id]
             )
@@ -128,16 +91,7 @@ class MeetingRepository(BaseRepository):
         limit: int = 50,
         offset: int = 0
     ) -> List[Meeting]:
-        """Get meetings for a city, ordered by date descending
-
-        Args:
-            banana: City banana
-            limit: Maximum number of meetings to return (default: 50)
-            offset: Number of meetings to skip (default: 0)
-
-        Returns:
-            List of Meeting objects with topics
-        """
+        """Get meetings for a city, ordered by date descending."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -158,7 +112,6 @@ class MeetingRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch all topics
             meeting_ids = [row["id"] for row in rows]
             topics_by_meeting = await fetch_topics_for_ids(
                 conn, "meeting_topics", "meeting_id", meeting_ids
@@ -170,16 +123,7 @@ class MeetingRepository(BaseRepository):
             ]
 
     async def get_meeting_by_packet_url(self, packet_url: str) -> Optional[Meeting]:
-        """Get meeting by packet_url for cache optimization
-
-        Used by processor.py to check if a packet has already been processed.
-
-        Args:
-            packet_url: The packet URL to look up
-
-        Returns:
-            Meeting object with denormalized topics, or None if not found
-        """
+        """Get meeting by packet_url for cache lookup."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -198,7 +142,6 @@ class MeetingRepository(BaseRepository):
             if not row:
                 return None
 
-            # Fetch normalized topics
             topics_map = await fetch_topics_for_ids(
                 conn, "meeting_topics", "meeting_id", [row["id"]]
             )
@@ -214,18 +157,8 @@ class MeetingRepository(BaseRepository):
         participation: Optional[ParticipationInfo] = None,
         topics: Optional[List[str]] = None,
     ) -> None:
-        """Update meeting summary and processing metadata
-
-        Args:
-            meeting_id: Meeting identifier
-            summary: Generated summary text (can be None for item-level processing)
-            processing_method: Processing method used (e.g., "item_level", "monolithic")
-            processing_time: Time taken in seconds
-            participation: Optional participation data dict
-            topics: Aggregated topics (normalized to meeting_topics table)
-        """
+        """Update meeting summary and processing metadata."""
         async with self.transaction() as conn:
-            # Update meeting
             await conn.execute(
                 """
                 UPDATE meetings
@@ -244,29 +177,15 @@ class MeetingRepository(BaseRepository):
                 participation,
             )
 
-            # Normalize topics to meeting_topics table (batch for efficiency)
             if topics:
-                await conn.execute(
-                    "DELETE FROM meeting_topics WHERE meeting_id = $1",
-                    meeting_id,
-                )
-                topic_records = [(meeting_id, topic) for topic in topics]
-                await conn.executemany(
-                    "INSERT INTO meeting_topics (meeting_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                    topic_records,
+                await replace_entity_topics(
+                    conn, "meeting_topics", "meeting_id", meeting_id, topics
                 )
 
         logger.info("updated meeting summary", meeting_id=meeting_id, topic_count=len(topics) if topics else 0)
 
     async def get_recent_meetings(self, limit: int = 50) -> List[Meeting]:
-        """Get most recent meetings across all cities
-
-        Args:
-            limit: Maximum number of meetings to return
-
-        Returns:
-            List of Meeting objects sorted by date descending
-        """
+        """Get most recent meetings across all cities."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT m.*
@@ -279,7 +198,6 @@ class MeetingRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch all topics
             meeting_ids = [row["id"] for row in rows]
             topics_by_meeting = await fetch_topics_for_ids(
                 conn, "meeting_topics", "meeting_id", meeting_ids
@@ -291,13 +209,7 @@ class MeetingRepository(BaseRepository):
             ]
 
     async def get_random_meeting_with_items(self) -> Optional[Meeting]:
-        """Get a random meeting that has items and a summary
-
-        Used for testing/debugging.
-
-        Returns:
-            Meeting object, or None if no matching meetings
-        """
+        """Get a random meeting that has items and a summary (for testing)."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT m.*
@@ -311,7 +223,6 @@ class MeetingRepository(BaseRepository):
             if not row:
                 return None
 
-            # Fetch normalized topics
             topics_map = await fetch_topics_for_ids(
                 conn, "meeting_topics", "meeting_id", [row["id"]]
             )

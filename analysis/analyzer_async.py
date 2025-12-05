@@ -24,6 +24,7 @@ from exceptions import ExtractionError, LLMError
 from parsing.pdf import PdfExtractor
 from parsing.participation import parse_participation_info
 from analysis.llm.summarizer import GeminiSummarizer
+from pipeline.protocols import MetricsCollector, NullMetrics
 
 from config import get_logger
 
@@ -47,14 +48,20 @@ class AsyncAnalyzer:
     Rate limiting is handled reactively by the summarizer via Gemini's retry instructions.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        metrics: Optional[MetricsCollector] = None
+    ):
         """Initialize the async analyzer
 
         Args:
             api_key: Gemini API key (or uses environment variables)
+            metrics: Metrics collector for LLM call tracking (uses NullMetrics if not provided)
         """
+        self.metrics = metrics or NullMetrics()
         self.pdf_extractor = PdfExtractor()  # Sync extractor, we'll wrap calls
-        self.summarizer = GeminiSummarizer(api_key=api_key)  # Sync summarizer, we'll wrap calls
+        self.summarizer = GeminiSummarizer(api_key=api_key, metrics=self.metrics)
         self.http_session: Optional[aiohttp.ClientSession] = None
 
         logger.info(
@@ -229,11 +236,6 @@ class AsyncAnalyzer:
 
                 logger.info("agenda processing success", url=url)
 
-                # Cleanup: free PDF text memory
-                del result
-                del extracted_text
-
-                # Convert Pydantic model to dict for return type consistency
                 participation_dict = participation.model_dump() if participation else None
                 return summary, "pymupdf_gemini", participation_dict
             else:

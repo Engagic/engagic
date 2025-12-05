@@ -1,17 +1,10 @@
-"""Async MatterRepository for matter operations
-
-Handles CRUD operations for matters (recurring legislative items):
-- Store/update matters with canonical summaries
-- Topic normalization (separate matter_topics table)
-- JSONB for attachments, sponsors, metadata
-- Timeline tracking (first_seen, last_seen, appearance_count)
-"""
+"""Async MatterRepository for matter operations."""
 
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from database.repositories_async.base import BaseRepository
-from database.repositories_async.helpers import build_matter, fetch_topics_for_ids
+from database.repositories_async.helpers import build_matter, fetch_topics_for_ids, replace_entity_topics
 from database.models import Matter, AttachmentInfo
 from config import get_logger
 
@@ -21,35 +14,8 @@ logger = get_logger(__name__).bind(component="matter_repository")
 class MatterRepository(BaseRepository):
     """Repository for matter operations."""
 
-    async def _replace_topics(self, conn, matter_id: str, topics: Optional[List[str]]) -> None:
-        """Replace all topics for a matter (destructive operation).
-
-        Deletes existing topics then inserts new ones. Use when topics are
-        recomputed and the new list should fully replace the old one.
-
-        Args:
-            conn: Database connection within transaction
-            matter_id: The matter's composite ID
-            topics: New topics to set (None or empty = no change)
-        """
-        if not topics:
-            return
-        await conn.execute("DELETE FROM matter_topics WHERE matter_id = $1", matter_id)
-        topic_records = [(matter_id, topic) for topic in topics]
-        await conn.executemany(
-            "INSERT INTO matter_topics (matter_id, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-            topic_records,
-        )
-
     async def store_matter(self, matter: Matter) -> None:
-        """Store or update a matter
-
-        Uses UPSERT to handle both new matters and updates.
-        Normalizes topics to matter_topics table.
-
-        Args:
-            matter: Matter object with canonical summary and topics
-        """
+        """Store or update a matter with topic normalization."""
         async with self.transaction() as conn:
             # Upsert matter row
             await conn.execute(
@@ -92,19 +58,15 @@ class MatterRepository(BaseRepository):
                 matter.status or "active",
             )
 
-            await self._replace_topics(conn, matter.id, matter.canonical_topics)
+            if matter.canonical_topics:
+                await replace_entity_topics(
+                    conn, "matter_topics", "matter_id", matter.id, matter.canonical_topics
+                )
 
         logger.debug("stored matter", matter_id=matter.id, banana=matter.banana)
 
     async def get_matter(self, matter_id: str) -> Optional[Matter]:
-        """Get a matter by ID
-
-        Args:
-            matter_id: Matter identifier (composite hash including city_banana)
-
-        Returns:
-            Matter object with denormalized topics, or None
-        """
+        """Get a matter by ID."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -122,7 +84,6 @@ class MatterRepository(BaseRepository):
             if not row:
                 return None
 
-            # Fetch normalized topics
             topics_map = await fetch_topics_for_ids(
                 conn, "matter_topics", "matter_id", [matter_id]
             )
@@ -131,18 +92,10 @@ class MatterRepository(BaseRepository):
             return build_matter(row, topics or None)
 
     async def get_matters_batch(self, matter_ids: List[str]) -> Dict[str, Matter]:
-        """Batch fetch multiple matters by ID - eliminates N+1
-
-        Args:
-            matter_ids: List of matter identifiers
-
-        Returns:
-            Dict mapping matter_id to Matter object
-        """
+        """Batch fetch multiple matters by ID - eliminates N+1."""
         if not matter_ids:
             return {}
 
-        # Deduplicate IDs
         unique_ids = list(set(matter_ids))
 
         async with self.pool.acquire() as conn:
@@ -163,12 +116,10 @@ class MatterRepository(BaseRepository):
             if not rows:
                 return {}
 
-            # Batch fetch all topics
             topics_by_matter = await fetch_topics_for_ids(
                 conn, "matter_topics", "matter_id", unique_ids
             )
 
-            # Build matters dict using helper
             return {
                 row["id"]: build_matter(
                     row, topics_by_matter.get(row["id"]) or None
@@ -183,18 +134,8 @@ class MatterRepository(BaseRepository):
         canonical_topics: List[str],
         attachment_hash: str
     ) -> None:
-        """Update matter with canonical summary, topics, and attachment hash
-
-        Used when matter attachments change and summary needs recomputation.
-
-        Args:
-            matter_id: Composite matter ID
-            canonical_summary: Deduplicated summary text
-            canonical_topics: Extracted topics
-            attachment_hash: SHA256 hash of attachments for change detection
-        """
+        """Update matter with canonical summary, topics, and attachment hash."""
         async with self.transaction() as conn:
-            # Update matter row with new summary and attachment hash
             await conn.execute(
                 """
                 UPDATE city_matters
@@ -208,7 +149,10 @@ class MatterRepository(BaseRepository):
                 attachment_hash,
             )
 
-            await self._replace_topics(conn, matter_id, canonical_topics)
+            if canonical_topics:
+                await replace_entity_topics(
+                    conn, "matter_topics", "matter_id", matter_id, canonical_topics
+                )
 
         logger.debug("updated matter with canonical summary", matter_id=matter_id)
 
@@ -220,25 +164,9 @@ class MatterRepository(BaseRepository):
         attachment_hash: str,
         increment_appearance_count: bool = False
     ) -> Optional[int]:
-        """Update matter tracking fields (last_seen, appearance_count, attachments)
-
-        Uses RETURNING to ensure atomic increment and prevent race conditions
-        when multiple workers process the same matter concurrently.
-
-        Args:
-            matter_id: Composite matter ID
-            meeting_date: Datetime when matter appeared
-            attachments: List of attachment dicts
-            attachment_hash: SHA256 hash of attachments
-            increment_appearance_count: Whether to increment appearance count
-
-        Returns:
-            New appearance_count if incremented, None otherwise
-        """
+        """Update matter tracking fields with atomic increment to prevent race conditions."""
         async with self.transaction() as conn:
             if increment_appearance_count:
-                # Use RETURNING to ensure atomic increment - prevents lost updates
-                # when two workers increment simultaneously
                 new_count = await conn.fetchval(
                     """
                     UPDATE city_matters
@@ -276,15 +204,7 @@ class MatterRepository(BaseRepository):
                 return None
 
     async def has_appearance(self, matter_id: str, meeting_id: str) -> bool:
-        """Check if a matter already has an appearance record for a specific meeting
-
-        Args:
-            matter_id: Composite matter ID
-            meeting_id: Meeting identifier
-
-        Returns:
-            True if appearance record exists, False otherwise
-        """
+        """Check if a matter already has an appearance record for a specific meeting."""
         async with self.pool.acquire() as conn:
             exists = await conn.fetchval(
                 """
@@ -308,17 +228,7 @@ class MatterRepository(BaseRepository):
         committee_id: Optional[str] = None,
         sequence: Optional[int] = None
     ) -> None:
-        """Create a matter appearance record
-
-        Args:
-            matter_id: Composite matter ID
-            meeting_id: Meeting identifier
-            item_id: Item identifier
-            appeared_at: Datetime when matter appeared
-            committee: Committee name (extracted from meeting title)
-            committee_id: FK to committees table (for linking)
-            sequence: Item sequence in meeting
-        """
+        """Create a matter appearance record."""
         async with self.transaction() as conn:
             await conn.execute(
                 """
@@ -345,18 +255,7 @@ class MatterRepository(BaseRepository):
         banana: str,
         limit: int = 50
     ) -> List[Matter]:
-        """Full-text search on matters using PostgreSQL FTS
-
-        Searches title, canonical_summary, and matter_file fields.
-
-        Args:
-            query: Search query (plain text, automatically converted to tsquery)
-            banana: City filter (required for scoped search)
-            limit: Maximum results (default: 50)
-
-        Returns:
-            List of matching matters ordered by relevance then last_seen
-        """
+        """Full-text search on matters using PostgreSQL FTS."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -387,13 +286,11 @@ class MatterRepository(BaseRepository):
             if not rows:
                 return []
 
-            # Batch fetch all topics
             matter_ids = [row["id"] for row in rows]
             topics_by_matter = await fetch_topics_for_ids(
                 conn, "matter_topics", "matter_id", matter_ids
             )
 
-            # Build matter objects using helper
             return [
                 build_matter(row, topics_by_matter.get(row["id"]) or None)
                 for row in rows
@@ -407,18 +304,7 @@ class MatterRepository(BaseRepository):
         vote_outcome: str,
         vote_tally: dict
     ) -> None:
-        """Update matter appearance with vote outcome and tally
-
-        Called after processing votes for an item. Records the
-        per-meeting outcome (passed/failed/etc) and vote counts.
-
-        Args:
-            matter_id: Composite matter ID
-            meeting_id: Meeting identifier
-            item_id: Item identifier
-            vote_outcome: Result: passed, failed, tabled, referred, amended, no_vote
-            vote_tally: Vote counts dict: {yes: N, no: N, abstain: N, absent: N}
-        """
+        """Update matter appearance with vote outcome and tally."""
         async with self.transaction() as conn:
             await conn.execute(
                 """
@@ -446,16 +332,7 @@ class MatterRepository(BaseRepository):
         status: str,
         final_vote_date: Optional[datetime] = None
     ) -> None:
-        """Update matter disposition status
-
-        Called when a matter reaches a terminal state (passed, failed, etc).
-        Sets the status and records when the final vote occurred.
-
-        Args:
-            matter_id: Composite matter ID
-            status: Disposition: passed, failed, tabled, withdrawn, etc.
-            final_vote_date: Date of final vote (optional)
-        """
+        """Update matter disposition status when reaching a terminal state."""
         async with self.transaction() as conn:
             await conn.execute(
                 """
@@ -478,24 +355,12 @@ class MatterRepository(BaseRepository):
         )
 
     async def get_matter_with_votes(self, matter_id: str) -> Optional[dict]:
-        """Get matter with full vote history across all meetings
-
-        Returns matter data enriched with vote timeline showing
-        each appearance, outcome, and tally.
-
-        Args:
-            matter_id: Composite matter ID
-
-        Returns:
-            Dict with matter data and vote_history array, or None
-        """
+        """Get matter with full vote history across all meetings."""
         async with self.pool.acquire() as conn:
-            # Get matter
             matter = await self.get_matter(matter_id)
             if not matter:
                 return None
 
-            # Get vote history from appearances
             appearances = await conn.fetch(
                 """
                 SELECT
