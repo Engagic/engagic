@@ -4,7 +4,7 @@ Search service layer
 Business logic for handling different search types
 """
 
-from typing import Dict, Any, List, Optional, TypedDict, Literal, Union
+from typing import cast, Dict, Any, List, Optional, TypedDict, Literal, Union
 from typing_extensions import NotRequired
 from difflib import get_close_matches
 from database.db_postgres import Database
@@ -88,13 +88,13 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
     # Check database - CACHED ONLY
     city = await db.get_city(zipcode=zipcode)
     if not city:
-        return {
+        return cast(SearchResponse, {
             "success": False,
             "message": "We're not covering that area yet, but we're always expanding! Thanks for your interest - we'll prioritize cities with high demand.",
             "query": zipcode,
             "type": "zipcode",
             "meetings": [],
-        }
+        })
 
     # Get cached meetings (include cancelled - frontend shows status badge)
     meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
@@ -109,7 +109,7 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
 
         meetings_with_items = await get_meetings_with_items(meetings, db)
 
-        return {
+        return cast(SearchResponse, {
             "success": True,
             "city_name": city.name,
             "state": city.state,
@@ -122,10 +122,10 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
             "cached": True,
             "query": zipcode,
             "type": "zipcode",
-        }
+        })
 
     # No cached meetings - background processor will handle this
-    return {
+    return cast(SearchResponse, {
         "success": True,
         "city_name": city.name,
         "state": city.state,
@@ -139,7 +139,7 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
         "query": zipcode,
         "type": "zipcode",
         "message": f"No meetings available yet for {city.name} - check back soon as we sync with the city website",
-    }
+    })
 
 
 async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
@@ -159,13 +159,13 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
     # Check database - CACHED ONLY
     city = await db.get_city(name=city_name, state=state)
     if not city:
-        return {
+        return cast(SearchResponse, {
             "success": False,
             "message": f"We're not covering {city_name}, {state} yet, but we're always expanding! Your interest has been noted - we prioritize cities with high demand.",
             "query": city_input,
             "type": "city_name",
             "meetings": [],
-        }
+        })
 
     # Get cached meetings (include cancelled - frontend shows status badge)
     meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
@@ -175,7 +175,7 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
 
         meetings_with_items = await get_meetings_with_items(meetings, db)
 
-        return {
+        return cast(SearchResponse, {
             "success": True,
             "city_name": city.name,
             "state": city.state,
@@ -188,10 +188,10 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
             "cached": True,
             "query": city_input,
             "type": "city",
-        }
+        })
 
     # No cached meetings - return empty
-    return {
+    return cast(SearchResponse, {
         "success": False,
         "city_name": city.name,
         "state": city.state,
@@ -205,7 +205,7 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
         "query": city_input,
         "type": "city",
         "message": f"No meetings cached yet for {city_name}, {state}, please check back soon!",
-    }
+    })
 
 
 async def handle_state_search(state_input: str, db: Database) -> SearchResponse:
@@ -215,25 +215,25 @@ async def handle_state_search(state_input: str, db: Database) -> SearchResponse:
     state_full = get_state_full_name(state_input)
 
     if not state_abbr:
-        return {
+        return cast(SearchResponse, {
             "success": False,
             "message": f"'{state_input}' is not a recognized state.",
             "query": state_input,
             "type": "state",
             "meetings": [],
-        }
+        })
 
     # Get all cities in this state
     cities = await db.get_cities(state=state_abbr)
 
     if not cities:
-        return {
+        return cast(SearchResponse, {
             "success": False,
             "message": f"We don't have any cities in {state_full} yet, but we're always expanding!",
             "query": state_input,
             "type": "state",
             "meetings": [],
-        }
+        })
 
     # Convert cities to the format expected by frontend
     city_options = []

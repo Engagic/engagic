@@ -3,6 +3,7 @@ Monitoring and health check API routes
 """
 
 from datetime import datetime
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
@@ -96,7 +97,7 @@ async def root():
 @router.get("/api/health")
 async def health_check(db: Database = Depends(get_db)):
     """Health check endpoint"""
-    health_status = {
+    health_status: Dict[str, Any] = {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": "2.0.0",

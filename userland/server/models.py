@@ -5,7 +5,7 @@ Pydantic models for validation and serialization.
 """
 
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, validator, Field
+from pydantic import BaseModel, EmailStr, field_validator, Field
 
 
 class SignupRequest(BaseModel):
@@ -16,16 +16,18 @@ class SignupRequest(BaseModel):
     cities: List[str] = Field(default=[], max_length=20)  # Multi-city for power users
     keywords: List[str] = Field(default=[], max_length=50)
 
-    @validator("cities")
-    def validate_cities_field(cls, v):
+    @field_validator("cities")
+    @classmethod
+    def validate_cities_field(cls, v: List[str]) -> List[str]:
         # Allow empty list - user can configure later
         if not v:
             return []
         # Basic validation - just ensure they're non-empty strings
         return [city.strip() for city in v if city.strip()]
 
-    @validator("keywords")
-    def validate_keywords_field(cls, v):
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords_field(cls, v: List[str]) -> List[str]:
         # Allow empty list - user can configure later
         if not v:
             return []

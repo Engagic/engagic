@@ -25,7 +25,7 @@ Confidence: 9/10 - Verified working with item-level extraction
 
 import re
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
@@ -33,27 +33,18 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
+from pipeline.protocols import MetricsCollector
 
 
 class AsyncBerkeleyAdapter(AsyncBaseAdapter):
     """Async Berkeley City Council - Custom Drupal CMS adapter"""
 
-    def __init__(self, city_slug: str):
-        super().__init__(city_slug, vendor="berkeley")
+    def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
+        super().__init__(city_slug, vendor="berkeley", metrics=metrics)
         self.base_url = "https://berkeleyca.gov"
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings from Berkeley's Drupal-based website (async).
-
-        Args:
-            days_back: Days to look backward (default 7)
-            days_forward: Days to look forward (default 14)
-
-        Returns:
-            List of meeting dictionaries (validation in base class)
-        """
-        # Date range based on standard window
+        """Fetch meetings from Berkeley's Drupal-based website."""
         today = datetime.now().date()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
@@ -167,15 +158,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
         return results
 
     async def _fetch_meeting_detail(self, agenda_url: str) -> Dict[str, Any]:
-        """
-        Fetch and parse HTML agenda detail page (async).
-
-        Args:
-            agenda_url: URL to HTML agenda page
-
-        Returns:
-            Dict with title, participation, and items
-        """
+        """Fetch and parse HTML agenda detail page."""
         logger.debug("fetching detail page", vendor="berkeley", slug=self.slug, url=agenda_url)
 
         response = await self._get(agenda_url)
@@ -203,15 +186,7 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
         }
 
     def _extract_participation(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """
-        Extract participation info from intro paragraphs.
-
-        Args:
-            soup: BeautifulSoup object of agenda page
-
-        Returns:
-            Participation dictionary with email, virtual_url, meeting_id, phone, is_hybrid
-        """
+        """Extract participation info (email, virtual_url, phone, is_hybrid) from intro paragraphs."""
         participation = {}
 
         # Get all text from page
@@ -243,16 +218,8 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
         """
         Extract agenda items from HTML content.
 
-        Berkeley format:
-        <strong>1.</strong><a href="/sites/default/files/documents/...pdf">Title</a>
-        <strong>From: ...</strong>
-        <strong>Recommendation: ...</strong>
-
-        Args:
-            soup: BeautifulSoup object of agenda page
-
-        Returns:
-            List of agenda item dictionaries
+        Berkeley format: <strong>1.</strong><a href="...pdf">Title</a>
+        followed by From:/Recommendation: metadata blocks.
         """
         items = []
 

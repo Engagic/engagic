@@ -1,42 +1,50 @@
 # Pipeline - Orchestration & Processing
 
-**Purpose:** Orchestrates the complete data flow from vendor fetching to LLM analysis to database storage.
-
-The pipeline handles:
-- Background daemon lifecycle (sync + processing loops)
-- City sync scheduling and vendor routing
-- Processing queue management
-- PDF extraction and LLM analysis
-- Topic normalization and aggregation
+Orchestrates data flow from vendor fetching to LLM analysis to database storage.
 
 ---
 
-## Architecture Overview
-
-The pipeline consists of **7 focused modules** with clear responsibilities:
+## Structure
 
 ```
-┌──────────────┐
-│  Conductor   │  Async orchestration (CLI, daemon lifecycle)
-└──────┬───────┘
-       │
-       ├──────> Fetcher    (City sync, vendor routing, rate limiting)
-       │
-       └──────> Processor  (Queue processing, item assembly)
-                     │
-                     ├──────> Models      (Job type definitions)
-                     ├──────> Utils       (Matter-first utilities)
-                     ├──────> Admin       (Debug/preview commands)
-                     └──────> ClickTypes  (CLI parameter validation)
+pipeline/
+  conductor.py      # Daemon lifecycle, CLI entry point
+  fetcher.py        # City sync, vendor routing
+  processor.py      # Queue processing, item assembly
+  models.py         # Job type definitions
+  utils.py          # Matter-first utilities
+  admin.py          # Debug commands
+  click_types.py    # CLI validation
+
+  protocols/        # Dependency injection interfaces
+  filters/          # Processing decision logic
+  orchestrators/    # Business logic coordinators
 ```
 
-**Key Pattern:** Conductor delegates to Fetcher and Processor, which are specialized for their domains. Processor imports analyzer from `analysis/` module. Models define typed job payloads. Utils provide matter-first deduplication utilities.
+---
+
+## Architecture
+
+```
+Conductor
+  ├─> Fetcher    (city sync, rate limiting)
+  │       └─> MeetingSyncOrchestrator (store + enqueue)
+  └─> Processor  (queue processing)
+           ├─> orchestrators/  (business logic)
+           └─> filters/        (skip decisions)
+```
+
+**Key patterns:**
+- Conductor delegates to Fetcher and Processor
+- Processor uses orchestrators for business logic
+- Database delegates decisions to orchestrators
+- Metrics injected via Protocol (no server dependency)
 
 ---
 
 ## Module Reference
 
-### 1. `conductor.py` - Orchestration (851 lines)
+### 1. `conductor.py` - Orchestration (~860 lines)
 
 **Entry point for all pipeline operations.** Coordinates sync and processing loops.
 
@@ -70,16 +78,32 @@ conductor.stop()         # Graceful shutdown (sets stop flag)
 
 ```bash
 # Background daemon (continuous sync + processing)
-engagic-daemon
+engagic-conductor daemon
 
 # Fetcher only (sync without processing)
-engagic-daemon --fetcher
+engagic-conductor fetcher
 
-# Admin operations
-engagic-daemon --sync-city paloaltoCA
-engagic-daemon --sync-and-process-city paloaltoCA
-engagic-daemon --preview-queue paloaltoCA
-engagic-daemon --status
+# Single city operations
+engagic-conductor sync-city paloaltoCA
+engagic-conductor sync-and-process-city paloaltoCA
+engagic-conductor preview-queue paloaltoCA
+engagic-conductor status
+
+# Multi-city operations (comma-separated or @file)
+engagic-conductor sync-cities paloaltoCA,oaklandCA
+engagic-conductor process-cities @cities.txt
+engagic-conductor sync-and-process-cities paloaltoCA,oaklandCA
+
+# Watchlist operations (user-demanded cities)
+engagic-conductor preview-watchlist
+engagic-conductor sync-watchlist
+engagic-conductor process-watchlist
+
+# Admin
+engagic-conductor full-sync           # Sync all active cities
+engagic-conductor city-requests       # Show pending user city requests
+engagic-conductor extract-text MEETING_ID --output-file text.txt
+engagic-conductor preview-items MEETING_ID --extract-text
 ```
 
 #### Async Architecture
@@ -90,7 +114,7 @@ engagic-daemon --status
 
 ---
 
-### 2. `fetcher.py` - City Sync & Vendor Routing (535 lines)
+### 2. `fetcher.py` - City Sync & Vendor Routing (~320 lines)
 
 **Fetches meetings from vendor platforms.** Handles rate limiting, retry logic, and database storage.
 
@@ -161,7 +185,7 @@ class SyncResult:
 
 ---
 
-### 3. `processor.py` - Queue Processing & Item Assembly (1350 lines)
+### 3. `processor.py` - Queue Processing & Item Assembly (~790 lines)
 
 **Processes jobs from the queue.** Extracts text from PDFs, assembles items, orchestrates LLM analysis.
 
@@ -192,7 +216,7 @@ processor.process_meeting(meeting)  # Agenda-first: items > packet
 
 #### Processing Paths
 
-**Path 1: Item-Level Processing (PRIMARY - 58% of cities)**
+**Path 1: Item-Level Processing (PRIMARY)**
 ```
 Meeting has agenda_items
   ├─ Filter procedural items (minutes, roll call, etc.)
@@ -200,8 +224,7 @@ Meeting has agenda_items
   │   └─ Extract each unique PDF once (not per-item)
   ├─ Separate shared vs item-specific documents
   ├─ Build batch requests (item-specific text only)
-  ├─ Process via Analyzer.process_batch_items()
-  │   └─ Gemini Batch API (50% cost savings)
+  ├─ Process via Analyzer.process_batch_items_async()
   │   └─ Generator yields chunks as they complete
   ├─ Normalize topics (via TopicNormalizer)
   ├─ Save incrementally (per-chunk, not end-of-batch)
@@ -209,24 +232,22 @@ Meeting has agenda_items
   └─ Update meeting metadata (topics, participation)
 ```
 
-**Path 2: Monolithic Processing (FALLBACK - 42% of cities)**
+**Path 2: Monolithic Processing (FALLBACK)**
 ```
 Meeting has packet_url (no items)
   ├─ Extract full PDF text
-  ├─ Meeting-level prompt (short/comprehensive)
+  ├─ Meeting-level prompt
   ├─ Single LLM call
   └─ Store meeting summary
 ```
 
-**Path 3: Matters-First Processing (NEW - Nov 2025)**
+**Path 3: Matter Processing (via queue)**
 ```
-Agenda item has matter_file/matter_id
-  ├─ Check if matter already processed
-  ├─ Compare attachment hash (changed?)
-  │   ├─ If unchanged: Reuse canonical summary
-  │   └─ If changed: Process and update canonical
-  ├─ Process matter once (representative item)
-  └─ Backfill all appearances with canonical summary
+MatterJob from queue (matter_id + item_ids)
+  ├─ Aggregate attachments from all item appearances
+  ├─ Process representative item
+  ├─ Store canonical_summary in city_matters
+  └─ Backfill all item appearances with canonical summary
 ```
 
 #### Document Caching (Item-Level Path)
@@ -257,25 +278,27 @@ item_request = {
 }
 ```
 
-#### Procedural Filtering
+#### Two-Tier Filtering
 
-**Skip low-value items to save API costs:**
+**Adapter level - discard entirely (zero metadata value):**
 
 ```python
-PROCEDURAL_PATTERNS = [
-    "review of minutes",
-    "approval of minutes",
+ADAPTER_SKIP_PATTERNS = [
     "roll call",
+    "approval of minutes",
     "pledge of allegiance",
     "adjournment"
 ]
+```
 
-PUBLIC_COMMENT_PATTERNS = [
-    "public comment",
-    "public correspondence",
-    "comment letters",
-    "written comment",
-    "petitions and communications"  # SF uses this heavily
+**Processor level - save but skip LLM (searchable metadata):**
+
+```python
+PROCESSOR_SKIP_PATTERNS = [
+    "proclamation",
+    "commendation",
+    "appointment",
+    "liquor license"
 ]
 ```
 
@@ -296,7 +319,7 @@ for chunk_results in analyzer.process_batch_items(batch_requests):
 
 ---
 
-### 4. `models.py` - Job Type Definitions (155 lines)
+### 4. `models.py` - Job Type Definitions (~160 lines)
 
 **Type-safe job payload definitions.** Enables exhaustive type checking and safe dispatch.
 
@@ -378,28 +401,26 @@ elif job.job_type == "matter":
 
 ---
 
-### 5. `utils.py` - Matter-First Utilities (216 lines)
+### 5. `utils.py` - Matter-First Utilities (~220 lines)
 
 **Utilities for matter-first processing.** Attachment hashing and matter key extraction.
 
 #### Responsibilities
 - Generate stable attachment hashes for deduplication
 - Extract canonical matter keys from vendor data
+- Combine date/time strings from vendor APIs
 - Support URL-only or metadata-enhanced hashing modes
 
 #### Key Functions
 
 ```python
-from pipeline.utils import hash_attachments, get_matter_key
+from pipeline.utils import hash_attachments, hash_attachments_fast, get_matter_key, combine_date_time
 
 # Hash attachments for deduplication (URL-only mode, fast)
-attachments = [
-    {"url": "https://city.gov/doc1.pdf", "name": "Staff Report"},
-    {"url": "https://city.gov/doc2.pdf", "name": "Ordinance"}
-]
-hash_value = hash_attachments(attachments)  # SHA256 hex digest
+attachments = [att1, att2]  # AttachmentInfo objects with url, name attrs
+hash_value = hash_attachments_fast(attachments)  # SHA256 hex digest
 
-# Hash with metadata (slower, more accurate)
+# Hash with metadata (slower, better change detection)
 hash_value = hash_attachments(attachments, include_metadata=True)
 # Fetches Content-Length and Last-Modified headers via HEAD requests
 
@@ -407,8 +428,9 @@ hash_value = hash_attachments(attachments, include_metadata=True)
 matter_key = get_matter_key(matter_file="25-1234", matter_id="uuid-abc")
 # Returns: "25-1234" (semantic ID preferred)
 
-matter_key = get_matter_key(matter_file=None, matter_id="uuid-abc")
-# Returns: "uuid-abc" (fallback to UUID)
+# Combine date and time strings from vendor APIs
+combined = combine_date_time("2025-11-18T00:00:00", "6:30 PM")
+# Returns: "2025-11-18T18:30:00"
 ```
 
 #### Attachment Hashing Strategy
@@ -472,7 +494,7 @@ get_matter_key(None, "uuid-abc")  # Returns: "uuid-abc"
 
 ---
 
-### 6. `admin.py` - Admin & Debug Utilities (201 lines)
+### 6. `admin.py` - Admin & Debug Utilities (~200 lines)
 
 **Debug utilities for manual inspection.** Not used in production daemon, only CLI commands.
 
@@ -512,7 +534,7 @@ engagic-daemon --preview-items paloaltoCA_2025-11-10
 
 ---
 
-### 7. `click_types.py` - CLI Parameter Types (57 lines)
+### 7. `click_types.py` - CLI Parameter Types (~60 lines)
 
 **Custom Click parameter types for CLI validation.**
 
@@ -540,6 +562,59 @@ def sync_city(city_banana: str):
 
 ---
 
+### 8. `orchestrators/` - Business Logic Coordinators
+
+Four orchestrators coordinate complex workflows across repositories:
+
+#### `MeetingSyncOrchestrator` (~370 lines)
+Main coordinator for sync operations. Called by Fetcher.
+
+```python
+orchestrator = MeetingSyncOrchestrator(db)
+meeting, stats = await orchestrator.sync_meeting(meeting_dict, city)
+```
+
+**Responsibilities:**
+- Transform vendor meeting dict to Meeting + AgendaItem models
+- Track legislative matters (new vs duplicate appearances)
+- Create matter_appearances for tracking
+- Process votes and update outcomes
+- Enqueue meetings for LLM processing
+
+#### `EnqueueDecider` (~45 lines)
+Determines if meetings should be enqueued for processing.
+
+```python
+decider = EnqueueDecider()
+should_enqueue, reason = decider.should_enqueue(meeting, items, has_items)
+priority = decider.calculate_priority(meeting_date)
+```
+
+**Logic:**
+- Skip if all items already have summaries
+- Skip if meeting already has summary (monolithic)
+- Priority based on date proximity (0-150 scale)
+
+#### `MatterFilter` (~12 lines)
+Filters out administrative/procedural matter types.
+
+```python
+filter = MatterFilter()
+if filter.should_skip(matter_type):
+    # Skip Minutes, IRC, Information Items, etc.
+```
+
+#### `VoteProcessor` (~23 lines)
+Computes vote tallies and determines outcomes.
+
+```python
+processor = VoteProcessor()
+result = processor.process_votes(votes)
+# Returns: {"tally": {"aye": 5, "nay": 2}, "outcome": "passed"}
+```
+
+---
+
 ## Data Flow Diagram
 
 ```
@@ -559,10 +634,10 @@ def sync_city(city_banana: str):
 │  ├─ Prioritize by activity                                      │
 │  ├─ Rate limit (3-5s delays)                                    │
 │  ├─ Adapter.fetch_meetings()                                    │
-│  └─ db.store_meeting_from_sync()                                │
+│  └─ MeetingSyncOrchestrator.sync_meeting()                      │
 │      ├─ Store Meeting + AgendaItem objects                      │
 │      ├─ Track matters (city_matters + matter_appearances)       │
-│      └─ Enqueue for processing (matters-first or item-level)    │
+│      └─ EnqueueDecider → Enqueue for processing                 │
 └─────────────────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -628,17 +703,17 @@ def sync_city(city_banana: str):
 **Schema:**
 ```sql
 CREATE TABLE queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_type TEXT,  -- "meeting" or "matter"
-    payload TEXT,   -- JSON payload (MeetingJob or MatterJob)
-    source_url TEXT NOT NULL UNIQUE,
+    id BIGSERIAL PRIMARY KEY,
+    source_url TEXT NOT NULL UNIQUE,  -- Deduplication key
     meeting_id TEXT,
     banana TEXT,
-    status TEXT DEFAULT 'pending',
+    job_type TEXT,              -- "meeting" or "matter"
+    payload JSONB,              -- MeetingJob or MatterJob data
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'dead_letter')),
     priority INTEGER DEFAULT 0,
     retry_count INTEGER DEFAULT 0,
     error_message TEXT,
-    created_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
     failed_at TIMESTAMP
@@ -709,26 +784,26 @@ ENGAGIC_LOG_LEVEL=INFO
 
 ```bash
 # Sync single city
-engagic-daemon --sync-city paloaltoCA
+engagic-conductor sync-city paloaltoCA
 
 # Sync and process immediately
-engagic-daemon --sync-and-process-city paloaltoCA
+engagic-conductor sync-and-process-city paloaltoCA
 
 # Preview queue
-engagic-daemon --preview-queue paloaltoCA
+engagic-conductor preview-queue paloaltoCA
 
 # Extract text for debugging
-engagic-daemon --extract-text meeting_id --output-file text.txt
+engagic-conductor extract-text MEETING_ID --output-file text.txt
 ```
 
 ### Production Deployment (Background Daemon)
 
 ```bash
 # Fetcher service (sync only, no processing)
-engagic-daemon --fetcher
+engagic-conductor fetcher
 
 # Full daemon (sync + processing)
-engagic-daemon
+engagic-conductor daemon
 ```
 
 **Deployment:** VPS runs two systemd services:
@@ -741,27 +816,21 @@ engagic-daemon
 
 ### Sync Errors (Fetcher)
 
-**Retry:** 2 attempts with exponential backoff (5s, 20s)
+**Retry:** 1 retry with backoff (5s, then 20s delay)
 ```python
 # Attempt 1: Immediate
-# Attempt 2: Wait 5s + jitter
-# Attempt 3: Wait 20s + jitter
+# If failed: Wait 5s + jitter, retry once
 # If all fail: Add to failed_cities set
 ```
 
 ### Processing Errors (Processor)
 
-**Retry:** 3 attempts with priority decay
+**Retry:** Handled at queue level via `mark_processing_failed()`
 ```python
-# Attempt 1: priority = 150 (recent meeting)
-# Attempt 2: priority = 130 (drops by 20)
-# Attempt 3: priority = 110 (drops by 40)
-# If all fail: Move to dead_letter queue
+# On failure: Error recorded, job remains in queue
+# retry_count tracked in queue table
+# Non-retryable: "Analyzer not available" (no API key)
 ```
-
-**Non-retryable errors:**
-- "Analyzer not available" (no API key)
-- These are marked as `failed` without retry logic
 
 ---
 
@@ -799,4 +868,4 @@ engagic-daemon
 
 ---
 
-**Last Updated:** 2025-12-03 (Updated all line counts: conductor 657→851, processor 1335→1350)
+**Last Updated:** 2025-12-04 (Audit: fixed CLI commands, line counts, added orchestrators section, PostgreSQL schema)

@@ -39,7 +39,8 @@ import aiohttp
 from parsing.chicago_pdf import parse_chicago_agenda_pdf
 from parsing.pdf import PdfExtractor
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.utils.item_filters import should_skip_procedural_item
+from pipeline.filters import should_skip_item
+from pipeline.protocols import MetricsCollector
 
 
 class AsyncChicagoAdapter(AsyncBaseAdapter):
@@ -68,8 +69,8 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         "pending": None,
     }
 
-    def __init__(self, city_slug: str):
-        super().__init__(city_slug, vendor="chicago")
+    def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
+        super().__init__(city_slug, vendor="chicago", metrics=metrics)
         self.base_url = "https://api.chicityclerkelms.chicago.gov"
         self.pdf_extractor = PdfExtractor()
         self._sync_stats: Dict[str, int] = {}
@@ -140,17 +141,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         return attachments
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings in moving window from Chicago's API (async).
-
-        Args:
-            days_back: Days to look backward (default 7)
-            days_forward: Days to look forward (default 14)
-
-        Returns:
-            List of meeting dictionaries (validation in base class)
-        """
-        # Reset stats for this sync
+        """Fetch meetings in moving window from Chicago's REST API."""
         self._reset_stats()
 
         # Build date range based on parameters
@@ -465,7 +456,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                     continue
 
                 # Skip procedural items (adapter-level filtering)
-                if should_skip_procedural_item(title, matter_type or ""):
+                if should_skip_item(title, matter_type or ""):
                     items_filtered += 1
                     logger.debug("skipping procedural item", vendor="chicago", slug=self.slug, title_prefix=title[:60])
                     continue

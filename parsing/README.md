@@ -13,26 +13,38 @@ Primary extraction using PyMuPDF (fitz) with OCR fallback via Tesseract.
 ```python
 from parsing.pdf import PdfExtractor
 
-extractor = PdfExtractor()
+# Constructor parameters (all optional with defaults)
+extractor = PdfExtractor(
+    ocr_threshold=100,                  # Min chars per page before OCR triggers
+    ocr_dpi=150,                        # DPI for OCR rendering (lower = faster, higher = better quality)
+    detect_legislative_formatting=True, # Enable [DELETED]/[ADDED] tag detection
+    max_ocr_workers=4                   # Parallel OCR threads
+)
 
 # Extract from URL
 result = extractor.extract_from_url(pdf_url, extract_links=True)
 
 # Extract from bytes
 result = extractor.extract_from_bytes(pdf_bytes, extract_links=True)
+
+# Validate extracted text quality
+is_valid = extractor.validate_text(result["text"])
 ```
 
 **Return format:**
 ```python
 {
     "success": bool,
-    "text": str,           # Extracted text content
-    "page_count": int,     # Total pages in document
-    "ocr_pages": int,      # Pages that required OCR
-    "links": list,         # Extracted hyperlinks (if extract_links=True)
-    "error": str | None,   # Error message if failed
+    "text": str,             # Extracted text content
+    "method": str,           # "pymupdf" or "pymupdf+ocr"
+    "page_count": int,       # Total pages in document
+    "extraction_time": float, # Seconds elapsed
+    "ocr_pages": int,        # Pages that required OCR
+    "links": list,           # Extracted hyperlinks (only if extract_links=True)
 }
 ```
+
+On failure, raises `ExtractionError` (not a return value).
 
 **Features:**
 - Legislative formatting detection (strikethrough/underline)
@@ -50,7 +62,7 @@ Parses Chicago City Council agenda PDFs to extract record numbers.
 from parsing.chicago_pdf import parse_chicago_agenda_pdf
 
 parsed = parse_chicago_agenda_pdf(pdf_text)
-# Returns: {"items": [{"record_number": "O2025-0019668", "sequence": 1}, ...]}
+# Returns: {"items": [{"record_number": "O2025-0019668", "sequence": 1, "title_hint": "Amendment of..."}, ...]}
 ```
 
 ### menlopark_pdf.py - Menlo Park Agenda Parser
@@ -66,13 +78,22 @@ parsed = parse_menlopark_pdf_agenda(pdf_text, links)
 
 ### participation.py - Participation Info Extractor
 
-Extracts civic engagement information (Zoom links, phone numbers, email) from meeting text.
+Extracts civic engagement information from meeting text before AI summarization.
+
+**Extracts:**
+- Multiple emails with inferred purpose (written comments, city clerk, etc.)
+- Phone numbers (normalized to +1 format)
+- Virtual meeting URLs (Zoom, Google Meet, Teams, WebEx, GoToMeeting)
+- Streaming URLs with platform detection (YouTube, Facebook Live, Granicus, Midpen Media, Vimeo)
+- Cable TV channel info
+- Zoom meeting IDs (handles spaces/dashes)
+- Hybrid vs virtual-only detection flags
 
 ```python
 from parsing.participation import parse_participation_info
 
-info = parse_participation_info(meeting_text, agenda_items)
-# Returns: ParticipationInfo object with virtual_url, phone, email, etc.
+info = parse_participation_info(meeting_text)
+# Returns: ParticipationInfo model or None if nothing found
 ```
 
 ## Error Handling
@@ -91,9 +112,10 @@ except ExtractionError as e:
 ## Performance Notes
 
 - PyMuPDF handles ~80% of PDFs reliably
-- OCR fallback adds 1-5 seconds per page
+- OCR fallback uses parallel ThreadPoolExecutor (configurable via `max_ocr_workers`)
+- OCR adds 1-5 seconds per page sequentially, faster with parallel workers
 - Large documents (1000+ pages) are likely public comment compilations
-- Memory usage peaks at ~300MB for 100MP image limit
+- Memory usage peaks at ~300MB per OCR worker for 100MP image limit
 
 ## Dependencies
 

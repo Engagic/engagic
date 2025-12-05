@@ -2,7 +2,7 @@
 
 **Transform raw meeting documents into actionable civic intelligence.** Async orchestration, Gemini API integration, adaptive prompting, topic normalization.
 
-**Last Updated:** November 23, 2025
+**Last Updated:** December 4, 2025
 
 ---
 
@@ -11,27 +11,27 @@
 The analysis module provides LLM-powered intelligence for civic meeting documents. Orchestrates Google's Gemini API to generate summaries, extract topics, and assess citizen impact from agenda items and meeting packets.
 
 **Core Capabilities:**
-- **Async orchestration:** Concurrent PDF downloads, rate-limited API calls, non-blocking extraction
+- **Async orchestration:** Concurrent PDF downloads, non-blocking extraction
+- **Reactive rate limiting:** Respects Gemini's `retryDelay` on 429 errors with exponential backoff
 - **Adaptive summarization:** Item-level (1-5 sentences) vs comprehensive (5-10 sentences) based on document size
 - **Topic extraction:** 16 canonical civic topics (housing, zoning, transportation, etc.)
 - **Citizen impact assessment:** "Why should residents care?" analysis
 - **Batch processing:** 50% cost savings via Gemini Batch API
 - **JSON structured output:** Schema-validated responses (no parsing failures)
 
-**Architecture Pattern:** AsyncAnalyzer (orchestration) → GeminiSummarizer (LLM) + AsyncRateLimiter (throttling) → TopicNormalizer (mapping)
+**Architecture Pattern:** AsyncAnalyzer (orchestration) → GeminiSummarizer (LLM + rate limiting) → TopicNormalizer (mapping)
 
 ```
 analysis/
-├── analyzer_async.py       # 350 lines - Async orchestration
-├── rate_limiter_async.py   # 157 lines - Token bucket rate limiting
+├── analyzer_async.py       # 343 lines - Async orchestration
 ├── llm/
-│   ├── summarizer.py       # 1,115 lines - Gemini API orchestration
+│   ├── summarizer.py       # 1,203 lines - Gemini API + reactive rate limiting
 │   └── prompts_v2.json     # 149 lines - Prompt templates
 └── topics/
-    ├── normalizer.py       # 231 lines - Topic normalization
+    ├── normalizer.py       # 230 lines - Topic normalization
     └── taxonomy.json       # 242 lines - 16 canonical topics
 
-**Total:** 1,849 lines Python + 391 lines JSON = 2,240 lines
+**Total:** 1,776 lines Python + 391 lines JSON = 2,167 lines
 ```
 
 ---
@@ -40,24 +40,25 @@ analysis/
 
 ### AsyncAnalyzer (analysis/analyzer_async.py)
 
-**Main orchestration layer** - coordinates async PDF downloads, rate-limited LLM calls, and concurrent processing.
+**Main orchestration layer** - coordinates async PDF downloads and LLM calls. Rate limiting is handled reactively by the summarizer.
 
 ```python
 class AsyncAnalyzer:
     """
-    Async LLM analysis orchestrator with intelligent rate limiting.
+    Async LLM analysis orchestrator.
 
     Key Features:
     - Async PDF downloads (aiohttp, concurrent)
     - CPU-bound extraction in thread pool (non-blocking)
-    - Gemini API rate limiting (tokens/min, /hour, /day)
-    - Concurrent batch processing within limits
+    - Concurrent batch processing
+
+    Rate limiting handled reactively by summarizer via Gemini's retry instructions.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, metrics: Optional[MetricsCollector] = None):
+        self.metrics = metrics or NullMetrics()
         self.pdf_extractor = PdfExtractor()  # Sync extractor, wrap in asyncio.to_thread()
-        self.summarizer = GeminiSummarizer(api_key=api_key)  # Sync summarizer, wrap in thread
-        self.rate_limiter = AsyncRateLimiter()  # Async token bucket limiter
+        self.summarizer = GeminiSummarizer(api_key=api_key, metrics=self.metrics)
         self.http_session: Optional[aiohttp.ClientSession] = None
 ```
 
@@ -82,20 +83,19 @@ async def process_agenda_async(url: str) -> Tuple[str, str, Optional[Dict]]:
 
 async def process_batch_items_async(
     item_requests: List[Dict[str, Any]],
-    shared_context: Optional[str] = None
+    shared_context: Optional[str] = None,
+    meeting_id: Optional[str] = None
 ) -> List[List[Dict[str, Any]]]:
     """
-    Process multiple agenda items concurrently (respects rate limits).
-    Processes items in parallel where rate limits allow.
+    Process multiple agenda items sequentially (to avoid TPM rate limits).
     Returns: [[{item_id, success, summary, topics, error?}, ...]]
     """
 ```
 
 **Why async?**
-- **I/O parallelism:** Download 10 PDFs concurrently instead of sequentially (10× faster)
+- **I/O parallelism:** Download PDFs concurrently instead of sequentially
 - **Non-blocking:** Event loop continues while waiting on HTTP/API responses
 - **Resource efficiency:** Thread pool for CPU-bound work (PyMuPDF), async for I/O
-- **Rate limit coordination:** Async context managers coordinate token consumption across tasks
 
 **Usage:**
 ```python
@@ -106,87 +106,52 @@ await analyzer.close()  # Cleanup HTTP session
 
 ---
 
-### AsyncRateLimiter (analysis/rate_limiter_async.py)
-
-**Token bucket rate limiter** for Gemini API quota management. Prevents hitting API limits with async-aware throttling.
-
-```python
-class AsyncRateLimiter:
-    """
-    Async rate limiter for Gemini API with token-based throttling.
-
-    Respects three Gemini API limits:
-    - Tokens per minute (default: 1,000,000)
-    - Tokens per hour (default: 30,000,000)
-    - Tokens per day (default: 500,000,000)
-    """
-
-    def __init__(
-        self,
-        tokens_per_minute: int = 1_000_000,
-        tokens_per_hour: int = 30_000_000,
-        tokens_per_day: int = 500_000_000
-    ):
-        self.limits: Dict[str, TokenBucket] = {
-            "minute": TokenBucket(capacity=tokens_per_minute, refill_rate=tokens_per_minute / 60.0),
-            "hour": TokenBucket(capacity=tokens_per_hour, refill_rate=tokens_per_hour / 3600.0),
-            "day": TokenBucket(capacity=tokens_per_day, refill_rate=tokens_per_day / 86400.0)
-        }
-```
-
-**Usage:**
-```python
-rate_limiter = AsyncRateLimiter()
-
-# Estimate tokens for text
-tokens = estimate_tokens(text)  # ~4 chars/token + 20% buffer
-
-# Acquire tokens (waits asynchronously if needed)
-async with rate_limiter.acquire(tokens):
-    summary = await asyncio.to_thread(summarizer.summarize_item, title, text)
-```
-
-**Token Bucket Algorithm:**
-- **Capacity:** Maximum tokens available
-- **Refill rate:** Tokens added per second (capacity / period_seconds)
-- **Consumption:** Tokens consumed per API call (estimated from text length)
-- **Waiting:** If insufficient tokens, calculates wait time and sleeps asynchronously
-
-**Why token-aware?**
-- Gemini charges by tokens, not requests
-- Large PDFs (50K+ tokens) consume quota differently than small items (5K tokens)
-- Token-based limiting prevents quota exhaustion more accurately than request-based
-
-```python
-def estimate_tokens(text: str) -> int:
-    """
-    Estimate token count for Gemini API.
-    Gemini uses ~4 characters per token for English text.
-    Add 20% buffer for safety (prompts, JSON structure, thinking, etc.)
-    """
-    char_count = len(text)
-    base_tokens = char_count / 4
-    buffered_tokens = int(base_tokens * 1.2)
-    return max(buffered_tokens, 100)  # Minimum 100 tokens for overhead
-```
-
----
-
 ### GeminiSummarizer (analysis/llm/summarizer.py)
 
-**Gemini API orchestration** with model selection, adaptive prompting, retry logic, and batch processing.
+**Gemini API orchestration** with model selection, adaptive prompting, reactive rate limiting, and batch processing.
 
 ```python
 class GeminiSummarizer:
     """Smart LLM orchestrator - picks model, picks prompt, formats response"""
 
-    def __init__(self, api_key: Optional[str] = None, prompts_path: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        prompts_path: Optional[str] = None,
+        metrics: Optional[MetricsCollector] = None
+    ):
+        self.metrics = metrics or NullMetrics()
         self.client = genai.Client(api_key=api_key)
         self.flash_model_name = "gemini-2.5-flash"
         self.flash_lite_model_name = "gemini-2.5-flash-lite"
 
-        # Load prompts from JSON
+        # Load prompts from JSON (v2 only)
         self.prompts = json.load(open(prompts_path or "analysis/llm/prompts_v2.json"))
+```
+
+**Reactive Rate Limiting:**
+
+Instead of proactive token bucket limiting, we trust Gemini to tell us when to retry. The `_call_with_retry()` method parses `retryDelay` from 429 responses:
+
+```python
+def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3):
+    """
+    Call Gemini API with automatic retry on 429 rate limits.
+
+    Gemini returns retryDelay in 429 responses - we parse and respect it.
+    Fallback: exponential backoff (30s, 60s, 90s) if no retryDelay provided.
+    """
+    for attempt in range(max_retries):
+        try:
+            return self.client.models.generate_content(model=model_name, contents=prompt, config=config)
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                # Parse retryDelay from Gemini's error response
+                retry_match = re.search(r'"retryDelay":\s*"(\d+)s"', str(e))
+                delay = int(retry_match.group(1)) + 1 if retry_match else 30 * (attempt + 1)
+                time.sleep(delay)
+                continue
+            raise
 ```
 
 **Model Selection:**
@@ -520,27 +485,7 @@ else:
 - **Process overnight:** 100 items = $0.50 instead of $1.00
 - **Trade-off:** 5-15 minute latency (acceptable for background processing)
 
-### 4. Text Truncation
-
-```python
-def truncate_text(text: str, max_tokens: int = 50000) -> str:
-    """
-    Truncate text to model limits.
-    Strategy: Keep first 80% + last 20% (intro + conclusion)
-    """
-    if len(text) <= max_tokens * 4:  # ~4 chars per token
-        return text
-
-    char_limit = max_tokens * 4
-    first_half = text[:int(char_limit * 0.8)]
-    last_half = text[-int(char_limit * 0.2):]
-
-    return first_half + "\n\n[... middle section truncated ...]\n\n" + last_half
-```
-
-**Savings:** Reduces input tokens by 60-80% for large documents with minimal quality loss
-
-### 5. Context Caching
+### 4. Context Caching
 
 ```python
 # Create cache for shared meeting context (>1024 tokens)
@@ -567,30 +512,28 @@ if len(shared_context) // 4 >= 1024:
 
 **Common failure modes and recovery strategies:**
 
-### 1. API Timeout
+### 1. Rate Limiting (429 / RESOURCE_EXHAUSTED)
+
+Handled reactively via `_call_with_retry()`:
+- Parses `retryDelay` from Gemini's 429 error response
+- Fallback: exponential backoff (30s, 60s, 90s)
+- Batch processing: 5 items per chunk with 120s delays between chunks
+
 ```python
-@retry(max_attempts=3, backoff_seconds=5)
-async def _generate_with_retry(prompt: str) -> Dict:
-    """Retry with exponential backoff on timeout"""
-    try:
-        response = await asyncio.to_thread(
-            self.client.generate_content, prompt, timeout=30
-        )
-        return json.loads(response.text)
-    except TimeoutError:
-        # Retry with longer timeout
-        response = await asyncio.to_thread(
-            self.client.generate_content, prompt, timeout=60
-        )
-        return json.loads(response.text)
+def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3):
+    for attempt in range(max_retries):
+        try:
+            return self.client.models.generate_content(...)
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                # Parse retryDelay or use exponential backoff
+                delay = parse_retry_delay(e) or 30 * (attempt + 1)
+                time.sleep(delay)
+                continue
+            raise
 ```
 
-### 2. Rate Limiting (429 / RESOURCE_EXHAUSTED)
-- AsyncRateLimiter prevents most 429s via proactive throttling
-- If 429 occurs: exponential backoff (60s, 120s, 240s)
-- Batch processing: chunked processing with 120s delays between chunks
-
-### 3. Content Filtering (Safety blocks)
+### 2. Content Filtering (Safety blocks)
 ```python
 try:
     response = client.generate_content(prompt)
@@ -603,12 +546,12 @@ except ContentFilterError as e:
     }
 ```
 
-### 4. Schema Validation Failure
+### 3. Schema Validation Failure
 - With `response_schema`, Gemini enforces JSON structure
 - If malformed JSON: retry with explicit error message in prompt
 - Track finish_reason: if "MAX_TOKENS", increase max_output_tokens
 
-### 5. PDF Extraction Failures
+### 4. PDF Extraction Failures
 ```python
 async def extract_pdf_async(url: str) -> Dict[str, Any]:
     """Extract text from PDF with error handling"""
@@ -629,15 +572,14 @@ async def extract_pdf_async(url: str) -> Dict[str, Any]:
 
 ## Quality Metrics
 
-**Measured on 1,000 item sample (Nov 2025):**
+**Target metrics:**
 
-| Metric | Value | Target |
-|--------|-------|--------|
-| Summary accuracy | 92% | >90% |
-| Topic precision | 88% | >85% |
-| Citizen impact relevance | 85% | >80% |
-| Confidence calibration | 0.91 | >0.85 |
-| JSON parse success | 100% | 100% |
+| Metric | Target | Notes |
+|--------|--------|-------|
+| Summary accuracy | >90% | Human reviewers rate 4+/5 = accurate |
+| Topic precision | >85% | Match against human-labeled ground truth |
+| Confidence calibration | >0.85 | Model confidence correlates with accuracy |
+| JSON parse success | 100% | Schema enforcement ensures this |
 
 **Definitions:**
 - **Summary accuracy:** Human reviewers rate summaries on 5-point scale, 4+ = accurate
@@ -649,64 +591,46 @@ async def extract_pdf_async(url: str) -> Dict[str, Any]:
 
 ## Testing
 
-**Unit tests:** `tests/test_analysis.py`
+**Topic normalization testing:**
 
 ```python
-def test_topic_normalization():
-    normalizer = get_normalizer()
-    raw = ["Affordable Housing", "bike lanes", "budget"]
-    normalized = normalizer.normalize(raw)
+from analysis.topics.normalizer import get_normalizer
 
-    assert "housing" in normalized
-    assert "transportation" in normalized
-    assert "budget" in normalized
+normalizer = get_normalizer()
+raw = ["Affordable Housing", "bike lanes", "budget"]
+normalized = normalizer.normalize(raw)
 
-def test_adaptive_prompt_selection():
-    summarizer = GeminiSummarizer(api_key="test")
-
-    # Standard item
-    prompt_type = "large" if 50 >= 100 else "standard"
-    assert prompt_type == "standard"
-
-    # Large item
-    prompt_type = "large" if 150 >= 100 else "standard"
-    assert prompt_type == "large"
-
-def test_token_estimation():
-    text = "a" * 4000  # 4000 chars
-    tokens = estimate_tokens(text)
-    # Should be ~1200 (4000/4 * 1.2 buffer)
-    assert 1100 <= tokens <= 1300
+assert "housing" in normalized
+assert "transportation" in normalized
+assert "budget" in normalized
 ```
 
-**Integration tests:** `tests/integration/test_gemini.py`
+**Adaptive prompt selection:**
 
 ```python
-@pytest.mark.integration
-async def test_gemini_summarization():
-    """Test live Gemini API (uses real API key)"""
-    summarizer = GeminiSummarizer(api_key=os.getenv("GEMINI_API_KEY"))
+# Standard item (<100 pages)
+prompt_type = "large" if 50 >= 100 else "standard"
+assert prompt_type == "standard"
 
-    summary, topics = summarizer.summarize_item(
-        item_title="Zoning Variance Request",
-        text="The applicant requests a variance to allow...",
-        page_count=5
-    )
+# Large item (100+ pages)
+prompt_type = "large" if 150 >= 100 else "standard"
+assert prompt_type == "large"
+```
 
-    assert len(summary) > 0
-    assert len(topics) > 0
-    assert all(t in CANONICAL_TOPICS for t in topics)
+**Live API testing:**
 
-@pytest.mark.integration
-async def test_async_analyzer():
-    """Test async orchestration"""
-    analyzer = AsyncAnalyzer()
+```python
+# Test live Gemini API
+summarizer = GeminiSummarizer(api_key=os.getenv("GEMINI_API_KEY"))
 
-    result = await analyzer.extract_pdf_async("https://example.com/agenda.pdf")
-    assert result["success"]
-    assert result["page_count"] > 0
+summary, topics = summarizer.summarize_item(
+    item_title="Zoning Variance Request",
+    text="The applicant requests a variance to allow...",
+    page_count=5
+)
 
-    await analyzer.close()
+assert len(summary) > 0
+assert len(topics) > 0
 ```
 
 ---
@@ -735,7 +659,6 @@ async def test_async_analyzer():
 
 **Async improvements:**
 - [ ] Connection pooling for HTTP session (single session across all tasks)
-- [ ] Retry with exponential backoff for transient errors
 - [ ] Structured concurrency (task groups for better error handling)
 
 ---
@@ -745,4 +668,4 @@ async def test_async_analyzer():
 - [database/README.md](../database/README.md) - How summaries are stored
 - [VISION.md](../docs/VISION.md) - Roadmap for intelligence features (Phase 6)
 
-**Last Updated:** 2025-11-23 (Comprehensive accuracy audit)
+**Last Updated:** 2025-12-04 (Documentation accuracy audit)

@@ -1,12 +1,7 @@
 """
 Async Legistar Adapter - API integration for Legistar platform
 
-Async version with:
-- Async HTTP requests (aiohttp)
-- Concurrent meeting/item fetching
-- Same API-first, HTML-fallback strategy as sync version
-
-Cities using Legistar: Seattle WA, NYC, Cambridge MA, and many others
+API-first with HTML fallback. Cities: Seattle WA, NYC, Cambridge MA, and many others
 """
 
 from typing import Dict, Any, List, Optional
@@ -18,38 +13,28 @@ import asyncio
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.legistar_parser import parse_html_agenda, parse_legislation_attachments
-from vendors.utils.item_filters import should_skip_procedural_item
+from pipeline.filters import should_skip_item
 from pipeline.utils import combine_date_time
+from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError, VendorParsingError
 import aiohttp
 
 
 class AsyncLegistarAdapter(AsyncBaseAdapter):
-    """Async adapter for cities using Legistar platform"""
+    """Async adapter for cities using Legistar platform."""
 
-    def __init__(self, city_slug: str, api_token: Optional[str] = None):
-        """
-        Initialize async Legistar adapter.
-
-        Args:
-            city_slug: Legistar client name (e.g., "seattle", "nyc")
-            api_token: Optional API token (required for some cities like NYC)
-        """
-        super().__init__(city_slug, vendor="legistar")
+    def __init__(
+        self,
+        city_slug: str,
+        api_token: Optional[str] = None,
+        metrics: Optional[MetricsCollector] = None
+    ):
+        super().__init__(city_slug, vendor="legistar", metrics=metrics)
         self.api_token = api_token
         self.base_url = f"https://webapi.legistar.com/v1/{self.slug}"
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings in moving window (tries API first, falls back to HTML).
-
-        Args:
-            days_back: Days to look backward (default 7, captures recent votes)
-            days_forward: Days to look forward (default 14, captures upcoming meetings)
-
-        Returns:
-            List of meeting dictionaries (validation in base class)
-        """
+        """Fetch meetings via API, falling back to HTML if needed."""
         meetings = []
         try:
             logger.info("legistar using API", slug=self.slug)
@@ -81,16 +66,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         return meetings
 
     async def _fetch_meetings_api(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings in date range from Legistar Web API.
-
-        Args:
-            days_back: Days to look backward (default 7)
-            days_forward: Days to look forward (default 14)
-
-        Returns:
-            List of meeting dictionaries
-        """
+        """Fetch meetings from Legistar Web API."""
         # Build date range
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         start_date_dt = today - timedelta(days=days_back)
@@ -137,7 +113,6 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 text = await response.text()
                 events = self._parse_xml_events(text)
 
-        # Defensive: Validate response is a list (API may return error dict)
         if not isinstance(events, list):
             raise VendorParsingError(
                 f"Expected list from Legistar API at {url}, got {type(events).__name__}",
@@ -145,18 +120,16 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 city_slug=self.slug
             )
 
-        # CRITICAL: Filter client-side because some APIs (Nashville) ignore server filters
+        # Some APIs (Nashville) ignore server filters - filter client-side
         filtered_events = []
         for event in events:
             event_date_str = event.get("EventDate")
             if event_date_str:
                 try:
                     event_date = datetime.fromisoformat(event_date_str.replace("Z", "+00:00"))
-                    # Only include events within our date range
                     if start_date_dt <= event_date <= end_date_dt:
                         filtered_events.append(event)
                 except (ValueError, TypeError):
-                    # Include events with unparseable dates (let validation handle them)
                     filtered_events.append(event)
             else:
                 filtered_events.append(event)
@@ -168,7 +141,6 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             filtered=len(filtered_events)
         )
 
-        # Process events
         meetings = []
         for event in filtered_events:
             meeting = await self._process_api_event(event)
@@ -306,7 +278,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             for idx, item in enumerate(processed_items):
                 if isinstance(item, Exception):
                     logger.warning("item processing failed", event_id=event_id, item_index=idx, error=str(item))
-                elif isinstance(item, dict) and not should_skip_procedural_item(item.get("title", "")):
+                elif isinstance(item, dict) and not should_skip_item(item.get("title", "")):
                     items.append(item)
 
             return items
@@ -409,15 +381,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return None
 
     async def _fetch_matter_metadata_async(self, matter_id: int) -> Dict[str, Any]:
-        """
-        Fetch matter metadata (type, sponsors) from API.
-
-        Args:
-            matter_id: Legistar matter ID
-
-        Returns:
-            Dict with matter_type and sponsors
-        """
+        """Fetch matter_type and sponsors from API."""
         metadata = {"matter_type": None, "sponsors": []}
 
         try:
@@ -464,15 +428,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         return metadata
 
     async def _fetch_event_item_votes_api(self, event_item_id: int) -> List[Dict[str, Any]]:
-        """
-        Fetch votes for a specific event item from API.
-
-        Args:
-            event_item_id: Legistar EventItemId
-
-        Returns:
-            List of votes: [{'name': str, 'vote': str, 'sequence': int, 'person_id': int}]
-        """
+        """Fetch votes for a specific event item from API."""
         try:
             votes_url = f"{self.base_url}/EventItems/{event_item_id}/Votes"
             params = {"token": self.api_token} if self.api_token else {}
@@ -537,15 +493,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         return vote_map.get(value_lower, "not_voting")
 
     async def _fetch_matter_attachments_async(self, matter_id: int) -> List[Dict[str, Any]]:
-        """
-        Fetch attachments for a specific matter from API.
-
-        Args:
-            matter_id: Legistar matter ID
-
-        Returns:
-            List of attachments: [{'name': str, 'url': str, 'type': str}]
-        """
+        """Fetch attachments for a specific matter from API."""
         try:
             attachments_url = f"{self.base_url}/matters/{matter_id}/attachments"
             params = {"token": self.api_token} if self.api_token else {}
@@ -586,15 +534,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return []
 
     def _parse_xml_attachments(self, xml_text: str) -> List[Dict[str, Any]]:
-        """
-        Parse Legistar XML response for matter attachments.
-
-        Args:
-            xml_text: Raw XML response text
-
-        Returns:
-            List of attachment dictionaries
-        """
+        """Parse XML response for matter attachments."""
         attachments = []
 
         try:
@@ -629,17 +569,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             raise
 
     def _parse_xml_votes(self, xml_text: str) -> List[Dict[str, Any]]:
-        """
-        Parse Legistar XML response for event item votes.
-        NYC and some other cities return XML instead of JSON from the API.
-
-        Args:
-            xml_text: Raw XML response text
-
-        Returns:
-            List of vote dictionaries matching JSON structure:
-            [{'VotePersonName': str, 'VoteValueName': str, 'VotePersonId': int, 'VoteSort': int}]
-        """
+        """Parse XML response for votes (NYC returns XML instead of JSON)."""
         votes = []
 
         try:
@@ -688,16 +618,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return []
 
     def _parse_xml_matter(self, xml_text: str) -> Dict[str, Any]:
-        """
-        Parse Legistar XML response for single matter details.
-        NYC returns XML instead of JSON from the API.
-
-        Args:
-            xml_text: Raw XML response text
-
-        Returns:
-            Dict with matter fields matching JSON structure
-        """
+        """Parse XML response for single matter details."""
         try:
             root = ET.fromstring(xml_text)
 
@@ -731,16 +652,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return {}
 
     def _parse_xml_sponsors(self, xml_text: str) -> List[Dict[str, Any]]:
-        """
-        Parse Legistar XML response for matter sponsors.
-        NYC returns XML instead of JSON from the API.
-
-        Args:
-            xml_text: Raw XML response text
-
-        Returns:
-            List of sponsor dictionaries matching JSON structure
-        """
+        """Parse XML response for matter sponsors."""
         sponsors = []
 
         try:
@@ -784,16 +696,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return []
 
     async def _fetch_meetings_html(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings by scraping HTML calendar (fallback when API fails).
-
-        Args:
-            days_back: Days to look backward (default 7)
-            days_forward: Days to look forward (default 14)
-
-        Returns:
-            List of meeting dictionaries with meeting_id, title, start, items
-        """
+        """Fetch meetings by scraping HTML calendar (fallback)."""
         # Try common Legistar calendar URL patterns
         calendar_urls = [
             f"https://{self.slug}.legistar.com/Calendar.aspx",
@@ -956,19 +859,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         detail_url: str,
         calendar_packet_url: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """
-        Fetch and parse meeting detail page for agenda items (async).
-
-        Args:
-            meeting_id: Meeting ID from calendar
-            meeting_dt: Meeting datetime
-            title: Meeting title from calendar
-            detail_url: Full URL to MeetingDetail.aspx
-            calendar_packet_url: Optional packet URL from calendar page
-
-        Returns:
-            Meeting dictionary with items array
-        """
+        """Fetch and parse meeting detail page for agenda items."""
         items = []
         packet_url = calendar_packet_url
 
@@ -994,7 +885,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 item_type = item.get('item_type', '')
 
                 # Skip procedural items
-                if should_skip_procedural_item(item_title, item_type):
+                if should_skip_item(item_title, item_type):
                     items_filtered += 1
                     continue
 
@@ -1048,17 +939,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
     def _parse_html_agenda_items(
         self, soup, meeting_id: str, base_url: str
     ) -> List[Dict[str, Any]]:
-        """
-        Parse agenda items from meeting detail HTML using dedicated parser.
-
-        Args:
-            soup: BeautifulSoup object of detail page
-            meeting_id: Meeting ID for generating item IDs
-            base_url: Base URL for building absolute URLs
-
-        Returns:
-            List of agenda item dictionaries
-        """
+        """Parse agenda items from meeting detail HTML using dedicated parser."""
         # Convert soup back to HTML string for the parser
         html = str(soup)
 
@@ -1070,33 +951,14 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
 
     @staticmethod
     def _parse_html(html: str):
-        """
-        Parse HTML string to BeautifulSoup object.
-
-        Static method for use with asyncio.to_thread() to avoid blocking.
-
-        Args:
-            html: HTML string to parse
-
-        Returns:
-            BeautifulSoup object
-        """
+        """Parse HTML to BeautifulSoup (for asyncio.to_thread)."""
         from bs4 import BeautifulSoup
         return BeautifulSoup(html, "html.parser")
 
     async def _fetch_item_attachments_async(
         self, item: Dict[str, Any], base_url: str
     ) -> List[Dict[str, Any]]:
-        """
-        Fetch attachments for a single item from its LegislationDetail page (async).
-
-        Args:
-            item: Item dictionary with legislation_url
-            base_url: Base URL for building absolute URLs
-
-        Returns:
-            List of attachment dictionaries
-        """
+        """Fetch attachments from LegislationDetail page."""
         legislation_url = item.get('legislation_url')
         if not legislation_url:
             return []
@@ -1120,16 +982,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return []
 
     def _filter_leg_ver_attachments(self, attachments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Filter attachments to include at most one 'Leg Ver' attachment.
-        Prefer 'Leg Ver2' over 'Leg Ver1' if both exist.
-
-        Args:
-            attachments: List of attachment dictionaries
-
-        Returns:
-            Filtered list of attachments
-        """
+        """Filter to at most one Leg Ver attachment (prefer Ver2 over Ver1)."""
         leg_ver_attachments = []
         other_attachments = []
 
