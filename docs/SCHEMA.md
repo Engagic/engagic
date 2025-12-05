@@ -5,9 +5,9 @@ Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 **For repository pattern implementation and code examples, see:** [../database/README.md](../database/README.md)
 
 **Database:** PostgreSQL 16 with asyncpg
-**Location:** `/root/engagic` (VPS production)
-**Code:** Async Repository Pattern (database/db_postgres.py → 8 repositories)
-**Last Updated:** November 23, 2025 (PostgreSQL migration complete)
+**Location:** `/opt/engagic` (VPS production)
+**Code:** Async Repository Pattern (database/db_postgres.py -> 14 repositories)
+**Last Updated:** December 5, 2025
 
 ---
 
@@ -24,9 +24,13 @@ Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 ## Table of Contents
 
 - [Overview](#overview)
-- [Core Tables](#core-tables)
-- [Processing Tables](#processing-tables)
-- [Future Tables](#future-tables-not-yet-used)
+- [Core Tables](#core-tables) (cities, zipcodes, meetings, items)
+- [Matters Tables](#matters-tables) (city_matters, matter_appearances)
+- [Representation Tables](#representation-tables) (committees, council_members, committee_members, votes, sponsorships)
+- [Topic Junction Tables](#topic-junction-tables) (item_topics, meeting_topics, matter_topics)
+- [Processing Tables](#processing-tables) (cache, queue)
+- [Phase 2 Tables](#phase-2-tables-user-profiles--alerts) (user_profiles, user_topic_subscriptions)
+- [Future Tables](#future-tables-phases-5-6)
 - [JSON Structures](#json-structures)
 - [Indices](#indices)
 - [Relationships](#relationships)
@@ -37,7 +41,9 @@ Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 
 ### Database Philosophy
 
-**Single Source of Truth:** One unified PostgreSQL database replaces the previous SQLite architecture.
+**Single Source of Truth:** One unified PostgreSQL database for all civic data.
+
+**Matters-First Architecture:** Legislative items tracked across meetings with deduplication. Council members and committees tracked for accountability.
 
 **Hybrid Normalization Strategy:** Topics normalized for efficient querying, complex structures (attachments, sponsors) stored as JSONB for flexibility.
 
@@ -55,7 +61,7 @@ Engagic uses a **hybrid approach** balancing query performance and schema flexib
 
 #### Normalized Tables (Separate Tables)
 
-✅ **When to normalize:**
+**When to normalize:**
 - Fields queried in WHERE clauses (filtering)
 - Aggregation queries (COUNT, GROUP BY)
 - Simple one-to-many relationships
@@ -79,7 +85,7 @@ Engagic uses a **hybrid approach** balancing query performance and schema flexib
 
 #### JSONB Fields (Not Normalized)
 
-❌ **When to use JSONB:**
+**When to use JSONB:**
 - Complex nested structures (objects within arrays)
 - Variable schemas (metadata varies by vendor)
 - Rarely queried fields (displayed but not filtered)
@@ -93,16 +99,15 @@ Engagic uses a **hybrid approach** balancing query performance and schema flexib
 - Display-only: Shown to users but rarely filtered
 - No query pattern: "Show all items with PDF attachment" not a current requirement
 
-**Sponsors (JSONB in 2 tables):**
-- `items.sponsors` - JSONB array: `["Council Member Smith", "Mayor Jones"]`
-- `city_matters.sponsors` - JSONB array
+**Sponsors (JSONB):**
+- `city_matters.sponsors` - JSONB array: `["Council Member Smith", "Mayor Jones"]`
 
 **Why JSONB:**
 - Simple array of strings
-- Display-only: Listed on meeting pages but not filterable
-- No query pattern: "Show all items by sponsor X" not implemented
+- Display-only: Listed on meeting pages
+- Actual sponsorship relationships tracked in `sponsorships` table for queries
 
-**Participation (JSONB in 1 table):**
+**Participation (JSONB):**
 - `meetings.participation` - JSONB object: `{email, phone, zoom}`
 
 **Why JSONB:**
@@ -110,39 +115,13 @@ Engagic uses a **hybrid approach** balancing query performance and schema flexib
 - Display-only: Contact info shown to users
 - No filtering: Never queried, just displayed
 
-**Metadata (JSONB in 2 tables):**
+**Metadata (JSONB):**
 - `city_matters.metadata` - Vendor-specific data
-- `tracked_items.metadata` - Future tenant feature
+- `council_members.metadata` - Additional member info
 
 **Why JSONB:**
 - Intentionally flexible (varies by vendor)
 - Not queried (internal debugging/diagnostics)
-
-### Trade-offs
-
-**Normalized:**
-- ✅ Fast queries (indexed lookups)
-- ✅ Aggregation-friendly (GROUP BY, COUNT)
-- ❌ More tables (6+ additional tables)
-- ❌ Complex joins for display
-
-**JSONB:**
-- ✅ Flexible schema (no migrations for new fields)
-- ✅ Simple queries (single SELECT)
-- ❌ Slow filtering (full table scan without GIN index)
-- ❌ No relational integrity (can't enforce foreign keys)
-
-### Future Considerations
-
-**If query patterns change:**
-- Add GIN indexes on JSONB fields for filtering (e.g., `CREATE INDEX idx_items_sponsors ON items USING gin(sponsors)`)
-- Or normalize additional fields if filtering becomes critical
-
-**Current ratio:**
-- 64% JSONB (7 columns)
-- 36% Normalized (4 relationships)
-
-This ratio reflects display-heavy workload (users browse meetings) vs search-heavy (filter by topic is primary use case).
 
 ---
 
@@ -150,7 +129,7 @@ This ratio reflects display-heavy workload (users browse meetings) vs search-hea
 
 ### `cities`
 
-Cities covered by Engagic across 6 vendor platforms.
+Cities covered by Engagic across 11 vendor platforms.
 
 **Primary Key:** `banana` (vendor-agnostic identifier)
 
@@ -174,12 +153,6 @@ Cities covered by Engagic across 6 vendor platforms.
 - `idx_cities_state` on `state`
 - `idx_cities_status` on `status`
 
-**Example:**
-```sql
-INSERT INTO cities (banana, name, state, vendor, slug)
-VALUES ('paloaltoCA', 'Palo Alto', 'CA', 'granicus', 'paloalto_ca');
-```
-
 ---
 
 ### `zipcodes`
@@ -200,22 +173,13 @@ Many-to-many relationship between cities and zipcodes.
 **Indices:**
 - `idx_zipcodes_zipcode` on `zipcode`
 
-**Example:**
-```sql
-INSERT INTO zipcodes (banana, zipcode, is_primary)
-VALUES ('paloaltoCA', '94301', TRUE);
-
-INSERT INTO zipcodes (banana, zipcode)
-VALUES ('paloaltoCA', '94302');
-```
-
 ---
 
 ### `meetings`
 
 Meeting records with optional summaries and metadata.
 
-**Primary Key:** `id` (vendor-generated meeting ID)
+**Primary Key:** `id` (generated meeting ID)
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -226,9 +190,9 @@ Meeting records with optional summaries and metadata.
 | `agenda_url` | TEXT | URL to HTML agenda page (item-based, primary) |
 | `packet_url` | TEXT | URL to PDF packet (monolithic, fallback) |
 | `summary` | TEXT | LLM-generated meeting summary (markdown) |
-| `participation` | TEXT | JSON: email, phone, virtual_url, is_hybrid |
+| `participation` | JSONB | Contact info: email, phone, virtual_url, is_hybrid |
 | `status` | TEXT | Meeting status (scheduled, completed, etc.) |
-| `topics` | TEXT | JSON array of canonical topics |
+| `committee_id` | TEXT | FK to committees (if meeting belongs to a committee) |
 | `processing_status` | TEXT | Processing state: 'pending', 'completed', 'failed' |
 | `processing_method` | TEXT | How processed: 'item-based', 'monolithic', 'batch' |
 | `processing_time` | REAL | Processing duration in seconds |
@@ -237,24 +201,13 @@ Meeting records with optional summaries and metadata.
 
 **Constraints:**
 - `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE SET NULL`
 
 **Indices:**
 - `idx_meetings_banana` on `banana`
 - `idx_meetings_date` on `date`
 - `idx_meetings_status` on `processing_status`
-
-**Example:**
-```sql
-INSERT INTO meetings (id, banana, title, date, topics, participation)
-VALUES (
-  'meeting_123',
-  'paloaltoCA',
-  'City Council Meeting',
-  '2025-11-01 19:00:00',
-  '["housing", "zoning", "transportation"]',
-  '{"email": "council@city.gov", "phone": "+1-650-329-2477", "virtual_url": "https://zoom.us/j/123", "is_hybrid": true}'
-);
-```
+- `idx_meetings_committee` on `committee_id`
 
 ---
 
@@ -268,30 +221,332 @@ Individual agenda items within meetings.
 |--------|------|-------------|
 | `id` | TEXT PRIMARY KEY | Unique item identifier |
 | `meeting_id` | TEXT NOT NULL | Parent meeting ID (FK to meetings) |
+| `matter_id` | TEXT | FK to city_matters (if item tracks a matter) |
 | `title` | TEXT NOT NULL | Agenda item title |
 | `sequence` | INTEGER NOT NULL | Order within agenda (1, 2, 3...) |
-| `attachments` | TEXT | JSON array of attachment objects |
+| `attachments` | JSONB | Array of attachment objects |
 | `attachment_hash` | TEXT | SHA-256 hash of attachments for change detection |
 | `summary` | TEXT | LLM-generated item summary (markdown) |
-| `topics` | TEXT | JSON array of canonical topics |
 | `created_at` | TIMESTAMP | Record creation timestamp |
 
 **Constraints:**
 - `FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE`
+- `FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE SET NULL`
 
-**Example:**
-```sql
-INSERT INTO items (id, meeting_id, title, sequence, topics, attachments, summary)
-VALUES (
-  'item_456',
-  'meeting_123',
-  'Affordable Housing Development at 123 Main St',
-  1,
-  '["housing", "zoning"]',
-  '[{"name": "Staff Report", "url": "https://...", "type": "pdf"}]',
-  'Council to consider a 150-unit affordable housing development...'
-);
-```
+**Indices:**
+- `idx_items_meeting_id` on `meeting_id`
+- `idx_items_matter_id` on `matter_id`
+
+---
+
+## Matters Tables
+
+Legislative items (bills, ordinances, resolutions) tracked across meetings.
+
+### `city_matters`
+
+Core matters table - legislative items deduplicated across meetings.
+
+**Primary Key:** `id` (generated matter ID)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Unique matter identifier |
+| `banana` | TEXT NOT NULL | City identifier (FK to cities) |
+| `matter_id` | TEXT | Vendor's original matter ID |
+| `matter_file` | TEXT | File number (e.g., "ORD-2025-001") |
+| `matter_type` | TEXT | Type: ordinance, resolution, motion, etc. |
+| `title` | TEXT NOT NULL | Matter title |
+| `sponsors` | JSONB | Array of sponsor names (display) |
+| `canonical_summary` | TEXT | LLM-generated canonical summary |
+| `canonical_topics` | JSONB | Array of canonical topic IDs |
+| `attachments` | JSONB | Array of attachment objects |
+| `metadata` | JSONB | Vendor-specific metadata |
+| `first_seen` | TIMESTAMP | First appearance date |
+| `last_seen` | TIMESTAMP | Most recent appearance date |
+| `appearance_count` | INTEGER | Number of meetings this matter appeared in |
+| `status` | TEXT | Status: active, passed, failed, tabled, withdrawn, referred, amended, vetoed, enacted |
+| `quality_score` | REAL | Summary quality rating (user feedback) |
+| `rating_count` | INTEGER | Number of ratings received |
+| `final_vote_date` | TIMESTAMP | Date of final vote (if any) |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+| `updated_at` | TIMESTAMP | Last update timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `CHECK (status IN ('active', 'passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'vetoed', 'enacted'))`
+
+**Indices:**
+- `idx_city_matters_banana` on `banana`
+- `idx_city_matters_status` on `status`
+- `idx_city_matters_matter_file` on `matter_file`
+- `idx_city_matters_first_seen` on `first_seen`
+- `idx_city_matters_final_vote` on `final_vote_date`
+- `idx_city_matters_fts` GIN index for full-text search on title + summary
+
+---
+
+### `matter_appearances`
+
+Tracks each time a matter appears in a meeting (junction table).
+
+**Primary Key:** `id` (auto-increment)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGINT PRIMARY KEY | Auto-increment ID |
+| `matter_id` | TEXT NOT NULL | FK to city_matters |
+| `meeting_id` | TEXT NOT NULL | FK to meetings |
+| `item_id` | TEXT NOT NULL | FK to items |
+| `appeared_at` | TIMESTAMP NOT NULL | Meeting date |
+| `committee` | TEXT | Committee name (denormalized) |
+| `committee_id` | TEXT | FK to committees |
+| `action` | TEXT | Action taken (e.g., "First Reading") |
+| `sequence` | INTEGER | Order in legislative process |
+| `vote_outcome` | TEXT | Outcome: passed, failed, tabled, withdrawn, referred, amended, unknown, no_vote |
+| `vote_tally` | JSONB | Vote counts: {yes, no, abstain, absent} |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE`
+- `FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE`
+- `FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE`
+- `FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE SET NULL`
+- `UNIQUE (matter_id, meeting_id, item_id)`
+- `CHECK (vote_outcome IN ('passed', 'failed', 'tabled', 'withdrawn', 'referred', 'amended', 'unknown', 'no_vote'))`
+
+**Indices:**
+- `idx_matter_appearances_matter` on `matter_id`
+- `idx_matter_appearances_meeting` on `meeting_id`
+- `idx_matter_appearances_item` on `item_id`
+- `idx_matter_appearances_committee_id` on `committee_id`
+- `idx_matter_appearances_outcome` on `vote_outcome`
+- `idx_matter_appearances_date` on `appeared_at`
+
+---
+
+## Representation Tables
+
+Council members, committees, and voting records for legislative accountability.
+
+### `council_members`
+
+Elected officials tracked across cities.
+
+**Primary Key:** `id` (generated member ID)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Unique member identifier |
+| `banana` | TEXT NOT NULL | City identifier (FK to cities) |
+| `name` | TEXT NOT NULL | Display name |
+| `normalized_name` | TEXT NOT NULL | Normalized for matching (lowercase, no titles) |
+| `title` | TEXT | Title (Mayor, Council Member, etc.) |
+| `district` | TEXT | District/ward represented |
+| `status` | TEXT | Status: active, former, unknown |
+| `first_seen` | TIMESTAMP | First appearance in data |
+| `last_seen` | TIMESTAMP | Most recent appearance |
+| `sponsorship_count` | INTEGER | Number of matters sponsored |
+| `vote_count` | INTEGER | Number of votes cast |
+| `metadata` | JSONB | Additional info (party, email, etc.) |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+| `updated_at` | TIMESTAMP | Last update timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `UNIQUE (banana, normalized_name)`
+- `CHECK (status IN ('active', 'former', 'unknown'))`
+
+**Indices:**
+- `idx_council_members_banana` on `banana`
+- `idx_council_members_status` on `status`
+- `idx_council_members_normalized` on `normalized_name`
+- `idx_council_members_banana_status` on `(banana, status)`
+- `idx_council_members_fts` GIN index for full-text search on name
+
+---
+
+### `committees`
+
+Legislative bodies within cities (Planning Commission, Budget Committee, etc.).
+
+**Primary Key:** `id` (generated committee ID)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Unique committee identifier |
+| `banana` | TEXT NOT NULL | City identifier (FK to cities) |
+| `name` | TEXT NOT NULL | Display name |
+| `normalized_name` | TEXT NOT NULL | Normalized for matching |
+| `description` | TEXT | Committee purpose/scope |
+| `status` | TEXT | Status: active, inactive, unknown |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+| `updated_at` | TIMESTAMP | Last update timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `UNIQUE (banana, normalized_name)`
+- `CHECK (status IN ('active', 'inactive', 'unknown'))`
+
+**Indices:**
+- `idx_committees_banana` on `banana`
+- `idx_committees_status` on `status`
+- `idx_committees_name` on `normalized_name`
+- `idx_committees_fts` GIN index for full-text search on name
+
+---
+
+### `committee_members`
+
+Junction table: which council members serve on which committees.
+
+**Primary Key:** `id` (auto-increment)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGINT PRIMARY KEY | Auto-increment ID |
+| `committee_id` | TEXT NOT NULL | FK to committees |
+| `council_member_id` | TEXT NOT NULL | FK to council_members |
+| `role` | TEXT | Role on committee (Chair, Vice Chair, Member) |
+| `joined_at` | TIMESTAMP | When member joined committee |
+| `left_at` | TIMESTAMP | When member left (NULL if current) |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE CASCADE`
+- `FOREIGN KEY (council_member_id) REFERENCES council_members(id) ON DELETE CASCADE`
+- `UNIQUE (committee_id, council_member_id, joined_at)`
+
+**Indices:**
+- `idx_committee_members_committee` on `committee_id`
+- `idx_committee_members_member` on `council_member_id`
+- `idx_committee_members_active` on `committee_id` WHERE `left_at IS NULL`
+- `idx_committee_members_dates` on `(joined_at, left_at)`
+
+---
+
+### `votes`
+
+Individual vote records for each council member on each matter.
+
+**Primary Key:** `id` (auto-increment)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGINT PRIMARY KEY | Auto-increment ID |
+| `council_member_id` | TEXT NOT NULL | FK to council_members |
+| `matter_id` | TEXT NOT NULL | FK to city_matters |
+| `meeting_id` | TEXT NOT NULL | FK to meetings |
+| `vote` | TEXT NOT NULL | Vote cast: yes, no, abstain, absent, present, recused, not_voting |
+| `vote_date` | TIMESTAMP | When vote was cast |
+| `sequence` | INTEGER | Order in voting sequence |
+| `metadata` | JSONB | Additional vote info |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (council_member_id) REFERENCES council_members(id) ON DELETE CASCADE`
+- `FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE`
+- `FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE`
+- `UNIQUE (council_member_id, matter_id, meeting_id)`
+- `CHECK (vote IN ('yes', 'no', 'abstain', 'absent', 'present', 'recused', 'not_voting'))`
+
+**Indices:**
+- `idx_votes_member` on `council_member_id`
+- `idx_votes_matter` on `matter_id`
+- `idx_votes_meeting` on `meeting_id`
+- `idx_votes_value` on `vote`
+- `idx_votes_member_date` on `(council_member_id, vote_date DESC)`
+
+---
+
+### `sponsorships`
+
+Which council members sponsored which matters.
+
+**Primary Key:** `id` (auto-increment)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGINT PRIMARY KEY | Auto-increment ID |
+| `council_member_id` | TEXT NOT NULL | FK to council_members |
+| `matter_id` | TEXT NOT NULL | FK to city_matters |
+| `is_primary` | BOOLEAN | Primary sponsor (vs. co-sponsor) |
+| `sponsor_order` | INTEGER | Order among sponsors |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (council_member_id) REFERENCES council_members(id) ON DELETE CASCADE`
+- `FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE`
+- `UNIQUE (council_member_id, matter_id)`
+
+**Indices:**
+- `idx_sponsorships_member` on `council_member_id`
+- `idx_sponsorships_matter` on `matter_id`
+- `idx_sponsorships_primary` on `is_primary` WHERE `is_primary = true`
+
+---
+
+## Topic Junction Tables
+
+Normalized topic relationships for efficient filtering.
+
+### `item_topics`
+
+Topics associated with agenda items.
+
+**Primary Key:** Composite `(item_id, topic)`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `item_id` | TEXT NOT NULL | FK to items |
+| `topic` | TEXT NOT NULL | Canonical topic identifier |
+
+**Constraints:**
+- `FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE`
+
+**Indices:**
+- `idx_item_topics_item` on `item_id`
+- `idx_item_topics_topic` on `topic`
+
+---
+
+### `meeting_topics`
+
+Topics associated with meetings (aggregated from items).
+
+**Primary Key:** Composite `(meeting_id, topic)`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `meeting_id` | TEXT NOT NULL | FK to meetings |
+| `topic` | TEXT NOT NULL | Canonical topic identifier |
+
+**Constraints:**
+- `FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE`
+
+**Indices:**
+- `idx_meeting_topics_meeting` on `meeting_id`
+- `idx_meeting_topics_topic` on `topic`
+
+---
+
+### `matter_topics`
+
+Topics associated with matters.
+
+**Primary Key:** Composite `(matter_id, topic)`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `matter_id` | TEXT NOT NULL | FK to city_matters |
+| `topic` | TEXT NOT NULL | Canonical topic identifier |
+
+**Constraints:**
+- `FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE`
+
+**Indices:**
+- `idx_matter_topics_matter` on `matter_id`
+- `idx_matter_topics_topic` on `topic`
 
 ---
 
@@ -329,10 +584,10 @@ Processing job queue with priority support.
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER PRIMARY KEY | Auto-increment job ID |
-| `source_url` | TEXT NOT NULL UNIQUE | Vendor-agnostic URL to process (agenda_url or packet_url) |
+| `source_url` | TEXT NOT NULL UNIQUE | Vendor-agnostic URL to process |
 | `meeting_id` | TEXT | Associated meeting ID (FK to meetings) |
 | `banana` | TEXT | City identifier (FK to cities) |
-| `status` | TEXT | Job status: 'pending', 'processing', 'completed', 'failed', 'dead_letter' |
+| `status` | TEXT | Job status: pending, processing, completed, failed, dead_letter |
 | `priority` | INTEGER | Priority score (higher = more urgent, default: 0) |
 | `retry_count` | INTEGER | Number of retry attempts (default: 0) |
 | `created_at` | TIMESTAMP | Job creation timestamp |
@@ -340,7 +595,7 @@ Processing job queue with priority support.
 | `completed_at` | TIMESTAMP | Processing completion timestamp |
 | `failed_at` | TIMESTAMP | Failure timestamp |
 | `error_message` | TEXT | Failure details if status='failed' |
-| `processing_metadata` | TEXT | JSON metadata about processing (optional) |
+| `processing_metadata` | TEXT | JSON metadata about processing |
 
 **Constraints:**
 - `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
@@ -362,18 +617,13 @@ if retry_count > 0:
     priority -= (20 * retry_count)
 ```
 
-**Dead Letter Queue:**
-Jobs that fail repeatedly (typically 3+ retries) are marked `status='dead_letter'` for manual review. This prevents infinite retry loops while preserving error context.
-
 ---
 
 ## Phase 2 Tables (User Profiles & Alerts)
 
-These tables support end-user features: user accounts, city subscriptions, and topic-based alerts.
-
 ### `user_profiles`
 
-End-user accounts for civic engagement features (Phase 2).
+End-user accounts for civic engagement features.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -381,10 +631,7 @@ End-user accounts for civic engagement features (Phase 2).
 | `email` | TEXT UNIQUE NOT NULL | User email address |
 | `created_at` | TIMESTAMP | Account creation timestamp |
 
-**Indices:**
-- `idx_user_profiles_email` on `email` (UNIQUE constraint enforced)
-
-**Purpose:** Simple email-based accounts for alert subscriptions. Authentication via magic links (no passwords initially).
+**Purpose:** Simple email-based accounts for alert subscriptions. Authentication via magic links.
 
 ---
 
@@ -396,7 +643,7 @@ Topics and cities users want to receive alerts about.
 |--------|------|-------------|
 | `user_id` | TEXT NOT NULL | User ID (FK to user_profiles) |
 | `banana` | TEXT NOT NULL | City identifier (FK to cities) |
-| `topic` | TEXT NOT NULL | Canonical topic identifier (housing, zoning, etc.) |
+| `topic` | TEXT NOT NULL | Canonical topic identifier |
 | `created_at` | TIMESTAMP | Subscription creation timestamp |
 
 **Primary Key:** Composite `(user_id, banana, topic)`
@@ -405,27 +652,9 @@ Topics and cities users want to receive alerts about.
 - `FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE`
 - `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
 
-**Indices:**
-- `idx_user_subscriptions_user` on `user_id`
-- `idx_user_subscriptions_city` on `banana`
-- `idx_user_subscriptions_topic` on `topic`
-
-**Purpose:** Track which topics each user cares about in which cities. Alert service matches meeting topics against subscriptions to send targeted notifications.
-
-**Example:**
-```sql
--- User subscribes to housing and zoning in Palo Alto
-INSERT INTO user_topic_subscriptions (user_id, banana, topic)
-VALUES
-  ('user_abc123', 'paloaltoCA', 'housing'),
-  ('user_abc123', 'paloaltoCA', 'zoning');
-```
-
 ---
 
 ## Future Tables (Phases 5-6)
-
-These tables support planned features (Phases 5-6) but are not actively used yet.
 
 ### `tenants`
 
@@ -506,9 +735,7 @@ Links tracked items to meetings where mentioned.
 
 ## JSON Structures
 
-### `topics` (meetings and items tables)
-
-Array of canonical topic identifiers.
+### `topics` (canonical topic identifiers)
 
 ```json
 ["housing", "zoning", "transportation"]
@@ -536,8 +763,6 @@ Array of canonical topic identifiers.
 
 ### `participation` (meetings table)
 
-Contact information for meeting participation.
-
 ```json
 {
   "email": "council@cityofpaloalto.org",
@@ -548,18 +773,9 @@ Contact information for meeting participation.
 }
 ```
 
-**Fields:**
-- `email` (string, optional) - Contact email for public comment
-- `phone` (string, optional) - Phone number (E.164 format)
-- `virtual_url` (string, optional) - Zoom/virtual meeting URL
-- `meeting_id` (string, optional) - Virtual meeting ID
-- `is_hybrid` (boolean) - True if both in-person and virtual
-
 ---
 
-### `attachments` (items table)
-
-Array of attachment objects for agenda items.
+### `attachments` (items and city_matters tables)
 
 ```json
 [
@@ -568,20 +784,22 @@ Array of attachment objects for agenda items.
     "url": "https://granicus.com/MetaViewer.php?meta_id=845318",
     "type": "pdf",
     "meta_id": "845318"
-  },
-  {
-    "name": "Public Comments",
-    "url": "https://...",
-    "type": "pdf"
   }
 ]
 ```
 
-**Fields:**
-- `name` (string) - Human-readable attachment name
-- `url` (string) - Direct URL to attachment
-- `type` (string) - MIME type or format (usually 'pdf')
-- `meta_id` (string, optional) - Vendor-specific metadata ID
+---
+
+### `vote_tally` (matter_appearances table)
+
+```json
+{
+  "yes": 5,
+  "no": 2,
+  "abstain": 1,
+  "absent": 1
+}
+```
 
 ---
 
@@ -595,30 +813,39 @@ CREATE INDEX idx_cities_vendor ON cities(vendor);
 CREATE INDEX idx_cities_state ON cities(state);
 CREATE INDEX idx_cities_status ON cities(status);
 
--- Zipcodes
-CREATE INDEX idx_zipcodes_zipcode ON zipcodes(zipcode);
-
 -- Meetings
 CREATE INDEX idx_meetings_banana ON meetings(banana);
 CREATE INDEX idx_meetings_date ON meetings(date);
 CREATE INDEX idx_meetings_status ON meetings(processing_status);
+CREATE INDEX idx_meetings_committee ON meetings(committee_id);
 
 -- Items
 CREATE INDEX idx_items_meeting_id ON items(meeting_id);
+CREATE INDEX idx_items_matter_id ON items(matter_id);
 
--- Cache
-CREATE INDEX idx_cache_hash ON cache(content_hash);
+-- Matters
+CREATE INDEX idx_city_matters_banana ON city_matters(banana);
+CREATE INDEX idx_city_matters_status ON city_matters(status);
+CREATE INDEX idx_city_matters_fts ON city_matters USING gin(to_tsvector('english', title || ' ' || canonical_summary));
 
--- Queue
-CREATE INDEX idx_queue_status ON queue(status);
-CREATE INDEX idx_queue_priority ON queue(priority DESC);
+-- Council Members
+CREATE INDEX idx_council_members_banana ON council_members(banana);
+CREATE INDEX idx_council_members_status ON council_members(status);
+
+-- Committees
+CREATE INDEX idx_committees_banana ON committees(banana);
+CREATE INDEX idx_committees_status ON committees(status);
+
+-- Votes
+CREATE INDEX idx_votes_member ON votes(council_member_id);
+CREATE INDEX idx_votes_matter ON votes(matter_id);
+CREATE INDEX idx_votes_meeting ON votes(meeting_id);
+
+-- Topics (junction tables)
+CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
+CREATE INDEX idx_item_topics_topic ON item_topics(topic);
+CREATE INDEX idx_matter_topics_topic ON matter_topics(topic);
 ```
-
-**Purpose:**
-- Fast zipcode lookups for search
-- Efficient meeting queries by city
-- Date-based meeting filtering
-- Queue priority ordering
 
 ---
 
@@ -627,198 +854,146 @@ CREATE INDEX idx_queue_priority ON queue(priority DESC);
 ### Entity Relationship Diagram
 
 ```
-cities (1) ----< (N) zipcodes
-  |
-  | (1) ----< (N) meetings
-  |              |
-  |              | (1) ----< (N) items
-  |
-  | (1) ----< (N) queue
-
-tenants (1) ----< (N) tenant_coverage >---- (N) cities
-        (1) ----< (N) tenant_keywords
-        (1) ----< (N) tracked_items >---- (N) meetings (via tracked_item_meetings)
+                                cities
+                                  |
+          +----------+------------+------------+-----------+
+          |          |            |            |           |
+          v          v            v            v           v
+      zipcodes   meetings    city_matters  committees  council_members
+                    |            |            |           |
+                    v            |            v           |
+                  items <--------+     committee_members<-+
+                    |            |                        |
+                    v            v                        v
+              item_topics  matter_appearances          votes
+                                 |                        |
+                                 +------------------------+
+                                           |
+                                           v
+                                     sponsorships
 ```
 
-### Foreign Key Relationships
+### Key Relationships
 
-**cities → zipcodes**
-- One city can have many zipcodes
-- Delete city → cascade delete zipcodes
+**cities -> meetings** (1:N)
+- One city has many meetings
+- Cascade delete
 
-**cities → meetings**
-- One city can have many meetings
-- Delete city → cascade delete meetings
+**cities -> city_matters** (1:N)
+- One city has many matters
+- Cascade delete
 
-**meetings → items**
-- One meeting can have many agenda items
-- Delete meeting → cascade delete items
+**cities -> council_members** (1:N)
+- One city has many council members
+- Cascade delete
 
-**cities → queue**
-- One city can have many queued jobs
-- Delete city → cascade delete queue jobs
+**cities -> committees** (1:N)
+- One city has many committees
+- Cascade delete
 
-**tenants → tracked_items** (Future)
-- One tenant can track many items
-- Delete tenant → cascade delete tracked items
+**meetings -> items** (1:N)
+- One meeting has many agenda items
+- Cascade delete
+
+**city_matters -> items** (1:N)
+- One matter can appear in many items
+- SET NULL on delete
+
+**city_matters -> matter_appearances** (1:N)
+- One matter has many appearances
+- Cascade delete
+
+**council_members -> votes** (1:N)
+- One member casts many votes
+- Cascade delete
+
+**council_members -> sponsorships** (1:N)
+- One member sponsors many matters
+- Cascade delete
+
+**committees -> committee_members** (1:N)
+- One committee has many member assignments
+- Cascade delete
 
 ---
 
 ## Querying Examples
 
-### Get all meetings for a city
+### Get all votes by a council member
 ```sql
-SELECT * FROM meetings
-WHERE banana = 'paloaltoCA'
-ORDER BY date DESC
+SELECT v.*, cm.title as matter_title, m.date as vote_date
+FROM votes v
+JOIN city_matters cm ON v.matter_id = cm.id
+JOIN meetings m ON v.meeting_id = m.id
+WHERE v.council_member_id = 'nashvilleTN_abc123'
+ORDER BY m.date DESC
 LIMIT 50;
 ```
 
-### Search by zipcode
+### Get committee roster
 ```sql
-SELECT c.*, m.*
-FROM cities c
-JOIN zipcodes z ON c.banana = z.banana
-JOIN meetings m ON c.banana = m.banana
-WHERE z.zipcode = '94301'
-ORDER BY m.date DESC;
+SELECT c.name as member_name, c.title, cm.role
+FROM committee_members cm
+JOIN council_members c ON cm.council_member_id = c.id
+WHERE cm.committee_id = 'sanfranciscoCA_planning'
+  AND cm.left_at IS NULL
+ORDER BY cm.role DESC, c.name;
+```
+
+### Get matter voting history
+```sql
+SELECT
+  m.date,
+  ma.committee,
+  ma.vote_outcome,
+  ma.vote_tally
+FROM matter_appearances ma
+JOIN meetings m ON ma.meeting_id = m.id
+WHERE ma.matter_id = 'nashvilleTN_BL2025-001'
+ORDER BY ma.appeared_at;
 ```
 
 ### Find meetings by topic
 ```sql
-SELECT * FROM meetings
-WHERE topics LIKE '%"housing"%'
-ORDER BY date DESC;
-```
-
-**Note:** SQLite json_each() can be used for more precise JSON queries:
-
-```sql
-SELECT m.* FROM meetings m
-WHERE EXISTS (
-  SELECT 1 FROM json_each(m.topics)
-  WHERE value = 'housing'
-)
-ORDER BY m.date DESC;
-```
-
-### Get agenda items for a meeting
-```sql
-SELECT * FROM items
-WHERE meeting_id = 'meeting_123'
-ORDER BY sequence ASC;
-```
-
-### Queue processing priorities
-```sql
-SELECT * FROM queue
-WHERE status = 'pending'
-ORDER BY priority DESC, created_at ASC
-LIMIT 10;
-```
-
----
-
-## Migrations
-
-### Schema Versioning
-
-Currently managed via `PRAGMA user_version`:
-
-```sql
-PRAGMA user_version;  -- Get current version
-PRAGMA user_version = 2;  -- Set version
-```
-
-**Recommended:** Add formal migration framework with versioned SQL files.
-
-### Adding Topics Column (October 2025)
-
-```sql
--- Add topics to meetings
-ALTER TABLE meetings ADD COLUMN topics TEXT;
-
--- Add topics to items
-ALTER TABLE items ADD COLUMN topics TEXT;
-
--- Backfill with empty arrays
-UPDATE meetings SET topics = '[]' WHERE topics IS NULL;
-UPDATE items SET topics = '[]' WHERE topics IS NULL;
+SELECT m.*
+FROM meetings m
+JOIN meeting_topics mt ON m.id = mt.meeting_id
+WHERE mt.topic = 'housing'
+ORDER BY m.date DESC
+LIMIT 20;
 ```
 
 ---
 
 ## Database Maintenance
 
-### Vacuum
-
-Reclaim unused space and optimize database file:
+### Backup (PostgreSQL)
 
 ```bash
-sqlite3 /root/engagic/data/engagic.db "VACUUM;"
-```
+# Daily backup
+pg_dump -U engagic -d engagic > /root/backups/engagic_$(date +%Y%m%d).sql
 
-### Integrity Check
-
-Verify database integrity:
-
-```bash
-sqlite3 /root/engagic/data/engagic.db "PRAGMA integrity_check;"
-```
-
-### Backup
-
-```bash
-# Daily backup (automated via cron)
-cp /root/engagic/data/engagic.db \
-   /root/engagic/data/backups/engagic.db.$(date +%Y%m%d)
-
-# Restore from backup
-cp /root/engagic/data/backups/engagic.db.20251031 \
-   /root/engagic/data/engagic.db
+# Restore
+psql -U engagic -d engagic < /root/backups/engagic_20251201.sql
 ```
 
 ### Statistics
 
 ```sql
 -- Table row counts
-SELECT 'cities', COUNT(*) FROM cities
-UNION ALL
-SELECT 'meetings', COUNT(*) FROM meetings
-UNION ALL
-SELECT 'items', COUNT(*) FROM items
-UNION ALL
-SELECT 'queue', COUNT(*) FROM queue;
-
--- Database file size
-SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();
+SELECT
+  'cities' as table_name, COUNT(*) as rows FROM cities
+UNION ALL SELECT 'meetings', COUNT(*) FROM meetings
+UNION ALL SELECT 'items', COUNT(*) FROM items
+UNION ALL SELECT 'city_matters', COUNT(*) FROM city_matters
+UNION ALL SELECT 'council_members', COUNT(*) FROM council_members
+UNION ALL SELECT 'committees', COUNT(*) FROM committees
+UNION ALL SELECT 'votes', COUNT(*) FROM votes
+ORDER BY table_name;
 ```
 
 ---
 
-## Future Improvements
-
-### Considered Enhancements
-
-1. **PostgreSQL Migration**
-   - Native JSONB support (faster JSON queries)
-   - Better full-text search
-   - Horizontal scaling
-
-2. **Full-Text Search**
-   - SQLite FTS5 extension for summary/title search
-   - Topic-based search optimization
-
-3. **Partitioning**
-   - Archive old meetings (>2 years)
-   - Separate hot/cold data
-
-4. **Analytics Tables**
-   - Pre-computed topic statistics
-   - Materialized views for common queries
-
----
-
-**Last Updated:** November 11, 2025
+**Last Updated:** December 5, 2025
 
 **See Also:** [../database/README.md](../database/README.md) for repository pattern and Python code usage
