@@ -3,8 +3,8 @@ Pydantic request models for API validation
 """
 
 import re
-from typing import Optional
-from pydantic import BaseModel, validator
+from typing import Any, Literal, Optional
+from pydantic import BaseModel, Field, field_validator
 from config import config
 from server.utils.validation import sanitize_string
 
@@ -12,8 +12,9 @@ from server.utils.validation import sanitize_string
 class SearchRequest(BaseModel):
     query: str
 
-    @validator("query")
-    def validate_query(cls, v):
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Search query cannot be empty")
 
@@ -39,8 +40,9 @@ class ProcessRequest(BaseModel):
     meeting_date: Optional[str] = None
     meeting_id: Optional[str] = None
 
-    @validator("packet_url")
-    def validate_packet_url(cls, v):
+    @field_validator("packet_url")
+    @classmethod
+    def validate_packet_url(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Packet URL cannot be empty")
 
@@ -53,8 +55,9 @@ class ProcessRequest(BaseModel):
 
         return v.strip()
 
-    @validator("banana")
-    def validate_banana(cls, v):
+    @field_validator("banana")
+    @classmethod
+    def validate_banana(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("City banana cannot be empty")
 
@@ -66,8 +69,9 @@ class ProcessRequest(BaseModel):
 
         return v.strip()
 
-    @validator("meeting_name", "meeting_date", "meeting_id", pre=True, always=True)
-    def validate_optional_strings(cls, v):
+    @field_validator("meeting_name", "meeting_date", "meeting_id", mode="before")
+    @classmethod
+    def validate_optional_strings(cls, v: Any) -> Optional[str]:
         if v is None:
             return None
         return sanitize_string(str(v))
@@ -78,8 +82,9 @@ class TopicSearchRequest(BaseModel):
     banana: Optional[str] = None  # Filter by city
     limit: int = 50
 
-    @validator("topic")
-    def validate_topic(cls, v):
+    @field_validator("topic")
+    @classmethod
+    def validate_topic(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Topic cannot be empty")
         return sanitize_string(v)
@@ -93,15 +98,17 @@ class FlyerRequest(BaseModel):
     user_name: Optional[str] = None
     dark_mode: bool = False
 
-    @validator("position")
-    def validate_position(cls, v):
+    @field_validator("position")
+    @classmethod
+    def validate_position(cls, v: str) -> str:
         allowed = ["support", "oppose", "more_info"]
         if v not in allowed:
             raise ValueError(f"Position must be one of: {', '.join(allowed)}")
         return v
 
-    @validator("custom_message")
-    def validate_custom_message(cls, v):
+    @field_validator("custom_message")
+    @classmethod
+    def validate_custom_message(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
         sanitized = sanitize_string(v)
@@ -109,8 +116,9 @@ class FlyerRequest(BaseModel):
             raise ValueError("Custom message too long (max 500 characters)")
         return sanitized
 
-    @validator("user_name")
-    def validate_user_name(cls, v):
+    @field_validator("user_name")
+    @classmethod
+    def validate_user_name(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
         sanitized = sanitize_string(v)
@@ -122,10 +130,44 @@ class FlyerRequest(BaseModel):
 class DonateRequest(BaseModel):
     amount: int
 
-    @validator("amount")
-    def validate_amount(cls, v):
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v: int) -> int:
         if v < 100:
             raise ValueError("Donation amount must be at least $1.00 (100 cents)")
         if v > 1000000:
             raise ValueError("Donation amount cannot exceed $10,000.00 (1,000,000 cents)")
         return v
+
+
+# Deliberation request models
+COMMENT_MIN_LENGTH = 10
+COMMENT_MAX_LENGTH = 500
+
+
+class DeliberationCreateRequest(BaseModel):
+    """Create a new deliberation for a matter."""
+    matter_id: str
+    topic: Optional[str] = None
+
+
+class CommentCreateRequest(BaseModel):
+    """Submit a comment to a deliberation."""
+    txt: str = Field(..., min_length=COMMENT_MIN_LENGTH, max_length=COMMENT_MAX_LENGTH)
+
+    @field_validator("txt")
+    @classmethod
+    def validate_txt(cls, v: str) -> str:
+        return sanitize_string(v)
+
+
+class VoteRequest(BaseModel):
+    """Vote on a comment."""
+    comment_id: int
+    vote: Literal[-1, 0, 1]  # -1=disagree, 0=pass, 1=agree
+
+
+class ModerateRequest(BaseModel):
+    """Moderate a pending comment."""
+    comment_id: int
+    approve: bool

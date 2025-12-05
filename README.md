@@ -18,6 +18,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 - **Voting records:** Individual votes per member per matter, tallies, outcomes across meetings
 - **Topic extraction:** 16 canonical civic topics for filtering and alerts
 - **Participation info:** Email, phone, Zoom links for civic action
+- **Deliberation:** Opinion clustering for structured public input on legislative matters
 
 ---
 
@@ -49,9 +50,11 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 | [vendors/](vendors/README.md) | 11 civic tech platform adapters | HTML parsers, API clients, rate limiting |
 | [analysis/](analysis/README.md) | LLM intelligence | Gemini API, topic extraction, adaptive prompts |
 | [pipeline/](pipeline/README.md) | Processing orchestration | Sync scheduling, queue management, batch processing |
-| [database/](database/README.md) | PostgreSQL repository pattern | 8 async repositories, matters tracking, userland schema |
-| [server/](server/README.md) | FastAPI public API | 14 route modules (votes, committees, etc.), tiered rate limiting |
+| [database/](database/README.md) | PostgreSQL repository pattern | 14 async repositories, matters tracking, userland schema |
+| [server/](server/README.md) | FastAPI public API | 16 route modules (votes, committees, etc.), tiered rate limiting |
 | [userland/](userland/README.md) | Civic alerts system | Magic link auth, email digests, keyword matching |
+| [parsing/](parsing/README.md) | PDF extraction | PyMuPDF, OCR fallback, participation parsing |
+| [deliberation/](deliberation/README.md) | Opinion clustering | PCA + k-means, consensus detection |
 
 ---
 
@@ -66,6 +69,41 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 **Async PostgreSQL:** Connection pooling (asyncpg, 5-20 connections), `FOR UPDATE SKIP LOCKED` for queue processing, UPSERT for idempotent updates.
 
 **Legislative Accountability:** Council members tracked across votes and sponsorships. Committees tracked with rosters. Vote outcomes computed per matter per meeting.
+
+**Repository Pattern:** 14 async repositories with shared connection pool. Each repository handles one domain (cities, meetings, items, matters, queue, search, userland, council_members, committees, engagement, feedback, deliberation, helpers).
+
+**AsyncBaseAdapter:** All 11 vendor adapters implement unified interface. Async HTTP with retry, rate limiting, date parsing. Adapters return `vendor_id`, database generates canonical IDs.
+
+**Orchestrator Delegation:** Pipeline delegates business logic to orchestrators (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). Enables testing and separation of concerns.
+
+---
+
+## Processing Flow
+
+```
+Sync Loop (72h)              Processing Loop (continuous)
+     |                              |
+     v                              v
+  Fetcher                      Processor
+     |                              |
+     v                              |
+  Vendors (11)                      |
+     |                              |
+     v                              v
+  Database          <----     Queue (typed jobs)
+     |                              |
+     |                              v
+     |                         Item-Level Path (86%)
+     |                              or
+     |                         Monolithic Fallback (14%)
+     |                              |
+     |                              v
+     +-------------------->    Analysis (LLM)
+```
+
+**Two Processing Paths:**
+- **Item-level (86%):** Structured agenda items, per-item summaries, topic aggregation
+- **Monolithic (14%):** PDF packet, comprehensive summary, single LLM call
 
 ---
 
@@ -115,6 +153,9 @@ npm run dev  # localhost:5173
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deployment guide |
 | [docs/API.md](docs/API.md) | Complete API endpoint reference |
 | [docs/SCHEMA.md](docs/SCHEMA.md) | Database schema quick reference |
+| [docs/MATTERS_ARCHITECTURE.md](docs/MATTERS_ARCHITECTURE.md) | Legislative matter tracking design |
+| [docs/ARCHITECTURE_REVIEW.md](docs/ARCHITECTURE_REVIEW.md) | Architecture priorities |
+| [docs/TERMS_OF_SERVICE.md](docs/TERMS_OF_SERVICE.md) | API rate tiers and usage policies |
 | [CHANGELOG.md](CHANGELOG.md) | Version history and recent changes |
 
 ---

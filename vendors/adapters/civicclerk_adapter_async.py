@@ -9,57 +9,32 @@ Async version with:
 - Non-blocking I/O for concurrent city fetching
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
+from pipeline.protocols import MetricsCollector
 
 
 class AsyncCivicClerkAdapter(AsyncBaseAdapter):
     """Async adapter for cities using CivicClerk platform"""
 
-    def __init__(self, city_slug: str):
-        """
-        Initialize async CivicClerk adapter.
-
-        Args:
-            city_slug: CivicClerk subdomain (e.g., "montpelliervt" for montpelliervt.api.civicclerk.com)
-        """
-        super().__init__(city_slug, vendor="civicclerk")
+    def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
+        """city_slug is the CivicClerk subdomain (e.g., "montpelliervt")"""
+        super().__init__(city_slug, vendor="civicclerk", metrics=metrics)
         self.base_url = f"https://{self.slug}.api.civicclerk.com"
 
     def _build_packet_url(self, doc: Dict[str, Any]) -> str:
-        """
-        Build packet URL from file metadata.
-
-        Args:
-            doc: Document dict with fileId
-
-        Returns:
-            URL to download packet PDF
-        """
+        """Build packet URL from document dict containing fileId."""
         file_id = doc.get("fileId")
         return f"{self.base_url}/v1/Meetings/GetMeetingFileStream(fileId={file_id},plainText=false)"
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings from CivicClerk OData API within date range (async).
-
-        Uses OData $filter and $orderby parameters to get meetings in range.
-
-        Args:
-            days_back: Days to look backward (default 7)
-            days_forward: Days to look forward (default 14)
-
-        Returns:
-            List of meeting dictionaries (validation in base class)
-        """
-        # Calculate date range
+        """Fetch meetings from CivicClerk OData API using $filter and $orderby."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        # Build OData query for date range
         start_time_str = start_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-3] + "Z"
         end_time_str = end_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")[:-3] + "Z"
         params = {
@@ -75,7 +50,6 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
             end_date=str(end_date.date())
         )
 
-        # Fetch from CivicClerk API (async)
         api_url = f"{self.base_url}/v1/Events"
         response = await self._get(api_url, params=params)
         data = await response.json()
@@ -90,7 +64,6 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
 
         results = []
         for meeting in meetings_data:
-            # Find agenda packet in published files
             packet = next(
                 (
                     doc
@@ -102,11 +75,8 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
 
             event_name = meeting.get("eventName", "")
             start_time = meeting.get("startDateTime", "")
-
-            # Parse meeting status from title and start time
             meeting_status = self._parse_meeting_status(event_name, start_time)
 
-            # Log if no packet (but still track the meeting)
             if not packet:
                 file_types = [
                     doc.get("type") for doc in meeting.get("publishedFiles", [])

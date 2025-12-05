@@ -36,28 +36,19 @@ from bs4 import BeautifulSoup
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from parsing.pdf import PdfExtractor
 from parsing.menlopark_pdf import parse_menlopark_pdf_agenda
+from pipeline.protocols import MetricsCollector
 
 
 class AsyncMenloParkAdapter(AsyncBaseAdapter):
     """Async Menlo Park City Council - PDF agenda with item extraction"""
 
-    def __init__(self, city_slug: str):
-        super().__init__(city_slug, vendor="menlopark")
+    def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
+        super().__init__(city_slug, vendor="menlopark", metrics=metrics)
         self.base_url = "https://menlopark.gov"
         self.pdf_extractor = PdfExtractor()
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings from Menlo Park's table-based website and extract items from PDFs (async).
-
-        Args:
-            days_back: Days to look backward (default 7)
-            days_forward: Days to look forward (default 14)
-
-        Returns:
-            List of meeting dictionaries (validation in base class)
-        """
-        # Date range based on standard window
+        """Fetch meetings from Menlo Park's table-based website, extracting items from PDFs."""
         today = datetime.now().date()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
@@ -104,12 +95,8 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
                 continue
 
             # Cell 1: Agenda packet PDF link
-            pdf_link = None
-            if len(cells) > 1:
-                link = cells[1].find('a', href=True, class_='document')
-                if link:
-                    href = link.get('href', '')
-                    pdf_link = urljoin(self.base_url, href)
+            link = cells[1].find('a', href=True, class_='document')
+            pdf_link = urljoin(self.base_url, link.get('href', '')) if link else None
 
             # Skip if no PDF packet
             if not pdf_link:
@@ -185,22 +172,11 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
         return results
 
     def _parse_menlopark_date(self, date_str: str) -> Optional[datetime]:
-        """
-        Parse Menlo Park date formats:
-        - "Nov. 4, 2025"
-        - "October 21, 2025"
-        """
+        """Parse Menlo Park date formats: 'Nov. 4, 2025', 'October 21, 2025'."""
         date_str = date_str.strip()
-
-        # Try full month name format
-        for fmt in [
-            "%b. %d, %Y",   # "Nov. 4, 2025"
-            "%B %d, %Y",    # "November 4, 2025"
-            "%b %d, %Y",    # "Nov 4, 2025" (without period)
-        ]:
+        for fmt in ("%b. %d, %Y", "%B %d, %Y", "%b %d, %Y"):
             try:
                 return datetime.strptime(date_str, fmt)
             except ValueError:
                 continue
-
         return None

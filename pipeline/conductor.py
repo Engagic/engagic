@@ -20,6 +20,7 @@ from typing import Dict, Any, Optional, List
 from database.db_postgres import Database
 from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
 from pipeline.processor import Processor
+from pipeline.protocols import MetricsCollector
 from pipeline.click_types import BANANA
 
 from config import get_logger
@@ -33,20 +34,25 @@ SHUTDOWN_POLL_INTERVAL = 1
 class Conductor:
     """Lightweight orchestrator for sync and processing loops"""
 
-    def __init__(self, db: Database):
+    def __init__(
+        self,
+        db: Database,
+        metrics: Optional[MetricsCollector] = None,
+    ):
         """Initialize the conductor
 
         Args:
             db: PostgreSQL database instance
+            metrics: Optional metrics collector (injected from server when available)
         """
         self.db = db
         self.is_running = False
 
-        # Initialize fetcher and processor with database
-        self.fetcher = Fetcher(db=db)
+        # Initialize fetcher and processor with database and metrics
+        self.fetcher = Fetcher(db=db, metrics=metrics)
         logger.info("fetcher initialized")
 
-        self.processor = Processor(db=db)
+        self.processor = Processor(db=db, metrics=metrics)
         logger.info(
             "processor initialized",
             has_analyzer=self.processor.analyzer is not None

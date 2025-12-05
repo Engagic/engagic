@@ -53,6 +53,7 @@ dependencies = [
     "feedparser>=6.0.12",
     "pydantic>=2.11.7",
     "python-dotenv>=1.0.0",
+    "scikit-learn>=1.6.0",
 ]
 
 [project.scripts]

@@ -102,7 +102,7 @@ async def rate_limit_middleware(
     elif request.headers.get("X-Forwarded-User-IP") and not ssr_authenticated:
         # Log spoofing attempt (someone sent header without auth)
         logger.warning(
-            f"X-Forwarded-User-IP without valid SSR auth - ignoring spoofed header"
+            "X-Forwarded-User-IP without valid SSR auth - ignoring spoofed header"
         )
         # Fall through to other headers
         if request.headers.get("X-Real-Client-IP"):
@@ -139,7 +139,7 @@ async def rate_limit_middleware(
     # Log non-Cloudflare requests for monitoring (potential bypass attempts)
     if not is_cloudflare and request.headers.get("X-Real-Client-IP"):
         logger.warning(
-            f"Non-Cloudflare request detected from {client_ip_raw[:16]}... (direct VPS access)"
+            f"Non-Cloudflare request detected from {client_ip_raw[:16]}... via {ip_source} (direct VPS access)"
         )
 
 
