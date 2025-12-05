@@ -1,4 +1,8 @@
-"""Metrics Protocol - Interface for metrics collection without concrete dependency"""
+"""Metrics Protocol - Interface for metrics collection without concrete dependency
+
+This protocol enables dependency injection of metrics throughout the pipeline,
+allowing components to be tested and run without the server module.
+"""
 
 from typing import Protocol, Any, ContextManager
 from contextlib import contextmanager
@@ -16,15 +20,37 @@ class LabeledHistogram(Protocol):
 
 
 class MetricsCollector(Protocol):
-    """Minimal metrics interface for pipeline operations"""
+    """Unified metrics interface for all pipeline components
+
+    Used by:
+    - pipeline/processor.py - Queue and processing metrics
+    - pipeline/fetcher.py - Vendor sync metrics
+    - analysis/llm/summarizer.py - LLM API metrics
+    - vendors/adapters/base_adapter_async.py - Vendor request metrics
+    """
+    # Queue metrics
     queue_jobs_processed: LabeledCounter
     processing_duration: LabeledHistogram
+
+    # Vendor metrics
     vendor_requests: LabeledCounter
+    vendor_request_duration: LabeledHistogram
     meetings_synced: LabeledCounter
     items_extracted: LabeledCounter
     matters_tracked: LabeledCounter
 
     def record_error(self, component: str, error: Exception) -> None: ...
+
+    def record_llm_call(
+        self,
+        model: str,
+        prompt_type: str,
+        duration_seconds: float,
+        input_tokens: int,
+        output_tokens: int,
+        cost_dollars: float,
+        success: bool = True
+    ) -> None: ...
 
 
 class _NullCounter:
@@ -54,9 +80,22 @@ class NullMetrics:
         self.queue_jobs_processed = _NullCounter()
         self.processing_duration = _NullHistogram()
         self.vendor_requests = _NullCounter()
+        self.vendor_request_duration = _NullHistogram()
         self.meetings_synced = _NullCounter()
         self.items_extracted = _NullCounter()
         self.matters_tracked = _NullCounter()
 
     def record_error(self, component: str, error: Exception) -> None:
+        pass
+
+    def record_llm_call(
+        self,
+        model: str,
+        prompt_type: str,
+        duration_seconds: float,
+        input_tokens: int,
+        output_tokens: int,
+        cost_dollars: float,
+        success: bool = True
+    ) -> None:
         pass

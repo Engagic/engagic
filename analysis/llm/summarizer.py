@@ -10,19 +10,20 @@ Responsibilities:
 """
 
 import asyncio
-import os
 import json
+import os
 import re
+import tempfile
 import time
-from typing import List, Dict, Any, Optional, Tuple
 from importlib.resources import files
 from json import JSONDecodeError
+from typing import Any, Dict, List, Optional, Tuple
 
 from google import genai
 from google.genai import types
 
 from config import get_logger
-from server.metrics import metrics
+from pipeline.protocols import MetricsCollector, NullMetrics
 from exceptions import LLMError
 
 logger = get_logger(__name__).bind(component="analyzer")
@@ -36,14 +37,20 @@ class GeminiSummarizer:
     """Smart LLM orchestrator - picks model, picks prompt, formats response"""
 
     def __init__(
-        self, api_key: Optional[str] = None, prompts_path: Optional[str] = None
+        self,
+        api_key: Optional[str] = None,
+        prompts_path: Optional[str] = None,
+        metrics: Optional[MetricsCollector] = None
     ):
         """Initialize summarizer
 
         Args:
             api_key: Gemini API key (defaults to env vars)
             prompts_path: Path to prompts.json (defaults to same directory)
+            metrics: Metrics collector for LLM call tracking (uses NullMetrics if not provided)
         """
+        self.metrics = metrics or NullMetrics()
+
         # Initialize Gemini client
         self.api_key = (
             api_key or os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY")
@@ -198,7 +205,7 @@ class GeminiSummarizer:
             duration = time.time() - start_time
 
             # Record metrics
-            metrics.record_llm_call(
+            self.metrics.record_llm_call(
                 model=model_display,
                 prompt_type=prompt_type,
                 duration_seconds=duration,
@@ -214,7 +221,7 @@ class GeminiSummarizer:
 
         except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
-            metrics.record_llm_call(
+            self.metrics.record_llm_call(
                 model=model_display,
                 prompt_type=prompt_type,
                 duration_seconds=duration,
@@ -223,7 +230,7 @@ class GeminiSummarizer:
                 cost_dollars=0,
                 success=False
             )
-            metrics.record_error(component="analyzer", error=e)
+            self.metrics.record_error(component="analyzer", error=e)
             logger.error("meeting summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__)
             raise LLMError(
                 f"Meeting summarization failed after {duration:.1f}s",
@@ -320,7 +327,7 @@ class GeminiSummarizer:
             duration = time.time() - start_time
 
             # Record metrics
-            metrics.record_llm_call(
+            self.metrics.record_llm_call(
                 model=model_display,
                 prompt_type=f"item_{prompt_type}",
                 duration_seconds=duration,
@@ -347,7 +354,7 @@ class GeminiSummarizer:
 
         except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
-            metrics.record_llm_call(
+            self.metrics.record_llm_call(
                 model=model_display,
                 prompt_type=f"item_{prompt_type}",
                 duration_seconds=duration,
@@ -356,7 +363,7 @@ class GeminiSummarizer:
                 cost_dollars=0,
                 success=False
             )
-            metrics.record_error(component="analyzer", error=e)
+            self.metrics.record_error(component="analyzer", error=e)
             logger.error("item summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__, prompt_type=prompt_type)
             raise LLMError(
                 f"Item summarization failed after {duration:.1f}s",
@@ -797,10 +804,6 @@ class GeminiSummarizer:
         Returns:
             List of results for this chunk
         """
-        import json
-        import tempfile
-        import os
-
         max_retries = 3
         retry_delay = 60  # Start with 60s delay
 
@@ -943,7 +946,7 @@ class GeminiSummarizer:
                     page_count = req.get("page_count", 0) if req else 0
                     prompt_type = "large" if page_count >= 100 else "standard"
 
-                    metrics.record_llm_call(
+                    self.metrics.record_llm_call(
                         model="flash",
                         prompt_type=f"item_{prompt_type}_batch",
                         duration_seconds=batch_duration / len(results),
@@ -961,7 +964,7 @@ class GeminiSummarizer:
                 error_str = str(e)
                 is_quota_error = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
 
-                metrics.record_error(component="analyzer", error=e)
+                self.metrics.record_error(component="analyzer", error=e)
 
                 if is_quota_error and attempt < max_retries - 1:
                     backoff_delay = retry_delay * (2**attempt)
@@ -982,7 +985,7 @@ class GeminiSummarizer:
                 for req in chunk_requests:
                     page_count = req.get("page_count", 0)
                     prompt_type = "large" if page_count >= 100 else "standard"
-                    metrics.record_llm_call(
+                    self.metrics.record_llm_call(
                         model="flash",
                         prompt_type=f"item_{prompt_type}_batch",
                         duration_seconds=0,
@@ -1179,9 +1182,6 @@ class GeminiSummarizer:
             return summary, topics
 
         except json.JSONDecodeError as e:
-            # FIXED (Nov 2025): Was caused by max_output_tokens=2048 in batch API
-            # Increased to 8192 to match single-item processing
-            # Added finish_reason checking to detect future MAX_TOKENS issues
             logger.error("failed to parse json response", error=str(e), error_type=type(e).__name__)
             logger.error("full malformed json response", response_text=response_text)
             raise
@@ -1189,37 +1189,6 @@ class GeminiSummarizer:
             logger.error("error validating json response", error=str(e), error_type=type(e).__name__)
             logger.error("response that failed validation", response_text=response_text)
             raise
-
-    def _clean_summary(self, raw_summary: str) -> str:
-        """Remove LLM artifacts and document headers from summary text
-
-        Args:
-            raw_summary: Raw summary text from LLM
-
-        Returns:
-            Cleaned summary text ready for storage
-        """
-        import re
-
-        if not raw_summary:
-            return ""
-
-        cleaned = raw_summary
-        # Remove document section markers
-        cleaned = re.sub(r"=== DOCUMENT \d+ ===", "", cleaned)
-        cleaned = re.sub(r"--- SECTION \d+ SUMMARY ---", "", cleaned)
-
-        # Remove common LLM preambles
-        cleaned = re.sub(r"Here's a concise summary of the[^:]*:", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"Here's a summary of the[^:]*:", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"Here's the key points[^:]*:", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"Here's a structured analysis[^:]*:", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"Summary of the[^:]*:", "", cleaned, flags=re.IGNORECASE)
-
-        # Normalize excessive newlines
-        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-
-        return cleaned.strip()
 
     def _estimate_page_count(self, text: str) -> int:
         """Estimate page count from text

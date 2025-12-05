@@ -1,23 +1,4 @@
-"""Repository helper functions for consistent object construction and topic fetching.
-
-Eliminates duplication across matters.py, meetings.py, items.py repositories.
-Following the pattern established in cities.py with _build_city().
-
-Usage:
-    from database.repositories_async.helpers import (
-        # JSONB deserialization helpers
-        deserialize_attachments,
-        deserialize_metadata,
-        deserialize_participation,
-        deserialize_city_participation,
-        # Topic fetching
-        fetch_topics_for_ids,
-        # Object builders
-        build_matter,
-        build_meeting,
-        build_agenda_item,
-    )
-"""
+"""Repository helper functions for object construction and topic fetching."""
 
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
@@ -34,59 +15,25 @@ from database.models import (
 
 
 def deserialize_attachments(data: Any) -> List[AttachmentInfo]:
-    """Deserialize JSONB attachments array to typed AttachmentInfo list.
-
-    Args:
-        data: Raw JSONB data (list of dicts) or None
-
-    Returns:
-        List of AttachmentInfo objects, empty list if data is None/empty
-    """
+    """Deserialize JSONB attachments array to typed AttachmentInfo list."""
     if not data:
         return []
     return [AttachmentInfo(**a) for a in data]
 
 
 def deserialize_metadata(data: Any) -> Optional[MatterMetadata]:
-    """Deserialize JSONB metadata object to typed MatterMetadata.
-
-    Args:
-        data: Raw JSONB data (dict) or None
-
-    Returns:
-        MatterMetadata object or None
-    """
-    if not data:
-        return None
-    return MatterMetadata(**data)
+    """Deserialize JSONB metadata object to typed MatterMetadata."""
+    return MatterMetadata(**data) if data else None
 
 
 def deserialize_participation(data: Any) -> Optional[ParticipationInfo]:
-    """Deserialize JSONB participation object to typed ParticipationInfo.
-
-    Args:
-        data: Raw JSONB data (dict) or None
-
-    Returns:
-        ParticipationInfo object or None
-    """
-    if not data:
-        return None
-    return ParticipationInfo(**data)
+    """Deserialize JSONB participation object to typed ParticipationInfo."""
+    return ParticipationInfo(**data) if data else None
 
 
 def deserialize_city_participation(data: Any) -> Optional[CityParticipation]:
-    """Deserialize JSONB city participation object to typed CityParticipation.
-
-    Args:
-        data: Raw JSONB data (dict) or None
-
-    Returns:
-        CityParticipation object or None
-    """
-    if not data:
-        return None
-    return CityParticipation(**data)
+    """Deserialize JSONB city participation object to typed CityParticipation."""
+    return CityParticipation(**data) if data else None
 
 
 async def fetch_topics_for_ids(
@@ -95,33 +42,13 @@ async def fetch_topics_for_ids(
     id_column: str,
     ids: List[str],
 ) -> Dict[str, List[str]]:
-    """Batch fetch topics from a topic table, return dict mapping id -> [topics].
-
-    Eliminates N+1 queries by fetching all topics in a single query.
-    This pattern was duplicated 8+ times across repositories.
-
-    Args:
-        conn: asyncpg connection (from pool.acquire() or transaction())
-        table: Topic table name ("matter_topics", "meeting_topics", "item_topics")
-        id_column: Foreign key column ("matter_id", "meeting_id", "item_id")
-        ids: List of entity IDs to fetch topics for
-
-    Returns:
-        Dict mapping entity_id -> list of topic strings.
-        Missing IDs are simply absent from the dict (use .get(id, [])).
-
-    Example:
-        topics_map = await fetch_topics_for_ids(
-            conn, "meeting_topics", "meeting_id", meeting_ids
-        )
-        meeting_topics = topics_map.get(meeting.id, [])
-    """
+    """Batch fetch topics from a topic table, return dict mapping id -> [topics]."""
     if not ids:
         return {}
 
     rows = await conn.fetch(
         f"SELECT {id_column}, topic FROM {table} WHERE {id_column} = ANY($1::text[])",
-        list(set(ids)),  # Deduplicate
+        list(set(ids)),
     )
 
     result: Dict[str, List[str]] = defaultdict(list)
@@ -132,19 +59,7 @@ async def fetch_topics_for_ids(
 
 
 def build_matter(row: Any, topics: Optional[List[str]] = None) -> Matter:
-    """Construct Matter from database row with JSONB deserialization.
-
-    Centralizes the Matter construction pattern that was duplicated 3+ times.
-
-    Args:
-        row: asyncpg Record with matter columns from city_matters table
-        topics: Pre-fetched topics from matter_topics table.
-                If None, falls back to row["canonical_topics"].
-
-    Returns:
-        Fully constructed Matter object
-    """
-    # Topics: prefer pre-fetched from matter_topics, fallback to canonical_topics
+    """Construct Matter from database row with JSONB deserialization."""
     resolved_topics = topics if topics is not None else (row["canonical_topics"] or [])
 
     return Matter(
@@ -167,18 +82,7 @@ def build_matter(row: Any, topics: Optional[List[str]] = None) -> Matter:
 
 
 def build_meeting(row: Any, topics: Optional[List[str]] = None) -> Meeting:
-    """Construct Meeting from database row with JSONB deserialization.
-
-    Centralizes the Meeting construction pattern that was duplicated 5+ times.
-
-    Args:
-        row: asyncpg Record with meeting columns from meetings table
-        topics: Pre-fetched topics from meeting_topics table.
-                Defaults to empty list if None.
-
-    Returns:
-        Fully constructed Meeting object
-    """
+    """Construct Meeting from database row with JSONB deserialization."""
     participation = deserialize_participation(row["participation"])
 
     return Meeting(
@@ -200,18 +104,7 @@ def build_meeting(row: Any, topics: Optional[List[str]] = None) -> Meeting:
 
 
 def build_agenda_item(row: Any, topics: Optional[List[str]] = None) -> AgendaItem:
-    """Construct AgendaItem from database row with JSONB deserialization.
-
-    Centralizes the AgendaItem construction pattern that was duplicated 4+ times.
-
-    Args:
-        row: asyncpg Record with item columns from items table
-        topics: Pre-fetched topics from item_topics table.
-                Defaults to empty list if None.
-
-    Returns:
-        Fully constructed AgendaItem object
-    """
+    """Construct AgendaItem from database row with JSONB deserialization."""
     attachments = deserialize_attachments(row["attachments"])
     sponsors = row["sponsors"] or []
 
@@ -230,3 +123,47 @@ def build_agenda_item(row: Any, topics: Optional[List[str]] = None) -> AgendaIte
         summary=row["summary"],
         topics=topics or [],
     )
+
+
+async def replace_entity_topics(
+    conn,
+    table: str,
+    id_column: str,
+    entity_id: str,
+    topics: List[str],
+) -> None:
+    """Replace all topics for an entity (DELETE + INSERT pattern)."""
+    await conn.execute(f"DELETE FROM {table} WHERE {id_column} = $1", entity_id)
+
+    if topics:
+        topic_records = [(entity_id, topic) for topic in topics]
+        await conn.executemany(
+            f"INSERT INTO {table} ({id_column}, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            topic_records
+        )
+
+
+async def replace_entity_topics_batch(
+    conn,
+    table: str,
+    id_column: str,
+    entity_topics: Dict[str, List[str]],
+) -> None:
+    """Replace topics for multiple entities in batch (DELETE + INSERT)."""
+    if not entity_topics:
+        return
+
+    entity_ids = list(entity_topics.keys())
+    await conn.execute(f"DELETE FROM {table} WHERE {id_column} = ANY($1::text[])", entity_ids)
+
+    all_records = [
+        (entity_id, topic)
+        for entity_id, topics in entity_topics.items()
+        for topic in topics
+    ]
+
+    if all_records:
+        await conn.executemany(
+            f"INSERT INTO {table} ({id_column}, topic) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            all_records
+        )
