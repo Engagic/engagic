@@ -694,7 +694,13 @@
 		}
 
 		.meeting-detail {
-			padding: 1.5rem;
+			padding: 1.5rem 1.5rem 0.75rem 1.5rem;
+		}
+
+		.agenda-items {
+			margin-left: -1.5rem;
+			margin-right: -1.5rem;
+			margin-bottom: -0.75rem;
 		}
 
 		.back-link {

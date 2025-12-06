@@ -782,12 +782,26 @@
 	}
 
 	@media (max-width: 640px) {
+		.agenda-item {
+			border-radius: 0;
+			border-left: 4px solid var(--border-primary);
+			border-right: none;
+		}
+
+		.agenda-item[data-has-summary="true"] {
+			border-left-color: var(--item-summary-border);
+		}
+
+		.agenda-item[data-expanded="true"] {
+			border-left-color: var(--civic-blue);
+		}
+
 		.item-header-clickable {
-			padding: 0.75rem 1rem;
+			padding: 0.75rem 1.25rem;
 		}
 
 		.item-expanded-content {
-			padding: 0 1rem 1rem 1rem;
+			padding: 0 1.25rem 1rem 1.25rem;
 		}
 
 		.item-header {
