@@ -1021,3 +1021,162 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             filtered.insert(0, selected_leg_ver)
 
         return filtered
+
+    # ==================
+    # ROSTER FETCHING
+    # ==================
+
+    async def fetch_roster_data(self) -> Dict[str, Any]:
+        """Fetch committee roster data (bodies and current office records).
+
+        This is intended for one-time population of committee memberships.
+        Returns raw API data for processing by the roster sync script.
+
+        Note: Persons API is not used - we get all person info from OfficeRecords.
+        This reduces API calls from 3 to 2 per city.
+
+        Returns:
+            Dict with 'bodies', 'persons' (empty), 'office_records' lists
+        """
+        logger.info("fetching roster data", slug=self.slug)
+
+        bodies = await self._fetch_bodies()
+        office_records = await self._fetch_office_records()
+
+        logger.info(
+            "roster data fetched",
+            slug=self.slug,
+            bodies=len(bodies),
+            office_records=len(office_records),
+        )
+
+        return {
+            "bodies": bodies,
+            "persons": [],  # Not used - info comes from OfficeRecords
+            "office_records": office_records,
+        }
+
+    async def _fetch_bodies(self) -> List[Dict[str, Any]]:
+        """Fetch all Bodies (committees) from Legistar API."""
+        try:
+            url = f"{self.base_url}/Bodies"
+            params = {"$top": 1000}
+            if self.api_token:
+                params["token"] = self.api_token
+
+            response = await self._get(url, params=params)
+
+            content_type = response.headers.get('content-type', '').lower()
+            if 'json' in content_type:
+                bodies = await response.json()
+            else:
+                text = await response.text()
+                bodies = self._parse_xml_generic(text, "GranicusBody", "Body")
+
+            # Filter to active bodies only
+            active_bodies = [
+                b for b in bodies
+                if b.get("BodyActiveFlag") == 1 or b.get("BodyActiveFlag") == "1"
+            ]
+
+            logger.debug("fetched bodies", slug=self.slug, total=len(bodies), active=len(active_bodies))
+            return active_bodies
+
+        except (VendorHTTPError, aiohttp.ClientError) as e:
+            logger.warning("failed to fetch bodies", slug=self.slug, error=str(e))
+            return []
+
+    async def _fetch_persons(self) -> List[Dict[str, Any]]:
+        """Fetch active Persons (council members) from Legistar API."""
+        try:
+            url = f"{self.base_url}/Persons"
+            params = {
+                "$filter": "PersonActiveFlag eq 1",
+                "$top": 1000,
+            }
+            if self.api_token:
+                params["token"] = self.api_token
+
+            response = await self._get(url, params=params)
+
+            content_type = response.headers.get('content-type', '').lower()
+            if 'json' in content_type:
+                persons = await response.json()
+            else:
+                text = await response.text()
+                persons = self._parse_xml_generic(text, "GranicusPerson", "Person")
+
+            logger.debug("fetched persons", slug=self.slug, count=len(persons))
+            return persons
+
+        except (VendorHTTPError, aiohttp.ClientError) as e:
+            logger.warning("failed to fetch persons", slug=self.slug, error=str(e))
+            return []
+
+    async def _fetch_office_records(self, current_only: bool = True) -> List[Dict[str, Any]]:
+        """Fetch OfficeRecords (committee memberships) from Legistar API.
+
+        Args:
+            current_only: Only fetch records where EndDate >= today (default True)
+
+        Returns:
+            List of office record dicts with person-to-body mappings
+        """
+        try:
+            url = f"{self.base_url}/OfficeRecords"
+
+            # Filter to current memberships only (EndDate >= today)
+            from datetime import datetime
+            today = datetime.now().strftime("%Y-%m-%d")
+
+            params = {"$top": 1000}
+            if current_only:
+                params["$filter"] = f"OfficeRecordEndDate ge datetime'{today}'"
+
+            if self.api_token:
+                params["token"] = self.api_token
+
+            response = await self._get(url, params=params)
+
+            content_type = response.headers.get('content-type', '').lower()
+            if 'json' in content_type:
+                records = await response.json()
+            else:
+                text = await response.text()
+                records = self._parse_xml_generic(text, "GranicusOfficeRecord", "OfficeRecord")
+
+            logger.debug("fetched office records", slug=self.slug, count=len(records), current_only=current_only)
+            return records
+
+        except (VendorHTTPError, aiohttp.ClientError) as e:
+            logger.warning("failed to fetch office records", slug=self.slug, error=str(e))
+            return []
+
+    def _parse_xml_generic(self, xml_text: str, primary_tag: str, fallback_tag: str) -> List[Dict]:
+        """Parse XML response for any Legistar entity type."""
+        try:
+            root = ET.fromstring(xml_text)
+            ns = {'ns': 'http://schemas.datacontract.org/2004/07/LegistarWebAPI.Models.v1'}
+
+            items = []
+            elements = root.findall(f'.//ns:{primary_tag}', ns)
+            if not elements:
+                elements = root.findall(f'.//ns:{fallback_tag}', ns)
+
+            for elem in elements:
+                item = {}
+                for child in elem:
+                    tag = child.tag.split('}')[1] if '}' in child.tag else child.tag
+                    if child.text:
+                        # Try to parse as int
+                        try:
+                            item[tag] = int(child.text)
+                        except ValueError:
+                            item[tag] = child.text
+                items.append(item)
+
+            return items
+
+        except ET.ParseError as e:
+            logger.warning("XML parsing error", error=str(e))
+            return []
