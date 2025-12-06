@@ -149,6 +149,59 @@ class Database:
             stats['summary_rate'] = f"{summarized / total * 100:.1f}%" if total > 0 else "0%"
             return stats
 
+    async def get_platform_metrics(self) -> dict:
+        """Get comprehensive platform metrics for impact/about page."""
+        async with self.pool.acquire() as conn:
+            result = await conn.fetchrow("""
+                SELECT
+                    -- Core content
+                    (SELECT COUNT(*) FROM cities) as total_cities,
+                    (SELECT COUNT(DISTINCT banana) FROM meetings) as active_cities,
+                    (SELECT COUNT(*) FROM meetings) as meetings,
+                    (SELECT COUNT(*) FROM items) as agenda_items,
+                    (SELECT COUNT(*) FROM city_matters) as matters,
+                    (SELECT COUNT(*) FROM matter_appearances) as matter_appearances,
+                    -- Civic infrastructure
+                    (SELECT COUNT(*) FROM committees) as committees,
+                    (SELECT COUNT(*) FROM council_members) as council_members,
+                    (SELECT COUNT(*) FROM committee_members) as committee_assignments,
+                    -- Accountability data
+                    (SELECT COUNT(*) FROM votes) as votes,
+                    (SELECT COUNT(*) FROM sponsorships) as sponsorships,
+                    (SELECT COUNT(DISTINCT SPLIT_PART(council_member_id, '_', 1)) FROM votes) as cities_with_votes,
+                    -- Processing stats
+                    (SELECT COUNT(*) FROM meetings WHERE summary IS NOT NULL) as summarized_meetings,
+                    (SELECT COUNT(*) FROM items WHERE summary IS NOT NULL) as summarized_items
+            """)
+
+            metrics = dict(result)
+
+            # Calculate rates
+            if metrics['meetings'] > 0:
+                metrics['meeting_summary_rate'] = round(metrics['summarized_meetings'] / metrics['meetings'] * 100, 1)
+            else:
+                metrics['meeting_summary_rate'] = 0
+
+            if metrics['agenda_items'] > 0:
+                metrics['item_summary_rate'] = round(metrics['summarized_items'] / metrics['agenda_items'] * 100, 1)
+            else:
+                metrics['item_summary_rate'] = 0
+
+            # Get vote breakdown by city
+            vote_breakdown = await conn.fetch("""
+                SELECT
+                    SPLIT_PART(council_member_id, '_', 1) as city,
+                    COUNT(*) as votes,
+                    COUNT(DISTINCT council_member_id) as voters
+                FROM votes
+                GROUP BY 1
+                ORDER BY votes DESC
+                LIMIT 10
+            """)
+            metrics['votes_by_city'] = [dict(row) for row in vote_breakdown]
+
+            return metrics
+
     async def get_city(
         self,
         banana: Optional[str] = None,

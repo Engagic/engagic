@@ -198,6 +198,44 @@ async def get_stats(db: Database = Depends(get_db)):
         )
 
 
+@router.get("/api/platform-metrics")
+async def get_platform_metrics(db: Database = Depends(get_db)):
+    """Get comprehensive platform metrics for impact/about page."""
+    try:
+        metrics = await db.get_platform_metrics()
+        return {
+            "status": "ok",
+            "content": {
+                "total_cities": metrics["total_cities"],
+                "active_cities": metrics["active_cities"],
+                "meetings": metrics["meetings"],
+                "agenda_items": metrics["agenda_items"],
+                "matters": metrics["matters"],
+                "matter_appearances": metrics["matter_appearances"],
+            },
+            "civic_infrastructure": {
+                "committees": metrics["committees"],
+                "council_members": metrics["council_members"],
+                "committee_assignments": metrics["committee_assignments"],
+            },
+            "accountability": {
+                "votes": metrics["votes"],
+                "sponsorships": metrics["sponsorships"],
+                "cities_with_votes": metrics["cities_with_votes"],
+                "votes_by_city": metrics["votes_by_city"],
+            },
+            "processing": {
+                "summarized_meetings": metrics["summarized_meetings"],
+                "summarized_items": metrics["summarized_items"],
+                "meeting_summary_rate": metrics["meeting_summary_rate"],
+                "item_summary_rate": metrics["item_summary_rate"],
+            },
+        }
+    except Exception as e:
+        logger.error("error fetching platform metrics", error=str(e))
+        raise HTTPException(status_code=500, detail="Error fetching metrics")
+
+
 @router.get("/api/queue-stats")
 async def get_queue_stats(db: Database = Depends(get_db)):
     """Get processing queue statistics (Phase 4)"""
