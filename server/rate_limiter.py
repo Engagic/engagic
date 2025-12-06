@@ -17,29 +17,17 @@ logger = get_logger(__name__)
 
 
 class RateLimitTier(str, Enum):
-    """Rate limit tiers for different user types"""
-    FRONTEND = "frontend"  # Interactive browser users (lenient)
-    BASIC = "basic"        # Direct API users (default)
-    HACKTIVIST = "hacktivist"
-    ENTERPRISE = "enterprise"
+    """Rate limit tiers"""
+    STANDARD = "standard"  # Everyone
+    ENTERPRISE = "enterprise"  # Paid API keys
 
 
 class TierLimits:
-    """Rate limit configuration for each tier"""
-    FRONTEND = {
-        "minute_limit": 100,
+    """Rate limit configuration - one tier for everyone"""
+    STANDARD = {
+        "minute_limit": 60,
         "day_limit": 2000,
-        "description": "Frontend browser users - interactive browsing"
-    }
-    BASIC = {
-        "minute_limit": 30,
-        "day_limit": 300,
-        "description": "Free tier - reasonable personal use"
-    }
-    HACKTIVIST = {
-        "minute_limit": 100,
-        "day_limit": 5000,
-        "description": "Nonprofit/journalist tier - requires attribution"
+        "description": "Standard tier - generous for casual use"
     }
     ENTERPRISE = {
         "minute_limit": 1000,
@@ -51,12 +39,10 @@ class TierLimits:
     def get_limits(cls, tier: RateLimitTier) -> Dict[str, Any]:
         """Get limits for a tier"""
         tier_map = {
-            RateLimitTier.FRONTEND: cls.FRONTEND,
-            RateLimitTier.BASIC: cls.BASIC,
-            RateLimitTier.HACKTIVIST: cls.HACKTIVIST,
+            RateLimitTier.STANDARD: cls.STANDARD,
             RateLimitTier.ENTERPRISE: cls.ENTERPRISE,
         }
-        return tier_map.get(tier, cls.BASIC)
+        return tier_map.get(tier, cls.STANDARD)
 
 
 class SQLiteRateLimiter:
@@ -169,19 +155,18 @@ class SQLiteRateLimiter:
             conn.commit()
             logger.info("initialized persistent rate limiter", db_path=str(self.db_path))
 
-    def get_client_tier(self, client_ip: str, api_key: Optional[str] = None, is_frontend: bool = False) -> RateLimitTier:
+    def get_client_tier(self, client_ip: str, api_key: Optional[str] = None) -> RateLimitTier:
         """
-        Get tier for client (API key lookup, frontend detection, or default to basic).
+        Get tier for client (API key lookup or default to standard).
 
         Args:
             client_ip: Client IP address
-            api_key: Optional API key
-            is_frontend: Whether request is from frontend (browser) origin
+            api_key: Optional API key for enterprise tier
 
         Returns:
             RateLimitTier enum
         """
-        # API key takes precedence (explicit tier assignment)
+        # API key = enterprise tier
         if api_key:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
@@ -190,14 +175,13 @@ class SQLiteRateLimiter:
                 )
                 result = cursor.fetchone()
                 if result:
-                    return RateLimitTier(result[0])
+                    try:
+                        return RateLimitTier(result[0])
+                    except ValueError:
+                        pass  # Invalid tier in DB, fall through to standard
 
-        # Frontend tier for browser users (more lenient than direct API)
-        if is_frontend:
-            return RateLimitTier.FRONTEND
-
-        # Default to basic tier for unauthenticated API requests
-        return RateLimitTier.BASIC
+        # Everyone gets standard tier
+        return RateLimitTier.STANDARD
 
     def check_temp_ban(self, client_ip: str) -> Tuple[bool, Optional[float]]:
         """
@@ -392,7 +376,7 @@ class SQLiteRateLimiter:
         except (sqlite3.Error, OSError, IOError) as e:
             logger.error("failed to export blocked IPs", error=str(e))
 
-    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, whitelist_ip: Optional[str] = None, is_frontend: bool = False) -> Tuple[bool, int, Dict[str, Any]]:
+    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, whitelist_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
         """
         Check if client has exceeded rate limits (both minute and day).
 
@@ -400,8 +384,7 @@ class SQLiteRateLimiter:
             client_ip: Client IP address (hashed, for rate limiting)
             api_key: Optional API key for tier lookup
             real_ip: Real client IP from proxy headers (for logging)
-            whitelist_ip: IP to check against whitelist (from CF-Connecting-IP via Cloudflare)
-            is_frontend: Whether request is from frontend (browser) origin
+            whitelist_ip: IP to check against whitelist
 
         Returns:
             (is_allowed, remaining_minute, limit_info)
@@ -435,8 +418,8 @@ class SQLiteRateLimiter:
                 "message": f"Temporarily banned for excessive rate limit violations. Ban lifts in {remaining_seconds}s."
             }
 
-        # Get client tier (frontend users get more lenient limits)
-        tier = self.get_client_tier(client_ip, api_key, is_frontend)
+        # Get client tier
+        tier = self.get_client_tier(client_ip, api_key)
         limits = TierLimits.get_limits(tier)
         minute_limit = limits["minute_limit"]
 

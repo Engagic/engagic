@@ -1,337 +1,115 @@
 """
-Rate limiting middleware
+Rate limiting middleware - simplified single tier
 """
 
 import hashlib
-from urllib.parse import urlparse
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from server.rate_limiter import SQLiteRateLimiter
 
-from config import get_logger, config as app_config
+from config import get_logger
 
 logger = get_logger(__name__)
-
-# Frontend origins that get lenient rate limiting (interactive browser users)
-FRONTEND_ORIGINS = {
-    "https://engagic.org",
-    "https://www.engagic.org",
-    "http://localhost:5173",  # Dev
-    "http://localhost:4173",  # Preview
-}
-
-
-def is_frontend_request(request: Request) -> bool:
-    """
-    Detect if request is from the frontend (browser) vs direct API.
-
-    Frontend requests get more lenient rate limiting because:
-    1. SvelteKit preloading triggers multiple requests on hover/navigation
-    2. Interactive users are legitimate, not scrapers
-    3. Frontend SSR explicitly passes X-Forwarded-User-IP header
-
-    Detection strategy (in order):
-    1. Origin header matches known frontend domains
-    2. Referer header matches known frontend domains
-    3. Presence of X-Forwarded-User-IP (only set by our frontend SSR)
-    """
-    # Check Origin header (most reliable for CORS requests)
-    origin = request.headers.get("Origin", "")
-    if origin in FRONTEND_ORIGINS:
-        return True
-
-    # Check Referer header (for navigation requests)
-    referer = request.headers.get("Referer", "")
-    if referer:
-        try:
-            parsed = urlparse(referer)
-            referer_origin = f"{parsed.scheme}://{parsed.netloc}"
-            if referer_origin in FRONTEND_ORIGINS:
-                return True
-        except Exception:
-            pass
-
-    # Presence of X-Forwarded-User-IP indicates frontend SSR
-    # (Our frontend explicitly sets this header with the real user IP)
-    if request.headers.get("X-Forwarded-User-IP"):
-        return True
-
-    return False
 
 
 async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
-    """Check rate limits for API endpoints with tier support"""
-    # Get real client IP from nginx-validated header (prevents CF-Connecting-IP spoofing)
-    #
-    # X-Real-Client-IP: Set by nginx after validating the request came from Cloudflare.
-    #   - If from Cloudflare IP: Contains CF-Connecting-IP (trusted real client IP)
-    #   - If direct connection: Contains $remote_addr (attacker's real IP, not spoofed header)
-    #
-    # X-Is-Cloudflare: "1" if request came from Cloudflare IP range, "0" otherwise
-    #   - Used for logging/debugging but not for IP extraction (nginx handles that)
-    #
-    # Header priority for IP extraction:
-    # 1. X-Forwarded-User-IP: Set by our frontend SSR (trusted, explicit user IP)
-    # 2. X-Real-Client-IP: nginx-validated from CF-Connecting-IP (direct API calls)
-    # 3. X-Real-IP: Standard nginx header (also nginx-validated)
-    # 4. CF-Connecting-IP: Direct Cloudflare requests (dev only)
-    # 5. X-Forwarded-For: Standard proxy header
-    # 6. request.client.host: Direct connection fallback
-    #
-    # IMPORTANT: X-Forwarded-User-IP must come FIRST because for SSR requests,
-    # Cloudflare sets CF-Connecting-IP to the Pages worker IP, not the real user.
-    # Our frontend explicitly passes the real user IP via X-Forwarded-User-IP.
-    is_cloudflare = request.headers.get("X-Is-Cloudflare") == "1"
-
-    # Track which header we got the IP from (for debugging)
-    ip_source = "unknown"
+    """Check rate limits for API endpoints"""
+    # IP Detection - Simple priority chain
+    # nginx validates Cloudflare IPs and sets X-Real-Client-IP with the real user IP
     client_ip_raw = "unknown"
 
-    # Only trust X-Forwarded-User-IP if authenticated by SSR secret
-    # This prevents attackers from spoofing the header to bypass rate limits
-    ssr_auth = request.headers.get("X-SSR-Auth")
-    ssr_secret = app_config.SSR_AUTH_SECRET
-    ssr_authenticated = ssr_secret and ssr_auth == ssr_secret
-
-    if request.headers.get("X-Forwarded-User-IP") and ssr_authenticated:
-        client_ip_raw = request.headers.get("X-Forwarded-User-IP") or "unknown"
-        ip_source = "X-Forwarded-User-IP"
-    elif request.headers.get("X-Forwarded-User-IP") and not ssr_authenticated:
-        # Log spoofing attempt (someone sent header without auth)
-        logger.warning(
-            "X-Forwarded-User-IP without valid SSR auth - ignoring spoofed header"
-        )
-        # Fall through to other headers
-        if request.headers.get("X-Real-Client-IP"):
-            client_ip_raw = request.headers.get("X-Real-Client-IP") or "unknown"
-            ip_source = "X-Real-Client-IP (SSR auth failed)"
-        elif request.headers.get("X-Real-IP"):
-            client_ip_raw = request.headers.get("X-Real-IP") or "unknown"
-            ip_source = "X-Real-IP (SSR auth failed)"
-        elif request.headers.get("CF-Connecting-IP"):
-            client_ip_raw = request.headers.get("CF-Connecting-IP") or "unknown"
-            ip_source = "CF-Connecting-IP (SSR auth failed)"
-        elif request.headers.get("X-Forwarded-For"):
-            client_ip_raw = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or "unknown"
-            ip_source = "X-Forwarded-For (SSR auth failed)"
-        elif request.client:
-            client_ip_raw = request.client.host
-            ip_source = "request.client.host (SSR auth failed)"
-    elif request.headers.get("X-Real-Client-IP"):
+    if request.headers.get("X-Real-Client-IP"):
         client_ip_raw = request.headers.get("X-Real-Client-IP") or "unknown"
-        ip_source = "X-Real-Client-IP"
     elif request.headers.get("X-Real-IP"):
         client_ip_raw = request.headers.get("X-Real-IP") or "unknown"
-        ip_source = "X-Real-IP"
     elif request.headers.get("CF-Connecting-IP"):
         client_ip_raw = request.headers.get("CF-Connecting-IP") or "unknown"
-        ip_source = "CF-Connecting-IP"
     elif request.headers.get("X-Forwarded-For"):
         client_ip_raw = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or "unknown"
-        ip_source = "X-Forwarded-For"
     elif request.client:
         client_ip_raw = request.client.host
-        ip_source = "request.client.host"
 
-    # Log non-Cloudflare requests for monitoring (potential bypass attempts)
-    if not is_cloudflare and request.headers.get("X-Real-Client-IP"):
-        logger.warning(
-            f"Non-Cloudflare request detected from {client_ip_raw[:16]}... via {ip_source} (direct VPS access)"
-        )
-
-
-    # Detect if request is from frontend (for lenient rate limiting)
-    is_frontend = is_frontend_request(request)
-
-    # Hash IP for privacy (GDPR-friendly, can't reverse to get real IP)
-    # Same user = same hash = consistent rate limiting
-    # Use first 16 chars of SHA-256 hash for brevity
+    # Hash IP for privacy
     client_ip_hash = hashlib.sha256(client_ip_raw.encode()).hexdigest()[:16]
-
-    # Store hash in request state for route handlers to access
     request.state.client_ip_hash = client_ip_hash
 
-    # Skip rate limiting for OPTIONS requests (CORS preflight)
+    # Skip rate limiting for OPTIONS (CORS preflight)
     if request.method == "OPTIONS":
-        response = await call_next(request)
-        return response
+        return await call_next(request)
 
-    # Apply rate limiting to ALL requests (not just /api/)
-    # Scanners bypass /api/ check by hitting root, /login.php, etc.
-    should_rate_limit = True
-
-    # Whitelist monitoring endpoints (Prometheus scraping + health checks)
+    # Whitelist health/metrics endpoints
     if request.url.path in ["/health", "/metrics", "/api/health", "/api/metrics"]:
-        should_rate_limit = False
+        return await call_next(request)
 
-    if should_rate_limit:
-        # Get API key from header (optional, for future use)
-        api_key = request.headers.get("X-API-Key")
+    # Check rate limit
+    api_key = request.headers.get("X-API-Key")
+    is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(
+        client_ip_hash, api_key, client_ip_raw, client_ip_raw
+    )
 
-        is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(
-            client_ip_hash, api_key, client_ip_raw, client_ip_raw, is_frontend
+    if not is_allowed:
+        limit_type = limit_info.get("limit_type", "unknown")
+        tier = limit_info.get("tier", "standard")
+        endpoint = f"{request.method} {request.url.path}"
+
+        logger.warning(
+            f"Rate limit exceeded for {client_ip_hash} - tier: {tier}, limit: {limit_type}, endpoint: {endpoint}"
         )
 
-        if not is_allowed:
-            limit_type = limit_info.get("limit_type", "unknown")
-            tier = limit_info.get("tier", "basic")
-
-            # Log endpoint being accessed for debugging
-            endpoint = f"{request.method} {request.url.path}"
-            logger.warning(
-                f"Rate limit exceeded for {client_ip_hash} (hashed) - tier: {tier}, limit: {limit_type}, endpoint: {endpoint}"
-            )
-
-            # Handle temp ban separately
-            if limit_type == "temp_ban":
-                remaining_seconds = limit_info.get("remaining_seconds", 0)
-                ban_message = limit_info.get("message", "Temporarily banned")
-
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "error": "Temporarily banned",
-                        "message": ban_message,
-                        "ban_remaining_seconds": remaining_seconds,
-                        "reason": "Excessive rate limit violations - progressive penalty applied"
-                    },
-                    headers={
-                        "Retry-After": str(remaining_seconds),
-                        "X-Ban-Until": str(limit_info.get("ban_until", 0)),
-                        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-                        "Access-Control-Allow-Credentials": "true",
-                        "Access-Control-Allow-Methods": "*",
-                        "Access-Control-Allow-Headers": "*",
-                    }
-                )
-
-            # Construct graduated messaging based on limit type
-            if limit_type == "daily":
-                # Hard boundary - need to upgrade or self-host
-                message = (
-                    f"You've reached your daily limit ({limit_info['day_limit']} requests/day). "
-                    f"Resets at midnight UTC. To continue today, you'll need higher access."
-                )
-                friendly_tone = False
-            else:
-                # Soft boundary - suggest donation, can continue after waiting
-                message = (
-                    f"Whoa, you're using this a lot! You've hit the per-minute limit "
-                    f"({limit_info['minute_limit']}/min). Wait a moment and you can continue."
-                )
-                friendly_tone = True
-
-            # Build response based on limit type (graduated approach)
-            origin = request.headers.get("origin", "*")
-
-            # Minute limit: friendly, donation-first
-            if friendly_tone:
-                content = {
-                    "error": "Rate limit exceeded",
-                    "message": message,
-                    "current_tier": tier,
-                    "limit_type": limit_type,
-                    "limits": {
-                        "minute": limit_info.get("minute_limit"),
-                        "daily": limit_info.get("day_limit")
-                    },
-                    "suggestion": (
-                        "Looks like you're finding this useful! Engagic is a public good project "
-                        "that costs real money to run (~$5 per 1,000 items for LLM processing). "
-                        "Consider supporting us:"
-                    ),
-                    "support": {
-                        "donate": {
-                            "url": "https://engagic.org/donate",
-                            "message": "Help keep this free for everyone"
-                        },
-                        "self_host": {
-                            "repo": "https://github.com/Engagic/engagic",
-                            "license": "AGPL-3.0",
-                            "message": "Run your own instance, unlimited access"
-                        },
-                        "nonprofit": {
-                            "contact": "hello@engagic.org",
-                            "message": "Nonprofit or journalist? We have a free tier with higher limits."
-                        },
-                        "commercial": {
-                            "contact": "admin@motioncount.com",
-                            "message": "Commercial use? Let's discuss pricing."
-                        }
-                    },
-                    "retry_after_seconds": 60
-                }
-            # Daily limit: firmer, upgrade-focused
-            else:
-                content = {
-                    "error": "Daily limit reached",
-                    "message": message,
-                    "current_tier": tier,
-                    "limit_type": limit_type,
-                    "limits": {
-                        "minute": limit_info.get("minute_limit"),
-                        "daily": limit_info.get("day_limit")
-                    },
-                    "next_steps": (
-                        "You're a power user! The free tier is designed for casual use. "
-                        "To continue with higher limits, choose an option below:"
-                    ),
-                    "options": {
-                        "self_host": {
-                            "limits": "Unlimited",
-                            "cost": "Your infrastructure costs (~$5/1k items)",
-                            "license": "AGPL-3.0",
-                            "repo": "https://github.com/Engagic/engagic",
-                            "message": "Best for developers and heavy users"
-                        },
-                        "nonprofit_tier": {
-                            "limits": "100/min, 5,000/day",
-                            "cost": "Free with attribution",
-                            "requirements": "501(c)(3) status or press credentials",
-                            "contact": "hello@engagic.org"
-                        },
-                        "commercial_tier": {
-                            "limits": "Negotiable (1k+/min, 100k+/day)",
-                            "cost": "Contact for pricing",
-                            "contact": "admin@motioncount.com",
-                            "message": "For commercial use and heavy API integration"
-                        }
-                    },
-                    "donate": {
-                        "url": "https://engagic.org/donate",
-                        "message": "Or support this public good with a donation"
-                    },
-                    "attribution_note": (
-                        "Engagic provides thorough attribution and links to source documents. "
-                        "We ask the same courtesy from users."
-                    ),
-                    "terms": "https://engagic.org/terms"
-                }
-
+        # Temp ban response
+        if limit_type == "temp_ban":
+            remaining_seconds = limit_info.get("remaining_seconds", 0)
             return JSONResponse(
-                status_code=429,
-                content=content,
+                status_code=403,
+                content={
+                    "error": "Temporarily banned",
+                    "message": limit_info.get("message", "Temporarily banned"),
+                    "ban_remaining_seconds": remaining_seconds,
+                },
                 headers={
-                    "X-RateLimit-Remaining": "0",
-                    "X-RateLimit-Tier": tier,
-                    "X-RateLimit-Type": limit_type,
-                    "Retry-After": "3600" if limit_type == "daily" else "60",
-                    "Access-Control-Allow-Origin": origin,
+                    "Retry-After": str(remaining_seconds),
+                    "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
                     "Access-Control-Allow-Credentials": "true",
                     "Access-Control-Allow-Methods": "*",
                     "Access-Control-Allow-Headers": "*",
-                },
+                }
             )
 
-        # Add rate limit headers to successful responses
-        response = await call_next(request)
-        response.headers["X-RateLimit-Remaining-Minute"] = str(limit_info.get("remaining_minute", 0))
-        response.headers["X-RateLimit-Remaining-Daily"] = str(limit_info.get("remaining_daily", 0))
-        response.headers["X-RateLimit-Tier"] = limit_info.get("tier", "basic")
-        return response
+        # Rate limit response
+        if limit_type == "daily":
+            message = f"Daily limit reached ({limit_info['day_limit']}/day). Resets at midnight UTC."
+            retry_after = "3600"
+        else:
+            message = f"Rate limit exceeded ({limit_info['minute_limit']}/min). Wait a moment."
+            retry_after = "60"
 
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "Rate limit exceeded",
+                "message": message,
+                "limit_type": limit_type,
+                "limits": {
+                    "minute": limit_info.get("minute_limit"),
+                    "daily": limit_info.get("day_limit")
+                },
+                "retry_after_seconds": int(retry_after)
+            },
+            headers={
+                "X-RateLimit-Remaining": "0",
+                "Retry-After": retry_after,
+                "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*",
+            },
+        )
+
+    # Success - add rate limit headers
     response = await call_next(request)
+    response.headers["X-RateLimit-Remaining-Minute"] = str(limit_info.get("remaining_minute", 0))
+    response.headers["X-RateLimit-Remaining-Daily"] = str(limit_info.get("remaining_daily", 0))
     return response
