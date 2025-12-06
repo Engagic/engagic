@@ -1,12 +1,10 @@
-"""Engagement repository - watches, activity logging, trending.
+"""Engagement repository - watches, activity logging.
 
-Handles user engagement tracking for the closed loop architecture:
+Handles user engagement tracking:
 - Watches: Users following matters, meetings, topics, cities, council members
 - Activity: Anonymous and authenticated views, actions, searches
-- Trending: Materialized view of hot content
 """
 
-import asyncpg
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -25,14 +23,6 @@ class Watch:
     entity_type: str
     entity_id: str
     created_at: datetime
-
-
-@dataclass
-class TrendingMatter:
-    """Trending matter from materialized view."""
-    matter_id: str
-    engagement: int
-    unique_users: int
 
 
 class EngagementRepository(BaseRepository):
@@ -134,21 +124,6 @@ class EngagementRepository(BaseRepository):
             for row in rows
         ]
 
-    async def get_watchers(self, entity_type: str, entity_id: str, limit: int = 100) -> list[str]:
-        """Get user IDs watching an entity."""
-        rows = await self._fetch(
-            """
-            SELECT user_id FROM userland.watches
-            WHERE entity_type = $1 AND entity_id = $2
-            ORDER BY created_at DESC
-            LIMIT $3
-            """,
-            entity_type,
-            entity_id,
-            limit,
-        )
-        return [row["user_id"] for row in rows]
-
     async def log_activity(
         self,
         user_id: Optional[str],
@@ -172,27 +147,3 @@ class EngagementRepository(BaseRepository):
             entity_id,
             metadata,
         )
-
-    async def get_trending_matters(self, limit: int = 20) -> list[TrendingMatter]:
-        """Get trending matters from materialized view, ordered by engagement."""
-        rows = await self._fetch(
-            "SELECT matter_id, engagement, unique_users FROM userland.trending_matters LIMIT $1",
-            limit,
-        )
-        return [
-            TrendingMatter(
-                matter_id=row["matter_id"],
-                engagement=row["engagement"],
-                unique_users=row["unique_users"],
-            )
-            for row in rows
-        ]
-
-    async def refresh_trending(self) -> None:
-        """Refresh trending materialized view (called every 15 min by daemon)."""
-        try:
-            await self._execute("REFRESH MATERIALIZED VIEW CONCURRENTLY userland.trending_matters")
-            logger.info("refreshed trending materialized view")
-        except asyncpg.PostgresError as e:
-            # May fail if view doesn't exist yet or no unique index
-            logger.warning("failed to refresh trending view", error=str(e))

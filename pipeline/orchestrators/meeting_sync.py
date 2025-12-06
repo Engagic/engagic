@@ -10,7 +10,7 @@ from database.repositories_async.helpers import deserialize_attachments
 from exceptions import DatabaseError, ValidationError
 from pipeline.utils import hash_attachments
 from pipeline.orchestrators.matter_filter import MatterFilter
-from pipeline.orchestrators.enqueue_decider import EnqueueDecider
+from pipeline.orchestrators.enqueue_decider import EnqueueDecider, MatterEnqueueDecider
 from pipeline.orchestrators.vote_processor import VoteProcessor
 
 logger = get_logger(__name__).bind(component="meeting_sync")
@@ -37,6 +37,7 @@ class MeetingSyncOrchestrator:
         self.db = db
         self.matter_filter = MatterFilter()
         self.enqueue_decider = EnqueueDecider()
+        self.matter_enqueue_decider = MatterEnqueueDecider()
         self.vote_processor = VoteProcessor()
 
     async def sync_meeting(
@@ -167,12 +168,12 @@ class MeetingSyncOrchestrator:
         return None
 
     async def _lookup_committee_id(self, banana: str, meeting_title: str) -> Optional[str]:
-        """Match meeting title to committee name."""
+        """Find or create committee from meeting title."""
         if not meeting_title:
             return None
         committee_name = meeting_title.split("-")[0].strip() if "-" in meeting_title else meeting_title
-        committee = await self.db.committees.find_by_name(banana, committee_name)
-        return committee.id if committee else None
+        committee = await self.db.committees.find_or_create_committee(banana, committee_name)
+        return committee.id
 
     async def _process_agenda_items(
         self,
@@ -228,7 +229,6 @@ class MeetingSyncOrchestrator:
         items_data: List[Dict[str, Any]],
         agenda_items: List[AgendaItem]
     ) -> Dict[str, Any]:
-        """Track legislative matters, creating new or updating existing."""
         stats: Dict[str, Any] = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0, 'skipped_item_ids': set()}
 
         if not items_data or not agenda_items:
@@ -271,6 +271,21 @@ class MeetingSyncOrchestrator:
                 stats['duplicate'] += 1
                 if not appearance_exists and (agenda_item.matter_file or raw_vendor_matter_id):
                     logger.info("matter new appearance", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type)
+
+                should_enqueue, _ = self.matter_enqueue_decider.should_enqueue_matter(
+                    existing_matter=existing_matter,
+                    current_attachment_hash=attachment_hash,
+                    has_attachments=bool(agenda_item.attachments)
+                )
+                if should_enqueue:
+                    item_ids = await self._collect_item_ids_for_matter(agenda_item.matter_id)
+                    await self._enqueue_matter_job(
+                        matter_id=agenda_item.matter_id,
+                        meeting_id=meeting.id,
+                        item_ids=item_ids,
+                        banana=meeting.banana,
+                        meeting_date=meeting.date
+                    )
             else:
                 if not agenda_item.matter_file and not raw_vendor_matter_id and not agenda_item.title:
                     continue
@@ -297,6 +312,15 @@ class MeetingSyncOrchestrator:
 
                 if agenda_item.matter_file or raw_vendor_matter_id:
                     logger.info("new matter tracked", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type, sponsor_count=len(sponsors))
+
+                if agenda_item.attachments:
+                    await self._enqueue_matter_job(
+                        matter_id=agenda_item.matter_id,
+                        meeting_id=meeting.id,
+                        item_ids=[agenda_item.id],
+                        banana=meeting.banana,
+                        meeting_date=meeting.date
+                    )
 
                 if sponsors:
                     await self.db.council_members.link_sponsors_to_matter(
@@ -363,10 +387,37 @@ class MeetingSyncOrchestrator:
             packet_url = packet_url[0] if packet_url else None
 
         await self.db.queue.enqueue_job(
+            source_url=f"meeting://{stored_meeting.id}",
             job_type="meeting",
             payload={"meeting_id": stored_meeting.id, "packet_url": packet_url, "banana": stored_meeting.banana, "title": stored_meeting.title},
+            meeting_id=stored_meeting.id,
             priority=priority,
             banana=stored_meeting.banana,
         )
 
         logger.info("enqueued meeting for processing", meeting_id=stored_meeting.id, priority=priority)
+
+    async def _enqueue_matter_job(
+        self,
+        matter_id: str,
+        meeting_id: str,
+        item_ids: List[str],
+        banana: str,
+        meeting_date: Optional[datetime]
+    ) -> None:
+        priority = self.matter_enqueue_decider.calculate_priority(meeting_date)
+
+        await self.db.queue.enqueue_job(
+            source_url=f"matter://{matter_id}",
+            job_type="matter",
+            payload={"matter_id": matter_id, "meeting_id": meeting_id, "item_ids": item_ids},
+            meeting_id=meeting_id,
+            banana=banana,
+            priority=priority,
+        )
+
+        logger.info("enqueued matter for processing", matter_id=matter_id, priority=priority)
+
+    async def _collect_item_ids_for_matter(self, matter_id: str) -> List[str]:
+        items = await self.db.items.get_all_items_for_matter(matter_id)
+        return [item.id for item in items]

@@ -223,6 +223,9 @@ class Matter:
     metadata: Optional[MatterMetadata] = None  # attachment_hash, etc.
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    final_vote_date: Optional[datetime] = None  # Terminal vote date
+    quality_score: Optional[float] = None  # Denormalized from ratings
+    rating_count: int = 0  # Denormalized from ratings
 
     def __post_init__(self):
         """Validate matter data after initialization"""
@@ -426,6 +429,8 @@ class AgendaItem:
     topics: Optional[List[str]] = None  # Extracted topics
     matter: Optional["Matter"] = None  # Linked Matter object (loaded on demand)
     created_at: Optional[datetime] = None
+    quality_score: Optional[float] = None  # Denormalized from ratings
+    rating_count: int = 0  # Denormalized from ratings
 
     def __post_init__(self):
         """Validate agenda item data after initialization"""

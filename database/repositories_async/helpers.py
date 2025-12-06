@@ -78,6 +78,9 @@ def build_matter(row: Any, topics: Optional[List[str]] = None) -> Matter:
         last_seen=row["last_seen"],
         appearance_count=row["appearance_count"],
         status=row["status"],
+        final_vote_date=row.get("final_vote_date"),
+        quality_score=row.get("quality_score"),
+        rating_count=row.get("rating_count", 0),
     )
 
 
@@ -122,6 +125,8 @@ def build_agenda_item(row: Any, topics: Optional[List[str]] = None) -> AgendaIte
         sponsors=sponsors,
         summary=row["summary"],
         topics=topics or [],
+        quality_score=row.get("quality_score"),
+        rating_count=row.get("rating_count", 0),
     )
 
 
