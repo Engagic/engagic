@@ -218,7 +218,7 @@
 <div class="container">
 	<header class="header">
 			<div class="logo-container">
-				<img src="/icon-64.png" alt="" class="logo-icon" width="64" height="64" />
+				<img src="/icon-64.png" alt="engagic" class="logo-icon" width="64" height="64" />
 				<a href="/" class="logo">engagic</a>
 			</div>
 			<p class="tagline">civic engagement made simple</p>

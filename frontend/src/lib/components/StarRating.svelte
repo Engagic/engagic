@@ -27,8 +27,8 @@
 		try {
 			stats = await getRatingStats(entityType, entityId);
 			userRating = stats.user_rating ?? 0;
-		} catch (e) {
-			console.debug('No rating stats available:', entityType, entityId);
+		} catch {
+			// No rating stats available - expected for new entities
 		} finally {
 			loading = false;
 		}
@@ -56,7 +56,6 @@
 			userRating = previousRating;
 			stats = previousStats;
 			error = 'Failed to submit rating';
-			console.error('Rating error:', e);
 		} finally {
 			submitting = false;
 		}

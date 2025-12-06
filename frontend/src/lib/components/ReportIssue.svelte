@@ -157,7 +157,10 @@
 		color: var(--civic-gray);
 		cursor: pointer;
 		transition: color 0.2s ease;
-		padding: 0;
+		padding: 0.5rem;
+		min-height: 44px;
+		display: inline-flex;
+		align-items: center;
 	}
 
 	.report-trigger:hover {

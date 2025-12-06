@@ -369,9 +369,9 @@
 	.item-badges-row {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.75rem;
 		flex-wrap: wrap;
-		row-gap: 0.25rem;
+		row-gap: 0.5rem;
 	}
 
 	.procedural-badge {
