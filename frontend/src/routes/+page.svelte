@@ -188,21 +188,24 @@
 		VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming'
 	};
 
+	// States where the name is also a major city - only match 2-letter codes for these
+	const AMBIGUOUS_STATES = new Set(['New York']);
+
 	function detectStateSearch(query: string): { isState: boolean; stateCode?: string; stateName?: string } {
 		const trimmed = query.trim();
 		const upper = trimmed.toUpperCase();
 
-		// Check if it's a 2-letter state code
+		// Check if it's a 2-letter state code (always redirect to state)
 		if (upper.length === 2 && STATE_CODES[upper]) {
 			return { isState: true, stateCode: upper, stateName: STATE_CODES[upper] };
 		}
 
-		// Check if it's a full state name
+		// Check if it's a full state name (but not ambiguous ones like "New York")
 		const stateEntry = Object.entries(STATE_CODES).find(([, name]) =>
 			name.toLowerCase() === trimmed.toLowerCase()
 		);
 
-		if (stateEntry) {
+		if (stateEntry && !AMBIGUOUS_STATES.has(stateEntry[1])) {
 			return { isState: true, stateCode: stateEntry[0], stateName: stateEntry[1] };
 		}
 

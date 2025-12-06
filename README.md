@@ -25,36 +25,90 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 ## Architecture
 
 ```
-                        Frontend (SvelteKit)
-                              |
-                              v
-                        Server (FastAPI)
-                              |
-              +---------------+---------------+
-              |               |               |
-              v               v               v
-         Database        Pipeline         Analysis
-        (PostgreSQL)   (Orchestration)     (LLM)
-              |               |               |
-              +-------+-------+               |
-                      |                       |
-                      v                       v
-                  Vendors  <-----------------+
-               (11 Adapters)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              PRESENTATION LAYER                             │
+│  ┌─────────────────────┐                    ┌────────────────────────────┐  │
+│  │  Frontend           │  HTTP/JSON         │  Server (FastAPI)          │  │
+│  │  (SvelteKit)        │ ◄───────────────── │  16 route modules          │  │
+│  │  Cloudflare Pages   │                    │  Tiered rate limiting      │  │
+│  └─────────────────────┘                    └─────────────┬──────────────┘  │
+└───────────────────────────────────────────────────────────┼─────────────────┘
+                                                            │ Cache-only reads
+┌───────────────────────────────────────────────────────────┼─────────────────┐
+│                              DATA LAYER                   ▼                 │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │  Database (PostgreSQL)                                                │  │
+│  │  ┌─────────────┬─────────────┬─────────────┬─────────────────────────┐│  │
+│  │  │ Core        │ Legislative │ Engagement  │ Userland                ││  │
+│  │  │ - cities    │ - matters   │ - watches   │ - users                 ││  │
+│  │  │ - meetings  │ - votes     │ - activity  │ - alerts                ││  │
+│  │  │ - items     │ - members   │ - ratings   │ - alert_matches         ││  │
+│  │  │ - queue     │ - committees│ - issues    │ - magic_links           ││  │
+│  │  └─────────────┴─────────────┴─────────────┴─────────────────────────┘│  │
+│  │  14 async repositories, connection pooling (5-20 conns)               │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────▲─────────────────┘
+                                                            │ Writes
+┌───────────────────────────────────────────────────────────┼─────────────────┐
+│                           PROCESSING LAYER                │                 │
+│  ┌────────────────────────────────────────────────────────┴───────────────┐ │
+│  │  Pipeline (Conductor)                                                  │ │
+│  │  ┌─────────────────────────┐    ┌────────────────────────────────────┐ │ │
+│  │  │  Sync Loop (72h)        │    │  Processing Loop (continuous)      │ │ │
+│  │  │  ┌─────────────────┐    │    │  ┌──────────────────────────────┐  │ │ │
+│  │  │  │ Fetcher         │    │    │  │ Processor                    │  │ │ │
+│  │  │  │ - rate limiting │    │    │  │ - item-level path (86%)      │  │ │ │
+│  │  │  │ - vendor routing│    │    │  │ - monolithic fallback (14%)  │  │ │ │
+│  │  │  │ - matter track  │    │    │  │ - matters-first dedup        │  │ │ │
+│  │  │  └────────┬────────┘    │    │  └──────────────┬───────────────┘  │ │ │
+│  │  └───────────┼─────────────┘    └─────────────────┼──────────────────┘ │ │
+│  │              │                                    │                    │ │
+│  │              ▼                                    ▼                    │ │
+│  │  ┌───────────────────────┐          ┌─────────────────────────────┐   │ │
+│  │  │  Vendors (11)         │          │  Analysis (LLM)             │   │ │
+│  │  │  - Legistar (110)     │          │  - Gemini 2.5 Flash/Lite    │   │ │
+│  │  │  - Granicus (467)     │          │  - Adaptive prompting       │   │ │
+│  │  │  - PrimeGov (64)      │          │  - 16 topic taxonomy        │   │ │
+│  │  │  - IQM2 (45)          │          │  - Batch processing (50%)   │   │ │
+│  │  │  - 7 more adapters    │          │  - Context caching          │   │ │
+│  │  └───────────┬───────────┘          └──────────────┬──────────────┘   │ │
+│  └──────────────┼──────────────────────────────────────┼─────────────────┘ │
+│                 │                                      │                   │
+│                 ▼                                      ▼                   │
+│  ┌────────────────────────┐            ┌────────────────────────────────┐  │
+│  │  External APIs         │            │  Parsing (PDF)                 │  │
+│  │  Civic tech platforms  │            │  - PyMuPDF extraction          │  │
+│  │  (rate limited)        │            │  - OCR fallback (Tesseract)    │  │
+│  └────────────────────────┘            │  - Participation info          │  │
+│                                        │  - Legislative formatting      │  │
+│                                        └────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           USER ENGAGEMENT LAYER                             │
+│  ┌─────────────────────────────────┐    ┌─────────────────────────────────┐ │
+│  │  Userland (Civic Alerts)        │    │  Deliberation (Opinion)         │ │
+│  │  - Magic link auth              │    │  - PCA dimensionality reduction │ │
+│  │  - Weekly digest emails         │    │  - K-means clustering           │ │
+│  │  - Keyword matching             │    │  - Consensus detection          │ │
+│  │  - Matter-based alerts          │    │  - Group vote analysis          │ │
+│  │  - CAN-SPAM compliance          │    │  - Trust-based moderation       │ │
+│  └─────────────────────────────────┘    └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**~29,000 lines Python backend** organized into focused modules:
+**~29,000 lines Python backend** organized into 8 focused modules:
 
-| Module | Purpose | Details |
-|--------|---------|---------|
-| [vendors/](vendors/README.md) | 11 civic tech platform adapters | HTML parsers, API clients, rate limiting |
-| [analysis/](analysis/README.md) | LLM intelligence | Gemini API, topic extraction, adaptive prompts |
-| [pipeline/](pipeline/README.md) | Processing orchestration | Sync scheduling, queue management, batch processing |
-| [database/](database/README.md) | PostgreSQL repository pattern | 14 async repositories, matters tracking, userland schema |
-| [server/](server/README.md) | FastAPI public API | 16 route modules (votes, committees, etc.), tiered rate limiting |
-| [userland/](userland/README.md) | Civic alerts system | Magic link auth, email digests, keyword matching |
-| [parsing/](parsing/README.md) | PDF extraction | PyMuPDF, OCR fallback, participation parsing |
-| [deliberation/](deliberation/README.md) | Opinion clustering | PCA + k-means, consensus detection |
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| [vendors/](vendors/README.md) | ~7,800 | 11 async adapters for Legistar, Granicus, PrimeGov, IQM2, NovusAgenda, CivicClerk, CivicPlus, eScribe, Berkeley, Chicago, Menlo Park. HTML parsers, rate limiting, vendor-agnostic ID contract. |
+| [database/](database/README.md) | ~7,000 | PostgreSQL with 14 async repositories (cities, meetings, items, matters, queue, search, council_members, committees, votes, engagement, feedback, deliberation, userland, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
+| [pipeline/](pipeline/README.md) | ~2,600 | Conductor orchestration with dual loops: Fetcher (72h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
+| [analysis/](analysis/README.md) | ~2,200 | Gemini API integration with reactive rate limiting, adaptive prompting (standard vs large items), 16-topic taxonomy, batch processing (50% cost savings), context caching. |
+| [server/](server/README.md) | ~3,500 | FastAPI with 16 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring). Tiered rate limiting, JWT sessions. |
+| [userland/](userland/README.md) | ~1,500 | Civic alerts: magic link auth, weekly digests (Sundays 9am), dual-track matching (keyword + matter-based), Mailgun delivery. |
+| [parsing/](parsing/README.md) | ~800 | PDF extraction: PyMuPDF primary, OCR fallback (Tesseract), legislative formatting detection ([DELETED]/[ADDED]), participation info parsing (emails, phones, Zoom links). |
+| [deliberation/](deliberation/README.md) | ~300 | Opinion clustering: PCA to 2D, dynamic K-means, Laplace-smoothed consensus detection, group vote tallies. |
 
 ---
 
@@ -81,29 +135,59 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 ## Processing Flow
 
 ```
-Sync Loop (72h)              Processing Loop (continuous)
-     |                              |
-     v                              v
-  Fetcher                      Processor
-     |                              |
-     v                              |
-  Vendors (11)                      |
-     |                              |
-     v                              v
-  Database          <----     Queue (typed jobs)
-     |                              |
-     |                              v
-     |                         Item-Level Path (86%)
-     |                              or
-     |                         Monolithic Fallback (14%)
-     |                              |
-     |                              v
-     +-------------------->    Analysis (LLM)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  SYNC LOOP (every 72h)                                                      │
+│                                                                             │
+│    Conductor ──► Fetcher ──► Vendors (11 adapters)                          │
+│                     │              │                                        │
+│                     │              ▼                                        │
+│                     │        External APIs (Legistar, Granicus, etc.)       │
+│                     │              │                                        │
+│                     │              ▼                                        │
+│                     └──────► Database                                       │
+│                              - Store meetings + items                       │
+│                              - Track matters (city_matters)                 │
+│                              - Extract votes + sponsors                     │
+│                              - Enqueue for processing                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼ Queue (priority-sorted, typed jobs)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PROCESSING LOOP (continuous)                                               │
+│                                                                             │
+│    Conductor ──► Processor ──► Dequeue job (FOR UPDATE SKIP LOCKED)         │
+│                                     │                                       │
+│           ┌─────────────────────────┴─────────────────────────┐             │
+│           ▼                                                   ▼             │
+│    ┌──────────────────────────┐               ┌──────────────────────────┐  │
+│    │  ITEM-LEVEL PATH (86%)   │               │  MONOLITHIC PATH (14%)   │  │
+│    │  Meeting has agenda_url  │               │  Meeting has packet_url  │  │
+│    └────────────┬─────────────┘               └────────────┬─────────────┘  │
+│                 │                                          │                │
+│                 ▼                                          ▼                │
+│    ┌──────────────────────────┐               ┌──────────────────────────┐  │
+│    │  For each agenda item:   │               │  Single PDF packet:      │  │
+│    │  - Filter procedural     │               │  - Extract via Parsing   │  │
+│    │  - Extract PDFs (Parsing)│               │  - LLM: comprehensive    │  │
+│    │  - Document cache (dedup)│               │    summary (5-10 sent)   │  │
+│    │  - LLM: per-item summary │               └────────────┬─────────────┘  │
+│    │    (1-5 sentences each)  │                            │                │
+│    │  - Topic normalization   │                            │                │
+│    │  - Aggregate to meeting  │                            │                │
+│    └────────────┬─────────────┘                            │                │
+│                 │                                          │                │
+│                 └──────────────────┬───────────────────────┘                │
+│                                    ▼                                        │
+│                              Database                                       │
+│                              - Update summaries                             │
+│                              - Store topics (normalized)                    │
+│                              - Mark job complete                            │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Two Processing Paths:**
-- **Item-level (86%):** Structured agenda items, per-item summaries, topic aggregation
-- **Monolithic (14%):** PDF packet, comprehensive summary, single LLM call
+- **Item-level (86%):** HTML agendas parsed into structured items. Each item gets focused 1-5 sentence summary. Topics aggregated to meeting. Document cache prevents re-extracting shared PDFs.
+- **Monolithic (14%):** PDF-only meetings. Single comprehensive 5-10 sentence summary. Falls back when vendor doesn't expose structured agenda.
 
 ---
 
