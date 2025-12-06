@@ -75,8 +75,8 @@
 
 	@media (max-width: 640px) {
 		.theme-toggle {
-			bottom: 1rem;
-			right: 1rem;
+			bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+			right: max(1rem, env(safe-area-inset-right));
 			padding: 0.6rem 1rem;
 		}
 

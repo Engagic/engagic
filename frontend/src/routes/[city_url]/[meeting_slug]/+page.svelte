@@ -33,9 +33,8 @@
 		if (data.selectedMeeting?.id) {
 			try {
 				votesData = await getMeetingVotes(data.selectedMeeting.id);
-			} catch (e) {
-				// No votes available for this meeting - that's okay
-				console.debug('No votes available for meeting:', data.selectedMeeting.id);
+			} catch {
+				// No votes available for this meeting - expected
 			}
 		}
 	});
