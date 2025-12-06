@@ -128,6 +128,80 @@ class CouncilMemberRepository(BaseRepository):
                 vote_count=0,
             )
 
+    async def update_member_metadata(
+        self,
+        member_id: str,
+        title: Optional[str] = None,
+        district: Optional[str] = None,
+        status: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+    ) -> bool:
+        """Update council member with additional metadata from roster sync.
+
+        Args:
+            member_id: Council member ID
+            title: Role title (e.g., "Council Member", "CHAIRPERSON")
+            district: District name (e.g., "District 35")
+            status: Member status (active, former, unknown)
+            metadata: Additional data (email, phone, url, etc.)
+
+        Returns:
+            True if member was updated, False if member not found
+        """
+        import json
+
+        async with self.transaction() as conn:
+            # Build dynamic SET clause - only update non-None fields
+            updates = []
+            params = [member_id]
+            param_idx = 2
+
+            if title is not None:
+                updates.append(f"title = ${param_idx}")
+                params.append(title)
+                param_idx += 1
+
+            if district is not None:
+                updates.append(f"district = ${param_idx}")
+                params.append(district)
+                param_idx += 1
+
+            if status is not None:
+                updates.append(f"status = ${param_idx}")
+                params.append(status)
+                param_idx += 1
+
+            if metadata is not None:
+                # Use JSONB merge to preserve existing keys while adding new ones
+                updates.append(f"metadata = COALESCE(metadata, '{{}}'::jsonb) || ${param_idx}::jsonb")
+                params.append(json.dumps(metadata))
+                param_idx += 1
+
+            if not updates:
+                return False
+
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+
+            query = f"""
+                UPDATE council_members
+                SET {', '.join(updates)}
+                WHERE id = $1
+            """
+
+            result = await conn.execute(query, *params)
+
+            if result == "UPDATE 0":
+                return False
+
+            logger.debug(
+                "updated council member metadata",
+                member_id=member_id,
+                title=title,
+                district=district,
+            )
+
+            return True
+
     async def create_sponsorship(
         self,
         council_member_id: str,
