@@ -42,9 +42,6 @@ export const submitRating = apiClient.submitRating.bind(apiClient);
 export const getIssues = apiClient.getIssues.bind(apiClient);
 export const reportIssue = apiClient.reportIssue.bind(apiClient);
 
-// Trending endpoints
-export const getTrendingMatters = apiClient.getTrendingMatters.bind(apiClient);
-
 // Engagement endpoints
 export const getMatterEngagement = apiClient.getMatterEngagement.bind(apiClient);
 export const getMeetingEngagement = apiClient.getMeetingEngagement.bind(apiClient);

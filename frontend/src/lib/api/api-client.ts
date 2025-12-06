@@ -23,7 +23,6 @@ import type {
 	MemberCommitteesResponse,
 	RatingStats,
 	RatingSubmitResponse,
-	TrendingResponse,
 	EngagementStats,
 	IssuesResponse,
 	ReportIssueResponse,
@@ -338,13 +337,6 @@ export const apiClient = {
 				credentials: 'include'
 			}
 		);
-		return response.json();
-	},
-
-	async getTrendingMatters(limit: number = 20): Promise<TrendingResponse> {
-		const url = new URL(`${config.apiBaseUrl}/api/trending/matters`);
-		url.searchParams.set('limit', limit.toString());
-		const response = await fetchWithRetry(url.toString());
 		return response.json();
 	},
 
