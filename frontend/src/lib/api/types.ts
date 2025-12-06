@@ -673,21 +673,6 @@ export interface EngagementStats {
 	is_watching: boolean;
 }
 
-export interface TrendingMatter {
-	matter_id: string;
-	engagement: number;
-	unique_users: number;
-	title: string;
-	status?: MatterStatus;
-	city_name?: string;
-	banana?: string;
-}
-
-export interface TrendingResponse {
-	success: boolean;
-	trending: TrendingMatter[];
-}
-
 // Watch types
 export interface Watch {
 	id: number;

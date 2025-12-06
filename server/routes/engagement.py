@@ -1,9 +1,8 @@
-"""Engagement API - watches, activity tracking, trending.
+"""Engagement API - watches, activity tracking.
 
 User engagement endpoints for the closed loop architecture:
 - Watch/unwatch entities (matters, meetings, topics, cities, council members)
 - Get user's watch list
-- Get trending matters
 - Social proof (watch counts)
 """
 
@@ -81,38 +80,6 @@ async def get_user_watches(
         ],
         "total": len(watches),
     }
-
-
-@router.get("/trending/matters")
-async def get_trending_matters(
-    limit: int = 20,
-    db: Database = Depends(get_db),
-):
-    """Get trending matters based on engagement.
-
-    Public endpoint - no auth required.
-    """
-    if limit < 1 or limit > 100:
-        limit = 20
-
-    trending = await db.engagement.get_trending_matters(limit)
-
-    # Batch fetch matter details (single query instead of N)
-    matter_ids = [item.matter_id for item in trending]
-    matters = await db.matters.get_matters_batch(matter_ids) if matter_ids else {}
-
-    result = [
-        {
-            "matter_id": item.matter_id,
-            "engagement": item.engagement,
-            "unique_users": item.unique_users,
-            "title": matters[item.matter_id].title if item.matter_id in matters else None,
-            "status": matters[item.matter_id].status if item.matter_id in matters else None,
-        }
-        for item in trending
-    ]
-
-    return {"success": True, "trending": result}
 
 
 @router.get("/matters/{matter_id}/engagement")
