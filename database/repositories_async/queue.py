@@ -165,6 +165,7 @@ class QueueRepository(BaseRepository):
             payload_data = row["payload"]
 
             if row["job_type"] == "meeting":
+                payload_data["source_url"] = row["source_url"]
                 payload = MeetingJob.from_dict(payload_data)
             elif row["job_type"] == "matter":
                 payload = MatterJob.from_dict(payload_data)

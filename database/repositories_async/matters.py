@@ -36,8 +36,8 @@ class MatterRepository(BaseRepository):
                     canonical_topics = COALESCE(EXCLUDED.canonical_topics, city_matters.canonical_topics),
                     attachments = EXCLUDED.attachments,
                     metadata = EXCLUDED.metadata,
-                    last_seen = EXCLUDED.last_seen,
-                    appearance_count = EXCLUDED.appearance_count,
+                    last_seen = COALESCE(city_matters.last_seen, EXCLUDED.last_seen),
+                    appearance_count = GREATEST(city_matters.appearance_count, EXCLUDED.appearance_count),
                     status = EXCLUDED.status,
                     updated_at = CURRENT_TIMESTAMP
                 """,
