@@ -2,6 +2,7 @@ import { config, errorMessages } from './config';
 import type {
 	SearchResult,
 	AnalyticsData,
+	PlatformMetrics,
 	RandomMeetingResponse,
 	RandomMeetingWithItemsResponse,
 	TopicSearchResult,
@@ -107,6 +108,11 @@ export const apiClient = {
 
 	async getAnalytics(): Promise<AnalyticsData> {
 		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/analytics`);
+		return response.json();
+	},
+
+	async getPlatformMetrics(): Promise<PlatformMetrics> {
+		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/platform-metrics`);
 		return response.json();
 	},
 
