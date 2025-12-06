@@ -6,9 +6,6 @@ export const config = {
 	retryDelay: 1000,
 	requestTimeout: 30000,
 	debounceDelay: 300,
-	// SSR auth secret - only available server-side via Cloudflare Pages env var
-	// This prevents X-Forwarded-User-IP header spoofing
-	ssrAuthSecret: import.meta.env.SSR_AUTH_SECRET || '',
 } as const;
 
 export const errorMessages = {
