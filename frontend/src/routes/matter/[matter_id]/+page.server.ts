@@ -33,13 +33,13 @@ async function fetchDeliberationForMatter(matterId: string): Promise<Deliberatio
 	}
 }
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params }) => {
 	const matterId = params.matter_id;
 
 	try {
 		const [timeline, votesResponse, deliberationData] = await Promise.all([
-			apiClient.getMatterTimeline(matterId, locals.clientIp),
-			apiClient.getMatterVotes(matterId, locals.clientIp).catch(() => null),
+			apiClient.getMatterTimeline(matterId),
+			apiClient.getMatterVotes(matterId).catch(() => null),
 			fetchDeliberationForMatter(matterId)
 		]);
 
