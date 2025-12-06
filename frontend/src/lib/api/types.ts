@@ -179,6 +179,40 @@ export interface AnalyticsData {
 	};
 }
 
+// Platform-wide metrics for impact page
+export interface PlatformMetrics {
+	status: string;
+	content: {
+		total_cities: number;
+		active_cities: number;
+		meetings: number;
+		agenda_items: number;
+		matters: number;
+		matter_appearances: number;
+	};
+	civic_infrastructure: {
+		committees: number;
+		council_members: number;
+		committee_assignments: number;
+	};
+	accountability: {
+		votes: number;
+		sponsorships: number;
+		cities_with_votes: number;
+		votes_by_city: Array<{
+			city: string;
+			votes: number;
+			voters: number;
+		}>;
+	};
+	processing: {
+		summarized_meetings: number;
+		summarized_items: number;
+		meeting_summary_rate: number;
+		item_summary_rate: number;
+	};
+}
+
 // Flyer generation types (mirrors backend Pydantic models)
 export type FlyerPosition = 'support' | 'oppose' | 'more_info';
 

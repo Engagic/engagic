@@ -53,6 +53,68 @@
 			</div>
 		</section>
 
+		{#if data.platformMetrics}
+			<section class="metrics-section">
+				<h2 class="primary-heading">Civic Infrastructure</h2>
+				<div class="cards-grid">
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.civic_infrastructure.council_members)}</div>
+						<div class="stat-title">Council Members</div>
+						<div class="stat-description">Elected officials tracked</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.civic_infrastructure.committees)}</div>
+						<div class="stat-title">Committees</div>
+						<div class="stat-description">Legislative bodies monitored</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.civic_infrastructure.committee_assignments)}</div>
+						<div class="stat-title">Committee Assignments</div>
+						<div class="stat-description">Member-to-committee relationships</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.content.matter_appearances)}</div>
+						<div class="stat-title">Matter Appearances</div>
+						<div class="stat-description">Items tracked across meetings</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="metrics-section">
+				<h2 class="primary-heading">Accountability Data</h2>
+				<div class="cards-grid">
+					<div class="stats-card highlight-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.accountability.votes)}</div>
+						<div class="stat-title">Votes Recorded</div>
+						<div class="stat-description">Individual voting records captured</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.accountability.sponsorships)}</div>
+						<div class="stat-title">Sponsorships</div>
+						<div class="stat-description">Legislation authorship tracked</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.accountability.cities_with_votes)}</div>
+						<div class="stat-title">Cities with Vote Data</div>
+						<div class="stat-description">Full voting record coverage</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="stat-numbers-split">
+							<span class="number-primary">{data.platformMetrics.processing.item_summary_rate}%</span>
+						</div>
+						<div class="stat-title">Item Summary Rate</div>
+						<div class="stat-description">{formatNumber(data.platformMetrics.processing.summarized_items)} items processed</div>
+					</div>
+				</div>
+			</section>
+		{/if}
+
 	{:else}
 		<div class="loading-container">Loading metrics...</div>
 	{/if}
@@ -120,6 +182,15 @@
 		transform: translateY(-2px);
 	}
 
+	.stats-card.highlight-card {
+		border-color: var(--civic-blue);
+		background: linear-gradient(135deg, var(--surface-primary) 0%, rgba(var(--civic-blue-rgb, 59, 130, 246), 0.05) 100%);
+	}
+
+	.stats-card.highlight-card .number-primary {
+		color: var(--civic-blue);
+	}
+
 	.stat-numbers-split {
 		display: flex;
 		align-items: baseline;
@@ -158,22 +229,6 @@
 		font-size: 0.9rem;
 		color: var(--text-secondary);
 		line-height: 1.5;
-	}
-
-	.future-section {
-		background: var(--surface-secondary);
-		border: 1px dashed var(--border-primary);
-		border-radius: var(--radius-md);
-		padding: var(--space-2xl);
-	}
-
-	.future-section p {
-		font-size: 1.0625rem;
-		line-height: 1.7;
-		color: var(--text-secondary);
-		font-style: italic;
-		text-align: center;
-		margin: 0;
 	}
 
 	.loading-container {
