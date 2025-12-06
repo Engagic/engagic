@@ -206,8 +206,8 @@ class AsyncBaseAdapter:
         return status
 
     def _validate_meeting(self, meeting: Dict[str, Any]) -> bool:
-        """Check meeting has meeting_id, title, start. Returns False if missing."""
-        required = {"meeting_id", "title", "start"}
+        """Check meeting has vendor_id, title, start. Returns False if missing."""
+        required = {"vendor_id", "title", "start"}
         missing = required - set(meeting.keys())
         if missing:
             logger.warning("meeting missing required fields", vendor=self.vendor, slug=self.slug, missing=list(missing), title=str(meeting.get("title", "unknown"))[:50])

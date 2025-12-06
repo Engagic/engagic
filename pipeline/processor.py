@@ -387,12 +387,11 @@ class Processor:
 
         attachment_hash = hash_attachments(representative_item.attachments)
         existing_matter = await self.db.matters.get_matter(matter_id)
-        raw_matter_id = existing_matter.matter_id if existing_matter else None
 
         matter_obj = Matter(
             id=matter_id,
             banana=banana,
-            matter_id=raw_matter_id,  # Raw vendor ID for reference
+            matter_id=existing_matter.matter_id if existing_matter else None,
             matter_file=representative_item.matter_file,
             matter_type=representative_item.matter_type,
             title=representative_item.title,
@@ -401,9 +400,9 @@ class Processor:
             canonical_topics=topics,
             attachments=representative_item.attachments,
             metadata=MatterMetadata(attachment_hash=attachment_hash),
-            first_seen=None,
-            last_seen=None,
-            appearance_count=len(items),
+            first_seen=existing_matter.first_seen if existing_matter else None,
+            last_seen=existing_matter.last_seen if existing_matter else None,
+            appearance_count=existing_matter.appearance_count if existing_matter else 1,
         )
 
         await self.db.matters.store_matter(matter_obj)
@@ -693,9 +692,9 @@ class Processor:
             canonical_topics=topics,
             attachments=item.attachments,
             metadata=MatterMetadata(attachment_hash=hash_attachments(item.attachments or [])),
-            first_seen=None,
-            last_seen=None,
-            appearance_count=1,
+            first_seen=existing_matter.first_seen if existing_matter else None,
+            last_seen=existing_matter.last_seen if existing_matter else None,
+            appearance_count=existing_matter.appearance_count if existing_matter else 1,
         )
 
         await self.db.matters.store_matter(matter_obj)
