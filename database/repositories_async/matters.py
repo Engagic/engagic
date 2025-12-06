@@ -74,7 +74,8 @@ class MatterRepository(BaseRepository):
                     id, banana, matter_id, matter_file, matter_type,
                     title, sponsors, canonical_summary, canonical_topics,
                     attachments, metadata, first_seen, last_seen,
-                    appearance_count, status, created_at, updated_at
+                    appearance_count, status, created_at, updated_at,
+                    final_vote_date, quality_score, rating_count
                 FROM city_matters
                 WHERE id = $1
                 """,
@@ -106,7 +107,8 @@ class MatterRepository(BaseRepository):
                     id, banana, matter_id, matter_file, matter_type,
                     title, sponsors, canonical_summary, canonical_topics,
                     attachments, metadata, first_seen, last_seen,
-                    appearance_count, status, created_at, updated_at
+                    appearance_count, status, created_at, updated_at,
+                    final_vote_date, quality_score, rating_count
                 FROM city_matters
                 WHERE id = ANY($1::text[])
                 """,
@@ -263,7 +265,7 @@ class MatterRepository(BaseRepository):
                     id, banana, matter_id, matter_file, matter_type,
                     title, sponsors, canonical_summary, canonical_topics,
                     attachments, metadata, first_seen, last_seen,
-                    appearance_count, status,
+                    appearance_count, status, final_vote_date, quality_score, rating_count,
                     ts_rank(
                         to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, '')),
                         plainto_tsquery('english', $1)

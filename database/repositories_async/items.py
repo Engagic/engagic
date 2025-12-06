@@ -154,7 +154,7 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE meeting_id = $1
                 ORDER BY sequence
@@ -189,7 +189,7 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE meeting_id = ANY($1::text[])
                 ORDER BY meeting_id, sequence
@@ -220,7 +220,7 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE id = $1
                 """,
@@ -291,7 +291,7 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE matter_id = $1
                 ORDER BY meeting_id, sequence

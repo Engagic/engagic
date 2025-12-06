@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from database.models import Meeting, AgendaItem
+    from database.models import Meeting, AgendaItem, Matter
 
 QUEUE_PRIORITY_BASE_SCORE = 150
 
@@ -42,3 +42,41 @@ class EnqueueDecider:
         else:
             days_distance = 999
         return max(0, QUEUE_PRIORITY_BASE_SCORE - days_distance)
+
+
+MATTER_PRIORITY_BASE_SCORE = 50
+
+
+class MatterEnqueueDecider:
+    """Enqueue new matters with attachments, or existing matters with changed attachments.
+    Priority lower than meetings (-100 to 50 vs 0-150).
+    """
+
+    def should_enqueue_matter(
+        self,
+        existing_matter: Optional["Matter"],
+        current_attachment_hash: str,
+        has_attachments: bool
+    ) -> tuple[bool, Optional[str]]:
+        if not has_attachments:
+            return False, "no_attachments"
+
+        if existing_matter is None:
+            return True, None
+
+        if not existing_matter.canonical_summary:
+            return True, None
+
+        stored_hash = existing_matter.metadata.attachment_hash if existing_matter.metadata else None
+        if stored_hash == current_attachment_hash:
+            return False, "attachments_unchanged"
+
+        return True, None
+
+    def calculate_priority(self, meeting_date: Optional[datetime]) -> int:
+        if meeting_date:
+            now = datetime.now(meeting_date.tzinfo) if meeting_date.tzinfo else datetime.now()
+            days_distance = abs((meeting_date - now).days)
+        else:
+            days_distance = 999
+        return max(-100, MATTER_PRIORITY_BASE_SCORE - days_distance)
