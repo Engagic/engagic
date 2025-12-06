@@ -674,6 +674,7 @@
 
 	@media (max-width: 640px) {
 		.container {
+			--meeting-pad-x: 1.25rem;
 			width: 100%;
 			padding: 1rem 0.75rem;
 		}
@@ -694,12 +695,12 @@
 		}
 
 		.meeting-detail {
-			padding: 1.5rem 1.5rem 0.75rem 1.5rem;
+			padding: var(--meeting-pad-x) var(--meeting-pad-x) 0.75rem var(--meeting-pad-x);
 		}
 
 		.agenda-items {
-			margin-left: -1.5rem;
-			margin-right: -1.5rem;
+			margin-left: calc(-1 * var(--meeting-pad-x));
+			margin-right: calc(-1 * var(--meeting-pad-x));
 			margin-bottom: -0.75rem;
 		}
 
