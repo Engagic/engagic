@@ -242,21 +242,53 @@
 
 	@media (max-width: 768px) {
 		.cards-grid {
-			grid-template-columns: 1fr;
+			grid-template-columns: repeat(2, 1fr);
+			gap: var(--space-sm);
+		}
+
+		.stats-card {
+			padding: var(--space-md) var(--space-sm);
+			min-height: 120px;
+			gap: var(--space-xs);
+		}
+
+		.number-primary {
+			font-size: 1.75rem;
+		}
+
+		.number-separator {
+			font-size: 1.25rem;
+		}
+
+		.number-secondary {
+			font-size: 1.25rem;
+		}
+
+		.stat-title {
+			font-size: 0.85rem;
+		}
+
+		.stat-description {
+			font-size: 0.75rem;
+			line-height: 1.3;
+		}
+
+		.metrics-container {
+			gap: var(--space-xl);
+		}
+
+		.metrics-section {
+			gap: var(--space-sm);
 		}
 	}
 
 	@media (max-width: 640px) {
 		h1.primary-heading {
-			font-size: 2rem;
-		}
-
-		.primary-heading {
 			font-size: 1.5rem;
 		}
 
-		.number-primary {
-			font-size: 2.5rem;
+		.primary-heading {
+			font-size: 1.25rem;
 		}
 	}
 </style>
