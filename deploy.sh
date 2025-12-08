@@ -62,6 +62,10 @@ Commands:
   Testing:
   test-emails       Send test emails to ibansadowski12@gmail.com
 
+  Moderation:
+  moderate          List pending deliberation comments
+  moderate review   Interactive review (prompts for deliberation ID)
+
   System:
   status            Show status of all services
   logs              Show all logs
@@ -229,6 +233,21 @@ main() {
         # Testing
         test-emails)
             cmd_test_emails
+            ;;
+
+        # Moderation
+        moderate)
+            if [ "$2" = "review" ]; then
+                if [ -z "$3" ]; then
+                    echo "Enter deliberation ID to review:"
+                    read -r delib_id
+                    python3 "$PROJECT_DIR/scripts/moderate.py" review "$delib_id"
+                else
+                    python3 "$PROJECT_DIR/scripts/moderate.py" review "$3"
+                fi
+            else
+                python3 "$PROJECT_DIR/scripts/moderate.py" list
+            fi
             ;;
 
         # System
