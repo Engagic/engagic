@@ -9,7 +9,6 @@
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import DeliberationPanel from '$lib/components/deliberation/DeliberationPanel.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -63,10 +62,6 @@
 	// Votes data from server load
 	const votesData = $derived(data.votes as MatterVotesResponse | null);
 	const hasVotes = $derived(votesData?.votes?.length ? votesData.votes.length > 0 : false);
-
-	// Deliberation data from server load
-	const deliberationData = $derived(data.deliberation);
-	const hasDeliberation = $derived(!!deliberationData?.deliberation?.id);
 
 	// Collapsible sections
 	let attachmentsExpanded = $state(false);
@@ -289,15 +284,11 @@
 			</div>
 		{/if}
 
-		{#if hasDeliberation && deliberationData?.deliberation}
-			<div class="deliberation-section">
-				<DeliberationPanel
-					deliberationId={deliberationData.deliberation.id}
-					matterId={matter.id}
-					topic={deliberationData.deliberation.topic ?? matter.title}
-				/>
-			</div>
-		{/if}
+		<div class="deliberation-cta">
+			<a href="/deliberate/{data.matterId}" class="deliberate-link">
+				Join Community Discussion
+			</a>
+		</div>
 
 		<div class="timeline-section">
 			<h2 class="section-title">Legislative Journey</h2>
@@ -458,7 +449,6 @@
 	.attachments-section,
 	.sponsors-section,
 	.voting-section,
-	.deliberation-section,
 	.timeline-section {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
@@ -468,9 +458,31 @@
 		box-shadow: 0 1px 3px var(--shadow-sm);
 	}
 
-	.deliberation-section {
-		padding: 0;
-		overflow: hidden;
+	.deliberation-cta {
+		margin-bottom: 1.5rem;
+	}
+
+	.deliberate-link {
+		display: block;
+		text-align: center;
+		padding: 1rem 1.5rem;
+		background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+		color: white;
+		border-radius: 12px;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 700;
+		text-decoration: none;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+		transition: all 0.2s ease;
+	}
+
+	.deliberate-link:hover {
+		background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+		transform: translateY(-1px);
 	}
 
 	.section-title {
@@ -865,13 +877,8 @@
 		.attachments-section,
 		.sponsors-section,
 		.voting-section,
-		.deliberation-section,
 		.timeline-section {
 			padding: 1.25rem;
-		}
-
-		.deliberation-section {
-			padding: 0;
 		}
 	}
 </style>
