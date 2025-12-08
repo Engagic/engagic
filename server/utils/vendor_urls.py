@@ -40,8 +40,8 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
         "civicplus": f"https://{slug}.civicplus.com",
         # Custom adapters
         "berkeley": "https://berkeleyca.gov/your-government/city-council/city-council-agendas",
+        "chicago": "https://chicityclerkelms.chicago.gov/Meetings/",
         "menlopark": "https://menlopark.gov/Agendas-and-minutes",
-        "fremont": "https://fremont.gov/AgendaCenter",
     }
 
     return vendor_patterns.get(vendor)
@@ -98,8 +98,8 @@ def get_vendor_display_name(vendor: str) -> str:
         "civicclerk": "CivicClerk",
         "civicplus": "CivicPlus",
         "berkeley": "City of Berkeley",
+        "chicago": "City of Chicago",
         "menlopark": "City of Menlo Park",
-        "fremont": "City of Fremont",
     }
 
     return display_names.get(vendor, vendor.title())

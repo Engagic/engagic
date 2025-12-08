@@ -287,6 +287,16 @@
 					>
 						{linkCopied ? '✓ Copied!' : '🔗 Share Link'}
 					</button>
+					{#if item.matter_id}
+						<a
+							href="/deliberate/{item.matter_id}"
+							class="flyer-btn flyer-btn-deliberate"
+							onclick={(e) => e.stopPropagation()}
+							aria-label="Join community discussion about this item"
+						>
+							Deliberate
+						</a>
+					{/if}
 				</div>
 			{/if}
 
@@ -763,6 +773,22 @@
 	.flyer-btn-share:hover {
 		background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
 		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+		transform: translateY(-1px);
+	}
+
+	.flyer-btn-deliberate {
+		background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+		color: white;
+		box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);
+		text-decoration: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.flyer-btn-deliberate:hover {
+		background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
 		transform: translateY(-1px);
 	}
 
