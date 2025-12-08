@@ -26,8 +26,8 @@ async def list_all_pending():
     db = await Database.create()
     try:
         # Query all pending comments with deliberation context
-        async with db.pool.connection() as conn:
-            rows = await conn.execute(
+        async with db.pool.acquire() as conn:
+            pending = await conn.fetch(
                 """
                 SELECT
                     c.id,
@@ -45,7 +45,6 @@ async def list_all_pending():
                 ORDER BY c.created_at DESC
                 """
             )
-            pending = await rows.fetchall()
 
         if not pending:
             print("\nNo pending comments. Queue is clear.")
