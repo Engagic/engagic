@@ -227,6 +227,42 @@ class UserlandRepository(BaseRepository):
         """
         return await self.get_alerts(active_only=True)
 
+    async def get_alerts_for_city(self, banana: str) -> List[Alert]:
+        """Get all active alerts that include a specific city
+
+        Used for "city now available" notifications when a city first gets data.
+
+        Args:
+            banana: City identifier (e.g., "mountairyNC")
+
+        Returns:
+            List of Alert objects that include this city
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM userland.alerts
+                WHERE active = TRUE
+                  AND cities @> $1::jsonb
+                ORDER BY created_at
+                """,
+                f'["{banana}"]'
+            )
+
+        return [
+            Alert(
+                id=row["id"],
+                user_id=row["user_id"],
+                name=row["name"],
+                cities=row["cities"],
+                criteria=row["criteria"],
+                frequency=row["frequency"],
+                active=row["active"],
+                created_at=row["created_at"]
+            )
+            for row in rows
+        ]
+
     async def get_demanded_cities(self) -> List[str]:
         """Get all unique cities that users have subscribed to
 

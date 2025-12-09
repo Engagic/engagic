@@ -71,6 +71,138 @@ async def send_magic_link(
         return False
 
 
+async def send_city_available_email(
+    email: str,
+    user_name: str,
+    city_name: str,
+    state: str,
+    banana: str
+) -> bool:
+    """
+    Send notification that a requested city is now available.
+
+    Args:
+        email: User email address
+        user_name: User's name
+        city_name: City name (e.g., "Mount Airy")
+        state: State abbreviation (e.g., "NC")
+        banana: City banana for URL (e.g., "mountairyNC")
+
+    Returns:
+        True if email sent successfully, False otherwise.
+    """
+    app_url = config.FRONTEND_URL or "https://engagic.org"
+    city_url = f"{app_url}/{banana}"
+
+    subject = f"Good news - {city_name}, {state} is now on Engagic"
+    html = _build_city_available_html(user_name, city_name, state, city_url)
+    text = _build_city_available_text(user_name, city_name, state, city_url)
+
+    try:
+        email_service = EmailService()
+        success = await email_service.send_email(
+            to_email=email,
+            subject=subject,
+            html_body=html,
+            text_body=text
+        )
+        if success:
+            logger.info("city available email sent", email=email, city=banana)
+        return success
+    except ValueError as e:
+        logger.error("mailgun not configured", error=str(e))
+        return False
+    except Exception as e:
+        logger.error("failed to send city available email", email=email, error=str(e))
+        return False
+
+
+def _build_city_available_html(
+    user_name: str,
+    city_name: str,
+    state: str,
+    city_url: str
+) -> str:
+    """Build city available HTML email template"""
+    return f"""{email_wrapper_start(f"{city_name}, {state} is now available")}
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 32px 40px 28px 40px; background-color: #10b981; border-radius: 9px 9px 0 0;">
+                            <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 16px;">
+                                <img src="https://engagic.org/icon-192.png" alt="Engagic" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);" />
+                                <div style="display: inline-block; padding: 6px 14px; background-color: rgba(255, 255, 255, 0.15); border-radius: 6px; backdrop-filter: blur(10px);">
+                                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: 0.02em;">engagic</span>
+                                </div>
+                            </div>
+                            <h1 style="margin: 0 0 10px 0; font-size: 26px; font-weight: 700; color: #ffffff; line-height: 1.3; letter-spacing: -0.02em; font-family: 'IBM Plex Mono', monospace;">
+                                Good news, {user_name}!
+                            </h1>
+                            <p style="margin: 0; font-size: 15px; color: #ffffff; opacity: 0.92; font-family: Georgia, serif; line-height: 1.5;">
+                                {city_name}, {state} is now available on Engagic
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 32px 40px 24px 40px;">
+                            <p style="margin: 0 0 32px 0; font-size: 15px; line-height: 1.6; color: #475569; font-family: Georgia, serif;">
+                                You signed up for alerts about {city_name}, {state} - and we've just added it to our system. You can now browse meeting agendas, summaries, and set up keyword alerts.
+                            </p>
+
+                            <!-- Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 0 0 32px 0;">
+                                        <a href="{city_url}" style="display: inline-block; padding: 12px 28px; background-color: #10b981; color: #ffffff; text-decoration: none; border-radius: 7px; font-weight: 600; font-size: 14px; font-family: 'IBM Plex Mono', monospace; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);">
+                                            View {city_name} Meetings
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #64748b; font-family: Georgia, serif;">
+                                Thanks for your patience. Your interest helped us prioritize adding this city.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0; text-align: center;">
+                            <p style="margin: 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/about/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
+                            </p>
+                        </td>
+                    </tr>
+{email_wrapper_end()}"""
+
+
+def _build_city_available_text(
+    user_name: str,
+    city_name: str,
+    state: str,
+    city_url: str
+) -> str:
+    """Build city available plain text email"""
+    return f"""
+    Good news, {user_name}!
+
+    {city_name}, {state} is now available on Engagic.
+
+    You signed up for alerts about this city - and we've just added it to our system.
+    You can now browse meeting agendas, summaries, and set up keyword alerts.
+
+    View {city_name} meetings: {city_url}
+
+    Thanks for your patience. Your interest helped us prioritize adding this city.
+
+    --
+    Engagic is free and open-source. If you find it valuable, please support the project.
+    https://engagic.org/about/donate
+    """
+
+
 def _build_magic_link_html(
     header_title: str,
     header_subtitle: str,
