@@ -77,7 +77,7 @@ class MeetingSyncOrchestrator:
                 title=title
             )
 
-            committee_id = await self._lookup_committee_id(city.banana, title)
+            committee_id = await self._lookup_committee_id(city.banana, meeting_dict)
 
             meeting_obj = Meeting(
                 id=meeting_id,
@@ -167,11 +167,44 @@ class MeetingSyncOrchestrator:
                 continue
         return None
 
-    async def _lookup_committee_id(self, banana: str, meeting_title: str) -> Optional[str]:
-        """Find or create committee from meeting title."""
-        if not meeting_title:
+    async def _lookup_committee_id(
+        self, banana: str, meeting_dict: Dict[str, Any]
+    ) -> Optional[str]:
+        """Find or create committee from meeting data.
+
+        Uses vendor_body_id if available (Legistar provides this).
+        Falls back to title parsing only for titles with clear committee prefixes.
+        Skips committee creation for generic titles.
+        """
+        # Prefer vendor-provided body/committee info
+        vendor_body_id = meeting_dict.get("vendor_body_id")
+        meeting_title = meeting_dict.get("title", "")
+
+        if vendor_body_id:
+            # Use the title as committee name since vendor gave us a body ID
+            committee_name = meeting_title.split("-")[0].strip() if "-" in meeting_title else meeting_title
+            committee = await self.db.committees.find_or_create_committee(
+                banana, committee_name, vendor_body_id=vendor_body_id
+            )
+            return committee.id
+
+        # No vendor body ID - only parse if title has clear committee pattern
+        # Skip generic titles that don't indicate a committee
+        skip_titles = {
+            "meeting", "agenda", "view meeting agenda", "view agenda packet",
+            "minutes", "packet", "regular meeting", "special meeting"
+        }
+        if not meeting_title or meeting_title.lower() in skip_titles:
             return None
-        committee_name = meeting_title.split("-")[0].strip() if "-" in meeting_title else meeting_title
+
+        # Only parse if title has " - " separator (e.g., "City Council - Regular Meeting")
+        if " - " not in meeting_title:
+            return None
+
+        committee_name = meeting_title.split(" - ")[0].strip()
+        if not committee_name or committee_name.lower() in skip_titles:
+            return None
+
         committee = await self.db.committees.find_or_create_committee(banana, committee_name)
         return committee.id
 
