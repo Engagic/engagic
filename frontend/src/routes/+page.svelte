@@ -234,7 +234,11 @@
 				Your city council decides zoning, taxes, and public safety<br />
 				We read the 100-page PDFs so you don't have to
 			</p>
-			<a href="/about/general" class="learn-more">How it works</a>
+			<div class="value-links">
+				<a href="/about/general" class="learn-more">How it works</a>
+				<span class="link-separator">|</span>
+				<a href="/country" class="learn-more">View coverage map</a>
+			</div>
 		</section>
 
 		<div class="search-section">
@@ -358,6 +362,13 @@
 		margin-right: auto;
 	}
 
+	.value-links {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+	}
+
 	.learn-more {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
@@ -367,6 +378,11 @@
 
 	.learn-more:hover {
 		text-decoration: underline;
+	}
+
+	.link-separator {
+		color: var(--text-tertiary);
+		font-size: 0.85rem;
 	}
 
 	@media (max-width: 640px) {
