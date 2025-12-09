@@ -246,7 +246,8 @@ def build_digest_email(
     keywords: List[str],
     upcoming_meetings: List[Dict[str, Any]],
     app_url: str,
-    unsubscribe_token: str
+    unsubscribe_token: str,
+    is_donor: bool = False
 ) -> str:
     """
     Build HTML email for weekly digest.
@@ -382,15 +383,21 @@ def build_digest_email(
 
     # Footer with one-click unsubscribe (CAN-SPAM compliant)
     unsubscribe_url = f"https://api.engagic.org/api/auth/unsubscribe?token={unsubscribe_token}"
+
+    # Donation CTA - hidden for donors
+    donation_cta = ""
+    if not is_donor:
+        donation_cta = """
+                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
+                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/about/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
+                            </p>"""
+
     html += f"""
                     <tr>
                         <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0 0 16px 0; font-size: 12px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
                                 You're receiving this because you're watching {city_name}
-                            </p>
-                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/about/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
-                            </p>
+                            </p>{donation_cta}
                             <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
                                 Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
                             </p>
@@ -485,7 +492,8 @@ async def send_weekly_digest():
                     keywords=keywords,
                     upcoming_meetings=upcoming_meetings,
                     app_url=app_url,
-                    unsubscribe_token=unsubscribe_token
+                    unsubscribe_token=unsubscribe_token,
+                    is_donor=user.is_donor
                 )
 
                 # Send email

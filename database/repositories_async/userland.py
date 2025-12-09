@@ -66,7 +66,8 @@ class UserlandRepository(BaseRepository):
             name=row["name"],
             email=row["email"],
             created_at=row["created_at"],
-            last_login=row["last_login"]
+            last_login=row["last_login"],
+            is_donor=row.get("is_donor", False)
         )
 
     async def get_user_by_email(self, email: str) -> Optional[User]:
@@ -92,7 +93,8 @@ class UserlandRepository(BaseRepository):
             name=row["name"],
             email=row["email"],
             created_at=row["created_at"],
-            last_login=row["last_login"]
+            last_login=row["last_login"],
+            is_donor=row.get("is_donor", False)
         )
 
     async def update_last_login(self, user_id: str) -> None:

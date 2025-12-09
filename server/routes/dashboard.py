@@ -503,12 +503,17 @@ async def request_city(
     Request coverage for a city that doesn't exist yet.
 
     For logged-in users who land on a 404 page for an uncovered city.
-    Records demand for prioritization.
+    Records demand for prioritization AND adds city to user's alert so they
+    get notified when the city is added and automatically start watching it.
     """
+    import secrets
+    from userland.database.models import Alert
+
     city_banana = city_data.get("city_banana")
     if not city_banana:
         raise HTTPException(status_code=400, detail="city_banana is required")
 
+    # Record city request for demand tracking
     try:
         await db.userland.record_city_request(city_banana)
         logger.info(
@@ -519,6 +524,46 @@ async def request_city(
         )
     except Exception as e:
         logger.warning("failed to record city request", error=str(e))
+
+    # Add city to user's alert so they get notified when it's added
+    # This ensures auto-migration from "request" to "follow" when city gets data
+    try:
+        alerts = await db.userland.get_alerts(user_id=user.id)
+        if alerts:
+            # Add to existing alert (simplified UX: replace city)
+            alert = alerts[0]
+            await db.userland.update_alert(
+                alert_id=alert.id,
+                cities=[city_banana],
+                keywords=alert.criteria.get("keywords", []),
+                frequency=alert.frequency,
+            )
+            logger.info(
+                "city added to alert for request",
+                alert_id=alert.id,
+                banana=city_banana,
+                user_email=user.email,
+            )
+        else:
+            # Create new alert with this city
+            alert = Alert(
+                id=secrets.token_urlsafe(16),
+                user_id=user.id,
+                name=f"{user.name}'s Alert",
+                cities=[city_banana],
+                criteria={"keywords": []},
+                frequency="weekly",
+                active=True,
+            )
+            await db.userland.create_alert(alert)
+            logger.info(
+                "alert created for city request",
+                alert_id=alert.id,
+                banana=city_banana,
+                user_email=user.email,
+            )
+    except Exception as e:
+        logger.warning("failed to add city to alert", error=str(e), banana=city_banana)
 
     return {
         "success": True,
