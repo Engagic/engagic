@@ -23,7 +23,7 @@ vendors/
 │   ├── granicus_adapter_async.py   # Granicus async (148 lines)
 │   ├── iqm2_adapter_async.py       # IQM2 async (693 lines)
 │   ├── novusagenda_adapter_async.py # NovusAgenda async (254 lines)
-│   ├── escribe_adapter_async.py    # eScribe async (221 lines)
+│   ├── escribe_adapter_async.py    # eScribe async (522 lines) - ITEM-LEVEL
 │   ├── civicclerk_adapter_async.py # CivicClerk async (134 lines)
 │   ├── civicplus_adapter_async.py  # CivicPlus async (436 lines)
 │   ├── custom/
@@ -123,7 +123,7 @@ See `database/README.md` for ID generation details.
 
 ## Vendor Adapters
 
-### Item-Level Adapters (6 adapters - 86% of cities)
+### Item-Level Adapters (7 adapters - 88% of cities)
 
 These adapters extract **structured agenda items** from HTML agendas or APIs. Items are stored separately with `matter_id`, `matter_file`, titles, and PDF links.
 
@@ -186,28 +186,31 @@ These adapters extract **structured agenda items** from HTML agendas or APIs. It
 - **Procedural filtering:** Filters "Call to Order", "Adjournment", etc.
 - **Special case:** High volume (1000+ items/meeting) requires batching
 
+**7. eScribe (522 lines) - ~20 cities**
+- **HTML scraping:** Meeting list -> Agenda=Merged view for items
+- **Item extraction:** Via `.AgendaItemContainer` elements with unique IDs
+- **Matter tracking:** Extracts case numbers from title prefixes (BOA-0039-2025, etc.)
+- **Per-item attachments:** `FileStream.ashx?DocumentId=` links per item
+- **Section hierarchy:** Nested containers with indentation
+- **City examples:** Raleigh NC, Canadian cities (supports French language)
+
 ---
 
-### Monolithic Adapters (5 adapters - 14% of cities)
+### Monolithic Adapters (4 adapters - 12% of cities)
 
 These adapters fetch **PDF packet URLs only** (no structured items). Meetings are processed with comprehensive LLM summarization.
 
-**7. CivicClerk (134 lines) - ~30 cities**
-- **HTML scraping:** Agenda calendar → packet PDF links
+**8. CivicClerk (134 lines) - ~30 cities**
+- **HTML scraping:** Agenda calendar -> packet PDF links
 - **No item extraction:** Only stores `packet_url`
 - **PDF structure:** Single PDF with all agenda items (no separation)
 - **City examples:** Multiple small CA cities
 
-**8. CivicPlus (436 lines) - ~25 cities**
-- **HTML scraping:** Meeting list → packet PDF links
+**9. CivicPlus (436 lines) - ~25 cities**
+- **HTML scraping:** Meeting list -> packet PDF links
 - **No item extraction:** Monolithic PDFs
 - **Quirks:** Some cities hide PDFs behind JavaScript modals
 - **City examples:** Various mid-size cities
-
-**9. eScribe (221 lines) - ~20 cities**
-- **HTML/API hybrid:** Meeting list API → HTML packet links
-- **No item extraction:** Single PDF per meeting
-- **City examples:** Canadian cities (supports French language)
 
 **10. Berkeley (328 lines) - 1 city (custom)**
 - **Custom scraper** for Berkeley CA's unique system
@@ -317,7 +320,7 @@ def is_procedural_item(title: str) -> bool:
     return any(re.search(pattern, title_lower) for pattern in procedural_patterns)
 ```
 
-**Deployed across:** All 6 item-level adapters (Legistar, PrimeGov, Granicus, IQM2, NovusAgenda, Chicago)
+**Deployed across:** All 7 item-level adapters (Legistar, PrimeGov, Granicus, IQM2, NovusAgenda, Chicago, eScribe)
 
 **Impact:** Saves ~5-10% of LLM costs by skipping procedural items
 

@@ -522,6 +522,6 @@ async def request_city(
 
     return {
         "success": True,
-        "message": f"We've noted your interest. You'll be notified when we add coverage.",
+        "message": "We've noted your interest. You'll be notified when we add coverage.",
         "city_banana": city_banana,
     }
