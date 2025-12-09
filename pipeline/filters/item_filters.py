@@ -9,10 +9,12 @@ ADAPTER_SKIP_PATTERNS = [
     r'invocation',
     r'pledge of allegiance',
     r'approval of (minutes|agenda)',
+    r'approval of.*minutes',  # "Approval of Draft Raleigh Board of Adjustment Minutes"
     r'approve the minutes',  # Austin variant ("approve the minutes of...")
     r'adopt minutes',
     r'review of minutes',
     r'^minutes of',  # Standalone minutes items
+    r'draft.*minutes',  # Draft minutes items
     r'adjourn',
     r'public comment',  # The period itself, not the content
     r'communications',  # Generic communications period
