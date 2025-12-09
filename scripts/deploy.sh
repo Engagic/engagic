@@ -513,6 +513,21 @@ preview_watchlist() {
     uv run engagic-conductor preview-watchlist
 }
 
+city_demands() {
+    load_env
+    log "Fetching city demand requests..."
+    PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
+SELECT
+    city_banana as city,
+    request_count as requests,
+    first_requested::date as first,
+    last_requested::date as last,
+    status
+FROM userland.city_requests
+ORDER BY request_count DESC, last_requested DESC;
+"
+}
+
 sync_watchlist() {
     load_env
     uv run engagic-conductor sync-watchlist
@@ -602,6 +617,7 @@ show_help() {
     echo "    preview-watchlist              - Show cities users are watching"
     echo "    sync-watchlist                 - Fetch + process watchlist cities"
     echo "    process-watchlist              - Process queued jobs for watchlist cities"
+    echo "    city-demands                   - Show cities users searched for but we don't have"
     echo ""
     echo "  Preview & Inspection:"
     echo "    preview-queue [CITY]                    - Show queued jobs (no processing)"
@@ -713,6 +729,7 @@ case "$COMMAND" in
     preview-watchlist)   preview_watchlist ;;
     sync-watchlist)      sync_watchlist ;;
     process-watchlist)   process_watchlist ;;
+    city-demands)        city_demands ;;
 
     # Preview and inspection
     preview-queue)       preview_queue "$2" ;;
