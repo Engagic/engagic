@@ -37,7 +37,7 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
         "novusagenda": f"https://{slug}.novusagenda.com/agendapublic",
         "escribe": f"https://{slug}.escribemeetings.com",
         "civicclerk": f"https://{slug}.api.civicclerk.com",
-        "civicplus": f"https://{slug}.civicplus.com",
+        "civicplus": f"https://{slug}.civicplus.com/AgendaCenter",
         # Custom adapters
         "berkeley": "https://berkeleyca.gov/your-government/city-council/city-council-agendas",
         "chicago": "https://chicityclerkelms.chicago.gov/Meetings/",

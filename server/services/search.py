@@ -156,8 +156,15 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
         # No state provided - check for ambiguous cities
         return await handle_ambiguous_city_search(city_name, city_input, db)
 
-    # Check database - CACHED ONLY
-    city = await db.get_city(name=city_name, state=state)
+    # Try banana lookup first (handles cases like "mountairy, NC" -> "mountairyNC")
+    # This catches multi-word city names that get compressed in URLs
+    potential_banana = f"{city_name.lower().replace(' ', '')}{state.upper()}"
+    city = await db.get_city(banana=potential_banana)
+
+    # Fallback to name+state lookup
+    if not city:
+        city = await db.get_city(name=city_name, state=state)
+
     if not city:
         # Record demand for this city
         requested_banana = f"{city_name.lower().replace(' ', '')}{state.upper()}"
