@@ -47,16 +47,30 @@ async def verify_admin_token(authorization: str = Header(None)):
 
 
 @router.get("/city-requests")
-async def get_city_requests(is_admin: bool = Depends(verify_admin_token)):
-    """Get top city requests for admin review"""
-    # TODO(Phase 5): Implement analytics tracking for city requests
-    # For now, check API logs for usage patterns
-    return {
-        "success": True,
-        "message": "City request tracking not yet implemented. Check API logs for usage patterns.",
-        "city_requests": [],
-        "total_count": 0,
-    }
+async def get_city_requests(
+    db: Database = Depends(get_db),
+    is_admin: bool = Depends(verify_admin_token)
+):
+    """Get pending city requests ordered by demand
+
+    Returns cities users have requested but aren't covered yet.
+    Sorted by request_count descending - highest demand first.
+    """
+    try:
+        requests = await db.userland.get_pending_city_requests()
+
+        return {
+            "success": True,
+            "city_requests": requests,
+            "total_count": len(requests),
+        }
+
+    except Exception:
+        logger.exception("failed to fetch city requests")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch city requests"
+        )
 
 
 @router.post("/sync-city/{banana}")

@@ -17,12 +17,11 @@ import argparse
 import asyncio
 import sys
 from datetime import datetime
-from typing import Dict, List, Any, Set
+from typing import Dict, Set
 
 sys.path.insert(0, '/opt/engagic')
 
 from database.db_postgres import Database
-from database.id_generation import generate_council_member_id, generate_committee_id
 from vendors.adapters.legistar_adapter_async import AsyncLegistarAdapter
 from vendors.session_manager_async import AsyncSessionManager
 from config import get_logger, config
