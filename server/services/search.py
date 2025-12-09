@@ -159,6 +159,14 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
     # Check database - CACHED ONLY
     city = await db.get_city(name=city_name, state=state)
     if not city:
+        # Record demand for this city
+        requested_banana = f"{city_name.lower().replace(' ', '')}{state.upper()}"
+        try:
+            await db.userland.record_city_request(requested_banana)
+            logger.info("city request recorded", banana=requested_banana)
+        except Exception as e:
+            logger.warning("failed to record city request", banana=requested_banana, error=str(e))
+
         return cast(SearchResponse, {
             "success": False,
             "message": f"We're not covering {city_name}, {state} yet, but we're always expanding! Your interest has been noted - we prioritize cities with high demand.",
@@ -310,6 +318,14 @@ async def handle_ambiguous_city_search(
                 logger.info("fuzzy match found", query=city_name, matches=[c.name for c in cities])
 
     if not cities:
+        # Record demand - use generic banana without state (user didn't provide state)
+        requested_banana = f"{city_name.lower().replace(' ', '')}UNKNOWN"
+        try:
+            await db.userland.record_city_request(requested_banana)
+            logger.info("city request recorded (no state)", banana=requested_banana)
+        except Exception as e:
+            logger.warning("failed to record city request", banana=requested_banana, error=str(e))
+
         return {
             "success": False,
             "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') - your interest has been noted!",

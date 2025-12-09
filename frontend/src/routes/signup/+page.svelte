@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { signup } from '$lib/api/auth';
+	import { page } from '$app/stores';
 
 	let email = $state('');
 	let name = $state('');
 	let loading = $state(false);
 	let success = $state(false);
 	let error = $state('');
+
+	// Get city from query params (from 404 page redirect)
+	const cityBanana = $derived($page.url.searchParams.get('city') || '');
+	const cityDisplayName = $derived($page.url.searchParams.get('name') || '');
 
 	function isValidEmail(email: string): boolean {
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,7 +40,8 @@
 		try {
 			await signup({
 				email: email.trim(),
-				name: name.trim()
+				name: name.trim(),
+				city_banana: cityBanana || undefined
 			});
 			success = true;
 		} catch (err: Error | unknown) {
@@ -72,8 +78,16 @@
 			</div>
 		{:else}
 			<div class="card">
-				<h1>Get Started</h1>
-				<p class="subtitle">Free civic digests for everyone. Set up your account in 30 seconds.</p>
+				{#if cityDisplayName}
+					<div class="city-context">
+						<span class="city-badge">Requesting: {cityDisplayName}</span>
+					</div>
+					<h1>Get Notified</h1>
+					<p class="subtitle">We'll email you when we add {cityDisplayName} to our coverage.</p>
+				{:else}
+					<h1>Get Started</h1>
+					<p class="subtitle">Free civic digests for everyone. Set up your account in 30 seconds.</p>
+				{/if}
 
 				<form onsubmit={(e) => {e.preventDefault(); handleSubmit();}}>
 					<div class="field">
@@ -174,6 +188,21 @@
 		font-size: 2rem;
 		color: #10b981;
 		font-weight: bold;
+	}
+
+	.city-context {
+		margin-bottom: 1rem;
+	}
+
+	.city-badge {
+		display: inline-block;
+		padding: 0.5rem 1rem;
+		background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+		border: 1px solid var(--civic-blue);
+		border-radius: 20px;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--civic-blue);
 	}
 
 	h1 {
