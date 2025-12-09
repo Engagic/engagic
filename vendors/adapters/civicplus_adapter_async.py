@@ -150,16 +150,20 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                     if meeting and self._is_meeting_in_range(meeting, start_date, end_date):
                         results.append(meeting)
 
+            # Dedupe by date - keep the last one (packet is typically uploaded after agenda)
+            deduped = self._dedupe_by_date(results)
+
             logger.info(
                 "filtered meetings in date range",
                 vendor="civicplus",
                 slug=self.slug,
-                count=len(results),
+                count=len(deduped),
+                before_dedupe=len(results),
                 start_date=str(start_date.date()),
                 end_date=str(end_date.date())
             )
 
-            return results
+            return deduped
 
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("failed to fetch meetings", vendor="civicplus", slug=self.slug, error=str(e))
@@ -179,6 +183,15 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         except (ValueError, AttributeError):
             return True
 
+    def _dedupe_by_date(self, meetings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Dedupe meetings by date, keeping the last one (packet uploaded after agenda)."""
+        by_date: Dict[str, Dict[str, Any]] = {}
+        for meeting in meetings:
+            date_key = meeting.get("start", "unknown")
+            # Later entries overwrite earlier ones (packet overwrites agenda)
+            by_date[date_key] = meeting
+        return list(by_date.values())
+
     def _extract_meeting_links(
         self, soup: BeautifulSoup, base_url: str
     ) -> List[Dict[str, str]]:
@@ -192,8 +205,16 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             text = link.get_text(strip=True)
             href = link["href"]
 
-            # Skip navigation links
-            if text.startswith("<<<") or text.startswith("Back to") or text == "Agendas & Minutes":
+            # Skip navigation links and page headers
+            skip_patterns = [
+                "<<<", "◄", "Back to", "back to",
+                "Agendas & Minutes", "agendas & minutes",
+                "Calendar", "All Agendas", "all agendas",
+            ]
+            if any(text.startswith(p) or text == p for p in skip_patterns):
+                continue
+            # Also skip if text is too short (likely a nav element)
+            if len(text) < 5:
                 continue
 
             # Check if it's a ViewFile link (direct meeting link)
@@ -209,14 +230,36 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
         return links
 
+    def _extract_date_from_url(self, url: str) -> Optional[datetime]:
+        """Extract date from CivicPlus ViewFile URL pattern _MMDDYYYY-ID."""
+        # Pattern: /ViewFile/Agenda/_12042025-786 = December 4, 2025
+        match = re.search(r'_(\d{2})(\d{2})(\d{4})-\d+', url)
+        if match:
+            month, day, year = match.groups()
+            try:
+                return datetime(int(year), int(month), int(day))
+            except ValueError:
+                return None
+        return None
+
     def _create_meeting_from_viewfile_link(self, link_data: Dict[str, str]) -> Optional[Dict[str, Any]]:
         """Create meeting dict directly from ViewFile link without scraping."""
         url = link_data["url"]
         title = link_data["title"]
-        date_text = self._extract_date_from_title(title)
-        parsed_date = self._parse_date(date_text) if date_text else None
+
+        # Try to extract date from URL first (more reliable for CivicPlus)
+        parsed_date = self._extract_date_from_url(url)
+        if not parsed_date:
+            date_text = self._extract_date_from_title(title)
+            parsed_date = self._parse_date(date_text) if date_text else None
+
         meeting_id = self._extract_meeting_id(url)
-        meeting_status = self._parse_meeting_status(title, date_text)
+
+        # Build better title if we have a date
+        if parsed_date and title in ["Agenda", "View Meeting Agenda", "View Agenda Packet"]:
+            title = f"Meeting - {parsed_date.strftime('%B %d, %Y')}"
+
+        meeting_status = self._parse_meeting_status(title, None)
 
         result = {
             "vendor_id": meeting_id,
