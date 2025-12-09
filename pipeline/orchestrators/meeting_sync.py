@@ -109,6 +109,9 @@ class MeetingSyncOrchestrator:
                     items_data, meeting_obj, stats
                 )
 
+            # Check if this is the first meeting for the city (before storing)
+            is_first_meeting = await self._is_first_meeting_for_city(city.banana)
+
             async with self.db.pool.acquire() as conn:
                 async with conn.transaction():
                     await self.db.meetings.store_meeting(meeting_obj)
@@ -137,6 +140,10 @@ class MeetingSyncOrchestrator:
             await self._enqueue_if_needed(
                 meeting_obj, meeting_date, agenda_items, items_data, stats
             )
+
+            # Notify users if this was the first meeting for the city
+            if is_first_meeting:
+                await self._notify_city_activation(city)
 
             return meeting_obj, stats
 
@@ -454,3 +461,55 @@ class MeetingSyncOrchestrator:
     async def _collect_item_ids_for_matter(self, matter_id: str) -> List[str]:
         items = await self.db.items.get_all_items_for_matter(matter_id)
         return [item.id for item in items]
+
+    async def _is_first_meeting_for_city(self, banana: str) -> bool:
+        """Check if city has no existing meetings (first sync detection)."""
+        meetings = await self.db.meetings.get_meetings_for_city(banana, limit=1)
+        return len(meetings) == 0
+
+    async def _notify_city_activation(self, city: City) -> None:
+        """Notify users who signed up for alerts when city first gets data.
+
+        Sends "city now available" email and updates city_request status.
+        """
+        try:
+            # Get alerts for this city
+            alerts = await self.db.userland.get_alerts_for_city(city.banana)
+            if not alerts:
+                logger.debug("no alerts for newly activated city", banana=city.banana)
+            else:
+                # Import here to avoid circular dependency
+                from userland.email.transactional import send_city_available_email
+
+                # Get user info and send emails
+                for alert in alerts:
+                    user = await self.db.userland.get_user(alert.user_id)
+                    if user:
+                        await send_city_available_email(
+                            email=user.email,
+                            user_name=user.name,
+                            city_name=city.name,
+                            state=city.state,
+                            banana=city.banana
+                        )
+
+                logger.info(
+                    "sent city activation emails",
+                    banana=city.banana,
+                    alert_count=len(alerts)
+                )
+
+            # Update city_request status to 'added'
+            await self.db.userland.update_city_request_status(
+                city_banana=city.banana,
+                status='added',
+                notes=f'First meeting synced {datetime.now().isoformat()}'
+            )
+
+        except Exception as e:
+            # Don't fail the sync for notification errors
+            logger.warning(
+                "city activation notification failed",
+                banana=city.banana,
+                error=str(e)
+            )

@@ -81,6 +81,48 @@ class CityRepository(BaseRepository):
 
         logger.info("city added", banana=city.banana, name=city.name)
 
+    async def upsert_city(self, city: City) -> None:
+        """Insert or update a city in the database
+
+        Args:
+            city: City object with banana, name, state, vendor, slug
+        """
+        async with self.transaction() as conn:
+            await conn.execute(
+                """
+                INSERT INTO cities (banana, name, state, vendor, slug, county, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (banana) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    state = EXCLUDED.state,
+                    vendor = EXCLUDED.vendor,
+                    slug = EXCLUDED.slug,
+                    county = EXCLUDED.county,
+                    status = EXCLUDED.status
+                """,
+                city.banana,
+                city.name,
+                city.state,
+                city.vendor,
+                city.slug,
+                city.county,
+                city.status or "active",
+            )
+
+            # Insert zipcodes (batch for efficiency)
+            if city.zipcodes:
+                zipcode_records = [(city.banana, z, False) for z in city.zipcodes]
+                await conn.executemany(
+                    """
+                    INSERT INTO zipcodes (banana, zipcode, is_primary)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (banana, zipcode) DO NOTHING
+                    """,
+                    zipcode_records,
+                )
+
+        logger.info("city upserted", banana=city.banana, name=city.name)
+
     async def get_city(self, banana: str) -> Optional[City]:
         """Get a city by banana
 
