@@ -1,9 +1,16 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import Footer from '$lib/components/Footer.svelte';
+	import { parseCityUrl } from '$lib/utils/utils';
 
 	const error = $derived($page.error);
 	const status = $derived($page.status);
+
+	// Extract city info from URL for the signup link
+	const cityUrl = $derived($page.params.city_url || '');
+	const parsed = $derived(parseCityUrl(cityUrl));
+	const cityBanana = $derived(parsed ? `${parsed.cityName.toLowerCase().replace(/\s+/g, '')}${parsed.state}` : '');
+	const cityDisplay = $derived(parsed ? `${parsed.cityName}, ${parsed.state}` : cityUrl);
 </script>
 
 <svelte:head>
@@ -27,8 +34,10 @@
 					please check back later or try searching by zipcode.
 				</p>
 				<div class="request-city-cta">
-					<p class="cta-text">Want us to track this city?</p>
-					<a href="/dashboard" class="cta-link">Create an account and add it to your watchlist</a>
+					<p class="cta-text">Want us to track {cityDisplay || 'this city'}?</p>
+					<a href="/signup?city={encodeURIComponent(cityBanana)}&name={encodeURIComponent(cityDisplay)}" class="cta-link">
+						Sign up for alerts when we add it
+					</a>
 					<p class="cta-subtext">Cities with active watchers get priority coverage.</p>
 				</div>
 			{:else}

@@ -68,6 +68,12 @@ async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
     alert_cities = []
     if signup_request.city_banana:
         alert_cities = [signup_request.city_banana]
+        # Record city request for demand tracking (even if city doesn't exist yet)
+        try:
+            await db.userland.record_city_request(signup_request.city_banana)
+            logger.info("city request from signup", banana=signup_request.city_banana)
+        except Exception as e:
+            logger.warning("failed to record city request", error=str(e))
     elif signup_request.cities:
         alert_cities = signup_request.cities
 

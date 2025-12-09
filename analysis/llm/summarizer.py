@@ -1184,11 +1184,90 @@ class GeminiSummarizer:
         except json.JSONDecodeError as e:
             logger.error("failed to parse json response", error=str(e), error_type=type(e).__name__)
             logger.error("full malformed json response", response_text=response_text)
+
+            # Attempt to salvage truncated responses
+            # Truncation typically happens mid-field, but summary_markdown is usually complete
+            if not response_text.rstrip().endswith('}'):
+                logger.warning("response appears truncated, attempting salvage")
+                salvaged = self._salvage_truncated_response(response_text)
+                if salvaged:
+                    return salvaged
+
             raise
         except Exception as e:  # Intentionally broad: log validation error then propagate
             logger.error("error validating json response", error=str(e), error_type=type(e).__name__)
             logger.error("response that failed validation", response_text=response_text)
             raise
+
+    def _salvage_truncated_response(self, response_text: str) -> tuple[str, list[str]] | None:
+        """Attempt to extract usable content from a truncated JSON response.
+
+        When Gemini truncates output mid-response (often on large documents),
+        the summary_markdown field is typically complete since it comes first.
+        This method uses regex to extract whatever fields are available.
+
+        Args:
+            response_text: The truncated JSON response
+
+        Returns:
+            (summary, topics) tuple if salvageable, None if not enough content
+        """
+        summary_parts = []
+        topics: list[str] = []
+
+        # Extract summary_markdown - usually complete even in truncated responses
+        summary_match = re.search(
+            r'"summary_markdown"\s*:\s*"((?:[^"\\]|\\.)*)(?:"|$)',
+            response_text,
+            re.DOTALL
+        )
+        if summary_match:
+            summary_md = summary_match.group(1)
+            # Unescape JSON string escapes
+            summary_md = summary_md.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+            if summary_md.strip():
+                summary_parts.append(f"## Summary\n\n{summary_md}\n")
+
+        # Try to extract citizen_impact_markdown
+        impact_match = re.search(
+            r'"citizen_impact_markdown"\s*:\s*"((?:[^"\\]|\\.)*)(?:"|$)',
+            response_text,
+            re.DOTALL
+        )
+        if impact_match:
+            impact_md = impact_match.group(1)
+            impact_md = impact_md.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+            if impact_md.strip():
+                summary_parts.append(f"## Citizen Impact\n\n{impact_md}\n")
+
+        # Try to extract topics array
+        topics_match = re.search(
+            r'"topics"\s*:\s*\[(.*?)\]',
+            response_text,
+            re.DOTALL
+        )
+        if topics_match:
+            topics_str = topics_match.group(1)
+            # Extract quoted strings from the array
+            topic_items = re.findall(r'"([^"]+)"', topics_str)
+            topics = [t.strip() for t in topic_items if t.strip()]
+
+        # Only return if we got meaningful content
+        if not summary_parts:
+            logger.warning("salvage failed: no summary content found in truncated response")
+            return None
+
+        # Add truncation notice
+        summary_parts.append("\n---\n*Note: This summary was recovered from a truncated response.*")
+
+        summary = "\n".join(summary_parts)
+        logger.info(
+            "salvaged truncated response",
+            summary_len=len(summary),
+            topics_count=len(topics)
+        )
+
+        return summary, topics
 
     def _estimate_page_count(self, text: str) -> int:
         """Estimate page count from text
