@@ -269,6 +269,11 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             counter_elem = container.find("div", class_="AgendaItemCounter")
             item_number = counter_elem.get_text(strip=True) if counter_elem else str(item_counter)
 
+            # Skip section headers (A., B., C., etc.) - organizational, not substantive
+            # They aggregate sub-item attachments causing shared attachment issues
+            if item_number and re.match(r'^[A-G]\.$', item_number):
+                continue
+
             title = self._extract_item_title(container)
             if not title:
                 continue
