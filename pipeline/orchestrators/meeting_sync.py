@@ -245,6 +245,7 @@ class MeetingSyncOrchestrator:
                 meeting_id=stored_meeting.id,
                 title=item_data.get("title", "Untitled Item"),
                 sequence=item_data.get("sequence", 0),
+                agenda_number=item_data.get("item_number"),
                 matter_file=matter_file,
                 matter_id=matter_id,
                 matter_type=item_data.get("matter_type"),
