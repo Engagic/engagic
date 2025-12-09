@@ -66,6 +66,12 @@ Commands:
   moderate          List pending deliberation comments
   moderate review   Interactive review (prompts for deliberation ID)
 
+  Map/Coverage:
+  map-import        Import Census TIGER boundaries (download + import + match)
+  map-tiles         Generate PMTiles from city geometries
+  map-status        Show geometry coverage status
+  map-all           Full map pipeline (import + tiles + deploy)
+
   System:
   status            Show status of all services
   logs              Show all logs
@@ -184,6 +190,33 @@ cmd_security() {
     echo "  Total backup space: $(du -sh /opt/engagic/data/backups 2>/dev/null | cut -f1)"
 }
 
+# Map Commands
+cmd_map_import() {
+    log_info "Importing Census TIGER boundaries..."
+    cd $PROJECT_DIR
+    uv run python scripts/import_census_boundaries.py --all
+    log_info "Census import complete"
+}
+
+cmd_map_tiles() {
+    log_info "Generating PMTiles..."
+    cd $PROJECT_DIR
+    uv run python scripts/generate_tiles.py --all
+    log_info "Tiles generated"
+}
+
+cmd_map_status() {
+    cd $PROJECT_DIR
+    uv run python scripts/import_census_boundaries.py --status
+}
+
+cmd_map_all() {
+    log_info "Running full map pipeline..."
+    cmd_map_import
+    cmd_map_tiles
+    log_info "Map pipeline complete"
+}
+
 # Main command router
 main() {
     local cmd="${1:-help}"
@@ -248,6 +281,20 @@ main() {
             else
                 python3 "$PROJECT_DIR/scripts/moderate.py" list
             fi
+            ;;
+
+        # Map
+        map-import)
+            cmd_map_import
+            ;;
+        map-tiles)
+            cmd_map_tiles
+            ;;
+        map-status)
+            cmd_map_status
+            ;;
+        map-all)
+            cmd_map_all
             ;;
 
         # System
