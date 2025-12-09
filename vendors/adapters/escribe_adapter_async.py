@@ -13,7 +13,6 @@ Item-level extraction via Agenda=Merged view:
 Confidence: 8/10 - Tested against Raleigh NC, may need adjustments for other cities
 """
 
-import asyncio
 import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
@@ -43,6 +42,23 @@ MATTER_FILE_PATTERNS = [
     r'\bFile\s*#?\s*(\d{4}-\d+)\b',
 ]
 
+# Derive matter_type from matter_file prefix
+# Prefixes are consistent within each Escribe instance
+MATTER_TYPE_FROM_PREFIX = {
+    "BOA": "Board of Adjustment",
+    "COA": "Certificate of Appropriateness",
+    "RES": "Resolution",
+    "ORD": "Ordinance",
+    "PLANDEV": "Planning & Development",
+    "TC": "Text Change",
+    "Z": "Zoning",
+    "SP": "Site Plan",
+    "SUP": "Special Use Permit",
+    "AN": "Annexation",
+    "CUP": "Conditional Use Permit",
+    "VAR": "Variance",
+}
+
 
 class AsyncEscribeAdapter(AsyncBaseAdapter):
     """Async adapter for cities using Escribe meeting management system.
@@ -56,60 +72,55 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         self.base_url = f"https://{self.slug}.escribemeetings.com"
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Scrape meetings from Escribe HTML with item-level extraction."""
+        """Fetch meetings via calendar API with item-level extraction."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        current_year = datetime.now().year
-        list_url = f"{self.base_url}/?Year={current_year}"
+        # Use calendar API to get ALL meetings (upcoming + past, all types)
+        calendar_url = f"{self.base_url}/MeetingsCalendarView.aspx/GetCalendarMeetings"
 
-        logger.info("fetching meetings", vendor="escribe", slug=self.slug, url=list_url)
+        logger.info("fetching meetings via calendar API", vendor="escribe", slug=self.slug)
 
-        response = await self._get(list_url)
-        html = await response.text()
-        soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
+        payload = {
+            "calendarStartDate": start_date.strftime("%Y-%m-%d"),
+            "calendarEndDate": end_date.strftime("%Y-%m-%d"),
+        }
 
-        meeting_containers = []
+        response = await self._post(
+            calendar_url,
+            json=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"}
+        )
+        data = await response.json()
 
-        for aria_label, container_class in [
-            ("List of Upcoming Meetings", "upcoming-meeting-container"),
-            ("List of Previous Meetings", "previous-meeting-container"),
-        ]:
-            section = soup.find("div", {"role": "region", "aria-label": aria_label})
-            if section:
-                meeting_containers.extend(section.find_all("div", class_=container_class))
-
-        if not meeting_containers:
-            logger.warning("no meeting sections found", vendor="escribe", slug=self.slug)
+        # Response is in {"d": [...]} format
+        meetings_data = data.get("d", [])
+        if not meetings_data:
+            logger.warning("no meetings from calendar API", vendor="escribe", slug=self.slug)
             return []
 
+        logger.info(
+            "found meetings in calendar API",
+            vendor="escribe",
+            slug=self.slug,
+            count=len(meetings_data)
+        )
+
         results = []
-        for container in meeting_containers:
-            meeting_basic = self._parse_meeting_container(container)
+        for meeting_json in meetings_data:
+            meeting_basic = self._parse_calendar_meeting(meeting_json)
             if not meeting_basic:
                 continue
 
-            meeting_start = meeting_basic.get("start")
-            if meeting_start:
-                meeting_dt = (
-                    datetime.strptime(meeting_start[:10], "%Y-%m-%d")
-                    if isinstance(meeting_start, str) else meeting_start
-                )
-                if not (start_date <= meeting_dt <= end_date):
-                    continue
-
-            # Fetch item-level details from Agenda=Merged view
             meeting_uuid = meeting_basic.get("_uuid")
-            if meeting_uuid:
-                meeting_data = await self._fetch_meeting_details(
-                    meeting_uuid,
-                    meeting_basic
-                )
+            if meeting_uuid and meeting_basic.get("has_agenda"):
+                meeting_data = await self._fetch_meeting_details(meeting_uuid, meeting_basic)
                 if meeting_data:
                     results.append(meeting_data)
             else:
-                # Fallback: no UUID found, use basic meeting data
+                meeting_basic.pop("_uuid", None)
+                meeting_basic.pop("has_agenda", None)
                 results.append(meeting_basic)
 
         logger.info(
@@ -121,60 +132,41 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
 
         return results
 
-    def _parse_meeting_container(self, container: Tag) -> Optional[Dict[str, Any]]:
-        """Parse a single meeting container to extract basic meeting details."""
-        title_elem = container.find("h3", class_="meeting-title-heading")
-        if not title_elem:
+    def _parse_calendar_meeting(self, meeting_json: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Parse meeting from calendar API JSON response."""
+        meeting_id = meeting_json.get("ID")
+        if not meeting_id:
             return None
 
-        title_link = title_elem.find("a")
-        if not title_link:
-            return None
+        title = meeting_json.get("MeetingName", "")
+        start_date = meeting_json.get("StartDate")
 
-        title = title_link.get_text(strip=True)
-        meeting_url = title_link.get("href", "")
-        if meeting_url and not meeting_url.startswith("http"):
-            meeting_url = urljoin(self.base_url, meeting_url)
+        # Parse date from "/Date(1733763600000)/" format
+        parsed_date = None
+        if start_date and "/Date(" in start_date:
+            match = re.search(r"/Date\((\d+)\)/", start_date)
+            if match:
+                timestamp_ms = int(match.group(1))
+                parsed_date = datetime.fromtimestamp(timestamp_ms / 1000)
 
-        # Extract UUID from URL: Meeting.aspx?Id=c20e2071-50d2-4513-8097-43c999600241
+        # Extract UUID from URL if available
         meeting_uuid = None
-        uuid_match = re.search(r"Id=([a-f0-9-]+)", meeting_url, re.IGNORECASE)
-        if uuid_match:
-            meeting_uuid = uuid_match.group(1)
-
-        date_elem = container.find("div", class_="meeting-date")
-        date_text = date_elem.get_text(strip=True) if date_elem else ""
-        parsed_date = self._parse_date(date_text) if date_text else None
-
-        # Look for packet PDF on meeting list (fallback)
-        pdf_links = []
-        for link in container.find_all(
-            "a", href=re.compile(r"FileStream\.ashx\?DocumentId=")
-        ):
-            aria_label = link.get("aria-label", "").lower()
-            if "pdf" in aria_label and "agenda" in aria_label:
-                pdf_url = link.get("href", "")
-                if pdf_url:
-                    if not pdf_url.startswith("http"):
-                        pdf_url = urljoin(self.base_url, pdf_url)
-                    pdf_links.append(pdf_url)
+        url = meeting_json.get("Url", "")
+        if url:
+            uuid_match = re.search(r"Id=([a-f0-9-]+)", url, re.IGNORECASE)
+            if uuid_match:
+                meeting_uuid = uuid_match.group(1)
 
         vendor_id = f"escribe_{meeting_uuid}" if meeting_uuid else self._generate_fallback_vendor_id(title, parsed_date)
-        packet_url = pdf_links[0] if pdf_links else None
-        meeting_status = self._parse_meeting_status(title, date_text)
 
         result = {
             "vendor_id": vendor_id,
             "title": title,
-            "start": parsed_date.isoformat() if parsed_date else date_text,
-            "packet_url": packet_url,
-            "_uuid": meeting_uuid,  # Internal: used for fetching details
+            "start": parsed_date.isoformat() if parsed_date else "",
+            "packet_url": meeting_json.get("MeetingDocumentLink"),
+            "_uuid": meeting_uuid,
+            "has_agenda": meeting_json.get("HasAgenda", False),
         }
-
-        if meeting_status:
-            result["meeting_status"] = meeting_status
-
-        logger.debug("parsed meeting", vendor="escribe", slug=self.slug, title=title, date=date_text)
 
         return result
 
@@ -193,14 +185,12 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
 
         response = await self._get(merged_url)
         html = await response.text()
-        soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
+        soup = BeautifulSoup(html, 'html.parser')
 
-        # Extract items from agenda
         items = await self._parse_agenda_items(soup, meeting_uuid, merged_url)
 
         items = [item for item in items if not should_skip_item(item.get('title', ''))]
 
-        # Build final meeting data
         meeting_data = {
             "vendor_id": basic_meeting["vendor_id"],
             "title": basic_meeting["title"],
@@ -251,17 +241,11 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             if not title:
                 continue
 
-            # Extract matter file from title prefix
             matter_file = self._extract_matter_file(title)
-
-            # Extract attachments for this item
             attachments = self._extract_item_attachments(container, base_url)
 
-            # Extract description (content row)
-            description = ""
             content_row = container.find("div", class_="AgendaItemContentRow")
-            if content_row:
-                description = content_row.get_text(strip=True)
+            description = content_row.get_text(strip=True) if content_row else ""
 
             item_data = {
                 "item_id": f"escribe_{item_id}",
@@ -273,36 +257,20 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
                 "attachments": attachments,
             }
 
-            # Add matter tracking fields
             if matter_file:
                 item_data["matter_file"] = matter_file
-                item_data["matter_id"] = item_id  # Vendor ID for fallback
+                item_data["matter_id"] = item_id
+                # Derive matter_type from prefix (BOA -> Board of Adjustment, etc.)
+                prefix = matter_file.split("-")[0].upper()
+                if prefix in MATTER_TYPE_FROM_PREFIX:
+                    item_data["matter_type"] = MATTER_TYPE_FROM_PREFIX[prefix]
 
             items.append(item_data)
-
-            logger.debug(
-                "parsed agenda item",
-                vendor="escribe",
-                slug=self.slug,
-                item_id=item_id,
-                item_number=item_number,
-                title=title[:50] if title else None,
-                attachments=len(attachments),
-                matter_file=matter_file
-            )
-
-        logger.info(
-            "parsed agenda items",
-            vendor="escribe",
-            slug=self.slug,
-            item_count=len(items)
-        )
 
         return items
 
     def _extract_item_id(self, container: Tag) -> Optional[str]:
         """Extract item ID from AgendaItem class or SelectItem link."""
-        # Try class name first (AgendaItem3681)
         agenda_item_div = container.find("div", class_=re.compile(r"AgendaItem\d+"))
         if not agenda_item_div:
             for cls in container.get("class", []):
@@ -316,7 +284,6 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
                 if match:
                     return match.group(1)
 
-        # Fallback: SelectItem() link
         select_link = container.find("a", href=re.compile(r"SelectItem\(\d+\)"))
         if select_link:
             match = re.search(r"SelectItem\((\d+)\)", select_link.get("href", ""))
@@ -334,7 +301,6 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             if title:
                 return title
 
-        # Fallback: any SelectItem link
         select_link = container.find("a", href=re.compile(r"SelectItem"))
         if select_link:
             return select_link.get_text(strip=True) or None
@@ -365,7 +331,6 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         if not title:
             return None
 
-        # Try each pattern
         for pattern in MATTER_FILE_PATTERNS:
             match = re.search(pattern, title, re.IGNORECASE)
             if match:
