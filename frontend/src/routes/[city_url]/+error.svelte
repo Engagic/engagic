@@ -2,6 +2,8 @@
 	import { page } from '$app/stores';
 	import Footer from '$lib/components/Footer.svelte';
 	import { parseCityUrl } from '$lib/utils/utils';
+	import { authState } from '$lib/stores/auth.svelte';
+	import { requestCity } from '$lib/api/dashboard';
 
 	const error = $derived($page.error);
 	const status = $derived($page.status);
@@ -11,6 +13,30 @@
 	const parsed = $derived(parseCityUrl(cityUrl));
 	const cityBanana = $derived(parsed ? `${parsed.cityName.toLowerCase().replace(/\s+/g, '')}${parsed.state}` : '');
 	const cityDisplay = $derived(parsed ? `${parsed.cityName}, ${parsed.state}` : cityUrl);
+
+	// Auth state for logged-in users
+	const isLoggedIn = $derived(authState.isAuthenticated);
+
+	// Request state
+	let requestSent = $state(false);
+	let requestLoading = $state(false);
+	let requestError = $state('');
+
+	async function handleRequestCity() {
+		if (!cityBanana || !authState.accessToken) return;
+
+		requestLoading = true;
+		requestError = '';
+
+		try {
+			await requestCity(authState.accessToken, cityBanana);
+			requestSent = true;
+		} catch (err) {
+			requestError = err instanceof Error ? err.message : 'Failed to submit request';
+		} finally {
+			requestLoading = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -35,9 +61,24 @@
 				</p>
 				<div class="request-city-cta">
 					<p class="cta-text">Want us to track {cityDisplay || 'this city'}?</p>
-					<a href="/signup?city={encodeURIComponent(cityBanana)}&name={encodeURIComponent(cityDisplay)}" class="cta-link">
-						Sign up for alerts when we add it
-					</a>
+					{#if requestSent}
+						<p class="cta-success">Got it! We'll notify you when we add {cityDisplay}.</p>
+					{:else if isLoggedIn}
+						<button
+							class="cta-button"
+							onclick={handleRequestCity}
+							disabled={requestLoading}
+						>
+							{requestLoading ? 'Submitting...' : 'Request this city'}
+						</button>
+						{#if requestError}
+							<p class="cta-error">{requestError}</p>
+						{/if}
+					{:else}
+						<a href="/signup?city={encodeURIComponent(cityBanana)}&name={encodeURIComponent(cityDisplay)}" class="cta-link">
+							Sign up for alerts when we add it
+						</a>
+					{/if}
 					<p class="cta-subtext">Cities with active watchers get priority coverage.</p>
 				</div>
 			{:else}
@@ -146,6 +187,44 @@
 
 	.cta-link:hover {
 		opacity: 0.8;
+	}
+
+	.cta-button {
+		display: inline-block;
+		padding: 0.75rem 1.5rem;
+		background: var(--civic-blue);
+		color: white;
+		border: none;
+		border-radius: 0.5rem;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.95rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: opacity 0.2s;
+	}
+
+	.cta-button:hover:not(:disabled) {
+		opacity: 0.9;
+	}
+
+	.cta-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.cta-success {
+		color: #059669;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.95rem;
+		font-weight: 500;
+		margin: 0.5rem 0;
+	}
+
+	.cta-error {
+		color: #dc2626;
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.85rem;
+		margin: 0.5rem 0 0 0;
 	}
 
 	.cta-subtext {

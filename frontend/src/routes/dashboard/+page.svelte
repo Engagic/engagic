@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { authState } from '$lib/stores/auth.svelte';
 	import { getDashboard, type Digest, type DigestMatch } from '$lib/api/dashboard';
+	import { ApiError } from '$lib/api/types';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -30,6 +31,12 @@
 			digests = data.digests;
 			recentMatches = data.recent_matches;
 		} catch (err) {
+			// Handle expired session - clear auth and redirect to login
+			if (err instanceof ApiError && (err.statusCode === 401 || err.statusCode === 403)) {
+				await authState.logout();
+				goto('/login?expired=true');
+				return;
+			}
 			error = err instanceof Error ? err.message : 'Failed to load dashboard';
 		} finally {
 			loading = false;

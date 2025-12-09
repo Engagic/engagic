@@ -491,3 +491,37 @@ async def remove_city_from_alert(
     logger.info("city removed", alert_id=alert_id, user_email=user.email)
 
     return {"status": "removed", "alert": updated.to_dict()}
+
+
+@router.post("/request-city")
+async def request_city(
+    city_data: Dict[str, str],
+    user: User = Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """
+    Request coverage for a city that doesn't exist yet.
+
+    For logged-in users who land on a 404 page for an uncovered city.
+    Records demand for prioritization.
+    """
+    city_banana = city_data.get("city_banana")
+    if not city_banana:
+        raise HTTPException(status_code=400, detail="city_banana is required")
+
+    try:
+        await db.userland.record_city_request(city_banana)
+        logger.info(
+            "city request from user",
+            banana=city_banana,
+            user_id=user.id,
+            user_email=user.email,
+        )
+    except Exception as e:
+        logger.warning("failed to record city request", error=str(e))
+
+    return {
+        "success": True,
+        "message": f"We've noted your interest. You'll be notified when we add coverage.",
+        "city_banana": city_banana,
+    }

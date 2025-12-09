@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { login } from '$lib/api/auth';
+	import { page } from '$app/stores';
 
 	let email = $state('');
 	let loading = $state(false);
 	let success = $state(false);
 	let error = $state('');
+
+	// Check for expired session redirect
+	const sessionExpired = $derived($page.url.searchParams.get('expired') === 'true');
 
 	function isValidEmail(email: string): boolean {
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,6 +71,11 @@
 			</div>
 		{:else}
 			<div class="card">
+				{#if sessionExpired}
+					<div class="session-expired-banner" role="alert">
+						Your session has expired. Please log in again.
+					</div>
+				{/if}
 				<h1>Welcome Back</h1>
 				<p class="subtitle">Enter your email to receive a login link</p>
 
@@ -234,6 +243,18 @@
 		font-size: 0.875rem;
 		margin-bottom: 1.5rem;
 		font-weight: 500;
+	}
+
+	.session-expired-banner {
+		padding: 1rem;
+		background: #fef3c7;
+		border: 1px solid #f59e0b;
+		border-radius: 8px;
+		color: #92400e;
+		font-size: 0.875rem;
+		margin-bottom: 1.5rem;
+		font-weight: 500;
+		text-align: center;
 	}
 
 	.btn-primary {

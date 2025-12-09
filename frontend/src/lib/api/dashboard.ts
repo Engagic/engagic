@@ -157,3 +157,20 @@ export async function removeCityFromDigest(
 	});
 	return response.json();
 }
+
+export interface RequestCityResponse {
+	success: boolean;
+	message: string;
+	city_banana: string;
+}
+
+export async function requestCity(
+	accessToken: string,
+	cityBanana: string
+): Promise<RequestCityResponse> {
+	const response = await fetchDashboard('/api/dashboard/request-city', accessToken, {
+		method: 'POST',
+		body: JSON.stringify({ city_banana: cityBanana })
+	});
+	return response.json();
+}
