@@ -105,7 +105,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 | [database/](database/README.md) | ~7,000 | PostgreSQL with 14 async repositories (cities, meetings, items, matters, queue, search, council_members, committees, votes, engagement, feedback, deliberation, userland, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
 | [pipeline/](pipeline/README.md) | ~2,600 | Conductor orchestration with dual loops: Fetcher (72h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
 | [analysis/](analysis/README.md) | ~2,200 | Gemini API integration with reactive rate limiting, adaptive prompting (standard vs large items), 16-topic taxonomy, batch processing (50% cost savings), context caching. |
-| [server/](server/README.md) | ~3,500 | FastAPI with 16 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring). Tiered rate limiting, JWT sessions. |
+| [server/](server/README.md) | ~3,500 | FastAPI with 15 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring). Tiered rate limiting, JWT sessions. |
 | [userland/](userland/README.md) | ~1,500 | Civic alerts: magic link auth, weekly digests (Sundays 9am), dual-track matching (keyword + matter-based), Mailgun delivery. |
 | [parsing/](parsing/README.md) | ~800 | PDF extraction: PyMuPDF primary, OCR fallback (Tesseract), legislative formatting detection ([DELETED]/[ADDED]), participation info parsing (emails, phones, Zoom links). |
 | [deliberation/](deliberation/README.md) | ~300 | Opinion clustering: PCA to 2D, dynamic K-means, Laplace-smoothed consensus detection, group vote tallies. |
@@ -240,6 +240,7 @@ npm run dev  # localhost:5173
 | [docs/MATTERS_ARCHITECTURE.md](docs/MATTERS_ARCHITECTURE.md) | Legislative matter tracking design |
 | [docs/ARCHITECTURE_REVIEW.md](docs/ARCHITECTURE_REVIEW.md) | Architecture priorities |
 | [docs/TERMS_OF_SERVICE.md](docs/TERMS_OF_SERVICE.md) | API rate tiers and usage policies |
+| [docs/DELIBERATION_LOCAL_FIRST.md](docs/DELIBERATION_LOCAL_FIRST.md) | PWA local-first deliberation plan |
 | [CHANGELOG.md](CHANGELOG.md) | Version history and recent changes |
 
 ---
