@@ -41,15 +41,18 @@ class CommitteeRepository(BaseRepository):
         banana: str,
         name: str,
         description: Optional[str] = None,
+        vendor_body_id: Optional[str] = None,
     ) -> Committee:
         """Find existing committee or create new one
 
-        Uses normalized name for matching. Creates new committee if not found.
+        Uses vendor_body_id for matching if provided (most reliable).
+        Falls back to normalized name matching.
 
         Args:
             banana: City identifier
             name: Committee name (will be normalized for matching)
             description: Optional committee description
+            vendor_body_id: Vendor-provided body ID (Legistar EventBodyId, etc.)
 
         Returns:
             Committee object (existing or newly created)
@@ -58,11 +61,35 @@ class CommitteeRepository(BaseRepository):
         committee_id = generate_committee_id(banana, name)
 
         async with self.transaction() as conn:
-            # Try to find existing committee
+            # If vendor_body_id provided, try to find by that first (most reliable)
+            if vendor_body_id:
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, banana, name, normalized_name, description, status,
+                           vendor_body_id, created_at, updated_at
+                    FROM committees
+                    WHERE banana = $1 AND vendor_body_id = $2
+                    """,
+                    banana,
+                    str(vendor_body_id),
+                )
+                if row:
+                    return Committee(
+                        id=row["id"],
+                        banana=row["banana"],
+                        name=row["name"],
+                        normalized_name=row["normalized_name"],
+                        description=row["description"],
+                        status=row["status"],
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
+                    )
+
+            # Try to find by generated ID (normalized name based)
             row = await conn.fetchrow(
                 """
                 SELECT id, banana, name, normalized_name, description, status,
-                       created_at, updated_at
+                       vendor_body_id, created_at, updated_at
                 FROM committees
                 WHERE id = $1
                 """,
@@ -70,6 +97,13 @@ class CommitteeRepository(BaseRepository):
             )
 
             if row:
+                # Update vendor_body_id if we now have it but didn't before
+                if vendor_body_id and not row["vendor_body_id"]:
+                    await conn.execute(
+                        "UPDATE committees SET vendor_body_id = $1 WHERE id = $2",
+                        str(vendor_body_id),
+                        committee_id,
+                    )
                 return Committee(
                     id=row["id"],
                     banana=row["banana"],
@@ -84,17 +118,18 @@ class CommitteeRepository(BaseRepository):
             # Create new committee
             await conn.execute(
                 """
-                INSERT INTO committees (id, banana, name, normalized_name, description, status)
-                VALUES ($1, $2, $3, $4, $5, 'active')
+                INSERT INTO committees (id, banana, name, normalized_name, description, vendor_body_id, status)
+                VALUES ($1, $2, $3, $4, $5, $6, 'active')
                 """,
                 committee_id,
                 banana,
                 name,
                 normalized,
                 description,
+                str(vendor_body_id) if vendor_body_id else None,
             )
 
-            logger.info("created committee", committee_id=committee_id, name=name, banana=banana)
+            logger.info("created committee", committee_id=committee_id, name=name, banana=banana, vendor_body_id=vendor_body_id)
 
             return Committee(
                 id=committee_id,
