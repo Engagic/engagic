@@ -17,6 +17,7 @@ class User:
     email: str
     created_at: datetime = field(default_factory=datetime.now)
     last_login: Optional[datetime] = None
+    is_donor: bool = False  # Donors don't see donation CTA in emails
 
     def to_dict(self) -> dict:
         return {
@@ -24,7 +25,8 @@ class User:
             "name": self.name,
             "email": self.email,
             "created_at": self.created_at.isoformat(),
-            "last_login": self.last_login.isoformat() if self.last_login else None
+            "last_login": self.last_login.isoformat() if self.last_login else None,
+            "is_donor": self.is_donor
         }
 
 

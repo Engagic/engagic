@@ -62,14 +62,14 @@
 				<div class="request-city-cta">
 					<p class="cta-text">Want us to track {cityDisplay || 'this city'}?</p>
 					{#if requestSent}
-						<p class="cta-success">Got it! We'll notify you when we add {cityDisplay}.</p>
+						<p class="cta-success">You're now watching {cityDisplay}. We'll email you when it's added.</p>
 					{:else if isLoggedIn}
 						<button
 							class="cta-button"
 							onclick={handleRequestCity}
 							disabled={requestLoading}
 						>
-							{requestLoading ? 'Submitting...' : 'Request this city'}
+							{requestLoading ? 'Adding to watchlist...' : 'Watch this city'}
 						</button>
 						{#if requestError}
 							<p class="cta-error">{requestError}</p>
