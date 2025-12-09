@@ -594,35 +594,45 @@ class Processor:
 
                 item_specific_parts = []
                 total_page_count = 0
+                has_shared_attachments = False
 
                 for att_url in item_attachments.get(item.id, []):
                     if att_url in shared_urls:
+                        has_shared_attachments = True
                         continue
                     if att_url in document_cache:
                         doc = document_cache[att_url]
                         item_specific_parts.append(f"=== {doc['name']} ===\n{doc['text']}")
                         total_page_count += doc['page_count']
 
+                # Items with only shared attachments can still be processed
+                # using shared context + item metadata
                 if item_specific_parts:
                     combined_text = "\n\n".join(item_specific_parts)
-
-                    if item.sequence in (first_sequence, last_sequence):
-                        item_participation = parse_participation_info(combined_text)
-                        if item_participation:
-                            participation_data.update(item_participation.model_dump(exclude_none=True))
-
-                    batch_requests.append({
-                        "item_id": item.id,
-                        "title": item.title,
-                        "text": combined_text,
-                        "sequence": item.sequence,
-                        "page_count": total_page_count if total_page_count > 0 else None,
-                    })
-                    item_map[item.id] = item
-                    logger.debug("prepared item for batch processing", title=item.title[:50], chars=len(combined_text))
+                elif has_shared_attachments:
+                    # Item relies on shared context - use description or title as anchor
+                    desc = getattr(item, 'description', '') or ''
+                    combined_text = f"[Item: {item.title}]\n{desc}".strip() if desc else f"[Item: {item.title}]"
+                    logger.debug("item uses shared attachments only", title=item.title[:50])
                 else:
                     logger.warning("no text extracted for item", title=item.title[:50])
                     failed_items.append(item.title)
+                    continue
+
+                if item.sequence in (first_sequence, last_sequence):
+                    item_participation = parse_participation_info(combined_text)
+                    if item_participation:
+                        participation_data.update(item_participation.model_dump(exclude_none=True))
+
+                batch_requests.append({
+                    "item_id": item.id,
+                    "title": item.title,
+                    "text": combined_text,
+                    "sequence": item.sequence,
+                    "page_count": total_page_count if total_page_count > 0 else None,
+                })
+                item_map[item.id] = item
+                logger.debug("prepared item for batch processing", title=item.title[:50], chars=len(combined_text))
 
             except (KeyError, AttributeError, TypeError) as e:
                 logger.error("error extracting text for item", title=item.title[:50], error=str(e))
