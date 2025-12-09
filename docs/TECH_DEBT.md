@@ -22,6 +22,54 @@ Last audit: 2025-12-08
 - **Effort:** Medium (5-10 new model classes)
 - **Trigger:** Next API contract change or frontend type generation work
 
+### Scanned PDFs lose legislative formatting (strikethrough/underline)
+- **File:** `parsing/pdf.py`
+- **Issue:** Legislative formatting detection relies on PyMuPDF detecting vector line objects. Scanned PDFs are pure images - strikethrough/underline are pixels, not vectors. OCR extracts text but loses ALL formatting, meaning deleted text appears as valid law.
+- **Example:** Mount Airy NC agenda (Konica copier scan, 25 pages) - Section 7 amendments have struck-through text that OCR outputs as regular text with no `[DELETED:]` tags.
+- **Current behavior:** `_detect_horizontal_lines()` finds nothing, `_has_legislative_legend()` fails (no text layer to search), OCR runs but formatting is lost.
+- **Impact:** Legally incorrect extraction - deleted provisions appear as current law.
+
+**Detection logic needed:**
+```python
+# In extract_from_bytes/extract_from_url:
+is_fully_scanned = (ocr_pages == total_pages)  # Every page triggered OCR
+has_legislative_content = any(kw in text.lower() for kw in ['whereas', 'ordinance', 'resolution', 'hereby'])
+
+if is_fully_scanned and has_legislative_content:
+    # Can't trust formatting - need vision model or flag as uncertain
+```
+
+**Proposed fix:** Use Gemini Vision for scanned legislative pages
+```python
+from google import genai
+from google.genai import types
+
+def extract_legislative_with_vision(image_bytes: bytes) -> str:
+    """Use Gemini Vision to extract text with formatting from scanned page."""
+    prompt = """Extract all text from this scanned legislative document.
+
+    CRITICAL: Identify visual formatting:
+    - Text with a line THROUGH it = strikethrough = output as [DELETED: text]
+    - Text with a line UNDER it = underline = output as [ADDED: text]
+    - Regular text = output normally
+
+    Preserve paragraph structure. Be precise about which text has lines through/under it."""
+
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-exp",
+        contents=[types.Part.from_bytes(data=image_bytes, mime_type="image/png"), prompt]
+    )
+    return response.text
+```
+
+**Cost consideration:** ~$0.01-0.02 per page for vision. A 25-page scanned packet = ~$0.25-0.50. Only triggers for fully-scanned PDFs with legislative content.
+
+**Alternative (cheaper, less accurate):** OpenCV line detection on rendered page images, correlate line positions with OCR bounding boxes. High effort, medium accuracy.
+
+**Effort:** Medium (vision integration) or High (OpenCV approach)
+**Trigger:** When onboarding cities that use copier scans for agenda packets
+**Note:** Most cities use native PDFs. This affects smaller municipalities with older document workflows.
+
 ---
 
 ## Medium Priority (Note for Future)
