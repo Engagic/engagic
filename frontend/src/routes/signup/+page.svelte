@@ -75,12 +75,17 @@
 				<p class="hint">
 					Click the link in the email to access your dashboard. The link expires in 15 minutes.
 				</p>
+				{#if cityDisplayName}
+					<p class="watching-confirmation">
+						You're now watching {cityDisplayName}. We'll email you when we add coverage.
+					</p>
+				{/if}
 			</div>
 		{:else}
 			<div class="card">
 				{#if cityDisplayName}
 					<div class="city-context">
-						<span class="city-badge">Requesting: {cityDisplayName}</span>
+						<span class="city-badge">Watching: {cityDisplayName}</span>
 					</div>
 					<h1>Get Notified</h1>
 					<p class="subtitle">We'll email you when we add {cityDisplayName} to our coverage.</p>
@@ -237,6 +242,18 @@
 		color: var(--civic-gray);
 		margin: 0;
 		line-height: 1.6;
+	}
+
+	.watching-confirmation {
+		font-size: 0.875rem;
+		color: #059669;
+		font-weight: 500;
+		margin: 1rem 0 0 0;
+		padding: 0.75rem 1rem;
+		background: #ecfdf5;
+		border: 1px solid #a7f3d0;
+		border-radius: 8px;
+		line-height: 1.5;
 	}
 
 	.field {
