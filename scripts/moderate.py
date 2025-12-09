@@ -63,9 +63,9 @@ async def list_all_pending():
             print(f"  Submitted: {row['created_at']}")
             print()
 
-        print(f"To review: python scripts/moderate.py review <deliberation_id>")
-        print(f"To approve: python scripts/moderate.py approve <comment_id>")
-        print(f"To reject: python scripts/moderate.py reject <comment_id>")
+        print("To review: python scripts/moderate.py review <deliberation_id>")
+        print("To approve: python scripts/moderate.py approve <comment_id>")
+        print("To reject: python scripts/moderate.py reject <comment_id>")
 
     finally:
         await db.close()
