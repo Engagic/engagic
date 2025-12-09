@@ -141,13 +141,30 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         title = meeting_json.get("MeetingName", "")
         start_date = meeting_json.get("StartDate")
 
-        # Parse date from "/Date(1733763600000)/" format
+        # Parse date using base adapter's parser
         parsed_date = None
-        if start_date and "/Date(" in start_date:
-            match = re.search(r"/Date\((\d+)\)/", start_date)
-            if match:
-                timestamp_ms = int(match.group(1))
-                parsed_date = datetime.fromtimestamp(timestamp_ms / 1000)
+        if start_date:
+            # Handle "/Date(timestamp)/" format (millisecond timestamp)
+            if "/Date(" in start_date:
+                match = re.search(r"/Date\((\d+)\)/", start_date)
+                if match:
+                    timestamp_ms = int(match.group(1))
+                    parsed_date = datetime.fromtimestamp(timestamp_ms / 1000)
+            else:
+                # Normalize YYYY/MM/DD to YYYY-MM-DD for base parser
+                normalized = start_date.replace("/", "-")
+                parsed_date = self._parse_date(normalized)
+
+        # Skip meetings without valid dates
+        if not parsed_date:
+            logger.warning(
+                "skipping meeting without valid date",
+                vendor="escribe",
+                slug=self.slug,
+                title=title,
+                start_date=start_date
+            )
+            return None
 
         # Extract UUID from URL if available
         meeting_uuid = None
@@ -159,11 +176,26 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
 
         vendor_id = f"escribe_{meeting_uuid}" if meeting_uuid else self._generate_fallback_vendor_id(title, parsed_date)
 
+        # Extract packet_url from MeetingDocumentLink array
+        # Prefer Merged (revised agenda), fallback to Agenda
+        packet_url = None
+        doc_links = meeting_json.get("MeetingDocumentLink", [])
+        if isinstance(doc_links, list):
+            for doc in doc_links:
+                if isinstance(doc, dict) and doc.get("Format") == ".pdf":
+                    if doc.get("Type") == "Merged":
+                        packet_url = doc.get("Url")
+                        break
+                    elif doc.get("Type") == "Agenda" and not packet_url:
+                        packet_url = doc.get("Url")
+            if packet_url and not packet_url.startswith("http"):
+                packet_url = urljoin(self.base_url, packet_url)
+
         result = {
             "vendor_id": vendor_id,
             "title": title,
             "start": parsed_date.isoformat() if parsed_date else "",
-            "packet_url": meeting_json.get("MeetingDocumentLink"),
+            "packet_url": packet_url,
             "_uuid": meeting_uuid,
             "has_agenda": meeting_json.get("HasAgenda", False),
         }
