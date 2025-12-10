@@ -216,7 +216,21 @@
 
 <svelte:head>
 	<title>engagic - civic engagement made simple</title>
-	<meta name="description" content="Find your local government meetings and agendas" />
+	<meta name="description" content="AI summaries of local government meetings. Your city council decides zoning, taxes, and public safety - we read the 100-page PDFs so you don't have to." />
+
+	<!-- Open Graph -->
+	<meta property="og:title" content="engagic - civic engagement made simple" />
+	<meta property="og:description" content="AI summaries of local government meetings. Your city council decides zoning, taxes, and public safety - we read the 100-page PDFs so you don't have to." />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org" />
+	<meta property="og:image" content="https://engagic.org/icon-192.png" />
+	<meta property="og:site_name" content="engagic" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="engagic - civic engagement made simple" />
+	<meta name="twitter:description" content="AI summaries of local government meetings. Your city council decides zoning, taxes, and public safety - we read the 100-page PDFs so you don't have to." />
+	<meta name="twitter:image" content="https://engagic.org/icon-192.png" />
 </svelte:head>
 
 <div class="container">

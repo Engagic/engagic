@@ -504,7 +504,8 @@ async def send_weekly_digest():
                 await email_service.send_email(
                     to_email=user.email,
                     subject=subject,
-                    html_body=html
+                    html_body=html,
+                    from_address="Engagic Digest <digest@engagic.org>"
                 )
 
                 sent_count += 1

@@ -58,7 +58,8 @@ async def send_magic_link(
             to_email=email,
             subject=subject,
             html_body=html,
-            text_body=text
+            text_body=text,
+            from_address="Engagic <auth@engagic.org>"
         )
         if success:
             logger.info("magic link sent", email=email, is_signup=is_signup)
@@ -104,7 +105,8 @@ async def send_city_available_email(
             to_email=email,
             subject=subject,
             html_body=html,
-            text_body=text
+            text_body=text,
+            from_address="Engagic <notifications@engagic.org>"
         )
         if success:
             logger.info("city available email sent", email=email, city=banana)
