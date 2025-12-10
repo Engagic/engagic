@@ -235,7 +235,7 @@ async def match_cities() -> None:
 
             # Try exact match first
             place = await conn.fetchrow("""
-                SELECT geom
+                SELECT wkb_geometry
                 FROM census_places
                 WHERE UPPER(name) = $1 AND statefp = $2
             """, name.upper(), state_fips)
@@ -244,7 +244,7 @@ async def match_cities() -> None:
             if not place:
                 normalized = normalize_city_name(name)
                 place = await conn.fetchrow("""
-                    SELECT geom
+                    SELECT wkb_geometry
                     FROM census_places
                     WHERE UPPER(name) LIKE $1 AND statefp = $2
                 """, f"%{normalized}%", state_fips)
@@ -252,7 +252,7 @@ async def match_cities() -> None:
             # Try with city suffix
             if not place:
                 place = await conn.fetchrow("""
-                    SELECT geom
+                    SELECT wkb_geometry
                     FROM census_places
                     WHERE (UPPER(name) = $1 OR UPPER(name) = $2)
                       AND statefp = $3
@@ -261,7 +261,7 @@ async def match_cities() -> None:
             if place:
                 await conn.execute("""
                     UPDATE cities SET geom = $1 WHERE banana = $2
-                """, place["geom"], banana)
+                """, place["wkb_geometry"], banana)
                 matched += 1
                 logger.debug("matched", banana=banana, name=name)
             else:
