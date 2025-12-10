@@ -69,6 +69,7 @@ async def export_geojson() -> None:
             state,
             status,
             vendor,
+            population,
             geom
         FROM cities
         WHERE geom IS NOT NULL
@@ -117,10 +118,18 @@ async def export_geojson() -> None:
     # Summary stats
     with_data = sum(1 for f in geojson["features"] if f["properties"]["has_data"])
     with_summaries = sum(1 for f in geojson["features"] if f["properties"]["has_summaries"])
+    total_pop = sum(f["properties"].get("population") or 0 for f in geojson["features"])
+    pop_with_data = sum(
+        f["properties"].get("population") or 0
+        for f in geojson["features"]
+        if f["properties"]["has_data"]
+    )
     print(f"\nExport Summary:")
     print(f"  Total cities with geometry: {len(geojson['features'])}")
     print(f"  Cities with meeting data: {with_data}")
     print(f"  Cities with summaries: {with_summaries}")
+    print(f"  Total population: {total_pop:,}")
+    print(f"  Population with data: {pop_with_data:,}")
 
 
 def generate_pmtiles() -> None:
