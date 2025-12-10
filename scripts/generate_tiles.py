@@ -35,85 +35,92 @@ STATIC_TILES_PATH = Path("/opt/engagic/frontend/static/tiles")
 
 
 async def export_geojson() -> None:
-    """Export cities with geometry to GeoJSON with styling properties."""
+    """Export cities with geometry to GeoJSON using ogr2ogr for reliable geometry handling."""
     dsn = config.get_postgres_dsn()
     conn = await asyncpg.connect(dsn)
 
     try:
-        # Get cities with geometry and meeting stats
-        rows = await conn.fetch("""
+        # Get meeting stats for each city
+        stats_rows = await conn.fetch("""
             SELECT
-                c.banana,
-                c.name,
-                c.state,
-                c.status,
-                c.vendor,
-                ST_AsGeoJSON(c.geom)::json as geometry,
-                COALESCE(m.meeting_count, 0) as meeting_count,
-                COALESCE(m.summarized_count, 0) as summarized_count
-            FROM cities c
-            LEFT JOIN (
-                SELECT
-                    banana,
-                    COUNT(*) as meeting_count,
-                    COUNT(*) FILTER (WHERE summary IS NOT NULL) as summarized_count
-                FROM meetings
-                GROUP BY banana
-            ) m ON c.banana = m.banana
-            WHERE c.geom IS NOT NULL
-            ORDER BY c.state, c.name
+                banana,
+                COUNT(*) as meeting_count,
+                COUNT(*) FILTER (WHERE summary IS NOT NULL) as summarized_count
+            FROM meetings
+            GROUP BY banana
         """)
+        meeting_stats = {row["banana"]: dict(row) for row in stats_rows}
 
-        logger.info("exporting cities", count=len(rows))
-
-        # Build GeoJSON FeatureCollection
-        features = []
-        for row in rows:
-            # Determine population status for styling
-            # "populated" = has meeting data we can show
-            has_data = row["meeting_count"] > 0
-            has_summaries = row["summarized_count"] > 0
-
-            feature = {
-                "type": "Feature",
-                "properties": {
-                    "banana": row["banana"],
-                    "name": row["name"],
-                    "state": row["state"],
-                    "status": row["status"],
-                    "vendor": row["vendor"],
-                    "meeting_count": row["meeting_count"],
-                    "summarized_count": row["summarized_count"],
-                    "has_data": has_data,
-                    "has_summaries": has_summaries,
-                },
-                "geometry": row["geometry"],
-            }
-            features.append(feature)
-
-        geojson = {
-            "type": "FeatureCollection",
-            "features": features,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-        }
-
-        # Write to file
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(GEOJSON_PATH, "w") as f:
-            json.dump(geojson, f)
-
-        logger.info("geojson exported", path=str(GEOJSON_PATH), features=len(features))
-
-        # Summary stats
-        with_data = sum(1 for f in features if f["properties"]["has_data"])
-        with_summaries = sum(1 for f in features if f["properties"]["has_summaries"])
-        print(f"\nExport Summary:")
-        print(f"  Total cities with geometry: {len(features)}")
-        print(f"  Cities with meeting data: {with_data}")
-        print(f"  Cities with summaries: {with_summaries}")
+        # Count cities with geometry
+        count = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE geom IS NOT NULL")
+        logger.info("exporting cities via ogr2ogr", count=count)
 
     finally:
         await conn.close()
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Use ogr2ogr to export directly from PostGIS - handles geometry correctly
+    pg_conn = f"PG:{dsn}"
+    sql = """
+        SELECT
+            banana,
+            name,
+            state,
+            status,
+            vendor,
+            geom
+        FROM cities
+        WHERE geom IS NOT NULL
+        ORDER BY state, name
+    """
+
+    result = subprocess.run(
+        [
+            "ogr2ogr",
+            "-f", "GeoJSON",
+            str(GEOJSON_PATH),
+            pg_conn,
+            "-sql", sql,
+            "-lco", "RFC7946=YES",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        logger.error("ogr2ogr export failed", stderr=result.stderr)
+        print(f"Error: {result.stderr}")
+        return
+
+    # Post-process to add meeting stats
+    with open(GEOJSON_PATH) as f:
+        geojson = json.load(f)
+
+    for feature in geojson["features"]:
+        props = feature["properties"]
+        banana = props["banana"]
+        stats = meeting_stats.get(banana, {"meeting_count": 0, "summarized_count": 0})
+
+        props["meeting_count"] = stats.get("meeting_count", 0)
+        props["summarized_count"] = stats.get("summarized_count", 0)
+        props["has_data"] = props["meeting_count"] > 0
+        props["has_summaries"] = props["summarized_count"] > 0
+
+    geojson["generated_at"] = datetime.now(tz=None).isoformat() + "Z"
+
+    with open(GEOJSON_PATH, "w") as f:
+        json.dump(geojson, f)
+
+    logger.info("geojson exported", path=str(GEOJSON_PATH), features=len(geojson["features"]))
+
+    # Summary stats
+    with_data = sum(1 for f in geojson["features"] if f["properties"]["has_data"])
+    with_summaries = sum(1 for f in geojson["features"] if f["properties"]["has_summaries"])
+    print(f"\nExport Summary:")
+    print(f"  Total cities with geometry: {len(geojson['features'])}")
+    print(f"  Cities with meeting data: {with_data}")
+    print(f"  Cities with summaries: {with_summaries}")
 
 
 def generate_pmtiles() -> None:
