@@ -144,6 +144,23 @@
 		};
 	}
 
+	// Update layer paint properties when theme changes
+	function applyTheme(mapInstance: maplibregl.Map, colors: typeof themes.light) {
+		mapInstance.setPaintProperty('background', 'background-color', colors.background);
+		mapInstance.setPaintProperty('city-fill-inactive', 'fill-color', colors.inactive);
+		mapInstance.setPaintProperty('city-fill-active', 'fill-color', colors.active);
+		mapInstance.setPaintProperty('city-fill-summarized', 'fill-color', colors.summarized);
+		mapInstance.setPaintProperty('city-hover', 'fill-color', colors.hover);
+		mapInstance.setPaintProperty('city-outline', 'line-color', [
+			'case',
+			['==', ['get', 'has_summaries'], true],
+			colors.summarized,
+			['==', ['get', 'has_data'], true],
+			colors.active,
+			colors.inactiveOutline
+		]);
+	}
+
 	// Map initialization effect
 	$effect(() => {
 		if (!mapContainer) return;
@@ -152,119 +169,17 @@
 		const protocol = new Protocol();
 		maplibregl.addProtocol('pmtiles', protocol.tile);
 
-		// Create map
+		// Get initial theme and build style
+		const initialTheme = getTheme();
+		const initialColors = themes[initialTheme];
+
+		// Create map with theme-aware style
 		const mapInstance = new maplibregl.Map({
 			container: mapContainer,
-			style: {
-				version: 8,
-				glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-				sources: {
-					cities: {
-						type: 'vector',
-						url: `pmtiles://${tilesUrl}`
-					}
-				},
-				layers: [
-					{
-						id: 'background',
-						type: 'background',
-						paint: {
-							'background-color': 'var(--surface-secondary, #f8fafc)'
-						}
-					},
-					// Cities without data - gray, less prominent
-					{
-						id: 'city-fill-inactive',
-						type: 'fill',
-						source: 'cities',
-						'source-layer': 'cities',
-						filter: ['==', ['get', 'has_data'], false],
-						paint: {
-							'fill-color': 'var(--border-primary, #e2e8f0)',
-							'fill-opacity': 0.4
-						}
-					},
-					// Cities with data - blue, prominent
-					{
-						id: 'city-fill-active',
-						type: 'fill',
-						source: 'cities',
-						'source-layer': 'cities',
-						filter: ['==', ['get', 'has_data'], true],
-						paint: {
-							'fill-color': 'var(--civic-blue, #4f46e5)',
-							'fill-opacity': [
-								'interpolate',
-								['linear'],
-								['get', 'meeting_count'],
-								0, 0.3,
-								50, 0.5,
-								200, 0.7
-							]
-						}
-					},
-					// Cities with summaries - even more prominent
-					{
-						id: 'city-fill-summarized',
-						type: 'fill',
-						source: 'cities',
-						'source-layer': 'cities',
-						filter: ['==', ['get', 'has_summaries'], true],
-						paint: {
-							'fill-color': 'var(--civic-green, #10b981)',
-							'fill-opacity': [
-								'interpolate',
-								['linear'],
-								['get', 'summarized_count'],
-								0, 0.4,
-								20, 0.6,
-								100, 0.8
-							]
-						}
-					},
-					// City outlines
-					{
-						id: 'city-outline',
-						type: 'line',
-						source: 'cities',
-						'source-layer': 'cities',
-						paint: {
-							'line-color': [
-								'case',
-								['==', ['get', 'has_summaries'], true],
-								'var(--civic-green, #10b981)',
-								['==', ['get', 'has_data'], true],
-								'var(--civic-blue, #4f46e5)',
-								'var(--civic-gray, #475569)'
-							],
-							'line-width': [
-								'interpolate',
-								['linear'],
-								['zoom'],
-								3, 0.3,
-								8, 1,
-								12, 2
-							],
-							'line-opacity': 0.6
-						}
-					},
-					// Hover highlight
-					{
-						id: 'city-hover',
-						type: 'fill',
-						source: 'cities',
-						'source-layer': 'cities',
-						filter: ['==', ['get', 'banana'], ''],
-						paint: {
-							'fill-color': 'var(--civic-accent, #8b5cf6)',
-							'fill-opacity': 0.5
-						}
-					}
-				]
-			},
-			center: [-98.5, 39.8],  // Center of contiguous US
+			style: buildStyle(initialColors),
+			center: [-98.5, 39.8],
 			zoom: 4,
-			maxBounds: [[-130, 24], [-65, 50]],  // Restrict to US
+			maxBounds: [[-130, 24], [-65, 50]],
 			minZoom: 3,
 			maxZoom: 12
 		});
@@ -301,7 +216,6 @@
 					state: props?.state || '',
 					meeting_count: props?.meeting_count || 0
 				};
-				// Update hover filter
 				mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], props?.banana || '']);
 			}
 		});
@@ -331,10 +245,26 @@
 			mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], '']);
 		});
 
+		// Watch for theme changes via MutationObserver on <html> element
+		let currentTheme = initialTheme;
+		const observer = new MutationObserver(() => {
+			const newTheme = getTheme();
+			if (newTheme !== currentTheme) {
+				currentTheme = newTheme;
+				applyTheme(mapInstance, themes[newTheme]);
+			}
+		});
+
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['class']
+		});
+
 		map = mapInstance;
 
 		// Teardown
 		return () => {
+			observer.disconnect();
 			mapInstance.remove();
 			maplibregl.removeProtocol('pmtiles');
 		};
