@@ -11,6 +11,15 @@
 		}
 		return num.toLocaleString();
 	}
+
+	function formatPopulation(num: number): string {
+		if (num >= 1000000) {
+			return (num / 1000000).toFixed(1) + 'M people';
+		} else if (num >= 1000) {
+			return Math.round(num / 1000) + 'K people';
+		}
+		return num.toLocaleString() + ' people';
+	}
 </script>
 
 <svelte:head>
@@ -30,13 +39,25 @@
 						<span class="number-secondary">{formatNumber(data.analytics.real_metrics.cities_covered)}</span>
 					</div>
 					<div class="stat-title">Frequently Updated Cities</div>
-					<div class="stat-description">Cities with 7+ meetings with summaries</div>
+					<div class="stat-description">
+						{#if data.analytics.real_metrics.population_with_summaries > 0}
+							{formatPopulation(data.analytics.real_metrics.population_with_summaries)}
+						{:else}
+							Cities with 7+ meetings with summaries
+						{/if}
+					</div>
 				</div>
 
 				<div class="stats-card">
 					<div class="number-primary">{formatNumber(data.analytics.real_metrics.meetings_tracked)}</div>
 					<div class="stat-title">Meetings Tracked</div>
-					<div class="stat-description">City council sessions monitored</div>
+					<div class="stat-description">
+						{#if data.analytics.real_metrics.population_with_data > 0}
+							{formatPopulation(data.analytics.real_metrics.population_with_data)}
+						{:else}
+							City council sessions monitored
+						{/if}
+					</div>
 				</div>
 
 				<div class="stats-card">
@@ -48,7 +69,13 @@
 				<div class="stats-card">
 					<div class="number-primary">{formatNumber(data.analytics.real_metrics.unique_item_summaries)}</div>
 					<div class="stat-title">Unique Summaries</div>
-					<div class="stat-description">Across {formatNumber(data.analytics.real_metrics.meetings_with_items)} item-level meetings</div>
+					<div class="stat-description">
+						{#if data.analytics.real_metrics.population_total > 0}
+							{formatPopulation(data.analytics.real_metrics.population_total)} in coverage
+						{:else}
+							Across {formatNumber(data.analytics.real_metrics.meetings_with_items)} item-level meetings
+						{/if}
+					</div>
 				</div>
 			</div>
 		</section>
