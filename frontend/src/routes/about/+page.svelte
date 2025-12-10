@@ -29,6 +29,15 @@
 		}
 		return num.toLocaleString();
 	}
+
+	function formatPopulation(num: number): string {
+		if (num >= 1000000) {
+			return (num / 1000000).toFixed(1) + 'M people';
+		} else if (num >= 1000) {
+			return (num / 1000).toFixed(0) + 'K people';
+		}
+		return num.toLocaleString() + ' people';
+	}
 </script>
 
 <svelte:head>
@@ -64,13 +73,25 @@
 						<div class="metric-card">
 							<div class="metric-value">{formatNumber(analytics.real_metrics.frequently_updated_cities)}</div>
 							<div class="metric-label">Active Cities</div>
-							<div class="metric-desc">With 7+ summarized meetings</div>
+							<div class="metric-desc">
+								{#if analytics.real_metrics.population_with_summaries > 0}
+									{formatPopulation(analytics.real_metrics.population_with_summaries)}
+								{:else}
+									With 7+ summarized meetings
+								{/if}
+							</div>
 						</div>
 
 						<div class="metric-card">
 							<div class="metric-value">{formatNumber(analytics.real_metrics.meetings_tracked)}</div>
 							<div class="metric-label">Meetings Tracked</div>
-							<div class="metric-desc">City council sessions monitored</div>
+							<div class="metric-desc">
+								{#if analytics.real_metrics.population_with_data > 0}
+									{formatPopulation(analytics.real_metrics.population_with_data)}
+								{:else}
+									City council sessions monitored
+								{/if}
+							</div>
 						</div>
 
 						<div class="metric-card">
@@ -82,7 +103,13 @@
 						<div class="metric-card">
 							<div class="metric-value">{formatNumber(analytics.real_metrics.unique_item_summaries)}</div>
 							<div class="metric-label">AI Summaries</div>
-							<div class="metric-desc">Unique item analyses</div>
+							<div class="metric-desc">
+								{#if analytics.real_metrics.population_total > 0}
+									{formatPopulation(analytics.real_metrics.population_total)} in coverage
+								{:else}
+									Unique item analyses
+								{/if}
+							</div>
 						</div>
 					</div>
 				</section>

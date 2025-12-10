@@ -356,6 +356,32 @@ async def get_analytics(db: Database = Depends(get_db)):
                 ) AS subquery
             """)
 
+            # Population metrics by coverage tier
+            # Total population: all cities with geometry
+            total_population = await conn.fetchrow("""
+                SELECT COALESCE(SUM(population), 0) as total_pop
+                FROM cities WHERE geom IS NOT NULL
+            """)
+
+            # Population with any meeting data
+            population_with_data = await conn.fetchrow("""
+                SELECT COALESCE(SUM(c.population), 0) as pop_with_data
+                FROM cities c
+                WHERE c.banana IN (SELECT DISTINCT banana FROM meetings)
+            """)
+
+            # Population with summarized content
+            population_with_summaries = await conn.fetchrow("""
+                SELECT COALESCE(SUM(c.population), 0) as pop_with_summaries
+                FROM cities c
+                WHERE c.banana IN (
+                    SELECT DISTINCT m.banana
+                    FROM meetings m
+                    WHERE (m.summary IS NOT NULL AND m.summary != '')
+                       OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
+                )
+            """)
+
         return {
             "success": True,
             "timestamp": datetime.now().isoformat(),
@@ -370,6 +396,9 @@ async def get_analytics(db: Database = Depends(get_db)):
                 "agenda_items_processed": items_stats["items_count"],
                 "matters_tracked": matters_stats["matters_count"],
                 "unique_item_summaries": unique_summaries,
+                "population_total": total_population["total_pop"],
+                "population_with_data": population_with_data["pop_with_data"],
+                "population_with_summaries": population_with_summaries["pop_with_summaries"],
             },
         }
 

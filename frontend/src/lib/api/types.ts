@@ -176,6 +176,9 @@ export interface AnalyticsData {
 		agenda_items_processed: number;
 		matters_tracked: number;
 		unique_item_summaries: number;
+		population_total: number;
+		population_with_data: number;
+		population_with_summaries: number;
 	};
 }
 
