@@ -14,6 +14,136 @@
 	let map: maplibregl.Map | null = $state(null);
 	let hoveredCity: { name: string; state: string; meeting_count: number } | null = $state(null);
 
+	// Theme color palettes - MapLibre requires actual hex values, not CSS vars
+	const themes = {
+		light: {
+			background: '#f8fafc',
+			inactive: '#e2e8f0',
+			inactiveOutline: '#475569',
+			active: '#4f46e5',
+			summarized: '#10b981',
+			hover: '#8b5cf6'
+		},
+		dark: {
+			background: '#1e293b',
+			inactive: '#334155',
+			inactiveOutline: '#64748b',
+			active: '#4f46e5',
+			summarized: '#10b981',
+			hover: '#8b5cf6'
+		}
+	};
+
+	function getTheme(): 'light' | 'dark' {
+		if (typeof document === 'undefined') return 'light';
+		return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+	}
+
+	function buildStyle(colors: typeof themes.light): maplibregl.StyleSpecification {
+		return {
+			version: 8,
+			glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+			sources: {
+				cities: {
+					type: 'vector',
+					url: `pmtiles://${tilesUrl}`
+				}
+			},
+			layers: [
+				{
+					id: 'background',
+					type: 'background',
+					paint: {
+						'background-color': colors.background
+					}
+				},
+				{
+					id: 'city-fill-inactive',
+					type: 'fill',
+					source: 'cities',
+					'source-layer': 'cities',
+					filter: ['==', ['get', 'has_data'], false],
+					paint: {
+						'fill-color': colors.inactive,
+						'fill-opacity': 0.4
+					}
+				},
+				{
+					id: 'city-fill-active',
+					type: 'fill',
+					source: 'cities',
+					'source-layer': 'cities',
+					filter: ['==', ['get', 'has_data'], true],
+					paint: {
+						'fill-color': colors.active,
+						'fill-opacity': [
+							'interpolate',
+							['linear'],
+							['get', 'meeting_count'],
+							0, 0.3,
+							50, 0.5,
+							200, 0.7
+						]
+					}
+				},
+				{
+					id: 'city-fill-summarized',
+					type: 'fill',
+					source: 'cities',
+					'source-layer': 'cities',
+					filter: ['==', ['get', 'has_summaries'], true],
+					paint: {
+						'fill-color': colors.summarized,
+						'fill-opacity': [
+							'interpolate',
+							['linear'],
+							['get', 'summarized_count'],
+							0, 0.4,
+							20, 0.6,
+							100, 0.8
+						]
+					}
+				},
+				{
+					id: 'city-outline',
+					type: 'line',
+					source: 'cities',
+					'source-layer': 'cities',
+					paint: {
+						'line-color': [
+							'case',
+							['==', ['get', 'has_summaries'], true],
+							colors.summarized,
+							['==', ['get', 'has_data'], true],
+							colors.active,
+							colors.inactiveOutline
+						],
+						'line-width': [
+							'interpolate',
+							['linear'],
+							['zoom'],
+							3, 0.3,
+							8, 1,
+							12, 2
+						],
+						'line-opacity': 0.6
+					}
+				},
+				{
+					id: 'city-hover',
+					type: 'fill',
+					source: 'cities',
+					'source-layer': 'cities',
+					filter: ['==', ['get', 'banana'], ''],
+					paint: {
+						'fill-color': colors.hover,
+						'fill-opacity': 0.5
+					}
+				}
+			]
+		};
+	}
+
 	// Map initialization effect
 	$effect(() => {
 		if (!mapContainer) return;
