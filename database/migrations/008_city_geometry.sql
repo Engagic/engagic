@@ -1,5 +1,5 @@
 -- Migration: Add PostGIS geometry column to cities table
--- Run with: psql -U engagic -d engagic -f scripts/migrations/001_add_city_geometry.sql
+-- Run with: psql -U engagic -d engagic -f database/migrations/008_city_geometry.sql
 
 -- Enable PostGIS extension (idempotent)
 CREATE EXTENSION IF NOT EXISTS postgis;
