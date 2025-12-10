@@ -29,7 +29,8 @@ class EmailService:
         to_email: str,
         subject: str,
         html_body: str,
-        text_body: Optional[str] = None
+        text_body: Optional[str] = None,
+        from_address: Optional[str] = None
     ) -> bool:
         """Send email via Mailgun API (async)
 
@@ -38,6 +39,7 @@ class EmailService:
             subject: Email subject line
             html_body: HTML content for email body
             text_body: Plain text fallback (optional, defaults to html_body)
+            from_address: Override sender (e.g., "Engagic Digest <digest@engagic.org>")
 
         Returns:
             True if sent successfully, False otherwise
@@ -48,7 +50,7 @@ class EmailService:
                     self.api_url,
                     auth=("api", self.api_key),
                     data={
-                        "from": self.from_email,
+                        "from": from_address or self.from_email,
                         "to": to_email,
                         "subject": subject,
                         "html": html_body,
