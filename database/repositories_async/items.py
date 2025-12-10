@@ -77,13 +77,14 @@ class ItemRepository(BaseRepository):
 
         return deduped + no_matter_items
 
+    def dedupe_items_by_matter(self, items: List[AgendaItem]) -> List[AgendaItem]:
+        """Public wrapper for item deduplication. Call before store_agenda_items."""
+        return self._dedupe_items_by_matter(items)
+
     async def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
-        """Store multiple agenda items with deduplication by matter_id."""
+        """Store multiple agenda items. Items should already be deduped via dedupe_items_by_matter()."""
         if not items:
             return 0
-
-        # Dedupe items by matter_id before storing
-        items = self._dedupe_items_by_matter(items)
 
         async with self.transaction() as conn:
             # Batch upsert items using executemany()

@@ -10,10 +10,22 @@ alamedaCA
 sunnyvaleCA
 menloparkCA
 mountainviewCA
+sanjoseCA
+losangelesCA
 
 # TEXAS (2 cities)
 dallasTX
 austinTX
+houstonTX
+sanantonioTX
+tomballTX
+
+# GEORGIA
+atlantaGA
+columbusGA
+
+# OHIO
+columbusOH
 
 # COLORADO (1 city)
 denverCO
@@ -26,6 +38,13 @@ phoenixAZ
 
 # MASSACHUSETTS (1 city)
 bostonMA
+cambridgeMA
+
+# MICHIGAN
+detroitMI
+
+# WISCONSIN
+milwaukeeWI
 
 # TENNESSEE (1 city)
 nashvilleTN

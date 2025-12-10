@@ -109,6 +109,10 @@ class MeetingSyncOrchestrator:
                     items_data, meeting_obj, stats
                 )
 
+                # Dedupe items by matter_id early - before any DB operations that use item IDs
+                # This prevents FK violations when multiple items reference the same matter
+                agenda_items = self.db.items.dedupe_items_by_matter(agenda_items)
+
             # Check if this is the first meeting for the city (before storing)
             is_first_meeting = await self._is_first_meeting_for_city(city.banana)
 
@@ -129,7 +133,9 @@ class MeetingSyncOrchestrator:
                             if item.id in skipped_ids:
                                 item.matter_id = None
 
-                        stored_count = await self.db.items.store_agenda_items(meeting_obj.id, agenda_items)
+                        stored_count = await self.db.items.store_agenda_items(
+                            meeting_obj.id, agenda_items
+                        )
                         stats['items_stored'] = stored_count
 
                         appearances_count = await self._create_matter_appearances(
