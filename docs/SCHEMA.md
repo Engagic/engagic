@@ -142,6 +142,8 @@ Cities covered by Engagic across 11 vendor platforms.
 | `slug` | TEXT NOT NULL | Vendor-specific identifier |
 | `county` | TEXT | County name (optional) |
 | `status` | TEXT | City status: 'active', 'inactive' (default: 'active') |
+| `population` | INTEGER | City population (Census data) |
+| `geom` | geometry(MultiPolygon, 4326) | City boundary polygon from Census TIGER/Line |
 | `created_at` | TIMESTAMP | Record creation timestamp |
 | `updated_at` | TIMESTAMP | Last update timestamp |
 
@@ -152,6 +154,8 @@ Cities covered by Engagic across 11 vendor platforms.
 - `idx_cities_vendor` on `vendor`
 - `idx_cities_state` on `state`
 - `idx_cities_status` on `status`
+- `idx_cities_population` on `population DESC NULLS LAST`
+- `idx_cities_geom` GIST index on `geom` (spatial queries)
 
 ---
 
