@@ -80,7 +80,17 @@ async def sync_roster_for_city(db: Database, banana: str, city_slug: str, api_to
             continue
 
         # Identify the primary legislative body
-        if body_type == "Primary Legislative Body":
+        # Match by type or name since different cities use different conventions
+        body_type_lower = body_type.lower() if body_type else ""
+        body_name_lower = body_name.lower() if body_name else ""
+
+        is_primary = (
+            body_type == "Primary Legislative Body"
+            or body_type_lower == "city council"
+            or body_name_lower in ("city council", "town council", "council")
+        )
+
+        if is_primary and city_council_body_id is None:
             city_council_body_id = body_id
 
         description = (body.get("BodyDescription") or "").strip() or None

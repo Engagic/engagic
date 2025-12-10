@@ -2,6 +2,15 @@
 
 import re
 
+# Meeting level: test/demo meetings to skip entirely
+MEETING_SKIP_PATTERNS = [
+    r'\bmock\b',  # "Mock Select Committee", "Mock Hearing"
+    r'\btest\b',  # "Test Meeting", "Test Committee"
+    r'\bdemo\b',  # "Demo Session"
+    r'\btraining\b',  # "Training Session"
+    r'\bpractice\b',  # "Practice Meeting"
+]
+
 # Adapter level: items with zero metadata value (not saved)
 ADAPTER_SKIP_PATTERNS = [
     # Core procedural items - no value even as metadata
@@ -68,7 +77,10 @@ PUBLIC_COMMENT_PATTERNS = [
     r'pub corr',  # SF abbreviation
     r'pulbic corr',  # Common typo in SF data
     r'comm pkt',  # Committee packets
+    r'cmte pkt',  # Committee packets (alternate abbreviation)
     r'committee packet',
+    r'co-?sponsor(ship)?\s*(request|ltr|letter)',  # "Co-Sponsor Request Chen 122525"
+    r'sponsor(ship)?\s*request',
 ]
 
 # Massive PDFs with no policy content (property lists, parcel tables)
@@ -97,6 +109,11 @@ SKIP_MATTER_TYPES = [
     'Information',
     'Referral Calendar',
 ]
+
+
+def should_skip_meeting(title: str) -> bool:
+    """Meeting level: should entire meeting be skipped (test/demo/mock)?"""
+    return any(re.search(p, title, re.IGNORECASE) for p in MEETING_SKIP_PATTERNS)
 
 
 def should_skip_item(title: str, item_type: str = "") -> bool:

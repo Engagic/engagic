@@ -13,7 +13,7 @@ import asyncio
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.legistar_parser import parse_html_agenda, parse_legislation_attachments
-from pipeline.filters import should_skip_item
+from pipeline.filters import should_skip_item, should_skip_meeting
 from pipeline.utils import combine_date_time
 from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError, VendorParsingError
@@ -180,6 +180,11 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             event_agenda_status = event.get("EventAgendaStatusName", "")
 
             if not event_id:
+                return None
+
+            # Skip test/demo/mock meetings
+            if should_skip_meeting(event_name):
+                logger.debug("skipping mock meeting", title=event_name, event_id=event_id)
                 return None
 
             # Parse date
@@ -811,6 +816,11 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if re.match(r'^\d+h\s+\d+m\s*$', title):
                 return None
 
+            # Skip test/demo/mock meetings
+            if should_skip_meeting(title):
+                logger.debug("skipping mock meeting", title=title, meeting_id=meeting_id)
+                return None
+
             # Extract date
             meeting_dt = None
             sorted_cell = row.find("td", class_="rgSorted")
@@ -982,38 +992,35 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return []
 
     def _filter_leg_ver_attachments(self, attachments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filter to at most one Leg Ver attachment (prefer Ver2 over Ver1)."""
+        """Filter to at most one Leg Ver/Dig attachment (select highest version number)."""
         leg_ver_attachments = []
         other_attachments = []
 
+        # Match "Leg Ver", "Leg Dig Ver", "Legislative Version", etc.
+        leg_pattern = re.compile(r'leg(?:islative)?\s*(?:dig(?:est)?)?\s*ver(?:sion)?\s*(\d+)?', re.IGNORECASE)
+
         for att in attachments:
-            name = att.get('name', '').lower()
-            if 'leg ver' in name:
-                leg_ver_attachments.append(att)
+            name = att.get('name', '')
+            match = leg_pattern.search(name)
+            if match:
+                # Extract version number if present, default to 0
+                version = int(match.group(1)) if match.group(1) else 0
+                leg_ver_attachments.append((version, att))
             else:
                 other_attachments.append(att)
 
-        # Select best Leg Ver attachment
+        # Select highest version number
         selected_leg_ver = None
         if leg_ver_attachments:
-            # Prefer Leg Ver2, then Leg Ver1, then any Leg Ver
-            for att in leg_ver_attachments:
-                name = att.get('name', '').lower()
-                if 'leg ver2' in name or 'leg ver 2' in name:
-                    selected_leg_ver = att
-                    break
-
-            # If no Ver2, look for Ver1
-            if not selected_leg_ver:
-                for att in leg_ver_attachments:
-                    name = att.get('name', '').lower()
-                    if 'leg ver1' in name or 'leg ver 1' in name:
-                        selected_leg_ver = att
-                        break
-
-            # If no Ver1 or Ver2, just take the first one
-            if not selected_leg_ver:
-                selected_leg_ver = leg_ver_attachments[0]
+            # Sort by version descending, pick highest
+            leg_ver_attachments.sort(key=lambda x: x[0], reverse=True)
+            selected_leg_ver = leg_ver_attachments[0][1]
+            logger.debug(
+                "selected leg ver attachment",
+                name=selected_leg_ver.get('name'),
+                version=leg_ver_attachments[0][0],
+                alternatives=len(leg_ver_attachments) - 1
+            )
 
         # Combine: at most one Leg Ver + all other attachments
         filtered = other_attachments
