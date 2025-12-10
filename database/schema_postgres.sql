@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS cities (
     county TEXT,
     status TEXT DEFAULT 'active',
     participation JSONB,  -- City-level participation config: {testimony_url, testimony_email, process_url}
+    population INTEGER,  -- City population from Census data
     geom geometry(MultiPolygon, 4326),  -- City boundary from Census TIGER/Line (WGS84)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -407,6 +408,7 @@ CREATE TABLE IF NOT EXISTS deliberation_results (
 CREATE INDEX IF NOT EXISTS idx_cities_vendor ON cities(vendor);
 CREATE INDEX IF NOT EXISTS idx_cities_state ON cities(state);
 CREATE INDEX IF NOT EXISTS idx_cities_status ON cities(status);
+CREATE INDEX IF NOT EXISTS idx_cities_population ON cities (population DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_cities_geom ON cities USING GIST (geom);  -- Spatial index for map queries
 
 -- Zipcodes
