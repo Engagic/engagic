@@ -363,7 +363,8 @@ class PdfExtractor:
             for future in as_completed(future_to_page):
                 page_num, original_text = future_to_page[future]
                 try:
-                    ocr_result = future.result()
+                    # Timeout prevents Tesseract hangs from blocking forever
+                    ocr_result = future.result(timeout=120)
 
                     # Decide whether to use OCR or keep original
                     if self._is_ocr_better(original_text, ocr_result, page_num):
@@ -371,6 +372,9 @@ class PdfExtractor:
                     else:
                         results[page_num] = original_text
 
+                except TimeoutError:
+                    logger.warning("OCR timeout", page_num=page_num)
+                    results[page_num] = original_text
                 except Exception as e:  # Intentionally broad: catch any thread exception
                     logger.error("parallel OCR failed", page_num=page_num, error=str(e))
                     results[page_num] = original_text

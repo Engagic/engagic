@@ -33,6 +33,7 @@ FLASH_LITE_MAX_CHARS = 200000  # Use Flash-Lite for documents under ~200K chars
 FLASH_LITE_MAX_PAGES = 50  # Or under 50 pages
 
 
+
 class GeminiSummarizer:
     """Smart LLM orchestrator - picks model, picks prompt, formats response"""
 
@@ -97,7 +98,7 @@ class GeminiSummarizer:
 
         return input_cost + output_cost
 
-    def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3):
+    def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3, max_retry_seconds: int = 180):
         """Call Gemini API with automatic retry on 429 rate limits.
 
         Instead of proactive rate limiting, we trust Gemini to tell us when to retry.
@@ -108,6 +109,7 @@ class GeminiSummarizer:
             prompt: The prompt text
             config: GenerateContentConfig
             max_retries: Maximum retry attempts (default 3)
+            max_retry_seconds: Total time cap for all retries (default 180s = 3 mins)
 
         Returns:
             GenerateContentResponse from Gemini
@@ -116,6 +118,7 @@ class GeminiSummarizer:
             LLMError: If max retries exceeded or non-rate-limit error
         """
         last_error = None
+        start_time = time.time()
 
         for attempt in range(max_retries):
             try:
@@ -129,19 +132,36 @@ class GeminiSummarizer:
                 error_str = str(e)
 
                 if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    # Parse retryDelay from Gemini's error response
-                    retry_match = re.search(r'"retryDelay":\s*"(\d+)s"', error_str)
+                    # Parse retryDelay from Gemini's error response (handles both quote styles)
+                    retry_match = re.search(r'["\']retryDelay["\']:\s*["\'](\d+)s?["\']', error_str)
                     if retry_match:
                         delay = int(retry_match.group(1)) + 1  # Add 1s buffer
                     else:
-                        # Fallback: exponential backoff (30s, 60s, 90s)
-                        delay = 30 * (attempt + 1)
+                        # Try alternate format: retryDelay: '28.5s' or similar
+                        retry_match = re.search(r'retry.*?(\d+(?:\.\d+)?)\s*s', error_str, re.IGNORECASE)
+                        if retry_match:
+                            delay = int(float(retry_match.group(1))) + 1
+                        else:
+                            # Fallback: exponential backoff (30s, 60s, 90s)
+                            delay = 30 * (attempt + 1)
+
+                    # Check if we'd exceed total time cap
+                    elapsed = time.time() - start_time
+                    if elapsed + delay > max_retry_seconds:
+                        logger.warning(
+                            "rate limit retry would exceed time cap, giving up",
+                            elapsed_seconds=round(elapsed),
+                            proposed_delay=delay,
+                            max_retry_seconds=max_retry_seconds
+                        )
+                        break
 
                     logger.warning(
                         "rate limited by gemini, waiting for retry",
                         attempt=attempt + 1,
                         max_retries=max_retries,
-                        delay_seconds=delay
+                        delay_seconds=delay,
+                        total_elapsed=round(elapsed)
                     )
                     time.sleep(delay)
                     continue
@@ -149,9 +169,10 @@ class GeminiSummarizer:
                 # Non-rate-limit error: raise immediately
                 raise
 
-        # All retries exhausted
+        # All retries exhausted or time cap exceeded
+        elapsed = time.time() - start_time
         raise LLMError(
-            f"Max retries ({max_retries}) exceeded due to rate limiting",
+            f"Rate limit retries exhausted after {round(elapsed)}s",
             model=model_name,
             prompt_type="unknown",
             original_error=last_error

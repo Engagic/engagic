@@ -850,6 +850,47 @@ def main():
 
         asyncio.run(run())
 
+    @cli.command("processor")
+    def processor():
+        """Run as processor service (continuous queue processing, no sync)
+
+        Runs alongside fetcher service. Fetcher syncs cities -> queue,
+        processor works through the queue.
+        """
+        async def run():
+            db = await Database.create()
+            try:
+                conductor = Conductor(db)
+
+                def signal_handler(signum, frame):
+                    sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+                    logger.info("received signal - graceful shutdown", signal=sig_name)
+                    conductor.processor.is_running = False
+                    logger.info("shutdown initiated")
+
+                signal.signal(signal.SIGTERM, signal_handler)
+                signal.signal(signal.SIGINT, signal_handler)
+
+                # Recovery: reset stale processing jobs from previous crash
+                stale_count = await conductor.db.queue.reset_stale_processing_jobs()
+                if stale_count:
+                    logger.info("recovered stale jobs", count=stale_count)
+
+                if not conductor.processor.analyzer:
+                    logger.error("analyzer not available - cannot start processor")
+                    return
+
+                logger.info("starting processor service")
+                conductor.processor.is_running = True
+                await conductor.processor.process_queue()
+                logger.info("shutdown complete")
+
+            finally:
+                await conductor.close()
+                await db.close()
+
+        asyncio.run(run())
+
     cli()
 
 

@@ -79,6 +79,7 @@ PUBLIC_COMMENT_PATTERNS = [
     r'comm pkt',  # Committee packets
     r'cmte pkt',  # Committee packets (alternate abbreviation)
     r'committee packet',
+    r'board pkt',  # Board packets (SF compilation format)
     r'co-?sponsor(ship)?\s*(request|ltr|letter)',  # "Co-Sponsor Request Chen 122525"
     r'sponsor(ship)?\s*request',
 ]
@@ -94,6 +95,22 @@ PARCEL_TABLE_PATTERNS = [
     r'assessor',
     r'apn list',  # Assessor Parcel Number
     r'parcel number',
+]
+
+# Boilerplate vendor/contract documents (huge, not substantive to decision)
+BOILERPLATE_CONTRACT_PATTERNS = [
+    r'omnia partners contract',  # Cooperative purchasing agreements (100s of pages each)
+    r'sourcewell contract',  # Another cooperative purchasing org
+    r'naspo valuepoint',  # State purchasing cooperative
+    r'u\.?s\.? communities',  # US Communities contracts
+    r'hgac.?buy',  # Houston-Galveston Area Council cooperative
+    r'master agreement',  # Generic master agreements (often boilerplate)
+    r'terms and conditions',  # T&C documents
+    r'general conditions',  # Construction general conditions
+    r'insurance certificate',  # COI documents
+    r'certificate of insurance',
+    r'w-?9',  # Tax forms
+    r'bid tabulation',  # Bid results tables (useful but huge)
 ]
 
 # Administrative matter types (not legislative)
@@ -137,7 +154,7 @@ def should_skip_matter(matter_type: str) -> bool:
 
 
 def is_public_comment_attachment(name: str) -> bool:
-    """Is attachment public comments or parcel tables (skip to save tokens)?"""
+    """Is attachment low-value for summarization (public comments, parcel tables, boilerplate)?"""
     name_lower = name.lower()
-    all_patterns = PUBLIC_COMMENT_PATTERNS + PARCEL_TABLE_PATTERNS
+    all_patterns = PUBLIC_COMMENT_PATTERNS + PARCEL_TABLE_PATTERNS + BOILERPLATE_CONTRACT_PATTERNS
     return any(re.search(p, name_lower, re.IGNORECASE) for p in all_patterns)
