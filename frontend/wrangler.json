@@ -7,13 +7,19 @@
     "binding": "ASSETS",
     "directory": ".svelte-kit/cloudflare"
   },
+  "r2_buckets": [
+    {
+      "binding": "TILES",
+      "bucket_name": "engagic-tiles"
+    }
+  ],
   "routes": [
     {
       "pattern": "engagic.org/*",
       "zone_name": "engagic.org"
     },
     {
-      "pattern": "www.engagic.org/*", 
+      "pattern": "www.engagic.org/*",
       "zone_name": "engagic.org"
     }
   ]
