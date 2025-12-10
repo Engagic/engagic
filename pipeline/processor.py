@@ -167,6 +167,14 @@ class Processor:
                 # Expected errors during job processing - log and continue
                 logger.error("queue processor error", error=str(e), error_type=type(e).__name__)
                 await asyncio.sleep(QUEUE_FATAL_ERROR_BACKOFF)
+            except Exception as e:
+                # Catch-all for unexpected errors - log and continue to prevent crash
+                logger.error(
+                    "unexpected queue processor error",
+                    error=str(e),
+                    error_type=type(e).__name__
+                )
+                await asyncio.sleep(QUEUE_FATAL_ERROR_BACKOFF)
 
     async def process_city_jobs(self, city_banana: str) -> dict:
         """Process all queued jobs for a specific city."""

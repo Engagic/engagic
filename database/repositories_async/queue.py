@@ -71,6 +71,36 @@ class QueueRepository(BaseRepository):
 
         logger.debug("job enqueued", source_url=source_url, job_type=job_type)
 
+    async def reset_stale_processing_jobs(self, stale_minutes: int = 10) -> int:
+        """Reset jobs stuck in 'processing' state after crash
+
+        Jobs that have been 'processing' for longer than stale_minutes are
+        assumed to have been abandoned due to a crash or restart. Reset them
+        to 'pending' so they can be retried.
+
+        Args:
+            stale_minutes: Consider jobs stale after this many minutes (default: 10)
+
+        Returns:
+            Number of jobs reset
+        """
+        result = await self._fetch(
+            """
+            UPDATE queue
+            SET status = 'pending',
+                retry_count = retry_count + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE status = 'processing'
+              AND started_at < NOW() - INTERVAL '1 minute' * $1
+            RETURNING id
+            """,
+            stale_minutes,
+        )
+        count = len(result) if result else 0
+        if count:
+            logger.info("reset stale processing jobs", count=count, stale_minutes=stale_minutes)
+        return count
+
     async def get_next_job(self) -> Optional[Dict[str, Any]]:
         """Get next pending job from queue (highest priority first)
 

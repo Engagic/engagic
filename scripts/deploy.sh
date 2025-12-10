@@ -483,9 +483,70 @@ process_cities() {
         error "Cities required (comma-separated bananas or @file path)"
     fi
 
-    log "Processing queued jobs for cities: $1"
+    local SCREEN_NAME="engagic-process"
+
+    # Check if already running
+    if screen -list | grep -q "$SCREEN_NAME"; then
+        warn "Process session already running!"
+        echo "  Attach with: $0 attach"
+        echo "  Or kill it:  $0 kill-process"
+        return 1
+    fi
+
+    log "Starting process-cities in detachable screen session..."
+    log "Cities: $1"
+    echo ""
+    info "Commands:"
+    echo "  Ctrl-A D     - Detach (process keeps running)"
+    echo "  $0 attach    - Reattach to view logs"
+    echo "  $0 kill-process - Stop processing"
+    echo ""
+    sleep 2
+
+    # Load env vars into a file for screen to source
     load_env
-    uv run engagic-conductor process-cities "$1"
+
+    # Start in screen session and immediately attach
+    screen -dmS "$SCREEN_NAME" bash -c "
+        cd $APP_DIR
+        source $VENV_DIR/bin/activate
+        if [ -f $APP_DIR/.env ]; then set -a; source $APP_DIR/.env; set +a; fi
+        if [ -f ~/.llm_secrets ]; then set -a; source ~/.llm_secrets; set +a; fi
+        export ENGAGIC_LOG_FORMAT=dev
+        echo 'Starting process-cities...'
+        echo ''
+        uv run engagic-conductor process-cities '$1'
+        echo ''
+        echo 'Processing complete. Press Enter to close.'
+        read
+    "
+
+    # Attach immediately so user sees output
+    screen -r "$SCREEN_NAME"
+}
+
+attach_process() {
+    local SCREEN_NAME="engagic-process"
+    if screen -list | grep -q "$SCREEN_NAME"; then
+        log "Attaching to process session (Ctrl-A D to detach)..."
+        screen -r "$SCREEN_NAME"
+    else
+        warn "No process session running"
+        echo "Start one with: $0 process-cities @regions/file.txt"
+    fi
+}
+
+kill_process() {
+    local SCREEN_NAME="engagic-process"
+    if screen -list | grep -q "$SCREEN_NAME"; then
+        warn "Killing process session..."
+        screen -S "$SCREEN_NAME" -X quit
+        # Also kill any orphaned conductor processes
+        pkill -f "engagic-conductor process-cities" 2>/dev/null || true
+        log "Process session terminated"
+    else
+        info "No process session running"
+    fi
 }
 
 sync_and_process_cities() {
@@ -607,8 +668,10 @@ show_help() {
     echo ""
     echo "  Multiple Cities:"
     echo "    sync-cities CITIES             - Fetch multiple (comma-separated or @file)"
-    echo "    process-cities CITIES          - Process queued jobs for multiple cities"
+    echo "    process-cities CITIES          - Process in screen (survives SSH disconnect)"
     echo "    sync-and-process-cities CITIES - Fetch + process multiple cities"
+    echo "    attach                         - Reattach to running process-cities"
+    echo "    kill-process                   - Stop running process-cities"
     echo ""
     echo "  Batch Operations:"
     echo "    process-unprocessed            - Process all unprocessed meetings in queue"
@@ -641,7 +704,9 @@ show_help() {
     echo "  # Regional workflow (RECOMMENDED)"
     echo "  $0 sync-cities @regions/bay-area.txt       # 1. Fetch region (free)"
     echo "  $0 preview-queue                           # 2. Check queue"
-    echo "  $0 process-cities @regions/bay-area.txt    # 3. Process (costs ~\$0.50)"
+    echo "  $0 process-cities @regions/bay-area.txt    # 3. Starts in screen session"
+    echo "  # Press Ctrl-A D to detach, logs keep running"
+    echo "  $0 attach                                  # 4. Check back on progress"
     echo ""
     echo "  # Quick test"
     echo "  $0 sync-and-process-cities @regions/test-small.txt  # 2 cities (~\$0.02)"
@@ -721,6 +786,8 @@ case "$COMMAND" in
     sync-cities)         sync_cities "$2" ;;
     process-cities)      process_cities "$2" ;;
     sync-and-process-cities) sync_and_process_cities "$2" ;;
+    attach)              attach_process ;;
+    kill-process)        kill_process ;;
 
     # Batch operations
     process-unprocessed) process_unprocessed ;;
