@@ -22,7 +22,9 @@
 			inactiveOutline: '#475569',
 			active: '#4f46e5',
 			summarized: '#10b981',
-			hover: '#8b5cf6'
+			hover: '#8b5cf6',
+			stateBorder: '#cbd5e1',
+			countryFill: '#f1f5f9'
 		},
 		dark: {
 			background: '#1e293b',
@@ -30,7 +32,9 @@
 			inactiveOutline: '#64748b',
 			active: '#4f46e5',
 			summarized: '#10b981',
-			hover: '#8b5cf6'
+			hover: '#8b5cf6',
+			stateBorder: '#475569',
+			countryFill: '#0f172a'
 		}
 	};
 
@@ -47,6 +51,11 @@
 				cities: {
 					type: 'vector',
 					url: `pmtiles://${tilesUrl}`
+				},
+				// US state boundaries (public domain, ~80KB)
+				states: {
+					type: 'geojson',
+					data: 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json'
 				}
 			},
 			layers: [
@@ -54,7 +63,28 @@
 					id: 'background',
 					type: 'background',
 					paint: {
-						'background-color': colors.background
+						'background-color': colors.countryFill
+					}
+				},
+				// US states fill (gives the country shape)
+				{
+					id: 'states-fill',
+					type: 'fill',
+					source: 'states',
+					paint: {
+						'fill-color': colors.background,
+						'fill-opacity': 1
+					}
+				},
+				// State boundaries
+				{
+					id: 'state-borders',
+					type: 'line',
+					source: 'states',
+					paint: {
+						'line-color': colors.stateBorder,
+						'line-width': 1,
+						'line-opacity': 0.4
 					}
 				},
 				{
@@ -146,7 +176,9 @@
 
 	// Update layer paint properties when theme changes
 	function applyTheme(mapInstance: maplibregl.Map, colors: typeof themes.light) {
-		mapInstance.setPaintProperty('background', 'background-color', colors.background);
+		mapInstance.setPaintProperty('background', 'background-color', colors.countryFill);
+		mapInstance.setPaintProperty('states-fill', 'fill-color', colors.background);
+		mapInstance.setPaintProperty('state-borders', 'line-color', colors.stateBorder);
 		mapInstance.setPaintProperty('city-fill-inactive', 'fill-color', colors.inactive);
 		mapInstance.setPaintProperty('city-fill-active', 'fill-color', colors.active);
 		mapInstance.setPaintProperty('city-fill-summarized', 'fill-color', colors.summarized);
