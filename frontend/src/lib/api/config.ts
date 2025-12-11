@@ -2,9 +2,9 @@
 
 export const config = {
 	apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'https://api.engagic.org',
-	maxRetries: 3,
-	retryDelay: 1000,
-	requestTimeout: 30000,
+	maxRetries: 2,
+	retryDelay: 500,
+	requestTimeout: 5000,
 	debounceDelay: 300,
 } as const;
 

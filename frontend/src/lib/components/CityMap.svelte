@@ -52,10 +52,10 @@
 					type: 'vector',
 					url: `pmtiles://${tilesUrl}`
 				},
-				// US state boundaries (public domain, ~80KB)
+				// US state boundaries (bundled locally for performance)
 				states: {
 					type: 'geojson',
-					data: 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json'
+					data: '/us-states.json'
 				}
 			},
 			layers: [
