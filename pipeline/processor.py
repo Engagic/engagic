@@ -800,6 +800,9 @@ class Processor:
                 processed_items.extend(new_processed)
                 failed_items.extend(new_failed)
 
+            # Free memory immediately - document_cache can be 100MB+ for meetings with many large PDFs
+            document_cache.clear()
+
         if processed_items and self.analyzer:
             meeting_topics = self._aggregate_meeting_topics(processed_items)
 
