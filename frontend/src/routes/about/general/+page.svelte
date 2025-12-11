@@ -1,32 +1,32 @@
 <svelte:head>
-	<title>About Engagic - What We Do</title>
-	<meta name="description" content="Learn about Engagic's mission to make local government meetings accessible through AI-powered summaries" />
+	<title>About Engagic - Civic Participation Made Simple</title>
+	<meta name="description" content="Engagic helps you participate in local government. We track city council meetings, surface what matters, and show you exactly how to have your say." />
 </svelte:head>
 
 <article class="about-content">
 	<section class="section">
 		<h1 class="section-heading">Our Mission</h1>
-		<p>Engagic is an open-source civic technology platform that automatically finds and summarizes local government meetings across the United States.</p>
-		<p>Democracy works better when everyone can participate. Government meetings are often hard to find, harder to understand, and buried in bureaucratic language. We changed that.</p>
+		<p>Democracy works when people participate. Most don't - not because they don't care, but because they don't know how.</p>
+		<p>Engagic makes it easy. We track city council meetings across the US, surface what affects you, and show you exactly how to have your say - call in, email, or join on Zoom.</p>
 	</section>
 
 	<section class="section">
-		<h2 class="section-heading">What We Do</h2>
+		<h2 class="section-heading">How It Works</h2>
 		<div class="feature-list">
 			<div class="feature-item">
-				<h3 class="feature-heading">Monitor</h3>
-				<p>Our system can continuously check city websites for new meeting agendas and packets across 600+ cities.</p>
+				<h3 class="feature-heading">Find What Matters</h3>
+				<p>We track 600+ cities, pulling meeting agendas and documents so you don't have to hunt across government websites.</p>
 			</div>
 			<div class="feature-item">
-				<h3 class="feature-heading">Process</h3>
-				<p>Advanced AI reads through dense government documents and extracts what matters - budget decisions, zoning changes, public hearings.</p>
+				<h3 class="feature-heading">Make It Understandable</h3>
+				<p>AI extracts the key decisions - budget changes, zoning proposals, public hearings - in plain language.</p>
 			</div>
 			<div class="feature-item">
-				<h3 class="feature-heading">Deliver Clarity</h3>
-				<p>Clean, readable summaries that highlight key decisions, citizen impact, and public participation opportunities.</p>
+				<h3 class="feature-heading">Show You How to Participate</h3>
+				<p>Every meeting includes contact info: phone numbers, email addresses, Zoom links. The ritual entry points to having your say.</p>
 			</div>
 		</div>
-		<p>No more digging through 100+ page PDFs. Search your zip code and get the important stuff in plain English.</p>
+		<p>Search your zip code and know what's happening - and how to speak up.</p>
 	</section>
 
 	<section class="section">

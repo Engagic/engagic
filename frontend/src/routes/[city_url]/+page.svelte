@@ -244,7 +244,7 @@
 						Committees
 					</a>
 					<button class="watch-city-btn" onclick={() => showWatchModal = true}>
-						Get weekly updates
+						Stay engaged
 					</button>
 				</div>
 			</div>

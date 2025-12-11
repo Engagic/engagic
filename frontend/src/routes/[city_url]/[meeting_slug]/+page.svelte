@@ -192,7 +192,7 @@
 					{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
 						<div class="meeting-helper">
 							<span class="helper-dot"></span>
-							<span class="helper-text-inline">Blue border = AI summary available</span>
+							<span class="helper-text-inline">Blue = summary | Green = how to participate</span>
 						</div>
 					{/if}
 				</div>

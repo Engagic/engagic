@@ -55,6 +55,13 @@
 		}
 		return 'status-border-none';
 	}
+
+	// Check if meeting has any participation info
+	const hasParticipation = $derived(() => {
+		const p = meeting.participation;
+		if (!p) return false;
+		return !!(p.email || p.emails?.length || p.phone || p.virtual_url);
+	});
 </script>
 
 <a
@@ -126,6 +133,12 @@
 					This meeting has been {meeting.meeting_status}
 				</div>
 			{/if}
+
+			{#if hasParticipation() && !isPast}
+				<div class="participation-indicator">
+					<span class="status-icon">📢</span> Speak Up
+				</div>
+			{/if}
 		</div>
 	</div>
 </a>
@@ -178,6 +191,17 @@
 		font-size: 0.85rem;
 		margin-top: 0.25rem;
 		text-transform: capitalize;
+	}
+
+	.participation-indicator {
+		color: var(--civic-green);
+		font-weight: 600;
+		font-size: 0.8rem;
+		margin-top: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		background: rgba(34, 197, 94, 0.1);
+		border-radius: 4px;
+		display: inline-block;
 	}
 
 	@media (max-width: 640px) {

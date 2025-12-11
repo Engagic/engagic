@@ -218,11 +218,11 @@
 
 <svelte:head>
 	<title>engagic - civic engagement made simple</title>
-	<meta name="description" content="AI summaries of local government meetings. Your city council decides zoning, taxes, and public safety - we read the 100-page PDFs so you don't have to." />
+	<meta name="description" content="Make your voice heard in local government. Know what your city council is deciding and how to participate - phone, email, or Zoom. We surface what matters so you can speak up." />
 
 	<!-- Open Graph -->
 	<meta property="og:title" content="engagic - civic engagement made simple" />
-	<meta property="og:description" content="AI summaries of local government meetings. Your city council decides zoning, taxes, and public safety - we read the 100-page PDFs so you don't have to." />
+	<meta property="og:description" content="Make your voice heard in local government. Know what your city council is deciding and how to participate - phone, email, or Zoom. We surface what matters so you can speak up." />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://engagic.org" />
 	<meta property="og:image" content="https://engagic.org/icon-192.png" />
@@ -231,7 +231,7 @@
 	<!-- Twitter -->
 	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="engagic - civic engagement made simple" />
-	<meta name="twitter:description" content="AI summaries of local government meetings. Your city council decides zoning, taxes, and public safety - we read the 100-page PDFs so you don't have to." />
+	<meta name="twitter:description" content="Make your voice heard in local government. Know what your city council is deciding and how to participate - phone, email, or Zoom." />
 	<meta name="twitter:image" content="https://engagic.org/icon-192.png" />
 </svelte:head>
 
@@ -242,10 +242,10 @@
 	</header>
 
 		<section class="value-prop">
-			<p class="value-headline">AI summaries of local government meetings</p>
+			<p class="value-headline">Your city is making decisions. Here's how to have your say.</p>
 			<p class="value-subtext">
-				Your city council decides zoning, taxes, and public safety<br />
-				We read the 100-page PDFs so you don't have to
+				Zoning, taxes, public safety - know what's coming up<br />
+				and exactly how to make your voice heard
 			</p>
 			<div class="value-links">
 				<a href="/about/general" class="learn-more">How it works</a>

@@ -118,7 +118,7 @@
 					<div class="icon-check">✓</div>
 					<h2>{authState.isAuthenticated ? 'Watching ' + cityName : 'Check Your Email'}</h2>
 					{#if authState.isAuthenticated}
-						<p>You'll receive weekly updates for {cityName} every Sunday.</p>
+						<p>Every Sunday, you'll know what's happening and how to speak up.</p>
 					{:else}
 						<p class="message">
 							We've sent a verification link to <strong>{email}</strong>
@@ -132,11 +132,12 @@
 				<button class="close-btn" onclick={handleClose} aria-label="Close">&times;</button>
 
 				<div class="modal-header">
-					<h2>Get weekly updates for {cityName}</h2>
-					<p class="subtitle">Every Sunday, we'll email you:</p>
+					<h2>Stay engaged with {cityName}</h2>
+					<p class="subtitle">Every Sunday, we'll send you:</p>
 					<ul class="features">
-						<li>Upcoming meetings this week</li>
-						<li>Items mentioning your keywords (optional)</li>
+						<li>What's coming up this week</li>
+						<li>How to participate (phone, email, Zoom)</li>
+						<li>Items matching your interests (optional)</li>
 					</ul>
 				</div>
 
@@ -188,7 +189,7 @@
 					{/if}
 
 					<button type="submit" class="btn-primary" disabled={loading}>
-						{loading ? 'Setting up...' : authState.isAuthenticated ? 'Start Watching' : 'Get Weekly Updates'}
+						{loading ? 'Setting up...' : authState.isAuthenticated ? 'Start Watching' : 'Get Ready to Participate'}
 					</button>
 
 					<p class="disclaimer">

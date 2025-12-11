@@ -64,7 +64,7 @@
 	<title>Sign Up - Engagic</title>
 	<meta
 		name="description"
-		content="Create a free Engagic account. Get weekly digests when your city discusses topics you care about."
+		content="Create a free Engagic account. Get ready to participate when your city discusses what matters to you."
 	/>
 </svelte:head>
 
@@ -98,7 +98,7 @@
 					<p class="subtitle">We'll email you when we add {cityDisplayName} to our coverage.</p>
 				{:else}
 					<h1>Get Started</h1>
-					<p class="subtitle">Free civic digests for everyone. Set up your account in 30 seconds.</p>
+					<p class="subtitle">Know what's happening. Have your say. Set up in 30 seconds.</p>
 				{/if}
 
 				<form onsubmit={(e) => {e.preventDefault(); handleSubmit();}}>
