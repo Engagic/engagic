@@ -57,7 +57,8 @@
 		return highlightMatch(result.context, query);
 	}
 
-	function renderSummary(): string {
+	// Memoized markdown rendering - computed once per result change
+	const renderedSummary = $derived.by(() => {
 		if (isItemResult(result) && result.summary) {
 			return marked(result.summary) as string;
 		}
@@ -65,7 +66,7 @@
 			return marked(result.canonical_summary) as string;
 		}
 		return '';
-	}
+	});
 
 	const topics = $derived.by(() => {
 		if (isItemResult(result)) {
@@ -170,9 +171,9 @@
 			{/if}
 
 			<!-- Full Summary -->
-			{#if renderSummary()}
+			{#if renderedSummary}
 				<div class="full-summary">
-					{@html renderSummary()}
+					{@html renderedSummary}
 				</div>
 			{:else}
 				<div class="no-summary">

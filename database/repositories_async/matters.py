@@ -258,6 +258,7 @@ class MatterRepository(BaseRepository):
         limit: int = 50
     ) -> List[Matter]:
         """Full-text search on matters using PostgreSQL FTS."""
+        # Uses search_vector stored column (requires migration 012_fts_optimization)
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -266,15 +267,11 @@ class MatterRepository(BaseRepository):
                     title, sponsors, canonical_summary, canonical_topics,
                     attachments, metadata, first_seen, last_seen,
                     appearance_count, status, final_vote_date, quality_score, rating_count,
-                    ts_rank(
-                        to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, '')),
-                        plainto_tsquery('english', $1)
-                    ) AS rank
+                    ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
                 FROM city_matters
                 WHERE banana = $2
                   AND (
-                      to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, ''))
-                          @@ plainto_tsquery('english', $1)
+                      search_vector @@ plainto_tsquery('english', $1)
                       OR matter_file ILIKE '%' || $1 || '%'
                   )
                 ORDER BY rank DESC, last_seen DESC

@@ -299,13 +299,37 @@ export const apiClient = {
 	},
 
 	async getMeetingVotes(meetingId: string): Promise<MeetingVotesResponse> {
-		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/meetings/${meetingId}/votes`);
-		return response.json();
+		const cacheKey = `votes:meeting:${meetingId}`;
+		if (inflightRequests.has(cacheKey)) {
+			return inflightRequests.get(cacheKey)!;
+		}
+		const request = (async () => {
+			try {
+				const response = await fetchWithRetry(`${config.apiBaseUrl}/api/meetings/${meetingId}/votes`);
+				return response.json();
+			} finally {
+				inflightRequests.delete(cacheKey);
+			}
+		})();
+		inflightRequests.set(cacheKey, request);
+		return request;
 	},
 
 	async getCityCouncilMembers(banana: string): Promise<CouncilRosterResponse> {
-		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/city/${banana}/council-members`);
-		return response.json();
+		const cacheKey = `council:${banana}`;
+		if (inflightRequests.has(cacheKey)) {
+			return inflightRequests.get(cacheKey)!;
+		}
+		const request = (async () => {
+			try {
+				const response = await fetchWithRetry(`${config.apiBaseUrl}/api/city/${banana}/council-members`);
+				return response.json();
+			} finally {
+				inflightRequests.delete(cacheKey);
+			}
+		})();
+		inflightRequests.set(cacheKey, request);
+		return request;
 	},
 
 	async getCouncilMemberVotes(memberId: string, limit: number = 100): Promise<VotingRecordResponse> {
@@ -412,10 +436,22 @@ export const apiClient = {
 	},
 
 	async getHappeningItems(banana: string, limit: number = 10): Promise<HappeningResponse> {
-		const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/happening`);
-		url.searchParams.set('limit', limit.toString());
-		const response = await fetchWithRetry(url.toString());
-		return response.json();
+		const cacheKey = `happening:${banana}:${limit}`;
+		if (inflightRequests.has(cacheKey)) {
+			return inflightRequests.get(cacheKey)!;
+		}
+		const request = (async () => {
+			try {
+				const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/happening`);
+				url.searchParams.set('limit', limit.toString());
+				const response = await fetchWithRetry(url.toString());
+				return response.json();
+			} finally {
+				inflightRequests.delete(cacheKey);
+			}
+		})();
+		inflightRequests.set(cacheKey, request);
+		return request;
 	}
 };
 

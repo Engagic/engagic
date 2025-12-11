@@ -43,6 +43,7 @@ class SearchRepository(BaseRepository):
         Returns:
             List of matching meetings ordered by relevance
         """
+        # Uses search_vector stored column (requires migration 012_fts_optimization)
         async with self.pool.acquire() as conn:
             if banana:
                 rows = await conn.fetch(
@@ -51,10 +52,10 @@ class SearchRepository(BaseRepository):
                         id, banana, title, date, agenda_url, packet_url,
                         summary, participation, status, processing_status,
                         processing_method, processing_time,
-                        ts_rank(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')), plainto_tsquery('english', $1)) AS rank
+                        ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
                     FROM meetings
                     WHERE banana = $2
-                      AND to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')) @@ plainto_tsquery('english', $1)
+                      AND search_vector @@ plainto_tsquery('english', $1)
                     ORDER BY rank DESC, date DESC
                     LIMIT $3
                     """,
@@ -69,9 +70,9 @@ class SearchRepository(BaseRepository):
                         id, banana, title, date, agenda_url, packet_url,
                         summary, participation, status, processing_status,
                         processing_method, processing_time,
-                        ts_rank(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')), plainto_tsquery('english', $1)) AS rank
+                        ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
                     FROM meetings
-                    WHERE to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')) @@ plainto_tsquery('english', $1)
+                    WHERE search_vector @@ plainto_tsquery('english', $1)
                     ORDER BY rank DESC, date DESC
                     LIMIT $2
                     """,
@@ -185,6 +186,7 @@ class SearchRepository(BaseRepository):
         Returns:
             List of dicts with item + meeting context for frontend display
         """
+        # Uses search_vector stored column (requires migration 012_fts_optimization)
         async with self.pool.acquire() as conn:
             # Search items by summary, title, and matter_file
             # Join with meetings to get meeting context
@@ -205,10 +207,7 @@ class SearchRepository(BaseRepository):
                     m.title as meeting_title,
                     m.date as meeting_date,
                     m.agenda_url,
-                    ts_rank(
-                        to_tsvector('english', COALESCE(i.title, '') || ' ' || COALESCE(i.summary, '')),
-                        plainto_tsquery('english', $1)
-                    ) AS rank,
+                    ts_rank(i.search_vector, plainto_tsquery('english', $1)) AS rank,
                     ts_headline(
                         'english',
                         COALESCE(i.summary, i.title, ''),
@@ -219,8 +218,7 @@ class SearchRepository(BaseRepository):
                 JOIN meetings m ON i.meeting_id = m.id
                 WHERE m.banana = $2
                   AND (
-                      to_tsvector('english', COALESCE(i.title, '') || ' ' || COALESCE(i.summary, ''))
-                          @@ plainto_tsquery('english', $1)
+                      i.search_vector @@ plainto_tsquery('english', $1)
                       OR i.matter_file ILIKE '%' || $1 || '%'
                   )
                 ORDER BY rank DESC, m.date DESC, i.sequence ASC
