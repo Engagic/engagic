@@ -15,7 +15,7 @@ import logging
 import signal
 import sys
 from contextlib import contextmanager
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, AsyncGenerator
 
 from database.db_postgres import Database
 from pipeline.fetcher import Fetcher, SyncResult, SyncStatus
@@ -223,37 +223,22 @@ class Conductor:
             for r in results
         ]
 
-    async def process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
-        """Process queued meetings for multiple cities (no sync, just process)
+    async def process_cities(self, city_bananas: List[str]) -> AsyncGenerator[Dict[str, Any], None]:
+        """Process queued meetings for multiple cities, yielding results as they complete.
 
         Args:
             city_bananas: List of city banana identifiers
 
-        Returns:
-            Summary of processing results
+        Yields:
+            Per-city processing results (streamed to prevent memory accumulation)
         """
         logger.info("processing queued jobs for cities", city_count=len(city_bananas))
 
         if not self.processor.analyzer:
-            logger.warning(
-                "analyzer not available - cannot process meetings"
-            )
-            return {
-                "cities_count": len(city_bananas),
-                "processed_count": 0,
-                "error": "Analyzer not available",
-            }
-
-        total_processed = 0
-        total_failed = 0
-        city_results = []
+            logger.warning("analyzer not available - cannot process meetings")
+            return  # Generator yields nothing if analyzer unavailable
 
         with self.enable_processing():
-            total_items_processed = 0
-            total_items_new = 0
-            total_items_skipped = 0
-            total_items_failed = 0
-
             for banana in city_bananas:
                 if not self.is_running:
                     break
@@ -261,41 +246,25 @@ class Conductor:
                 logger.info("processing jobs for city", city=banana)
                 stats = await self.processor.process_city_jobs(banana)
 
-                total_processed += stats["processed_count"]
-                total_failed += stats["failed_count"]
-                total_items_processed += stats.get("items_processed", 0)
-                total_items_new += stats.get("items_new", 0)
-                total_items_skipped += stats.get("items_skipped", 0)
-                total_items_failed += stats.get("items_failed", 0)
-
-                city_results.append({
+                # Yield immediately - don't accumulate results in memory
+                yield {
                     "city_banana": banana,
                     "processed": stats["processed_count"],
                     "failed": stats["failed_count"],
                     "items_processed": stats.get("items_processed", 0),
                     "items_new": stats.get("items_new", 0),
                     "items_skipped": stats.get("items_skipped", 0),
-                })
+                    "items_failed": stats.get("items_failed", 0),
+                }
 
-            return {
-                "cities_count": len(city_bananas),
-                "meetings_processed": total_processed,
-                "meetings_failed": total_failed,
-                "items_processed": total_items_processed,
-                "items_new": total_items_new,
-                "items_skipped": total_items_skipped,
-                "items_failed": total_items_failed,
-                "city_results": city_results,
-            }
-
-    async def sync_and_process_cities(self, city_bananas: List[str]) -> Dict[str, Any]:
-        """Sync multiple cities and immediately process all their meetings
+    async def sync_and_process_cities(self, city_bananas: List[str]) -> AsyncGenerator[Dict[str, Any], None]:
+        """Sync multiple cities and immediately process all their meetings.
 
         Args:
             city_bananas: List of city banana identifiers
 
-        Returns:
-            Combined sync and processing results
+        Yields:
+            Sync results first, then per-city processing results
         """
         logger.info("sync and process cities", city_count=len(city_bananas))
 
@@ -305,16 +274,16 @@ class Conductor:
 
         logger.info("sync complete", total_meetings=total_meetings, city_count=len(city_bananas))
 
-        # Step 2: Process all queued jobs for these cities
-        process_results = await self.process_cities(city_bananas)
-
-        return {
+        # Yield sync summary
+        yield {
+            "phase": "sync_complete",
             "sync_results": sync_results,
-            "processing_results": process_results,
             "total_meetings_found": total_meetings,
-            "total_processed": process_results["processed_count"],
-            "total_failed": process_results["failed_count"],
         }
+
+        # Step 2: Process all queued jobs, yielding per-city results
+        async for result in self.process_cities(city_bananas):
+            yield result
 
     async def preview_queue(self, city_banana: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
         """Preview queued jobs without processing them
@@ -466,14 +435,29 @@ def main():
 
         async def run():
             db = await Database.create()
+            totals = {"processed": 0, "failed": 0, "items_processed": 0, "items_new": 0}
             try:
                 async with Conductor(db) as conductor:
-                    return await conductor.process_cities(city_list)
+                    async for result in conductor.process_cities(city_list):
+                        # Stream results - log each city as it completes
+                        city = result.get("city_banana", "unknown")
+                        logger.info("city complete",
+                            city=city,
+                            meetings=result.get("processed", 0),
+                            items=result.get("items_processed", 0),
+                            new=result.get("items_new", 0),
+                        )
+                        # Accumulate totals for final summary
+                        totals["processed"] += result.get("processed", 0)
+                        totals["failed"] += result.get("failed", 0)
+                        totals["items_processed"] += result.get("items_processed", 0)
+                        totals["items_new"] += result.get("items_new", 0)
+                return totals
             finally:
                 await db.close()
 
         results = asyncio.run(run())
-        click.echo(json.dumps(results, indent=2))
+        click.echo(f"Complete: {results['processed']} meetings, {results['items_new']} new items")
 
     @cli.command("sync-and-process-cities")
     @click.argument("cities")
@@ -484,14 +468,33 @@ def main():
 
         async def run():
             db = await Database.create()
+            totals = {"processed": 0, "failed": 0, "items_processed": 0, "items_new": 0, "meetings_found": 0}
             try:
                 async with Conductor(db) as conductor:
-                    return await conductor.sync_and_process_cities(city_list)
+                    async for result in conductor.sync_and_process_cities(city_list):
+                        if result.get("phase") == "sync_complete":
+                            # Sync phase complete
+                            totals["meetings_found"] = result.get("total_meetings_found", 0)
+                            logger.info("sync complete", meetings_found=totals["meetings_found"])
+                        else:
+                            # Per-city processing result
+                            city = result.get("city_banana", "unknown")
+                            logger.info("city complete",
+                                city=city,
+                                meetings=result.get("processed", 0),
+                                items=result.get("items_processed", 0),
+                                new=result.get("items_new", 0),
+                            )
+                            totals["processed"] += result.get("processed", 0)
+                            totals["failed"] += result.get("failed", 0)
+                            totals["items_processed"] += result.get("items_processed", 0)
+                            totals["items_new"] += result.get("items_new", 0)
+                return totals
             finally:
                 await db.close()
 
         results = asyncio.run(run())
-        click.echo(json.dumps(results, indent=2))
+        click.echo(f"Complete: {results['meetings_found']} found, {results['processed']} processed, {results['items_new']} new items")
 
     @cli.command("full-sync")
     def full_sync():
@@ -585,14 +588,20 @@ def main():
 
                 click.echo(f"Syncing {len(valid_cities)} watchlist cities: {', '.join(valid_cities)}")
 
-                # Sync and process
+                # Sync and process, streaming results
+                totals = {"processed": 0, "items_new": 0}
                 async with Conductor(db) as conductor:
-                    results = await conductor.sync_and_process_cities(valid_cities)
-                    return {
-                        "cities_synced": len(valid_cities),
-                        "unknown_cities": unknown_cities,
-                        "results": results
-                    }
+                    async for result in conductor.sync_and_process_cities(valid_cities):
+                        if result.get("phase") == "sync_complete":
+                            logger.info("sync complete", meetings_found=result.get("total_meetings_found", 0))
+                        elif result.get("city_banana"):
+                            totals["processed"] += result.get("processed", 0)
+                            totals["items_new"] += result.get("items_new", 0)
+                return {
+                    "cities_synced": len(valid_cities),
+                    "unknown_cities": unknown_cities,
+                    "totals": totals
+                }
             finally:
                 await db.close()
 
@@ -600,7 +609,7 @@ def main():
         if "message" in results:
             click.echo(results["message"])
         else:
-            click.echo(f"Watchlist sync complete: {results['cities_synced']} cities")
+            click.echo(f"Watchlist sync complete: {results['cities_synced']} cities, {results['totals']['items_new']} new items")
 
     @cli.command("process-watchlist")
     def process_watchlist():
@@ -635,9 +644,13 @@ def main():
 
                 click.echo(f"Processing {len(valid_cities)} watchlist cities: {', '.join(valid_cities)}")
 
+                totals = {"processed": 0, "items_new": 0}
                 async with Conductor(db) as conductor:
-                    results = await conductor.process_cities(valid_cities)
-                    return {"cities_processed": len(valid_cities), "results": results}
+                    async for result in conductor.process_cities(valid_cities):
+                        if result.get("city_banana"):
+                            totals["processed"] += result.get("processed", 0)
+                            totals["items_new"] += result.get("items_new", 0)
+                return {"cities_processed": len(valid_cities), "totals": totals}
             finally:
                 await db.close()
 
@@ -645,7 +658,7 @@ def main():
         if "message" in results:
             click.echo(results["message"])
         else:
-            click.echo(f"Watchlist processing complete: {results['cities_processed']} cities")
+            click.echo(f"Watchlist processing complete: {results['cities_processed']} cities, {results['totals']['items_new']} new items")
 
     @cli.command("city-requests")
     def city_requests():

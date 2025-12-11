@@ -63,6 +63,8 @@ class AsyncAnalyzer:
         self.pdf_extractor = PdfExtractor()  # Sync extractor, we'll wrap calls
         self.summarizer = GeminiSummarizer(api_key=api_key, metrics=self.metrics)
         self.http_session: Optional[aiohttp.ClientSession] = None
+        self._request_count = 0
+        self._recycle_after = 100  # Recycle session after N requests to prevent memory accumulation
 
         logger.info(
             "async analyzer initialized",
@@ -89,6 +91,14 @@ class AsyncAnalyzer:
             await self.http_session.close()
             logger.debug("http session closed")
 
+    async def recycle_session(self):
+        """Close and recreate HTTP session to free accumulated memory."""
+        previous = self._request_count
+        await self.close()
+        self.http_session = None
+        self._request_count = 0
+        logger.info("http session recycled", previous_requests=previous)
+
     async def __aenter__(self):
         """Async context manager entry"""
         return self
@@ -111,6 +121,11 @@ class AsyncAnalyzer:
         Raises:
             ExtractionError: If download fails
         """
+        # Recycle session periodically to prevent memory accumulation
+        self._request_count += 1
+        if self._request_count >= self._recycle_after:
+            await self.recycle_session()
+
         session = await self._get_session()
 
         try:
