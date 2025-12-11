@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { marked } from 'marked';
 	import type { HappeningItem } from '$lib/api/types';
 	import { formatMeetingDate, extractTime } from '$lib/utils/date-utils';
 	import { generateAnchorId } from '$lib/utils/anchor';
+	import { generateMeetingSlug } from '$lib/utils/utils';
 
 	interface Props {
 		items: HappeningItem[];
@@ -11,12 +13,23 @@
 	let { items, cityUrl }: Props = $props();
 
 	function getItemLink(item: HappeningItem): string {
-		const meetingSlug = item.meeting_id;
-		const anchor = item.item_id ? generateAnchorId({
+		const meeting = {
+			id: item.meeting_id,
+			title: item.meeting_title || '',
+			date: item.meeting_date || ''
+		};
+		const slug = generateMeetingSlug(meeting as any);
+		const anchor = generateAnchorId({
 			id: item.item_id,
+			agenda_number: item.agenda_number || undefined,
 			matter_file: item.matter_file || undefined
-		}) : '';
-		return `/${cityUrl}/${meetingSlug}${anchor ? '#' + anchor : ''}`;
+		});
+		return `/${cityUrl}/${slug}#${anchor}`;
+	}
+
+	function renderSummary(summary: string | null): string {
+		if (!summary) return '';
+		return marked(summary) as string;
 	}
 
 	function getMeetingDateTime(item: HappeningItem): string {
@@ -95,7 +108,9 @@
 						<p class="reason">{item.reason}</p>
 
 						{#if item.item_summary}
-							<p class="summary">{item.item_summary}</p>
+							<div class="summary">
+								{@html renderSummary(item.item_summary)}
+							</div>
 						{/if}
 
 						<div class="card-actions">
@@ -283,6 +298,35 @@
 		line-height: 1.6;
 		color: var(--text-secondary);
 		margin: 0 0 1rem 0;
+	}
+
+	.summary :global(p) {
+		margin: 0.5rem 0;
+	}
+
+	.summary :global(p:first-child) {
+		margin-top: 0;
+	}
+
+	.summary :global(ul),
+	.summary :global(ol) {
+		margin: 0.5rem 0;
+		padding-left: 1.5rem;
+	}
+
+	.summary :global(li) {
+		margin: 0.25rem 0;
+	}
+
+	.summary :global(h1),
+	.summary :global(h2),
+	.summary :global(h3),
+	.summary :global(h4) {
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin: 0.75rem 0 0.5rem 0;
+		font-size: 0.95rem;
 	}
 
 	.card-actions {
