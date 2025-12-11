@@ -62,7 +62,7 @@ async def get_city_requests(
         return {
             "success": True,
             "city_requests": requests,
-            "total_count": len(requests),
+            "total": len(requests),
         }
 
     except Exception:
@@ -141,7 +141,7 @@ async def get_dead_letter_queue(
 
         return {
             "success": True,
-            "count": len(jobs_list),
+            "total": len(jobs_list),
             "alert": needs_attention,
             "alert_threshold": alert_threshold,
             "message": f"Found {len(jobs_list)} jobs in dead letter queue" +

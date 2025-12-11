@@ -319,7 +319,7 @@ class CommitteeRepository(BaseRepository):
                 left_at,
             )
 
-            if result == "UPDATE 0":
+            if self._parse_row_count(result) == 0:
                 return False
 
             logger.debug(
@@ -545,7 +545,7 @@ class CommitteeRepository(BaseRepository):
                 json.dumps(vote_tally) if vote_tally else None,
             )
 
-            return result != "UPDATE 0"
+            return self._parse_row_count(result) > 0
 
     async def get_committee_vote_history(
         self,

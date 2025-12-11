@@ -36,7 +36,7 @@ async def get_all_topics():
         return {
             "success": True,
             "topics": topics_with_display,
-            "count": len(topics_with_display)
+            "total": len(topics_with_display)
         }
     except Exception as e:
         logger.error("error fetching topics", error=str(e))
@@ -88,7 +88,7 @@ async def search_by_topic(request: TopicSearchRequest, db: Database = Depends(ge
             "normalized_topic": normalized_topic,
             "display_name": normalizer.get_display_name(normalized_topic),
             "results": results,
-            "count": len(results)
+            "total": len(results)
         }
 
     except Exception as e:
@@ -118,7 +118,7 @@ async def get_popular_topics(db: Database = Depends(get_db)):
         return {
             "success": True,
             "topics": popular_topics,
-            "count": len(popular_topics)
+            "total": len(popular_topics)
         }
 
     except Exception as e:

@@ -300,7 +300,7 @@ class FeedbackRepository(BaseRepository):
             admin_notes,
             issue_id,
         )
-        updated = result.split()[-1] != "0"
+        updated = self._parse_row_count(result) > 0
 
         if updated:
             logger.info("issue resolved", issue_id=issue_id, status=status)

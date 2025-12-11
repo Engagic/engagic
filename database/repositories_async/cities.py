@@ -97,8 +97,8 @@ class CityRepository(BaseRepository):
                     state = EXCLUDED.state,
                     vendor = EXCLUDED.vendor,
                     slug = EXCLUDED.slug,
-                    county = EXCLUDED.county,
-                    status = EXCLUDED.status
+                    county = COALESCE(EXCLUDED.county, cities.county),
+                    status = COALESCE(EXCLUDED.status, cities.status)
                 """,
                 city.banana,
                 city.name,

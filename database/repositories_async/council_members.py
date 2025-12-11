@@ -190,7 +190,7 @@ class CouncilMemberRepository(BaseRepository):
 
             result = await conn.execute(query, *params)
 
-            if result == "UPDATE 0":
+            if self._parse_row_count(result) == 0:
                 return False
 
             logger.debug(

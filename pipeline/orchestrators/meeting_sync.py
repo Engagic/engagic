@@ -94,13 +94,16 @@ class MeetingSyncOrchestrator:
             )
 
             existing_meeting = await self.db.meetings.get_meeting(meeting_obj.id)
-            if existing_meeting and existing_meeting.summary:
-                meeting_obj.summary = existing_meeting.summary
+            if existing_meeting:
+                # Always preserve processing state (prevents failed->pending downgrade on resync)
                 meeting_obj.processing_status = existing_meeting.processing_status
                 meeting_obj.processing_method = existing_meeting.processing_method
                 meeting_obj.processing_time = existing_meeting.processing_time
-                meeting_obj.topics = existing_meeting.topics
-                logger.debug("preserved existing summary", title=meeting_obj.title)
+                # Only preserve outputs if processing completed
+                if existing_meeting.summary:
+                    meeting_obj.summary = existing_meeting.summary
+                    meeting_obj.topics = existing_meeting.topics
+                    logger.debug("preserved existing summary", title=meeting_obj.title)
 
             agenda_items = []
             items_data = meeting_dict.get("items")
@@ -429,14 +432,11 @@ class MeetingSyncOrchestrator:
             return
 
         priority = self.enqueue_decider.calculate_priority(meeting_date)
-        packet_url = stored_meeting.packet_url
-        if isinstance(packet_url, list):
-            packet_url = packet_url[0] if packet_url else None
 
         await self.db.queue.enqueue_job(
             source_url=f"meeting://{stored_meeting.id}",
             job_type="meeting",
-            payload={"meeting_id": stored_meeting.id, "packet_url": packet_url, "banana": stored_meeting.banana, "title": stored_meeting.title},
+            payload={"meeting_id": stored_meeting.id},
             meeting_id=stored_meeting.id,
             priority=priority,
             banana=stored_meeting.banana,

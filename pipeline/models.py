@@ -16,22 +16,16 @@ import json
 class MeetingJob:
     """Process a meeting (monolithic or item-level)
 
-    This handles both architectures:
-    - Item-level: Meeting has items, process each item
-    - Monolithic: Meeting has packet_url only, process as single document
+    Processor fetches meeting from DB to get URLs - only meeting_id needed here.
     """
     meeting_id: str
-    source_url: str  # agenda_url or packet_url
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MeetingJob":
-        return cls(
-            meeting_id=data["meeting_id"],
-            source_url=data["source_url"]
-        )
+        return cls(meeting_id=data["meeting_id"])
 
 
 @dataclass
@@ -127,9 +121,9 @@ def serialize_payload(payload: JobPayload) -> str:
     return json.dumps(payload.to_dict())
 
 
-def create_meeting_job(meeting_id: str, source_url: str, banana: str, priority: int = 0) -> Dict[str, Any]:
+def create_meeting_job(meeting_id: str, banana: str, priority: int = 0) -> Dict[str, Any]:
     """Helper to create meeting job data for enqueueing"""
-    payload = MeetingJob(meeting_id=meeting_id, source_url=source_url)
+    payload = MeetingJob(meeting_id=meeting_id)
     return {
         "job_type": "meeting",
         "payload": serialize_payload(payload),
