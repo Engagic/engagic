@@ -7,7 +7,7 @@ Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 **Database:** PostgreSQL 16 with asyncpg
 **Location:** `/opt/engagic` (VPS production)
 **Code:** Async Repository Pattern (database/db_postgres.py -> 14 repositories)
-**Last Updated:** December 5, 2025
+**Last Updated:** December 10, 2025
 
 ---
 
@@ -29,6 +29,8 @@ Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 - [Representation Tables](#representation-tables) (committees, council_members, committee_members, votes, sponsorships)
 - [Topic Junction Tables](#topic-junction-tables) (item_topics, meeting_topics, matter_topics)
 - [Processing Tables](#processing-tables) (cache, queue)
+- [Analytics Tables](#analytics-tables) (happening_items, session_events)
+- [Deliberation Tables](#deliberation-tables) (deliberations, comments, votes, results)
 - [Phase 2 Tables](#phase-2-tables-user-profiles--alerts) (user_profiles, user_topic_subscriptions)
 - [Future Tables](#future-tables-phases-5-6)
 - [JSON Structures](#json-structures)
@@ -142,6 +144,7 @@ Cities covered by Engagic across 11 vendor platforms.
 | `slug` | TEXT NOT NULL | Vendor-specific identifier |
 | `county` | TEXT | County name (optional) |
 | `status` | TEXT | City status: 'active', 'inactive' (default: 'active') |
+| `participation` | JSONB | City-level participation config: {testimony_url, testimony_email, process_url} |
 | `population` | INTEGER | City population (Census data) |
 | `geom` | geometry(MultiPolygon, 4326) | City boundary polygon from Census TIGER/Line |
 | `created_at` | TIMESTAMP | Record creation timestamp |
@@ -200,6 +203,7 @@ Meeting records with optional summaries and metadata.
 | `processing_status` | TEXT | Processing state: 'pending', 'completed', 'failed' |
 | `processing_method` | TEXT | How processed: 'item-based', 'monolithic', 'batch' |
 | `processing_time` | REAL | Processing duration in seconds |
+| `search_vector` | tsvector | Generated column for optimized full-text search |
 | `created_at` | TIMESTAMP | Record creation timestamp |
 | `updated_at` | TIMESTAMP | Last update timestamp |
 
@@ -212,6 +216,7 @@ Meeting records with optional summaries and metadata.
 - `idx_meetings_date` on `date`
 - `idx_meetings_status` on `processing_status`
 - `idx_meetings_committee` on `committee_id`
+- `idx_meetings_search_vector` GIN index on `search_vector`
 
 ---
 
@@ -231,6 +236,9 @@ Individual agenda items within meetings.
 | `attachments` | JSONB | Array of attachment objects |
 | `attachment_hash` | TEXT | SHA-256 hash of attachments for change detection |
 | `summary` | TEXT | LLM-generated item summary (markdown) |
+| `search_vector` | tsvector | Generated column for optimized full-text search |
+| `quality_score` | REAL | Denormalized from ratings for efficient queries |
+| `rating_count` | INTEGER | Number of ratings received (default: 0) |
 | `created_at` | TIMESTAMP | Record creation timestamp |
 
 **Constraints:**
@@ -240,6 +248,7 @@ Individual agenda items within meetings.
 **Indices:**
 - `idx_items_meeting_id` on `meeting_id`
 - `idx_items_matter_id` on `matter_id`
+- `idx_items_search_vector` GIN index on `search_vector`
 
 ---
 
@@ -273,6 +282,7 @@ Core matters table - legislative items deduplicated across meetings.
 | `quality_score` | REAL | Summary quality rating (user feedback) |
 | `rating_count` | INTEGER | Number of ratings received |
 | `final_vote_date` | TIMESTAMP | Date of final vote (if any) |
+| `search_vector` | tsvector | Generated column for optimized full-text search |
 | `created_at` | TIMESTAMP | Record creation timestamp |
 | `updated_at` | TIMESTAMP | Last update timestamp |
 
@@ -286,7 +296,7 @@ Core matters table - legislative items deduplicated across meetings.
 - `idx_city_matters_matter_file` on `matter_file`
 - `idx_city_matters_first_seen` on `first_seen`
 - `idx_city_matters_final_vote` on `final_vote_date`
-- `idx_city_matters_fts` GIN index for full-text search on title + summary
+- `idx_city_matters_search_vector` GIN index on `search_vector`
 
 ---
 
@@ -620,6 +630,170 @@ priority = max(0, 150 - days_from_meeting)
 if retry_count > 0:
     priority -= (20 * retry_count)
 ```
+
+---
+
+## Analytics Tables
+
+Tables for user journey tracking and AI-curated content.
+
+### `happening_items`
+
+AI-curated rankings of important upcoming agenda items. Populated via autonomous analysis, surfaced in "Happening This Week" frontend section.
+
+**Primary Key:** `id` (auto-increment)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | SERIAL PRIMARY KEY | Auto-increment ID |
+| `banana` | TEXT NOT NULL | City identifier (FK to cities) |
+| `item_id` | TEXT NOT NULL | Agenda item ID |
+| `meeting_id` | TEXT NOT NULL | Meeting ID |
+| `meeting_date` | TIMESTAMP NOT NULL | Meeting date for filtering |
+| `rank` | INTEGER NOT NULL | Importance ranking (1 = most important) |
+| `reason` | TEXT NOT NULL | One-sentence explanation of why this item matters |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+| `expires_at` | TIMESTAMP NOT NULL | Auto-cleanup timestamp (usually meeting_date + 1 day) |
+
+**Constraints:**
+- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `UNIQUE (banana, item_id)`
+
+**Indices:**
+- `idx_happening_banana_expires` on `(banana, expires_at)`
+- `idx_happening_expires` on `expires_at`
+
+---
+
+### `session_events`
+
+Anonymous user journey events for analytics. Linked by IP hash (same as rate limiting). 7-day retention via cleanup function.
+
+**Primary Key:** `id` (auto-increment)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | SERIAL PRIMARY KEY | Auto-increment ID |
+| `ip_hash` | TEXT NOT NULL | SHA256[:16] hash of client IP |
+| `event` | TEXT NOT NULL | Event type (page_view, search, etc.) |
+| `url` | TEXT | Page URL |
+| `properties` | JSONB | Event-specific metadata |
+| `created_at` | TIMESTAMPTZ | Event timestamp |
+
+**Indices:**
+- `idx_session_events_ip_hash` on `(ip_hash, created_at DESC)`
+- `idx_session_events_created` on `created_at DESC`
+
+**Cleanup:** `cleanup_old_session_events()` function deletes events older than 7 days.
+
+---
+
+## Deliberation Tables
+
+Opinion clustering system for civic engagement. Citizens submit comments on matters and vote agree/disagree/pass.
+
+### `deliberations`
+
+Deliberation sessions linked to legislative matters.
+
+**Primary Key:** `id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Format: "delib_{matter_id}_{short_hash}" |
+| `matter_id` | TEXT NOT NULL | FK to city_matters |
+| `banana` | TEXT NOT NULL | City identifier |
+| `topic` | TEXT | Optional override of matter title |
+| `is_active` | BOOLEAN | Whether deliberation is open (default: true) |
+| `created_at` | TIMESTAMPTZ | Creation timestamp |
+| `closed_at` | TIMESTAMPTZ | When deliberation was closed |
+
+**Constraints:**
+- `FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE CASCADE`
+
+**Indices:**
+- `idx_delib_matter` on `matter_id`
+- `idx_delib_banana` on `banana`
+
+---
+
+### `deliberation_participants`
+
+Tracks participant numbers for pseudonymous display.
+
+**Primary Key:** Composite `(deliberation_id, user_id)`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `deliberation_id` | TEXT NOT NULL | FK to deliberations |
+| `user_id` | TEXT NOT NULL | FK to userland.users |
+| `participant_number` | INTEGER NOT NULL | Sequential number for pseudonym |
+| `joined_at` | TIMESTAMPTZ | When user joined |
+
+---
+
+### `deliberation_comments`
+
+User-submitted statements for clustering.
+
+**Primary Key:** `id` (auto-increment)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | SERIAL PRIMARY KEY | Auto-increment ID |
+| `deliberation_id` | TEXT NOT NULL | FK to deliberations |
+| `user_id` | TEXT NOT NULL | FK to userland.users |
+| `participant_number` | INTEGER NOT NULL | Pseudonym: "Participant 1", "Participant 2" |
+| `txt` | TEXT NOT NULL | Comment text |
+| `mod_status` | INTEGER | Moderation: 0=pending, 1=approved, -1=hidden |
+| `created_at` | TIMESTAMPTZ | Submission timestamp |
+
+**Indices:**
+- `idx_delib_comments_delib` on `deliberation_id`
+- `idx_delib_comments_mod` on `(deliberation_id, mod_status)`
+- `idx_delib_comments_unique` UNIQUE on `(deliberation_id, user_id, txt)`
+
+---
+
+### `deliberation_votes`
+
+Votes on comments for opinion clustering.
+
+**Primary Key:** Composite `(comment_id, user_id)`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `comment_id` | INTEGER NOT NULL | FK to deliberation_comments |
+| `user_id` | TEXT NOT NULL | FK to userland.users |
+| `vote` | SMALLINT NOT NULL | -1=disagree, 0=pass, 1=agree |
+| `created_at` | TIMESTAMPTZ | Vote timestamp |
+
+**Constraints:**
+- `CHECK (vote IN (-1, 0, 1))`
+
+**Indices:**
+- `idx_delib_votes_comment` on `comment_id`
+
+---
+
+### `deliberation_results`
+
+Cached clustering output. Recomputed on demand.
+
+**Primary Key:** `deliberation_id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `deliberation_id` | TEXT PRIMARY KEY | FK to deliberations |
+| `n_participants` | INTEGER NOT NULL | Number of participants |
+| `n_comments` | INTEGER NOT NULL | Number of comments |
+| `k` | INTEGER NOT NULL | Number of clusters |
+| `positions` | JSONB | 2D positions per participant: [[x,y], ...] |
+| `clusters` | JSONB | Cluster assignments: {user_id: cluster_id} |
+| `cluster_centers` | JSONB | Cluster centers: [[x,y], ...] |
+| `consensus` | JSONB | Consensus scores: {comment_id: score} |
+| `group_votes` | JSONB | Per-cluster vote tallies |
+| `computed_at` | TIMESTAMPTZ | When results were computed |
 
 ---
 
@@ -998,6 +1172,6 @@ ORDER BY table_name;
 
 ---
 
-**Last Updated:** December 5, 2025
+**Last Updated:** December 10, 2025
 
 **See Also:** [../database/README.md](../database/README.md) for repository pattern and Python code usage

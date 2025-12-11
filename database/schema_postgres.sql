@@ -401,6 +401,62 @@ CREATE TABLE IF NOT EXISTS deliberation_results (
 );
 
 -- =======================
+-- ANALYTICS & EVENTS
+-- =======================
+
+-- Happening Items: AI-curated important upcoming agenda items
+-- Populated by autonomous analysis, surfaced in "Happening This Week" section
+CREATE TABLE IF NOT EXISTS happening_items (
+    id SERIAL PRIMARY KEY,
+    banana TEXT NOT NULL REFERENCES cities(banana) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    meeting_id TEXT NOT NULL,
+    meeting_date TIMESTAMP NOT NULL,
+    rank INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP NOT NULL,
+    UNIQUE(banana, item_id)
+);
+
+-- Session Events: Anonymous user journey tracking
+-- Events linked to IP hash (same as rate limiting), 7-day retention
+CREATE TABLE IF NOT EXISTS session_events (
+    id SERIAL PRIMARY KEY,
+    ip_hash TEXT NOT NULL,
+    event TEXT NOT NULL,
+    url TEXT,
+    properties JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Cleanup function for session events (7-day retention)
+CREATE OR REPLACE FUNCTION cleanup_old_session_events()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM session_events WHERE created_at < NOW() - INTERVAL '7 days';
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =======================
+-- FULL-TEXT SEARCH OPTIMIZATION
+-- =======================
+-- Stored generated columns for faster FTS queries (5-10x improvement)
+
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS search_vector tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, ''))) STORED;
+
+ALTER TABLE items ADD COLUMN IF NOT EXISTS search_vector tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, ''))) STORED;
+
+ALTER TABLE city_matters ADD COLUMN IF NOT EXISTS search_vector tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, ''))) STORED;
+
+-- =======================
 -- PERFORMANCE INDICES
 -- =======================
 
@@ -510,19 +566,28 @@ CREATE INDEX IF NOT EXISTS idx_delib_comments_mod ON deliberation_comments(delib
 CREATE UNIQUE INDEX IF NOT EXISTS idx_delib_comments_unique ON deliberation_comments(deliberation_id, user_id, txt);
 CREATE INDEX IF NOT EXISTS idx_delib_votes_comment ON deliberation_votes(comment_id);
 
+-- Happening items
+CREATE INDEX IF NOT EXISTS idx_happening_banana_expires ON happening_items(banana, expires_at);
+CREATE INDEX IF NOT EXISTS idx_happening_expires ON happening_items(expires_at);
+
+-- Session events
+CREATE INDEX IF NOT EXISTS idx_session_events_ip_hash ON session_events(ip_hash, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_session_events_created ON session_events(created_at DESC);
+
 -- =======================
 -- FULL-TEXT SEARCH (PostgreSQL GIN indexes)
 -- =======================
 
--- Full-text search on meetings (title + summary)
+-- FTS indexes on stored search_vector columns (faster than expression indexes)
+CREATE INDEX IF NOT EXISTS idx_meetings_search_vector ON meetings USING gin(search_vector);
+CREATE INDEX IF NOT EXISTS idx_items_search_vector ON items USING gin(search_vector);
+CREATE INDEX IF NOT EXISTS idx_city_matters_search_vector ON city_matters USING gin(search_vector);
+
+-- Legacy expression-based FTS indexes (kept for backward compatibility)
 CREATE INDEX IF NOT EXISTS idx_meetings_fts ON meetings
 USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')));
-
--- Full-text search on items (title + summary)
 CREATE INDEX IF NOT EXISTS idx_items_fts ON items
 USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')));
-
--- Full-text search on city_matters (title + canonical_summary)
 CREATE INDEX IF NOT EXISTS idx_city_matters_fts ON city_matters
 USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, '')));
 
@@ -533,6 +598,22 @@ USING gin(to_tsvector('english', name));
 -- Full-text search on committees (name)
 CREATE INDEX IF NOT EXISTS idx_committees_fts ON committees
 USING gin(to_tsvector('english', name));
+
+-- =======================
+-- COVERING INDEXES (for common query patterns)
+-- =======================
+
+-- Meetings by city sorted by date (covering index for faster reads)
+CREATE INDEX IF NOT EXISTS idx_meetings_banana_date_covering
+    ON meetings(banana, date DESC) INCLUDE (id, title, summary);
+
+-- Items by meeting sorted by sequence
+CREATE INDEX IF NOT EXISTS idx_items_meeting_sequence
+    ON items(meeting_id, sequence ASC);
+
+-- Matters by city for city matters listing
+CREATE INDEX IF NOT EXISTS idx_city_matters_banana_last_seen
+    ON city_matters(banana, last_seen DESC);
 
 -- =======================
 -- COMMENTS FOR CRITICAL CONSTRAINTS
@@ -575,3 +656,10 @@ COMMENT ON TABLE deliberation_comments IS 'User-submitted statements. mod_status
 COMMENT ON TABLE deliberation_votes IS 'Votes on comments: -1=disagree, 0=pass, 1=agree. Vote matrix used for PCA clustering.';
 
 COMMENT ON TABLE deliberation_results IS 'Cached clustering output: 2D positions, cluster assignments, consensus scores. Recomputed on demand.';
+
+COMMENT ON TABLE happening_items IS 'AI-curated rankings of important upcoming agenda items. Populated via autonomous analysis, surfaced in frontend.';
+COMMENT ON COLUMN happening_items.reason IS 'One-sentence explanation of why this item matters to residents.';
+COMMENT ON COLUMN happening_items.expires_at IS 'Usually meeting_date + 1 day. Used for automatic cleanup of stale items.';
+
+COMMENT ON TABLE session_events IS 'Anonymous user journey events. Linked by IP hash (same as rate limiting). 7-day retention via cleanup_old_session_events().';
+COMMENT ON COLUMN session_events.ip_hash IS 'SHA256[:16] hash of client IP. Same hash used in rate limiting middleware.';
