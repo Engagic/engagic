@@ -139,16 +139,24 @@ class AsyncAnalyzer:
             Dict with keys: success, text, page_count, etc.
 
         Raises:
-            ExtractionError: If extraction fails
+            ExtractionError: If extraction fails or times out
         """
         # Download PDF (async I/O)
         pdf_bytes = await self.download_pdf_async(url)
 
-        # Extract text in thread pool (CPU-bound, blocks thread but not event loop)
-        result = await asyncio.to_thread(
-            self.pdf_extractor.extract_from_bytes,
-            pdf_bytes
-        )
+        # Extract text in thread pool with timeout (defense in depth)
+        # 10 min budget for huge PDFs with OCR - OCR itself has 5 min internal timeout
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.pdf_extractor.extract_from_bytes,
+                    pdf_bytes
+                ),
+                timeout=600
+            )
+        except asyncio.TimeoutError:
+            logger.error("PDF extraction timed out after 10 minutes", url=url[:100])
+            raise ExtractionError(f"PDF extraction timed out after 10 minutes: {url[:100]}")
 
         if not result.get("success"):
             raise ExtractionError(f"PDF extraction failed: {result.get('error', 'Unknown error')}")
@@ -238,10 +246,18 @@ class AsyncAnalyzer:
 
                 # Summarize meeting (Gemini SDK is sync, run in thread pool)
                 # Rate limiting handled reactively by summarizer via Gemini's retry instructions
-                summary = await asyncio.to_thread(
-                    self.summarizer.summarize_meeting,
-                    extracted_text
-                )
+                # 5 min timeout - summarizer has internal 3 min retry budget
+                try:
+                    summary = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.summarizer.summarize_meeting,
+                            extracted_text
+                        ),
+                        timeout=300
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("LLM summarization timed out after 5 minutes", url=url[:100])
+                    raise LLMError("LLM summarization timed out after 5 minutes", model="gemini", prompt_type="meeting")
 
                 logger.info("agenda processing success", url=url)
 
@@ -304,7 +320,7 @@ class AsyncAnalyzer:
         )
 
         async def process_item(item: Dict[str, Any]) -> Dict[str, Any]:
-            """Process single item"""
+            """Process single item with timeout"""
             try:
                 text = item.get("text", "")
                 title = item.get("title", "")
@@ -312,11 +328,15 @@ class AsyncAnalyzer:
 
                 # Summarize item (Gemini SDK is sync, run in thread pool)
                 # Rate limiting handled reactively by summarizer
-                summary, topics = await asyncio.to_thread(
-                    self.summarizer.summarize_item,
-                    title,
-                    text,
-                    page_count
+                # 5 min timeout per item - summarizer has 3 min internal retry budget
+                summary, topics = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.summarizer.summarize_item,
+                        title,
+                        text,
+                        page_count
+                    ),
+                    timeout=300
                 )
 
                 return {
@@ -324,6 +344,18 @@ class AsyncAnalyzer:
                     "success": True,
                     "summary": summary,
                     "topics": topics
+                }
+
+            except asyncio.TimeoutError:
+                logger.error(
+                    "item summarization timed out after 5 minutes",
+                    item_id=item.get("item_id"),
+                    title=item.get("title", "")[:50]
+                )
+                return {
+                    "item_id": item["item_id"],
+                    "success": False,
+                    "error": "LLM summarization timed out after 5 minutes"
                 }
 
             except Exception as e:
