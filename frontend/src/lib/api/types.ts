@@ -723,3 +723,25 @@ export interface WatchListResponse {
 	watches: Watch[];
 	total: number;
 }
+
+// Happening This Week types (Claude-analyzed important items)
+export interface HappeningItem {
+	item_id: string;
+	meeting_id: string;
+	meeting_date: string | null;
+	meeting_title: string | null;
+	rank: number;
+	reason: string;
+	item_title: string | null;
+	item_summary: string | null;
+	matter_file: string | null;
+	participation: Meeting['participation'] | null;
+	expires_at: string | null;
+}
+
+export interface HappeningResponse {
+	success: boolean;
+	banana: string;
+	count: number;
+	items: HappeningItem[];
+}

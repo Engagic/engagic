@@ -27,7 +27,8 @@ import type {
 	EngagementStats,
 	IssuesResponse,
 	ReportIssueResponse,
-	IssueType
+	IssueType,
+	HappeningResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -370,5 +371,12 @@ export const apiClient = {
 				credentials: 'include'
 			}
 		);
+	},
+
+	async getHappeningItems(banana: string, limit: number = 10): Promise<HappeningResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/happening`);
+		url.searchParams.set('limit', limit.toString());
+		const response = await fetchWithRetry(url.toString());
+		return response.json();
 	}
 };

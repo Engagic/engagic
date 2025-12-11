@@ -47,3 +47,6 @@ export const reportIssue = apiClient.reportIssue.bind(apiClient);
 export const getMatterEngagement = apiClient.getMatterEngagement.bind(apiClient);
 export const getMeetingEngagement = apiClient.getMeetingEngagement.bind(apiClient);
 export const logView = apiClient.logView.bind(apiClient);
+
+// Happening This Week endpoints
+export const getHappeningItems = apiClient.getHappeningItems.bind(apiClient);
