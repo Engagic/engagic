@@ -26,18 +26,21 @@ async def get_city_committees(
 
     committees = await db.committees.get_committees_by_city(banana, status=status)
 
-    # Get member counts for each committee
-    committees_with_counts = []
-    for committee in committees:
-        members = await db.committees.get_committee_members(committee.id, active_only=True)
-        committees_with_counts.append({
+    # Batch fetch member counts (single query instead of N+1)
+    committee_ids = [c.id for c in committees]
+    member_counts = await db.committees.get_committee_member_counts(committee_ids, active_only=True)
+
+    committees_with_counts = [
+        {
             "id": committee.id,
             "name": committee.name,
             "description": committee.description,
             "status": committee.status,
-            "member_count": len(members),
+            "member_count": member_counts.get(committee.id, 0),
             "created_at": committee.created_at.isoformat() if committee.created_at else None,
-        })
+        }
+        for committee in committees
+    ]
 
     return {
         "success": True,

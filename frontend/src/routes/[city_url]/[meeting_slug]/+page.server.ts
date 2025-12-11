@@ -4,7 +4,7 @@ import { extractMeetingIdFromSlug, parseCityUrl, generateMeetingSlug } from '$li
 import type { PageServerLoad } from './$types';
 import type { Meeting } from '$lib/api/types';
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
 	const { city_url, meeting_slug } = params;
 
@@ -15,6 +15,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			const result = await getMeeting(meetingId);
 
 			if (result.success && result.meeting) {
+				setHeaders({
+					'cache-control': 'public, max-age=300'
+				});
 				return {
 					selectedMeeting: result.meeting,
 					searchResults: {
@@ -51,6 +54,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			});
 
 			if (meeting) {
+				setHeaders({
+					'cache-control': 'public, max-age=300'
+				});
 				return {
 					selectedMeeting: meeting,
 					searchResults
