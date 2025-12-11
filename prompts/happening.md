@@ -19,6 +19,7 @@ FROM cities c
 JOIN meetings m ON m.banana = c.banana
 WHERE c.status = 'active'
   AND m.date BETWEEN NOW() AND NOW() + INTERVAL '14 days'
+  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'deferred', 'postponed'))
 ORDER BY c.name;
 ```
 
@@ -41,6 +42,7 @@ FROM items i
 JOIN meetings m ON m.id = i.meeting_id
 WHERE m.banana = '{banana}'
   AND m.date BETWEEN NOW() AND NOW() + INTERVAL '14 days'
+  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'deferred', 'postponed'))
   AND i.summary IS NOT NULL
 ORDER BY m.date ASC, i.sequence ASC;
 ```
