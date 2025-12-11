@@ -7,6 +7,7 @@ Business logic for handling different search types
 from typing import cast, Dict, Any, List, Optional, TypedDict, Literal, Union
 from typing_extensions import NotRequired
 from difflib import get_close_matches
+from uszipcode import SearchEngine
 from database.db_postgres import Database
 from server.services.meeting import get_meetings_with_items
 from server.utils.geo import parse_city_state_input, get_state_abbreviation, get_state_full_name
@@ -15,6 +16,37 @@ from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_n
 from config import get_logger
 
 logger = get_logger(__name__)
+
+# Lazy-initialized uszipcode search engine (downloads DB on first use)
+_zipcode_search: Optional[SearchEngine] = None
+
+
+def _get_zipcode_search() -> SearchEngine:
+    """Get or create uszipcode SearchEngine (lazy singleton)."""
+    global _zipcode_search
+    if _zipcode_search is None:
+        _zipcode_search = SearchEngine()
+    return _zipcode_search
+
+
+def resolve_states_from_city(city_name: str) -> List[str]:
+    """Try to resolve state abbreviations from city name using uszipcode.
+
+    Returns list of unique states where this city exists, sorted by frequency.
+    """
+    try:
+        search = _get_zipcode_search()
+        results = search.by_city(city_name)
+        if results:
+            states = [z.state for z in results if z.state]
+            if states:
+                # Return unique states sorted by frequency (most common first)
+                unique_states = list(set(states))
+                unique_states.sort(key=lambda s: states.count(s), reverse=True)
+                return unique_states
+    except Exception as e:
+        logger.debug("uszipcode lookup failed", city=city_name, error=str(e))
+    return []
 
 
 class CityOption(TypedDict):
@@ -325,17 +357,60 @@ async def handle_ambiguous_city_search(
                 logger.info("fuzzy match found", query=city_name, matches=[c.name for c in cities])
 
     if not cities:
-        # Record demand - use generic banana without state (user didn't provide state)
-        requested_banana = f"{city_name.lower().replace(' ', '')}UNKNOWN"
+        # Try to resolve states using uszipcode
+        resolved_states = resolve_states_from_city(city_name)
+
+        if len(resolved_states) > 1:
+            # Multiple states found - show ambiguous options (don't record yet, let user pick)
+            city_name_clean = city_name.lower().replace(' ', '')
+            city_options = [
+                {
+                    "city_name": city_name.title(),
+                    "state": state,
+                    "banana": f"{city_name_clean}{state}",
+                    "vendor": "unknown",
+                    "display_name": f"{city_name.title()}, {state}",
+                    "total_meetings": 0,
+                    "meetings_with_packet": 0,
+                    "summarized_meetings": 0,
+                }
+                for state in resolved_states[:5]  # Limit to top 5
+            ]
+            logger.info("ambiguous city from uszipcode", city=city_name, states=resolved_states[:5])
+
+            return {
+                "success": False,
+                "message": f"'{city_name.title()}' exists in multiple states. Select which city you're looking for:",
+                "query": original_input,
+                "type": "city",
+                "ambiguous": True,
+                "city_options": city_options,
+                "meetings": [],
+            }
+
+        elif len(resolved_states) == 1:
+            # Single state found - record with that state
+            requested_banana = f"{city_name.lower().replace(' ', '')}{resolved_states[0]}"
+            logger.info("resolved state from uszipcode", city=city_name, state=resolved_states[0])
+        else:
+            # No results from uszipcode
+            requested_banana = f"{city_name.lower().replace(' ', '')}UNKNOWN"
+
         try:
             await db.userland.record_city_request(requested_banana)
-            logger.info("city request recorded (no state)", banana=requested_banana)
+            logger.info("city request recorded", banana=requested_banana, resolved=bool(resolved_states))
         except Exception as e:
             logger.warning("failed to record city request", banana=requested_banana, error=str(e))
 
+        # Provide helpful message
+        if resolved_states:
+            message = f"We don't have '{city_name.title()}, {resolved_states[0]}' in our database yet - your interest has been noted!"
+        else:
+            message = f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') - your interest has been noted!"
+
         return {
             "success": False,
-            "message": f"We don't have '{city_name}' in our database yet. Please include the state (e.g., '{city_name}, CA') - your interest has been noted!",
+            "message": message,
             "query": original_input,
             "type": "city",
             "meetings": [],
