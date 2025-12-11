@@ -4,7 +4,7 @@ Serves Claude Code's analysis of important upcoming agenda items.
 Items are ranked by importance and include participation info for civic action.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from server.dependencies import get_db
 from database.db_postgres import Database
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api")
 
 
 @router.get("/city/{banana}/happening")
-async def get_happening_items(banana: str, limit: int = 10, db: Database = Depends(get_db)):
+async def get_happening_items(banana: str, limit: int = Query(default=10, ge=1, le=50), db: Database = Depends(get_db)):
     """Get ranked important items for a city, ordered by importance."""
     items = await db.happening.get_happening_items(banana, limit=limit)
 
@@ -44,7 +44,7 @@ async def get_happening_items(banana: str, limit: int = 10, db: Database = Depen
 
 
 @router.get("/happening/active")
-async def get_all_happening(limit: int = 50, db: Database = Depends(get_db)):
+async def get_all_happening(limit: int = Query(default=50, ge=1, le=100), db: Database = Depends(get_db)):
     """Get all active happening items across all cities (admin/debug)."""
     items = await db.happening.get_all_active(limit=limit)
     cities = await db.happening.get_cities_with_happening()

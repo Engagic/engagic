@@ -17,17 +17,27 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_ROOT"
 
-# Load environment if not already set
-if [ -z "$DATABASE_URL" ]; then
-    if [ -f .env ]; then
-        export $(grep -v '^#' .env | xargs)
-    fi
+# Load secrets (same as systemd service)
+if [ -f "$PROJECT_ROOT/.llm_secrets" ]; then
+    set -a
+    source "$PROJECT_ROOT/.llm_secrets"
+    set +a
 fi
 
-# Verify database connection
+# Build DATABASE_URL from config vars (mirrors config.py)
 if [ -z "$DATABASE_URL" ]; then
-    echo "ERROR: DATABASE_URL not set"
-    exit 1
+    PGUSER="${ENGAGIC_POSTGRES_USER:-engagic}"
+    PGPASS="${ENGAGIC_POSTGRES_PASSWORD:-}"
+    PGHOST="${ENGAGIC_POSTGRES_HOST:-localhost}"
+    PGPORT="${ENGAGIC_POSTGRES_PORT:-5432}"
+    PGDB="${ENGAGIC_POSTGRES_DB:-engagic}"
+
+    if [ -z "$PGPASS" ]; then
+        echo "ERROR: ENGAGIC_POSTGRES_PASSWORD not set in .llm_secrets"
+        exit 1
+    fi
+
+    export DATABASE_URL="postgresql://${PGUSER}:${PGPASS}@${PGHOST}:${PGPORT}/${PGDB}"
 fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Starting Happening This Week analysis..."

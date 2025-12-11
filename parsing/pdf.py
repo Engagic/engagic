@@ -352,6 +352,10 @@ class PdfExtractor:
 
         ocr_start = time.time()
 
+        # Total OCR budget: 5 minutes for all pages combined
+        # Prevents infinite hangs if Tesseract locks up on any page
+        ocr_total_timeout = 300
+
         with ThreadPoolExecutor(max_workers=workers) as executor:
             # Submit all OCR jobs
             future_to_page = {
@@ -359,25 +363,42 @@ class PdfExtractor:
                 for page_num, png_bytes, original_text in ocr_tasks
             }
 
-            # Collect results as they complete
-            for future in as_completed(future_to_page):
-                page_num, original_text = future_to_page[future]
-                try:
-                    # Timeout prevents Tesseract hangs from blocking forever
-                    ocr_result = future.result(timeout=120)
+            # Collect results as they complete (with total timeout)
+            completed_futures = set()
+            try:
+                for future in as_completed(future_to_page, timeout=ocr_total_timeout):
+                    completed_futures.add(future)
+                    page_num, original_text = future_to_page[future]
+                    try:
+                        # Per-page timeout as secondary safeguard
+                        ocr_result = future.result(timeout=120)
 
-                    # Decide whether to use OCR or keep original
-                    if self._is_ocr_better(original_text, ocr_result, page_num):
-                        results[page_num] = ocr_result
-                    else:
+                        # Decide whether to use OCR or keep original
+                        if self._is_ocr_better(original_text, ocr_result, page_num):
+                            results[page_num] = ocr_result
+                        else:
+                            results[page_num] = original_text
+
+                    except TimeoutError:
+                        logger.warning("OCR timeout on page", page_num=page_num)
+                        results[page_num] = original_text
+                    except Exception as e:  # Intentionally broad: catch any thread exception
+                        logger.error("parallel OCR failed", page_num=page_num, error=str(e))
                         results[page_num] = original_text
 
-                except TimeoutError:
-                    logger.warning("OCR timeout", page_num=page_num)
-                    results[page_num] = original_text
-                except Exception as e:  # Intentionally broad: catch any thread exception
-                    logger.error("parallel OCR failed", page_num=page_num, error=str(e))
-                    results[page_num] = original_text
+            except TimeoutError:
+                # Total OCR budget exceeded - cancel remaining futures and use original text
+                timed_out_pages = []
+                for future, (page_num, original_text) in future_to_page.items():
+                    if future not in completed_futures:
+                        future.cancel()
+                        results[page_num] = original_text
+                        timed_out_pages.append(page_num)
+                logger.warning(
+                    "OCR total timeout exceeded, skipping remaining pages",
+                    timed_out_pages=timed_out_pages,
+                    timeout_seconds=ocr_total_timeout
+                )
 
         ocr_time = time.time() - ocr_start
         logger.info(

@@ -17,14 +17,20 @@ async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
     """Check rate limits for API endpoints"""
-    # IP Detection - Simple priority chain
-    # nginx validates Cloudflare IPs and sets X-Real-Client-IP with the real user IP
+    # IP Detection - Priority chain with SSR support
+    # When request comes via Cloudflare Pages SSR, CF-Connecting-IP is the Worker's IP.
+    # The SSR layer forwards the real user IP as X-Forwarded-Client-IP.
+    # nginx validates Cloudflare IPs and sets X-Real-Client-IP.
     client_ip_raw = "unknown"
 
     if request.headers.get("X-Real-Client-IP"):
         client_ip_raw = request.headers.get("X-Real-Client-IP") or "unknown"
     elif request.headers.get("X-Real-IP"):
         client_ip_raw = request.headers.get("X-Real-IP") or "unknown"
+    elif request.headers.get("X-Forwarded-Client-IP"):
+        # SSR layer (Cloudflare Pages) forwards the original client IP here
+        # Only trusted when request comes through Cloudflare (validated by nginx)
+        client_ip_raw = request.headers.get("X-Forwarded-Client-IP") or "unknown"
     elif request.headers.get("CF-Connecting-IP"):
         client_ip_raw = request.headers.get("CF-Connecting-IP") or "unknown"
     elif request.headers.get("X-Forwarded-For"):
