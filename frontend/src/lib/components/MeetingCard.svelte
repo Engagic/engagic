@@ -136,7 +136,7 @@
 
 			{#if hasParticipation() && !isPast}
 				<div class="participation-indicator">
-					<span class="status-icon">📢</span> Speak Up
+					<span class="status-icon">📢</span> How to Participate
 				</div>
 			{/if}
 		</div>
