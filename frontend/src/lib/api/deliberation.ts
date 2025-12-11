@@ -2,6 +2,10 @@ import { config } from './config';
 import { ApiError } from './types';
 import { getExtraHeaders } from './api-client';
 
+// Note: This module uses getExtraHeaders() for client-side compatibility.
+// For server-side SSR, prefer using createServerApiClient from './server'
+// to avoid race conditions with concurrent requests.
+
 export interface Deliberation {
 	id: string;
 	matter_id: string;
@@ -73,22 +77,36 @@ async function fetchWithAuth(
 	options: RequestInit = {},
 	accessToken?: string
 ): Promise<Response> {
-	const headers = new Headers(options.headers);
-	headers.set('Content-Type', 'application/json');
+	// Build headers using spread operator for consistency
+	const extraHeaders = getExtraHeaders();
+	const authHeaders: Record<string, string> = accessToken
+		? { 'Authorization': `Bearer ${accessToken}` }
+		: {};
 
-	// Add extra headers (e.g., X-Forwarded-Client-IP for SSR)
-	const extra = getExtraHeaders();
-	for (const [key, value] of Object.entries(extra)) {
-		headers.set(key, value);
-	}
-
-	if (accessToken) {
-		headers.set('Authorization', `Bearer ${accessToken}`);
+	// Convert options.headers to plain object if it's a Headers instance
+	let optionHeaders: Record<string, string> = {};
+	if (options.headers) {
+		if (options.headers instanceof Headers) {
+			options.headers.forEach((value, key) => {
+				optionHeaders[key] = value;
+			});
+		} else if (Array.isArray(options.headers)) {
+			options.headers.forEach(([key, value]) => {
+				optionHeaders[key] = value;
+			});
+		} else {
+			optionHeaders = options.headers as Record<string, string>;
+		}
 	}
 
 	const response = await fetch(url, {
 		...options,
-		headers,
+		headers: {
+			'Content-Type': 'application/json',
+			...extraHeaders,
+			...authHeaders,
+			...optionHeaders
+		},
 		credentials: 'include' // Include cookies for refresh token fallback
 	});
 

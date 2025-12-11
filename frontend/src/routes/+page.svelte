@@ -237,12 +237,9 @@
 
 <div class="container">
 	<header class="header">
-			<div class="logo-container">
-				<img src="/icon-64.png" alt="engagic" class="logo-icon" width="64" height="64" />
-				<a href="/" class="logo">engagic</a>
-			</div>
-			<p class="tagline">civic engagement made simple</p>
-		</header>
+		<a href="/" class="logo">engagic</a>
+		<p class="tagline">civic engagement made simple</p>
+	</header>
 
 		<section class="value-prop">
 			<p class="value-headline">AI summaries of local government meetings</p>
@@ -276,6 +273,16 @@
 		>
 			{loading ? 'Searching...' : 'Search'}
 		</button>
+
+		{#if searchResults && !searchResults.success && !searchResults.ambiguous}
+			<div class="not-found-inline">
+				<p class="not-found-message">{searchResults.message}</p>
+				<p class="not-found-cta">
+					<a href="/dashboard">Create an account</a> to request this city.
+					Cities with active watchers get priority.
+				</p>
+			</div>
+		{/if}
 
 		<div class="button-divider">
 			<span>or</span>
@@ -321,49 +328,61 @@
 		</div>
 	{/if}
 
-	{#if searchResults}
+	{#if searchResults && isSearchAmbiguous(searchResults)}
 		<div class="results-section">
-			{#if searchResults.success === false && searchResults.ambiguous && searchResults.city_options}
-				<div class="ambiguous-cities">
-					<div class="ambiguous-message">
-						{@html searchResults.message}
-					</div>
-					<div class="city-options">
-						{#each searchResults.city_options as cityOption}
-							<div class="city-option-row">
-								<button
-									class="city-option"
-									onclick={() => handleCityOptionClick(cityOption)}
-								>
-									{cityOption.display_name}
-								</button>
-								<div class="city-stats">
-									<span class="stat-total">{cityOption.total_meetings}</span>
-									<span class="stat-separator">|</span>
-									<span class="stat-packets">{cityOption.meetings_with_packet}</span>
-									<span class="stat-separator">|</span>
-									<span class="stat-summaries">{cityOption.summarized_meetings}</span>
-								</div>
+			<div class="ambiguous-cities">
+				<div class="ambiguous-message">
+					{@html searchResults.message}
+				</div>
+				<div class="city-options">
+					{#each searchResults.city_options as cityOption}
+						<div class="city-option-row">
+							<button
+								class="city-option"
+								onclick={() => handleCityOptionClick(cityOption)}
+							>
+								{cityOption.display_name}
+							</button>
+							<div class="city-stats">
+								<span class="stat-total">{cityOption.total_meetings}</span>
+								<span class="stat-separator">|</span>
+								<span class="stat-packets">{cityOption.meetings_with_packet}</span>
+								<span class="stat-separator">|</span>
+								<span class="stat-summaries">{cityOption.summarized_meetings}</span>
 							</div>
-						{/each}
-					</div>
+						</div>
+					{/each}
 				</div>
-			{:else if !searchResults.success}
-				<div class="error-message">
-					{searchResults.message || 'Search failed'}
-				</div>
-				<div class="request-city-cta">
-					<p class="cta-text">Looking for a city we don't track yet?</p>
-					<a href="/dashboard" class="cta-link">Create an account and request it</a>
-					<p class="cta-subtext">Cities with active watchers get priority coverage.</p>
-				</div>
-			{/if}
+			</div>
 		</div>
-	{:else if loading}
+	{/if}
+
+	{#if loading}
 		<div class="loading">
 			Searching for meetings...
 		</div>
 	{/if}
+
+	<section class="mission-section">
+		<div class="mission-content">
+			<p class="mission-text">
+				Many government decisions that affect daily life are locked inside
+				long, difficult-to-read documents.
+			</p>
+			<p class="mission-text">
+				This project exists to make that information accessible for everyone
+				— individuals, journalists, and civic organizations.
+			</p>
+			<p class="mission-text mission-highlight">
+				Engagic is open-source and not funded by any organization.
+			</p>
+			<p class="mission-cta">
+				If you'd like to support, consider sharing it with a friend or making a donation.
+			</p>
+			<a href="/about/donate" class="donate-button">Support Engagic</a>
+		</div>
+		<img src="/icon-64.png" alt="engagic" class="signature-icon" width="48" height="48" />
+	</section>
 
 	<Footer />
 </div>
@@ -419,8 +438,8 @@
 	.country-outline {
 		display: block;
 		width: 100%;
-		max-width: 280px;
-		margin: 3rem auto 0.5rem;
+		max-width: 200px;
+		margin: 3.5rem auto -2rem;
 		color: var(--text-tertiary);
 		opacity: 0.6;
 		transition: opacity 0.2s ease, transform 0.2s ease;
@@ -438,8 +457,8 @@
 
 	@media (max-width: 640px) {
 		.country-outline {
-			max-width: 240px;
-			margin-top: 1rem;
+			max-width: 160px;
+			margin: 2.5rem auto -1.5rem;
 		}
 	}
 
@@ -453,64 +472,108 @@
 		}
 	}
 
-	.logo-container {
+	.mission-section {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		gap: 1rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.logo-icon {
-		width: 64px;
-		height: 64px;
-		border-radius: 16px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-	}
-
-	@media (max-width: 640px) {
-		.logo-icon {
-			width: 48px;
-			height: 48px;
-			border-radius: 12px;
-		}
-	}
-
-	.request-city-cta {
-		margin-top: 1.5rem;
-		padding: 1.5rem;
-		background: var(--surface-secondary);
-		border: 2px solid var(--civic-blue);
-		border-radius: 11px;
+		gap: 2rem;
+		margin-top: 0;
+		padding: 1rem 1rem 2rem;
 		text-align: center;
 	}
 
-	.cta-text {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0 0 0.5rem 0;
+	.mission-content {
+		max-width: 480px;
 	}
 
-	.cta-link {
+	.mission-text {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 1rem;
+		line-height: 1.6;
+		color: var(--text-secondary);
+		margin: 0 0 1rem 0;
+	}
+
+	.mission-highlight {
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+
+	.mission-cta {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.95rem;
+		color: var(--text-secondary);
+		margin: 1.5rem 0 1rem 0;
+	}
+
+	.donate-button {
 		display: inline-block;
-		color: var(--civic-blue);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.95rem;
 		font-weight: 500;
-		text-decoration: underline;
-		text-underline-offset: 3px;
+		color: white;
+		background: var(--civic-blue);
+		padding: 0.75rem 1.5rem;
+		border-radius: 8px;
+		text-decoration: none;
+		transition: background var(--transition-fast), transform var(--transition-fast);
 	}
 
-	.cta-link:hover {
-		opacity: 0.8;
+	.donate-button:hover {
+		background: var(--civic-accent);
+		transform: translateY(-1px);
 	}
 
-	.cta-subtext {
+	.signature-icon {
+		width: 48px;
+		height: 48px;
+		border-radius: 12px;
+		opacity: 0.7;
+		transition: opacity var(--transition-fast);
+	}
+
+	.signature-icon:hover {
+		opacity: 1;
+	}
+
+	@media (max-width: 640px) {
+		.mission-section {
+			margin-top: 3rem;
+			padding: 1.5rem 1rem;
+		}
+
+		.mission-text {
+			font-size: 0.95rem;
+		}
+	}
+
+	.not-found-inline {
+		margin-top: 1rem;
+		padding: 1rem;
+		text-align: center;
+	}
+
+	.not-found-message {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.95rem;
+		color: var(--text-secondary);
+		margin: 0 0 0.5rem 0;
+	}
+
+	.not-found-cta {
 		font-family: system-ui, -apple-system, sans-serif;
 		font-size: 0.85rem;
 		color: var(--text-tertiary);
-		margin: 0.75rem 0 0 0;
+		margin: 0;
+	}
+
+	.not-found-cta a {
+		color: var(--civic-blue);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.not-found-cta a:hover {
+		color: var(--civic-accent);
 	}
 </style>

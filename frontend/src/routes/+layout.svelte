@@ -1,12 +1,21 @@
 <script>
 	import '../app.css';
+	import { afterNavigate } from '$app/navigation';
 	import { navigating, page } from '$app/stores';
 	import { themeState } from '$lib/stores/theme.svelte';
 	import { authState } from '$lib/stores/auth.svelte';
+	import { logger } from '$lib/services/logger';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	// Only show nav on homepage
 	const showNav = $derived($page.url.pathname === '/');
+
+	// Track page views on navigation
+	afterNavigate(({ from, to }) => {
+		if (to?.url) {
+			logger.trackPageView(to.url.pathname, from?.url?.pathname);
+		}
+	});
 
 	// Theme is applied via:
 	// 1. Inline script in svelte:head (prevents flash)
