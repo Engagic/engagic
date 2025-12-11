@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { signup } from '$lib/api/auth';
 	import { page } from '$app/stores';
+	import { logger } from '$lib/services/logger';
+	import { onMount } from 'svelte';
 
 	let email = $state('');
 	let name = $state('');
@@ -11,6 +13,11 @@
 	// Get city from query params (from 404 page redirect)
 	const cityBanana = $derived($page.url.searchParams.get('city') || '');
 	const cityDisplayName = $derived($page.url.searchParams.get('name') || '');
+
+	// Track signup page view
+	onMount(() => {
+		logger.trackEvent('signup_view', { source: cityBanana ? 'city_request' : 'direct' });
+	});
 
 	function isValidEmail(email: string): boolean {
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -44,6 +51,7 @@
 				city_banana: cityBanana || undefined
 			});
 			success = true;
+			logger.trackEvent('signup_submit', { source: cityBanana ? 'city_request' : 'direct' });
 		} catch (err: Error | unknown) {
 			error = err instanceof Error ? err.message : 'Failed to create account';
 			console.error('Signup error:', err);

@@ -12,6 +12,7 @@
 	import ParticipationBox from '$lib/components/ParticipationBox.svelte';
 	import MeetingStatusBanner from '$lib/components/MeetingStatusBanner.svelte';
 	import AgendaItem from '$lib/components/AgendaItem.svelte';
+	import { logger } from '$lib/services/logger';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -30,6 +31,11 @@
 	});
 
 	onMount(async () => {
+		// Track meeting view
+		if (data.selectedMeeting?.banana) {
+			logger.trackEvent('meeting_view', { city: data.selectedMeeting.banana });
+		}
+
 		if (data.selectedMeeting?.id) {
 			try {
 				votesData = await getMeetingVotes(data.selectedMeeting.id);

@@ -3,9 +3,15 @@
 	import { createDeliberation } from '$lib/api/deliberation';
 	import DeliberationPanel from '$lib/components/deliberation/DeliberationPanel.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import { logger } from '$lib/services/logger';
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	onMount(() => {
+		logger.trackEvent('deliberate_view', { matter_id: data.matterId });
+	});
 
 	const matter = $derived(data.matter);
 	let deliberation = $state(data.deliberation.deliberation);

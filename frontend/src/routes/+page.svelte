@@ -75,8 +75,10 @@
 				goto(`/${cityUrl}`, { state: { cachedSearchResults: result } });
 			} else if (isSearchAmbiguous(result)) {
 				logger.trackEvent('search_ambiguous', { query: searchQuery });
+			} else {
+				// City not found
+				logger.trackEvent('search_not_found', { query: searchQuery });
 			}
-			// If not found, the message from API will be shown via searchResults
 		} catch (err) {
 			logger.error('Search failed', err as Error, { query: searchQuery });
 			error = err instanceof Error ? err.message : 'Search failed. Please try again.';
