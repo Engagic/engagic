@@ -9,6 +9,7 @@
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import { logger } from '$lib/services/logger';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -27,6 +28,9 @@
 	onMount(async () => {
 		const matterId = $page.params.matter_id;
 		if (!matterId) return;
+
+		logger.trackEvent('matter_view', { matter_id: matterId });
+
 		// Load sponsors for this specific matter (efficient: only sponsors, not all members)
 		try {
 			const response = await getMatterSponsors(matterId);

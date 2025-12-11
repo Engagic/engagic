@@ -6,6 +6,7 @@
 	import { buildItemShareLink } from '$lib/utils/utils';
 	import { SvelteSet } from 'svelte/reactivity';
 	import VoteBadge from './VoteBadge.svelte';
+	import { logger } from '$lib/services/logger';
 
 	interface Props {
 		item: AgendaItemType;
@@ -34,6 +35,7 @@
 			expandedItems.delete(item.id);
 		} else {
 			expandedItems.add(item.id);
+			logger.trackEvent('item_expand', { city: meeting.banana });
 		}
 	}
 
@@ -80,6 +82,7 @@
 			flyerWindow.document.open();
 			flyerWindow.document.write(html);
 			flyerWindow.document.close();
+			logger.trackEvent('flyer_click', { position, city: meeting.banana });
 		} catch (error) {
 			console.error('Failed to generate flyer:', error);
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';

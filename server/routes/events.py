@@ -45,7 +45,7 @@ EVENT_HANDLERS = {
     "deliberate_view": lambda p: metrics.page_views.labels(page_type="deliberate").inc(),
     "meeting_view": lambda p: metrics.page_views.labels(page_type="meeting_frontend").inc(),
     "item_expand": lambda p: metrics.matter_engagement.labels(action="item_expand").inc(),
-    "matter_view": lambda p: metrics.page_views.labels(page_type="matter_frontend").inc(),
+    "matter_view": lambda p: metrics.matter_engagement.labels(action="matter_view").inc(),
 
     # Discovery features
     "random_meeting_click": lambda p: metrics.matter_engagement.labels(action="random_meeting").inc(),

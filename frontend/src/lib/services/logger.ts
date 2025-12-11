@@ -1,4 +1,5 @@
 // Error logging and monitoring
+import { config } from '$lib/api/config';
 
 interface LogLevel {
 	DEBUG: 'debug';
@@ -97,9 +98,25 @@ class Logger {
 		}
 	}
 	
-	// Track user actions for analytics
+	// Track user actions for analytics - sends to backend in production
 	trackEvent(eventName: string, properties?: Record<string, unknown>) {
 		this.info(`Event: ${eventName}`, properties);
+
+		// Send to backend analytics endpoint in production
+		if (this.isProduction) {
+			try {
+				fetch(`${config.apiBaseUrl}/api/events`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ event: eventName, properties }),
+					keepalive: true  // Ensure delivery even on page unload
+				}).catch(() => {
+					// Silent fail - analytics shouldn't break UX
+				});
+			} catch {
+				// Silent fail
+			}
+		}
 	}
 	
 	// Track API errors
