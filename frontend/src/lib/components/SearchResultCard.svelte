@@ -3,6 +3,7 @@
 	import { marked } from 'marked';
 	import type { CitySearchResult, CitySearchItemResult, CitySearchMatterResult } from '$lib/api/types';
 	import { generateMeetingSlug } from '$lib/utils/utils';
+	import { generateAnchorId } from '$lib/utils/anchor';
 
 	interface Props {
 		result: CitySearchResult;
@@ -31,7 +32,7 @@
 		return r.type === 'matter';
 	}
 
-	function getMeetingLink(): string {
+	function getItemLink(): string {
 		if (isItemResult(result)) {
 			const meeting = {
 				id: result.meeting_id,
@@ -39,7 +40,12 @@
 				date: result.meeting_date || ''
 			};
 			const slug = generateMeetingSlug(meeting as any);
-			return `/${cityUrl}/${slug}`;
+			const anchor = generateAnchorId({
+				id: result.item_id,
+				agenda_number: result.agenda_number,
+				matter_file: result.matter_file
+			});
+			return `/${cityUrl}/${slug}#${anchor}`;
 		}
 		return '';
 	}
@@ -198,11 +204,11 @@
 			<div class="result-actions">
 				{#if isItemResult(result)}
 					<a
-						href={getMeetingLink()}
+						href={getItemLink()}
 						class="action-link primary"
 						onclick={(e) => e.stopPropagation()}
 					>
-						View Meeting
+						View Item
 					</a>
 					{#if result.agenda_url}
 						<a
