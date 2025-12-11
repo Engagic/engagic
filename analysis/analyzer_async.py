@@ -89,6 +89,15 @@ class AsyncAnalyzer:
             await self.http_session.close()
             logger.debug("http session closed")
 
+    async def __aenter__(self):
+        """Async context manager entry"""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - ensures cleanup even on exception"""
+        await self.close()
+        return False  # Don't suppress exceptions
+
     async def download_pdf_async(self, url: str) -> bytes:
         """
         Download PDF asynchronously (non-blocking).

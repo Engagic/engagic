@@ -124,7 +124,7 @@ async def export_geojson() -> None:
         for f in geojson["features"]
         if f["properties"]["has_data"]
     )
-    print(f"\nExport Summary:")
+    print("\nExport Summary:")
     print(f"  Total cities with geometry: {len(geojson['features'])}")
     print(f"  Cities with meeting data: {with_data}")
     print(f"  Cities with summaries: {with_summaries}")

@@ -157,13 +157,13 @@ async def report_status(conn) -> None:
     with_pop = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE population IS NOT NULL")
     total_pop = await conn.fetchval("SELECT COALESCE(SUM(population), 0) FROM cities")
 
-    print(f"\nPopulation Coverage:")
+    print("\nPopulation Coverage:")
     print(f"  Total cities: {total}")
     print(f"  With population: {with_pop} ({100*with_pop/total:.1f}%)")
     print(f"  Total population: {total_pop:,}")
 
     # Top 10 by population
-    print(f"\nTop 10 Cities by Population:")
+    print("\nTop 10 Cities by Population:")
     rows = await conn.fetch("""
         SELECT name, state, population
         FROM cities
@@ -175,7 +175,7 @@ async def report_status(conn) -> None:
         print(f"  {row['name']}, {row['state']}: {row['population']:,}")
 
     # Cities with data
-    print(f"\nPopulation with Meeting Data:")
+    print("\nPopulation with Meeting Data:")
     pop_with_data = await conn.fetchval("""
         SELECT COALESCE(SUM(c.population), 0)
         FROM cities c

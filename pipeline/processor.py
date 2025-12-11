@@ -72,7 +72,9 @@ class Processor:
     ):
         self.db = db
         self.metrics = metrics or NullMetrics()
-        self.is_running = True
+        # Use asyncio.Event for proper async-safe shutdown signaling
+        self._shutdown_event = asyncio.Event()
+        self._running = True  # Internal state, use property for access
 
         if analyzer is not None:
             self.analyzer = analyzer
@@ -83,6 +85,20 @@ class Processor:
             except ValueError:
                 logger.warning("llm analyzer not available, summaries will be skipped", has_analyzer=False)
                 self.analyzer = None
+
+    @property
+    def is_running(self) -> bool:
+        """Thread-safe running state check"""
+        return self._running and not self._shutdown_event.is_set()
+
+    @is_running.setter
+    def is_running(self, value: bool):
+        """Set running state (triggers shutdown event if False)"""
+        self._running = value
+        if not value:
+            self._shutdown_event.set()
+        else:
+            self._shutdown_event.clear()
 
     def _filter_document_versions(self, urls: List[str]) -> List[str]:
         """Keep only latest versions (Ver2 > Ver1, etc.)."""
@@ -146,6 +162,18 @@ class Processor:
             logger.error("queue job failed", queue_id=queue_id, error=str(e))
             return True
 
+    async def _wait_with_shutdown_check(self, seconds: float) -> bool:
+        """Wait for specified seconds, but return early if shutdown is signaled.
+
+        Returns:
+            True if shutdown was signaled, False if wait completed normally
+        """
+        try:
+            await asyncio.wait_for(self._shutdown_event.wait(), timeout=seconds)
+            return True  # Shutdown signaled
+        except asyncio.TimeoutError:
+            return False  # Normal timeout, continue processing
+
     async def process_queue(self):
         """Process jobs from the processing queue continuously"""
         logger.info("starting queue processor")
@@ -155,7 +183,10 @@ class Processor:
                 job = await self.db.queue.get_next_for_processing()
 
                 if not job:
-                    await asyncio.sleep(QUEUE_POLL_INTERVAL)
+                    # Use interruptible wait instead of sleep
+                    if await self._wait_with_shutdown_check(QUEUE_POLL_INTERVAL):
+                        logger.info("shutdown signaled during queue poll")
+                        break
                     continue
 
                 queue_id = job.id
@@ -166,7 +197,8 @@ class Processor:
             except (ProcessingError, LLMError, ExtractionError) as e:
                 # Expected errors during job processing - log and continue
                 logger.error("queue processor error", error=str(e), error_type=type(e).__name__)
-                await asyncio.sleep(QUEUE_FATAL_ERROR_BACKOFF)
+                if await self._wait_with_shutdown_check(QUEUE_FATAL_ERROR_BACKOFF):
+                    break
             except Exception as e:
                 # Catch-all for unexpected errors - log and continue to prevent crash
                 logger.error(
@@ -174,7 +206,10 @@ class Processor:
                     error=str(e),
                     error_type=type(e).__name__
                 )
-                await asyncio.sleep(QUEUE_FATAL_ERROR_BACKOFF)
+                if await self._wait_with_shutdown_check(QUEUE_FATAL_ERROR_BACKOFF):
+                    break
+
+        logger.info("queue processor stopped")
 
     async def process_city_jobs(self, city_banana: str) -> dict:
         """Process all queued jobs for a specific city."""

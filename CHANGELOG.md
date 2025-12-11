@@ -6,6 +6,29 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-10] Architectural Hardening
+
+Based on comprehensive audit, addressed concurrency hazards and improved robustness.
+
+### P0 Fixes (Critical)
+- **Shutdown race conditions**: Replaced simple `is_running` booleans with `asyncio.Event` for proper async-safe signaling in `Processor`, `Conductor`, and `Fetcher`
+- **Interruptible waits**: Added `_wait_with_shutdown_check()` for graceful shutdown during queue polling
+- **Context manager safety**: `enable_processing()` no longer restores state after shutdown signal
+- **SQLite WAL consistency**: WAL mode now set once at init in rate_limiter.py (was scattered)
+- **Session cleanup**: Added async context manager to `AsyncAnalyzer` for guaranteed cleanup
+
+### P1 Enhancements
+- **Repository exceptions**: Added `DuplicateEntityError`, `InvalidForeignKeyError`, `StaleJobError` to exception hierarchy
+- **Structured logging**: Converted f-string logging to structured logging in rate_limiter.py
+
+### Architecture Verified (No Changes Needed)
+- Userland model separation is correct (User model belongs to userland domain)
+- Topics dual storage is intentional denormalization (JSONB source, tables for queries)
+- Pipeline/models.py already centralizes job types with clear documentation
+- Metrics injection is architectural limitation (server and daemon are separate processes)
+
+---
+
 ## [2025-12-04] Architectural Refactoring
 
 Addressed layering violations and god object issues. See REFACTORING.md for full details.

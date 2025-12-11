@@ -50,8 +50,24 @@ class Fetcher:
         self.metrics = metrics or NullMetrics()
         self.rate_limiter = AsyncRateLimiter()
         self.failed_cities: Set[str] = set()
-        self.is_running = True
+        # Use asyncio.Event for proper async-safe shutdown signaling
+        self._shutdown_event = asyncio.Event()
+        self._running = True
         self.meeting_sync = MeetingSyncOrchestrator(db)
+
+    @property
+    def is_running(self) -> bool:
+        """Thread-safe running state check"""
+        return self._running and not self._shutdown_event.is_set()
+
+    @is_running.setter
+    def is_running(self, value: bool):
+        """Set running state (triggers shutdown event if False)"""
+        self._running = value
+        if not value:
+            self._shutdown_event.set()
+        else:
+            self._shutdown_event.clear()
 
     async def sync_all(self) -> List[SyncResult]:
         """Sync all active cities with vendor-aware rate limiting."""
