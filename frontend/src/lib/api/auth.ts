@@ -6,6 +6,7 @@
 
 import { config } from './config';
 import { ApiError, NetworkError } from './types';
+import { getExtraHeaders } from './api-client';
 
 export interface SignupRequest {
 	name: string;
@@ -60,6 +61,7 @@ async function fetchAuth(
 			...options,
 			signal: controller.signal,
 			headers: {
+				...getExtraHeaders(),
 				'Content-Type': 'application/json',
 				...options.headers
 			}

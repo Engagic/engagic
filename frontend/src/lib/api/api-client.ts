@@ -41,6 +41,10 @@ export function setExtraHeaders(headers: Record<string, string>) {
 	extraHeaders = headers;
 }
 
+export function getExtraHeaders(): Record<string, string> {
+	return extraHeaders;
+}
+
 async function fetchWithRetry(
 	url: string,
 	options: RequestInit = {},
