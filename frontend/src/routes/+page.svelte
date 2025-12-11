@@ -366,12 +366,12 @@
 	<section class="mission-section">
 		<div class="mission-content">
 			<p class="mission-text">
-				Many government decisions that affect daily life are locked inside
-				long, difficult-to-read documents.
+				Your city council makes decisions that affect your daily life.
+				Most people never participate - not because they don't care, but because they don't know how.
 			</p>
 			<p class="mission-text">
-				This project exists to make that information accessible for everyone
-				— individuals, journalists, and civic organizations.
+				We built Engagic to change that. For individuals, journalists, and civic organizations
+				who want to stay informed and speak up.
 			</p>
 			<p class="mission-text mission-highlight">
 				Engagic is open-source and not funded by any organization.

@@ -23,7 +23,7 @@
 			</div>
 			<div class="feature-item">
 				<h3 class="feature-heading">Show You How to Participate</h3>
-				<p>Every meeting includes contact info: phone numbers, email addresses, Zoom links. The ritual entry points to having your say.</p>
+				<p>Every meeting includes contact info: phone numbers, email addresses, Zoom links. Everything you need to have your say.</p>
 			</div>
 		</div>
 		<p>Search your zip code and know what's happening - and how to speak up.</p>
