@@ -449,25 +449,6 @@ daemon_status() {
     uv run engagic-daemon --status
 }
 
-sync_city() {
-    if [ -z "$1" ]; then
-        error "City banana required (e.g., paloaltoCA)"
-    fi
-
-    load_env
-    uv run engagic-conductor sync-city "$1"
-}
-
-sync_and_process_city() {
-    if [ -z "$1" ]; then
-        error "City banana required (e.g., paloaltoCA)"
-    fi
-
-    log "Syncing and processing $1..."
-    load_env
-    uv run engagic-conductor sync-and-process-city "$1"
-}
-
 sync_cities() {
     if [ -z "$1" ]; then
         error "Cities required (comma-separated bananas or @file path)"
@@ -574,16 +555,29 @@ preview_watchlist() {
     uv run engagic-conductor preview-watchlist
 }
 
-city_demands() {
+users() {
     load_env
-    log "Fetching city demand requests..."
+    echo -e "${BLUE}=== Users ===${NC}"
+    PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
+SELECT
+    u.email,
+    u.created_at::date as joined,
+    COUNT(a.id) as alerts,
+    STRING_AGG(DISTINCT elem::text, ', ') as watching_cities
+FROM userland.users u
+LEFT JOIN userland.alerts a ON u.id = a.user_id AND a.active = true
+LEFT JOIN LATERAL jsonb_array_elements_text(a.cities) elem ON true
+GROUP BY u.id, u.email, u.created_at
+ORDER BY u.created_at DESC;
+"
+    echo ""
+    echo -e "${BLUE}=== City Requests (from searches) ===${NC}"
     PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
 SELECT
     city_banana as city,
     request_count as requests,
-    first_requested::date as first,
-    last_requested::date as last,
-    status
+    status,
+    last_requested::date as last_req
 FROM userland.city_requests
 ORDER BY request_count DESC, last_requested DESC;
 "
@@ -780,56 +774,32 @@ show_help() {
     echo "  map-status                - Show geometry coverage"
     echo "  map-all                   - Full map pipeline"
     echo ""
-    echo "Data Operations (Explicit Control Only):"
-    echo ""
-    echo "  Single City:"
-    echo "    sync-city CITY_BANANA          - Fetch meetings (enqueue for processing)"
-    echo "    sync-and-process CITY          - Fetch + process immediately"
-    echo ""
-    echo "  Multiple Cities:"
-    echo "    sync-cities CITIES             - Fetch multiple (comma-separated or @file)"
+    echo "Data Operations:"
+    echo "    sync-cities CITIES             - Fetch meetings (single city or comma-separated or @file)"
     echo "    process-cities CITIES          - Process in screen (survives SSH disconnect)"
-    echo "    sync-and-process-cities CITIES - Fetch + process multiple cities"
+    echo "    sync-and-process-cities CITIES - Fetch + process cities"
     echo "    attach                         - Reattach to running process-cities"
     echo "    kill-process                   - Stop running process-cities"
-    echo ""
-    echo "  Batch Operations:"
     echo "    process-unprocessed            - Process all unprocessed meetings in queue"
     echo ""
-    echo "  Watchlist (User-Demanded Cities):"
+    echo "  Watchlist:"
     echo "    preview-watchlist              - Show cities users are watching"
     echo "    sync-watchlist                 - Fetch + process watchlist cities"
     echo "    process-watchlist              - Process queued jobs for watchlist cities"
-    echo "    city-demands                   - Show cities users searched for but we don't have"
     echo ""
     echo "  Preview & Inspection:"
-    echo "    preview-queue [CITY]                    - Show queued jobs (no processing)"
-    echo "    extract-text MEETING_ID [FILE]          - Extract PDF text (no LLM, manual review)"
-    echo "    preview-items MEETING_ID [--extract] [DIR] - Preview items structure (+ optional text extraction)"
+    echo "    preview-queue [CITY]           - Show queued jobs (no processing)"
+    echo "    extract-text MEETING_ID [FILE] - Extract PDF text (no LLM)"
+    echo "    preview-items MEETING_ID       - Preview items structure"
+    echo "    users                          - Show users, alerts, and city requests"
     echo ""
     echo "Examples:"
-    echo ""
-    echo "  # System management"
-    echo "  $0 deploy                                  # First time setup"
     echo "  $0 status                                  # Check what's running"
-    echo "  $0 kill                                    # Stop any background jobs"
-    echo "  $0 logs                                    # Watch conductor logs"
-    echo ""
-    echo "  # Single city workflow"
-    echo "  $0 sync-city paloaltoCA                    # 1. Fetch meetings"
-    echo "  $0 preview-queue paloaltoCA                # 2. Preview queue"
-    echo "  $0 extract-text MEETING_ID /tmp/check.txt  # 3. Review extraction quality"
-    echo "  $0 sync-and-process paloaltoCA             # 4. Process (costs API credits)"
-    echo ""
-    echo "  # Regional workflow (RECOMMENDED)"
-    echo "  $0 sync-cities @regions/bay-area.txt       # 1. Fetch region (free)"
-    echo "  $0 preview-queue                           # 2. Check queue"
-    echo "  $0 process-cities @regions/bay-area.txt    # 3. Starts in screen session"
-    echo "  # Press Ctrl-A D to detach, logs keep running"
-    echo "  $0 attach                                  # 4. Check back on progress"
-    echo ""
-    echo "  # Quick test"
-    echo "  $0 sync-and-process-cities @regions/test-small.txt  # 2 cities (~\$0.02)"
+    echo "  $0 sync-cities paloaltoCA                  # Fetch single city"
+    echo "  $0 sync-cities @regions/bay-area.txt       # Fetch region (free)"
+    echo "  $0 process-cities paloaltoCA               # Process in screen"
+    echo "  $0 sync-and-process-cities paloaltoCA      # Fetch + process"
+    echo "  $0 users                                   # Show user activity"
 }
 
 # Main command handling
@@ -916,25 +886,19 @@ case "$COMMAND" in
     map-status)         cmd_map_status ;;
     map-all)            cmd_map_all ;;
 
-    # Data operations - single city
-    sync-city)           sync_city "$2" ;;
-    sync-and-process)    sync_and_process_city "$2" ;;
-
-    # Data operations - multiple cities
+    # Data operations
     sync-cities)         sync_cities "$2" ;;
     process-cities)      process_cities "$2" ;;
     sync-and-process-cities) sync_and_process_cities "$2" ;;
     attach)              attach_process ;;
     kill-process)        kill_process ;;
-
-    # Batch operations
     process-unprocessed) process_unprocessed ;;
 
-    # Watchlist operations
+    # Watchlist and users
     preview-watchlist)   preview_watchlist ;;
     sync-watchlist)      sync_watchlist ;;
     process-watchlist)   process_watchlist ;;
-    city-demands)        city_demands ;;
+    users)               users ;;
 
     # Preview and inspection
     preview-queue)       preview_queue "$2" ;;
