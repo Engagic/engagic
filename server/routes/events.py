@@ -22,6 +22,7 @@ from config import get_logger
 from database.db_postgres import Database
 from server.dependencies import get_db
 from server.metrics import metrics
+from server.routes.admin import verify_admin_token
 
 logger = get_logger(__name__)
 
@@ -129,7 +130,8 @@ async def track_event(
 async def get_journeys(
     limit: int = Query(default=50, ge=1, le=200),
     hours: int = Query(default=24, ge=1, le=168),
-    db: Database = Depends(get_db)
+    db: Database = Depends(get_db),
+    _: bool = Depends(verify_admin_token)
 ):
     """Get recent user journeys for flow analysis.
 
@@ -175,7 +177,8 @@ async def get_journeys(
 @router.get("/funnel/patterns")
 async def get_patterns(
     hours: int = Query(default=24, ge=1, le=168),
-    db: Database = Depends(get_db)
+    db: Database = Depends(get_db),
+    _: bool = Depends(verify_admin_token)
 ):
     """Get common user flow patterns.
 
@@ -214,7 +217,8 @@ async def get_patterns(
 @router.get("/funnel/dropoffs")
 async def get_dropoffs(
     hours: int = Query(default=24, ge=1, le=168),
-    db: Database = Depends(get_db)
+    db: Database = Depends(get_db),
+    _: bool = Depends(verify_admin_token)
 ):
     """Identify where users drop off.
 
