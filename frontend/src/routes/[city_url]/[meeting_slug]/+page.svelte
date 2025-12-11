@@ -31,8 +31,7 @@
 	});
 
 	onMount(async () => {
-		// Track meeting view
-		if (data.selectedMeeting?.banana) {
+		if (data.selectedMeeting) {
 			logger.trackEvent('meeting_view', { city: data.selectedMeeting.banana });
 		}
 

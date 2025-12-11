@@ -89,7 +89,6 @@
 						</h3>
 
 						<div class="meeting-datetime">
-							<span class="datetime-icon">[ ]</span>
 							{getMeetingDateTime(item)}
 						</div>
 
@@ -258,13 +257,6 @@
 		font-size: 0.85rem;
 		color: var(--civic-gray);
 		margin-bottom: 0.75rem;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.datetime-icon {
-		font-size: 0.9rem;
 	}
 
 	.reason {
