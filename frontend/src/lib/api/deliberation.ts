@@ -1,5 +1,6 @@
 import { config } from './config';
 import { ApiError } from './types';
+import { getExtraHeaders } from './api-client';
 
 export interface Deliberation {
 	id: string;
@@ -75,6 +76,12 @@ async function fetchWithAuth(
 	const headers = new Headers(options.headers);
 	headers.set('Content-Type', 'application/json');
 
+	// Add extra headers (e.g., X-Forwarded-Client-IP for SSR)
+	const extra = getExtraHeaders();
+	for (const [key, value] of Object.entries(extra)) {
+		headers.set(key, value);
+	}
+
 	if (accessToken) {
 		headers.set('Authorization', `Bearer ${accessToken}`);
 	}
@@ -110,7 +117,8 @@ export async function getDeliberationForMatter(
 	matterId: string
 ): Promise<{ deliberation: Deliberation | null }> {
 	const response = await fetch(
-		`${config.apiBaseUrl}/api/v1/deliberations/matter/${matterId}`
+		`${config.apiBaseUrl}/api/v1/deliberations/matter/${matterId}`,
+		{ headers: getExtraHeaders() }
 	);
 
 	if (!response.ok) {
@@ -128,7 +136,8 @@ export async function getDeliberation(
 	deliberationId: string
 ): Promise<GetDeliberationResponse> {
 	const response = await fetch(
-		`${config.apiBaseUrl}/api/v1/deliberations/${deliberationId}`
+		`${config.apiBaseUrl}/api/v1/deliberations/${deliberationId}`,
+		{ headers: getExtraHeaders() }
 	);
 
 	if (!response.ok) {
@@ -149,7 +158,8 @@ export async function getDeliberationResults(
 	deliberationId: string
 ): Promise<GetResultsResponse> {
 	const response = await fetch(
-		`${config.apiBaseUrl}/api/v1/deliberations/${deliberationId}/results`
+		`${config.apiBaseUrl}/api/v1/deliberations/${deliberationId}/results`,
+		{ headers: getExtraHeaders() }
 	);
 
 	if (!response.ok) {
@@ -292,6 +302,7 @@ export async function computeClusters(
 		{
 			method: 'POST',
 			headers: {
+				...getExtraHeaders(),
 				'X-Admin-Token': adminToken
 			}
 		}
