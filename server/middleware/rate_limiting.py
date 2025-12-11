@@ -1,15 +1,13 @@
 """
-Rate limiting middleware - simplified single tier
+Rate limiting middleware
 
-IP Detection Chain (in order of trust):
-1. CF-Connecting-IP: Browser requests via Cloudflare CDN
-   - nginx validates request came from Cloudflare IP ranges
-   - Header only present for legitimate Cloudflare traffic
-
-2. X-Forwarded-Client-IP + X-SSR-Auth: SSR requests from Cloudflare Pages
+IP Detection Chain (priority order):
+1. X-Forwarded-Client-IP + X-SSR-Auth: SSR requests from Cloudflare Pages
    - Pages worker forwards user's cf-connecting-ip
    - X-SSR-Auth validates the request came from our frontend
-   - Prevents spoofing of X-Forwarded-Client-IP header
+   - Takes priority because CF-Connecting-IP for Pages requests is Cloudflare's IP
+
+2. CF-Connecting-IP: Direct browser requests via Cloudflare CDN
 
 3. X-Forwarded-For: Local dev fallback (first IP in chain)
 
@@ -26,13 +24,6 @@ from config import config, get_logger
 
 logger = get_logger(__name__)
 
-# Log SSR auth config at import time
-logger.info(
-    "rate limiting middleware loaded",
-    ssr_auth_configured=bool(config.SSR_AUTH_SECRET),
-    ssr_secret_length=len(config.SSR_AUTH_SECRET) if config.SSR_AUTH_SECRET else 0
-)
-
 
 async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
@@ -44,24 +35,12 @@ async def rate_limit_middleware(
     xff_ip = request.headers.get("X-Forwarded-Client-IP")
     ssr_auth = request.headers.get("X-SSR-Auth")
 
-    # DEBUG: Log headers for requests with SSR-related headers
-    if xff_ip or ssr_auth:
-        logger.info(
-            "SSR headers",
-            cf_connecting_ip=cf_ip[:16] if cf_ip else None,
-            x_forwarded_client_ip=xff_ip[:16] if xff_ip else None,
-            has_ssr_auth=bool(ssr_auth),
-            path=request.url.path
-        )
-
     client_ip = None
 
-    # 1. FIRST check SSR auth - if valid, use X-Forwarded-Client-IP
-    # (SSR requests have CF-Connecting-IP but it's Cloudflare's IP, not user's)
+    # 1. SSR auth takes priority (Cloudflare Pages forwards user IP)
     if xff_ip and ssr_auth and config.SSR_AUTH_SECRET:
         if ssr_auth == config.SSR_AUTH_SECRET:
             client_ip = xff_ip
-            logger.debug("using SSR forwarded IP", client_ip=client_ip[:16])
         else:
             logger.warning("invalid SSR auth token")
 
