@@ -638,6 +638,111 @@ preview_items() {
     fi
 }
 
+# Prometheus Commands
+PROMETHEUS_SERVICE="prometheus"
+
+cmd_start_prometheus() {
+    log "Starting Prometheus..."
+    sudo systemctl start $PROMETHEUS_SERVICE
+    log "Prometheus started"
+}
+
+cmd_stop_prometheus() {
+    log "Stopping Prometheus..."
+    sudo systemctl stop $PROMETHEUS_SERVICE
+    log "Prometheus stopped"
+}
+
+cmd_restart_prometheus() {
+    log "Restarting Prometheus..."
+    sudo systemctl restart $PROMETHEUS_SERVICE
+    log "Prometheus restarted"
+}
+
+cmd_logs_prometheus() {
+    log "Streaming Prometheus logs (Ctrl+C to exit)..."
+    sudo journalctl -u $PROMETHEUS_SERVICE -f
+}
+
+cmd_status_prometheus() {
+    sudo systemctl status $PROMETHEUS_SERVICE
+}
+
+# Testing Commands
+cmd_test_emails() {
+    log "Sending test emails to ibansadowski12@gmail.com..."
+    load_env
+    uv run userland/scripts/test_emails.py ibansadowski12@gmail.com
+}
+
+# Moderation Commands
+cmd_moderate() {
+    load_env
+    if [ "$1" = "review" ]; then
+        if [ -z "$2" ]; then
+            echo "Enter deliberation ID to review:"
+            read -r delib_id
+            uv run scripts/moderate.py review "$delib_id"
+        else
+            uv run scripts/moderate.py review "$2"
+        fi
+    else
+        uv run scripts/moderate.py list
+    fi
+}
+
+# Map Commands
+cmd_map_import() {
+    log "Importing Census TIGER boundaries..."
+    load_env
+    uv run python scripts/import_census_boundaries.py --all
+    log "Census import complete"
+}
+
+cmd_map_tiles() {
+    log "Generating PMTiles..."
+    load_env
+    uv run python scripts/generate_tiles.py --all
+    log "Tiles generated"
+}
+
+cmd_map_status() {
+    load_env
+    uv run python scripts/import_census_boundaries.py --status
+}
+
+cmd_map_all() {
+    log "Running full map pipeline..."
+    cmd_map_import
+    cmd_map_tiles
+    log "Map pipeline complete"
+}
+
+# Security Commands
+cmd_security() {
+    log "Security Status:"
+    echo ""
+    echo "Firewall (UFW):"
+    ufw status | head -5
+    echo ""
+    echo "Fail2ban:"
+    echo "  Status: $(systemctl is-active fail2ban)"
+    fail2ban-client status 2>/dev/null | grep "Jail list" || echo "  (could not query jails)"
+    echo ""
+    echo "SSH:"
+    echo "  Password auth: $(grep -E '^PasswordAuthentication' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || echo 'default (check main config)')"
+    echo ""
+    echo "Backups:"
+    local latest_backup=$(ls -t /opt/engagic/data/backups/engagic_*.sql.gz 2>/dev/null | head -1)
+    if [ -n "$latest_backup" ]; then
+        echo "  Latest: $latest_backup"
+        echo "  Size: $(du -h "$latest_backup" | cut -f1)"
+    else
+        echo "  No backups found (will run at 3 AM daily)"
+    fi
+    echo "  Total backup space: $(du -sh /opt/engagic/data/backups 2>/dev/null | cut -f1)"
+}
+
 show_help() {
     echo "Engagic Deploy"
     echo ""
@@ -659,6 +764,21 @@ show_help() {
     echo "  deploy                    - Full deployment"
     echo "  test                      - Test API endpoints"
     echo "  sync                      - Sync dependencies"
+    echo ""
+    echo "Prometheus:"
+    echo "  start-prometheus, stop-prometheus, restart-prometheus"
+    echo "  logs-prometheus, status-prometheus"
+    echo ""
+    echo "Tools:"
+    echo "  test-emails               - Send test emails"
+    echo "  moderate [review ID]      - List/review pending comments"
+    echo "  security                  - Show security posture"
+    echo ""
+    echo "Map/Coverage:"
+    echo "  map-import                - Import Census TIGER boundaries"
+    echo "  map-tiles                 - Generate PMTiles"
+    echo "  map-status                - Show geometry coverage"
+    echo "  map-all                   - Full map pipeline"
     echo ""
     echo "Data Operations (Explicit Control Only):"
     echo ""
@@ -772,11 +892,29 @@ case "$COMMAND" in
     
     # Testing
     test)           test_services ;;
-    
+
     # Deployment
     update)         quick_update ;;
     deploy)         deploy_full ;;
     sync)           sync_deps ;;
+
+    # Prometheus
+    start-prometheus)   cmd_start_prometheus ;;
+    stop-prometheus)    cmd_stop_prometheus ;;
+    restart-prometheus) cmd_restart_prometheus ;;
+    logs-prometheus)    cmd_logs_prometheus ;;
+    status-prometheus)  cmd_status_prometheus ;;
+
+    # Tools
+    test-emails)        cmd_test_emails ;;
+    moderate)           cmd_moderate "$2" "$3" ;;
+    security)           cmd_security ;;
+
+    # Map
+    map-import)         cmd_map_import ;;
+    map-tiles)          cmd_map_tiles ;;
+    map-status)         cmd_map_status ;;
+    map-all)            cmd_map_all ;;
 
     # Data operations - single city
     sync-city)           sync_city "$2" ;;

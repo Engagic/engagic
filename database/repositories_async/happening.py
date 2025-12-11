@@ -73,6 +73,7 @@ class HappeningRepository(BaseRepository):
             LEFT JOIN meetings m ON m.id = h.meeting_id
             WHERE h.banana = $1
               AND h.expires_at > NOW()
+              AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'deferred', 'postponed'))
             ORDER BY h.rank ASC
             LIMIT $2
             """,
@@ -103,6 +104,7 @@ class HappeningRepository(BaseRepository):
             LEFT JOIN items i ON i.id = h.item_id
             LEFT JOIN meetings m ON m.id = h.meeting_id
             WHERE h.expires_at > NOW()
+              AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'deferred', 'postponed'))
             ORDER BY h.meeting_date ASC, h.rank ASC
             LIMIT $1
             """,
