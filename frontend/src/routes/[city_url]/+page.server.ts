@@ -1,10 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { searchMeetings, type SearchResult } from '$lib/api/index';
+import { configureApiForRequest } from '$lib/api/server';
 import { parseCityUrl } from '$lib/utils/utils';
 import { processMeetingDates } from '$lib/utils/meetings';
 import { error, redirect } from '@sveltejs/kit';
 
-export const load: PageServerLoad = async ({ params, setHeaders }) => {
+export const load: PageServerLoad = async ({ params, setHeaders, locals }) => {
+	configureApiForRequest(locals.clientIp);
 	const { city_url } = params;
 
 	if (city_url === 'about') {
