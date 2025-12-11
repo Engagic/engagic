@@ -238,3 +238,42 @@ def get_metrics_text() -> str:
         Metrics text suitable for /metrics endpoint
     """
     return generate_latest(REGISTRY).decode('utf-8')
+
+
+def get_funnel_stats() -> dict:
+    """Get user funnel stats as clean dict for dashboard display"""
+
+    def get_counter_value(counter, labels: dict) -> int:
+        try:
+            return int(counter.labels(**labels)._value.get())
+        except Exception:
+            return 0
+
+    def get_counter_total(counter) -> int:
+        total = 0
+        try:
+            for sample in counter.collect()[0].samples:
+                if sample.name.endswith('_total'):
+                    total += int(sample.value)
+        except Exception:
+            pass
+        return total
+
+    return {
+        "search": {
+            "success": get_counter_value(metrics.search_queries, {"query_type": "success"}),
+            "not_found": get_counter_value(metrics.search_queries, {"query_type": "not_found"}),
+            "ambiguous": get_counter_value(metrics.search_queries, {"query_type": "ambiguous"}),
+        },
+        "pages": {
+            "signup": get_counter_value(metrics.page_views, {"page_type": "signup"}),
+            "deliberate": get_counter_value(metrics.page_views, {"page_type": "deliberate"}),
+            "meeting": get_counter_value(metrics.page_views, {"page_type": "meeting_frontend"}),
+        },
+        "engagement": {
+            "signup_complete": get_counter_value(metrics.matter_engagement, {"action": "signup"}),
+            "item_expand": get_counter_value(metrics.matter_engagement, {"action": "item_expand"}),
+            "flyer_click": get_counter_value(metrics.matter_engagement, {"action": "flyer_click"}),
+            "matter_view": get_counter_value(metrics.matter_engagement, {"action": "matter_view"}),
+        },
+    }

@@ -30,6 +30,7 @@ class HappeningItem:
     item_title: Optional[str] = None
     item_summary: Optional[str] = None
     matter_file: Optional[str] = None
+    agenda_number: Optional[str] = None
     # Joined from meetings table
     meeting_title: Optional[str] = None
     participation: Optional[dict] = None
@@ -53,6 +54,7 @@ class HappeningRepository(BaseRepository):
             item_title=row['item_title'],
             item_summary=row['item_summary'],
             matter_file=row['matter_file'],
+            agenda_number=row['agenda_number'],
             meeting_title=row['meeting_title'],
             participation=row['participation'],
         )
@@ -64,7 +66,7 @@ class HappeningRepository(BaseRepository):
             SELECT
                 h.id, h.banana, h.item_id, h.meeting_id, h.meeting_date,
                 h.rank, h.reason, h.created_at, h.expires_at,
-                i.title as item_title, i.summary as item_summary, i.matter_file,
+                i.title as item_title, i.summary as item_summary, i.matter_file, i.agenda_number,
                 m.title as meeting_title, m.participation
             FROM happening_items h
             LEFT JOIN items i ON i.id = h.item_id
@@ -95,7 +97,7 @@ class HappeningRepository(BaseRepository):
             SELECT
                 h.id, h.banana, h.item_id, h.meeting_id, h.meeting_date,
                 h.rank, h.reason, h.created_at, h.expires_at,
-                i.title as item_title, i.summary as item_summary, i.matter_file,
+                i.title as item_title, i.summary as item_summary, i.matter_file, i.agenda_number,
                 m.title as meeting_title, m.participation
             FROM happening_items h
             LEFT JOIN items i ON i.id = h.item_id

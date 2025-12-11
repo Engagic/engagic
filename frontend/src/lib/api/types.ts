@@ -735,6 +735,7 @@ export interface HappeningItem {
 	item_title: string | null;
 	item_summary: string | null;
 	matter_file: string | null;
+	agenda_number: string | null;
 	participation: Meeting['participation'] | null;
 	expires_at: string | null;
 }

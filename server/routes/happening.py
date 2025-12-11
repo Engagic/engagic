@@ -35,6 +35,7 @@ async def get_happening_items(banana: str, limit: int = Query(default=10, ge=1, 
                 "item_title": item.item_title,
                 "item_summary": item.item_summary[:500] if item.item_summary else None,
                 "matter_file": item.matter_file,
+                "agenda_number": item.agenda_number,
                 "participation": item.participation,
                 "expires_at": item.expires_at.isoformat() if item.expires_at else None,
             }
