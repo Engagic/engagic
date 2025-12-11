@@ -157,19 +157,40 @@ systemctl status engagic-daemon
 
 ---
 
-## Nginx Reverse Proxy (Optional)
+## Nginx Reverse Proxy
 
-For SSL/TLS and domain mapping:
+### Cloudflare Real IP Configuration (Required)
+
+All traffic goes through Cloudflare. nginx must validate the origin and extract real user IPs.
+
+**Install Cloudflare IP validation:**
+
+```bash
+# Copy config from repo
+cp /opt/engagic/deploy/nginx/cloudflare-realip.conf /etc/nginx/conf.d/
+
+# Or use auto-updater (recommended)
+cp /opt/engagic/deploy/nginx/cloudflare-ip-update.sh /opt/engagic/
+chmod +x /opt/engagic/cloudflare-ip-update.sh
+/opt/engagic/cloudflare-ip-update.sh
+
+# Add to cron (updates weekly)
+crontab -e
+# Add: 0 4 * * 0 /opt/engagic/cloudflare-ip-update.sh
+```
+
+**What this does:**
+- Validates requests came from Cloudflare IP ranges
+- Extracts real user IP from `CF-Connecting-IP` header
+- Sets `$remote_addr` to the real user IP
+- Non-Cloudflare requests (direct/spoofed) use socket IP
+
+### API Server Config
 
 ```nginx
 server {
     listen 80;
     server_name api.engagic.org;
-
-    # Deny blocked IPs from rate limiter (uses Cloudflare-validated real IP)
-    if ($is_blocked_ip) {
-        return 429 "Rate limited";
-    }
 
     location / {
         proxy_pass http://localhost:8000;
@@ -181,9 +202,34 @@ server {
 }
 ```
 
-**Rate Limit IP Blocking:** The API auto-generates `/opt/engagic/data/blocked_ips_nginx.conf` containing banned IPs. This is included by `/etc/nginx/conf.d/engagic-blocked-ips.conf` which wraps it in a geo block using `$real_client_ip` (validated against Cloudflare IPs to prevent header spoofing).
+Note: After Cloudflare realip config, `$remote_addr` is the real user IP (not Cloudflare's edge IP).
 
-Setup SSL with certbot:
+### Rate Limit IP Blocking
+
+The API auto-generates `/opt/engagic/data/blocked_ips_nginx.conf` with banned IPs. To enable nginx-level blocking:
+
+```bash
+# Create wrapper config
+cat > /etc/nginx/conf.d/engagic-blocked-ips.conf << 'EOF'
+geo $is_blocked_ip {
+    default 0;
+    include /opt/engagic/data/blocked_ips_nginx.conf;
+}
+EOF
+
+# Test and reload
+nginx -t && systemctl reload nginx
+```
+
+Then add to your server block:
+
+```nginx
+if ($is_blocked_ip) {
+    return 429 "Rate limited";
+}
+```
+
+### SSL with Certbot
 
 ```bash
 apt install -y certbot python3-certbot-nginx

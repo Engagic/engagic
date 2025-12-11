@@ -3,7 +3,7 @@ import { configureApiForRequest } from '$lib/api/server';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	configureApiForRequest(locals.clientIp);
+	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
 	try {
 		const [analytics, platformMetrics] = await Promise.all([
 			getAnalytics(),

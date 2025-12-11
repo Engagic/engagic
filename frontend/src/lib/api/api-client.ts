@@ -48,14 +48,20 @@ export function getExtraHeaders(): Record<string, string> {
 
 // Request context for server-side use (thread-safe, no global mutation)
 // SSR must forward the user's real IP so API can track user journeys correctly
+// SSR_AUTH_SECRET authenticates SSR requests to prevent X-Forwarded-Client-IP spoofing
 export interface RequestContext {
 	clientIp?: string | null;
+	ssrAuthSecret?: string | null;
 }
 
 export function buildRequestHeaders(context?: RequestContext): Record<string, string> {
 	const headers: Record<string, string> = {};
 	if (context?.clientIp) {
 		headers['X-Forwarded-Client-IP'] = context.clientIp;
+		// Include auth secret if available (validates SSR origin)
+		if (context.ssrAuthSecret) {
+			headers['X-SSR-Auth'] = context.ssrAuthSecret;
+		}
 	}
 	return headers;
 }
@@ -418,10 +424,11 @@ export const apiClient = {
  * Use this in +page.server.ts load functions to avoid race conditions.
  *
  * @param clientIp - The real client IP from event.locals.clientIp
- * @returns API client methods that include the client IP header
+ * @param ssrAuthSecret - SSR auth secret to authenticate SSR requests (from $env/static/private)
+ * @returns API client methods that include the client IP and auth headers
  */
-export function createServerApiClient(clientIp: string | null) {
-	const headers = buildRequestHeaders({ clientIp });
+export function createServerApiClient(clientIp: string | null, ssrAuthSecret?: string | null) {
+	const headers = buildRequestHeaders({ clientIp, ssrAuthSecret });
 
 	// Helper to wrap fetch calls with request-scoped headers
 	async function serverFetch(url: string, options: RequestInit = {}): Promise<Response> {

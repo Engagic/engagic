@@ -5,12 +5,14 @@ declare global {
 		// interface Error {}
 		interface Locals {
 			clientIp: string | null;
+			ssrAuthSecret: string | null;
 		}
 		// interface PageData {}
 		// interface PageState {}
 		interface Platform {
 			env?: {
 				TILES: R2Bucket;
+				SSR_AUTH_SECRET?: string;
 			};
 		}
 	}

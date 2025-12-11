@@ -5,7 +5,7 @@ import type { PageServerLoad } from './$types';
 import type { Meeting } from '$lib/api/types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	configureApiForRequest(locals.clientIp);
+	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
 	const { city_url, meeting_slug } = params;
 
 	try {

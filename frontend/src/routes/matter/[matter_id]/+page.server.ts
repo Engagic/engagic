@@ -3,7 +3,7 @@ import { configureApiForRequest, apiClient } from '$lib/api/server';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	configureApiForRequest(locals.clientIp);
+	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
 	const matterId = params.matter_id;
 
 	try {
