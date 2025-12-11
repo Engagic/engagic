@@ -571,7 +571,17 @@ GROUP BY u.id, u.email, u.created_at
 ORDER BY u.created_at DESC;
 "
     echo ""
-    echo -e "${BLUE}=== City Requests (from searches) ===${NC}"
+    echo -e "${BLUE}=== City Requests WITH Email (priority) ===${NC}"
+    PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
+SELECT DISTINCT elem as requested_city, u.email, a.created_at::date as requested
+FROM userland.alerts a
+JOIN userland.users u ON a.user_id = u.id
+CROSS JOIN LATERAL jsonb_array_elements_text(a.cities) elem
+WHERE NOT EXISTS (SELECT 1 FROM cities c WHERE c.banana = elem)
+ORDER BY requested DESC, elem;
+"
+    echo ""
+    echo -e "${BLUE}=== City Requests (anonymous searches) ===${NC}"
     PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
 SELECT
     city_banana as city,
