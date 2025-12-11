@@ -1,8 +1,9 @@
 <script lang="ts" module>
-	// Module-level cache - persists across component instances and navigation
+	// Module-level caches - persist across component instances and navigation
 	// Cleared only on full page reload
-	const MATTERS_CACHE_DURATION = 120000; // 2 minutes
+	const CACHE_DURATION = 120000; // 2 minutes
 	const mattersCache = new Map<string, { data: any; timestamp: number }>();
+	const happeningCache = new Map<string, { data: any; timestamp: number }>();
 </script>
 
 <script lang="ts">
@@ -61,15 +62,24 @@
 		happeningItems = [];
 	});
 
-	// Fetch happening items for this city
+	// Fetch happening items for this city (with cache)
 	$effect(() => {
 		const banana = city_banana;
 		if (!banana) return;
+
+		// Check cache first
+		const cached = happeningCache.get(banana);
+		const now = Date.now();
+		if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+			happeningItems = cached.data;
+			return;
+		}
 
 		getHappeningItems(banana)
 			.then(response => {
 				if (response.success) {
 					happeningItems = response.items;
+					happeningCache.set(banana, { data: response.items, timestamp: Date.now() });
 				}
 			})
 			.catch(err => {
@@ -88,10 +98,10 @@
 		if (mattersLoading) return; // Already fetching - prevent concurrent requests
 		if (cityMatters) return; // Already loaded in component state
 
-		// Check cache first (2-minute expiration)
+		// Check cache first
 		const cached = mattersCache.get(city_banana);
 		const now = Date.now();
-		if (cached && (now - cached.timestamp) < MATTERS_CACHE_DURATION) {
+		if (cached && (now - cached.timestamp) < CACHE_DURATION) {
 			// Use cached data - instant load
 			cityMatters = cached.data;
 			mattersChecked = true;
@@ -123,13 +133,12 @@
 		}
 	}
 
-	async function switchToMatters() {
+	function switchToMatters() {
 		viewMode = 'matters';
-		await loadCityMatters();
-		// Re-search if there's an active query
-		if (activeSearchQuery) {
-			await performSearch();
-		}
+		// Fire-and-forget: load data without blocking the interaction
+		loadCityMatters().then(() => {
+			if (activeSearchQuery) performSearch();
+		});
 	}
 
 	// Search function - calls appropriate endpoint based on viewMode
@@ -177,10 +186,11 @@
 	}
 
 	// Re-search when switching tabs (if there's an active query)
-	async function switchToMeetings() {
+	function switchToMeetings() {
 		viewMode = 'meetings';
 		if (activeSearchQuery) {
-			await performSearch();
+			// Fire-and-forget: don't block the interaction
+			performSearch();
 		}
 	}
 
@@ -367,8 +377,8 @@
 						{meeting}
 						cityUrl={city_banana}
 						isPast={false}
-						animationDuration={isInitialLoad ? 300 : 0}
-						animationDelay={isInitialLoad ? index * 50 : 0}
+						animationDuration={isInitialLoad && index < 3 ? 300 : 0}
+						animationDelay={isInitialLoad && index < 3 ? index * 50 : 0}
 						onIntroEnd={() => { if (index === upcomingMeetings.length - 1 && !showPastMeetings) isInitialLoad = false; }}
 					/>
 				{/each}
@@ -382,8 +392,8 @@
 							{meeting}
 							cityUrl={city_banana}
 							isPast={true}
-							animationDuration={isInitialLoad ? 300 : 0}
-							animationDelay={isInitialLoad ? index * 50 : 0}
+							animationDuration={isInitialLoad && index < 3 ? 300 : 0}
+							animationDelay={isInitialLoad && index < 3 ? index * 50 : 0}
 							onIntroEnd={() => { if (index === pastMeetings.length - 1) isInitialLoad = false; }}
 						/>
 					{/each}

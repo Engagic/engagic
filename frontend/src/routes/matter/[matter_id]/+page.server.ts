@@ -2,7 +2,7 @@ import type { PageServerLoad } from './$types';
 import { configureApiForRequest, apiClient } from '$lib/api/server';
 import { error } from '@sveltejs/kit';
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
 	const matterId = params.matter_id;
 
@@ -15,6 +15,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		if (!timeline || !timeline.matter) {
 			throw error(404, 'Matter not found');
 		}
+
+		setHeaders({
+			'cache-control': 'public, max-age=300'
+		});
 
 		return {
 			matterId,

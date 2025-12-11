@@ -42,13 +42,13 @@ async def get_dashboard(
         if "keywords" in criteria:
             total_keywords += len(criteria["keywords"])
 
-    matches_this_week = await db.userland.get_match_count(user_id=user.id, since_days=7)
-    total_matches = await db.userland.get_match_count(user_id=user.id)
+    # Single query for both match counts
+    match_counts = await db.userland.get_match_counts(user_id=user.id)
 
     stats = {
         "active_digests": len(active_alerts),
-        "total_matches": total_matches,
-        "matches_this_week": matches_this_week,
+        "total_matches": match_counts["total"],
+        "matches_this_week": match_counts["this_week"],
         "cities_tracked": len(all_cities),
     }
 

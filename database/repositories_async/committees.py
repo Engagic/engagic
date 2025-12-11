@@ -330,6 +330,47 @@ class CommitteeRepository(BaseRepository):
 
             return True
 
+    async def get_committee_member_counts(
+        self,
+        committee_ids: List[str],
+        active_only: bool = True,
+    ) -> Dict[str, int]:
+        """Get active member counts for multiple committees in one query
+
+        Args:
+            committee_ids: List of committee IDs
+            active_only: Only count currently serving members
+
+        Returns:
+            Dict mapping committee_id to member count
+        """
+        if not committee_ids:
+            return {}
+
+        if active_only:
+            rows = await self._fetch(
+                """
+                SELECT committee_id, COUNT(*) as member_count
+                FROM committee_members
+                WHERE committee_id = ANY($1)
+                  AND left_at IS NULL
+                GROUP BY committee_id
+                """,
+                committee_ids,
+            )
+        else:
+            rows = await self._fetch(
+                """
+                SELECT committee_id, COUNT(*) as member_count
+                FROM committee_members
+                WHERE committee_id = ANY($1)
+                GROUP BY committee_id
+                """,
+                committee_ids,
+            )
+
+        return {row["committee_id"]: row["member_count"] for row in rows}
+
     async def get_committee_members(
         self,
         committee_id: str,

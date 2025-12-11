@@ -562,6 +562,37 @@ class UserlandRepository(BaseRepository):
 
         return row["count"]
 
+    async def get_match_counts(
+        self,
+        user_id: str,
+        week_days: int = 7
+    ) -> dict:
+        """Get total and weekly match counts in a single query
+
+        Args:
+            user_id: User ID
+            week_days: Number of days for weekly count (default 7)
+
+        Returns:
+            Dict with 'total' and 'this_week' counts
+        """
+        query = """
+            SELECT
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE am.created_at >= NOW() - INTERVAL '%s days') as this_week
+            FROM userland.alert_matches am
+            JOIN userland.alerts a ON am.alert_id = a.id
+            WHERE a.user_id = $1
+        """ % week_days
+
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, user_id)
+
+        return {
+            "total": row["total"],
+            "this_week": row["this_week"]
+        }
+
     # ========== Magic Link Token Operations ==========
 
     async def is_magic_link_used(self, token_hash: str) -> bool:
