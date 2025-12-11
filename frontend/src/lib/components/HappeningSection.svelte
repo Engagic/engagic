@@ -4,6 +4,7 @@
 	import { formatMeetingDate, extractTime } from '$lib/utils/date-utils';
 	import { generateAnchorId } from '$lib/utils/anchor';
 	import { generateMeetingSlug } from '$lib/utils/utils';
+	import { sanitizeHtml } from '$lib/utils/sanitize';
 
 	interface Props {
 		items: HappeningItem[];
@@ -13,12 +14,12 @@
 	let { items, cityUrl }: Props = $props();
 
 	function getItemLink(item: HappeningItem): string {
-		const meeting = {
+		const slug = generateMeetingSlug({
 			id: item.meeting_id,
 			title: item.meeting_title || '',
-			date: item.meeting_date || ''
-		};
-		const slug = generateMeetingSlug(meeting as any);
+			date: item.meeting_date || '',
+			banana: ''
+		} as Parameters<typeof generateMeetingSlug>[0]);
 		const anchor = generateAnchorId({
 			id: item.item_id,
 			agenda_number: item.agenda_number || undefined,
@@ -29,7 +30,7 @@
 
 	function renderSummary(summary: string | null): string {
 		if (!summary) return '';
-		return marked(summary) as string;
+		return sanitizeHtml(marked(summary) as string);
 	}
 
 	function getMeetingDateTime(item: HappeningItem): string {

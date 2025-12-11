@@ -27,12 +27,13 @@
 
 	.terms-link {
 		color: var(--civic-blue);
-		text-decoration: underline;
+		text-decoration: none;
 		transition: color var(--transition-fast);
 	}
 
 	.terms-link:hover {
 		color: var(--civic-accent);
+		text-decoration: underline;
 	}
 
 	.about-nav-link {

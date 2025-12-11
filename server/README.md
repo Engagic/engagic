@@ -27,7 +27,7 @@ Provides:
 server/
 ├── main.py                 - FastAPI app initialization
 ├── dependencies.py         - Centralized dependency injection
-├── rate_limiter.py         - SQLite tiered rate limiting (Basic/Hacktivist/Enterprise)
+├── rate_limiter.py         - SQLite tiered rate limiting (Standard/Enterprise)
 ├── metrics.py              - Prometheus instrumentation
 │
 ├── routes/                 - HTTP request handlers (15 modules)
@@ -192,34 +192,35 @@ async def search_meetings(request: SearchRequest, db: Database = Depends(get_db)
 
 ### 2. `rate_limiter.py` - Tiered Rate Limiting
 
-**SQLite-based rate limiter with three tiers: Basic (free), Hacktivist (nonprofit/journalist), Enterprise (commercial).**
+**SQLite-based rate limiter with two tiers: Standard (everyone), Enterprise (API key holders).**
 
 #### SQLiteRateLimiter
 
 ```python
-rate_limiter = SQLiteRateLimiter(
-    db_path="rate_limits.db",
-    basic_minute_limit=30,
-    basic_day_limit=1000,
-    hacktivist_minute_limit=100,
-    hacktivist_day_limit=5000
-)
+rate_limiter = SQLiteRateLimiter(db_path="rate_limits.db")
 
 # Check rate limit (returns tier info)
 is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(
-    client_ip_hash, api_key, client_ip_raw, client_ip_raw, is_frontend
+    client_ip_hash,  # SHA256[:16] of raw IP
+    api_key,         # Optional API key for enterprise tier
+    client_ip_raw,   # For whitelist check and logging
+    endpoint         # Optional: endpoint-specific limits (e.g., "/api/events")
 )
 
 # limit_info contains: tier, minute_limit, day_limit, remaining_minute, remaining_daily
 ```
 
+**Limits:**
+- Standard: 60/min, 2000/day
+- Enterprise: 1000/min, 100000/day
+- /api/events: 120/min, 10000/day (endpoint override)
+
 **Features:**
-- **Tiered limits:** Basic, Hacktivist (nonprofit), Enterprise
+- **Endpoint-aware:** Different limits per endpoint (e.g., lighter for analytics)
 - **Dual limits:** Per-minute burst + daily quota
-- **Progressive penalties:** Temp bans for repeated violations
-- **Frontend detection:** Lenient limits for browser users (SvelteKit preloading)
-- **Persistent:** Survives API restarts
-- **WAL mode:** Better concurrency
+- **Progressive penalties:** Temp bans for repeated violations (10+ violations = 1h, 50+ = 24h, 100+ = 7d)
+- **Persistent:** SQLite, survives API restarts, WAL mode for concurrency
+- **nginx integration:** Exports blocked IPs for nginx geo blocking
 
 ---
 
@@ -835,19 +836,21 @@ async def generate_meeting_flyer(
 
 ### `middleware/rate_limiting.py`
 
-Rate limit enforcement with tier detection, frontend detection, and comprehensive 429 responses.
+Rate limit enforcement with endpoint-aware limits and comprehensive 429 responses.
 
 ```python
 async def rate_limit_middleware(request: Request, call_next, rate_limiter: SQLiteRateLimiter):
-    """Check rate limits with tier support
+    """Check rate limits with unified endpoint-aware system
+
+    IP Detection:
+    - CF-Connecting-IP (Cloudflare, trusted)
+    - X-Forwarded-For (nginx fallback, for local dev)
 
     Features:
-    - IP extraction from nginx-validated headers (Cloudflare-aware)
-    - Frontend detection for lenient limits (SvelteKit preloading)
-    - SSR authentication via X-SSR-Auth header
-    - Privacy-preserving IP hashing (GDPR-friendly)
+    - Endpoint-aware: /api/events gets 120/min, others get 60/min
+    - Privacy-preserving IP hashing (SHA256[:16])
     - Graduated responses: friendly for burst limits, firm for daily limits
-    - Temp ban for repeated violations
+    - Temp ban for repeated violations (nginx IP blocking)
     """
 ```
 
@@ -1174,7 +1177,7 @@ FRONTEND_URL=https://engagic.org
 ## Performance Characteristics
 
 - **Response time:** <100ms (cache hit)
-- **Rate limit:** 30 req/min, 1000/day per IP (Basic tier)
+- **Rate limit:** 60 req/min, 2000/day per IP (Standard tier)
 - **Concurrent requests:** 1000+ (uvicorn default)
 - **Database:** Async PostgreSQL with connection pooling
 - **Memory:** ~200MB (API process)

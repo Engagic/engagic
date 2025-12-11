@@ -45,6 +45,13 @@ class TierLimits:
         return tier_map.get(tier, cls.STANDARD)
 
 
+# Endpoint-specific rate limits (overrides tier defaults)
+# Events endpoint gets lighter limits since it's just analytics
+ENDPOINT_LIMITS: Dict[str, Dict[str, int]] = {
+    "/api/events": {"minute_limit": 120, "day_limit": 10000},
+}
+
+
 class SQLiteRateLimiter:
     """
     Persistent rate limiter using SQLite with tier support.
@@ -292,21 +299,25 @@ class SQLiteRateLimiter:
             )
             conn.commit()
 
-    def check_daily_limit(self, client_ip: str, tier: RateLimitTier) -> Tuple[bool, int]:
+    def check_daily_limit(
+        self, client_ip: str, tier: RateLimitTier, day_limit: Optional[int] = None
+    ) -> Tuple[bool, int]:
         """
         Check if client has exceeded daily limit.
 
         Args:
             client_ip: Client IP address
             tier: Rate limit tier
+            day_limit: Optional override for daily limit (for endpoint-specific limits)
 
         Returns:
             (is_allowed, remaining_requests)
         """
         from datetime import datetime, timezone
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        limits = TierLimits.get_limits(tier)
-        day_limit = limits["day_limit"]
+        if day_limit is None:
+            limits = TierLimits.get_limits(tier)
+            day_limit = limits["day_limit"]
 
         with sqlite3.connect(self.db_path) as conn:
             # WAL mode set at init time in _init_db()
@@ -382,25 +393,31 @@ class SQLiteRateLimiter:
         except (sqlite3.Error, OSError, IOError) as e:
             logger.error("failed to export blocked IPs", error=str(e))
 
-    def check_rate_limit(self, client_ip: str, api_key: Optional[str] = None, real_ip: Optional[str] = None, whitelist_ip: Optional[str] = None) -> Tuple[bool, int, Dict[str, Any]]:
+    def check_rate_limit(
+        self,
+        client_ip: str,
+        api_key: Optional[str] = None,
+        real_ip: Optional[str] = None,
+        endpoint: Optional[str] = None
+    ) -> Tuple[bool, int, Dict[str, Any]]:
         """
         Check if client has exceeded rate limits (both minute and day).
 
         Args:
             client_ip: Client IP address (hashed, for rate limiting)
             api_key: Optional API key for tier lookup
-            real_ip: Real client IP from proxy headers (for logging)
-            whitelist_ip: IP to check against whitelist
+            real_ip: Real client IP from proxy headers (for logging and whitelist)
+            endpoint: Optional endpoint path for endpoint-specific limits
 
         Returns:
             (is_allowed, remaining_minute, limit_info)
         """
-        # Whitelist check: VPS IP (165.232.158.241) bypasses rate limits
-        # Uses CF-Connecting-IP from Cloudflare (trusted, can't be spoofed with proper DNS)
-        if whitelist_ip and whitelist_ip in config.ADMIN_WHITELIST_IPS:
+        # Whitelist check: VPS IP bypasses rate limits
+        # NOTE: CF-Connecting-IP can be spoofed if nginx doesn't validate Cloudflare IPs
+        if real_ip and real_ip in config.ADMIN_WHITELIST_IPS:
             logger.debug(
                 "whitelist check passed",
-                whitelist_ip=whitelist_ip[:16] + "..." if whitelist_ip else None,
+                real_ip_prefix=real_ip[:16] + "..." if real_ip else None,
                 whitelist_ips=list(config.ADMIN_WHITELIST_IPS)
             )
             return True, 999999, {
@@ -424,10 +441,18 @@ class SQLiteRateLimiter:
                 "message": f"Temporarily banned for excessive rate limit violations. Ban lifts in {remaining_seconds}s."
             }
 
-        # Get client tier
+        # Get client tier and limits
         tier = self.get_client_tier(client_ip, api_key)
         limits = TierLimits.get_limits(tier)
-        minute_limit = limits["minute_limit"]
+
+        # Check for endpoint-specific limits (overrides tier defaults)
+        if endpoint and endpoint in ENDPOINT_LIMITS:
+            endpoint_limits = ENDPOINT_LIMITS[endpoint]
+            minute_limit = endpoint_limits.get("minute_limit", limits["minute_limit"])
+            day_limit = endpoint_limits.get("day_limit", limits["day_limit"])
+        else:
+            minute_limit = limits["minute_limit"]
+            day_limit = limits["day_limit"]
 
         # Periodic cleanup to prevent database bloat
         if current_time - self._last_cleanup > self._cleanup_interval:
@@ -451,18 +476,18 @@ class SQLiteRateLimiter:
                     "tier": tier.value,
                     "limit_type": "minute",
                     "minute_limit": minute_limit,
-                    "day_limit": limits["day_limit"]
+                    "day_limit": day_limit
                 }
 
-            # Check daily limit
-            is_allowed_daily, remaining_daily = self.check_daily_limit(client_ip, tier)
+            # Check daily limit (uses tier limits, not endpoint overrides)
+            is_allowed_daily, remaining_daily = self.check_daily_limit(client_ip, tier, day_limit)
             if not is_allowed_daily:
                 self.record_violation(client_ip, "daily", real_ip)
                 return False, 0, {
                     "tier": tier.value,
                     "limit_type": "daily",
                     "minute_limit": minute_limit,
-                    "day_limit": limits["day_limit"]
+                    "day_limit": day_limit
                 }
 
             # Add current request to minute tracker
@@ -482,7 +507,7 @@ class SQLiteRateLimiter:
                 "remaining_minute": remaining_minute,
                 "remaining_daily": remaining_daily,
                 "minute_limit": minute_limit,
-                "day_limit": limits["day_limit"]
+                "day_limit": day_limit
             }
 
     def _cleanup_old_entries(self, cutoff_time: float):

@@ -99,6 +99,7 @@ class Logger {
 	}
 	
 	// Track user actions for analytics - sends to backend in production
+	// Backend associates events with IP hash for journey tracking
 	trackEvent(eventName: string, properties?: Record<string, unknown>) {
 		this.info(`Event: ${eventName}`, properties);
 
@@ -106,10 +107,21 @@ class Logger {
 			fetch(`${config.apiBaseUrl}/api/events`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ event: eventName, properties }),
+				body: JSON.stringify({
+					event: eventName,
+					properties,
+					url: typeof window !== 'undefined' ? window.location.pathname : undefined
+				}),
 				keepalive: true
-			}).catch(() => {});
+			}).catch(() => {
+				// Analytics failures are non-critical, silently ignore in production
+			});
 		}
+	}
+
+	// Track page view - call on route changes
+	trackPageView(path: string, referrer?: string) {
+		this.trackEvent('page_view', { path, referrer });
 	}
 	
 	// Track API errors

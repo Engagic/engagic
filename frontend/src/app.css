@@ -417,7 +417,7 @@ body {
 }
 
 .random-button:disabled {
-	background: var(--civic-gray);
+	opacity: 0.7;
 	cursor: not-allowed;
 	transform: none;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);

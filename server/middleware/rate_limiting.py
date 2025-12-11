@@ -17,26 +17,12 @@ async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
     """Check rate limits for API endpoints"""
-    # IP Detection - Priority chain with SSR support
-    # When request comes via Cloudflare Pages SSR, CF-Connecting-IP is the Worker's IP.
-    # The SSR layer forwards the real user IP as X-Forwarded-Client-IP.
-    # nginx validates Cloudflare IPs and sets X-Real-Client-IP.
-    client_ip_raw = "unknown"
-
-    if request.headers.get("X-Real-Client-IP"):
-        client_ip_raw = request.headers.get("X-Real-Client-IP") or "unknown"
-    elif request.headers.get("X-Real-IP"):
-        client_ip_raw = request.headers.get("X-Real-IP") or "unknown"
-    elif request.headers.get("X-Forwarded-Client-IP"):
-        # SSR layer (Cloudflare Pages) forwards the original client IP here
-        # Only trusted when request comes through Cloudflare (validated by nginx)
-        client_ip_raw = request.headers.get("X-Forwarded-Client-IP") or "unknown"
-    elif request.headers.get("CF-Connecting-IP"):
-        client_ip_raw = request.headers.get("CF-Connecting-IP") or "unknown"
-    elif request.headers.get("X-Forwarded-For"):
-        client_ip_raw = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or "unknown"
-    elif request.client:
-        client_ip_raw = request.client.host
+    # IP Detection - Cloudflare is authoritative, X-Forwarded-For for local dev
+    client_ip_raw = (
+        request.headers.get("CF-Connecting-IP") or
+        request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or
+        (request.client.host if request.client else "unknown")
+    )
 
     # Hash IP for privacy
     client_ip_hash = hashlib.sha256(client_ip_raw.encode()).hexdigest()[:16]
@@ -46,14 +32,14 @@ async def rate_limit_middleware(
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    # Whitelist health/metrics endpoints
+    # Whitelist health/metrics endpoints (no rate limiting)
     if request.url.path in ["/health", "/metrics", "/api/health", "/api/metrics"]:
         return await call_next(request)
 
-    # Check rate limit
+    # Check rate limit (endpoint-aware: /api/events gets lighter limits)
     api_key = request.headers.get("X-API-Key")
     is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(
-        client_ip_hash, api_key, client_ip_raw, client_ip_raw
+        client_ip_hash, api_key, client_ip_raw, request.url.path
     )
 
     if not is_allowed:

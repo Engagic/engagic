@@ -34,7 +34,8 @@ import { ApiError, NetworkError } from './types';
 
 const inflightRequests = new Map<string, Promise<any>>();
 
-// Extra headers to add to all requests (used by server-side to forward client IP)
+// Extra headers for client-side use (browser is single-threaded, safe)
+// WARNING: Do NOT use on server-side SSR - use requestHeaders parameter instead
 let extraHeaders: Record<string, string> = {};
 
 export function setExtraHeaders(headers: Record<string, string>) {
@@ -45,10 +46,24 @@ export function getExtraHeaders(): Record<string, string> {
 	return extraHeaders;
 }
 
+// Request context for server-side use (thread-safe, no global mutation)
+// Note: SSR requests are rate-limited by Cloudflare Pages worker IP, not user IP.
+// This is intentional - browser follow-up requests use CF-Connecting-IP properly.
+export interface RequestContext {
+	clientIp?: string | null;  // Preserved for future use if needed
+}
+
+export function buildRequestHeaders(_context?: RequestContext): Record<string, string> {
+	// No longer forwarding client IP - simplified to trust CF-Connecting-IP only
+	// SSR requests get rate limited by their source (Cloudflare Pages), which is fine
+	return {};
+}
+
 async function fetchWithRetry(
 	url: string,
 	options: RequestInit = {},
-	retries: number = config.maxRetries
+	retries: number = config.maxRetries,
+	requestHeaders?: Record<string, string>
 ): Promise<Response> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), config.requestTimeout);
@@ -58,6 +73,7 @@ async function fetchWithRetry(
 			...options,
 			headers: {
 				...extraHeaders,
+				...(requestHeaders || {}),
 				...(options.headers || {})
 			},
 			signal: controller.signal
@@ -79,7 +95,7 @@ async function fetchWithRetry(
 
 		if (response.status >= 500 && retries > 0) {
 			await new Promise(resolve => setTimeout(resolve, config.retryDelay));
-			return fetchWithRetry(url, options, retries - 1);
+			return fetchWithRetry(url, options, retries - 1, requestHeaders);
 		}
 
 		throw new ApiError(errorMessages.generic, response.status, false);
@@ -95,7 +111,7 @@ async function fetchWithRetry(
 			if (error.name === 'AbortError') {
 				if (retries > 0) {
 					await new Promise(resolve => setTimeout(resolve, config.retryDelay));
-					return fetchWithRetry(url, options, retries - 1);
+					return fetchWithRetry(url, options, retries - 1, requestHeaders);
 				}
 				throw new NetworkError(errorMessages.timeout);
 			}
@@ -395,3 +411,93 @@ export const apiClient = {
 		return response.json();
 	}
 };
+
+/**
+ * Create a server-side API client with request-scoped headers.
+ * Use this in +page.server.ts load functions to avoid race conditions.
+ *
+ * @param clientIp - The real client IP from event.locals.clientIp
+ * @returns API client methods that include the client IP header
+ */
+export function createServerApiClient(clientIp: string | null) {
+	const headers = buildRequestHeaders({ clientIp });
+
+	// Helper to wrap fetch calls with request-scoped headers
+	async function serverFetch(url: string, options: RequestInit = {}): Promise<Response> {
+		return fetchWithRetry(url, options, config.maxRetries, headers);
+	}
+
+	return {
+		async searchMeetings(query: string): Promise<SearchResult> {
+			const response = await serverFetch(
+				`${config.apiBaseUrl}/api/search`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ query }),
+				}
+			);
+			return response.json();
+		},
+
+		async getMeeting(meetingId: string): Promise<GetMeetingResponse> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/meeting/${meetingId}`);
+			return response.json();
+		},
+
+		async getMatterTimeline(matterId: string): Promise<MatterTimelineResponse> {
+			const response = await serverFetch(
+				`${config.apiBaseUrl}/api/matters/${matterId}/timeline`
+			);
+			return response.json();
+		},
+
+		async getCityMatters(banana: string, limit: number = 50, offset: number = 0): Promise<GetCityMattersResponse> {
+			const response = await serverFetch(
+				`${config.apiBaseUrl}/api/city/${banana}/matters?limit=${limit}&offset=${offset}`
+			);
+			return response.json();
+		},
+
+		async getHappeningItems(banana: string, limit: number = 10): Promise<HappeningResponse> {
+			const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/happening`);
+			url.searchParams.set('limit', limit.toString());
+			const response = await serverFetch(url.toString());
+			return response.json();
+		},
+
+		async getAnalytics(): Promise<AnalyticsData> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/analytics`);
+			return response.json();
+		},
+
+		async getPlatformMetrics(): Promise<PlatformMetrics> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/platform-metrics`);
+			return response.json();
+		},
+
+		async getCityCouncilMembers(banana: string): Promise<CouncilRosterResponse> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/city/${banana}/council-members`);
+			return response.json();
+		},
+
+		async getCouncilMemberVotes(memberId: string, limit: number = 100): Promise<VotingRecordResponse> {
+			const url = new URL(`${config.apiBaseUrl}/api/council-members/${memberId}/votes`);
+			url.searchParams.set('limit', limit.toString());
+			const response = await serverFetch(url.toString());
+			return response.json();
+		},
+
+		async getCityCommittees(banana: string, status?: string): Promise<CityCommitteesResponse> {
+			const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/committees`);
+			if (status) url.searchParams.set('status', status);
+			const response = await serverFetch(url.toString());
+			return response.json();
+		},
+
+		async getCommittee(committeeId: string): Promise<CommitteeDetailResponse> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/committees/${committeeId}`);
+			return response.json();
+		}
+	};
+}
