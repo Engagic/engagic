@@ -195,7 +195,6 @@ class QueueRepository(BaseRepository):
             payload_data = row["payload"]
 
             if row["job_type"] == "meeting":
-                payload_data["source_url"] = row["source_url"]
                 payload = MeetingJob.from_dict(payload_data)
             elif row["job_type"] == "matter":
                 payload = MatterJob.from_dict(payload_data)
@@ -215,25 +214,8 @@ class QueueRepository(BaseRepository):
                 started_at=row.get("started_at").isoformat() if row.get("started_at") else None
             )
 
-    async def mark_job_complete(self, queue_id: int) -> None:
-        """Mark job as completed
-
-        Args:
-            queue_id: Queue entry ID
-        """
-        await self._execute(
-            """
-            UPDATE queue
-            SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-            WHERE id = $1
-            """,
-            queue_id,
-        )
-
-        logger.debug("job completed", queue_id=queue_id)
-
     async def mark_processing_complete(self, queue_id: int) -> None:
-        """Mark job as completed (alias for mark_job_complete)
+        """Mark job as completed
 
         Args:
             queue_id: Queue job ID
@@ -247,7 +229,7 @@ class QueueRepository(BaseRepository):
             queue_id,
         )
 
-        logger.info("marked queue item as completed", queue_id=queue_id)
+        logger.info("job completed", queue_id=queue_id)
 
     async def mark_job_failed(self, queue_id: int, error_message: str) -> None:
         """Mark job as failed with retry logic

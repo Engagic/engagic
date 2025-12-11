@@ -289,13 +289,13 @@ class UserlandRepository(BaseRepository):
 
     # ========== City Request Operations ==========
 
-    async def record_city_request(self, city_banana: str) -> None:
+    async def record_city_request(self, banana: str) -> None:
         """Record or increment a request for an unknown city
 
         Uses upsert: first request creates row, subsequent requests increment count.
 
         Args:
-            city_banana: City identifier (e.g., "austinTX")
+            banana: City identifier (e.g., "austinTX")
         """
         async with self.transaction() as conn:
             await conn.execute(
@@ -306,7 +306,7 @@ class UserlandRepository(BaseRepository):
                     request_count = userland.city_requests.request_count + 1,
                     last_requested = CURRENT_TIMESTAMP
                 """,
-                city_banana
+                banana
             )
 
     async def get_pending_city_requests(self) -> List[dict]:
@@ -328,14 +328,14 @@ class UserlandRepository(BaseRepository):
 
     async def update_city_request_status(
         self,
-        city_banana: str,
+        banana: str,
         status: str,
         notes: Optional[str] = None
     ) -> None:
         """Update city request status
 
         Args:
-            city_banana: City identifier
+            banana: City identifier
             status: New status ('pending', 'added', 'rejected')
             notes: Optional admin notes
         """
@@ -346,7 +346,7 @@ class UserlandRepository(BaseRepository):
                 SET status = $2, notes = $3
                 WHERE city_banana = $1
                 """,
-                city_banana,
+                banana,
                 status,
                 notes
             )
@@ -427,9 +427,7 @@ class UserlandRepository(BaseRepository):
                 alert_id
             )
 
-        # Parse result like "DELETE 1" to get row count
-        deleted_count = int(result.split()[-1]) if result else 0
-        return deleted_count > 0
+        return self._parse_row_count(result) > 0
 
     # ========== Alert Match Operations ==========
 
@@ -646,6 +644,4 @@ class UserlandRepository(BaseRepository):
                 "DELETE FROM userland.used_magic_links WHERE expires_at < NOW()"
             )
 
-        # Parse "DELETE N" result
-        deleted_count = int(result.split()[-1]) if result else 0
-        return deleted_count
+        return self._parse_row_count(result)

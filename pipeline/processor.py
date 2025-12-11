@@ -146,7 +146,9 @@ class Processor:
                     raise ValueError(f"Invalid payload type for meeting job: {type(job.payload)}")
                 meeting = await self.db.meetings.get_meeting(job.payload.meeting_id)
                 if not meeting:
-                    await self.db.queue.mark_processing_failed(queue_id, "Meeting not found in database")
+                    await self.db.queue.mark_processing_failed(
+                        queue_id, "Meeting not found in database", increment_retry=False
+                    )
                     return True
                 await self.process_meeting(meeting)
 

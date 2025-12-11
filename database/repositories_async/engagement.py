@@ -58,7 +58,7 @@ class EngagementRepository(BaseRepository):
             entity_type,
             entity_id,
         )
-        deleted = result.split()[-1] != "0"
+        deleted = self._parse_row_count(result) > 0
         if deleted:
             await self.log_activity(user_id, None, "unwatch", entity_type, entity_id)
             logger.info("user unwatched entity", user_id=user_id, entity_type=entity_type, entity_id=entity_id)
@@ -74,8 +74,7 @@ class EngagementRepository(BaseRepository):
             entity_type,
             entity_id,
         )
-        assert row is not None  # COUNT(*) always returns exactly one row
-        return row["count"]
+        return row["count"] if row else 0
 
     async def is_watching(self, user_id: str, entity_type: str, entity_id: str) -> bool:
         """Check if user is watching an entity."""

@@ -245,7 +245,7 @@ async def get_city_matters(
             "state": city.state,
             "banana": banana,
             "matters": matters_list,
-            "total_count": total_count,
+            "total": total_count,
             "limit": limit,
             "offset": offset
         }
@@ -302,7 +302,7 @@ async def search_city_matters(
         "query": query,
         "banana": banana,
         "results": results,
-        "count": len(results)
+        "total": len(results)
     }
 
 

@@ -205,9 +205,9 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
             "type": "city",
         })
 
-    # No cached meetings - return empty
+    # No cached meetings - background processor will handle this
     return cast(SearchResponse, {
-        "success": False,
+        "success": True,
         "city_name": city.name,
         "state": city.state,
         "banana": city.banana,
@@ -216,10 +216,10 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
         "source_url": get_vendor_source_url(city.vendor, city.slug),
         "participation": city.participation,
         "meetings": [],
-        "cached": True,
+        "cached": False,
         "query": city_input,
         "type": "city",
-        "message": f"No meetings cached yet for {city_name}, {state}, please check back soon!",
+        "message": f"No meetings available yet for {city_name}, {state} - check back soon as we sync with the city website",
     })
 
 

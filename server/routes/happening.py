@@ -23,7 +23,7 @@ async def get_happening_items(banana: str, limit: int = Query(default=10, ge=1, 
     return {
         "success": True,
         "banana": banana,
-        "count": len(items),
+        "total": len(items),
         "items": [
             {
                 "item_id": item.item_id,
