@@ -90,6 +90,61 @@ class DataIntegrityError(DatabaseError):
         super().__init__(message, context)
 
 
+class DuplicateEntityError(DataIntegrityError):
+    """Attempted to create entity that already exists
+
+    Examples:
+    - Duplicate city banana
+    - Duplicate meeting ID
+    - Duplicate matter ID
+    """
+
+    def __init__(self, message: str, entity_type: str, entity_id: str, table: Optional[str] = None):
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+        super().__init__(message, table=table, constraint="unique")
+        self.context['entity_type'] = entity_type
+        self.context['entity_id'] = entity_id
+
+
+class InvalidForeignKeyError(DataIntegrityError):
+    """Referenced entity does not exist
+
+    Examples:
+    - Meeting ID not found when storing agenda items
+    - City banana not found when storing meeting
+    """
+
+    def __init__(self, message: str, referenced_table: str, referenced_id: str, table: Optional[str] = None):
+        self.referenced_table = referenced_table
+        self.referenced_id = referenced_id
+        super().__init__(message, table=table, constraint="foreign_key")
+        self.context['referenced_table'] = referenced_table
+        self.context['referenced_id'] = referenced_id
+
+
+class StaleJobError(DatabaseError):
+    """Queue job is stale or has been claimed by another worker
+
+    Examples:
+    - Job already processed
+    - Job claimed by another worker
+    - Job status changed during processing
+    """
+    _retryable = True  # Worker should get fresh job from queue
+
+    def __init__(self, message: str, queue_id: int, expected_status: Optional[str] = None, actual_status: Optional[str] = None):
+        self.queue_id = queue_id
+        self.expected_status = expected_status
+        self.actual_status = actual_status
+        context = {'queue_id': queue_id}
+        if expected_status:
+            context['expected_status'] = expected_status
+        if actual_status:
+            context['actual_status'] = actual_status
+        super().__init__(message, context)
+
+
 # ========== Vendor Errors ==========
 
 

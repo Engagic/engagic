@@ -17,7 +17,6 @@ Requirements:
 
 import argparse
 import asyncio
-import os
 import subprocess
 import re
 from pathlib import Path
@@ -292,13 +291,13 @@ async def report_status() -> None:
         with_geom = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE geom IS NOT NULL")
         without_geom = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE geom IS NULL")
 
-        print(f"\nGeometry Coverage:")
+        print("\nGeometry Coverage:")
         print(f"  Total cities: {total}")
         print(f"  With geometry: {with_geom} ({100*with_geom/total:.1f}%)")
         print(f"  Without geometry: {without_geom}")
 
         # By state
-        print(f"\nBy State (top 10 missing):")
+        print("\nBy State (top 10 missing):")
         rows = await conn.fetch("""
             SELECT state, COUNT(*) as total,
                    COUNT(*) FILTER (WHERE geom IS NOT NULL) as with_geom

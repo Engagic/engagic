@@ -79,6 +79,8 @@ class SQLiteRateLimiter:
     def _init_db(self):
         """Initialize rate limiting tables"""
         with sqlite3.connect(self.db_path) as conn:
+            # Enable WAL mode for better concurrency - set once at init
+            conn.execute("PRAGMA journal_mode=WAL")
             # Per-minute tracking
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS rate_limits (
@@ -269,7 +271,11 @@ class SQLiteRateLimiter:
                 # Hash real_ip in logs for privacy (full IP stored in DB for nginx blocking)
                 real_ip_hash = hashlib.sha256(real_ip.encode()).hexdigest()[:12] if real_ip else "unknown"
                 logger.warning(
-                    f"Temporary ban imposed on {client_ip[:16]} (real IP hash: {real_ip_hash}) - {ban_reason} - banned until {ban_until}"
+                    "temporary ban imposed",
+                    client_ip=client_ip[:16],
+                    real_ip_hash=real_ip_hash,
+                    ban_reason=ban_reason,
+                    ban_until=ban_until
                 )
 
                 # Export blocked IPs for nginx
@@ -303,7 +309,7 @@ class SQLiteRateLimiter:
         day_limit = limits["day_limit"]
 
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("PRAGMA journal_mode=WAL")
+            # WAL mode set at init time in _init_db()
 
             # Get or create daily counter
             cursor = conn.execute(
@@ -429,8 +435,7 @@ class SQLiteRateLimiter:
             self._last_cleanup = current_time
 
         with sqlite3.connect(self.db_path) as conn:
-            # Enable WAL mode for better concurrency
-            conn.execute("PRAGMA journal_mode=WAL")
+            # WAL mode set at init time in _init_db()
 
             # Count requests in current window
             cursor = conn.execute(

@@ -46,7 +46,9 @@ class Conductor:
             metrics: Optional metrics collector (injected from server when available)
         """
         self.db = db
-        self.is_running = False
+        # Use asyncio.Event for proper async-safe shutdown signaling
+        self._shutdown_event = asyncio.Event()
+        self._running = False
 
         # Initialize fetcher and processor with database and metrics
         self.fetcher = Fetcher(db=db, metrics=metrics)
@@ -58,9 +60,27 @@ class Conductor:
             has_analyzer=self.processor.analyzer is not None
         )
 
+    @property
+    def is_running(self) -> bool:
+        """Thread-safe running state check"""
+        return self._running and not self._shutdown_event.is_set()
+
+    @is_running.setter
+    def is_running(self, value: bool):
+        """Set running state (triggers shutdown event if False)"""
+        self._running = value
+        if not value:
+            self._shutdown_event.set()
+        else:
+            self._shutdown_event.clear()
+
     @contextmanager
     def enable_processing(self):
-        """Context manager for temporarily enabling processing state"""
+        """Context manager for temporarily enabling processing state.
+
+        Does NOT restore state if shutdown was signaled during context -
+        prevents accidentally re-enabling after shutdown.
+        """
         old_state = self.is_running
         self.is_running = True
         self.fetcher.is_running = True
@@ -68,9 +88,14 @@ class Conductor:
         try:
             yield
         finally:
-            self.is_running = old_state
-            self.fetcher.is_running = old_state
-            self.processor.is_running = old_state
+            # Only restore old state if shutdown wasn't signaled
+            # If shutdown was triggered, keep everything stopped
+            if not self._shutdown_event.is_set():
+                self.is_running = old_state
+                self.fetcher.is_running = old_state
+                self.processor.is_running = old_state
+            else:
+                logger.debug("shutdown signaled, not restoring processing state")
 
     async def close(self):
         """Cleanup resources (HTTP sessions)"""
