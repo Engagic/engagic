@@ -47,16 +47,17 @@ export function getExtraHeaders(): Record<string, string> {
 }
 
 // Request context for server-side use (thread-safe, no global mutation)
-// Note: SSR requests are rate-limited by Cloudflare Pages worker IP, not user IP.
-// This is intentional - browser follow-up requests use CF-Connecting-IP properly.
+// SSR must forward the user's real IP so API can track user journeys correctly
 export interface RequestContext {
-	clientIp?: string | null;  // Preserved for future use if needed
+	clientIp?: string | null;
 }
 
-export function buildRequestHeaders(_context?: RequestContext): Record<string, string> {
-	// No longer forwarding client IP - simplified to trust CF-Connecting-IP only
-	// SSR requests get rate limited by their source (Cloudflare Pages), which is fine
-	return {};
+export function buildRequestHeaders(context?: RequestContext): Record<string, string> {
+	const headers: Record<string, string> = {};
+	if (context?.clientIp) {
+		headers['X-Forwarded-Client-IP'] = context.clientIp;
+	}
+	return headers;
 }
 
 async function fetchWithRetry(
