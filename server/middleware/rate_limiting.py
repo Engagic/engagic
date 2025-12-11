@@ -38,43 +38,36 @@ async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
     """Check rate limits for API endpoints"""
-    # IP Detection - prioritize trusted sources
-    # DEBUG: Log ALL IP-related headers for every request
+    # IP Detection - prioritize SSR auth over CF-Connecting-IP
+    # (Cloudflare Pages requests have CF-Connecting-IP set to Cloudflare's IP, not user's)
     cf_ip = request.headers.get("CF-Connecting-IP")
     xff_ip = request.headers.get("X-Forwarded-Client-IP")
-    ssr_hdr = request.headers.get("X-SSR-Auth")
-    if not cf_ip:  # Only log for non-browser requests (SSR)
+    ssr_auth = request.headers.get("X-SSR-Auth")
+
+    # DEBUG: Log headers for requests with SSR-related headers
+    if xff_ip or ssr_auth:
         logger.info(
-            "IP headers",
-            cf_connecting_ip=bool(cf_ip),
-            x_forwarded_client_ip=bool(xff_ip),
-            x_ssr_auth=bool(ssr_hdr),
+            "SSR headers",
+            cf_connecting_ip=cf_ip[:16] if cf_ip else None,
+            x_forwarded_client_ip=xff_ip[:16] if xff_ip else None,
+            has_ssr_auth=bool(ssr_auth),
             path=request.url.path
         )
 
-    # 1. CF-Connecting-IP (browser via Cloudflare, validated by nginx)
-    client_ip = cf_ip
+    client_ip = None
 
-    # 2. X-Forwarded-Client-IP (SSR, requires valid X-SSR-Auth)
-    if not client_ip:
-        ssr_auth = request.headers.get("X-SSR-Auth")
-        forwarded_ip = request.headers.get("X-Forwarded-Client-IP")
+    # 1. FIRST check SSR auth - if valid, use X-Forwarded-Client-IP
+    # (SSR requests have CF-Connecting-IP but it's Cloudflare's IP, not user's)
+    if xff_ip and ssr_auth and config.SSR_AUTH_SECRET:
+        if ssr_auth == config.SSR_AUTH_SECRET:
+            client_ip = xff_ip
+            logger.debug("using SSR forwarded IP", client_ip=client_ip[:16])
+        else:
+            logger.warning("invalid SSR auth token")
 
-        # DEBUG: Log SSR auth attempt
-        if forwarded_ip or ssr_auth:
-            logger.info(
-                "SSR auth check",
-                has_forwarded_ip=bool(forwarded_ip),
-                has_ssr_auth=bool(ssr_auth),
-                has_config_secret=bool(config.SSR_AUTH_SECRET),
-                secrets_match=ssr_auth == config.SSR_AUTH_SECRET if ssr_auth and config.SSR_AUTH_SECRET else None
-            )
-
-        if forwarded_ip and ssr_auth and config.SSR_AUTH_SECRET:
-            if ssr_auth == config.SSR_AUTH_SECRET:
-                client_ip = forwarded_ip
-            else:
-                logger.warning("invalid SSR auth token", forwarded_ip=forwarded_ip[:16])
+    # 2. Fall back to CF-Connecting-IP (direct browser requests)
+    if not client_ip and cf_ip:
+        client_ip = cf_ip
 
     # 3. X-Forwarded-For fallback (local dev)
     if not client_ip:
