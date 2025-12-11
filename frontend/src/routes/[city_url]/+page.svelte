@@ -7,11 +7,12 @@
 
 <script lang="ts">
 	import { page } from '$app/stores';
-	import type { Meeting, CitySearchItemResult, CitySearchMatterResult } from '$lib/api/index';
-	import { getCityMatters, searchCityMeetings, searchCityMatters } from '$lib/api/index';
+	import type { Meeting, CitySearchItemResult, CitySearchMatterResult, HappeningItem } from '$lib/api/index';
+	import { getCityMatters, searchCityMeetings, searchCityMatters, getHappeningItems } from '$lib/api/index';
 	import MeetingCard from '$lib/components/MeetingCard.svelte';
 	import MatterTimeline from '$lib/components/MatterTimeline.svelte';
 	import SearchResultCard from '$lib/components/SearchResultCard.svelte';
+	import HappeningSection from '$lib/components/HappeningSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import WatchCityModal from '$lib/components/WatchCityModal.svelte';
 	import type { PageData } from './$types';
@@ -35,6 +36,9 @@
 	let searchLoading = $state(false);
 	let activeSearchQuery = $state(''); // The query that produced current results
 
+	// Happening This Week state
+	let happeningItems = $state<HappeningItem[]>([]);
+
 	// Data comes from server-side load function - reactive to navigation
 	const searchResults = $derived(data.searchResults);
 	const upcomingMeetings = $derived(data.upcomingMeetings || []);
@@ -53,6 +57,25 @@
 		searchMeetingsResults = null;
 		searchMattersResults = null;
 		activeSearchQuery = '';
+		// Reset happening items
+		happeningItems = [];
+	});
+
+	// Fetch happening items for this city
+	$effect(() => {
+		const banana = city_banana;
+		if (!banana) return;
+
+		getHappeningItems(banana)
+			.then(response => {
+				if (response.success) {
+					happeningItems = response.items;
+				}
+			})
+			.catch(err => {
+				// Silently fail - happening items are optional enhancement
+				console.debug('Happening items not available:', err);
+			});
 	});
 
 	// Derived: Check if city has qualifying matters (2+ appearances)
@@ -315,6 +338,9 @@
 				{/if}
 			{:else if searchResults.meetings && searchResults.meetings.length > 0}
 				<!-- Default view -->
+				{#if happeningItems.length > 0}
+					<HappeningSection items={happeningItems} cityUrl={city_banana} />
+				{/if}
 				{#if upcomingMeetings.length > 0 || pastMeetings.length > 0}
 					<div class="meetings-filter">
 						{#if upcomingMeetings.length > 0}

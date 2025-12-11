@@ -16,6 +16,7 @@ from database.repositories_async import (
     CityRepository,
     CommitteeRepository,
     CouncilMemberRepository,
+    HappeningRepository,
     MeetingRepository,
     ItemRepository,
     MatterRepository,
@@ -59,12 +60,14 @@ class Database:
     search: SearchRepository
     userland: UserlandRepository
     deliberation: DeliberationRepository
+    happening: HappeningRepository
 
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
         self.cities = CityRepository(pool)
         self.committees = CommitteeRepository(pool)
         self.council_members = CouncilMemberRepository(pool)
+        self.happening = HappeningRepository(pool)
         self.meetings = MeetingRepository(pool)
         self.items = ItemRepository(pool)
         self.matters = MatterRepository(pool)
