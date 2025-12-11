@@ -26,6 +26,11 @@
 		count: number;
 	}
 
+	// Auth state
+	let adminToken = $state('');
+	let isAuthenticated = $state(false);
+	let authError = $state('');
+
 	let journeys: Journey[] = $state([]);
 	let patterns: Pattern[] = $state([]);
 	let dropoffs: Dropoff[] = $state([]);
@@ -35,20 +40,67 @@
 	let error = $state('');
 	let activeTab: 'journeys' | 'patterns' | 'dropoffs' = $state('journeys');
 
+	let refreshInterval: ReturnType<typeof setInterval> | null = null;
+
 	onMount(() => {
-		loadAll();
-		const interval = setInterval(loadAll, 60000);
-		return () => clearInterval(interval);
+		const stored = localStorage.getItem('engagic_admin_token');
+		if (stored) {
+			adminToken = stored;
+			verifyAndLoad();
+		} else {
+			loading = false;
+		}
+		return () => {
+			if (refreshInterval) clearInterval(refreshInterval);
+		};
 	});
+
+	async function verifyAndLoad() {
+		loading = true;
+		authError = '';
+		try {
+			const res = await fetch(`${config.apiBaseUrl}/api/funnel/journeys?hours=1&limit=1`, {
+				headers: { Authorization: `Bearer ${adminToken}` }
+			});
+			if (res.ok) {
+				localStorage.setItem('engagic_admin_token', adminToken);
+				isAuthenticated = true;
+				await loadAll();
+				refreshInterval = setInterval(loadAll, 60000);
+			} else {
+				authError = 'Invalid admin token';
+				localStorage.removeItem('engagic_admin_token');
+				loading = false;
+			}
+		} catch (e) {
+			authError = 'Failed to connect to API';
+			loading = false;
+		}
+	}
+
+	function logout() {
+		localStorage.removeItem('engagic_admin_token');
+		isAuthenticated = false;
+		adminToken = '';
+		journeys = [];
+		patterns = [];
+		dropoffs = [];
+		uniqueUsers = 0;
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+	}
 
 	async function loadAll() {
 		loading = true;
 		error = '';
 		try {
+			const headers = { Authorization: `Bearer ${adminToken}` };
 			const [journeysRes, patternsRes, dropoffsRes] = await Promise.all([
-				fetch(`${config.apiBaseUrl}/api/funnel/journeys?hours=${hours}&limit=50`),
-				fetch(`${config.apiBaseUrl}/api/funnel/patterns?hours=${hours}`),
-				fetch(`${config.apiBaseUrl}/api/funnel/dropoffs?hours=${hours}`)
+				fetch(`${config.apiBaseUrl}/api/funnel/journeys?hours=${hours}&limit=50`, { headers }),
+				fetch(`${config.apiBaseUrl}/api/funnel/patterns?hours=${hours}`, { headers }),
+				fetch(`${config.apiBaseUrl}/api/funnel/dropoffs?hours=${hours}`, { headers })
 			]);
 
 			if (!journeysRes.ok || !patternsRes.ok || !dropoffsRes.ok) {
@@ -94,20 +146,43 @@
 </svelte:head>
 
 <div class="journey-page">
-	<header class="page-header">
-		<h1>User Journeys</h1>
-		<p class="subtitle">Individual visitor flows and behavior patterns</p>
-		<div class="controls">
-			<select bind:value={hours} onchange={() => loadAll()}>
-				<option value={1}>Last hour</option>
-				<option value={6}>Last 6 hours</option>
-				<option value={24}>Last 24 hours</option>
-				<option value={48}>Last 48 hours</option>
-				<option value={168}>Last 7 days</option>
-			</select>
-			<span class="user-count">{uniqueUsers} unique users</span>
+	{#if !isAuthenticated}
+		<div class="auth-container">
+			<h1>User Journeys</h1>
+			<p class="subtitle">Enter admin token to access analytics</p>
+			<form class="auth-form" onsubmit={(e) => { e.preventDefault(); verifyAndLoad(); }}>
+				<input
+					type="password"
+					bind:value={adminToken}
+					placeholder="Admin token"
+					class="token-input"
+				/>
+				<button type="submit" disabled={loading || !adminToken}>
+					{loading ? 'Verifying...' : 'Login'}
+				</button>
+			</form>
+			{#if authError}
+				<p class="auth-error">{authError}</p>
+			{/if}
 		</div>
-	</header>
+	{:else}
+		<header class="page-header">
+			<div class="header-top">
+				<h1>User Journeys</h1>
+				<button class="logout-btn" onclick={logout}>Logout</button>
+			</div>
+			<p class="subtitle">Individual visitor flows and behavior patterns</p>
+			<div class="controls">
+				<select bind:value={hours} onchange={() => loadAll()}>
+					<option value={1}>Last hour</option>
+					<option value={6}>Last 6 hours</option>
+					<option value={24}>Last 24 hours</option>
+					<option value={48}>Last 48 hours</option>
+					<option value={168}>Last 7 days</option>
+				</select>
+				<span class="user-count">{uniqueUsers} unique users</span>
+			</div>
+		</header>
 
 	<nav class="tabs">
 		<button class:active={activeTab === 'journeys'} onclick={() => (activeTab = 'journeys')}>
@@ -191,6 +266,7 @@
 			</section>
 		{/if}
 	{/if}
+	{/if}
 </div>
 
 <style>
@@ -199,6 +275,67 @@
 		margin: 0 auto;
 		padding: 2rem;
 		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	.auth-container {
+		max-width: 400px;
+		margin: 4rem auto;
+		text-align: center;
+	}
+
+	.auth-form {
+		display: flex;
+		gap: 0.5rem;
+		margin-top: 1.5rem;
+	}
+
+	.token-input {
+		flex: 1;
+		padding: 0.75rem 1rem;
+		border: 1px solid #d1d5db;
+		border-radius: 6px;
+		font-size: 0.9rem;
+	}
+
+	.auth-form button {
+		padding: 0.75rem 1.5rem;
+		background: #3b82f6;
+		color: white;
+		border: none;
+		border-radius: 6px;
+		font-size: 0.9rem;
+		cursor: pointer;
+	}
+
+	.auth-form button:disabled {
+		background: #93c5fd;
+		cursor: not-allowed;
+	}
+
+	.auth-error {
+		color: #dc2626;
+		margin-top: 1rem;
+		font-size: 0.9rem;
+	}
+
+	.header-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.logout-btn {
+		padding: 0.4rem 0.8rem;
+		background: none;
+		border: 1px solid #d1d5db;
+		border-radius: 4px;
+		font-size: 0.8rem;
+		color: #6b7280;
+		cursor: pointer;
+	}
+
+	.logout-btn:hover {
+		background: #f3f4f6;
 	}
 
 	.page-header {
