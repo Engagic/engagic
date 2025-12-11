@@ -17,17 +17,7 @@ router = APIRouter(prefix="/api")
 
 @router.get("/city/{banana}/happening")
 async def get_happening_items(banana: str, limit: int = 10, db: Database = Depends(get_db)):
-    """Get important upcoming items for a city.
-
-    Returns Claude-analyzed ranked items with:
-    - Item details (title, summary, matter_file)
-    - Meeting context (title, datetime)
-    - Participation info (email, phone, virtual meeting URL)
-    - Reason why this item matters
-
-    Items are ordered by rank (most important first).
-    Only returns non-expired items (meeting hasn't passed yet).
-    """
+    """Get ranked important items for a city, ordered by importance."""
     items = await db.happening.get_happening_items(banana, limit=limit)
 
     return {
@@ -55,11 +45,7 @@ async def get_happening_items(banana: str, limit: int = 10, db: Database = Depen
 
 @router.get("/happening/active")
 async def get_all_happening(limit: int = 50, db: Database = Depends(get_db)):
-    """Get all active happening items across all cities.
-
-    Useful for monitoring and debugging the Claude analysis pipeline.
-    Returns items ordered by meeting date (soonest first).
-    """
+    """Get all active happening items across all cities (admin/debug)."""
     items = await db.happening.get_all_active(limit=limit)
     cities = await db.happening.get_cities_with_happening()
 

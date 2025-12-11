@@ -28,8 +28,6 @@ class FrontendEvent(BaseModel):
     properties: dict | None = None
 
 
-# Event handlers map frontend events to Prometheus metrics
-# No PII stored - just increment counters
 EVENT_HANDLERS = {
     # Search funnel
     "search_success": lambda p: metrics.search_queries.labels(query_type="success").inc(),

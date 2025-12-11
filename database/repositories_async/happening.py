@@ -38,12 +38,27 @@ class HappeningItem:
 class HappeningRepository(BaseRepository):
     """Repository for happening items (Claude-analyzed important upcoming items)."""
 
-    async def get_happening_items(self, banana: str, limit: int = 10) -> List[HappeningItem]:
-        """Get active happening items for a city with full context.
+    def _row_to_item(self, row) -> HappeningItem:
+        """Convert a database row to HappeningItem."""
+        return HappeningItem(
+            id=row['id'],
+            banana=row['banana'],
+            item_id=row['item_id'],
+            meeting_id=row['meeting_id'],
+            meeting_date=row['meeting_date'],
+            rank=row['rank'],
+            reason=row['reason'],
+            created_at=row['created_at'],
+            expires_at=row['expires_at'],
+            item_title=row['item_title'],
+            item_summary=row['item_summary'],
+            matter_file=row['matter_file'],
+            meeting_title=row['meeting_title'],
+            participation=row['participation'],
+        )
 
-        Joins to items and meetings tables to include all display info.
-        Only returns non-expired items, ordered by rank.
-        """
+    async def get_happening_items(self, banana: str, limit: int = 10) -> List[HappeningItem]:
+        """Get active happening items for a city, ordered by rank."""
         rows = await self._fetch(
             """
             SELECT
@@ -61,26 +76,7 @@ class HappeningRepository(BaseRepository):
             """,
             banana, limit
         )
-
-        return [
-            HappeningItem(
-                id=row['id'],
-                banana=row['banana'],
-                item_id=row['item_id'],
-                meeting_id=row['meeting_id'],
-                meeting_date=row['meeting_date'],
-                rank=row['rank'],
-                reason=row['reason'],
-                created_at=row['created_at'],
-                expires_at=row['expires_at'],
-                item_title=row['item_title'],
-                item_summary=row['item_summary'],
-                matter_file=row['matter_file'],
-                meeting_title=row['meeting_title'],
-                participation=row['participation'],
-            )
-            for row in rows
-        ]
+        return [self._row_to_item(row) for row in rows]
 
     async def clear_expired(self) -> int:
         """Delete expired happening items. Returns count deleted."""
@@ -93,10 +89,7 @@ class HappeningRepository(BaseRepository):
         return count
 
     async def get_all_active(self, limit: int = 100) -> List[HappeningItem]:
-        """Get all active happening items across all cities.
-
-        Useful for debugging and monitoring.
-        """
+        """Get all active happening items across all cities."""
         rows = await self._fetch(
             """
             SELECT
@@ -113,26 +106,7 @@ class HappeningRepository(BaseRepository):
             """,
             limit
         )
-
-        return [
-            HappeningItem(
-                id=row['id'],
-                banana=row['banana'],
-                item_id=row['item_id'],
-                meeting_id=row['meeting_id'],
-                meeting_date=row['meeting_date'],
-                rank=row['rank'],
-                reason=row['reason'],
-                created_at=row['created_at'],
-                expires_at=row['expires_at'],
-                item_title=row['item_title'],
-                item_summary=row['item_summary'],
-                matter_file=row['matter_file'],
-                meeting_title=row['meeting_title'],
-                participation=row['participation'],
-            )
-            for row in rows
-        ]
+        return [self._row_to_item(row) for row in rows]
 
     async def get_cities_with_happening(self) -> List[str]:
         """Get list of bananas that have active happening items."""

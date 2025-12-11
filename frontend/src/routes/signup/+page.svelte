@@ -14,7 +14,6 @@
 	const cityBanana = $derived($page.url.searchParams.get('city') || '');
 	const cityDisplayName = $derived($page.url.searchParams.get('name') || '');
 
-	// Track signup page view
 	onMount(() => {
 		logger.trackEvent('signup_view', { source: cityBanana ? 'city_request' : 'direct' });
 	});

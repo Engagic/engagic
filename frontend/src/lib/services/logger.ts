@@ -102,20 +102,13 @@ class Logger {
 	trackEvent(eventName: string, properties?: Record<string, unknown>) {
 		this.info(`Event: ${eventName}`, properties);
 
-		// Send to backend analytics endpoint in production
 		if (this.isProduction) {
-			try {
-				fetch(`${config.apiBaseUrl}/api/events`, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ event: eventName, properties }),
-					keepalive: true  // Ensure delivery even on page unload
-				}).catch(() => {
-					// Silent fail - analytics shouldn't break UX
-				});
-			} catch {
-				// Silent fail
-			}
+			fetch(`${config.apiBaseUrl}/api/events`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ event: eventName, properties }),
+				keepalive: true
+			}).catch(() => {});
 		}
 	}
 	
