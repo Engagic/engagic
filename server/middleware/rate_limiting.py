@@ -26,14 +26,34 @@ from config import config, get_logger
 
 logger = get_logger(__name__)
 
+# Log SSR auth config at import time
+logger.info(
+    "rate limiting middleware loaded",
+    ssr_auth_configured=bool(config.SSR_AUTH_SECRET),
+    ssr_secret_length=len(config.SSR_AUTH_SECRET) if config.SSR_AUTH_SECRET else 0
+)
+
 
 async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
     """Check rate limits for API endpoints"""
     # IP Detection - prioritize trusted sources
+    # DEBUG: Log ALL IP-related headers for every request
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    xff_ip = request.headers.get("X-Forwarded-Client-IP")
+    ssr_hdr = request.headers.get("X-SSR-Auth")
+    if not cf_ip:  # Only log for non-browser requests (SSR)
+        logger.info(
+            "IP headers",
+            cf_connecting_ip=bool(cf_ip),
+            x_forwarded_client_ip=bool(xff_ip),
+            x_ssr_auth=bool(ssr_hdr),
+            path=request.url.path
+        )
+
     # 1. CF-Connecting-IP (browser via Cloudflare, validated by nginx)
-    client_ip = request.headers.get("CF-Connecting-IP")
+    client_ip = cf_ip
 
     # 2. X-Forwarded-Client-IP (SSR, requires valid X-SSR-Auth)
     if not client_ip:
