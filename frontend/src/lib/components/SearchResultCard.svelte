@@ -232,15 +232,15 @@
 
 <style>
 	.result-card {
-		background: var(--civic-card-bg);
-		border: 1px solid var(--civic-border);
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
 		border-radius: 8px;
 		overflow: hidden;
 		transition: border-color 0.15s ease, box-shadow 0.15s ease;
 	}
 
 	.result-card.expanded {
-		border-color: var(--civic-primary);
+		border-color: var(--civic-blue);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	}
 
@@ -259,7 +259,7 @@
 	}
 
 	.result-card-header:hover {
-		background: var(--civic-bg-secondary);
+		background: var(--surface-secondary);
 	}
 
 	.result-content {
@@ -278,43 +278,43 @@
 	.agenda-position {
 		display: inline-block;
 		padding: 2px 8px;
-		background: var(--civic-primary);
+		background: var(--civic-blue);
 		color: white;
 		border-radius: 4px;
 		font-size: 0.75rem;
 		font-weight: 600;
-		font-family: var(--font-mono, monospace);
+		font-family: 'IBM Plex Mono', monospace;
 	}
 
 	.agenda-number {
 		display: inline-block;
 		padding: 2px 8px;
-		background: var(--civic-bg-secondary);
-		color: var(--civic-text-secondary);
+		background: var(--surface-secondary);
+		color: var(--text-secondary);
 		border-radius: 4px;
 		font-size: 0.75rem;
 		font-weight: 500;
-		font-family: var(--font-mono, monospace);
+		font-family: 'IBM Plex Mono', monospace;
 	}
 
 	.matter-badge {
 		display: inline-block;
 		padding: 2px 8px;
-		background: var(--civic-primary-light);
-		border: 1px solid var(--civic-primary);
-		color: var(--civic-primary-dark);
+		background: var(--surface-hover);
+		border: 1px solid var(--civic-blue);
+		color: var(--civic-blue);
 		border-radius: 4px;
 		font-size: 0.75rem;
 		font-weight: 600;
-		font-family: var(--font-mono);
+		font-family: 'IBM Plex Mono', monospace;
 	}
 
 	.attachment-count {
 		display: inline-block;
 		padding: 2px 8px;
-		background: var(--civic-bg-secondary);
-		border: 1px solid var(--civic-border);
-		color: var(--civic-text-secondary);
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		color: var(--text-secondary);
 		border-radius: 4px;
 		font-size: 0.75rem;
 		font-weight: 500;
@@ -323,13 +323,13 @@
 	.result-context {
 		margin: 0 0 0.75rem 0;
 		line-height: 1.6;
-		color: var(--civic-text);
+		color: var(--text-primary);
 		font-size: 1rem;
 	}
 
 	.result-context :global(mark) {
-		background: var(--highlight-bg);
-		color: var(--highlight-text);
+		background: #fef08a;
+		color: #713f12;
 		padding: 2px 4px;
 		border-radius: 3px;
 		font-weight: 500;
@@ -339,7 +339,7 @@
 		font-size: 0.9rem;
 		font-weight: 500;
 		margin: 0 0 0.5rem 0;
-		color: var(--civic-text-secondary);
+		color: var(--text-secondary);
 	}
 
 	.result-meta {
@@ -348,19 +348,19 @@
 		flex-wrap: wrap;
 		align-items: center;
 		font-size: 0.8rem;
-		color: var(--civic-text-muted);
+		color: var(--civic-gray);
 	}
 
 	.separator {
-		color: var(--civic-text-muted);
+		color: var(--civic-gray);
 	}
 
 	.meeting-title {
-		color: var(--civic-text-secondary);
+		color: var(--text-secondary);
 	}
 
 	.appearance-count {
-		color: var(--civic-primary);
+		color: var(--civic-blue);
 		font-weight: 500;
 	}
 
@@ -371,26 +371,26 @@
 		justify-content: center;
 		width: 1.75rem;
 		height: 1.75rem;
-		background: var(--civic-bg-secondary);
-		border: 1px solid var(--civic-border);
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
 		border-radius: 4px;
-		color: var(--civic-text);
+		color: var(--text-primary);
 		font-size: 1.25rem;
 		font-weight: bold;
 		transition: all 0.1s ease;
 	}
 
 	.result-card-header:hover .expand-icon {
-		background: var(--civic-primary-light);
-		border-color: var(--civic-primary);
-		color: var(--civic-primary);
+		background: var(--surface-hover);
+		border-color: var(--civic-blue);
+		color: var(--civic-blue);
 	}
 
 	/* Expanded section */
 	.result-expanded {
 		padding: 1rem;
 		padding-top: 0.75rem;
-		border-top: 1px solid var(--civic-border);
+		border-top: 1px solid var(--border-primary);
 		animation: slideDown 0.15s ease-out;
 	}
 
@@ -415,8 +415,8 @@
 	.topic-tag {
 		display: inline-block;
 		padding: 2px 8px;
-		background: var(--civic-primary-light);
-		color: var(--civic-primary-dark);
+		background: var(--surface-hover);
+		color: var(--civic-blue);
 		border-radius: 999px;
 		font-size: 0.75rem;
 		font-weight: 500;
@@ -433,15 +433,15 @@
 	.label {
 		font-size: 0.8rem;
 		font-weight: 500;
-		color: var(--civic-text-secondary);
+		color: var(--text-secondary);
 	}
 
 	.sponsor-name {
 		display: inline-block;
 		padding: 2px 8px;
-		background: var(--civic-bg-secondary);
-		border: 1px solid var(--civic-border);
-		color: var(--civic-text-secondary);
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		color: var(--text-secondary);
 		border-radius: 4px;
 		font-size: 0.75rem;
 		font-weight: 500;
@@ -449,13 +449,13 @@
 
 	.full-summary {
 		padding: 1rem;
-		background: var(--civic-card-bg);
-		border-left: 3px solid var(--civic-primary);
+		background: var(--surface-primary);
+		border-left: 3px solid var(--civic-blue);
 		border-radius: 4px;
 		margin-bottom: 0.75rem;
 		font-size: 0.9rem;
 		line-height: 1.7;
-		color: var(--civic-text);
+		color: var(--text-primary);
 	}
 
 	.full-summary :global(p) {
@@ -478,9 +478,9 @@
 	.full-summary :global(h4),
 	.full-summary :global(h5),
 	.full-summary :global(h6) {
-		font-family: var(--font-mono);
+		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 600;
-		color: var(--civic-text);
+		color: var(--text-primary);
 		margin: 1rem 0 0.5rem 0;
 		line-height: 1.3;
 	}
@@ -495,15 +495,15 @@
 	.full-summary :global(blockquote) {
 		margin: 0.75rem 0;
 		padding: 0.5rem 1rem;
-		border-left: 3px solid var(--civic-primary);
-		background: var(--civic-bg-secondary);
+		border-left: 3px solid var(--civic-blue);
+		background: var(--surface-secondary);
 		font-style: italic;
 	}
 
 	.full-summary :global(code) {
-		font-family: var(--font-mono);
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85em;
-		background: var(--civic-bg-secondary);
+		background: var(--surface-secondary);
 		padding: 0.15rem 0.35rem;
 		border-radius: 4px;
 	}
@@ -511,7 +511,7 @@
 	.full-summary :global(pre) {
 		margin: 0.75rem 0;
 		padding: 1rem;
-		background: var(--civic-bg-secondary);
+		background: var(--surface-secondary);
 		border-radius: 6px;
 		overflow-x: auto;
 	}
@@ -524,9 +524,9 @@
 	.no-summary {
 		padding: 1rem;
 		text-align: center;
-		color: var(--civic-text-muted);
+		color: var(--civic-gray);
 		font-style: italic;
-		background: var(--civic-bg-secondary);
+		background: var(--surface-secondary);
 		border-radius: 4px;
 		margin-bottom: 0.75rem;
 	}
@@ -545,9 +545,9 @@
 	.attachment-link {
 		display: inline-block;
 		padding: 6px 12px;
-		background: var(--civic-card-bg);
-		color: var(--civic-primary);
-		border: 1px solid var(--civic-border);
+		background: var(--surface-primary);
+		color: var(--civic-blue);
+		border: 1px solid var(--border-primary);
 		border-radius: 4px;
 		text-decoration: none;
 		font-size: 0.8rem;
@@ -556,8 +556,8 @@
 	}
 
 	.attachment-link:hover {
-		background: var(--civic-bg-secondary);
-		border-color: var(--civic-primary);
+		background: var(--surface-secondary);
+		border-color: var(--civic-blue);
 	}
 
 	.result-actions {
@@ -578,23 +578,23 @@
 	}
 
 	.action-link.primary {
-		background: var(--civic-primary);
+		background: var(--civic-blue);
 		color: white;
 	}
 
 	.action-link.primary:hover {
-		background: var(--civic-primary-dark);
+		background: var(--civic-accent);
 	}
 
 	.action-link.secondary {
-		background: var(--civic-bg-secondary);
-		color: var(--civic-primary);
-		border: 1px solid var(--civic-border);
+		background: var(--surface-secondary);
+		color: var(--civic-blue);
+		border: 1px solid var(--border-primary);
 	}
 
 	.action-link.secondary:hover {
-		background: var(--civic-primary-light);
-		border-color: var(--civic-primary);
+		background: var(--surface-hover);
+		border-color: var(--civic-blue);
 	}
 
 	@media (max-width: 640px) {
