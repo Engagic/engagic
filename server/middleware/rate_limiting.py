@@ -17,9 +17,13 @@ async def rate_limit_middleware(
     request: Request, call_next, rate_limiter: SQLiteRateLimiter
 ):
     """Check rate limits for API endpoints"""
-    # IP Detection - Cloudflare is authoritative, X-Forwarded-For for local dev
+    # IP Detection:
+    # 1. CF-Connecting-IP: Direct browser requests through Cloudflare
+    # 2. X-Forwarded-Client-IP: SSR requests forwarding user's CF-Connecting-IP
+    # 3. X-Forwarded-For: Local dev fallback
     client_ip_raw = (
         request.headers.get("CF-Connecting-IP") or
+        request.headers.get("X-Forwarded-Client-IP") or
         request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or
         (request.client.host if request.client else "unknown")
     )
