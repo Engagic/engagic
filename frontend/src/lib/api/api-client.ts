@@ -34,6 +34,13 @@ import { ApiError, NetworkError } from './types';
 
 const inflightRequests = new Map<string, Promise<any>>();
 
+// Extra headers to add to all requests (used by server-side to forward client IP)
+let extraHeaders: Record<string, string> = {};
+
+export function setExtraHeaders(headers: Record<string, string>) {
+	extraHeaders = headers;
+}
+
 async function fetchWithRetry(
 	url: string,
 	options: RequestInit = {},
@@ -45,6 +52,10 @@ async function fetchWithRetry(
 	try {
 		const response = await fetch(url, {
 			...options,
+			headers: {
+				...extraHeaders,
+				...(options.headers || {})
+			},
 			signal: controller.signal
 		});
 
