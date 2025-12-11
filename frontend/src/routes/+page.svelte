@@ -529,11 +529,12 @@
 		height: 48px;
 		border-radius: 12px;
 		opacity: 0.7;
-		transition: opacity var(--transition-fast);
+		transition: opacity 0.3s ease, transform 0.3s ease;
 	}
 
 	.signature-icon:hover {
 		opacity: 1;
+		transform: rotate(8deg) scale(1.1);
 	}
 
 	@media (max-width: 640px) {

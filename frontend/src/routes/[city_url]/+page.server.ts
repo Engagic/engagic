@@ -6,7 +6,7 @@ import { processMeetingDates } from '$lib/utils/meetings';
 import { error, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, setHeaders, locals }) => {
-	configureApiForRequest(locals.clientIp);
+	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
 	const { city_url } = params;
 
 	if (city_url === 'about') {
