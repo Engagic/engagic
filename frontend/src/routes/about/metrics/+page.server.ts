@@ -1,7 +1,9 @@
 import { getAnalytics, getPlatformMetrics } from '$lib/api/index';
+import { configureApiForRequest } from '$lib/api/server';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
+	configureApiForRequest(locals.clientIp);
 	try {
 		const [analytics, platformMetrics] = await Promise.all([
 			getAnalytics(),

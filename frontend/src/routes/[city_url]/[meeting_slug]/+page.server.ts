@@ -1,9 +1,11 @@
 import { getMeeting, searchMeetings } from '$lib/api/index';
+import { configureApiForRequest } from '$lib/api/server';
 import { extractMeetingIdFromSlug, parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 import type { PageServerLoad } from './$types';
 import type { Meeting } from '$lib/api/types';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
+	configureApiForRequest(locals.clientIp);
 	const { city_url, meeting_slug } = params;
 
 	try {

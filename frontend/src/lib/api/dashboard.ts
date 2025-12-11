@@ -6,6 +6,7 @@
 
 import { config } from './config';
 import { ApiError, NetworkError } from './types';
+import { getExtraHeaders } from './api-client';
 
 export interface Digest {
 	id: string;
@@ -69,6 +70,7 @@ async function fetchDashboard(
 			...options,
 			signal: controller.signal,
 			headers: {
+				...getExtraHeaders(),
 				'Authorization': `Bearer ${accessToken}`,
 				'Content-Type': 'application/json',
 				...options.headers
