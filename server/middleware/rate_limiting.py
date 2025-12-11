@@ -39,6 +39,17 @@ async def rate_limit_middleware(
     if not client_ip:
         ssr_auth = request.headers.get("X-SSR-Auth")
         forwarded_ip = request.headers.get("X-Forwarded-Client-IP")
+
+        # DEBUG: Log SSR auth attempt
+        if forwarded_ip or ssr_auth:
+            logger.info(
+                "SSR auth check",
+                has_forwarded_ip=bool(forwarded_ip),
+                has_ssr_auth=bool(ssr_auth),
+                has_config_secret=bool(config.SSR_AUTH_SECRET),
+                secrets_match=ssr_auth == config.SSR_AUTH_SECRET if ssr_auth and config.SSR_AUTH_SECRET else None
+            )
+
         if forwarded_ip and ssr_auth and config.SSR_AUTH_SECRET:
             if ssr_auth == config.SSR_AUTH_SECRET:
                 client_ip = forwarded_ip
