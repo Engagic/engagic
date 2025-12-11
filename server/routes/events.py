@@ -15,7 +15,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from config import get_logger
-from server.metrics import metrics
+from server.metrics import metrics, get_funnel_stats
 
 logger = get_logger(__name__)
 
@@ -73,3 +73,9 @@ async def track_event(event: FrontendEvent):
         logger.debug("unknown frontend event", event=event.event)
 
     return {"ok": True}
+
+
+@router.get("/funnel")
+async def get_funnel():
+    """User behavior funnel - simple stats for understanding what people use"""
+    return get_funnel_stats()
