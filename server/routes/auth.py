@@ -255,7 +255,9 @@ async def verify_magic_link(token: str, response: Response, request: Request):
         if token_expiry_unix
         else datetime.now(timezone.utc) + timedelta(minutes=15)
     )
-    await db.userland.mark_magic_link_used(token_hash, user_id, token_expiry)
+    # Strip timezone for naive timestamp column
+    token_expiry_naive = token_expiry.replace(tzinfo=None)
+    await db.userland.mark_magic_link_used(token_hash, user_id, token_expiry_naive)
 
     logger.info("magic link verified", email=user.email, user_id=user_id)
 
