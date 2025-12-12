@@ -358,6 +358,10 @@
 						{/if}
 						{#if pastMeetings.length > 0 && upcomingMeetings.length === 0}
 							<h2 class="meetings-section-title">No Upcoming Meetings</h2>
+							<div class="no-upcoming-cta">
+								<p>Watching ensures this city stays synced and you get notified when new meetings are posted.</p>
+								<button class="cta-button-inline" onclick={() => showWatchModal = true}>Watch this city</button>
+							</div>
 						{/if}
 						{#if pastMeetings.length > 0}
 							<button
@@ -942,6 +946,43 @@
 		margin-top: 1rem;
 	}
 
+	.no-upcoming-cta {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 1rem 1.25rem;
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-left: 3px solid var(--civic-blue);
+		border-radius: 8px;
+		margin: 1rem 0;
+	}
+
+	.no-upcoming-cta p {
+		margin: 0;
+		font-size: 0.9rem;
+		color: var(--text-secondary);
+		flex: 1;
+	}
+
+	.cta-button-inline {
+		padding: 0.5rem 1rem;
+		background: var(--civic-blue);
+		color: white;
+		border: none;
+		border-radius: 6px;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		font-weight: 500;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all 0.2s;
+	}
+
+	.cta-button-inline:hover {
+		background: var(--civic-accent);
+	}
+
 	.request-city-cta {
 		margin-top: 2rem;
 		padding: 1.5rem;
@@ -1075,6 +1116,15 @@
 
 		.matter-card-title {
 			font-size: 1rem;
+		}
+
+		.no-upcoming-cta {
+			flex-direction: column;
+			text-align: center;
+		}
+
+		.no-upcoming-cta p {
+			font-size: 0.85rem;
 		}
 	}
 </style>
