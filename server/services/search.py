@@ -7,7 +7,6 @@ Business logic for handling different search types
 from typing import cast, Dict, Any, List, Optional, TypedDict, Literal, Union
 from typing_extensions import NotRequired
 from difflib import get_close_matches
-from uszipcode import SearchEngine
 from database.db_postgres import Database
 from server.services.meeting import get_meetings_with_items
 from server.utils.geo import parse_city_state_input, get_state_abbreviation, get_state_full_name
@@ -16,38 +15,6 @@ from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_n
 from config import get_logger
 
 logger = get_logger(__name__)
-
-# Lazy-initialized uszipcode search engine (downloads DB on first use)
-_zipcode_search: Optional[SearchEngine] = None
-
-
-def _get_zipcode_search() -> SearchEngine:
-    """Get or create uszipcode SearchEngine (lazy singleton)."""
-    global _zipcode_search
-    if _zipcode_search is None:
-        _zipcode_search = SearchEngine()
-    return _zipcode_search
-
-
-def resolve_states_from_city(city_name: str) -> List[str]:
-    """Resolve state abbreviations from city name using uszipcode.
-
-    Returns unique states sorted by frequency (most common first).
-    """
-    try:
-        search = _get_zipcode_search()
-        results = search.by_city(city_name)
-        if not results:
-            return []
-        states = [z.state for z in results if z.state]
-        if not states:
-            return []
-        unique_states = list(set(states))
-        unique_states.sort(key=lambda s: states.count(s), reverse=True)
-        return unique_states
-    except Exception as e:
-        logger.debug("uszipcode lookup failed", city=city_name, error=str(e))
-        return []
 
 
 async def _record_city_request(db: Database, banana: str) -> None:
@@ -365,7 +332,7 @@ async def _handle_unknown_city(
 ) -> SearchResponse:
     """Handle city not in our DB - resolve via uszipcode."""
     logger.info("city not in database, checking uszipcode", city=city_name)
-    resolved_states = resolve_states_from_city(city_name)
+    resolved_states = await db.get_states_for_city_name(city_name)
 
     if len(resolved_states) > 1:
         logger.info("uszipcode found multiple states", city=city_name, states=resolved_states[:5])
@@ -406,7 +373,7 @@ async def _handle_single_city_match(
     city: Any, city_name: str, original_input: str, db: Database
 ) -> SearchResponse:
     """Handle single DB match - check if other states exist via uszipcode."""
-    other_states = [s for s in resolve_states_from_city(city_name) if s != city.state]
+    other_states = [s for s in await db.get_states_for_city_name(city_name) if s != city.state]
 
     if other_states:
         logger.info("single db match but other states exist", city=city_name, covered=city.state, uncovered=other_states)
