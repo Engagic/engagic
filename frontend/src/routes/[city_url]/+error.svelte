@@ -12,7 +12,9 @@
 	const cityUrl = $derived($page.params.city_url || '');
 	const parsed = $derived(parseCityUrl(cityUrl));
 	const cityBanana = $derived(parsed ? `${parsed.cityName.toLowerCase().replace(/\s+/g, '')}${parsed.state}` : '');
-	const cityDisplay = $derived(parsed ? `${parsed.cityName}, ${parsed.state}` : cityUrl);
+	// Capitalize city name for display (URL has it lowercase)
+	const cityNameCapitalized = $derived(parsed ? parsed.cityName.charAt(0).toUpperCase() + parsed.cityName.slice(1) : '');
+	const cityDisplay = $derived(parsed ? `${cityNameCapitalized}, ${parsed.state}` : cityUrl);
 
 	// Auth state for logged-in users
 	const isLoggedIn = $derived(authState.isAuthenticated);
