@@ -217,12 +217,12 @@
 </script>
 
 <svelte:head>
-	<title>engagic - civic engagement made simple</title>
-	<meta name="description" content="Make your voice heard in local government. Know what your city council is deciding and how to participate - phone, email, or Zoom. We surface what matters so you can speak up." />
+	<title>engagic - Help shape your city</title>
+	<meta name="description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
 
 	<!-- Open Graph -->
-	<meta property="og:title" content="engagic - civic engagement made simple" />
-	<meta property="og:description" content="Make your voice heard in local government. Know what your city council is deciding and how to participate - phone, email, or Zoom. We surface what matters so you can speak up." />
+	<meta property="og:title" content="engagic - Help shape your city" />
+	<meta property="og:description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://engagic.org" />
 	<meta property="og:image" content="https://engagic.org/icon-192.png" />
@@ -230,22 +230,22 @@
 
 	<!-- Twitter -->
 	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="engagic - civic engagement made simple" />
-	<meta name="twitter:description" content="Make your voice heard in local government. Know what your city council is deciding and how to participate - phone, email, or Zoom." />
+	<meta name="twitter:title" content="engagic - Help shape your city" />
+	<meta name="twitter:description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
 	<meta name="twitter:image" content="https://engagic.org/icon-192.png" />
 </svelte:head>
 
 <div class="container">
 	<header class="header">
 		<a href="/" class="logo">engagic</a>
-		<p class="tagline">civic engagement made simple</p>
+		<p class="tagline">Help shape your city</p>
 	</header>
 
 		<section class="value-prop">
-			<p class="value-headline">Your city is making decisions. Here's how to have your say.</p>
+			<p class="value-headline">Stay informed. Make your voice heard.</p>
 			<p class="value-subtext">
-				Zoning, taxes, public safety - know what's coming up<br />
-				and exactly how to make your voice heard
+				AI summaries of local government meetings.<br />
+				Civic participation information.
 			</p>
 			<div class="value-links">
 				<a href="/about/general" class="learn-more">How it works</a>

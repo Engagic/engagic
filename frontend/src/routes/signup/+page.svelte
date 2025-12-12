@@ -64,7 +64,7 @@
 	<title>Sign Up - Engagic</title>
 	<meta
 		name="description"
-		content="Create a free Engagic account. Get ready to participate when your city discusses what matters to you."
+		content="Create a free Engagic account. Stay informed about local government and make your voice heard."
 	/>
 </svelte:head>
 

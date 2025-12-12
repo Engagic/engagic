@@ -1,13 +1,13 @@
 <svelte:head>
-	<title>About Engagic - Civic Participation Made Simple</title>
-	<meta name="description" content="Engagic helps you participate in local government. We track city council meetings, surface what matters, and show you exactly how to have your say." />
+	<title>About Engagic - Help Shape Your City</title>
+	<meta name="description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
 </svelte:head>
 
 <article class="about-content">
 	<section class="section">
 		<h1 class="section-heading">Our Mission</h1>
-		<p>Democracy works when people participate. Most don't - not because they don't care, but because they don't know how.</p>
-		<p>Engagic makes it easy. We track city council meetings across the US, surface what affects you, and show you exactly how to have your say - call in, email, or join on Zoom.</p>
+		<p>Help you stay informed and make your voice heard in local government.</p>
+		<p>We track city council meetings across the US, summarize what's being decided, and show you exactly how to weigh in - call, email, or Zoom.</p>
 	</section>
 
 	<section class="section">
