@@ -360,10 +360,11 @@
 
 	select {
 		padding: 0.5rem 1rem;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--civic-border);
 		border-radius: 6px;
 		font-size: 0.9rem;
-		background: white;
+		color: var(--text-primary);
+		background: var(--surface-primary);
 	}
 
 	.user-count {
