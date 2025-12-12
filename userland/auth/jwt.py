@@ -8,6 +8,7 @@ This is acceptable because the secret is set once and never modified.
 For testing, call init_jwt() before using any token functions.
 """
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -56,11 +57,7 @@ def _get_secret() -> str:
 
 
 def generate_magic_link_token(user_id: str) -> str:
-    """
-    Generate short-lived magic link token for passwordless login.
-
-    Expiry: 15 minutes (one-time use)
-    """
+    """Generate short-lived magic link token for passwordless login."""
     secret = _get_secret()
     payload = {
         "user_id": user_id,
@@ -71,11 +68,7 @@ def generate_magic_link_token(user_id: str) -> str:
 
 
 def generate_access_token(user_id: str) -> str:
-    """
-    Generate short-lived access token for API requests.
-
-    Expiry: 1 hour (refresh frequently)
-    """
+    """Generate short-lived access token for API requests."""
     secret = _get_secret()
     payload = {
         "user_id": user_id,
@@ -85,28 +78,21 @@ def generate_access_token(user_id: str) -> str:
     return jwt.encode(payload, secret, algorithm=_ALGORITHM)
 
 
-def generate_refresh_token(user_id: str) -> str:
-    """
-    Generate long-lived refresh token for session persistence.
-
-    Expiry: 30 days (stored in httpOnly cookie)
-    """
+def generate_refresh_token(user_id: str) -> tuple[str, str]:
+    """Generate long-lived refresh token. Returns (token, hash) for revocation support."""
     secret = _get_secret()
     payload = {
         "user_id": user_id,
         "type": "refresh",
         "exp": datetime.now(timezone.utc) + _REFRESH_TOKEN_EXPIRY,
     }
-    return jwt.encode(payload, secret, algorithm=_ALGORITHM)
+    token = jwt.encode(payload, secret, algorithm=_ALGORITHM)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    return token, token_hash
 
 
 def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[dict]:
-    """
-    Verify JWT token and return payload.
-
-    Returns None if token is invalid or expired.
-    Optionally validates token type (magic_link, access, refresh).
-    """
+    """Verify JWT token and return payload, or None if invalid/expired."""
     secret = _get_secret()
     try:
         payload = jwt.decode(token, secret, algorithms=[_ALGORITHM])
@@ -120,11 +106,7 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[di
 
 
 def generate_unsubscribe_token(user_id: str) -> str:
-    """
-    Generate long-lived unsubscribe token for email links.
-
-    Expiry: 1 year (emails may be read months later)
-    """
+    """Generate long-lived unsubscribe token for email links."""
     secret = _get_secret()
     payload = {
         "user_id": user_id,
@@ -135,12 +117,6 @@ def generate_unsubscribe_token(user_id: str) -> str:
 
 
 def extract_user_id(token: str) -> Optional[str]:
-    """
-    Extract user_id from token without full validation.
-
-    Useful for logging/debugging, NOT for auth decisions.
-    """
+    """Extract user_id from token. For logging only, NOT auth decisions."""
     payload = verify_token(token)
-    if payload:
-        return payload.get("user_id")
-    return None
+    return payload.get("user_id") if payload else None

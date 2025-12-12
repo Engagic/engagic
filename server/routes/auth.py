@@ -7,7 +7,9 @@ Passwordless auth with magic links, JWT session management.
 import hashlib
 import os
 import secrets
-from datetime import datetime, timedelta
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -32,6 +34,42 @@ from userland.server.models import (
 )
 
 logger = get_logger(__name__)
+
+# Per-email rate limiting (in-memory, resets on restart)
+_email_requests: dict[str, list[float]] = defaultdict(list)
+_EMAIL_RATE_LIMIT = 3
+_EMAIL_RATE_WINDOW = 3600  # seconds
+
+
+def check_email_rate_limit(email: str) -> bool:
+    """Returns True if request allowed, False if rate limited."""
+    email_lower = email.lower()
+    now = time.time()
+    cutoff = now - _EMAIL_RATE_WINDOW
+
+    _email_requests[email_lower] = [
+        t for t in _email_requests[email_lower] if t > cutoff
+    ]
+
+    if len(_email_requests[email_lower]) >= _EMAIL_RATE_LIMIT:
+        return False
+
+    _email_requests[email_lower].append(now)
+    return True
+
+
+def _get_cookie_config() -> tuple[bool, Literal["lax", "strict", "none"]]:
+    """Read cookie security settings from environment."""
+    secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
+    samesite_str = os.getenv("COOKIE_SAMESITE", "lax").lower()
+    samesite: Literal["lax", "strict", "none"] = (
+        cast(Literal["lax", "strict", "none"], samesite_str)
+        if samesite_str in ("lax", "strict", "none")
+        else "lax"
+    )
+    return secure, samesite
+
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -42,21 +80,35 @@ def hash_token(token: str) -> str:
 
 @router.post("/signup", response_model=MagicLinkResponse)
 async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
-    """
-    Create user account and send magic link.
+    """Create user account and send magic link. Returns same response for existing users to prevent enumeration."""
+    if not check_email_rate_limit(signup_request.email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again later.",
+        )
 
-    Flow:
-    1. Validate email not already registered
-    2. Create user
-    3. Create default alert with their keywords/cities (if provided)
-    4. Generate magic link token
-    5. Send email with magic link
-    """
     existing = await db.userland.get_user_by_email(signup_request.email)
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        token = generate_magic_link_token(existing.id)
+
+        from userland.email.transactional import send_magic_link
+
+        success = await send_magic_link(
+            email=signup_request.email,
+            token=token,
+            user_name=existing.name,
+            is_signup=False,
         )
+
+        if not success:
+            logger.error("email delivery failed", email=signup_request.email)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Email delivery failed. Please try again or contact support.",
+            )
+
+        logger.info("signup for existing user, sent login link", email=signup_request.email)
+        return MagicLinkResponse()
 
     user_id = secrets.token_urlsafe(16)
     name = signup_request.name or signup_request.email.split("@")[0]
@@ -64,16 +116,13 @@ async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
     user = User(id=user_id, name=name, email=signup_request.email)
     await db.userland.create_user(user)
 
-    # Create default alert if city provided (keywords optional)
     alert_cities = []
     if signup_request.city_banana:
         alert_cities = [signup_request.city_banana]
-        # Record city request for demand tracking (even if city doesn't exist yet)
         try:
             await db.userland.record_city_request(signup_request.city_banana)
-            logger.info("city request from signup", banana=signup_request.city_banana)
-        except Exception as e:
-            logger.warning("failed to record city request", error=str(e))
+        except Exception:
+            pass  # Non-critical: demand tracking failure shouldn't block signup
     elif signup_request.cities:
         alert_cities = signup_request.cities
 
@@ -91,7 +140,6 @@ async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
 
     token = generate_magic_link_token(user_id)
 
-    # Send magic link email (use shared transactional template)
     from userland.email.transactional import send_magic_link
 
     success = await send_magic_link(
@@ -115,24 +163,19 @@ async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
 
 @router.post("/login", response_model=MagicLinkResponse)
 async def login(login_request: LoginRequest, db: Database = Depends(get_db)):
-    """
-    Send magic link to existing user.
+    """Send magic link to existing user. Returns same response for unknown emails to prevent enumeration."""
+    if not check_email_rate_limit(login_request.email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again later.",
+        )
 
-    Flow:
-    1. Validate email exists
-    2. Generate magic link token
-    3. Send email with magic link
-    """
     user = await db.userland.get_user_by_email(login_request.email)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found with this email",
-        )
+        return MagicLinkResponse()
 
     token = generate_magic_link_token(user.id)
 
-    # Send magic link email (use shared transactional template)
     from userland.email.transactional import send_magic_link
 
     success = await send_magic_link(
@@ -156,18 +199,7 @@ async def login(login_request: LoginRequest, db: Database = Depends(get_db)):
 
 @router.get("/verify")
 async def verify_magic_link(token: str, response: Response, request: Request):
-    """
-    Verify magic link and create session.
-
-    Flow:
-    1. Validate magic link token (15min expiry)
-    2. Check token hasn't been used (single-use enforcement)
-    3. Update user last_login
-    4. Generate access + refresh tokens
-    5. Set refresh token as httpOnly cookie
-    6. Mark magic link as used
-    7. Return access token + user info to client
-    """
+    """Verify magic link and create session with access + refresh tokens."""
     payload = verify_token(token, expected_type="magic_link")
 
     if not payload:
@@ -182,7 +214,6 @@ async def verify_magic_link(token: str, response: Response, request: Request):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
         )
 
-    # Security: Check if magic link has already been used (prevent replay attacks)
     token_hash = hash_token(token)
     db: Database = request.app.state.db
 
@@ -202,18 +233,12 @@ async def verify_magic_link(token: str, response: Response, request: Request):
     await db.userland.update_last_login(user_id)
 
     access_token = generate_access_token(user_id)
-    refresh_token = generate_refresh_token(user_id)
+    refresh_token, refresh_token_hash = generate_refresh_token(user_id)
 
-    # Set secure cookie
-    cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
-    cookie_samesite_str = os.getenv("COOKIE_SAMESITE", "lax").lower()
-    # Type-safe samesite value - validate then cast
-    cookie_samesite: Literal["lax", "strict", "none"] = (
-        cast(Literal["lax", "strict", "none"], cookie_samesite_str)
-        if cookie_samesite_str in ("lax", "strict", "none")
-        else "lax"
-    )
+    refresh_expiry = datetime.now(timezone.utc) + timedelta(days=30)
+    await db.userland.create_refresh_token(refresh_token_hash, user_id, refresh_expiry)
 
+    cookie_secure, cookie_samesite = _get_cookie_config()
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
@@ -221,11 +246,15 @@ async def verify_magic_link(token: str, response: Response, request: Request):
         httponly=True,
         secure=cookie_secure,
         samesite=cookie_samesite,
-        max_age=30 * 24 * 60 * 60,  # 30 days
+        max_age=30 * 24 * 60 * 60,
     )
 
-    # Mark magic link as used
-    token_expiry = datetime.now() + timedelta(minutes=15)
+    token_expiry_unix = payload.get("exp")
+    token_expiry = (
+        datetime.fromtimestamp(token_expiry_unix, tz=timezone.utc)
+        if token_expiry_unix
+        else datetime.now(timezone.utc) + timedelta(minutes=15)
+    )
     await db.userland.mark_magic_link_used(token_hash, user_id, token_expiry)
 
     logger.info("magic link verified", email=user.email, user_id=user_id)
@@ -244,9 +273,7 @@ async def verify_magic_link(token: str, response: Response, request: Request):
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_access_token(request: Request, response: Response):
-    """
-    Refresh access token using refresh token from cookie.
-    """
+    """Refresh access token using httpOnly cookie. Implements token rotation."""
     refresh_token = request.cookies.get("refresh_token")
 
     if not refresh_token:
@@ -268,25 +295,28 @@ async def refresh_access_token(request: Request, response: Response):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
         )
 
-    # Get user for response
     db: Database = request.app.state.db
+    old_token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+
+    # TODO: After migration period, reject tokens not in database
+    if not await db.userland.validate_refresh_token(old_token_hash):
+        logger.warning("refresh token not in database", user_id=user_id)
+
     user = await db.userland.get_user(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
+    await db.userland.revoke_refresh_token(old_token_hash, reason="rotation")
+
     new_access_token = generate_access_token(user_id)
-    new_refresh_token = generate_refresh_token(user_id)
+    new_refresh_token, new_refresh_token_hash = generate_refresh_token(user_id)
 
-    cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
-    cookie_samesite_str = os.getenv("COOKIE_SAMESITE", "lax").lower()
-    cookie_samesite: Literal["lax", "strict", "none"] = (
-        cast(Literal["lax", "strict", "none"], cookie_samesite_str)
-        if cookie_samesite_str in ("lax", "strict", "none")
-        else "lax"
-    )
+    refresh_expiry = datetime.now(timezone.utc) + timedelta(days=30)
+    await db.userland.create_refresh_token(new_refresh_token_hash, user_id, refresh_expiry)
 
+    cookie_secure, cookie_samesite = _get_cookie_config()
     response.set_cookie(
         key="refresh_token",
         value=new_refresh_token,
@@ -310,21 +340,21 @@ async def refresh_access_token(request: Request, response: Response):
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    """Logout by clearing refresh token cookie"""
+async def logout(request: Request, response: Response):
+    """Revoke refresh token and clear cookie."""
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+        db: Database = request.app.state.db
+        await db.userland.revoke_refresh_token(token_hash, reason="logout")
+
     response.delete_cookie("refresh_token", path="/")
     return {"status": "logged_out"}
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_endpoint(user: User = Depends(get_current_user)):
-    """
-    Get current user profile.
-
-    Uses get_current_user dependency to extract user from:
-    - Access token in Authorization header (preferred)
-    - Refresh token from httpOnly cookie (fallback on page load)
-    """
+    """Get current user profile."""
     return UserResponse(
         id=user.id,
         name=user.name,
@@ -335,12 +365,7 @@ async def get_current_user_endpoint(user: User = Depends(get_current_user)):
 
 @router.get("/unsubscribe")
 async def unsubscribe(token: str, request: Request):
-    """
-    One-click unsubscribe from email digest.
-
-    Deactivates all alerts for the user. Token is long-lived (1 year)
-    and embedded in email footer links for CAN-SPAM compliance.
-    """
+    """One-click unsubscribe from email digest (CAN-SPAM compliance)."""
     payload = verify_token(token, expected_type="unsubscribe")
 
     if not payload:
@@ -352,19 +377,16 @@ async def unsubscribe(token: str, request: Request):
     user_id = payload.get("user_id")
     if not user_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
         )
 
     db: Database = request.app.state.db
     user = await db.userland.get_user(user_id)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    # Deactivate all alerts for this user
     alerts = await db.userland.get_alerts(user_id=user_id)
     deactivated_count = 0
     for alert in alerts:
@@ -383,10 +405,5 @@ async def unsubscribe(token: str, request: Request):
 
 @router.get("/unsubscribe-token")
 async def get_unsubscribe_token(user: User = Depends(get_current_user)):
-    """
-    Get unsubscribe token for current user (for testing/debugging).
-
-    Requires authentication.
-    """
-    token = generate_unsubscribe_token(user.id)
-    return {"token": token}
+    """Get unsubscribe token for current user (testing/debugging)."""
+    return {"token": generate_unsubscribe_token(user.id)}

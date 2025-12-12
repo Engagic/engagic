@@ -645,3 +645,114 @@ class UserlandRepository(BaseRepository):
             )
 
         return self._parse_row_count(result)
+
+    # ========== Refresh Token Operations ==========
+
+    async def create_refresh_token(
+        self,
+        token_hash: str,
+        user_id: str,
+        expires_at: datetime,
+    ) -> None:
+        """Store refresh token hash for revocation tracking.
+
+        Args:
+            token_hash: SHA256 hash of the refresh token
+            user_id: User who owns this token
+            expires_at: When the token expires
+        """
+        async with self.transaction() as conn:
+            await conn.execute(
+                """
+                INSERT INTO userland.refresh_tokens (token_hash, user_id, expires_at)
+                VALUES ($1, $2, $3)
+                """,
+                token_hash,
+                user_id,
+                expires_at,
+            )
+
+    async def validate_refresh_token(self, token_hash: str) -> bool:
+        """Check if refresh token is valid (exists and not revoked).
+
+        Args:
+            token_hash: SHA256 hash of the token to validate
+
+        Returns:
+            True if token is valid, False otherwise
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT 1 FROM userland.refresh_tokens
+                WHERE token_hash = $1
+                  AND revoked_at IS NULL
+                  AND expires_at > NOW()
+                """,
+                token_hash,
+            )
+        return row is not None
+
+    async def revoke_refresh_token(
+        self, token_hash: str, reason: str = "logout"
+    ) -> None:
+        """Revoke a specific refresh token.
+
+        Args:
+            token_hash: SHA256 hash of the token to revoke
+            reason: Why the token was revoked (logout, rotation, security)
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE userland.refresh_tokens
+                SET revoked_at = NOW(), revoked_reason = $2
+                WHERE token_hash = $1
+                """,
+                token_hash,
+                reason,
+            )
+
+    async def revoke_all_user_tokens(
+        self, user_id: str, reason: str = "security"
+    ) -> int:
+        """Revoke all refresh tokens for a user.
+
+        Used for password reset, security concerns, or account compromise.
+
+        Args:
+            user_id: User whose tokens to revoke
+            reason: Why tokens were revoked
+
+        Returns:
+            Number of tokens revoked
+        """
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE userland.refresh_tokens
+                SET revoked_at = NOW(), revoked_reason = $2
+                WHERE user_id = $1 AND revoked_at IS NULL
+                """,
+                user_id,
+                reason,
+            )
+        return self._parse_row_count(result)
+
+    async def cleanup_expired_refresh_tokens(self) -> int:
+        """Remove expired/revoked refresh tokens older than 7 days.
+
+        Cleanup maintenance task to prevent table bloat.
+
+        Returns:
+            Number of tokens deleted
+        """
+        async with self.transaction() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM userland.refresh_tokens
+                WHERE expires_at < NOW() - INTERVAL '7 days'
+                   OR (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '7 days')
+                """
+            )
+        return self._parse_row_count(result)

@@ -60,6 +60,7 @@ async function fetchAuth(
 		const response = await fetch(url, {
 			...options,
 			signal: controller.signal,
+			credentials: 'include',
 			headers: {
 				...getExtraHeaders(),
 				'Content-Type': 'application/json',
