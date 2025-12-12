@@ -175,9 +175,9 @@
 			const result = await apiClient.searchMeetings(citySearchQuery.trim());
 			if (isSearchSuccess(result)) {
 				// Direct match - add city immediately
-				await handleAddCity(editingCityForDigest, result.city_banana);
+				await handleAddCity(editingCityForDigest, result.banana);
 			} else if (isSearchAmbiguous(result)) {
-				citySearchResults = result.options;
+				citySearchResults = result.city_options;
 			} else {
 				citySearchError = 'City not found. You can request coverage below.';
 			}
@@ -195,7 +195,7 @@
 		try {
 			const updated = await addCityToDigest(authState.accessToken!, digestId, cityBanana);
 			digests = digests.map((d) => (d.id === digestId ? updated : d));
-			stats.cities_tracked = new Set(digests.flatMap((d) => d.cities)).size;
+			stats.cities_tracked = new Set(digests.reduce<string[]>((acc, d) => acc.concat(d.cities), [])).size;
 			cancelCityEdit();
 		} catch (err) {
 			cityError[digestId] = err instanceof Error ? err.message : 'Failed to add city';
@@ -212,7 +212,7 @@
 		try {
 			const updated = await removeCityFromDigest(authState.accessToken!, digestId, cityBanana);
 			digests = digests.map((d) => (d.id === digestId ? updated : d));
-			stats.cities_tracked = new Set(digests.flatMap((d) => d.cities)).size;
+			stats.cities_tracked = new Set(digests.reduce<string[]>((acc, d) => acc.concat(d.cities), [])).size;
 		} catch (err) {
 			cityError[digestId] = err instanceof Error ? err.message : 'Failed to remove city';
 			setTimeout(() => (cityError[digestId] = null), 3000);
@@ -268,6 +268,7 @@
 	<div class="container">
 		<header class="header">
 			<div class="header-content">
+				<a href="/" class="logo">engagic</a>
 				<h1>Dashboard</h1>
 				<div class="header-actions">
 					<span class="user-email">{authState.user?.email}</span>
@@ -345,7 +346,7 @@
 													{#each citySearchResults as city}
 														<button
 															class="city-result"
-															onclick={() => handleAddCity(digest.id, city.city_banana)}
+															onclick={() => handleAddCity(digest.id, city.banana)}
 															disabled={cityLoading[digest.id]}
 														>
 															{city.city_name}, {city.state}
@@ -368,7 +369,7 @@
 										<span class="city-display">
 											{#each digest.cities as city}
 												<span class="city-tag">
-													{city}
+													<a href="/{city}" class="city-link">{city}</a>
 													<button
 														class="remove-btn"
 														onclick={() => handleRemoveCity(digest.id, city)}
@@ -533,9 +534,22 @@
 		gap: 1rem;
 	}
 
+	.logo {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.25rem;
+		font-weight: 500;
+		color: var(--civic-blue);
+		text-decoration: none;
+		transition: color var(--transition-fast);
+	}
+
+	.logo:hover {
+		color: var(--civic-accent);
+	}
+
 	h1 {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 2rem;
+		font-size: 1.5rem;
 		font-weight: 600;
 		color: var(--text-primary);
 		margin: 0;
@@ -765,6 +779,17 @@
 		border-radius: 12px;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8125rem;
+	}
+
+	.city-link {
+		color: inherit;
+		text-decoration: none;
+		transition: color var(--transition-fast);
+	}
+
+	.city-link:hover {
+		color: var(--civic-blue);
+		text-decoration: underline;
 	}
 
 	/* Keywords */
