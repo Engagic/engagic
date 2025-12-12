@@ -6,6 +6,29 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-11] Auth Security Hardening
+
+Comprehensive auth flow audit and fixes.
+
+### Security Fixes
+- **Broken refresh flow**: Added `credentials: 'include'` to frontend auth API
+- **User enumeration**: Login/signup now return identical responses regardless of account existence
+- **Email bombing**: Per-email rate limiting (3 requests/hour) on magic link endpoints
+- **Token revocation**: Server-side refresh token storage with rotation on use
+- **Magic link expiry**: Fixed incorrect hardcoded expiry in used_magic_links table
+
+### Changes
+- `frontend/src/lib/api/auth.ts`: Added credentials for cookie-based auth
+- `server/routes/auth.py`: Rate limiting, enumeration fixes, token revocation
+- `userland/auth/jwt.py`: `generate_refresh_token()` returns (token, hash) tuple
+- `database/repositories_async/userland.py`: Refresh token CRUD methods
+- `database/migrations/013_refresh_tokens.sql`: New table for revocation support
+
+### Migration Note
+Existing users will need to re-login after deploying (old tokens not in DB).
+
+---
+
 ## [2025-12-10] Architectural Hardening
 
 Based on comprehensive audit, addressed concurrency hazards and improved robustness.
