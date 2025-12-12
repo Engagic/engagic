@@ -284,6 +284,32 @@
 			</div>
 		{/if}
 
+		{#if searchResults && isSearchAmbiguous(searchResults)}
+			<div class="ambiguous-inline">
+				<div class="ambiguous-message">
+					{@html searchResults.message}
+				</div>
+				<div class="city-options">
+					{#each searchResults.city_options as cityOption}
+						<button
+							class="city-option"
+							onclick={() => handleCityOptionClick(cityOption)}
+						>
+							{cityOption.display_name}
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		{#if loading}
+			<div class="loading-inline">Searching...</div>
+		{/if}
+
+		{#if error}
+			<div class="error-inline" id="search-error" role="alert">{error}</div>
+		{/if}
+
 		<div class="button-divider">
 			<span>or</span>
 		</div>
@@ -321,47 +347,6 @@
 			</svg>
 		</a>
 	</div>
-
-	{#if error}
-		<div class="error-message" id="search-error" role="alert">
-			{error}
-		</div>
-	{/if}
-
-	{#if searchResults && isSearchAmbiguous(searchResults)}
-		<div class="results-section">
-			<div class="ambiguous-cities">
-				<div class="ambiguous-message">
-					{@html searchResults.message}
-				</div>
-				<div class="city-options">
-					{#each searchResults.city_options as cityOption}
-						<div class="city-option-row">
-							<button
-								class="city-option"
-								onclick={() => handleCityOptionClick(cityOption)}
-							>
-								{cityOption.display_name}
-							</button>
-							<div class="city-stats">
-								<span class="stat-total">{cityOption.total_meetings}</span>
-								<span class="stat-separator">|</span>
-								<span class="stat-packets">{cityOption.meetings_with_packet}</span>
-								<span class="stat-separator">|</span>
-								<span class="stat-summaries">{cityOption.summarized_meetings}</span>
-							</div>
-						</div>
-					{/each}
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	{#if loading}
-		<div class="loading">
-			Searching for meetings...
-		</div>
-	{/if}
 
 	<section class="mission-section">
 		<div class="mission-content">
@@ -579,5 +564,67 @@
 
 	.not-found-cta a:hover {
 		color: var(--civic-accent);
+	}
+
+	.ambiguous-inline {
+		margin-top: 1.25rem;
+		padding: 1.25rem;
+		background: var(--surface-secondary);
+		border-left: 3px solid var(--civic-blue);
+		border-radius: 8px;
+		text-align: left;
+	}
+
+	.ambiguous-inline .ambiguous-message {
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 1rem;
+		color: var(--text-primary);
+		margin: 0 0 1rem 0;
+		line-height: 1.5;
+	}
+
+	.ambiguous-inline .city-options {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.ambiguous-inline .city-option {
+		padding: 0.5rem 1rem;
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: 6px;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--civic-blue);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.ambiguous-inline .city-option:hover {
+		background: var(--civic-blue);
+		color: white;
+		border-color: var(--civic-blue);
+	}
+
+	.loading-inline {
+		margin-top: 1rem;
+		padding: 0.75rem 1rem;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		color: var(--text-secondary);
+		text-align: center;
+	}
+
+	.error-inline {
+		margin-top: 1rem;
+		padding: 0.75rem 1rem;
+		background: rgba(220, 38, 38, 0.1);
+		border-left: 3px solid #dc2626;
+		border-radius: 6px;
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.9rem;
+		color: #dc2626;
 	}
 </style>
