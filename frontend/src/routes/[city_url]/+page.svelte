@@ -949,19 +949,19 @@
 	.no-upcoming-cta {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
-		padding: 1rem 1.25rem;
+		gap: 1.25rem;
+		padding: 1.25rem 1.5rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
 		border-left: 3px solid var(--civic-blue);
 		border-radius: 8px;
-		margin: 1rem 0;
+		margin: 1.25rem 0;
 	}
 
 	.no-upcoming-cta p {
 		margin: 0;
-		font-size: 0.9rem;
-		color: var(--text-secondary);
+		font-size: 1rem;
+		color: var(--text-primary);
 		flex: 1;
 	}
 
@@ -1124,7 +1124,7 @@
 		}
 
 		.no-upcoming-cta p {
-			font-size: 0.85rem;
+			font-size: 0.95rem;
 		}
 	}
 </style>

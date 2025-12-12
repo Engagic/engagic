@@ -549,22 +549,25 @@
 	}
 
 	.not-found-inline {
-		margin-top: 1rem;
-		padding: 1rem;
-		text-align: center;
+		margin-top: 1.25rem;
+		padding: 1.25rem;
+		background: var(--surface-secondary);
+		border-left: 3px solid var(--civic-blue);
+		border-radius: 8px;
+		text-align: left;
 	}
 
 	.not-found-message {
 		font-family: system-ui, -apple-system, sans-serif;
-		font-size: 0.95rem;
-		color: var(--text-secondary);
+		font-size: 1rem;
+		color: var(--text-primary);
 		margin: 0 0 0.5rem 0;
 	}
 
 	.not-found-cta {
 		font-family: system-ui, -apple-system, sans-serif;
-		font-size: 0.85rem;
-		color: var(--text-tertiary);
+		font-size: 0.95rem;
+		color: var(--text-secondary);
 		margin: 0;
 	}
 
