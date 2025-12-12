@@ -263,7 +263,7 @@
 					</div>
 				{/if}
 				<button class="priority-hint" onclick={() => showWatchModal = true}>
-					Watching this city will give it sync priority
+					Follow this city to guarantee it stays up to date.
 				</button>
 			</div>
 		{/if}
@@ -359,7 +359,7 @@
 						{#if pastMeetings.length > 0 && upcomingMeetings.length === 0}
 							<h2 class="meetings-section-title">No Upcoming Meetings</h2>
 							<div class="no-upcoming-cta">
-								<p>Watching ensures this city stays synced and you get notified when new meetings are posted.</p>
+								<p>Follow this city to guarantee it stays up to date.</p>
 								<button class="cta-button-inline" onclick={() => showWatchModal = true}>Watch this city</button>
 							</div>
 						{/if}
@@ -408,7 +408,7 @@
 						<p class="empty-state-title">No meetings found</p>
 						<p class="empty-state-message">This city might not have any upcoming meetings scheduled yet. Check back soon!</p>
 						<div class="request-city-cta">
-							<p class="cta-text">Want priority updates for this city?</p>
+							<p class="cta-text">Want this city prioritized?</p>
 							<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
 							<p class="cta-subtext">Cities with active watchers get synced more frequently.</p>
 						</div>
@@ -793,18 +793,17 @@
 	.priority-hint {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
-		color: var(--civic-gray);
+		color: var(--civic-blue);
 		background: none;
 		border: none;
 		cursor: pointer;
 		padding: 0;
-		opacity: 0.85;
+		opacity: 0.8;
 		transition: all 0.2s ease;
 	}
 
 	.priority-hint:hover {
 		opacity: 1;
-		color: var(--civic-blue);
 	}
 
 	.loading-matters {
@@ -960,7 +959,8 @@
 
 	.no-upcoming-cta p {
 		margin: 0;
-		font-size: 1rem;
+		font-size: 1.1rem;
+		font-weight: 500;
 		color: var(--text-primary);
 		flex: 1;
 	}
@@ -1124,7 +1124,7 @@
 		}
 
 		.no-upcoming-cta p {
-			font-size: 0.95rem;
+			font-size: 1rem;
 		}
 	}
 </style>
