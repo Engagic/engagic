@@ -287,6 +287,7 @@ async def handle_state_search(state_input: str, db: Database) -> SearchResponse:
             "banana": city.banana,
             "vendor": city.vendor,
             "display_name": f"{city.name}, {city.state}",
+            "covered": True,
         }
         for city in cities
     ]
