@@ -86,6 +86,23 @@ CREATE TABLE IF NOT EXISTS userland.used_magic_links (
 CREATE INDEX IF NOT EXISTS idx_userland_magic_links_expires ON userland.used_magic_links(expires_at);
 
 -- ============================================================
+-- REFRESH TOKENS TABLE
+-- ============================================================
+-- Server-side refresh token storage for revocation support
+-- Enables logout, security revocation, and token rotation
+CREATE TABLE IF NOT EXISTS userland.refresh_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES userland.users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    revoked_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON userland.refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON userland.refresh_tokens(expires_at);
+
+-- ============================================================
 -- CITY REQUESTS TABLE
 -- ============================================================
 -- Track unknown cities that users request via their watchlists
@@ -112,6 +129,7 @@ COMMENT ON TABLE userland.users IS 'User accounts with email-based authenticatio
 COMMENT ON TABLE userland.alerts IS 'User-configured alerts for meeting/agenda item notifications';
 COMMENT ON TABLE userland.alert_matches IS 'Matched meetings/items that triggered user alerts';
 COMMENT ON TABLE userland.used_magic_links IS 'Security table to prevent magic link replay attacks';
+COMMENT ON TABLE userland.refresh_tokens IS 'Server-side refresh token storage for revocation support';
 COMMENT ON TABLE userland.city_requests IS 'Unknown cities requested by users - tracks demand for coverage expansion';
 
 -- Column-level comments for clarity
