@@ -304,8 +304,8 @@
 		padding: 0.75rem 1rem;
 		font-size: 1rem;
 		font-family: system-ui, -apple-system, sans-serif;
-		color: var(--civic-dark);
-		background: white;
+		color: var(--text-primary);
+		background: var(--surface-primary);
 		border: 2px solid var(--civic-border);
 		border-radius: 8px;
 		transition: all 0.2s;

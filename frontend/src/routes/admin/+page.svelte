@@ -300,7 +300,7 @@
 	.auth-form {
 		max-width: 400px;
 		margin: 100px auto;
-		background: white;
+		background: var(--surface-primary);
 		padding: 2rem;
 		border-radius: 8px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -372,15 +372,16 @@
 
 	.header-actions button {
 		padding: 0.5rem 1rem;
-		background: white;
-		border: 1px solid #ddd;
+		background: var(--surface-primary);
+		border: 1px solid var(--civic-border);
 		border-radius: 4px;
 		cursor: pointer;
 		font-size: 0.9rem;
+		color: var(--text-primary);
 	}
 
 	.header-actions button:hover {
-		background: #f5f5f5;
+		background: var(--surface-secondary);
 	}
 
 	.header-actions button:disabled {
@@ -393,7 +394,7 @@
 	}
 
 	.metrics-section {
-		background: white;
+		background: var(--surface-primary);
 		padding: 1.5rem;
 		border-radius: 8px;
 		margin-bottom: 1.5rem;
