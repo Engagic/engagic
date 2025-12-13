@@ -73,7 +73,7 @@ Parses Menlo Park agenda PDFs with letter-based section structure (H., I., J., K
 from parsing.menlopark_pdf import parse_menlopark_pdf_agenda
 
 parsed = parse_menlopark_pdf_agenda(pdf_text, links)
-# Returns: {"items": [{item_id, title, attachments, ...}, ...]}
+# Returns: {"items": [{item_id, title, sequence, attachments: [{name, url, type}]}, ...]}
 ```
 
 ### participation.py - Participation Info Extractor
@@ -94,6 +94,7 @@ from parsing.participation import parse_participation_info
 
 info = parse_participation_info(meeting_text)
 # Returns: ParticipationInfo model or None if nothing found
+# Uses models from database.models (ParticipationInfo, EmailContext, StreamingUrl)
 ```
 
 ## Error Handling
@@ -123,3 +124,4 @@ except ExtractionError as e:
 - `pytesseract` - OCR fallback
 - `Pillow` - Image processing for OCR
 - `requests` - PDF URL fetching
+- `pydantic` - Data models for ParticipationInfo (via database.models)

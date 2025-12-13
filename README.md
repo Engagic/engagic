@@ -18,7 +18,9 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 - **Voting records:** Individual votes per member per matter, tallies, outcomes across meetings
 - **Topic extraction:** 16 canonical civic topics for filtering and alerts
 - **Participation info:** Email, phone, Zoom links for civic action
-- **Deliberation:** Opinion clustering for structured public input on legislative matters
+- **Deliberation:** Opinion clustering for structured public input, trust-based moderation
+- **Civic alerts:** Weekly digests with keyword matching, magic link auth
+- **Happening this week:** AI-curated important upcoming items per city
 
 ---
 
@@ -29,7 +31,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 │                              PRESENTATION LAYER                             │
 │  ┌─────────────────────┐                    ┌────────────────────────────┐  │
 │  │  Frontend           │  HTTP/JSON         │  Server (FastAPI)          │  │
-│  │  (SvelteKit)        │ ◄───────────────── │  16 route modules          │  │
+│  │  (SvelteKit)        │ ◄───────────────── │  17 route modules          │  │
 │  │  Cloudflare Pages   │                    │  Tiered rate limiting      │  │
 │  └─────────────────────┘                    └─────────────┬──────────────┘  │
 └───────────────────────────────────────────────────────────┼─────────────────┘
@@ -70,7 +72,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 │  │  │  - Granicus (467)     │          │  - Adaptive prompting       │   │ │
 │  │  │  - PrimeGov (64)      │          │  - 16 topic taxonomy        │   │ │
 │  │  │  - IQM2 (45)          │          │  - Batch processing (50%)   │   │ │
-│  │  │  - 7 more adapters    │          │  - Context caching          │   │ │
+│  │  │  - 8 more adapters    │          │  - Context caching          │   │ │
 │  │  └───────────┬───────────┘          └──────────────┬──────────────┘   │ │
 │  └──────────────┼──────────────────────────────────────┼─────────────────┘ │
 │                 │                                      │                   │
@@ -101,11 +103,11 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| [vendors/](vendors/README.md) | ~7,800 | 11 async adapters for Legistar, Granicus, PrimeGov, IQM2, NovusAgenda, CivicClerk, CivicPlus, eScribe, Berkeley, Chicago, Menlo Park. HTML parsers, rate limiting, vendor-agnostic ID contract. |
-| [database/](database/README.md) | ~7,000 | PostgreSQL with 14 async repositories (cities, meetings, items, matters, queue, search, council_members, committees, votes, engagement, feedback, deliberation, userland, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
-| [pipeline/](pipeline/README.md) | ~2,600 | Conductor orchestration with dual loops: Fetcher (72h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
-| [analysis/](analysis/README.md) | ~2,200 | Gemini API integration with reactive rate limiting, adaptive prompting (standard vs large items), 16-topic taxonomy, batch processing (50% cost savings), context caching. |
-| [server/](server/README.md) | ~3,500 | FastAPI with 15 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring). Tiered rate limiting, JWT sessions. |
+| [vendors/](vendors/README.md) | ~7,300 | 12 async adapters for Legistar, Granicus, PrimeGov, IQM2, NovusAgenda, CivicClerk, CivicPlus, eScribe, Municode, Berkeley, Chicago, Menlo Park. HTML parsers, rate limiting, vendor-agnostic ID contract. |
+| [database/](database/README.md) | ~7,700 | PostgreSQL with 14 async repositories (cities, meetings, items, matters, queue, search, council_members, committees, votes, engagement, feedback, deliberation, happening, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
+| [pipeline/](pipeline/README.md) | ~3,200 | Conductor orchestration with dual loops: Fetcher (72h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
+| [analysis/](analysis/README.md) | ~2,300 | Gemini API integration with reactive rate limiting, adaptive prompting (standard vs large items), 16-topic taxonomy, batch processing (50% cost savings), context caching. |
+| [server/](server/README.md) | ~3,500 | FastAPI with 17 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring, events, happening). Tiered rate limiting, JWT sessions. |
 | [userland/](userland/README.md) | ~1,500 | Civic alerts: magic link auth, weekly digests (Sundays 9am), dual-track matching (keyword + matter-based), Mailgun delivery. |
 | [parsing/](parsing/README.md) | ~800 | PDF extraction: PyMuPDF primary, OCR fallback (Tesseract), legislative formatting detection ([DELETED]/[ADDED]), participation info parsing (emails, phones, Zoom links). |
 | [deliberation/](deliberation/README.md) | ~300 | Opinion clustering: PCA to 2D, dynamic K-means, Laplace-smoothed consensus detection, group vote tallies. |

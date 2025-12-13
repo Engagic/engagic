@@ -2,7 +2,7 @@
 
 **Transform raw meeting documents into actionable civic intelligence.** Async orchestration, Gemini API integration, adaptive prompting, topic normalization.
 
-**Last Updated:** December 4, 2025
+**Last Updated:** December 13, 2025
 
 ---
 
@@ -23,15 +23,15 @@ The analysis module provides LLM-powered intelligence for civic meeting document
 
 ```
 analysis/
-├── analyzer_async.py       # 343 lines - Async orchestration
+├── analyzer_async.py       # 400 lines - Async orchestration
 ├── llm/
-│   ├── summarizer.py       # 1,203 lines - Gemini API + reactive rate limiting
+│   ├── summarizer.py       # 1,304 lines - Gemini API + reactive rate limiting
 │   └── prompts_v2.json     # 149 lines - Prompt templates
 └── topics/
-    ├── normalizer.py       # 230 lines - Topic normalization
+    ├── normalizer.py       # 231 lines - Topic normalization
     └── taxonomy.json       # 242 lines - 16 canonical topics
 
-**Total:** 1,776 lines Python + 391 lines JSON = 2,167 lines
+**Total:** 1,935 lines Python + 391 lines JSON = 2,326 lines
 ```
 
 ---
@@ -65,6 +65,25 @@ class AsyncAnalyzer:
 **Key Methods:**
 
 ```python
+async def process_agenda_with_cache_async(meeting_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Main entry point - process agenda with caching support.
+
+    Args:
+        meeting_data: Dict with packet_url, city_banana, meeting_id, etc.
+
+    Returns: {
+        success: bool,
+        summary: str,
+        processing_time: float,
+        processing_method: str,  # "pymupdf_gemini"
+        participation: Optional[Dict],
+        cached: bool,
+        meeting_id: str,
+        error: str (if failed)
+    }
+    """
+
 async def download_pdf_async(url: str) -> bytes:
     """Download PDF asynchronously with aiohttp"""
 
@@ -97,8 +116,32 @@ async def process_batch_items_async(
 - **Non-blocking:** Event loop continues while waiting on HTTP/API responses
 - **Resource efficiency:** Thread pool for CPU-bound work (PyMuPDF), async for I/O
 
+**Session Management:**
+
+HTTP sessions are automatically recycled after 100 requests to prevent memory accumulation:
+
+```python
+# Internal recycling (automatic)
+self._request_count += 1
+if self._request_count >= self._recycle_after:  # Default: 100
+    await self.recycle_session()  # Close and recreate
+```
+
+**Timeout Structure:**
+
+Defense-in-depth timeout hierarchy prevents hangs:
+- PDF extraction: 10 minutes (includes OCR budget)
+- LLM summarization: 5 minutes per call
+- Retry budget: 3 minutes total (within LLM timeout)
+
 **Usage:**
 ```python
+# Recommended: Use as async context manager for automatic cleanup
+async with AsyncAnalyzer() as analyzer:
+    results = await analyzer.process_batch_items_async(items)
+# Session automatically closed on exit
+
+# Alternative: Manual lifecycle management
 analyzer = AsyncAnalyzer()
 results = await analyzer.process_batch_items_async(items)
 await analyzer.close()  # Cleanup HTTP session
@@ -191,21 +234,35 @@ def summarize_item(item_title: str, text: str, page_count: Optional[int] = None)
     return self._parse_item_response(response.text)
 ```
 
+**Adaptive Thinking Configuration:**
+
+Thinking budget scales with document complexity for optimal quality/speed tradeoff:
+
+```python
+def _get_thinking_config(page_count: int, text_size: int, model_name: str):
+    """
+    Thinking budget by complexity:
+    - Simple (≤10 pages, ≤30K chars): thinking_budget=0 (disabled for speed)
+    - Medium (≤50 pages, ≤150K chars): thinking_budget=2048 (moderate)
+    - Complex (>50 pages or >150K chars): thinking_budget=-1 (dynamic/unlimited)
+    """
+```
+
 **Batch Processing (50% Cost Savings):**
 
 ```python
-def summarize_batch(
+async def summarize_batch(
     item_requests: List[Dict[str, Any]],
     shared_context: Optional[str] = None,
     meeting_id: Optional[str] = None
 ):
     """
-    Process multiple items using Gemini Batch API.
+    Process multiple items using Gemini Batch API (async generator).
 
-    Generator yields results per chunk:
+    Yields results per chunk immediately for incremental saving:
     - 5 items per chunk (respects TPM quota)
     - 120-second delays between chunks (allows quota refill)
-    - Exponential backoff on 429 errors
+    - Exponential backoff on 429 errors (60s, 120s, 240s)
 
     Yields: List of results per chunk
     """
@@ -215,11 +272,29 @@ def summarize_batch(
         cache = self.client.caches.create(model=self.flash_model_name, contents=[shared_context])
         cache_name = cache.name
 
-    # Process chunks with delay between each
+    # Process chunks with async delay between each
     for chunk in chunks:
-        chunk_results = self._process_batch_chunk(chunk, cache_name, shared_context)
+        chunk_results = await self._process_batch_chunk(chunk, cache_name, shared_context)
         yield chunk_results
-        time.sleep(120)  # 120s delay for quota refill
+        await asyncio.sleep(120)  # 120s delay for quota refill
+```
+
+**Truncated Response Recovery:**
+
+When Gemini truncates output mid-response (common with large documents), the `_salvage_truncated_response()` method attempts to recover usable content:
+
+```python
+def _salvage_truncated_response(response_text: str) -> tuple[str, list[str]] | None:
+    """
+    Extract content from truncated JSON using regex.
+
+    Truncation typically happens mid-field, but summary_markdown is usually
+    complete since it comes first. Uses regex to extract whatever fields
+    are available.
+
+    Returns (summary, topics) if salvageable, None if insufficient content.
+    Adds truncation notice to recovered summary.
+    """
 ```
 
 ---
@@ -668,4 +743,4 @@ assert len(topics) > 0
 - [database/README.md](../database/README.md) - How summaries are stored
 - [VISION.md](../docs/VISION.md) - Roadmap for intelligence features (Phase 6)
 
-**Last Updated:** 2025-12-04 (Documentation accuracy audit)
+**Last Updated:** 2025-12-13 (Documentation accuracy audit)

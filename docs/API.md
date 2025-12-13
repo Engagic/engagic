@@ -8,7 +8,7 @@ Complete reference for the Engagic public API endpoints.
 **Base URL (Local):** `http://localhost:8000`
 
 **Version:** v1
-**Last Updated:** December 3, 2025
+**Last Updated:** December 13, 2025
 
 ---
 
@@ -46,10 +46,10 @@ Complete reference for the Engagic public API endpoints.
 Most endpoints are **public and require no authentication**.
 
 ### Admin Endpoints
-Admin endpoints require the `X-Admin-Token` header:
+Admin endpoints require the `Authorization` header with a Bearer token:
 
 ```http
-X-Admin-Token: your-admin-token-here
+Authorization: Bearer your-admin-token-here
 ```
 
 Set via `ENGAGIC_ADMIN_TOKEN` environment variable.
@@ -64,20 +64,16 @@ Set via `ENGAGIC_ADMIN_TOKEN` environment variable.
 
 | Tier | Minute Limit | Daily Limit | Auth Required | Use Case |
 |------|--------------|-------------|---------------|----------|
-| **Free** | 30 req/min | 300 req/day | No | Personal use, exploration |
-| **Hacktivist** | 100 req/min | 5,000 req/day | Yes (attribution) | Nonprofits, journalists, researchers |
-| **Enterprise** | 1,000+ req/min | 100,000+ req/day | Yes (paid) | Commercial applications |
+| **Standard** | 60 req/min | 2,000 req/day | No | Everyone (default) |
+| **Enterprise** | 1,000 req/min | 100,000 req/day | Yes (API key) | Commercial applications |
 
 **Self-host option:** AGPL-3.0 license - unlimited if you run your own instance
 
 ### Headers
 
 ```http
-X-RateLimit-Limit: 30
-X-RateLimit-Remaining: 25
-X-RateLimit-Reset: 1698765432
-X-RateLimit-Limit-Day: 300
-X-RateLimit-Remaining-Day: 275
+X-RateLimit-Remaining-Minute: 55
+X-RateLimit-Remaining-Daily: 1950
 ```
 
 ### Rate Limit Exceeded (429)
@@ -86,15 +82,10 @@ X-RateLimit-Remaining-Day: 275
 {
   "detail": "Rate limit exceeded",
   "retry_after": 45,
-  "current_tier": "free",
+  "current_tier": "standard",
   "limits": {
-    "minute": {"limit": 30, "remaining": 0, "reset": 1698765432},
-    "day": {"limit": 300, "remaining": 150, "reset": 1698851832}
-  },
-  "upgrade_options": {
-    "hacktivist": "Email admin@motioncount.com with your use case for nonprofit/journalist tier",
-    "enterprise": "Visit https://motioncount.com for commercial pricing",
-    "self_host": "Clone https://github.com/yourusername/engagic and run unlimited"
+    "minute": {"limit": 60, "remaining": 0},
+    "day": {"limit": 2000, "remaining": 1500}
   }
 }
 ```
@@ -1285,7 +1276,7 @@ curl https://api.engagic.org/api/analytics
 
 ## Admin Endpoints
 
-**Authentication Required:** `X-Admin-Token` header
+**Authentication Required:** `Authorization: Bearer` header
 
 ### Sync City
 
@@ -1296,7 +1287,7 @@ Trigger immediate sync for a specific city.
 **Example:**
 ```bash
 curl -X POST https://api.engagic.org/api/admin/sync-city/paloaltoCA \
-  -H "X-Admin-Token: your-admin-token"
+  -H "Authorization: Bearer your-admin-token"
 ```
 
 **Response:**
@@ -1324,7 +1315,7 @@ Trigger processing for a specific meeting.
 **Example:**
 ```bash
 curl -X POST https://api.engagic.org/api/admin/process-meeting \
-  -H "X-Admin-Token: your-admin-token" \
+  -H "Authorization: Bearer your-admin-token" \
   -H "Content-Type: application/json" \
   -d '{"meeting_id": "meeting_123"}'
 ```
@@ -1460,6 +1451,6 @@ curl https://api.engagic.org/api/stats
 
 ---
 
-**Last Updated:** December 3, 2025 (Added Vote, Committee, Engagement, and Feedback endpoints - 24 new endpoints documented)
+**Last Updated:** December 13, 2025 (Fixed rate limiting tiers, admin auth header)
 
 **See Also:** [../server/README.md](../server/README.md) for server code architecture and implementation

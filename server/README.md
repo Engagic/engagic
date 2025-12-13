@@ -46,7 +46,7 @@ server/
 │   ├── engagement.py       - User watches, trending topics
 │   ├── feedback.py         - User ratings, issue reporting
 │   ├── deliberation.py     - Opinion clustering for civic engagement
-│   ├── events.py           - Calendar event feeds
+│   ├── events.py           - Frontend analytics events
 │   └── happening.py        - Active/upcoming items
 │
 ├── services/               - Business logic
@@ -155,7 +155,7 @@ app.add_middleware(RequestIDMiddleware)
 async def rate_limit_middleware_wrapper(request, call_next):
     return await rate_limit_middleware(request, call_next, rate_limiter)
 
-# Route mounting (16 routers)
+# Route mounting (17 routers)
 app.include_router(monitoring.router)
 app.include_router(search.router)
 app.include_router(meetings.router)
@@ -171,6 +171,8 @@ app.include_router(committees.router)
 app.include_router(engagement.router)
 app.include_router(feedback.router)
 app.include_router(deliberation.router)
+app.include_router(events.router)
+app.include_router(happening.router)
 ```
 
 #### Dependency Injection Pattern
@@ -265,7 +267,7 @@ GET /metrics  # Returns Prometheus text format
 
 ---
 
-## Route Modules (15)
+## Route Modules (17)
 
 **Each route module focuses on one domain.** No business logic - delegate to services.
 
@@ -763,6 +765,48 @@ async def compute_clusters(deliberation_id: str, is_admin: bool = Depends(verify
 
 ---
 
+### 16. `routes/events.py`
+
+**Frontend analytics event tracking** for user journey analysis.
+
+```python
+@router.post("/api/events")
+async def track_event(event: FrontendEvent, request: Request, db: Database = Depends(get_db)):
+    """Receive frontend event and store for journey analysis"""
+
+# Admin endpoints for journey analytics
+@router.get("/api/funnel/journeys")
+async def get_journeys(limit: int = 50, hours: int = 24, _: bool = Depends(verify_admin_token)):
+    """Get recent user journeys for flow analysis"""
+
+@router.get("/api/funnel/patterns")
+async def get_patterns(hours: int = 24, _: bool = Depends(verify_admin_token)):
+    """Get common user flow patterns"""
+
+@router.get("/api/funnel/dropoffs")
+async def get_dropoffs(hours: int = 24, _: bool = Depends(verify_admin_token)):
+    """Identify where users drop off"""
+```
+
+**Features:**
+- IP hash links events to user journeys (privacy-preserving)
+- 7-day automatic cleanup of old events
+- Prometheus counter integration for aggregate metrics
+
+---
+
+### 17. `routes/happening.py`
+
+**Active/upcoming items** - Claude-analyzed important civic items.
+
+```python
+@router.get("/api/happening")
+async def get_happening(banana: Optional[str] = None, db: Database = Depends(get_db)):
+    """Get important/trending items for this week"""
+```
+
+---
+
 ## Service Layer
 
 **Business logic separated from HTTP concerns.**
@@ -1110,6 +1154,21 @@ POST   /api/flyer/generate           Generate printable flyer (HTML)
 POST   /api/donate/checkout          Create Stripe checkout session
 ```
 
+### Events (Analytics)
+
+```
+POST   /api/events                   Track frontend event
+GET    /api/funnel/journeys          Admin: Get user journeys
+GET    /api/funnel/patterns          Admin: Get flow patterns
+GET    /api/funnel/dropoffs          Admin: Get dropoff points
+```
+
+### Happening
+
+```
+GET    /api/happening                Get important items this week
+```
+
 ### Admin (requires Bearer token)
 
 ```
@@ -1145,10 +1204,9 @@ ENGAGIC_API_PORT=8000
 ```
 
 **Rate Limiting:**
-```bash
-ENGAGIC_RATE_LIMIT_REQUESTS=30     # Basic tier per-minute
-ENGAGIC_RATE_LIMIT_DAY=1000        # Basic tier per-day
-```
+Rate limits are hardcoded in `rate_limiter.py`:
+- Standard: 60 req/min, 2000 req/day
+- Enterprise: 1000 req/min, 100000 req/day
 
 **CORS:**
 ```bash
@@ -1216,4 +1274,4 @@ FRONTEND_URL=https://engagic.org
 
 ---
 
-**Last Updated:** 2025-12-07 (Deliberation routes enabled, 15 active route modules)
+**Last Updated:** 2025-12-13 (17 route modules, funnel analytics documented)
