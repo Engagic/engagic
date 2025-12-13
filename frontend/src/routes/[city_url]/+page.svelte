@@ -16,12 +16,14 @@
 	import HappeningSection from '$lib/components/HappeningSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import WatchCityModal from '$lib/components/WatchCityModal.svelte';
+	import { authState } from '$lib/stores/auth.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 
 	const city_banana = $derived($page.params.city_url ?? '');
+	const isWatching = $derived(authState.subscribedCities.includes(city_banana));
 	let showPastMeetings = $state(false);
 	let isInitialLoad = $state(true);
 	let viewMode = $state<'meetings' | 'matters'>('meetings');
@@ -89,10 +91,9 @@
 	});
 
 	// Derived: Check if city has qualifying matters (2+ appearances)
-	const hasQualifyingMatters = $derived(() => {
-		if (!mattersChecked) return true; // Assume matters exist until checked
-		return cityMatters && cityMatters.total_count > 0;
-	});
+	const hasQualifyingMatters = $derived(
+		!mattersChecked || (cityMatters && cityMatters.total_count > 0)
+	);
 
 	async function loadCityMatters() {
 		if (mattersLoading) return; // Already fetching - prevent concurrent requests
@@ -243,9 +244,13 @@
 					<a href="/{city_banana}/committees" class="council-link" data-sveltekit-preload-data="tap">
 						Committees
 					</a>
-					<button class="watch-city-btn" onclick={() => showWatchModal = true}>
-						Stay engaged
-					</button>
+					<button
+					class="watch-city-btn"
+					class:watching={isWatching}
+					onclick={() => showWatchModal = true}
+				>
+					{isWatching ? 'Watching' : 'Stay engaged'}
+				</button>
 				</div>
 			</div>
 			<div class="source-row">
@@ -273,6 +278,7 @@
 		<WatchCityModal
 			cityName={searchResults.city_name}
 			cityBanana={city_banana}
+			{isWatching}
 			bind:open={showWatchModal}
 			onClose={() => showWatchModal = false}
 		/>
@@ -280,7 +286,7 @@
 
 	{#if searchResults && searchResults.success}
 		<div class="controls-row">
-			{#if hasQualifyingMatters()}
+			{#if hasQualifyingMatters}
 				<div class="view-toggle" role="tablist" aria-label="View mode selection">
 					<button
 						class="toggle-btn"
@@ -645,6 +651,15 @@
 
 	.watch-city-btn:active {
 		transform: translateY(0);
+	}
+
+	.watch-city-btn.watching {
+		background: var(--civic-green);
+	}
+
+	.watch-city-btn.watching:hover {
+		background: #059669;
+		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 	}
 
 	.source-row {

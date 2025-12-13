@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { authState } from '$lib/stores/auth.svelte';
+	import { getDashboard } from '$lib/api/dashboard';
 
 	let loading = $state(true);
 	let error = $state('');
@@ -18,6 +19,21 @@
 
 		try {
 			await authState.verifyAndLogin(token);
+
+			// Fetch subscribed cities from dashboard
+			if (authState.accessToken) {
+				try {
+					const dashboard = await getDashboard(authState.accessToken);
+					const cities: string[] = [];
+					for (const digest of dashboard.digests) {
+						cities.push(...digest.cities);
+					}
+					authState.setSubscribedCities(cities);
+				} catch {
+					// Non-fatal: continue without subscribed cities
+				}
+			}
+
 			// Redirect to dashboard on success
 			await goto('/dashboard');
 		} catch (err) {

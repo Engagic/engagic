@@ -1,11 +1,14 @@
-<script>
+<script lang="ts">
 	import '../app.css';
 	import { afterNavigate } from '$app/navigation';
 	import { navigating, page } from '$app/stores';
-	import { themeState } from '$lib/stores/theme.svelte';
 	import { authState } from '$lib/stores/auth.svelte';
 	import { logger } from '$lib/services/logger';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import Toast from '$lib/components/Toast.svelte';
+	import type { Snippet } from 'svelte';
+
+	let { children }: { children: Snippet } = $props();
 
 	// Only show nav on homepage
 	const showNav = $derived($page.url.pathname === '/');
@@ -16,10 +19,6 @@
 			logger.trackPageView(to.url.pathname, from?.url?.pathname);
 		}
 	});
-
-	// Theme is applied via:
-	// 1. Inline script in svelte:head (prevents flash)
-	// 2. ThemeState constructor when Svelte hydrates
 </script>
 
 <svelte:head>
@@ -60,8 +59,10 @@
 {/if}
 
 <main id="main-content">
-	<slot />
+	{@render children()}
 </main>
+
+<Toast />
 
 <style>
 	.main-nav {
