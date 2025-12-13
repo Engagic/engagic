@@ -31,7 +31,7 @@ async def root():
         "endpoints": {
             "search": "POST /api/search - Search for meetings by zipcode or city name",
             "process": "POST /api/process-agenda - Get cached meeting agenda summary",
-            "random_best": "GET /api/random-best-meeting - Get a random high-quality meeting for showcasing",
+            "random_meeting": "GET /api/random-meeting-with-items - Get a random meeting with item summaries",
             "topics": "GET /api/topics - Get all available topics for filtering",
             "topics_popular": "GET /api/topics/popular - Get most common topics across all meetings",
             "search_by_topic": "POST /api/search/by-topic - Search meetings by topic",

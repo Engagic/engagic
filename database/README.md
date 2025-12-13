@@ -23,34 +23,36 @@ Manages:
 
 ```
 ┌─────────────────────┐
-│  Database           │  Orchestration (325 lines)
+│  Database           │  Orchestration (412 lines)
 │  (db_postgres.py)   │
 └──────────┬──────────┘
            │
-           ├──> repositories_async/base.py            (117 lines) - Base repository with connection pooling
-           ├──> repositories_async/cities.py          (319 lines) - City and zipcode operations
-           ├──> repositories_async/meetings.py        (231 lines) - Meeting storage and retrieval
+           ├──> repositories_async/base.py            (116 lines) - Base repository with connection pooling
+           ├──> repositories_async/cities.py          (360 lines) - City and zipcode operations
+           ├──> repositories_async/meetings.py        (230 lines) - Meeting storage and retrieval
            ├──> repositories_async/items.py           (372 lines) - Agenda item operations
-           ├──> repositories_async/matters.py         (426 lines) - Matter operations (matters-first)
-           ├──> repositories_async/queue.py           (448 lines) - Processing queue management
-           ├──> repositories_async/search.py          (260 lines) - PostgreSQL full-text search
-           ├──> repositories_async/userland.py        (583 lines) - User auth, alerts, notifications
-           ├──> repositories_async/council_members.py (731 lines) - Council member tracking, sponsorships, votes
-           ├──> repositories_async/committees.py      (517 lines) - Committee management, memberships
-           ├──> repositories_async/engagement.py      (199 lines) - Watches, activity logging, trending
-           ├──> repositories_async/feedback.py        (344 lines) - Ratings, issue reporting
-           ├──> repositories_async/helpers.py         (170 lines) - Shared builders, JSONB deserialization
-           └──> repositories_async/deliberation.py    (738 lines) - Deliberation comments, votes, clustering
+           ├──> repositories_async/matters.py         (424 lines) - Matter operations (matters-first)
+           ├──> repositories_async/queue.py           (460 lines) - Processing queue management
+           ├──> repositories_async/search.py          (257 lines) - PostgreSQL full-text search
+           ├──> repositories_async/userland.py        (758 lines) - User auth, alerts, notifications
+           ├──> repositories_async/council_members.py (804 lines) - Council member tracking, sponsorships, votes
+           ├──> repositories_async/committees.py      (592 lines) - Committee management, memberships
+           ├──> repositories_async/engagement.py      (148 lines) - Watches, activity logging, trending
+           ├──> repositories_async/feedback.py        (343 lines) - Ratings, issue reporting
+           ├──> repositories_async/helpers.py         (174 lines) - Shared builders, JSONB deserialization
+           ├──> repositories_async/deliberation.py    (737 lines) - Deliberation comments, votes, clustering
+           └──> repositories_async/happening.py       (125 lines) - "Happening This Week" curated items
 
 Supporting Modules:
-├── models.py          (468 lines) - Pydantic dataclasses (City, Meeting, AgendaItem, Matter, CouncilMember, Vote, Committee, CommitteeMember)
-├── id_generation.py   (588 lines) - Deterministic ID generation (matters, members, committees)
-├── vote_utils.py      (47 lines)  - Vote tally computation and outcome determination
-├── schema_postgres.sql - Main database schema (cities, meetings, items, matters, queue, council_members, committees, votes, deliberations)
+├── models.py          (472 lines) - Pydantic dataclasses (City, Meeting, AgendaItem, Matter, CouncilMember, Vote, Committee, CommitteeMember)
+├── id_generation.py   (587 lines) - Deterministic ID generation (matters, members, committees)
+├── vote_utils.py      (46 lines)  - Vote tally computation and outcome determination
+├── migrate.py         (270 lines) - Versioned SQL migration runner
+├── schema_postgres.sql - Main database schema (cities, meetings, items, matters, queue, council_members, committees, votes, deliberations, happening_items)
 └── schema_userland.sql - Userland schema (users, alerts, alert_matches, watches, ratings, issues, deliberation_trusted_users)
 ```
 
-**Total: ~7,000 lines** (325 orchestration + 5,455 repositories + 1,103 supporting + 29 init)
+**Total: ~7,700 lines** (412 orchestration + 5,900 repositories + 1,105 supporting + 270 migrations + 29 init)
 
 **Why Repository Pattern?**
 - **Separation of concerns:** Each repository handles one domain
@@ -300,6 +302,31 @@ CREATE TABLE cache (
     last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+#### `happening_items` - AI-Curated Important Items
+```sql
+CREATE TABLE happening_items (
+    id SERIAL PRIMARY KEY,
+    banana TEXT NOT NULL,              -- City identifier
+    item_id TEXT NOT NULL,             -- Reference to items.id
+    meeting_id TEXT NOT NULL,          -- Reference to meetings.id
+    meeting_date TIMESTAMP NOT NULL,   -- For ordering by upcoming date
+    rank INTEGER NOT NULL,             -- 1 = most important, 2 = second, etc.
+    reason TEXT NOT NULL,              -- One-sentence explanation of why it matters
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,     -- Usually meeting_date + 1 day
+    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+);
+```
+
+**"Happening This Week" Feature:**
+- AI-analyzed rankings of important upcoming agenda items
+- Populated via autonomous analysis (Claude Code)
+- Surfaced prominently on city pages in frontend
+- Auto-expires after meeting date passes
+- Excludes cancelled/postponed meetings automatically
 
 ### Userland Schema Tables
 
@@ -558,7 +585,7 @@ city = City.from_db_row(db_row)
 
 ## Repository Guide
 
-### 1. CityRepository (319 lines)
+### 1. CityRepository (360 lines)
 
 **Operations:**
 - Unified city lookup (banana, slug, zipcode, name+state)
@@ -600,7 +627,7 @@ last_sync = db.get_city_last_sync("paloaltoCA")  # datetime or None
 
 ---
 
-### 2. MeetingRepository (231 lines)
+### 2. MeetingRepository (230 lines)
 
 **Operations:**
 - Meeting storage (upsert with preservation)
@@ -687,7 +714,7 @@ items = db.get_agenda_items_by_ids(["item_1", "item_2"])
 
 ---
 
-### 4. MatterRepository (426 lines)
+### 4. MatterRepository (424 lines)
 
 **Operations:**
 - Matter storage (preserves canonical summary on re-sync)
@@ -790,7 +817,7 @@ else:
 
 ---
 
-### 5. QueueRepository (448 lines)
+### 5. QueueRepository (460 lines)
 
 **Operations:**
 - Enqueue typed jobs (MeetingJob, MatterJob)
@@ -872,7 +899,7 @@ cleared = db.clear_queue()  # {"pending": 10, "processing": 2, ...}
 
 ---
 
-### 6. SearchRepository (260 lines)
+### 6. SearchRepository (257 lines)
 
 **Operations:**
 - PostgreSQL full-text search (FTS with ts_rank)
@@ -909,7 +936,7 @@ topics = await db.search.get_popular_topics(limit=20)
 
 ---
 
-### 7. UserlandRepository (583 lines)
+### 7. UserlandRepository (758 lines)
 
 **Operations:**
 - User authentication (magic link tokens)
@@ -962,7 +989,7 @@ is_valid = await db.userland.check_magic_link_valid(token_hash)
 
 ---
 
-### 8. CouncilMemberRepository (730 lines)
+### 8. CouncilMemberRepository (804 lines)
 
 **Operations:**
 - Find or create council members from sponsor names
@@ -1019,7 +1046,7 @@ votes = await db.council_members.get_matter_votes("nashvilleTN_BL2025-1098")
 
 ---
 
-### 9. CommitteeRepository (516 lines)
+### 9. CommitteeRepository (592 lines)
 
 **Operations:**
 - Find or create committees from meeting titles
@@ -1074,7 +1101,7 @@ votes = await db.committees.get_committee_vote_history(committee.id, limit=50)
 
 ---
 
-### 10. EngagementRepository (198 lines)
+### 10. EngagementRepository (148 lines)
 
 **Operations:**
 - Watch/unwatch entities (matters, meetings, topics, cities, council members)
@@ -1174,7 +1201,7 @@ low_rated = await db.feedback.get_low_rated_entities(
 
 ---
 
-### 12. HelpersRepository (170 lines)
+### 12. HelpersRepository (174 lines)
 
 **Shared utilities for consistent object construction across repositories.**
 
@@ -1207,7 +1234,7 @@ meeting_topics = topics_map.get(meeting.id, [])
 
 ---
 
-### 13. DeliberationRepository (738 lines)
+### 13. DeliberationRepository (737 lines)
 
 **Operations:**
 - Deliberations (linked to matters)
@@ -1282,7 +1309,59 @@ await db.deliberation.close_deliberation(deliberation_id)
 
 ---
 
-### 14. vote_utils.py (47 lines)
+### 14. HappeningRepository (125 lines)
+
+**Operations:**
+- Get ranked important upcoming items for city pages
+- Clear expired items (automatic cleanup)
+- Query cities with active happenings
+
+**Methods:**
+
+```python
+# Get happening items for a city (ordered by rank)
+items = await db.happening.get_happening_items(banana="nashvilleTN", limit=10)
+# Returns: List[HappeningItem] with joined item/meeting data
+
+# Get all active items across all cities
+all_items = await db.happening.get_all_active(limit=100)
+
+# Clear expired items (call periodically)
+deleted_count = await db.happening.clear_expired()
+
+# Get cities that have active happening items
+cities = await db.happening.get_cities_with_happening()
+# Returns: ["nashvilleTN", "paloaltoCA", ...]
+```
+
+**HappeningItem Model:**
+```python
+@dataclass
+class HappeningItem:
+    id: int
+    banana: str
+    item_id: str
+    meeting_id: str
+    meeting_date: datetime
+    rank: int                    # 1 = most important
+    reason: str                  # "Why this matters" explanation
+    created_at: datetime
+    expires_at: datetime
+    # Joined fields from items table
+    item_title: Optional[str]
+    item_summary: Optional[str]
+    matter_file: Optional[str]
+    agenda_number: Optional[str]
+    # Joined fields from meetings table
+    meeting_title: Optional[str]
+    participation: Optional[dict]
+```
+
+**Use Case:** Frontend "Happening This Week" section on city pages shows AI-ranked important upcoming items with reasons why residents should care.
+
+---
+
+### 15. vote_utils.py (46 lines)
 
 **Shared vote tally and outcome computation logic.**
 
@@ -1667,7 +1746,7 @@ ON CONFLICT(id) DO UPDATE SET
 
 ## Supporting Modules
 
-### `models.py` - Data Models (468 lines)
+### `models.py` - Data Models (472 lines)
 
 **Pydantic dataclasses with runtime validation.**
 
@@ -1692,7 +1771,7 @@ from database.models import City, Meeting, AgendaItem, Matter
 
 ---
 
-### `id_generation.py` - ID Generation (588 lines)
+### `id_generation.py` - ID Generation (587 lines)
 
 **Deterministic, collision-free ID generation for matters with title-based fallback.**
 
@@ -1733,4 +1812,25 @@ banana = extract_banana_from_matter_id("nashvilleTN_7a8f3b2c1d9e4f5a")
 
 ---
 
-**Last Updated:** 2025-12-04 (Added deliberation.py (738 lines) and vote_utils.py (47 lines); added deliberation tables to schema; corrected all line counts to match reality)
+### `migrate.py` - Migration Runner (270 lines)
+
+**Simple versioned SQL migrations for PostgreSQL.**
+
+```python
+# Usage via command line
+python -m database.migrate              # Apply pending migrations
+python -m database.migrate --status     # Show migration status
+python -m database.migrate --rollback 1 # Rollback last migration
+```
+
+**Pattern:**
+- Migrations are numbered SQL files: `001_name.sql`, `002_name.sql`
+- Each migration runs in a transaction (all-or-nothing)
+- Applied migrations tracked in `schema_migrations` table
+- Optional rollback via `001_name.down.sql` files
+
+**Migration Directory:** `database/migrations/`
+
+---
+
+**Last Updated:** 2025-12-13 (Added HappeningRepository (125 lines) and migrate.py (270 lines); added happening_items table to schema; corrected all line counts to match reality)

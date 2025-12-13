@@ -44,7 +44,7 @@ Conductor
 
 ## Module Reference
 
-### 1. `conductor.py` - Orchestration (~860 lines)
+### 1. `conductor.py` - Orchestration (~940 lines)
 
 **Entry point for all pipeline operations.** Coordinates sync and processing loops.
 
@@ -150,6 +150,7 @@ class SyncResult:
     status: SyncStatus  # COMPLETED, FAILED, SKIPPED
     meetings_found: int = 0
     meetings_processed: int = 0
+    meetings_skipped: int = 0
     duration_seconds: float = 0.0
     error_message: Optional[str] = None
 ```
@@ -170,11 +171,12 @@ class SyncResult:
 
 #### Adaptive Sync Scheduling
 
+Based on meeting frequency in the last 30 days:
+
 ```python
-# High activity (2+ meetings/week): Sync every 12 hours
-# Medium activity (1+ meeting/week): Sync every 24 hours
-# Low activity (some meetings): Sync every 7 days
-# Very low activity (no recent meetings): Sync every 7 days
+# High activity (8+ meetings/month): Sync every 12 hours
+# Medium activity (4-7 meetings/month): Sync every 24 hours
+# Low activity (< 4 meetings/month): Sync every 7 days
 ```
 
 #### Vendor Rate Limiting
@@ -185,7 +187,7 @@ class SyncResult:
 
 ---
 
-### 3. `processor.py` - Queue Processing & Item Assembly (~790 lines)
+### 3. `processor.py` - Queue Processing & Item Assembly (~840 lines)
 
 **Processes jobs from the queue.** Extracts text from PDFs, assembles items, orchestrates LLM analysis.
 
@@ -334,9 +336,11 @@ for chunk_results in analyzer.process_batch_items(batch_requests):
 ```python
 @dataclass
 class MeetingJob:
-    """Process a meeting (monolithic or item-level)"""
+    """Process a meeting (monolithic or item-level)
+
+    Processor fetches meeting from DB to get URLs - only meeting_id needed.
+    """
     meeting_id: str
-    source_url: str  # agenda_url or packet_url
 
 @dataclass
 class MatterJob:
@@ -367,7 +371,6 @@ class QueueJob:
 # Create meeting job
 job_data = create_meeting_job(
     meeting_id="paloaltoCA_2025-11-10",
-    source_url="https://...",
     banana="paloaltoCA",
     priority=150
 )
@@ -566,7 +569,7 @@ def sync_city(city_banana: str):
 
 Four orchestrators coordinate complex workflows across repositories:
 
-#### `MeetingSyncOrchestrator` (~370 lines)
+#### `MeetingSyncOrchestrator` (~520 lines)
 Main coordinator for sync operations. Called by Fetcher.
 
 ```python
@@ -581,7 +584,7 @@ meeting, stats = await orchestrator.sync_meeting(meeting_dict, city)
 - Process votes and update outcomes
 - Enqueue meetings for LLM processing
 
-#### `EnqueueDecider` (~45 lines)
+#### `EnqueueDecider` (~80 lines, in enqueue_decider.py)
 Determines if meetings should be enqueued for processing.
 
 ```python
@@ -594,6 +597,23 @@ priority = decider.calculate_priority(meeting_date)
 - Skip if all items already have summaries
 - Skip if meeting already has summary (monolithic)
 - Priority based on date proximity (0-150 scale)
+
+#### `MatterEnqueueDecider` (in enqueue_decider.py)
+Determines if matters should be enqueued for processing. Lower priority than meetings.
+
+```python
+decider = MatterEnqueueDecider()
+should_enqueue, reason = decider.should_enqueue_matter(
+    existing_matter, attachment_hash, has_attachments
+)
+priority = decider.calculate_priority(meeting_date)  # Returns -100 to 50
+```
+
+**Logic:**
+- Skip if no attachments
+- Enqueue if new matter or no canonical_summary
+- Enqueue if attachment_hash changed (re-process)
+- Priority: 50 - days_distance (lower than meetings' 0-150)
 
 #### `MatterFilter` (~12 lines)
 Filters out administrative/procedural matter types.
@@ -727,8 +747,7 @@ CREATE TABLE queue (
 {
     "job_type": "meeting",
     "payload": {
-        "meeting_id": "sanfranciscoCA_2025-11-10",
-        "source_url": "https://..."
+        "meeting_id": "sanfranciscoCA_2025-11-10"
     }
 }
 
@@ -868,4 +887,4 @@ engagic-conductor daemon
 
 ---
 
-**Last Updated:** 2025-12-04 (Audit: fixed CLI commands, line counts, added orchestrators section, PostgreSQL schema)
+**Last Updated:** 2025-12-13 (Audit: removed source_url from MeetingJob, fixed sync thresholds, added MatterEnqueueDecider, updated line counts)
