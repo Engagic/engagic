@@ -18,13 +18,15 @@ interface AuthState {
 	user: User | null;
 	accessToken: string | null;
 	isAuthenticated: boolean;
+	subscribedCities: string[];
 }
 
 class AuthStore {
 	private state = $state<AuthState>({
 		user: null,
 		accessToken: null,
-		isAuthenticated: false
+		isAuthenticated: false,
+		subscribedCities: []
 	});
 
 	constructor() {
@@ -45,14 +47,25 @@ class AuthStore {
 		return this.state.isAuthenticated;
 	}
 
-	private loadFromStorage() {
-		const user = localStorage.getItem('user');
-		const accessToken = localStorage.getItem('access_token');
+	get subscribedCities() {
+		return this.state.subscribedCities;
+	}
 
-		if (user && accessToken) {
-			this.state.user = JSON.parse(user);
-			this.state.accessToken = accessToken;
-			this.state.isAuthenticated = true;
+	private loadFromStorage() {
+		try {
+			const user = localStorage.getItem('user');
+			const accessToken = localStorage.getItem('access_token');
+			const subscribedCities = localStorage.getItem('subscribed_cities');
+
+			if (user && accessToken) {
+				this.state.user = JSON.parse(user);
+				this.state.accessToken = accessToken;
+				this.state.isAuthenticated = true;
+				this.state.subscribedCities = subscribedCities ? JSON.parse(subscribedCities) : [];
+			}
+		} catch {
+			// Corrupted localStorage - clear and start fresh
+			this.clearStorage();
 		}
 	}
 
@@ -60,12 +73,14 @@ class AuthStore {
 		if (this.state.user && this.state.accessToken) {
 			localStorage.setItem('user', JSON.stringify(this.state.user));
 			localStorage.setItem('access_token', this.state.accessToken);
+			localStorage.setItem('subscribed_cities', JSON.stringify(this.state.subscribedCities));
 		}
 	}
 
 	private clearStorage() {
 		localStorage.removeItem('user');
 		localStorage.removeItem('access_token');
+		localStorage.removeItem('subscribed_cities');
 		// Note: refresh_token is in httpOnly cookie, cleared by server
 	}
 
@@ -99,8 +114,26 @@ class AuthStore {
 		this.state.user = null;
 		this.state.accessToken = null;
 		this.state.isAuthenticated = false;
+		this.state.subscribedCities = [];
 		this.clearStorage();
 		// Note: refresh_token cookie is cleared by backend logout endpoint
+	}
+
+	setSubscribedCities(cities: string[]) {
+		this.state.subscribedCities = cities;
+		this.saveToStorage();
+	}
+
+	addSubscribedCity(city: string) {
+		if (!this.state.subscribedCities.includes(city)) {
+			this.state.subscribedCities = [...this.state.subscribedCities, city];
+			this.saveToStorage();
+		}
+	}
+
+	removeSubscribedCity(city: string) {
+		this.state.subscribedCities = this.state.subscribedCities.filter(c => c !== city);
+		this.saveToStorage();
 	}
 }
 
