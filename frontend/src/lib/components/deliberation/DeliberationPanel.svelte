@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { authState } from '$lib/stores/auth.svelte';
+	import { logger } from '$lib/services/logger';
 	import {
 		getDeliberation,
 		getDeliberationResults,
@@ -56,7 +57,7 @@
 				myVotes = votesData.votes;
 			}
 		} catch (e) {
-			console.error('Failed to load deliberation:', e);
+			logger.error('Failed to load deliberation', {}, e instanceof Error ? e : undefined);
 		} finally {
 			loading = false;
 		}

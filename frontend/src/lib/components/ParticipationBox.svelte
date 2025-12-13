@@ -275,7 +275,7 @@
 		flex-shrink: 0;
 	}
 
-	@media (max-width: 768px) {
+	@media (max-width: 640px) {
 		.info-row {
 			flex-direction: column;
 			gap: 1rem;
@@ -424,6 +424,18 @@
 		background: #dbeafe;
 		color: #1e40af;
 		border: 1px solid #60a5fa;
+	}
+
+	:global(.dark) .badge-hybrid {
+		background: #78350f;
+		color: #fef3c7;
+		border-color: #b45309;
+	}
+
+	:global(.dark) .badge-virtual {
+		background: #1e3a5f;
+		color: #93c5fd;
+		border-color: #3b82f6;
 	}
 
 	.participation-content {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { authState } from '$lib/stores/auth.svelte';
+	import { logger } from '$lib/services/logger';
 	import { voteOnComment } from '$lib/api/deliberation';
 
 	interface Props {
@@ -44,7 +45,7 @@
 			currentVote = previousVote;
 			error = e instanceof Error ? e.message : 'Vote failed';
 			setTimeout(() => (error = null), 5000);
-			console.error('Vote error:', e);
+			logger.error('Vote error', {}, e instanceof Error ? e : undefined);
 		} finally {
 			voting = false;
 		}

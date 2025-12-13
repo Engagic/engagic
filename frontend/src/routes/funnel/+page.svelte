@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { config } from '$lib/api/config';
+	import { logger } from '$lib/services/logger';
 
 	interface JourneyEvent {
 		event: string;
@@ -117,7 +118,7 @@
 			dropoffs = dropoffsData.dropoffs;
 		} catch (e) {
 			error = 'Failed to load analytics data';
-			console.error(e);
+			logger.error('Failed to load analytics data', {}, e instanceof Error ? e : undefined);
 		} finally {
 			loading = false;
 		}

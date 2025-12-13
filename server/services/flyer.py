@@ -157,10 +157,9 @@ async def generate_meeting_flyer(
     meeting_slug = _generate_meeting_slug(meeting)
     meeting_url = f"{config.FRONTEND_URL}/{meeting.banana}/{meeting_slug}"
 
-    # Add item anchor for deep linking (when item-specific flyer)
     if item:
         anchor = _generate_item_anchor(item)
-        meeting_url += f"#{anchor}"
+        meeting_url += f"?item={anchor}"
 
     # Generate QR code and logo as data URLs
     qr_data_url = _generate_qr_code(meeting_url)

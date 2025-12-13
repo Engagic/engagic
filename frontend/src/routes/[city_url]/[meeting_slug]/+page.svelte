@@ -8,6 +8,7 @@
 	import { extractTime } from '$lib/utils/date-utils';
 	import { findItemByAnchor } from '$lib/utils/anchor';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
+	import { truncateForMeta } from '$lib/utils/utils';
 	import Footer from '$lib/components/Footer.svelte';
 	import ParticipationBox from '$lib/components/ParticipationBox.svelte';
 	import MeetingStatusBanner from '$lib/components/MeetingStatusBanner.svelte';
@@ -47,6 +48,7 @@
 	let city_banana = $page.params.city_url;
 	let searchResults: SearchResult | null = $state(data.searchResults || null);
 	let selectedMeeting: Meeting | null = $state(data.selectedMeeting || null);
+	let highlightedItem = data.highlightedItem || null;
 	let error = $state(data.error || '');
 	let showProceduralItems = $state(false);
 	let expandedTitles = new SvelteSet<string>();
@@ -59,7 +61,7 @@
 
 		const matchingItem = findItemByAnchor(selectedMeeting!.items!, hash);
 		if (!matchingItem) {
-			console.warn(`No matching item found for hash: #${hash}`);
+			logger.warn(`No matching item found for hash: #${hash}`);
 			return;
 		}
 
@@ -75,7 +77,7 @@
 			requestAnimationFrame(() => {
 				const element = document.getElementById(hash);
 				if (!element) {
-					console.warn(`Anchor element not found: #${hash}`);
+					logger.warn(`Anchor element not found: #${hash}`);
 					return;
 				}
 
@@ -91,8 +93,16 @@
 	}
 
 	$effect(() => {
-		if (typeof window !== 'undefined' && window.location.hash && selectedMeeting?.items) {
-			scrollToAnchoredItem(window.location.hash.substring(1));
+		if (typeof window !== 'undefined' && selectedMeeting?.items) {
+			// Handle hash fragments (e.g., #item-5-e)
+			if (window.location.hash) {
+				scrollToAnchoredItem(window.location.hash.substring(1));
+			}
+			// Handle query param (e.g., ?item=item-5-e) - used for social sharing links
+			const itemParam = $page.url.searchParams.get('item');
+			if (itemParam && !window.location.hash) {
+				scrollToAnchoredItem(itemParam);
+			}
 		}
 	});
 
@@ -155,11 +165,108 @@
 			}
 		}
 	};
+
+	// Search results with type guard applied once
+	const searchData = $derived(
+		searchResults && isSearchSuccess(searchResults) ? searchResults : null
+	);
+	const cityName = $derived(searchData?.city_name ?? '');
+	const cityState = $derived(searchData?.state ?? '');
+
+	// OG meta data
+	const ogTitle = $derived.by(() => {
+		if (highlightedItem?.title) return `${highlightedItem.title} - ${cityName}`;
+		if (selectedMeeting?.title) return `${selectedMeeting.title} - ${cityName}`;
+		return `City Council Meeting - ${cityName}`;
+	});
+	const ogDescription = $derived.by(() => {
+		if (highlightedItem?.summary) return truncateForMeta(highlightedItem.summary);
+		const firstSummary = summarizedItems[0]?.summary;
+		if (firstSummary) return truncateForMeta(firstSummary);
+		return `City council meeting agenda and summary for ${cityName}`;
+	});
+	const ogUrl = $derived(
+		`https://engagic.org/${city_banana}/${$page.params.meeting_slug}`
+	);
+
+	// JSON-LD structured data for Event schema
+	const jsonLd = $derived.by(() => {
+		if (!selectedMeeting) return '';
+
+		const ld: Record<string, unknown> = {
+			'@context': 'https://schema.org',
+			'@type': 'Event',
+			name: selectedMeeting.title,
+			url: ogUrl
+		};
+
+		if (selectedMeeting.date) {
+			ld.startDate = selectedMeeting.date;
+		}
+
+		ld.description = ogDescription;
+
+		// Event attendance mode based on meeting-level participation
+		const meetingPart = selectedMeeting.participation;
+		if (meetingPart?.virtual_url && meetingPart?.physical_location) {
+			ld.eventAttendanceMode = 'https://schema.org/MixedEventAttendanceMode';
+		} else if (meetingPart?.virtual_url) {
+			ld.eventAttendanceMode = 'https://schema.org/OnlineEventAttendanceMode';
+		} else {
+			ld.eventAttendanceMode = 'https://schema.org/OfflineEventAttendanceMode';
+		}
+
+		// Location
+		if (meetingPart?.physical_location) {
+			ld.location = {
+				'@type': 'Place',
+				name: `${cityName} City Hall`,
+				address: {
+					'@type': 'PostalAddress',
+					streetAddress: meetingPart.physical_location,
+					addressLocality: cityName,
+					addressRegion: cityState
+				}
+			};
+		}
+
+		// Organizer
+		ld.organizer = {
+			'@type': 'GovernmentOrganization',
+			name: `${cityName} City Council`,
+			address: {
+				'@type': 'PostalAddress',
+				addressLocality: cityName,
+				addressRegion: cityState
+			}
+		};
+
+		return JSON.stringify(ld);
+	});
 </script>
 
 <svelte:head>
 	<title>{selectedMeeting?.title || 'Meeting'} - engagic</title>
-	<meta name="description" content="City council meeting agenda and summary" />
+	<meta name="description" content="{ogDescription}" />
+
+	<!-- Open Graph -->
+	<meta property="og:title" content="{ogTitle}" />
+	<meta property="og:description" content="{ogDescription}" />
+	<meta property="og:type" content="article" />
+	<meta property="og:url" content="{ogUrl}" />
+	<meta property="og:image" content="https://engagic.org/icon-192.png" />
+	<meta property="og:site_name" content="engagic" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="{ogTitle}" />
+	<meta name="twitter:description" content="{ogDescription}" />
+	<meta name="twitter:image" content="https://engagic.org/icon-192.png" />
+
+	<!-- JSON-LD Structured Data -->
+	{#if jsonLd}
+		{@html `<script type="application/ld+json">${jsonLd}</script>`}
+	{/if}
 </svelte:head>
 
 <div class="container">
@@ -253,7 +360,7 @@
 				<div class="agenda-items">
 					{#each displayedItems as item (item.id)}
 						{@const voteInfo = item.matter_id ? votesByMatter().get(item.matter_id) : undefined}
-						<svelte:boundary onerror={(e) => console.error('Agenda item error:', e, item.id)}>
+						<svelte:boundary onerror={(e) => logger.error('Agenda item error', { itemId: item.id }, e instanceof Error ? e : undefined)}>
 							<AgendaItem
 								{item}
 								meeting={selectedMeeting}
@@ -680,7 +787,9 @@
 		.container {
 			--meeting-pad-x: 1.25rem;
 			width: 100%;
+			max-width: 100%;
 			padding: 1rem 0.75rem;
+			overflow-x: hidden;
 		}
 
 		.compact-logo {
@@ -808,5 +917,24 @@
 			overflow-x: auto;
 			font-size: 0.85rem;
 		}
+	}
+
+	:global(.dark) .meeting-helper {
+		background: #1e3a5f;
+		border-color: #3b82f6;
+	}
+
+	:global(.dark) .helper-dot {
+		background: #60a5fa;
+	}
+
+	:global(.dark) .helper-text-inline {
+		color: #93c5fd;
+	}
+
+	:global(.dark) .error-message {
+		background: #78350f;
+		border-color: #b45309;
+		color: #fef3c7;
 	}
 </style>

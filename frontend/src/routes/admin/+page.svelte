@@ -475,7 +475,7 @@
 
 	.breakdown-value {
 		font-weight: 600;
-		color: #111;
+		color: var(--text-primary);
 	}
 
 	.error {
@@ -484,5 +484,10 @@
 		padding: 1rem;
 		border-radius: 4px;
 		margin-top: 1rem;
+	}
+
+	:global(.dark) .error {
+		background: #450a0a;
+		color: #fca5a5;
 	}
 </style>

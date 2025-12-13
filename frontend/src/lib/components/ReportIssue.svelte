@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { reportIssue } from '$lib/api';
+	import { logger } from '$lib/services/logger';
 	import type { IssueType } from '$lib/api/types';
 
 	interface Props {
@@ -68,7 +69,7 @@
 				closeModal();
 			}, 2000);
 		} catch (e) {
-			console.error('Failed to report issue:', e);
+			logger.error('Failed to report issue', {}, e instanceof Error ? e : undefined);
 			error = 'Failed to submit report. Please try again.';
 		} finally {
 			submitting = false;

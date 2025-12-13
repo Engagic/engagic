@@ -60,16 +60,13 @@
 	}
 
 	function buildMeetingLink(appearance: MatterTimelineAppearance): string {
-		// Build meeting slug from date and ID
 		const date = new Date(appearance.meeting_date);
 		const year = date.getFullYear();
 		const month = String(date.getMonth() + 1).padStart(2, '0');
 		const day = String(date.getDate()).padStart(2, '0');
 		const meetingSlug = `${year}-${month}-${day}-${appearance.meeting_id}`;
-
-		// Build full meeting URL with anchor
 		const anchor = buildItemAnchor(appearance);
-		return `/${appearance.banana}/${meetingSlug}#${anchor}`;
+		return `/${appearance.banana}/${meetingSlug}?item=${anchor}`;
 	}
 
 	function navigateToCommittee(e: MouseEvent, banana: string, committeeId: string) {

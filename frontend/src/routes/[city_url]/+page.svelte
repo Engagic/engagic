@@ -16,6 +16,7 @@
 	import HappeningSection from '$lib/components/HappeningSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import WatchCityModal from '$lib/components/WatchCityModal.svelte';
+	import { logger } from '$lib/services/logger';
 	import { authState } from '$lib/stores/auth.svelte';
 	import type { PageData } from './$types';
 
@@ -127,7 +128,7 @@
 				viewMode = 'meetings';
 			}
 		} catch (err) {
-			console.error('Failed to load city matters:', err);
+			logger.error('Failed to load city matters', {}, err instanceof Error ? err : undefined);
 			mattersChecked = true;
 		} finally {
 			mattersLoading = false;
@@ -165,7 +166,7 @@
 				searchMattersResults = result.results;
 			}
 		} catch (err) {
-			console.error('Search failed:', err);
+			logger.error('Search failed', {}, err instanceof Error ? err : undefined);
 		} finally {
 			searchLoading = false;
 		}

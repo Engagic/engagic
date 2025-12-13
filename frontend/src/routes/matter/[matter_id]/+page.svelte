@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
+	import { truncateForMeta } from '$lib/utils/utils';
 	import { getMatterSponsors, getCityCouncilMembers } from '$lib/api';
 	import type { CouncilMember, MatterVotesResponse } from '$lib/api/types';
 	import VoteBadge from '$lib/components/VoteBadge.svelte';
@@ -76,6 +77,50 @@
 		return councilMembers.find(m => m.id === id);
 	}
 
+	// OG meta data
+	const ogTitle = $derived(
+		matter.matter_file ? `${matter.matter_file}: ${matter.title}` : matter.title
+	);
+	const ogDescription = $derived(
+		truncateForMeta(matter.canonical_summary) || 'Legislative matter tracked by engagic'
+	);
+
+	// JSON-LD structured data for Legislation schema
+	const jsonLd = $derived.by(() => {
+		const ld: Record<string, unknown> = {
+			'@context': 'https://schema.org',
+			'@type': 'Legislation',
+			name: matter.title,
+			url: `https://engagic.org/matter/${data.matterId}`
+		};
+
+		if (matter.matter_file) {
+			ld.legislationIdentifier = matter.matter_file;
+		}
+
+		if (matter.canonical_summary) {
+			ld.abstract = truncateForMeta(matter.canonical_summary, 500);
+		}
+
+		if (matter.first_seen) {
+			ld.dateCreated = matter.first_seen;
+		}
+
+		if (firstAppearance) {
+			ld.legislationPassedBy = {
+				'@type': 'GovernmentOrganization',
+				name: `${firstAppearance.city_name} City Council`,
+				address: {
+					'@type': 'PostalAddress',
+					addressLocality: firstAppearance.city_name,
+					addressRegion: firstAppearance.state
+				}
+			};
+		}
+
+		return JSON.stringify(ld);
+	});
+
 	// Snapshot: Preserve scroll position during navigation
 	export const snapshot = {
 		capture: () => ({
@@ -91,7 +136,24 @@
 
 <svelte:head>
 	<title>{matter.matter_file ? `${matter.matter_file} - ` : ''}{matter.title} - engagic</title>
-	<meta name="description" content="Track legislative matter across meetings: {matter.title}" />
+	<meta name="description" content="{ogDescription}" />
+
+	<!-- Open Graph -->
+	<meta property="og:title" content="{ogTitle}" />
+	<meta property="og:description" content="{ogDescription}" />
+	<meta property="og:type" content="article" />
+	<meta property="og:url" content="https://engagic.org/matter/{data.matterId}" />
+	<meta property="og:image" content="https://engagic.org/icon-192.png" />
+	<meta property="og:site_name" content="engagic" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="{ogTitle}" />
+	<meta name="twitter:description" content="{ogDescription}" />
+	<meta name="twitter:image" content="https://engagic.org/icon-192.png" />
+
+	<!-- JSON-LD Structured Data -->
+	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
 <div class="matter-page">
@@ -296,7 +358,7 @@
 
 		<div class="timeline-section">
 			<h2 class="section-title">Legislative Journey</h2>
-			<svelte:boundary onerror={(e) => console.error('Timeline error:', e)}>
+			<svelte:boundary onerror={(e) => logger.error('Timeline error', {}, e instanceof Error ? e : undefined)}>
 				<MatterTimeline timelineData={data.timeline} matterFile={matter.matter_file} />
 				{#snippet failed(error: unknown, reset: () => void)}
 					<div class="error-message">

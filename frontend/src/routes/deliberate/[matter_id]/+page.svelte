@@ -35,7 +35,7 @@
 			);
 			deliberation = result.deliberation;
 		} catch (err) {
-			console.error('Failed to create deliberation:', err);
+			logger.error('Failed to create deliberation', {}, err instanceof Error ? err : undefined);
 			createError = 'Failed to start discussion. Please try again.';
 		} finally {
 			creating = false;

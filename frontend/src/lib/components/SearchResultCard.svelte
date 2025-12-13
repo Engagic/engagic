@@ -45,7 +45,7 @@
 				agenda_number: result.agenda_number,
 				matter_file: result.matter_file
 			});
-			return `/${cityUrl}/${slug}#${anchor}`;
+			return `/${cityUrl}/${slug}?item=${anchor}`;
 		}
 		return '';
 	}

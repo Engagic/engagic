@@ -1,12 +1,27 @@
 import { getMeeting, searchMeetings } from '$lib/api/index';
 import { configureApiForRequest } from '$lib/api/server';
 import { extractMeetingIdFromSlug, parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
+import { findItemByAnchor } from '$lib/utils/anchor';
 import type { PageServerLoad } from './$types';
 import type { Meeting } from '$lib/api/types';
 
-export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
+// Find highlighted item for OG tags when ?item= query param is present
+function getHighlightedItem(meeting: Meeting, itemParam: string | null): { title: string; summary: string } | null {
+	if (!itemParam || !meeting.items?.length) return null;
+
+	const item = findItemByAnchor(meeting.items, itemParam);
+	if (!item) return null;
+
+	return {
+		title: item.title || '',
+		summary: item.summary || ''
+	};
+}
+
+export const load: PageServerLoad = async ({ params, locals, setHeaders, url }) => {
 	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
 	const { city_url, meeting_slug } = params;
+	const itemParam = url.searchParams.get('item');
 
 	try {
 		const meetingId = extractMeetingIdFromSlug(meeting_slug);
@@ -20,6 +35,7 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 				});
 				return {
 					selectedMeeting: result.meeting,
+					highlightedItem: getHighlightedItem(result.meeting, itemParam),
 					searchResults: {
 						success: true as const,
 						city_name: result.city_name ?? '',
@@ -59,6 +75,7 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 				});
 				return {
 					selectedMeeting: meeting,
+					highlightedItem: getHighlightedItem(meeting, itemParam),
 					searchResults
 				};
 			}
