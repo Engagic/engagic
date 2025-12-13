@@ -40,7 +40,9 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: D
             return await handle_city_search("new york, ny", db)
 
         # Determine if input is zipcode, state, or city name
-        is_zipcode = query.isdigit() and len(query) == 5
+        # Normalize zipcode: strip dashes/spaces (users type "85-635" or "85 635")
+        zipcode_cleaned = query.replace("-", "").replace(" ", "")
+        is_zipcode = zipcode_cleaned.isdigit() and len(zipcode_cleaned) == 5
         is_state = is_state_query(query)
 
         logger.debug("query analysis", is_zipcode=is_zipcode, is_state=is_state)
@@ -50,7 +52,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: D
 
         if is_zipcode:
             metrics.search_queries.labels(query_type='zipcode').inc()
-            return await handle_zipcode_search(query, db)
+            return await handle_zipcode_search(zipcode_cleaned, db)
         elif is_state:
             metrics.search_queries.labels(query_type='state').inc()
             return await handle_state_search(query, db)

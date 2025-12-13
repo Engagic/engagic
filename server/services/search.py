@@ -372,11 +372,34 @@ async def _handle_unknown_city(
 async def _handle_single_city_match(
     city: Any, city_name: str, original_input: str, db: Database
 ) -> SearchResponse:
-    """Handle single DB match - check if other states exist via uszipcode."""
+    """Handle single DB match - return immediately if has meetings, else disambiguate."""
+    # If we have meetings, return immediately (Boston MA with data beats Boston GA we don't cover)
+    meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
+
+    if meetings:
+        logger.info("found cached meetings", count=len(meetings), city=city.name, state=city.state)
+        meetings_with_items = await get_meetings_with_items(meetings, db)
+        return {
+            "success": True,
+            "city_name": city.name,
+            "state": city.state,
+            "banana": city.banana,
+            "vendor": city.vendor,
+            "vendor_display_name": get_vendor_display_name(city.vendor),
+            "source_url": get_vendor_source_url(city.vendor, city.slug),
+            "participation": city.participation,
+            "meetings": meetings_with_items,
+            "cached": True,
+            "query": original_input,
+            "type": "city",
+            "ambiguous": False,
+        }
+
+    # No meetings - check if other states exist for disambiguation
     other_states = [s for s in await db.get_states_for_city_name(city_name) if s != city.state]
 
     if other_states:
-        logger.info("single db match but other states exist", city=city_name, covered=city.state, uncovered=other_states)
+        logger.info("no meetings, disambiguating with other states", city=city_name, covered=city.state, uncovered=other_states)
         city_options = [
             {
                 "city_name": city.name,
@@ -401,28 +424,7 @@ async def _handle_single_city_match(
             "meetings": [],
         }
 
-    # Only one state exists - return this city
-    meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
-
-    if meetings:
-        logger.info("found cached meetings", count=len(meetings), city=city.name, state=city.state)
-        meetings_with_items = await get_meetings_with_items(meetings, db)
-        return {
-            "success": True,
-            "city_name": city.name,
-            "state": city.state,
-            "banana": city.banana,
-            "vendor": city.vendor,
-            "vendor_display_name": get_vendor_display_name(city.vendor),
-            "source_url": get_vendor_source_url(city.vendor, city.slug),
-            "participation": city.participation,
-            "meetings": meetings_with_items,
-            "cached": True,
-            "query": original_input,
-            "type": "city",
-            "ambiguous": False,
-        }
-
+    # No meetings and no other states
     return {
         "success": False,
         "city_name": city.name,
