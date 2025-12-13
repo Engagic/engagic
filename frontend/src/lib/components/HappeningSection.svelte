@@ -25,7 +25,7 @@
 			agenda_number: item.agenda_number || undefined,
 			matter_file: item.matter_file || undefined
 		});
-		return `/${cityUrl}/${slug}#${anchor}`;
+		return `/${cityUrl}/${slug}?item=${anchor}`;
 	}
 
 	function renderSummary(summary: string | null): string {

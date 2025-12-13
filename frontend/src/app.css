@@ -301,7 +301,7 @@ body {
 	left: 0;
 	right: 0;
 	height: 3px;
-	background: rgba(255, 255, 255, 0.9);
+	background: var(--civic-blue);
 	z-index: 9999;
 	animation: navigation-progress 1s ease-in-out;
 	transform-origin: left;
@@ -694,7 +694,7 @@ body {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 	font-size: 0.95rem;
 	font-weight: 600;
-	color: oklab(68.601% 0.15852 0.13842);
+	color: var(--civic-orange);
 	white-space: nowrap;
 	flex-shrink: 0;
 	-webkit-font-smoothing: antialiased;

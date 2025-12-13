@@ -4,6 +4,7 @@
 	import { getCouncilMemberVotes, getMemberCommittees } from '$lib/api';
 	import type { CouncilMember, VoteRecord, VoteTally, CommitteeAssignment } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
+	import { logger } from '$lib/services/logger';
 
 	// Route params are always defined on this page
 	const city_banana = $page.params.city_url as string;
@@ -34,7 +35,7 @@
 			statistics = votesResponse.statistics;
 			committees = committeesResponse.committees || [];
 		} catch (e) {
-			console.error('Failed to load council member:', e);
+			logger.error('Failed to load council member', {}, e instanceof Error ? e : undefined);
 			error = 'Unable to load council member profile.';
 		} finally {
 			loading = false;

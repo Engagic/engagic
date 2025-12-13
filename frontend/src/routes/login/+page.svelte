@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { login } from '$lib/api/auth';
+	import { logger } from '$lib/services/logger';
 	import { page } from '$app/stores';
 
 	let email = $state('');
@@ -39,7 +40,7 @@
 			} else {
 				error = err instanceof Error ? err.message : 'Failed to send login link';
 			}
-			console.error('Login error:', err);
+			logger.error('Login error', {}, err instanceof Error ? err : undefined);
 		} finally {
 			loading = false;
 		}
@@ -324,5 +325,17 @@
 			height: 56px;
 			font-size: 1.5rem;
 		}
+	}
+
+	:global(.dark) .error-banner {
+		background: #450a0a;
+		border-color: #991b1b;
+		color: #fca5a5;
+	}
+
+	:global(.dark) .session-expired-banner {
+		background: #78350f;
+		border-color: #b45309;
+		color: #fef3c7;
 	}
 </style>

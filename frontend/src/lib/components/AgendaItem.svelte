@@ -84,7 +84,7 @@
 			flyerWindow.document.close();
 			logger.trackEvent('flyer_click', { position, city: meeting.banana });
 		} catch (error) {
-			console.error('Failed to generate flyer:', error);
+			logger.error('Failed to generate flyer', {}, error instanceof Error ? error : undefined);
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
 			flyerWindow.document.open();
@@ -128,7 +128,7 @@
 				linkCopied = false;
 			}, 2000);
 		} catch (error) {
-			console.error('Failed to copy link:', error);
+			logger.error('Failed to copy link', {}, error instanceof Error ? error : undefined);
 			alert('Failed to copy link to clipboard');
 		}
 	}
@@ -915,6 +915,7 @@
 		.flyer-btn {
 			font-size: 0.85rem;
 			padding: 0.75rem 1.25rem;
+			min-width: 100px;
 		}
 	}
 </style>

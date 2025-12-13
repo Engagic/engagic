@@ -5,6 +5,7 @@
 	import type { CouncilMember } from '$lib/api/types';
 	import { isSearchSuccess } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
+	import { logger } from '$lib/services/logger';
 
 	// Route param is always defined on this page
 	const city_banana = $page.params.city_url as string;
@@ -38,7 +39,7 @@
 				stateName = searchResponse.state;
 			}
 		} catch (e) {
-			console.error('Failed to load council members:', e);
+			logger.error('Failed to load council members', {}, e instanceof Error ? e : undefined);
 			error = 'Unable to load council roster. This city may not have voting data yet.';
 		} finally {
 			loading = false;

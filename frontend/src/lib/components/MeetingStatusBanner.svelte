@@ -69,4 +69,30 @@
 	.meeting-info-banner .alert-text {
 		color: #1e40af;
 	}
+
+	:global(.dark) .meeting-alert-banner {
+		background: #450a0a;
+		border-color: #991b1b;
+	}
+
+	:global(.dark) .meeting-info-banner {
+		background: #1e3a5f;
+		border-color: #3b82f6;
+	}
+
+	:global(.dark) .alert-icon {
+		background: #ef4444;
+	}
+
+	:global(.dark) .meeting-info-banner .alert-icon {
+		background: #3b82f6;
+	}
+
+	:global(.dark) .alert-text {
+		color: #fca5a5;
+	}
+
+	:global(.dark) .meeting-info-banner .alert-text {
+		color: #93c5fd;
+	}
 </style>

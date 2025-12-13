@@ -4,6 +4,7 @@
 	import { getCommittee, getCommitteeVotes } from '$lib/api';
 	import type { Committee, CommitteeMember, CommitteeVoteRecord } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
+	import { logger } from '$lib/services/logger';
 	import VoteBadge from '$lib/components/VoteBadge.svelte';
 
 	const city_banana = $page.params.city_url as string;
@@ -34,7 +35,7 @@
 			stateName = committeeResponse.state || '';
 			votes = votesResponse.votes || [];
 		} catch (e) {
-			console.error('Failed to load committee:', e);
+			logger.error('Failed to load committee', {}, e instanceof Error ? e : undefined);
 			error = 'Unable to load committee details.';
 		} finally {
 			loading = false;

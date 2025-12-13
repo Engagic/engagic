@@ -1070,4 +1070,10 @@
 			flex: none;
 		}
 	}
+
+	:global(.dark) .error-banner {
+		background: #450a0a;
+		border-color: #991b1b;
+		color: #fca5a5;
+	}
 </style>

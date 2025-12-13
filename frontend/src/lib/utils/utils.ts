@@ -86,8 +86,15 @@ export function parseCityUrl(cityUrl: string): { cityName: string; state: string
 }
 
 export function buildItemShareLink(banana: string, meeting: Meeting, item: AgendaItem): string {
-	// Build shareable URL: https://engagic.org/{banana}/{meeting_slug}#{anchor}
 	const meetingSlug = generateMeetingSlug(meeting);
 	const anchor = generateAnchorId(item);
-	return `https://engagic.org/${banana}/${meetingSlug}#${anchor}`;
+	return `https://engagic.org/${banana}/${meetingSlug}?item=${anchor}`;
+}
+
+// Truncate text for OG meta description (strips markdown formatting)
+export function truncateForMeta(text: string | undefined | null, maxLength: number = 200): string {
+	if (!text) return '';
+	const cleaned = text.replace(/[#*_`]/g, '').trim();
+	if (cleaned.length <= maxLength) return cleaned;
+	return cleaned.slice(0, maxLength - 3) + '...';
 }

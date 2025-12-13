@@ -1,6 +1,6 @@
 # Vendors Module - Civic Tech Platform Adapters
 
-**Fetch meeting data from 11 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
+**Fetch meeting data from 12 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
 
 **Last Updated:** November 24, 2025
 
@@ -12,11 +12,11 @@ The vendors module provides adapters for fetching meeting data from civic techno
 
 **Architecture Pattern:** AsyncBaseAdapter + Vendor-Specific Parsers + Shared Utilities
 
-**Migration Status:** All 11 adapters async (migration complete Nov 2025)
+**Migration Status:** All 12 adapters async (migration complete Nov 2025)
 
 ```
 vendors/
-├── adapters/           # 11 async adapters
+├── adapters/           # 12 async adapters
 │   ├── base_adapter_async.py       # Async base (639 lines)
 │   ├── legistar_adapter_async.py   # Legistar async (1170 lines)
 │   ├── primegov_adapter_async.py   # PrimeGov async (353 lines)
@@ -26,6 +26,7 @@ vendors/
 │   ├── escribe_adapter_async.py    # eScribe async (522 lines) - ITEM-LEVEL
 │   ├── civicclerk_adapter_async.py # CivicClerk async (134 lines)
 │   ├── civicplus_adapter_async.py  # CivicPlus async (436 lines)
+│   ├── municode_adapter_async.py   # Municode async (304 lines)
 │   ├── custom/
 │   │   ├── berkeley_adapter_async.py  # Berkeley async (328 lines)
 │   │   ├── chicago_adapter_async.py   # Chicago async (805 lines)

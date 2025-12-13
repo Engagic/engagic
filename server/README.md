@@ -30,7 +30,7 @@ server/
 ├── rate_limiter.py         - SQLite tiered rate limiting (Standard/Enterprise)
 ├── metrics.py              - Prometheus instrumentation
 │
-├── routes/                 - HTTP request handlers (15 modules)
+├── routes/                 - HTTP request handlers (17 modules)
 │   ├── search.py           - Universal search endpoint
 │   ├── meetings.py         - Meeting retrieval
 │   ├── topics.py           - Topic browsing
@@ -45,7 +45,9 @@ server/
 │   ├── committees.py       - Committee rosters, voting history
 │   ├── engagement.py       - User watches, trending topics
 │   ├── feedback.py         - User ratings, issue reporting
-│   └── deliberation.py     - Opinion clustering for civic engagement
+│   ├── deliberation.py     - Opinion clustering for civic engagement
+│   ├── events.py           - Calendar event feeds
+│   └── happening.py        - Active/upcoming items
 │
 ├── services/               - Business logic
 │   ├── meeting.py          - Meeting retrieval with items
@@ -73,7 +75,7 @@ server/
 
 **Why this structure?**
 - **Minimal main.py** - Just wiring, no business logic
-- **Focused route modules** - Single responsibility per file (15 modules)
+- **Focused route modules** - Single responsibility per file (17 modules)
 - **Service layer** - Business logic separate from HTTP concerns
 - **Dependency injection** - Centralized in dependencies.py
 - **Clean imports** - No circular dependencies

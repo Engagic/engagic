@@ -53,7 +53,7 @@
 			logger.trackEvent('signup_submit', { source: cityBanana ? 'city_request' : 'direct' });
 		} catch (err: Error | unknown) {
 			error = err instanceof Error ? err.message : 'Failed to create account';
-			console.error('Signup error:', err);
+			logger.error('Signup error', {}, err instanceof Error ? err : undefined);
 		} finally {
 			loading = false;
 		}
@@ -389,5 +389,11 @@
 			height: 56px;
 			font-size: 1.5rem;
 		}
+	}
+
+	:global(.dark) .error-banner {
+		background: #450a0a;
+		border-color: #991b1b;
+		color: #fca5a5;
 	}
 </style>

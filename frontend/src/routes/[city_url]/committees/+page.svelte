@@ -5,6 +5,7 @@
 	import type { Committee } from '$lib/api/types';
 	import { isSearchSuccess } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
+	import { logger } from '$lib/services/logger';
 
 	const city_banana = $page.params.city_url as string;
 
@@ -34,7 +35,7 @@
 				stateName = searchResponse.state;
 			}
 		} catch (e) {
-			console.error('Failed to load committees:', e);
+			logger.error('Failed to load committees', {}, e instanceof Error ? e : undefined);
 			error = 'Unable to load committees. This city may not have committee data yet.';
 		} finally {
 			loading = false;

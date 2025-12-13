@@ -2,7 +2,7 @@
 
 Architectural opportunities identified but deferred. Review when modifying related code.
 
-Last audit: 2025-12-08
+Last audit: 2025-12-12
 
 ---
 
@@ -14,6 +14,27 @@ Last audit: 2025-12-08
 - **Fix:** Import and return `ParticipationInfo` objects
 - **Effort:** Low (wiring change)
 - **Trigger:** Next time participation extraction is modified
+
+### SQL Query Duplication in SearchRepository
+- **File:** `database/repositories_async/search.py:48-81, 117-134`
+- **Issue:** `search_meetings_fulltext()` and `search_meetings_by_topic()` duplicate nearly identical SQL queries for banana filter vs no filter. Only difference is `AND banana = $N` clause.
+- **Fix:** Extract query builder with conditional WHERE clause construction
+- **Effort:** Low-Medium
+- **Trigger:** Next time search queries are modified
+
+### Chained .replace() Anti-pattern
+- **File:** `server/services/flyer.py:253-264`
+- **Issue:** 12 consecutive `html.replace()` calls, each allocates new string
+- **Fix:** Use dict-based substitution loop
+- **Effort:** Low
+- **Trigger:** Next time flyer template logic is touched
+
+### SVG Literal Duplication
+- **File:** `server/services/flyer.py:298-303, 308-313`
+- **Issue:** Identical fallback SVG placeholder appears twice (in try block and exception handler)
+- **Fix:** Extract to module-level constant `DEFAULT_LOGO_SVG`
+- **Effort:** Trivial
+- **Trigger:** Any modification to `_generate_logo_data_url()`
 
 ### Server routes return raw dicts
 - **Files:** `server/routes/engagement.py`, `server/routes/feedback.py`, `server/routes/matters.py`
@@ -74,6 +95,30 @@ def extract_legislative_with_vision(image_bytes: bytes) -> str:
 
 ## Medium Priority (Note for Future)
 
+### Raw console.* Calls in Frontend
+- **Files:** 9 files with 11 instances
+  - `routes/login/+page.svelte:42`
+  - `routes/funnel/+page.svelte:120`
+  - `routes/deliberate/[matter_id]/+page.svelte:38`
+  - `routes/deliberate/[matter_id]/+page.server.ts:56`
+  - `routes/[city_url]/[meeting_slug]/+page.svelte:62,78,256`
+  - `routes/matter/[matter_id]/+page.svelte:39,48,299`
+  - `routes/[city_url]/committees/[committee_id]/+page.svelte:37`
+  - `lib/components/ReportIssue.svelte:71`
+  - `routes/signup/+page.svelte:56`
+  - `routes/[city_url]/+page.svelte:89`
+- **Issue:** Using raw `console.error/warn/debug` instead of structured logger service
+- **Fix:** Replace with `logger.error()`, `logger.warn()`, `logger.debug()` from `$lib/services/logger`
+- **Effort:** Low (mechanical replacement)
+- **Trigger:** When touching any of these files
+
+### Type-unsafe Admin State
+- **File:** `frontend/src/routes/admin/+page.svelte:14-15`
+- **Issue:** Uses `any` type for metrics and activities state
+- **Fix:** Define proper TypeScript interfaces for admin dashboard data
+- **Effort:** Low
+- **Trigger:** When extending admin dashboard functionality
+
 ### analysis/ lacks intermediate result types
 - **Files:** `analysis/analyzer_async.py`, `analysis/topics/normalizer.py`
 - **Issue:** Analysis pipeline passes dicts between stages; no `ExtractionResult`, `SummaryResult`, `TopicsResult` types
@@ -98,6 +143,20 @@ def extract_legislative_with_vision(image_bytes: bytes) -> str:
 ---
 
 ## Low Priority (Long-Term)
+
+### Documentation Drift: vendors/README.md
+- **File:** `vendors/README.md`
+- **Issue:** Claims "11 adapters" but Municode (12th) is fully implemented
+- **Fix:** Add Municode to adapter list, update count
+- **Effort:** Trivial
+- **Trigger:** When updating vendor documentation
+
+### Documentation Drift: server/README.md
+- **File:** `server/README.md`
+- **Issue:** Claims "15 route modules" but there are 18
+- **Fix:** Update route module count
+- **Effort:** Trivial
+- **Trigger:** When updating server documentation
 
 ### parsing/pdf.py monolith (28K lines)
 - **File:** `parsing/pdf.py`
