@@ -89,6 +89,45 @@ async def signup(signup_request: SignupRequest, db: Database = Depends(get_db)):
 
     existing = await db.userland.get_user_by_email(signup_request.email)
     if existing:
+        # Existing user signing up with a city - add city to their alerts
+        alert_cities = []
+        if signup_request.city_banana:
+            alert_cities = [signup_request.city_banana]
+        elif signup_request.cities:
+            alert_cities = signup_request.cities
+
+        if alert_cities:
+            alerts = await db.userland.get_alerts(user_id=existing.id)
+            if alerts:
+                # Add city to existing alert
+                await db.userland.update_alert(
+                    alert_id=alerts[0].id,
+                    cities=alert_cities,
+                    keywords=alerts[0].criteria.get("keywords", []),
+                )
+                logger.info(
+                    "city added to existing alert",
+                    email=signup_request.email,
+                    cities=alert_cities,
+                )
+            else:
+                # Create new alert for existing user
+                alert = Alert(
+                    id=secrets.token_urlsafe(16),
+                    user_id=existing.id,
+                    name=f"{existing.name}'s Alert",
+                    cities=alert_cities,
+                    criteria={"keywords": signup_request.keywords or []},
+                    frequency="weekly",
+                    active=True,
+                )
+                await db.userland.create_alert(alert)
+                logger.info(
+                    "alert created for existing user",
+                    email=signup_request.email,
+                    cities=alert_cities,
+                )
+
         token = generate_magic_link_token(existing.id)
 
         from userland.email.transactional import send_magic_link
