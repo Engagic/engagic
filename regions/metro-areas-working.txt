@@ -13,6 +13,9 @@ mountainviewCA
 sanjoseCA
 losangelesCA
 
+# FLORIDA
+miamiFL
+
 # TEXAS (2 cities)
 dallasTX
 austinTX
@@ -44,7 +47,7 @@ cambridgeMA
 detroitMI
 
 # WISCONSIN
-milwaukeeWI
+milwaukeeWiiiiI
 
 # TENNESSEE (1 city)
 nashvilleTN

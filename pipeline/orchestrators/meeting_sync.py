@@ -121,9 +121,9 @@ class MeetingSyncOrchestrator:
             # Check if this is the first meeting for the city (before storing)
             is_first_meeting = await self._is_first_meeting_for_city(city.banana)
 
+            pending_jobs = []
             async with self.db.pool.acquire() as conn:
                 async with conn.transaction():
-                    # All repository calls share this connection for atomic commit/rollback
                     await self.db.meetings.store_meeting(meeting_obj, conn=conn)
 
                     if agenda_items:
@@ -133,6 +133,7 @@ class MeetingSyncOrchestrator:
                         stats['matters_tracked'] = matters_stats.get('tracked', 0)
                         stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
                         stats['items_skipped_procedural'] = matters_stats.get('skipped_procedural', 0)
+                        pending_jobs = matters_stats.get('pending_jobs', [])
 
                         skipped_ids = matters_stats.get('skipped_item_ids', set())
                         for item in agenda_items:
@@ -148,6 +149,10 @@ class MeetingSyncOrchestrator:
                             meeting_obj, agenda_items, conn=conn
                         )
                         stats['appearances_created'] = appearances_count
+
+            # Enqueue jobs after transaction commits (queue has FK to meetings)
+            for job in pending_jobs:
+                await self._enqueue_matter_job(**job)
 
             await self._enqueue_if_needed(
                 meeting_obj, meeting_date, agenda_items, items_data, stats
@@ -283,7 +288,8 @@ class MeetingSyncOrchestrator:
         agenda_items: List[AgendaItem],
         conn: Connection
     ) -> Dict[str, Any]:
-        stats: Dict[str, Any] = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0, 'skipped_item_ids': set()}
+        """Track matters and return stats with pending jobs to enqueue after commit."""
+        stats: Dict[str, Any] = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0, 'skipped_item_ids': set(), 'pending_jobs': []}
 
         if not items_data or not agenda_items:
             return stats
@@ -334,13 +340,13 @@ class MeetingSyncOrchestrator:
                 )
                 if should_enqueue:
                     item_ids = await self._collect_item_ids_for_matter(agenda_item.matter_id)
-                    await self._enqueue_matter_job(
-                        matter_id=agenda_item.matter_id,
-                        meeting_id=meeting.id,
-                        item_ids=item_ids,
-                        banana=meeting.banana,
-                        meeting_date=meeting.date
-                    )
+                    stats['pending_jobs'].append({
+                        'matter_id': agenda_item.matter_id,
+                        'meeting_id': meeting.id,
+                        'item_ids': item_ids,
+                        'banana': meeting.banana,
+                        'meeting_date': meeting.date
+                    })
             else:
                 if not agenda_item.matter_file and not raw_vendor_matter_id and not agenda_item.title:
                     continue
@@ -369,13 +375,13 @@ class MeetingSyncOrchestrator:
                     logger.info("new matter tracked", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type, sponsor_count=len(sponsors))
 
                 if agenda_item.attachments:
-                    await self._enqueue_matter_job(
-                        matter_id=agenda_item.matter_id,
-                        meeting_id=meeting.id,
-                        item_ids=[agenda_item.id],
-                        banana=meeting.banana,
-                        meeting_date=meeting.date
-                    )
+                    stats['pending_jobs'].append({
+                        'matter_id': agenda_item.matter_id,
+                        'meeting_id': meeting.id,
+                        'item_ids': [agenda_item.id],
+                        'banana': meeting.banana,
+                        'meeting_date': meeting.date
+                    })
 
                 if sponsors:
                     await self.db.council_members.link_sponsors_to_matter(
