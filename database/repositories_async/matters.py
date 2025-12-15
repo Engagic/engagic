@@ -66,18 +66,19 @@ class MatterRepository(BaseRepository):
         logger.debug("stored matter", matter_id=matter.id, banana=matter.banana)
 
     async def get_matter(self, matter_id: str) -> Optional[Matter]:
-        """Get a matter by ID."""
+        """Get a matter by ID with accurate appearance count."""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
                 SELECT
-                    id, banana, matter_id, matter_file, matter_type,
-                    title, sponsors, canonical_summary, canonical_topics,
-                    attachments, metadata, first_seen, last_seen,
-                    appearance_count, status, created_at, updated_at,
-                    final_vote_date, quality_score, rating_count
-                FROM city_matters
-                WHERE id = $1
+                    cm.id, cm.banana, cm.matter_id, cm.matter_file, cm.matter_type,
+                    cm.title, cm.sponsors, cm.canonical_summary, cm.canonical_topics,
+                    cm.attachments, cm.metadata, cm.first_seen, cm.last_seen,
+                    (SELECT COUNT(*) FROM items i WHERE i.matter_id = cm.id) as appearance_count,
+                    cm.status, cm.created_at, cm.updated_at,
+                    cm.final_vote_date, cm.quality_score, cm.rating_count
+                FROM city_matters cm
+                WHERE cm.id = $1
                 """,
                 matter_id,
             )
@@ -93,24 +94,29 @@ class MatterRepository(BaseRepository):
             return build_matter(row, topics or None)
 
     async def get_matters_batch(self, matter_ids: List[str]) -> Dict[str, Matter]:
-        """Batch fetch multiple matters by ID - eliminates N+1."""
+        """Batch fetch multiple matters by ID - eliminates N+1.
+
+        Computes actual appearance_count from items table instead of using
+        stored value, which can drift due to race conditions in sync logic.
+        """
         if not matter_ids:
             return {}
 
         unique_ids = list(set(matter_ids))
 
         async with self.pool.acquire() as conn:
-            # Single query for all matters
+            # Compute accurate appearance_count from items table
             rows = await conn.fetch(
                 """
                 SELECT
-                    id, banana, matter_id, matter_file, matter_type,
-                    title, sponsors, canonical_summary, canonical_topics,
-                    attachments, metadata, first_seen, last_seen,
-                    appearance_count, status, created_at, updated_at,
-                    final_vote_date, quality_score, rating_count
-                FROM city_matters
-                WHERE id = ANY($1::text[])
+                    cm.id, cm.banana, cm.matter_id, cm.matter_file, cm.matter_type,
+                    cm.title, cm.sponsors, cm.canonical_summary, cm.canonical_topics,
+                    cm.attachments, cm.metadata, cm.first_seen, cm.last_seen,
+                    (SELECT COUNT(*) FROM items i WHERE i.matter_id = cm.id) as appearance_count,
+                    cm.status, cm.created_at, cm.updated_at,
+                    cm.final_vote_date, cm.quality_score, cm.rating_count
+                FROM city_matters cm
+                WHERE cm.id = ANY($1::text[])
                 """,
                 unique_ids,
             )
