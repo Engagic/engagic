@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any, TypedDict
 
+from asyncpg import Connection
+
 from config import get_logger
 from database.id_generation import generate_meeting_id, generate_matter_id, validate_matter_id
 from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata
@@ -121,11 +123,12 @@ class MeetingSyncOrchestrator:
 
             async with self.db.pool.acquire() as conn:
                 async with conn.transaction():
-                    await self.db.meetings.store_meeting(meeting_obj)
+                    # All repository calls share this connection for atomic commit/rollback
+                    await self.db.meetings.store_meeting(meeting_obj, conn=conn)
 
                     if agenda_items:
                         matters_stats = await self._track_matters(
-                            meeting_obj, items_data or [], agenda_items
+                            meeting_obj, items_data or [], agenda_items, conn=conn
                         )
                         stats['matters_tracked'] = matters_stats.get('tracked', 0)
                         stats['matters_duplicate'] = matters_stats.get('duplicate', 0)
@@ -137,12 +140,12 @@ class MeetingSyncOrchestrator:
                                 item.matter_id = None
 
                         stored_count = await self.db.items.store_agenda_items(
-                            meeting_obj.id, agenda_items
+                            meeting_obj.id, agenda_items, conn=conn
                         )
                         stats['items_stored'] = stored_count
 
                         appearances_count = await self._create_matter_appearances(
-                            meeting_obj, agenda_items
+                            meeting_obj, agenda_items, conn=conn
                         )
                         stats['appearances_created'] = appearances_count
 
@@ -277,7 +280,8 @@ class MeetingSyncOrchestrator:
         self,
         meeting: Meeting,
         items_data: List[Dict[str, Any]],
-        agenda_items: List[AgendaItem]
+        agenda_items: List[AgendaItem],
+        conn: Optional[Connection] = None
     ) -> Dict[str, Any]:
         stats: Dict[str, Any] = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0, 'skipped_item_ids': set()}
 
@@ -316,7 +320,8 @@ class MeetingSyncOrchestrator:
                     meeting_date=meeting.date,
                     attachments=agenda_item.attachments,
                     attachment_hash=attachment_hash,
-                    increment_appearance_count=not appearance_exists
+                    increment_appearance_count=not appearance_exists,
+                    conn=conn
                 )
                 stats['duplicate'] += 1
                 if not appearance_exists and (agenda_item.matter_file or raw_vendor_matter_id):
@@ -357,7 +362,7 @@ class MeetingSyncOrchestrator:
                     appearance_count=1,
                 )
 
-                await self.db.matters.store_matter(matter_obj)
+                await self.db.matters.store_matter(matter_obj, conn=conn)
                 stats['tracked'] += 1
 
                 if agenda_item.matter_file or raw_vendor_matter_id:
@@ -374,17 +379,17 @@ class MeetingSyncOrchestrator:
 
                 if sponsors:
                     await self.db.council_members.link_sponsors_to_matter(
-                        banana=meeting.banana, matter_id=agenda_item.matter_id, sponsor_names=sponsors, appeared_at=meeting.date
+                        banana=meeting.banana, matter_id=agenda_item.matter_id, sponsor_names=sponsors, appeared_at=meeting.date, conn=conn
                     )
 
             votes = raw_item.get("votes", [])
             if votes:
                 await self.db.council_members.record_votes_for_matter(
-                    banana=meeting.banana, matter_id=agenda_item.matter_id, meeting_id=meeting.id, votes=votes, vote_date=meeting.date
+                    banana=meeting.banana, matter_id=agenda_item.matter_id, meeting_id=meeting.id, votes=votes, vote_date=meeting.date, conn=conn
                 )
                 result = self.vote_processor.process_votes(votes)
                 await self.db.matters.update_appearance_outcome(
-                    matter_id=agenda_item.matter_id, meeting_id=meeting.id, item_id=agenda_item.id, vote_outcome=result["outcome"], vote_tally=result["tally"]
+                    matter_id=agenda_item.matter_id, meeting_id=meeting.id, item_id=agenda_item.id, vote_outcome=result["outcome"], vote_tally=result["tally"], conn=conn
                 )
 
         return stats
@@ -392,7 +397,8 @@ class MeetingSyncOrchestrator:
     async def _create_matter_appearances(
         self,
         meeting: Meeting,
-        agenda_items: List[AgendaItem]
+        agenda_items: List[AgendaItem],
+        conn: Optional[Connection] = None
     ) -> int:
         """Create matter_appearances after items are stored."""
         count = 0
@@ -409,7 +415,8 @@ class MeetingSyncOrchestrator:
                 appeared_at=meeting.date,
                 committee=committee,
                 committee_id=meeting.committee_id,
-                sequence=agenda_item.sequence
+                sequence=agenda_item.sequence,
+                conn=conn
             )
             count += 1
 

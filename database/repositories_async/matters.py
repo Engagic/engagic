@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from asyncpg import Connection
+
 from database.repositories_async.base import BaseRepository
 from database.repositories_async.helpers import build_matter, fetch_topics_for_ids, replace_entity_topics
 from database.models import Matter, AttachmentInfo
@@ -14,11 +16,10 @@ logger = get_logger(__name__).bind(component="matter_repository")
 class MatterRepository(BaseRepository):
     """Repository for matter operations."""
 
-    async def store_matter(self, matter: Matter) -> None:
+    async def store_matter(self, matter: Matter, conn: Optional[Connection] = None) -> None:
         """Store or update a matter with topic normalization."""
-        async with self.transaction() as conn:
-            # Upsert matter row
-            await conn.execute(
+        async with self._ensure_conn(conn) as c:
+            await c.execute(
                 """
                 INSERT INTO city_matters (
                     id, banana, matter_id, matter_file, matter_type,
@@ -60,7 +61,7 @@ class MatterRepository(BaseRepository):
 
             if matter.canonical_topics:
                 await replace_entity_topics(
-                    conn, "matter_topics", "matter_id", matter.id, matter.canonical_topics
+                    c, "matter_topics", "matter_id", matter.id, matter.canonical_topics
                 )
 
         logger.debug("stored matter", matter_id=matter.id, banana=matter.banana)
@@ -170,12 +171,13 @@ class MatterRepository(BaseRepository):
         meeting_date: Optional[datetime],
         attachments: Optional[List[AttachmentInfo]],
         attachment_hash: str,
-        increment_appearance_count: bool = False
+        increment_appearance_count: bool = False,
+        conn: Optional[Connection] = None
     ) -> Optional[int]:
         """Update matter tracking fields with atomic increment to prevent race conditions."""
-        async with self.transaction() as conn:
+        async with self._ensure_conn(conn) as c:
             if increment_appearance_count:
-                new_count = await conn.fetchval(
+                new_count = await c.fetchval(
                     """
                     UPDATE city_matters
                     SET last_seen = $2,
@@ -194,7 +196,7 @@ class MatterRepository(BaseRepository):
                 logger.debug("updated matter tracking", matter_id=matter_id, new_count=new_count)
                 return new_count
             else:
-                await conn.execute(
+                await c.execute(
                     """
                     UPDATE city_matters
                     SET last_seen = $2,
@@ -234,11 +236,12 @@ class MatterRepository(BaseRepository):
         appeared_at: Optional[datetime],
         committee: Optional[str] = None,
         committee_id: Optional[str] = None,
-        sequence: Optional[int] = None
+        sequence: Optional[int] = None,
+        conn: Optional[Connection] = None
     ) -> None:
         """Create a matter appearance record."""
-        async with self.transaction() as conn:
-            await conn.execute(
+        async with self._ensure_conn(conn) as c:
+            await c.execute(
                 """
                 INSERT INTO matter_appearances (
                     matter_id, meeting_id, item_id, appeared_at, committee, committee_id, sequence
@@ -307,11 +310,12 @@ class MatterRepository(BaseRepository):
         meeting_id: str,
         item_id: str,
         vote_outcome: str,
-        vote_tally: dict
+        vote_tally: dict,
+        conn: Optional[Connection] = None
     ) -> None:
         """Update matter appearance with vote outcome and tally."""
-        async with self.transaction() as conn:
-            await conn.execute(
+        async with self._ensure_conn(conn) as c:
+            await c.execute(
                 """
                 UPDATE matter_appearances
                 SET vote_outcome = $1, vote_tally = $2

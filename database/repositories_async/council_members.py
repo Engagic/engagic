@@ -15,6 +15,8 @@ Design:
 from typing import Dict, List, Optional
 from datetime import datetime
 
+from asyncpg import Connection
+
 from database.repositories_async.base import BaseRepository
 from database.models import CouncilMember, Vote
 from database.id_generation import (
@@ -41,26 +43,18 @@ class CouncilMemberRepository(BaseRepository):
         banana: str,
         name: str,
         appeared_at: Optional[datetime] = None,
+        conn: Optional[Connection] = None,
     ) -> CouncilMember:
-        """Find existing council member or create new one
+        """Find existing council member or create new one.
 
-        Uses normalized name for matching. Creates new member if not found.
-        Updates last_seen if existing member found.
-
-        Args:
-            banana: City identifier
-            name: Sponsor name (will be normalized for matching)
-            appeared_at: Date when sponsor appeared (for first_seen/last_seen)
-
-        Returns:
-            CouncilMember object (existing or newly created)
+        Uses normalized name for matching. Updates last_seen if existing member found.
         """
         normalized = normalize_sponsor_name(name)
         member_id = generate_council_member_id(banana, name)
 
-        async with self.transaction() as conn:
+        async with self._ensure_conn(conn) as c:
             # Try to find existing member
-            row = await conn.fetchrow(
+            row = await c.fetchrow(
                 """
                 SELECT id, banana, name, normalized_name, title, district,
                        status, first_seen, last_seen, sponsorship_count, vote_count, metadata
@@ -73,7 +67,7 @@ class CouncilMemberRepository(BaseRepository):
             if row:
                 # Update last_seen if newer
                 if appeared_at and (not row["last_seen"] or appeared_at > row["last_seen"]):
-                    await conn.execute(
+                    await c.execute(
                         """
                         UPDATE council_members
                         SET last_seen = $2, updated_at = CURRENT_TIMESTAMP
@@ -99,7 +93,7 @@ class CouncilMemberRepository(BaseRepository):
                 )
 
             # Create new member
-            await conn.execute(
+            await c.execute(
                 """
                 INSERT INTO council_members (
                     id, banana, name, normalized_name, status,
@@ -208,24 +202,16 @@ class CouncilMemberRepository(BaseRepository):
         matter_id: str,
         is_primary: bool = False,
         sponsor_order: Optional[int] = None,
+        conn: Optional[Connection] = None,
     ) -> bool:
-        """Create sponsorship link between council member and matter
+        """Create sponsorship link between council member and matter.
 
-        Uses UPSERT with RETURNING to detect if insert succeeded.
-        Only increments sponsorship_count when a new row is actually created.
-
-        Args:
-            council_member_id: Council member ID
-            matter_id: Matter ID (city_matters.id)
-            is_primary: True if primary sponsor, False for co-sponsor
-            sponsor_order: Position in sponsor list (1 = first)
-
-        Returns:
-            True if new sponsorship created, False if already exists
+        Uses UPSERT with RETURNING - only increments sponsorship_count on actual insert.
+        Returns True if new sponsorship created, False if already exists.
         """
-        async with self.transaction() as conn:
+        async with self._ensure_conn(conn) as c:
             # Use RETURNING to detect if insert succeeded (no redundant SELECT)
-            result = await conn.fetchval(
+            result = await c.fetchval(
                 """
                 INSERT INTO sponsorships (council_member_id, matter_id, is_primary, sponsor_order)
                 VALUES ($1, $2, $3, $4)
@@ -243,7 +229,7 @@ class CouncilMemberRepository(BaseRepository):
                 return False
 
             # Only increment count when INSERT actually succeeded
-            await conn.execute(
+            await c.execute(
                 """
                 UPDATE council_members
                 SET sponsorship_count = sponsorship_count + 1,
@@ -452,20 +438,11 @@ class CouncilMemberRepository(BaseRepository):
         matter_id: str,
         sponsor_names: List[str],
         appeared_at: Optional[datetime] = None,
+        conn: Optional[Connection] = None,
     ) -> int:
-        """Link multiple sponsors to a matter
+        """Link multiple sponsors to a matter. Creates members if needed.
 
-        Convenience method for processing sponsor arrays from vendor data.
-        Creates council members if they don't exist, then creates sponsorships.
-
-        Args:
-            banana: City identifier
-            matter_id: Matter ID
-            sponsor_names: List of sponsor names from vendor data
-            appeared_at: Date when sponsors appeared
-
-        Returns:
-            Number of new sponsorships created
+        Returns number of new sponsorships created.
         """
         created_count = 0
 
@@ -474,11 +451,11 @@ class CouncilMemberRepository(BaseRepository):
                 continue
 
             # Find or create council member
-            member = await self.find_or_create_member(banana, name, appeared_at)
+            member = await self.find_or_create_member(banana, name, appeared_at, conn=conn)
 
             # Create sponsorship (first sponsor is primary)
             is_primary = (order == 1)
-            if await self.create_sponsorship(member.id, matter_id, is_primary, order):
+            if await self.create_sponsorship(member.id, matter_id, is_primary, order, conn=conn):
                 created_count += 1
 
         if created_count > 0:
@@ -504,27 +481,16 @@ class CouncilMemberRepository(BaseRepository):
         vote_date: Optional[datetime] = None,
         sequence: Optional[int] = None,
         metadata: Optional[dict] = None,
+        conn: Optional[Connection] = None,
     ) -> bool:
-        """Record a single vote for a council member on a matter in a meeting
+        """Record a single vote for a council member on a matter in a meeting.
 
-        Uses UPSERT with RETURNING to detect if insert succeeded.
-        Only increments vote_count when a new row is actually created.
-
-        Args:
-            council_member_id: Council member ID
-            matter_id: Matter ID
-            meeting_id: Meeting ID (critical: same matter can be voted multiple times)
-            vote: Vote value (yes, no, abstain, absent, present, recused, not_voting)
-            vote_date: Date of vote (usually meeting date)
-            sequence: Order in roll call if available
-            metadata: Vendor-specific data (motion_id, etc.)
-
-        Returns:
-            True if new vote recorded, False if already exists
+        Uses UPSERT with RETURNING - only increments vote_count on actual insert.
+        Returns True if new vote recorded, False if already exists.
         """
-        async with self.transaction() as conn:
+        async with self._ensure_conn(conn) as c:
             # Use RETURNING to detect if insert succeeded (no redundant SELECT)
-            result = await conn.fetchval(
+            result = await c.fetchval(
                 """
                 INSERT INTO votes (council_member_id, matter_id, meeting_id, vote, vote_date, sequence, metadata)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -545,7 +511,7 @@ class CouncilMemberRepository(BaseRepository):
                 return False
 
             # Only increment count when INSERT actually succeeded
-            await conn.execute(
+            await c.execute(
                 """
                 UPDATE council_members
                 SET vote_count = vote_count + 1,
@@ -574,21 +540,11 @@ class CouncilMemberRepository(BaseRepository):
         meeting_id: str,
         votes: List[Dict],
         vote_date: Optional[datetime] = None,
+        conn: Optional[Connection] = None,
     ) -> int:
-        """Record all votes for a matter in a meeting
+        """Record all votes for a matter in a meeting. Creates members if needed.
 
-        Convenience method for processing vote arrays from vendor data.
-        Creates council members if they don't exist, then records votes.
-
-        Args:
-            banana: City identifier
-            matter_id: Matter ID
-            meeting_id: Meeting ID
-            votes: List of vote dicts with keys: name, vote, sequence (optional)
-            vote_date: Date of vote
-
-        Returns:
-            Number of new votes recorded
+        Returns number of new votes recorded.
         """
         recorded_count = 0
 
@@ -616,7 +572,7 @@ class CouncilMemberRepository(BaseRepository):
                 vote_value = vote_map.get(vote_value, "not_voting")
 
             # Find or create council member
-            member = await self.find_or_create_member(banana, name, vote_date)
+            member = await self.find_or_create_member(banana, name, vote_date, conn=conn)
 
             # Record vote
             if await self.record_vote(
@@ -627,6 +583,7 @@ class CouncilMemberRepository(BaseRepository):
                 vote_date=vote_date,
                 sequence=vote_data.get("sequence"),
                 metadata=vote_data.get("metadata"),
+                conn=conn,
             ):
                 recorded_count += 1
 
