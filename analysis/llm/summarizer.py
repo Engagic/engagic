@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from google import genai
 from google.genai import types
 
-from config import get_logger
+from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
 from exceptions import LLMError
 
@@ -97,6 +97,40 @@ class GeminiSummarizer:
             output_cost = (output_tokens / 1_000_000) * 0.30
 
         return input_cost + output_cost
+
+    def _select_prompt_type(self, page_count: int) -> str:
+        """Select prompt type based on experiment setting.
+
+        Args:
+            page_count: Document page count (used for adaptive selection)
+
+        Returns:
+            Prompt type: "unified", "standard", or "large"
+        """
+        experiment = config.PROMPT_EXPERIMENT
+
+        if experiment == "unified":
+            return "unified"
+        else:
+            # Default adaptive behavior: large for 100+ pages, standard otherwise
+            return "large" if page_count >= 100 else "standard"
+
+    def _select_model(self, page_count: int, text_size: int) -> tuple[str, str]:
+        """Select model based on config and document size.
+
+        Args:
+            page_count: Document page count
+            text_size: Character count of text
+
+        Returns:
+            Tuple of (model_name, display_name)
+        """
+        # Default: Flash for everything (consistent quality)
+        # If USE_FLASH_LITE enabled: use Flash-Lite for small docs (cost savings)
+        if config.USE_FLASH_LITE:
+            if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
+                return self.flash_lite_model_name, "flash-lite"
+        return self.flash_model_name, "flash"
 
     def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3, max_retry_seconds: int = 180):
         """Call Gemini API with automatic retry on 429 rate limits.
@@ -190,13 +224,8 @@ class GeminiSummarizer:
         text_size = len(text)
         page_count = self._estimate_page_count(text)
 
-        # Model selection based on size
-        if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
-            model_name = self.flash_lite_model_name
-            model_display = "flash-lite"
-        else:
-            model_name = self.flash_model_name
-            model_display = "flash"
+        # Model selection based on config
+        model_name, model_display = self._select_model(page_count, text_size)
 
         logger.info("summarizing meeting", page_count=page_count, text_size=text_size, model=model_display)
 
@@ -279,34 +308,20 @@ class GeminiSummarizer:
         if page_count is None:
             page_count = self._estimate_page_count(text)
 
-        # Adaptive prompt selection based on document size
-        # Large items (100+ pages): comprehensive analysis with extended thinking mode
-        # Standard items: focused analysis
-        if page_count >= 100:
-            prompt_type = "large"
-            model_name = self.flash_model_name  # Always use flash for large items
-            model_display = "flash"
-            logger.info(
-                "large item using comprehensive prompt",
-                item_title=item_title[:50],
-                page_count=page_count,
-                text_size=text_size
-            )
-        else:
-            prompt_type = "standard"
-            # Model selection for standard items
-            if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
-                model_name = self.flash_lite_model_name
-                model_display = "flash-lite"
-            else:
-                model_name = self.flash_model_name
-                model_display = "flash"
-            logger.info(
-                "standard item processing",
-                item_title=item_title[:50],
-                page_count=page_count,
-                text_size=text_size
-            )
+        # Prompt selection based on experiment setting
+        prompt_type = self._select_prompt_type(page_count)
+
+        # Model selection based on config
+        model_name, model_display = self._select_model(page_count, text_size)
+
+        logger.info(
+            "item processing",
+            item_title=item_title[:50],
+            page_count=page_count,
+            text_size=text_size,
+            prompt_type=prompt_type,
+            model=model_display
+        )
 
         # Get adaptive prompt and config
         prompt = self._get_prompt("item", prompt_type, title=item_title, text=text)
@@ -853,8 +868,8 @@ class GeminiSummarizer:
                     if page_count is None:
                         page_count = self._estimate_page_count(text)
 
-                    # Adaptive prompt selection based on size
-                    prompt_type = "large" if page_count >= 100 else "standard"
+                    # Prompt selection based on experiment setting
+                    prompt_type = self._select_prompt_type(page_count)
 
                     # Build prompt and config
                     prompt = self._get_prompt(
@@ -965,7 +980,7 @@ class GeminiSummarizer:
                 for result in results:
                     req = request_map.get(result["item_id"], {})
                     page_count = req.get("page_count", 0) if req else 0
-                    prompt_type = "large" if page_count >= 100 else "standard"
+                    prompt_type = self._select_prompt_type(page_count)
 
                     self.metrics.record_llm_call(
                         model="flash",
@@ -1005,7 +1020,7 @@ class GeminiSummarizer:
                 # Record failed batch metrics
                 for req in chunk_requests:
                     page_count = req.get("page_count", 0)
-                    prompt_type = "large" if page_count >= 100 else "standard"
+                    prompt_type = self._select_prompt_type(page_count)
                     self.metrics.record_llm_call(
                         model="flash",
                         prompt_type=f"item_{prompt_type}_batch",
