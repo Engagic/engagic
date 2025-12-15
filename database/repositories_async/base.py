@@ -34,6 +34,7 @@ Connection Patterns
 """
 
 import asyncpg
+from asyncpg import Connection
 from typing import Any, List, Optional
 from contextlib import asynccontextmanager
 
@@ -107,6 +108,18 @@ class BaseRepository:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 yield conn
+
+    @asynccontextmanager
+    async def _ensure_conn(self, conn: Optional[Connection] = None):
+        """Use provided connection or create new transaction.
+
+        Allows methods to participate in caller's transaction when conn is passed.
+        """
+        if conn:
+            yield conn
+        else:
+            async with self.transaction() as c:
+                yield c
 
     @staticmethod
     def _parse_row_count(result: str) -> int:

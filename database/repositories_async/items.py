@@ -3,6 +3,8 @@
 from collections import defaultdict
 from typing import Dict, List, Optional
 
+from asyncpg import Connection
+
 from database.repositories_async.base import BaseRepository
 from database.repositories_async.helpers import (
     build_agenda_item,
@@ -81,12 +83,14 @@ class ItemRepository(BaseRepository):
         """Public wrapper for item deduplication. Call before store_agenda_items."""
         return self._dedupe_items_by_matter(items)
 
-    async def store_agenda_items(self, meeting_id: str, items: List[AgendaItem]) -> int:
+    async def store_agenda_items(
+        self, meeting_id: str, items: List[AgendaItem], conn: Optional[Connection] = None
+    ) -> int:
         """Store multiple agenda items. Items should already be deduped via dedupe_items_by_matter()."""
         if not items:
             return 0
 
-        async with self.transaction() as conn:
+        async with self._ensure_conn(conn) as c:
             # Batch upsert items using executemany()
             item_records = [
                 (
@@ -107,7 +111,7 @@ class ItemRepository(BaseRepository):
                 for item in items
             ]
 
-            await conn.executemany(
+            await c.executemany(
                 """
                 INSERT INTO items (
                     id, meeting_id, title, sequence, attachments,
@@ -139,7 +143,7 @@ class ItemRepository(BaseRepository):
             }
             if items_with_topics:
                 await replace_entity_topics_batch(
-                    conn, "item_topics", "item_id", items_with_topics
+                    c, "item_topics", "item_id", items_with_topics
                 )
 
         logger.debug("stored agenda items", count=len(items), meeting_id=meeting_id)

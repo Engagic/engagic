@@ -2,6 +2,8 @@
 
 from typing import List, Optional
 
+from asyncpg import Connection
+
 from database.repositories_async.base import BaseRepository
 from database.repositories_async.helpers import build_meeting, fetch_topics_for_ids, replace_entity_topics
 from database.models import Meeting, ParticipationInfo
@@ -13,10 +15,10 @@ logger = get_logger(__name__).bind(component="meeting_repository")
 class MeetingRepository(BaseRepository):
     """Repository for meeting operations."""
 
-    async def store_meeting(self, meeting: Meeting) -> None:
+    async def store_meeting(self, meeting: Meeting, conn: Optional[Connection] = None) -> None:
         """Store or update a meeting with topic normalization."""
-        async with self.transaction() as conn:
-            await conn.execute(
+        async with self._ensure_conn(conn) as c:
+            await c.execute(
                 """
                 INSERT INTO meetings (
                     id, banana, title, date, agenda_url, packet_url,
@@ -55,7 +57,7 @@ class MeetingRepository(BaseRepository):
 
             if meeting.topics:
                 await replace_entity_topics(
-                    conn, "meeting_topics", "meeting_id", meeting.id, meeting.topics
+                    c, "meeting_topics", "meeting_id", meeting.id, meeting.topics
                 )
 
         logger.info("meeting stored", meeting_id=meeting.id, banana=meeting.banana)
