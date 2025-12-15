@@ -26,6 +26,21 @@ async def _record_city_request(db: Database, banana: str) -> None:
         logger.warning("failed to record city request", banana=banana, error=str(e))
 
 
+async def _log_city_search(db: Database, banana: str, query: str) -> None:
+    """Log successful city search to activity_log for analytics."""
+    try:
+        await db.engagement.log_activity(
+            user_id=None,
+            session_id=None,
+            action="search",
+            entity_type="city",
+            entity_id=banana,
+            metadata={"query": query},
+        )
+    except Exception as e:
+        logger.warning("failed to log city search", banana=banana, error=str(e))
+
+
 def _apply_stats_to_options(options: List[Dict[str, Any]], stats: Dict[str, Dict[str, int]]) -> None:
     """Apply meeting stats to city options in-place."""
     default_stats = {"total_meetings": 0, "meetings_with_packet": 0, "summarized_meetings": 0}
@@ -128,6 +143,8 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
 
     meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
+    await _log_city_search(db, city.banana, zipcode)
+
     if meetings:
         logger.info("found cached meetings", count=len(meetings), city=city.name, state=city.state)
         meetings_with_items = await get_meetings_with_items(meetings, db)
@@ -187,6 +204,8 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
         })
 
     meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
+
+    await _log_city_search(db, city.banana, city_input)
 
     if meetings:
         logger.info("found cached meetings for city", count=len(meetings), city=city_name, state=state)
@@ -377,6 +396,7 @@ async def _handle_single_city_match(
     meetings = await db.get_meetings(bananas=[city.banana], limit=50, exclude_cancelled=False)
 
     if meetings:
+        await _log_city_search(db, city.banana, original_input)
         logger.info("found cached meetings", count=len(meetings), city=city.name, state=city.state)
         meetings_with_items = await get_meetings_with_items(meetings, db)
         return {

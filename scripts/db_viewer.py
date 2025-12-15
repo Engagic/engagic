@@ -590,13 +590,13 @@ class DatabaseViewer:
 
                 item_results = await conn.fetch(
                     """
-                    SELECT ai.id, ai.meeting_id, ai.title, ai.summary, ai.attachments,
+                    SELECT i.id, i.meeting_id, i.title, i.summary, i.attachments,
                            m.banana, m.title as meeting_title, m.date, m.agenda_url,
                            c.name as city_name, c.state
-                    FROM agenda_items ai
-                    JOIN meetings m ON ai.meeting_id = m.id
+                    FROM items i
+                    JOIN meetings m ON i.meeting_id = m.id
                     JOIN cities c ON m.banana = c.banana
-                    WHERE ai.summary ILIKE $1
+                    WHERE i.summary ILIKE $1
                     ORDER BY m.date DESC
                     LIMIT 20
                     """,
