@@ -591,6 +591,25 @@ SELECT
 FROM userland.city_requests
 ORDER BY request_count DESC, last_requested DESC;
 "
+    echo ""
+    echo -e "${BLUE}=== Top Searched Cities (tracked) ===${NC}"
+    PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
+SELECT
+    entity_id as city,
+    COUNT(*) as searches,
+    MIN(created_at)::date as first_search,
+    MAX(created_at)::date as last_search
+FROM userland.activity_log
+WHERE action = 'search' AND entity_type = 'city'
+GROUP BY entity_id
+ORDER BY searches DESC
+LIMIT 20;
+"
+    echo ""
+    echo -e "${BLUE}=== Top Searched Cities (from logs) ===${NC}"
+    journalctl -u engagic-api --no-pager --since "2024-01-01" 2>/dev/null \
+        | grep -oP 'POST /api/search "\K[^"]+' \
+        | sort | uniq -c | sort -rn | head -20
 }
 
 sync_watchlist() {
