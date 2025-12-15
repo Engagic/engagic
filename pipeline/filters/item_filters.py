@@ -113,6 +113,21 @@ BOILERPLATE_CONTRACT_PATTERNS = [
     r'bid tabulation',  # Bid results tables (useful but huge)
 ]
 
+# SF procedural boilerplate (internal routing, compliance checkboxes, no policy substance)
+# The actual legislative content is in "Leg Ver*" and "PC Transmittal"
+SF_PROCEDURAL_PATTERNS = [
+    r'ceqa det',  # CEQA Determination - checkbox form saying "categorically exempt"
+    r'ceqa determination',
+    r'referral ceqa',  # Referral to CEQA review - internal routing
+    r'referral fyi',  # FYI referral - just routing notification
+    r'myr memo',  # Mayor's memo - cover letter, no substance
+    r'mayor.?s? memo',
+    r'comm rpt rqst',  # Committee Report Request Memo - internal request
+    r'committee report request',
+    r'referral.*pc\b',  # Referral to Planning Commission - routing form
+    r'hearing notice',  # Notice that hearing will occur - no content
+]
+
 # Administrative matter types (not legislative)
 SKIP_MATTER_TYPES = [
     'Minutes (Min)',
@@ -154,7 +169,12 @@ def should_skip_matter(matter_type: str) -> bool:
 
 
 def is_public_comment_attachment(name: str) -> bool:
-    """Is attachment low-value for summarization (public comments, parcel tables, boilerplate)?"""
+    """Is attachment low-value for summarization (public comments, parcel tables, boilerplate, procedural)?"""
     name_lower = name.lower()
-    all_patterns = PUBLIC_COMMENT_PATTERNS + PARCEL_TABLE_PATTERNS + BOILERPLATE_CONTRACT_PATTERNS
+    all_patterns = (
+        PUBLIC_COMMENT_PATTERNS +
+        PARCEL_TABLE_PATTERNS +
+        BOILERPLATE_CONTRACT_PATTERNS +
+        SF_PROCEDURAL_PATTERNS
+    )
     return any(re.search(p, name_lower, re.IGNORECASE) for p in all_patterns)

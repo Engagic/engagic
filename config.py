@@ -129,6 +129,14 @@ class Config:
         # Log format: "json" (default for prod) or "dev" (human-readable key=value)
         self.LOG_FORMAT = os.getenv("ENGAGIC_LOG_FORMAT", "json").lower()
 
+        # Prompt experiment for A/B testing
+        # Options: "adaptive" (default: standard/large based on page count), "unified" (new unified prompt)
+        self.PROMPT_EXPERIMENT = os.getenv("ENGAGIC_PROMPT_EXPERIMENT", "adaptive").lower()
+
+        # Model selection: use Flash-Lite for small docs (cost savings) or Flash for all (quality)
+        # Default: false (use Flash for everything for consistent quality)
+        self.USE_FLASH_LITE = os.getenv("ENGAGIC_USE_FLASH_LITE", "false").lower() == "true"
+
         # Admin authentication
         self.ADMIN_TOKEN = os.getenv("ENGAGIC_ADMIN_TOKEN", "")
         # Whitelist VPS IP for admin access (uses CF-Connecting-IP from Cloudflare)
