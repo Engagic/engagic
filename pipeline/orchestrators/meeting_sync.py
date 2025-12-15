@@ -281,7 +281,7 @@ class MeetingSyncOrchestrator:
         meeting: Meeting,
         items_data: List[Dict[str, Any]],
         agenda_items: List[AgendaItem],
-        conn: Optional[Connection] = None
+        conn: Connection
     ) -> Dict[str, Any]:
         stats: Dict[str, Any] = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0, 'skipped_item_ids': set()}
 
@@ -398,7 +398,7 @@ class MeetingSyncOrchestrator:
         self,
         meeting: Meeting,
         agenda_items: List[AgendaItem],
-        conn: Optional[Connection] = None
+        conn: Connection
     ) -> int:
         """Create matter_appearances after items are stored."""
         count = 0
