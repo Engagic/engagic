@@ -899,6 +899,11 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                     items_filtered += 1
                     continue
 
+                # Map item_type to matter_type for HTML-parsed items
+                # (API path handles this separately via _fetch_matter_metadata_async)
+                if item_type and 'matter_type' not in item:
+                    item['matter_type'] = item_type
+
                 substantive_items.append(item)
 
             # Fetch attachments for substantive items concurrently
