@@ -18,7 +18,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from config import config, get_logger
+from config import get_logger
 from database.db_postgres import Database
 from userland.email.emailer import EmailService
 from userland.email.templates import (
@@ -41,7 +41,7 @@ def build_happening_email(items: list, today_str: str) -> str:
 
     html = email_wrapper_start(f"Happening Today - {today_str}")
     html += header_section(
-        title=f"Happening Today",
+        title="Happening Today",
         subtitle=today_str,
         meta=f"{len(items)} important items across local government meetings"
     )

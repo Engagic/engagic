@@ -6,6 +6,23 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-16] Unified Summarizer Prompt
+
+Replaced page-count-based prompt selection with single unified prompt. LLM now determines output depth based on content complexity, not document length.
+
+### Changes
+- **Prompt selection**: Removed `PROMPT_EXPERIMENT` config and adaptive standard/large logic
+- **prompts_v2.json**: Removed `item.standard` and `item.large`, kept only `item.unified`
+- **summarizer.py**: `_select_prompt_type()` always returns `"unified"`
+
+### Rationale
+Page count is a poor proxy for civic importance. A 3-page rezoning can reshape a neighborhood; a 150-page contract renewal is boilerplate. The unified prompt gives the LLM explicit guidance on complexity signals (ordinances with multiple provisions, tenant protections, zoning changes) rather than mechanical thresholds.
+
+### Also
+- `happening_email.py`: Moved recipient email to `ENGAGIC_HAPPENING_RECIPIENT` env var
+
+---
+
 ## [2025-12-15] Field Name Consistency Sweep
 
 Second audit round focused on field name mismatches between adapters, parsers, and orchestrator.
