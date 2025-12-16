@@ -417,13 +417,13 @@ def generate_item_id(
     if sequence < 1:
         raise ValueError("sequence must be >= 1")
 
-    if vendor_item_id:
+    if vendor_item_id and vendor_item_id.strip():
         # Normalize: strip whitespace, collapse internal spaces, lowercase
         normalized = re.sub(r'\s+', '', vendor_item_id.strip().lower())
         if normalized:
             return f"{meeting_id}_{normalized}"
 
-    # Fallback: deterministic hash from meeting + sequence
+    # Fallback: deterministic hash from meeting + sequence (used when vendor_item_id is None, empty, or whitespace-only)
     stable_key = f"{meeting_id}:seq:{sequence}"
     hash_suffix = hashlib.sha256(stable_key.encode()).hexdigest()[:8]
     return f"{meeting_id}_seq{sequence:03d}_{hash_suffix}"

@@ -115,9 +115,9 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
         }
 
         # If item_id looks like a File ID (YYYY-NNNNN), treat as matter_file
+        # matter_file takes precedence in ID generation, no need to set matter_id
         if item_id and re.match(r'^\d{4}-\d+$', item_id):
             item_dict['matter_file'] = item_id
-            item_dict['matter_id'] = item_id  # Use same value for both (no separate backend ID)
 
         items.append(item_dict)
 

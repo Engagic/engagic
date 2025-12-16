@@ -30,38 +30,66 @@ class EngagementRepository(BaseRepository):
 
     async def watch(self, user_id: str, entity_type: str, entity_id: str) -> bool:
         """Add entity to user's watch list. Returns True if created, False if already watching."""
-        row = await self._fetchrow(
-            """
-            INSERT INTO userland.watches (user_id, entity_type, entity_id)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (user_id, entity_type, entity_id) DO NOTHING
-            RETURNING id
-            """,
-            user_id,
-            entity_type,
-            entity_id,
-        )
-        created = row is not None
-        if created:
-            await self.log_activity(user_id, None, "watch", entity_type, entity_id)
-            logger.info("user watching entity", user_id=user_id, entity_type=entity_type, entity_id=entity_id)
+        async with self.transaction() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO userland.watches (user_id, entity_type, entity_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (user_id, entity_type, entity_id) DO NOTHING
+                RETURNING id
+                """,
+                user_id,
+                entity_type,
+                entity_id,
+            )
+            created = row is not None
+            if created:
+                # Log activity in same transaction for atomicity
+                await conn.execute(
+                    """
+                    INSERT INTO userland.activity_log
+                        (user_id, session_id, action, entity_type, entity_id, metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    """,
+                    user_id,
+                    None,
+                    "watch",
+                    entity_type,
+                    entity_id,
+                    None,
+                )
+                logger.info("user watching entity", user_id=user_id, entity_type=entity_type, entity_id=entity_id)
         return created
 
     async def unwatch(self, user_id: str, entity_type: str, entity_id: str) -> bool:
         """Remove entity from user's watch list. Returns True if removed."""
-        result = await self._execute(
-            """
-            DELETE FROM userland.watches
-            WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3
-            """,
-            user_id,
-            entity_type,
-            entity_id,
-        )
-        deleted = self._parse_row_count(result) > 0
-        if deleted:
-            await self.log_activity(user_id, None, "unwatch", entity_type, entity_id)
-            logger.info("user unwatched entity", user_id=user_id, entity_type=entity_type, entity_id=entity_id)
+        async with self.transaction() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM userland.watches
+                WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3
+                """,
+                user_id,
+                entity_type,
+                entity_id,
+            )
+            deleted = self._parse_row_count(result) > 0
+            if deleted:
+                # Log activity in same transaction for atomicity
+                await conn.execute(
+                    """
+                    INSERT INTO userland.activity_log
+                        (user_id, session_id, action, entity_type, entity_id, metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    """,
+                    user_id,
+                    None,
+                    "unwatch",
+                    entity_type,
+                    entity_id,
+                    None,
+                )
+                logger.info("user unwatched entity", user_id=user_id, entity_type=entity_type, entity_id=entity_id)
         return deleted
 
     async def get_watch_count(self, entity_type: str, entity_id: str) -> int:

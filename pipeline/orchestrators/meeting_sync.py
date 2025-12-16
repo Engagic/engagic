@@ -273,9 +273,9 @@ class MeetingSyncOrchestrator:
 
         agenda_items = []
         for idx, item_data in enumerate(items_data):
-            # Centralized item ID generation - adapters return vendor_item_id (or legacy item_id)
+            # Centralized item ID generation - all parsers return item_id
             sequence = item_data.get("sequence", idx + 1)
-            vendor_item_id = item_data.get("vendor_item_id") or item_data.get("item_id")
+            vendor_item_id = item_data.get("item_id")
             item_id = generate_item_id(stored_meeting.id, sequence, vendor_item_id)
 
             item_attachments = deserialize_attachments(item_data.get("attachments"))
