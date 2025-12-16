@@ -52,7 +52,6 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from PrimeGov API (upcoming + archived concurrently)."""
-        # Calculate date range
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
@@ -82,7 +81,6 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
 
         meetings_in_range = []
         for meeting in unique_meetings:
-            # Parse meeting datetime
             date_str = meeting.get("dateTime", "")
             if not date_str:
                 continue
@@ -161,9 +159,9 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         date_time = meeting.get("dateTime", "")
         meeting_status = self._parse_meeting_status(title, date_time)
 
-        meeting_state = meeting.get("meetingState")
-        if meeting_state == 3 and not meeting_status:
-            meeting_status = "cancelled"
+        # Note: meetingState values appear to be:
+        # 1 = scheduled, 2 = in progress, 3 = completed/archived
+        # Do NOT treat meetingState == 3 as cancelled (it just means past/completed)
 
         if not meeting_status:
             for doc in meeting.get("documentList", []):
@@ -185,27 +183,25 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
                 result["meeting_status"] = meeting_status
             return result
 
-        # Set agenda_url to highest priority document
-        primary_doc, _ = agenda_docs[0]
-        query = urlencode({"meetingTemplateId": primary_doc["templateId"]})
-        result["agenda_url"] = f"{self.base_url}/Portal/Meeting?{query}"
+        # Build agenda_sources and fetch tasks in single pass
+        label_map = {"agenda": "Agenda", "continuation": "Continuation", "special": "Special"}
+        agenda_sources = []
+        fetch_tasks = []
+        for doc, agenda_type in agenda_docs:
+            url = f"{self.base_url}/Portal/Meeting?{urlencode({'meetingTemplateId': doc['templateId']})}"
+            agenda_sources.append({"type": agenda_type, "url": url, "label": label_map[agenda_type]})
+            fetch_tasks.append(self._fetch_agenda_with_type(url, agenda_type, title))
 
-        # Log when fetching multiple agenda types
+        result["agenda_url"] = agenda_sources[0]["url"]
+        result["agenda_sources"] = agenda_sources
+
         if len(agenda_docs) > 1:
-            agenda_types = [t for _, t in agenda_docs]
             logger.info(
                 "fetching multiple agendas",
                 slug=self.slug,
                 title=title,
-                agenda_types=agenda_types
+                agenda_types=[t for _, t in agenda_docs]
             )
-
-        # Fetch all agendas in parallel
-        fetch_tasks = []
-        for doc, agenda_type in agenda_docs:
-            q = urlencode({"meetingTemplateId": doc["templateId"]})
-            url = f"{self.base_url}/Portal/Meeting?{q}"
-            fetch_tasks.append(self._fetch_agenda_with_type(url, agenda_type, title))
 
         results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
 

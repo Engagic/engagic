@@ -65,7 +65,6 @@
 			return;
 		}
 
-		// Show procedural items if needed
 		if (!matchingItem.summary && !showProceduralItems) {
 			showProceduralItems = true;
 		}
@@ -106,12 +105,10 @@
 		}
 	});
 
-	// Extract city participation using type guard for proper narrowing
 	const cityParticipation = $derived(
 		searchResults && isSearchSuccess(searchResults) ? searchResults.participation : undefined
 	);
 
-	// Filter items by whether they have summaries
 	const summarizedItems = $derived(
 		selectedMeeting?.items?.filter(item => item.summary) || []
 	);
@@ -322,7 +319,19 @@
 						{/if}
 					</div>
 					<div class="meeting-meta-right">
-						{#if selectedMeeting.agenda_url}
+						{#if selectedMeeting.agenda_sources && selectedMeeting.agenda_sources.length > 1}
+							<div class="agenda-sources">
+								{#each selectedMeeting.agenda_sources as source}
+									<a href={source.url} target="_blank" rel="noopener noreferrer" class="document-link document-link-compact">
+										<svg class="document-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+											<path d="M14 2v6h6"/>
+										</svg>
+										<span>{source.label}</span>
+									</a>
+								{/each}
+							</div>
+						{:else if selectedMeeting.agenda_url}
 							<a href={selectedMeeting.agenda_url} target="_blank" rel="noopener noreferrer" class="document-link">
 								<svg class="document-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -578,6 +587,17 @@
 		height: 1em;
 		vertical-align: -0.125em;
 		flex-shrink: 0;
+	}
+
+	.agenda-sources {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.document-link-compact {
+		padding: 0.35rem 0.65rem;
+		font-size: 0.75rem;
 	}
 
 	.toggle-procedural-btn {

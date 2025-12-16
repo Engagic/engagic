@@ -17,19 +17,23 @@ class MeetingRepository(BaseRepository):
 
     async def store_meeting(self, meeting: Meeting, conn: Optional[Connection] = None) -> None:
         """Store or update a meeting with topic normalization."""
+        import json
+        agenda_sources_json = json.dumps(meeting.agenda_sources) if meeting.agenda_sources else None
+
         async with self._ensure_conn(conn) as c:
             await c.execute(
                 """
                 INSERT INTO meetings (
-                    id, banana, title, date, agenda_url, packet_url,
+                    id, banana, title, date, agenda_url, agenda_sources, packet_url,
                     summary, participation, status, processing_status,
                     processing_method, processing_time, committee_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (id) DO UPDATE SET
                     title = EXCLUDED.title,
                     date = EXCLUDED.date,
                     agenda_url = EXCLUDED.agenda_url,
+                    agenda_sources = COALESCE(EXCLUDED.agenda_sources, meetings.agenda_sources),
                     packet_url = EXCLUDED.packet_url,
                     summary = COALESCE(EXCLUDED.summary, meetings.summary),
                     participation = COALESCE(EXCLUDED.participation, meetings.participation),
@@ -45,6 +49,7 @@ class MeetingRepository(BaseRepository):
                 meeting.title,
                 meeting.date,
                 meeting.agenda_url,
+                agenda_sources_json,
                 meeting.packet_url,
                 meeting.summary,
                 meeting.participation,
@@ -68,7 +73,7 @@ class MeetingRepository(BaseRepository):
             row = await conn.fetchrow(
                 """
                 SELECT
-                    id, banana, title, date, agenda_url, packet_url,
+                    id, banana, title, date, agenda_url, agenda_sources, packet_url,
                     summary, participation, status, processing_status,
                     processing_method, processing_time, committee_id,
                     created_at, updated_at
@@ -98,7 +103,7 @@ class MeetingRepository(BaseRepository):
             rows = await conn.fetch(
                 """
                 SELECT
-                    id, banana, title, date, agenda_url, packet_url,
+                    id, banana, title, date, agenda_url, agenda_sources, packet_url,
                     summary, participation, status, processing_status,
                     processing_method, processing_time, committee_id
                 FROM meetings
@@ -130,7 +135,7 @@ class MeetingRepository(BaseRepository):
             row = await conn.fetchrow(
                 """
                 SELECT
-                    id, banana, title, date, agenda_url, packet_url,
+                    id, banana, title, date, agenda_url, agenda_sources, packet_url,
                     summary, participation, status, processing_status,
                     processing_method, processing_time, committee_id,
                     created_at, updated_at
@@ -257,7 +262,7 @@ class MeetingRepository(BaseRepository):
             rows = await conn.fetch(
                 """
                 SELECT
-                    id, banana, title, date, agenda_url, packet_url,
+                    id, banana, title, date, agenda_url, agenda_sources, packet_url,
                     summary, participation, status, processing_status,
                     processing_method, processing_time, committee_id
                 FROM meetings

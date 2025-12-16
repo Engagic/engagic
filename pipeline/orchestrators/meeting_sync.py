@@ -88,6 +88,7 @@ class MeetingSyncOrchestrator:
                 title=title,
                 date=meeting_date,
                 agenda_url=meeting_dict.get("agenda_url"),
+                agenda_sources=meeting_dict.get("agenda_sources"),
                 packet_url=meeting_dict.get("packet_url"),
                 summary=None,
                 participation=meeting_dict.get("participation"),

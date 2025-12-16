@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS meetings (
     title TEXT NOT NULL,
     date TIMESTAMP,
     agenda_url TEXT,
+    agenda_sources JSONB,  -- [{type, url, label}] for multi-agenda provenance (PrimeGov)
     packet_url TEXT,
     summary TEXT,
     participation JSONB,  -- Complex structure: {email, phone, zoom}, keep as JSONB
