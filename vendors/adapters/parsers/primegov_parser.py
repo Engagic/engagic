@@ -82,8 +82,8 @@ def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
 
     if meeting_items:
         logger.debug("found meeting-item divs (LA pattern)", parser="primegov", item_count=len(meeting_items))
-        for meeting_item_div in meeting_items:
-            item_dict = _extract_la_pattern_item(meeting_item_div, soup)
+        for sequence, meeting_item_div in enumerate(meeting_items, 1):
+            item_dict = _extract_la_pattern_item(meeting_item_div, soup, sequence)
             if item_dict:
                 items.append(item_dict)
     else:
@@ -99,7 +99,7 @@ def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     return items
 
 
-def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup) -> Optional[Dict[str, Any]]:
+def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup, sequence: int) -> Optional[Dict[str, Any]]:
     """
     Extract item from LA pattern (meeting-item wrapper with matter tracking).
 
@@ -186,7 +186,7 @@ def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup) -> Optional[
     item_dict = {
         'vendor_item_id': str(item_id),
         'title': title,
-        'sequence': 0,  # Will be set by caller if needed
+        'sequence': sequence,
         'attachments': attachments,
     }
 
