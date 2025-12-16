@@ -5,7 +5,7 @@ Pydantic dataclasses with runtime validation for core entities.
 """
 
 
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
@@ -139,6 +139,7 @@ class Meeting:
     title: str
     date: Optional[datetime]
     agenda_url: Optional[str] = None  # HTML agenda page (item-based, primary)
+    agenda_sources: Optional[List[Dict[str, str]]] = None  # [{type, url, label}] for provenance
     packet_url: Optional[
         str | List[str]
     ] = None  # PDF packet (monolithic, fallback)

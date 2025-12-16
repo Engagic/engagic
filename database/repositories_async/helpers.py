@@ -94,6 +94,7 @@ def build_meeting(row: Any, topics: Optional[List[str]] = None) -> Meeting:
         title=row["title"],
         date=row["date"],
         agenda_url=row["agenda_url"],
+        agenda_sources=row.get("agenda_sources"),  # JSONB auto-deserialized by asyncpg
         packet_url=row["packet_url"],
         summary=row["summary"],
         participation=participation,

@@ -42,12 +42,19 @@ export interface AgendaItem {
 	matter?: Matter;  // Eagerly loaded Matter object (when load_matters=True in API)
 }
 
+export interface AgendaSource {
+	type: 'agenda' | 'continuation' | 'special';
+	url: string;
+	label: string;
+}
+
 export interface Meeting {
 	id: string;
 	banana: string;
 	title: string;
 	date: string | null; // ISO format datetime or null when missing
 	agenda_url?: string; // HTML/PDF agenda with extracted items (item-based, primary)
+	agenda_sources?: AgendaSource[]; // Multi-agenda provenance [{type, url, label}]
 	packet_url?: string | string[]; // Monolithic PDF fallback (no items extracted)
 	summary?: string;
 	meeting_status?: 'cancelled' | 'postponed' | 'revised' | 'rescheduled';
@@ -403,6 +410,7 @@ export interface CitySearchItemResult {
 	meeting_title?: string;
 	meeting_date?: string;
 	agenda_url?: string;
+	agenda_sources?: AgendaSource[];
 	context: string; // Snippet centered on keyword
 }
 

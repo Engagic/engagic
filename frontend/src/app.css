@@ -96,6 +96,39 @@
 	--badge-info-border: #bfdbfe;
 	--badge-info-text: #1e40af;
 
+	/* Matter badge (blue gradient) */
+	--badge-matter-bg-start: #dbeafe;
+	--badge-matter-bg-end: #bfdbfe;
+	--badge-matter-text: #1e40af;
+	--badge-matter-border: #93c5fd;
+	--badge-matter-shadow: rgba(59, 130, 246, 0.15);
+
+	/* Sponsor badge (purple gradient) */
+	--badge-sponsor-bg-start: #ede9fe;
+	--badge-sponsor-bg-end: #ddd6fe;
+	--badge-sponsor-text: #5b21b6;
+	--badge-sponsor-border: #a78bfa;
+
+	/* Timeline badge (green gradient) */
+	--badge-timeline-bg-start: #d1fae5;
+	--badge-timeline-bg-end: #a7f3d0;
+	--badge-timeline-text: #065f46;
+	--badge-timeline-border: #6ee7b7;
+	--badge-timeline-shadow: rgba(16, 185, 129, 0.15);
+
+	/* Procedural badge */
+	--badge-procedural-bg: #f1f5f9;
+	--badge-procedural-text: #64748b;
+	--badge-procedural-border: #cbd5e1;
+
+	/* Item summary indicator */
+	--item-summary-border: #3b82f6;
+
+	/* Cancelled meeting */
+	--badge-cancelled-bg: #fef2f2;
+	--badge-cancelled-border: #fecaca;
+	--badge-cancelled-text: #dc2626;
+
 	/* Committee type colors */
 	--committee-color: #8b5cf6;
 	--council-color: #10b981;
@@ -141,6 +174,39 @@
 	--badge-info-bg: #1e3a5f;
 	--badge-info-border: #3b82f6;
 	--badge-info-text: #93c5fd;
+
+	/* Matter badge (blue gradient) */
+	--badge-matter-bg-start: #1e3a8a;
+	--badge-matter-bg-end: #1e40af;
+	--badge-matter-text: #93c5fd;
+	--badge-matter-border: #3b82f6;
+	--badge-matter-shadow: rgba(59, 130, 246, 0.3);
+
+	/* Sponsor badge (purple gradient) */
+	--badge-sponsor-bg-start: #4c1d95;
+	--badge-sponsor-bg-end: #5b21b6;
+	--badge-sponsor-text: #c4b5fd;
+	--badge-sponsor-border: #8b5cf6;
+
+	/* Timeline badge (green gradient) */
+	--badge-timeline-bg-start: #064e3b;
+	--badge-timeline-bg-end: #065f46;
+	--badge-timeline-text: #6ee7b7;
+	--badge-timeline-border: #10b981;
+	--badge-timeline-shadow: rgba(16, 185, 129, 0.3);
+
+	/* Procedural badge */
+	--badge-procedural-bg: #334155;
+	--badge-procedural-text: #94a3b8;
+	--badge-procedural-border: #475569;
+
+	/* Item summary indicator */
+	--item-summary-border: #3b82f6;
+
+	/* Cancelled meeting */
+	--badge-cancelled-bg: #450a0a;
+	--badge-cancelled-border: #991b1b;
+	--badge-cancelled-text: #fca5a5;
 
 	/* Committee type colors */
 	--committee-color: #c4b5fd;
@@ -666,6 +732,27 @@ body {
 	border-color: var(--border-hover);
 	transform: translateY(-4px);
 	box-shadow: 0 8px 24px var(--shadow-lg);
+}
+
+/* Meeting status borders */
+.meeting-card.has-alert {
+	border-left: 4px solid var(--badge-cancelled-text);
+}
+
+.meeting-card.status-border-ai {
+	border-left: 4px solid var(--civic-green);
+}
+
+.meeting-card.status-border-agenda {
+	border-left: 4px solid var(--civic-yellow);
+}
+
+.meeting-card.status-border-packet {
+	border-left: 4px solid var(--civic-orange);
+}
+
+.meeting-card.status-border-none {
+	border-left: 4px solid var(--civic-border);
 }
 
 .meeting-card-header {

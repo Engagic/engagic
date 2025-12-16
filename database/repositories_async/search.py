@@ -49,7 +49,7 @@ class SearchRepository(BaseRepository):
                 rows = await conn.fetch(
                     """
                     SELECT
-                        id, banana, title, date, agenda_url, packet_url,
+                        id, banana, title, date, agenda_url, agenda_sources, packet_url,
                         summary, participation, status, processing_status,
                         processing_method, processing_time,
                         ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
@@ -67,7 +67,7 @@ class SearchRepository(BaseRepository):
                 rows = await conn.fetch(
                     """
                     SELECT
-                        id, banana, title, date, agenda_url, packet_url,
+                        id, banana, title, date, agenda_url, agenda_sources, packet_url,
                         summary, participation, status, processing_status,
                         processing_method, processing_time,
                         ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
@@ -207,6 +207,7 @@ class SearchRepository(BaseRepository):
                     m.title as meeting_title,
                     m.date as meeting_date,
                     m.agenda_url,
+                    m.agenda_sources,
                     ts_rank(i.search_vector, plainto_tsquery('english', $1)) AS rank,
                     ts_headline(
                         'english',
@@ -251,6 +252,7 @@ class SearchRepository(BaseRepository):
                     "meeting_title": row["meeting_title"],
                     "meeting_date": row["meeting_date"].isoformat() if row["meeting_date"] else None,
                     "agenda_url": row["agenda_url"],
+                    "agenda_sources": row["agenda_sources"],
                     "context_headline": row["context_headline"],
                 })
 
