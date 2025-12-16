@@ -103,12 +103,11 @@ class UserlandRepository(BaseRepository):
         Args:
             user_id: User identifier
         """
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE userland.users SET last_login = $1 WHERE id = $2",
-                datetime.now(),
-                user_id
-            )
+        await self._execute(
+            "UPDATE userland.users SET last_login = $1 WHERE id = $2",
+            datetime.now(),
+            user_id
+        )
 
     async def get_user_count(self) -> int:
         """Get total count of registered users

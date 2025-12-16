@@ -242,10 +242,10 @@ class QueueRepository(BaseRepository):
             queue_id: Queue entry ID
             error_message: Error description
         """
-        async with self.pool.acquire() as conn:
-            # Get current retry count
+        async with self.transaction() as conn:
+            # Get current retry count with row lock to prevent race
             row = await conn.fetchrow(
-                "SELECT retry_count FROM queue WHERE id = $1",
+                "SELECT retry_count FROM queue WHERE id = $1 FOR UPDATE",
                 queue_id,
             )
 
@@ -300,7 +300,7 @@ class QueueRepository(BaseRepository):
             increment_retry: If False, mark as failed without retry logic
                            (used for non-retryable errors)
         """
-        async with self.pool.acquire() as conn:
+        async with self.transaction() as conn:
             if not increment_retry:
                 # Non-retryable error
                 await conn.execute(
@@ -317,9 +317,9 @@ class QueueRepository(BaseRepository):
                 logger.warning("marked queue item as failed (non-retryable)", queue_id=queue_id, error=error_message)
                 return
 
-            # Get current retry_count and priority
+            # Get current retry_count and priority with row lock to prevent race
             row = await conn.fetchrow(
-                "SELECT retry_count, priority FROM queue WHERE id = $1",
+                "SELECT retry_count, priority FROM queue WHERE id = $1 FOR UPDATE",
                 queue_id,
             )
 

@@ -6,6 +6,37 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-15] Post-Mortem Hardening Follow-up
+
+Addressed remaining gaps found during code review after the orphan crisis.
+
+### Transaction Atomicity Fixes
+- `queue.py`: Wrapped `mark_job_failed` and `mark_processing_failed` in transactions with FOR UPDATE to prevent race conditions on retry_count
+- `committees.py`: Added `conn` parameter to `add_member_to_committee` and `remove_member_from_committee` for transaction participation
+- `engagement.py`: Made `watch()` and `unwatch()` atomic with activity logging (same transaction)
+
+### ID Generation Hardening
+- `meeting_sync.py`: Removed fragile `vendor_item_id` fallback - all parsers return `item_id`, no dual lookup needed
+- `id_generation.py`: Added explicit whitespace check for `vendor_item_id`
+- `granicus_parser.py`: Removed redundant `matter_id` assignment (matter_file takes precedence)
+
+### FK Constraints (Migration 017)
+- Added FK on `userland.used_magic_links.user_id` -> `userland.users(id)` ON DELETE CASCADE
+- Added FK on `tracked_items.first_mentioned_meeting_id` -> `meetings(id)` ON DELETE SET NULL
+
+### Files Changed
+```
+database/repositories_async/committees.py   # conn param for atomicity
+database/repositories_async/queue.py        # transaction + FOR UPDATE
+database/repositories_async/engagement.py   # atomic watch/unwatch
+database/id_generation.py                   # whitespace validation
+pipeline/orchestrators/meeting_sync.py      # remove fragile fallback
+vendors/adapters/parsers/granicus_parser.py # remove redundant assignment
+database/migrations/017_userland_fks.sql    # FK constraints
+```
+
+---
+
 ## [2025-12-16] Orphaned Records Post-Mortem
 
 **Severity: Critical**

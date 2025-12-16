@@ -15,6 +15,8 @@ Design:
 from typing import Dict, List, Optional
 from datetime import datetime
 
+from asyncpg import Connection
+
 from database.repositories_async.base import BaseRepository
 from database.models import Committee
 from database.id_generation import (
@@ -241,6 +243,7 @@ class CommitteeRepository(BaseRepository):
         council_member_id: str,
         role: Optional[str] = None,
         joined_at: Optional[datetime] = None,
+        conn: Optional[Connection] = None,
     ) -> bool:
         """Add a council member to a committee
 
@@ -251,6 +254,7 @@ class CommitteeRepository(BaseRepository):
             council_member_id: Council member ID
             role: Role on committee (Chair, Vice-Chair, Member)
             joined_at: Date joined (defaults to now)
+            conn: Optional connection for transaction participation
 
         Returns:
             True if new membership created, False if already exists
@@ -258,8 +262,8 @@ class CommitteeRepository(BaseRepository):
         if joined_at is None:
             joined_at = datetime.now()
 
-        async with self.transaction() as conn:
-            result = await conn.fetchval(
+        async with self._ensure_conn(conn) as c:
+            result = await c.fetchval(
                 """
                 INSERT INTO committee_members (committee_id, council_member_id, role, joined_at)
                 VALUES ($1, $2, $3, $4)
@@ -289,6 +293,7 @@ class CommitteeRepository(BaseRepository):
         committee_id: str,
         council_member_id: str,
         left_at: Optional[datetime] = None,
+        conn: Optional[Connection] = None,
     ) -> bool:
         """Remove a council member from a committee
 
@@ -298,6 +303,7 @@ class CommitteeRepository(BaseRepository):
             committee_id: Committee ID
             council_member_id: Council member ID
             left_at: Date left (defaults to now)
+            conn: Optional connection for transaction participation
 
         Returns:
             True if membership was updated, False if no active membership found
@@ -305,8 +311,8 @@ class CommitteeRepository(BaseRepository):
         if left_at is None:
             left_at = datetime.now()
 
-        async with self.transaction() as conn:
-            result = await conn.execute(
+        async with self._ensure_conn(conn) as c:
+            result = await c.execute(
                 """
                 UPDATE committee_members
                 SET left_at = $3
