@@ -183,11 +183,19 @@ class AsyncBaseAdapter:
         return None
 
     def _generate_fallback_vendor_id(self, title: str, date: Optional[datetime], meeting_type: Optional[str] = None) -> str:
-        """Generate stable 8-char hash for vendors without native meeting IDs."""
-        date_str = date.strftime("%Y%m%d") if date else "nodate"
+        """Generate stable 12-char hash for vendors without native meeting IDs.
+
+        Confidence: 8/10 - Includes full datetime for same-day meetings.
+        Uses SHA256 with 12 hex chars (48 bits) for lower collision risk.
+        """
+        # Include full datetime (hour/minute) to distinguish same-day meetings
+        date_str = date.strftime("%Y%m%dT%H%M") if date else "nodate"
         type_str = f"_{meeting_type}" if meeting_type else ""
-        id_string = f"{self.slug}_{date_str}_{title}{type_str}"
-        return hashlib.md5(id_string.encode()).hexdigest()[:8]
+        # Normalize title to avoid whitespace variations
+        normalized_title = " ".join(title.split()).lower()
+        id_string = f"{self.slug}_{date_str}_{normalized_title}{type_str}"
+        # SHA256 with 12 chars for ~2^48 combinations (vs MD5's 2^32 with 8 chars)
+        return hashlib.sha256(id_string.encode()).hexdigest()[:12]
 
     def _parse_meeting_status(self, title: str, date_str: Optional[str] = None) -> Optional[str]:
         """Detect cancelled/postponed/revised status from title or date string."""

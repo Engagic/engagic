@@ -285,7 +285,7 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             description = content_row.get_text(strip=True) if content_row else ""
 
             item_data = {
-                "item_id": f"escribe_{item_id}",
+                "vendor_item_id": item_id,  # Raw vendor ID, orchestrator generates final item_id
                 "title": title,
                 "sequence": item_counter,
                 "item_number": item_number,

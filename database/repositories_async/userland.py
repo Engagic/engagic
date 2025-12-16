@@ -359,7 +359,10 @@ class UserlandRepository(BaseRepository):
         frequency: Optional[str] = None,
         active: Optional[bool] = None
     ) -> Optional[Alert]:
-        """Update alert configuration
+        """Update alert configuration atomically.
+
+        Uses single transaction with FOR UPDATE lock to prevent concurrent
+        modification races. All changes happen in one atomic operation.
 
         Args:
             alert_id: Alert ID to update
@@ -371,46 +374,78 @@ class UserlandRepository(BaseRepository):
         Returns:
             Updated Alert object or None if not found
         """
-        # Get current alert to merge updates
-        alert = await self.get_alert(alert_id)
-        if not alert:
-            return None
+        async with self.transaction() as conn:
+            # Lock the row to prevent concurrent modifications
+            row = await conn.fetchrow(
+                """
+                SELECT id, user_id, name, cities, criteria, frequency, active, created_at
+                FROM userland.alerts
+                WHERE id = $1
+                FOR UPDATE
+                """,
+                alert_id
+            )
 
-        # Build dynamic update query
-        updates = []
-        params = []
+            if not row:
+                return None
 
-        if cities is not None:
-            params.append(cities)  # asyncpg handles list → JSONB natively
-            updates.append(f"cities = ${len(params)}")
+            # Build dynamic update query
+            updates = []
+            params = []
 
-        if keywords is not None:
-            # Update keywords in criteria JSON
-            alert.criteria["keywords"] = keywords
-            params.append(alert.criteria)  # asyncpg handles dict → JSONB natively
-            updates.append(f"criteria = ${len(params)}")
+            if cities is not None:
+                params.append(cities)
+                updates.append(f"cities = ${len(params)}")
 
-        if frequency is not None:
-            params.append(frequency)
-            updates.append(f"frequency = ${len(params)}")
+            if keywords is not None:
+                # Update keywords in criteria JSON using SQL jsonb_set
+                params.append(keywords)
+                updates.append(f"criteria = jsonb_set(criteria, '{{keywords}}', to_jsonb(${len(params)}::text[]))")
 
-        if active is not None:
-            params.append(active)
-            updates.append(f"active = ${len(params)}")
+            if frequency is not None:
+                params.append(frequency)
+                updates.append(f"frequency = ${len(params)}")
 
-        if not updates:
-            # No changes requested
-            return alert
+            if active is not None:
+                params.append(active)
+                updates.append(f"active = ${len(params)}")
 
-        # Add alert_id as final parameter
-        params.append(alert_id)
-        query = f"UPDATE userland.alerts SET {', '.join(updates)} WHERE id = ${len(params)}"
+            if not updates:
+                # No changes - return current alert from locked row
+                return Alert(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    name=row["name"],
+                    cities=row["cities"],
+                    criteria=row["criteria"],
+                    frequency=row["frequency"],
+                    active=row["active"],
+                    created_at=row["created_at"]
+                )
 
-        async with self.pool.acquire() as conn:
-            await conn.execute(query, *params)
+            # Add alert_id as final parameter and execute with RETURNING
+            params.append(alert_id)
+            query = f"""
+                UPDATE userland.alerts
+                SET {', '.join(updates)}
+                WHERE id = ${len(params)}
+                RETURNING id, user_id, name, cities, criteria, frequency, active, created_at
+            """
 
-        # Return updated alert
-        return await self.get_alert(alert_id)
+            updated_row = await conn.fetchrow(query, *params)
+            if not updated_row:
+                return None
+
+            return Alert(
+                id=updated_row["id"],
+                user_id=updated_row["user_id"],
+                name=updated_row["name"],
+                cities=updated_row["cities"],
+                criteria=updated_row["criteria"],
+                frequency=updated_row["frequency"],
+                active=updated_row["active"],
+                created_at=updated_row["created_at"]
+            )
 
     async def delete_alert(self, alert_id: str) -> bool:
         """Delete an alert and all its matches (CASCADE)
@@ -553,7 +588,8 @@ class UserlandRepository(BaseRepository):
             query += " WHERE 1=1"
 
         if since_days:
-            query += f" AND am.created_at >= NOW() - INTERVAL '{since_days} days'"
+            params.append(since_days)
+            query += f" AND am.created_at >= NOW() - make_interval(days => ${len(params)})"
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(query, *params)
@@ -577,14 +613,14 @@ class UserlandRepository(BaseRepository):
         query = """
             SELECT
                 COUNT(*) as total,
-                COUNT(*) FILTER (WHERE am.created_at >= NOW() - INTERVAL '%s days') as this_week
+                COUNT(*) FILTER (WHERE am.created_at >= NOW() - make_interval(days => $2)) as this_week
             FROM userland.alert_matches am
             JOIN userland.alerts a ON am.alert_id = a.id
             WHERE a.user_id = $1
-        """ % week_days
+        """
 
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(query, user_id)
+            row = await conn.fetchrow(query, user_id, week_days)
 
         return {
             "total": row["total"],
@@ -719,6 +755,7 @@ class UserlandRepository(BaseRepository):
         """Revoke all refresh tokens for a user.
 
         Used for password reset, security concerns, or account compromise.
+        Wrapped in transaction for atomicity - ensures all tokens revoked together.
 
         Args:
             user_id: User whose tokens to revoke
@@ -727,7 +764,7 @@ class UserlandRepository(BaseRepository):
         Returns:
             Number of tokens revoked
         """
-        async with self.pool.acquire() as conn:
+        async with self.transaction() as conn:
             result = await conn.execute(
                 """
                 UPDATE userland.refresh_tokens
@@ -737,7 +774,7 @@ class UserlandRepository(BaseRepository):
                 user_id,
                 reason,
             )
-        return self._parse_row_count(result)
+            return self._parse_row_count(result)
 
     async def cleanup_expired_refresh_tokens(self) -> int:
         """Remove expired/revoked refresh tokens older than 7 days.

@@ -473,7 +473,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                     display_id = str(item_counter)
 
                 preliminary_items.append({
-                    "item_id": str(item_id),
+                    "vendor_item_id": str(item_id),  # Raw vendor ID
                     "title": title,
                     "sequence": sequence,
                     "matter_id": matter_id,
@@ -509,7 +509,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             matter_data = matter_data_map.get(matter_id, self._EMPTY_MATTER) if matter_id else self._EMPTY_MATTER
 
             item_data = {
-                "item_id": pitem["item_id"],
+                "vendor_item_id": pitem["vendor_item_id"],  # Orchestrator generates final item_id
                 "title": pitem["title"],
                 "sequence": pitem["sequence"],
                 "attachments": matter_data["attachments"],
@@ -640,7 +640,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             # - matter_id: backend UUID from Chicago API
             # - agenda_number: item position within this meeting (1, 2, 3...)
             item_data = {
-                "item_id": matter_data.get("matter_id") or pdf_item["record_number"],
+                "vendor_item_id": matter_data.get("matter_id") or pdf_item["record_number"],  # Orchestrator generates final item_id
                 "title": matter_data.get("title") or pdf_item.get("title_hint", ""),
                 "sequence": pdf_item["sequence"],
                 "agenda_number": str(pdf_item["sequence"]),  # Position within meeting

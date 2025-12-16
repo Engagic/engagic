@@ -374,7 +374,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
                             legifile_id = None
 
                         current_item = {
-                            "item_id": legifile_id or f"iqm2-{self.slug}-{meeting_id}-{item_counter}",
+                            "vendor_item_id": legifile_id,  # Raw vendor ID, orchestrator generates final item_id
                             "title": item_title,
                             "sequence": item_counter,
                             "item_number": item_number,
@@ -448,7 +448,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
                             item_title = title_cell.get_text(strip=True)
 
                         current_item = {
-                            "item_id": legifile_id or f"iqm2-{self.slug}-{meeting_id}-{item_counter}",
+                            "vendor_item_id": legifile_id,  # Raw vendor ID, orchestrator generates final item_id
                             "title": item_title,
                             "sequence": item_counter,
                             "item_number": item_number,
