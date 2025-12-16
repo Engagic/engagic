@@ -64,10 +64,10 @@ class MeetingSyncOrchestrator:
             meeting_date = self._parse_meeting_date(meeting_dict)
             title = meeting_dict.get("title", "Meeting")
 
-            vendor_id = meeting_dict.get("vendor_id") or meeting_dict.get("meeting_id")
+            vendor_id = meeting_dict.get("vendor_id")
 
             if not vendor_id:
-                logger.error("adapter missing vendor_id", city=city.banana, meeting_title=title)
+                logger.error("adapter returned meeting without vendor_id - check adapter output schema", city=city.banana, meeting_title=title)
                 stats['meetings_skipped'] = 1
                 stats['skip_reason'] = "missing_vendor_id"
                 stats['skipped_title'] = title
@@ -273,9 +273,9 @@ class MeetingSyncOrchestrator:
 
         agenda_items = []
         for idx, item_data in enumerate(items_data):
-            # Centralized item ID generation - all parsers return item_id
+            # Centralized item ID generation - all adapters return vendor_item_id
             sequence = item_data.get("sequence", idx + 1)
-            vendor_item_id = item_data.get("item_id")
+            vendor_item_id = item_data.get("vendor_item_id")
             item_id = generate_item_id(stored_meeting.id, sequence, vendor_item_id)
 
             item_attachments = deserialize_attachments(item_data.get("attachments"))

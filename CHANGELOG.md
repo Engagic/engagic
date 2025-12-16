@@ -6,6 +6,76 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-15] Architectural Coherence Audit
+
+Deep audit across adapters, repositories, and pipeline revealed additional issues beyond the orphan crisis. Focus: consistency, intuitive APIs, and eliminating silent failures.
+
+### P0: Active Data Loss Fixes
+
+**1. `vendor_item_id` Field Name Mismatch (CRITICAL)**
+- `meeting_sync.py:278` was reading `item_data.get("item_id")`
+- All adapters return `vendor_item_id`
+- Result: ALL vendor item IDs were being silently ignored, falling back to sequence-based IDs
+- Same class of bug that caused the matter ID crisis
+- Fix: Changed to `item_data.get("vendor_item_id")`
+
+**2. Split Transaction Race Condition**
+- `items.py:update_agenda_item()` updated item in one transaction, topics in another
+- Crash between them left item without topics
+- Fix: Wrapped both in single transaction
+
+**3. Removed `vendor_id/meeting_id` Fallback**
+- `meeting_sync.py:67` had `vendor_id or meeting_id` fallback hiding adapter inconsistencies
+- Fix: Now requires `vendor_id`, fails explicitly if missing
+
+### P1: Silent Failure Visibility
+
+**4. FetchResult Pattern**
+- `base_adapter_async.py` now returns `FetchResult` dataclass instead of `List[Dict]`
+- Callers can distinguish "0 meetings" from "adapter failed"
+- `fetcher.py` updated to check `fetch_result.success` and log adapter errors
+
+**5. Exception Logging**
+- `deliberation.py`: Added logging for caught `UniqueViolationError` and `ForeignKeyViolationError`
+- Previously returned error dicts silently
+
+**6. Schema Field Names**
+- `vendors/schemas.py`: Updated to use `vendor_id` and `vendor_item_id` (matching adapter output)
+- Previous schema used `meeting_id` and `item_id` (wrong)
+
+### P2: Consistency Improvements
+
+**7. Centralized HTTP Timeout**
+- Added `VENDOR_HTTP_TIMEOUT` to `config.py`
+- `base_adapter_async.py` now uses config value instead of hardcoded 30
+
+**8. Tightened Exception Handlers**
+- `fetcher.py`: Changed 3 broad `except Exception` to specific `(VendorError, asyncio.TimeoutError, aiohttp.ClientError)`
+- Merged duplicate dataclass imports in `base_adapter_async.py`
+
+### Files Changed
+```
+pipeline/orchestrators/meeting_sync.py   # vendor_item_id fix, vendor_id requirement
+pipeline/fetcher.py                      # FetchResult handling, tightened exceptions
+database/repositories_async/items.py     # atomic transaction for update
+database/repositories_async/deliberation.py  # exception logging
+vendors/adapters/base_adapter_async.py   # FetchResult, config timeout
+vendors/schemas.py                       # correct field names
+config.py                                # VENDOR_HTTP_TIMEOUT
+```
+
+### Deferred (P2/P3)
+- Full constant centralization (rate limits, processing thresholds)
+- Return type standardization across repositories
+- `conn` parameter for engagement.py
+- Adapter contract documentation
+- Diagnostics enhancements
+
+### Resolution
+Items will self-correct on next sync cycle. No data migration required.
+
+---
+
 ## [2025-12-15] Post-Mortem Hardening Follow-up
 
 Addressed remaining gaps found during code review after the orphan crisis.
@@ -16,9 +86,9 @@ Addressed remaining gaps found during code review after the orphan crisis.
 - `engagement.py`: Made `watch()` and `unwatch()` atomic with activity logging (same transaction)
 
 ### ID Generation Hardening
-- `meeting_sync.py`: Removed fragile `vendor_item_id` fallback - all parsers return `item_id`, no dual lookup needed
 - `id_generation.py`: Added explicit whitespace check for `vendor_item_id`
 - `granicus_parser.py`: Removed redundant `matter_id` assignment (matter_file takes precedence)
+- Note: `vendor_item_id` field name mismatch discovered and fixed in Coherence Audit above
 
 ### FK Constraints (Migration 017)
 - Added FK on `userland.used_magic_links.user_id` -> `userland.users(id)` ON DELETE CASCADE

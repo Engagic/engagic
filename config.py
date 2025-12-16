@@ -124,6 +124,11 @@ class Config:
             os.getenv("ENGAGIC_PROCESSING_INTERVAL_HOURS", "2")
         )
 
+        # Vendor HTTP settings
+        self.VENDOR_HTTP_TIMEOUT = int(
+            os.getenv("ENGAGIC_VENDOR_HTTP_TIMEOUT", "30")
+        )
+
         # Logging
         self.LOG_LEVEL = os.getenv("ENGAGIC_LOG_LEVEL", "INFO").upper()
         # Log format: "json" (default for prod) or "dev" (human-readable key=value)

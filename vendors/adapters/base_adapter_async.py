@@ -3,13 +3,14 @@
 import asyncio
 import hashlib
 import time
+from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import aiohttp
 
-from config import get_logger
+from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
 from vendors.session_manager_async import AsyncSessionManager
 from exceptions import VendorHTTPError
@@ -17,10 +18,25 @@ from exceptions import VendorHTTPError
 logger = get_logger(__name__).bind(component="vendor")
 
 
+@dataclass
+class FetchResult:
+    """Result of fetch_meetings() - distinguishes success from failure.
+
+    Allows callers to detect adapter failures vs "city has no meetings".
+    """
+    meetings: List[Dict[str, Any]] = field(default_factory=list)
+    success: bool = True
+    error: Optional[str] = None
+    error_type: Optional[str] = None
+
+
 class AsyncBaseAdapter:
     """Async base adapter. Subclasses implement _fetch_meetings_impl().
 
-    Contract: config errors raise in __init__, runtime errors return [] from fetch_meetings().
+    Contract:
+    - Config errors raise in __init__
+    - fetch_meetings() returns FetchResult with success=True/False
+    - Callers can distinguish "0 meetings" from "adapter failed"
     """
 
     def __init__(
@@ -46,7 +62,7 @@ class AsyncBaseAdapter:
         session = await self._get_session()
 
         if "timeout" not in kwargs:
-            kwargs["timeout"] = aiohttp.ClientTimeout(total=30)
+            kwargs["timeout"] = aiohttp.ClientTimeout(total=config.VENDOR_HTTP_TIMEOUT)
 
         # Legistar API: prefer JSON over XML
         if 'webapi.legistar.com' in url:
@@ -222,19 +238,24 @@ class AsyncBaseAdapter:
             return False
         return True
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Fetch meetings, validate, return list. Returns [] on failure (never raises)."""
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> FetchResult:
+        """Fetch meetings, validate, return FetchResult.
+
+        Returns FetchResult with success=True for valid results (even if empty).
+        Returns FetchResult with success=False on adapter failure.
+        Callers can distinguish "no meetings" from "adapter broken".
+        """
         try:
             meetings = await self._fetch_meetings_impl(days_back, days_forward)
             valid = [m for m in meetings if self._validate_meeting(m)]
             if len(valid) < len(meetings):
                 logger.warning("filtered invalid meetings", vendor=self.vendor, slug=self.slug, total=len(meetings), valid=len(valid))
-            return valid
+            return FetchResult(meetings=valid, success=True)
         except NotImplementedError:
             raise
         except Exception as e:
             logger.error("fetch_meetings failed", vendor=self.vendor, slug=self.slug, error=str(e), error_type=type(e).__name__)
-            return []
+            return FetchResult(meetings=[], success=False, error=str(e), error_type=type(e).__name__)
 
     async def _fetch_meetings_impl(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
         """Subclass must implement. Return raw meeting dicts."""
