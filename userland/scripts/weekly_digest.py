@@ -116,35 +116,30 @@ async def get_upcoming_meetings(db: Database, city_banana: str, days_ahead: int 
     Get upcoming meetings for a city in the next N days.
 
     FILTERS OUT cancelled/postponed meetings.
-    Uses Database repository pattern (async PostgreSQL).
+    Uses repository pattern.
     """
     today = datetime.now().date()
     end_date = today + timedelta(days=days_ahead)
 
-    async with db.pool.acquire() as conn:
-        query = """
-            SELECT id, banana, title, date, agenda_url, packet_url, status
-            FROM meetings
-            WHERE banana = $1
-              AND date >= $2
-              AND date <= $3
-              AND (status IS NULL OR status NOT IN ('cancelled', 'postponed'))
-            ORDER BY date ASC
-            LIMIT 50
-        """
-        rows = await conn.fetch(query, city_banana, today, end_date)
+    # Use repository method instead of raw SQL
+    meetings = await db.meetings.get_upcoming_meetings(
+        banana=city_banana,
+        start_date=today,
+        end_date=end_date,
+        limit=50
+    )
 
     return [
         {
-            'id': row['id'],
-            'banana': row['banana'],
-            'title': row['title'],
-            'date': str(row['date']),
-            'agenda_url': row['agenda_url'],
-            'packet_url': row['packet_url'],
-            'status': row['status']
+            'id': m.id,
+            'banana': m.banana,
+            'title': m.title,
+            'date': str(m.date),
+            'agenda_url': m.agenda_url,
+            'packet_url': m.packet_url,
+            'status': m.status
         }
-        for row in rows
+        for m in meetings
     ]
 
 
@@ -158,7 +153,7 @@ async def find_keyword_matches(
     Find items in upcoming meetings that mention user's keywords.
 
     FILTERS OUT cancelled/postponed meetings.
-    Uses direct async SQL queries for efficient searching.
+    Uses repository pattern.
     """
     if not keywords:
         return []
@@ -168,60 +163,49 @@ async def find_keyword_matches(
 
     all_matches = []
 
-    async with db.pool.acquire() as conn:
-        for keyword in keywords:
-            # Search for keyword in item summaries
-            query = """
-                SELECT i.id as item_id, i.meeting_id, i.title as item_title,
-                       i.summary, i.agenda_number, i.matter_file, i.sequence,
-                       m.title as meeting_title, m.date, m.banana,
-                       m.agenda_url, m.status
-                FROM items i
-                JOIN meetings m ON i.meeting_id = m.id
-                WHERE m.banana = $1
-                  AND m.date >= $2
-                  AND m.date <= $3
-                  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
-                  AND i.summary LIKE $4
-                ORDER BY m.date ASC
-            """
+    for keyword in keywords:
+        # Use repository method instead of raw SQL
+        rows = await db.items.search_upcoming_by_keyword(
+            banana=city_banana,
+            keyword=keyword,
+            start_date=today,
+            end_date=end_date
+        )
 
-            rows = await conn.fetch(query, city_banana, today, end_date, f"%{keyword}%")
+        for row in rows:
+            # Extract context around keyword
+            summary = row['summary'] or ""
+            keyword_lower = keyword.lower()
+            summary_lower = summary.lower()
 
-            for row in rows:
-                # Extract context around keyword
-                summary = row['summary'] or ""
-                keyword_lower = keyword.lower()
-                summary_lower = summary.lower()
+            # Find keyword position and extract context
+            context = ""
+            if keyword_lower in summary_lower:
+                pos = summary_lower.index(keyword_lower)
+                start = max(0, pos - 150)
+                end = min(len(summary), pos + 150)
+                context = summary[start:end].strip()
+                if start > 0:
+                    context = "..." + context
+                if end < len(summary):
+                    context = context + "..."
 
-                # Find keyword position and extract context
-                context = ""
-                if keyword_lower in summary_lower:
-                    pos = summary_lower.index(keyword_lower)
-                    start = max(0, pos - 150)
-                    end = min(len(summary), pos + 150)
-                    context = summary[start:end].strip()
-                    if start > 0:
-                        context = "..." + context
-                    if end < len(summary):
-                        context = context + "..."
-
-                all_matches.append({
-                    'keyword': keyword,
-                    'item_id': row['item_id'],
-                    'meeting_id': row['meeting_id'],
-                    'item_title': row['item_title'],
-                    'item_summary': summary,
-                    'item_position': row['agenda_number'] or row['sequence'] or '?',
-                    'meeting_title': row['meeting_title'],
-                    'meeting_date': str(row['date']),
-                    'agenda_url': row['agenda_url'],
-                    'banana': row['banana'],
-                    'context': context,
-                    # Fields needed for proper anchor generation
-                    'agenda_number': row['agenda_number'],
-                    'matter_file': row['matter_file']
-                })
+            all_matches.append({
+                'keyword': keyword,
+                'item_id': row['item_id'],
+                'meeting_id': row['meeting_id'],
+                'item_title': row['item_title'],
+                'item_summary': summary,
+                'item_position': row['agenda_number'] or row['sequence'] or '?',
+                'meeting_title': row['meeting_title'],
+                'meeting_date': str(row['date']),
+                'agenda_url': row['agenda_url'],
+                'banana': row['banana'],
+                'context': context,
+                # Fields needed for proper anchor generation
+                'agenda_number': row['agenda_number'],
+                'matter_file': row['matter_file']
+            })
 
     # Deduplicate by item_id and aggregate matched keywords
     deduplicated = {}

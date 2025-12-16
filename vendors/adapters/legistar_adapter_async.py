@@ -47,7 +47,6 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                     slug=self.slug,
                     status=e.status_code
                 )
-                logger.info("legistar using HTML fallback", slug=self.slug)
                 meetings = await self._fetch_meetings_html(days_back, days_forward)
             else:
                 raise
@@ -59,7 +58,6 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 "legistar API returned 0 events, falling back to HTML",
                 slug=self.slug
             )
-            logger.info("legistar using HTML fallback", slug=self.slug)
             meetings = await self._fetch_meetings_html(days_back, days_forward)
         else:
             logger.info("legistar API success", slug=self.slug, count=len(meetings))

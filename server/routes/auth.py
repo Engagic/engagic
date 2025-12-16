@@ -339,9 +339,13 @@ async def refresh_access_token(request: Request, response: Response):
     db: Database = request.app.state.db
     old_token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
 
-    # TODO: After migration period, reject tokens not in database
+    # Reject tokens not in database - users must reauthenticate
     if not await db.userland.validate_refresh_token(old_token_hash):
-        logger.warning("refresh token not in database", user_id=user_id)
+        logger.warning("refresh token not in database, rejecting", user_id=user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )
 
     user = await db.userland.get_user(user_id)
     if not user:
