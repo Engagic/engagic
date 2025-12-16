@@ -75,9 +75,10 @@ class MatterRepository(BaseRepository):
                     cm.id, cm.banana, cm.matter_id, cm.matter_file, cm.matter_type,
                     cm.title, cm.sponsors, cm.canonical_summary, cm.canonical_topics,
                     cm.attachments, cm.metadata, cm.first_seen, cm.last_seen,
-                    (SELECT COUNT(*) FROM items i WHERE i.matter_id = cm.id) as appearance_count,
+                    GREATEST(1, (SELECT COUNT(*) FROM items i WHERE i.matter_id = cm.id)) as appearance_count,
                     cm.status, cm.created_at, cm.updated_at,
-                    cm.final_vote_date, cm.quality_score, cm.rating_count
+                    cm.final_vote_date, cm.quality_score, cm.rating_count,
+                    (SELECT COUNT(*) FROM items i WHERE i.matter_id = cm.id) as actual_item_count
                 FROM city_matters cm
                 WHERE cm.id = $1
                 """,
@@ -86,6 +87,15 @@ class MatterRepository(BaseRepository):
 
             if not row:
                 return None
+
+            # Orphan matters (0 items) without summaries are treated as non-existent
+            # Orphans WITH summaries are preserved (appearance_count clamped to 1)
+            if row["actual_item_count"] == 0:
+                if row["canonical_summary"]:
+                    logger.debug("orphan matter with summary preserved", matter_id=matter_id)
+                else:
+                    logger.warning("orphan matter without summary skipped", matter_id=matter_id)
+                    return None
 
             topics_map = await fetch_topics_for_ids(
                 conn, "matter_topics", "matter_id", [matter_id]
@@ -125,15 +135,24 @@ class MatterRepository(BaseRepository):
             if not rows:
                 return {}
 
+            # Filter out orphan matters (0 items)
+            valid_rows = [r for r in rows if r["appearance_count"] > 0]
+            orphan_count = len(rows) - len(valid_rows)
+            if orphan_count > 0:
+                logger.warning("orphan matters detected in batch", count=orphan_count)
+
+            if not valid_rows:
+                return {}
+
             topics_by_matter = await fetch_topics_for_ids(
-                conn, "matter_topics", "matter_id", unique_ids
+                conn, "matter_topics", "matter_id", [r["id"] for r in valid_rows]
             )
 
             return {
                 row["id"]: build_matter(
                     row, topics_by_matter.get(row["id"]) or None
                 )
-                for row in rows
+                for row in valid_rows
             }
 
     async def update_matter_summary(
