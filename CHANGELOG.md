@@ -6,6 +6,147 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-16] Orphaned Records Post-Mortem
+
+**Severity: Critical**
+**Duration: ~2 weeks of accumulated rot**
+**Resolution: 4 migrations, 1 migration script, architectural overhaul**
+
+### What Happened
+
+Orphaned items and duplicate matters accumulated silently until queries returned garbage data and FK violations blocked syncs. Database integrity was compromised with:
+- 60 duplicate matters (same legislation, different IDs)
+- 52 orphaned matters (no items referencing them)
+- Unknown count of orphaned happening_items
+- Broken matter_appearances references
+
+### Root Causes (The Dogshit Practices)
+
+**1. Distributed ID Generation (FATAL FLAW)**
+
+Each adapter generated its own item IDs with inconsistent formats:
+```python
+# Legistar: "item_id": str(item_id)
+# IQM2: "item_id": legifile_id or f"iqm2-{slug}-{meeting}-{counter}"
+# Chicago: "item_id": str(item_id)
+# Escribe: "item_id": f"escribe_{item_id}"
+```
+No single source of truth. Orchestrator couldn't reliably map items back to raw data.
+
+**2. Flawed Matter ID Logic (THE KILLER)**
+
+Old generation combined matter_file AND matter_id:
+```python
+key = f"{banana}:{matter_file or ''}:{matter_id or ''}"
+```
+Problem: Vendors create NEW backend matter_ids for each agenda appearance, but matter_file stays stable. Same legislation got different matter IDs every time it appeared. Duplicates accumulated silently.
+
+**3. No Foreign Key Constraints**
+
+`happening_items` had no FK constraints to `meetings` or `items`. Records could reference deleted entities. Database couldn't enforce integrity.
+
+**4. Separate Transactions**
+
+Repository methods each started their own transactions:
+```python
+async def store_meeting(...):
+    async with self.transaction():  # Transaction 1
+        ...
+
+async def store_items(...):
+    async with self.transaction():  # Transaction 2 - CAN FAIL INDEPENDENTLY
+        ...
+```
+If transaction 2 failed, transaction 1 already committed. Orphans created.
+
+**5. Brittle String Parsing**
+
+Orchestrator extracted item IDs via string splitting:
+```python
+item_id_short = agenda_item.id.rsplit("_", 1)[1]  # BREAKS WITH NEW FORMATS
+raw_item = items_map.get(item_id_short, {})
+```
+When ID formats changed, lookups failed silently. Data lost.
+
+**6. No Monitoring**
+
+Zero visibility into orphan accumulation. No diagnostics. No alerts. Problems festered for weeks until catastrophic failure.
+
+### The Fix
+
+**Centralized ID Generation** (`database/id_generation.py`):
+- `generate_item_id()` - Single source of truth for all adapters
+- Adapters return raw `vendor_item_id`, orchestrator generates final ID
+- Deterministic: same inputs always produce same ID
+
+**Strict Matter ID Hierarchy**:
+```python
+# NEW: matter_file takes absolute precedence
+if matter_file:
+    key = f"{banana}:file:{matter_file}"  # matter_id IGNORED
+elif matter_id:
+    key = f"{banana}:id:{matter_id}"
+```
+
+**Connection Passing for Atomicity**:
+```python
+async def store_meeting(..., conn=None):
+    async with self._ensure_conn(conn) as c:  # Participates in caller's transaction
+        ...
+```
+
+**FK Constraints** (Migration 014):
+- `happening_items.meeting_id` -> `meetings.id` ON DELETE CASCADE
+- `happening_items.item_id` -> `items.id` ON DELETE CASCADE
+
+**Sequence-Based Lookup**:
+```python
+# OLD: items_map = {item["item_id"]: item ...}  # Fragile
+# NEW: items_map = {item.get("sequence", idx): item ...}  # Stable
+```
+
+**Diagnostics Tool** (`scripts/diagnostics.py`):
+- Detects orphaned matters, items, queue jobs
+- Finds duplicate matters by matter_file
+- Checks FK integrity across all tables
+
+**Data Migration** (Migration 016 via `scripts/migrate_matter_ids.py`):
+- Recalculated all matter IDs with new logic
+- Merged 60 duplicates into canonical records
+- Deleted 52 orphans
+- Updated 57,352 FK references
+
+### Files Changed
+
+```
+database/id_generation.py              # +generate_item_id(), strict matter hierarchy
+database/repositories_async/base.py    # +_ensure_conn() for transaction participation
+database/repositories_async/matters.py # Orphan filtering in get_matter()
+pipeline/orchestrators/meeting_sync.py # Centralized ID gen, sequence lookup, error handling
+vendors/adapters/*_async.py            # item_id -> vendor_item_id (all 6 adapters)
+scripts/diagnostics.py                 # NEW: Orphan detection tool
+scripts/migrate_matter_ids.py          # NEW: Data migration script
+database/migrations/014-016            # FK constraints, cleanup, matter ID fix
+```
+
+### Lessons Learned
+
+1. **Single source of truth for ID generation** - Never let multiple components generate IDs
+2. **FK constraints from day one** - Database should enforce integrity, not application code
+3. **Transaction atomicity** - Related operations must be in same transaction
+4. **Monitoring for data integrity** - Run diagnostics regularly, not after catastrophe
+5. **Strict hierarchies for deduplication** - When multiple identifiers exist, pick ONE canonical source
+6. **Never parse IDs with string operations** - Use structured lookups (sequence, explicit fields)
+
+### Prevention
+
+- Run `scripts/diagnostics.py` weekly on VPS
+- All new tables get FK constraints in initial schema
+- ID generation ONLY in `database/id_generation.py`
+- Repository methods accept `conn` parameter for transaction participation
+
+---
+
 ## [2025-12-11] Auth Security Hardening
 
 Comprehensive auth flow audit and fixes.
