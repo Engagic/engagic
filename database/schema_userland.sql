@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_userland_matches_created ON userland.alert_matche
 -- Stores hashed tokens that have been used (single-use enforcement)
 CREATE TABLE IF NOT EXISTS userland.used_magic_links (
     token_hash TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES userland.users(id) ON DELETE CASCADE,
     used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL
 );
@@ -237,6 +237,18 @@ CREATE TABLE IF NOT EXISTS userland.issues (
 
 CREATE INDEX IF NOT EXISTS idx_userland_issues_status ON userland.issues(status);
 CREATE INDEX IF NOT EXISTS idx_userland_issues_entity ON userland.issues(entity_type, entity_id);
+
+-- ============================================================
+-- DELIBERATION TRUSTED USERS TABLE
+-- ============================================================
+-- Track trusted participants (have had comments approved before)
+-- Trust is global, not per-deliberation - once trusted, auto-approved
+CREATE TABLE IF NOT EXISTS userland.deliberation_trusted_users (
+    user_id TEXT PRIMARY KEY REFERENCES userland.users(id) ON DELETE CASCADE,
+    first_approved_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE userland.deliberation_trusted_users IS 'Trusted users who have had deliberation comments approved. Auto-approve future submissions.';
 
 -- Comments for engagement/feedback tables
 COMMENT ON TABLE userland.watches IS 'User watchlist for entities (matters, meetings, topics, cities, council members)';

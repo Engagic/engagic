@@ -31,8 +31,8 @@ Quick reference for the Engagic PostgreSQL database schema and SQL queries.
 - [Processing Tables](#processing-tables) (cache, queue)
 - [Analytics Tables](#analytics-tables) (happening_items, session_events)
 - [Deliberation Tables](#deliberation-tables) (deliberations, comments, votes, results)
-- [Phase 2 Tables](#phase-2-tables-user-profiles--alerts) (user_profiles, user_topic_subscriptions)
-- [Future Tables](#future-tables-phases-5-6)
+- [Userland Schema](#userland-schema) (users, alerts, watches, ratings, issues, refresh_tokens)
+- [B2B Tables](#b2b-tables) (tenants, tenant_coverage, tenant_keywords, tracked_items)
 - [JSON Structures](#json-structures)
 - [Indices](#indices)
 - [Relationships](#relationships)
@@ -195,6 +195,7 @@ Meeting records with optional summaries and metadata.
 | `title` | TEXT NOT NULL | Meeting title |
 | `date` | TIMESTAMP | Meeting date/time |
 | `agenda_url` | TEXT | URL to HTML agenda page (item-based, primary) |
+| `agenda_sources` | JSONB | Multi-agenda provenance: [{type, url, label}] (PrimeGov) |
 | `packet_url` | TEXT | URL to PDF packet (monolithic, fallback) |
 | `summary` | TEXT | LLM-generated meeting summary (markdown) |
 | `participation` | JSONB | Contact info: email, phone, virtual_url, is_hybrid |
@@ -231,10 +232,15 @@ Individual agenda items within meetings.
 | `id` | TEXT PRIMARY KEY | Unique item identifier |
 | `meeting_id` | TEXT NOT NULL | Parent meeting ID (FK to meetings) |
 | `matter_id` | TEXT | FK to city_matters (if item tracks a matter) |
+| `matter_file` | TEXT | Denormalized file number for query performance |
+| `matter_type` | TEXT | Denormalized matter type |
 | `title` | TEXT NOT NULL | Agenda item title |
+| `agenda_number` | TEXT | Agenda item number (e.g., "5.A") |
 | `sequence` | INTEGER NOT NULL | Order within agenda (1, 2, 3...) |
 | `attachments` | JSONB | Array of attachment objects |
 | `attachment_hash` | TEXT | SHA-256 hash of attachments for change detection |
+| `sponsors` | JSONB | Array of sponsor names |
+| `topics` | JSONB | Array of topic identifiers (also normalized to item_topics) |
 | `summary` | TEXT | LLM-generated item summary (markdown) |
 | `search_vector` | tsvector | Generated column for optimized full-text search |
 | `quality_score` | REAL | Denormalized from ratings for efficient queries |
@@ -248,6 +254,8 @@ Individual agenda items within meetings.
 **Indices:**
 - `idx_items_meeting_id` on `meeting_id`
 - `idx_items_matter_id` on `matter_id`
+- `idx_items_matter_file` on `matter_file`
+- `idx_items_meeting_sequence` on `(meeting_id, sequence)`
 - `idx_items_search_vector` GIN index on `search_vector`
 
 ---
@@ -597,10 +605,12 @@ Processing job queue with priority support.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | INTEGER PRIMARY KEY | Auto-increment job ID |
+| `id` | BIGSERIAL PRIMARY KEY | Auto-increment job ID |
 | `source_url` | TEXT NOT NULL UNIQUE | Vendor-agnostic URL to process |
 | `meeting_id` | TEXT | Associated meeting ID (FK to meetings) |
 | `banana` | TEXT | City identifier (FK to cities) |
+| `job_type` | TEXT | Type of processing job |
+| `payload` | JSONB | Job-specific payload data |
 | `status` | TEXT | Job status: pending, processing, completed, failed, dead_letter |
 | `priority` | INTEGER | Priority score (higher = more urgent, default: 0) |
 | `retry_count` | INTEGER | Number of retry attempts (default: 0) |
@@ -609,7 +619,7 @@ Processing job queue with priority support.
 | `completed_at` | TIMESTAMP | Processing completion timestamp |
 | `failed_at` | TIMESTAMP | Failure timestamp |
 | `error_message` | TEXT | Failure details if status='failed' |
-| `processing_metadata` | TEXT | JSON metadata about processing |
+| `processing_metadata` | JSONB | Processing metadata (timing, method, etc.) |
 
 **Constraints:**
 - `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
@@ -618,7 +628,8 @@ Processing job queue with priority support.
 
 **Indices:**
 - `idx_queue_status` on `status`
-- `idx_queue_priority` on `priority DESC`
+- `idx_queue_city` on `banana`
+- `idx_queue_processing` on `(status, priority DESC, created_at ASC)`
 
 **Priority Calculation:**
 ```python
@@ -647,8 +658,8 @@ AI-curated rankings of important upcoming agenda items. Populated via autonomous
 |--------|------|-------------|
 | `id` | SERIAL PRIMARY KEY | Auto-increment ID |
 | `banana` | TEXT NOT NULL | City identifier (FK to cities) |
-| `item_id` | TEXT NOT NULL | Agenda item ID |
-| `meeting_id` | TEXT NOT NULL | Meeting ID |
+| `item_id` | TEXT NOT NULL | Agenda item ID (FK to items) |
+| `meeting_id` | TEXT NOT NULL | Meeting ID (FK to meetings) |
 | `meeting_date` | TIMESTAMP NOT NULL | Meeting date for filtering |
 | `rank` | INTEGER NOT NULL | Importance ranking (1 = most important) |
 | `reason` | TEXT NOT NULL | One-sentence explanation of why this item matters |
@@ -657,6 +668,8 @@ AI-curated rankings of important upcoming agenda items. Populated via autonomous
 
 **Constraints:**
 - `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE`
+- `FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE`
 - `UNIQUE (banana, item_id)`
 
 **Indices:**
@@ -797,46 +810,267 @@ Cached clustering output. Recomputed on demand.
 
 ---
 
-## Phase 2 Tables (User Profiles & Alerts)
+## Userland Schema
 
-### `user_profiles`
+User authentication, engagement, and feedback system. All tables in the `userland` schema namespace.
 
-End-user accounts for civic engagement features.
+### `userland.users`
+
+User accounts for authentication and engagement features.
+
+**Primary Key:** `id`
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | TEXT PRIMARY KEY | User identifier (UUID) |
+| `name` | TEXT NOT NULL | Display name |
 | `email` | TEXT UNIQUE NOT NULL | User email address |
 | `created_at` | TIMESTAMP | Account creation timestamp |
+| `last_login` | TIMESTAMP | Most recent login timestamp |
 
-**Purpose:** Simple email-based accounts for alert subscriptions. Authentication via magic links.
+**Indices:**
+- `idx_userland_users_email` on `email`
 
 ---
 
-### `user_topic_subscriptions`
+### `userland.alerts`
 
-Topics and cities users want to receive alerts about.
+User-configured alerts for meeting/item notifications.
+
+**Primary Key:** `id`
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `user_id` | TEXT NOT NULL | User ID (FK to user_profiles) |
-| `banana` | TEXT NOT NULL | City identifier (FK to cities) |
-| `topic` | TEXT NOT NULL | Canonical topic identifier |
-| `created_at` | TIMESTAMP | Subscription creation timestamp |
-
-**Primary Key:** Composite `(user_id, banana, topic)`
+| `id` | TEXT PRIMARY KEY | Alert identifier |
+| `user_id` | TEXT NOT NULL | FK to users |
+| `name` | TEXT NOT NULL | Alert name |
+| `cities` | JSONB NOT NULL | Array of city bananas to monitor |
+| `criteria` | JSONB NOT NULL | Matching criteria: {keywords: [...]} |
+| `frequency` | TEXT | Notification frequency: 'weekly', 'daily' |
+| `active` | BOOLEAN | Whether alert is active (default: TRUE) |
+| `created_at` | TIMESTAMP | Creation timestamp |
 
 **Constraints:**
-- `FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE`
-- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `FOREIGN KEY (user_id) REFERENCES userland.users(id) ON DELETE CASCADE`
+- `CHECK (frequency IN ('weekly', 'daily'))`
+
+**Indices:**
+- `idx_userland_alerts_user` on `user_id`
+- `idx_userland_alerts_active` on `active`
+- `idx_userland_alerts_criteria` GIN index on `criteria`
 
 ---
 
-## Future Tables (Phases 5-6)
+### `userland.alert_matches`
+
+Matched meetings/items that triggered user alerts.
+
+**Primary Key:** `id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Match identifier |
+| `alert_id` | TEXT NOT NULL | FK to alerts |
+| `meeting_id` | TEXT NOT NULL | Meeting that matched |
+| `item_id` | TEXT | Item that matched (NULL for meeting-level) |
+| `match_type` | TEXT NOT NULL | Type: 'keyword', 'matter' |
+| `confidence` | REAL NOT NULL | Match confidence 0.0-1.0 |
+| `matched_criteria` | JSONB NOT NULL | Match details for display |
+| `notified` | BOOLEAN | Whether user was notified (default: FALSE) |
+| `created_at` | TIMESTAMP | Match timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (alert_id) REFERENCES userland.alerts(id) ON DELETE CASCADE`
+- `CHECK (match_type IN ('keyword', 'matter'))`
+- `CHECK (confidence >= 0 AND confidence <= 1)`
+
+---
+
+### `userland.watches`
+
+User watchlist for entities (matters, meetings, topics, cities, council members).
+
+**Primary Key:** `id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGSERIAL PRIMARY KEY | Auto-increment ID |
+| `user_id` | TEXT NOT NULL | FK to users |
+| `entity_type` | TEXT NOT NULL | Type: matter, meeting, topic, city, council_member |
+| `entity_id` | TEXT NOT NULL | Entity identifier |
+| `created_at` | TIMESTAMP | Watch creation timestamp |
+
+**Constraints:**
+- `FOREIGN KEY (user_id) REFERENCES userland.users(id) ON DELETE CASCADE`
+- `UNIQUE (user_id, entity_type, entity_id)`
+- `CHECK (entity_type IN ('matter', 'meeting', 'topic', 'city', 'council_member'))`
+
+---
+
+### `userland.activity_log`
+
+User activity tracking for analytics and trending calculations.
+
+**Primary Key:** `id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGSERIAL PRIMARY KEY | Auto-increment ID |
+| `user_id` | TEXT | FK to users (NULL for anonymous) |
+| `session_id` | TEXT | Session ID for anonymous tracking |
+| `action` | TEXT NOT NULL | Action: view, watch, unwatch, search, share, rate, report |
+| `entity_type` | TEXT NOT NULL | Entity type |
+| `entity_id` | TEXT | Entity identifier |
+| `metadata` | JSONB | Action-specific metadata |
+| `created_at` | TIMESTAMP | Event timestamp |
+
+**Constraints:**
+- `CHECK (action IN ('view', 'watch', 'unwatch', 'search', 'share', 'rate', 'report'))`
+
+---
+
+### `userland.ratings`
+
+User ratings (1-5 stars) for items, meetings, and matters.
+
+**Primary Key:** `id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGSERIAL PRIMARY KEY | Auto-increment ID |
+| `user_id` | TEXT | FK to users (NULL for anonymous) |
+| `session_id` | TEXT | Session ID for anonymous rating |
+| `entity_type` | TEXT NOT NULL | Type: item, meeting, matter |
+| `entity_id` | TEXT NOT NULL | Entity identifier |
+| `rating` | SMALLINT NOT NULL | Rating 1-5 |
+| `created_at` | TIMESTAMP | Rating timestamp |
+
+**Constraints:**
+- `UNIQUE (user_id, entity_type, entity_id)`
+- `CHECK (entity_type IN ('item', 'meeting', 'matter'))`
+- `CHECK (rating BETWEEN 1 AND 5)`
+
+---
+
+### `userland.issues`
+
+User-reported issues for admin review.
+
+**Primary Key:** `id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGSERIAL PRIMARY KEY | Auto-increment ID |
+| `user_id` | TEXT | FK to users |
+| `session_id` | TEXT | Session ID for anonymous reports |
+| `entity_type` | TEXT NOT NULL | Entity type |
+| `entity_id` | TEXT NOT NULL | Entity identifier |
+| `issue_type` | TEXT NOT NULL | Type: inaccurate, incomplete, misleading, offensive, other |
+| `description` | TEXT NOT NULL | Issue description |
+| `status` | TEXT | Status: open, resolved, dismissed |
+| `admin_notes` | TEXT | Admin notes |
+| `created_at` | TIMESTAMP | Report timestamp |
+| `resolved_at` | TIMESTAMP | Resolution timestamp |
+
+**Constraints:**
+- `CHECK (issue_type IN ('inaccurate', 'incomplete', 'misleading', 'offensive', 'other'))`
+- `CHECK (status IN ('open', 'resolved', 'dismissed'))`
+
+---
+
+### `userland.used_magic_links`
+
+Security table to prevent magic link replay attacks.
+
+**Primary Key:** `token_hash`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `token_hash` | TEXT PRIMARY KEY | SHA-256 hash of used token |
+| `user_id` | TEXT NOT NULL | FK to users |
+| `used_at` | TIMESTAMP | When token was used |
+| `expires_at` | TIMESTAMP NOT NULL | Token expiration time |
+
+**Constraints:**
+- `FOREIGN KEY (user_id) REFERENCES userland.users(id) ON DELETE CASCADE`
+
+---
+
+### `userland.refresh_tokens`
+
+Server-side refresh token storage for revocation support.
+
+**Primary Key:** `token_hash`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `token_hash` | TEXT PRIMARY KEY | SHA-256 hash of token |
+| `user_id` | TEXT NOT NULL | FK to users |
+| `created_at` | TIMESTAMPTZ | Token creation timestamp |
+| `expires_at` | TIMESTAMPTZ NOT NULL | Token expiration time |
+| `revoked_at` | TIMESTAMPTZ | When token was revoked (NULL = active) |
+| `revoked_reason` | TEXT | Revocation reason: logout, rotation, security |
+
+**Constraints:**
+- `FOREIGN KEY (user_id) REFERENCES userland.users(id) ON DELETE CASCADE`
+
+---
+
+### `userland.city_requests`
+
+Track unknown cities users request for coverage expansion.
+
+**Primary Key:** `city_banana`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `city_banana` | TEXT PRIMARY KEY | Requested city identifier |
+| `request_count` | INTEGER | Number of requests (default: 1) |
+| `first_requested` | TIMESTAMP | First request timestamp |
+| `last_requested` | TIMESTAMP | Most recent request |
+| `status` | TEXT | Status: pending, added, rejected |
+| `notes` | TEXT | Admin notes |
+
+**Constraints:**
+- `CHECK (status IN ('pending', 'added', 'rejected'))`
+
+---
+
+### `userland.deliberation_trusted_users`
+
+Trusted users who have had deliberation comments approved. Auto-approve future submissions.
+
+**Primary Key:** `user_id`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `user_id` | TEXT PRIMARY KEY | FK to users |
+| `first_approved_at` | TIMESTAMPTZ | When first comment was approved |
+
+**Constraints:**
+- `FOREIGN KEY (user_id) REFERENCES userland.users(id) ON DELETE CASCADE`
+
+---
+
+### `userland.trending_matters` (Materialized View)
+
+Trending matters based on user engagement. Refreshed every 15 minutes.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `matter_id` | TEXT | Matter identifier |
+| `engagement` | BIGINT | Total engagement count |
+| `unique_users` | BIGINT | Unique user/session count |
+
+---
+
+## B2B Tables
+
+Tables for B2B API access (implemented, not yet active).
 
 ### `tenants`
 
-B2B customers for paid API access (Phase 5).
+B2B customers for paid API access.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -860,6 +1094,10 @@ Cities each tenant tracks.
 
 **Primary Key:** Composite `(tenant_id, banana)`
 
+**Constraints:**
+- `FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE`
+- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+
 ---
 
 ### `tenant_keywords`
@@ -874,11 +1112,14 @@ Topics/keywords tenants care about.
 
 **Primary Key:** Composite `(tenant_id, keyword)`
 
+**Constraints:**
+- `FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE`
+
 ---
 
 ### `tracked_items`
 
-Ordinances, proposals tracked across meetings (Phase 6).
+Tenant-tracked ordinances and proposals across meetings.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -888,11 +1129,16 @@ Ordinances, proposals tracked across meetings (Phase 6).
 | `title` | TEXT NOT NULL | Item title |
 | `description` | TEXT | Description |
 | `banana` | TEXT NOT NULL | City identifier (FK to cities) |
-| `first_mentioned_meeting_id` | TEXT | First meeting where mentioned |
+| `first_mentioned_meeting_id` | TEXT | First meeting where mentioned (FK to meetings) |
 | `first_seen` | TIMESTAMP | First mention timestamp |
 | `last_seen` | TIMESTAMP | Most recent mention timestamp |
 | `status` | TEXT | Status: 'active', 'passed', 'rejected' |
-| `metadata` | TEXT | JSON metadata |
+| `metadata` | JSONB | Additional metadata |
+
+**Constraints:**
+- `FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE`
+- `FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE`
+- `FOREIGN KEY (first_mentioned_meeting_id) REFERENCES meetings(id) ON DELETE SET NULL`
 
 ---
 
@@ -908,6 +1154,10 @@ Links tracked items to meetings where mentioned.
 | `excerpt` | TEXT | Relevant excerpt from meeting |
 
 **Primary Key:** Composite `(tracked_item_id, meeting_id)`
+
+**Constraints:**
+- `FOREIGN KEY (tracked_item_id) REFERENCES tracked_items(id) ON DELETE CASCADE`
+- `FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE`
 
 ---
 
@@ -990,39 +1240,89 @@ Links tracked items to meetings where mentioned.
 CREATE INDEX idx_cities_vendor ON cities(vendor);
 CREATE INDEX idx_cities_state ON cities(state);
 CREATE INDEX idx_cities_status ON cities(status);
+CREATE INDEX idx_cities_population ON cities(population DESC NULLS LAST);
+CREATE INDEX idx_cities_geom ON cities USING GIST (geom);
 
 -- Meetings
 CREATE INDEX idx_meetings_banana ON meetings(banana);
 CREATE INDEX idx_meetings_date ON meetings(date);
 CREATE INDEX idx_meetings_status ON meetings(processing_status);
 CREATE INDEX idx_meetings_committee ON meetings(committee_id);
+CREATE INDEX idx_meetings_banana_date ON meetings(banana, date DESC);
 
 -- Items
 CREATE INDEX idx_items_meeting_id ON items(meeting_id);
 CREATE INDEX idx_items_matter_id ON items(matter_id);
+CREATE INDEX idx_items_matter_file ON items(matter_file);
+CREATE INDEX idx_items_meeting_sequence ON items(meeting_id, sequence ASC);
 
 -- Matters
 CREATE INDEX idx_city_matters_banana ON city_matters(banana);
 CREATE INDEX idx_city_matters_status ON city_matters(status);
-CREATE INDEX idx_city_matters_fts ON city_matters USING gin(to_tsvector('english', title || ' ' || canonical_summary));
+CREATE INDEX idx_city_matters_matter_file ON city_matters(matter_file);
+CREATE INDEX idx_city_matters_first_seen ON city_matters(first_seen);
+CREATE INDEX idx_city_matters_banana_last_seen ON city_matters(banana, last_seen DESC);
 
 -- Council Members
 CREATE INDEX idx_council_members_banana ON council_members(banana);
 CREATE INDEX idx_council_members_status ON council_members(status);
+CREATE INDEX idx_council_members_normalized ON council_members(normalized_name);
+CREATE INDEX idx_council_members_banana_status ON council_members(banana, status);
 
 -- Committees
 CREATE INDEX idx_committees_banana ON committees(banana);
 CREATE INDEX idx_committees_status ON committees(status);
+CREATE INDEX idx_committees_name ON committees(normalized_name);
 
 -- Votes
 CREATE INDEX idx_votes_member ON votes(council_member_id);
 CREATE INDEX idx_votes_matter ON votes(matter_id);
 CREATE INDEX idx_votes_meeting ON votes(meeting_id);
+CREATE INDEX idx_votes_value ON votes(vote);
+CREATE INDEX idx_votes_member_date ON votes(council_member_id, vote_date DESC);
+
+-- Sponsorships
+CREATE INDEX idx_sponsorships_member ON sponsorships(council_member_id);
+CREATE INDEX idx_sponsorships_matter ON sponsorships(matter_id);
 
 -- Topics (junction tables)
 CREATE INDEX idx_meeting_topics_topic ON meeting_topics(topic);
 CREATE INDEX idx_item_topics_topic ON item_topics(topic);
 CREATE INDEX idx_matter_topics_topic ON matter_topics(topic);
+
+-- Queue
+CREATE INDEX idx_queue_status ON queue(status);
+CREATE INDEX idx_queue_city ON queue(banana);
+CREATE INDEX idx_queue_processing ON queue(status, priority DESC, created_at ASC);
+```
+
+### Covering Indices (FTS Optimization)
+
+```sql
+-- Meetings by city sorted by date (includes id, title, summary for covering)
+CREATE INDEX idx_meetings_banana_date_covering
+    ON meetings(banana, date DESC) INCLUDE (id, title, summary);
+
+-- Items by meeting sorted by sequence
+CREATE INDEX idx_items_meeting_sequence
+    ON items(meeting_id, sequence ASC);
+
+-- Matters by city for listing
+CREATE INDEX idx_city_matters_banana_last_seen
+    ON city_matters(banana, last_seen DESC);
+```
+
+### Full-Text Search Indices
+
+```sql
+-- Stored tsvector columns (5-10x faster than expression indexes)
+CREATE INDEX idx_meetings_search_vector ON meetings USING gin(search_vector);
+CREATE INDEX idx_items_search_vector ON items USING gin(search_vector);
+CREATE INDEX idx_city_matters_search_vector ON city_matters USING gin(search_vector);
+
+-- Full-text search on names
+CREATE INDEX idx_council_members_fts ON council_members USING gin(to_tsvector('english', name));
+CREATE INDEX idx_committees_fts ON committees USING gin(to_tsvector('english', name));
 ```
 
 ---
@@ -1042,13 +1342,34 @@ CREATE INDEX idx_matter_topics_topic ON matter_topics(topic);
                     v            |            v           |
                   items <--------+     committee_members<-+
                     |            |                        |
-                    v            v                        v
-              item_topics  matter_appearances          votes
-                                 |                        |
-                                 +------------------------+
-                                           |
-                                           v
-                                     sponsorships
+                    +-----+      v                        v
+                    |     |  matter_appearances        votes
+                    v     |      |                        |
+              item_topics |      +------------------------+
+                          |                |
+                          v                v
+                   happening_items   sponsorships
+
+
+                            userland.users
+                                  |
+          +----------+------------+------------+-----------+
+          |          |            |            |           |
+          v          v            v            v           v
+       alerts    watches     activity_log  ratings     issues
+          |
+          v
+    alert_matches
+
+                             deliberations
+                                  |
+          +----------+------------+------------+
+          |          |            |
+          v          v            v
+    participants  comments     results
+                      |
+                      v
+                    votes
 ```
 
 ### Key Relationships
@@ -1091,6 +1412,26 @@ CREATE INDEX idx_matter_topics_topic ON matter_topics(topic);
 
 **committees -> committee_members** (1:N)
 - One committee has many member assignments
+- Cascade delete
+
+**userland.users -> userland.alerts** (1:N)
+- One user has many alerts
+- Cascade delete
+
+**userland.users -> userland.watches** (1:N)
+- One user has many watched entities
+- Cascade delete
+
+**userland.alerts -> userland.alert_matches** (1:N)
+- One alert has many matches
+- Cascade delete
+
+**deliberations -> deliberation_participants** (1:N)
+- One deliberation has many participants
+- Cascade delete
+
+**deliberations -> deliberation_comments** (1:N)
+- One deliberation has many comments
 - Cascade delete
 
 ---
@@ -1158,7 +1499,7 @@ psql -U engagic -d engagic < /root/backups/engagic_20251201.sql
 ### Statistics
 
 ```sql
--- Table row counts
+-- Core table row counts
 SELECT
   'cities' as table_name, COUNT(*) as rows FROM cities
 UNION ALL SELECT 'meetings', COUNT(*) FROM meetings
@@ -1167,11 +1508,21 @@ UNION ALL SELECT 'city_matters', COUNT(*) FROM city_matters
 UNION ALL SELECT 'council_members', COUNT(*) FROM council_members
 UNION ALL SELECT 'committees', COUNT(*) FROM committees
 UNION ALL SELECT 'votes', COUNT(*) FROM votes
+UNION ALL SELECT 'sponsorships', COUNT(*) FROM sponsorships
+UNION ALL SELECT 'deliberations', COUNT(*) FROM deliberations
+ORDER BY table_name;
+
+-- Userland table row counts
+SELECT
+  'users' as table_name, COUNT(*) as rows FROM userland.users
+UNION ALL SELECT 'alerts', COUNT(*) FROM userland.alerts
+UNION ALL SELECT 'watches', COUNT(*) FROM userland.watches
+UNION ALL SELECT 'ratings', COUNT(*) FROM userland.ratings
 ORDER BY table_name;
 ```
 
 ---
 
-**Last Updated:** December 10, 2025
+**Last Updated:** December 16, 2025
 
 **See Also:** [../database/README.md](../database/README.md) for repository pattern and Python code usage
