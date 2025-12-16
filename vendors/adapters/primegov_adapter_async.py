@@ -15,6 +15,14 @@ from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 
 
+# Priority order for agenda types: regular > continuation > special
+AGENDA_TYPES = [
+    ("HTML Agenda", "agenda"),
+    ("HTML Continuation Agenda", "continuation"),
+    ("HTML Special Agenda", "special"),
+]
+
+
 class AsyncPrimeGovAdapter(AsyncBaseAdapter):
     """Async adapter for cities using PrimeGov platform."""
 
@@ -31,6 +39,16 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
             }
         )
         return f"{self.base_url}/Public/CompiledDocument?{query}"
+
+    def _find_agenda_docs(self, document_list: List[Dict[str, Any]]) -> List[tuple]:
+        """Find all HTML agenda documents in priority order (regular > continuation > special)."""
+        found = []
+        for template_name, agenda_type in AGENDA_TYPES:
+            for doc in document_list:
+                if doc.get("templateName") == template_name:
+                    found.append((doc, agenda_type))
+                    break
+        return found
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from PrimeGov API (upcoming + archived concurrently)."""
@@ -135,21 +153,10 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
             return []
 
     async def _process_meeting(self, meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Process a single meeting (async HTML fetching if needed)."""
+        """Process a single meeting, fetching all agenda types in parallel."""
         title = meeting.get("title", "")
         if " - SAP" in title:
             return None
-
-        packet_doc = next(
-            (
-                doc
-                for doc in meeting.get("documentList", [])
-                if "HTML Agenda" in doc.get("templateName", "")
-                or "packet" in doc.get("templateName", "").lower()
-                or "agenda" in doc.get("templateName", "").lower()
-            ),
-            None,
-        )
 
         date_time = meeting.get("dateTime", "")
         meeting_status = self._parse_meeting_status(title, date_time)
@@ -171,37 +178,85 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
             "start": date_time,
         }
 
-        if packet_doc:
-            if "HTML Agenda" in packet_doc.get("templateName", ""):
-                query = urlencode({"meetingTemplateId": packet_doc["templateId"]})
-                html_url = f"{self.base_url}/Portal/Meeting?{query}"
-                result["agenda_url"] = html_url
-                try:
-                    items_data = await self.fetch_html_agenda_items_async(html_url)
-                    if items_data["items"]:
-                        result["items"] = items_data["items"]
-                        logger.info(
-                            "found agenda items",
-                            slug=self.slug,
-                            title=title,
-                            count=len(items_data["items"])
-                        )
-                    if items_data["participation"]:
-                        result["participation"] = items_data["participation"]
-                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError) as e:
-                    logger.warning(
-                        "failed to fetch HTML agenda items",
-                        vendor="primegov",
-                        slug=self.slug,
-                        title=title,
-                        error=str(e)
-                    )
-            else:
-                result["packet_url"] = self._build_packet_url(packet_doc)
+        agenda_docs = self._find_agenda_docs(meeting.get("documentList", []))
+
+        if not agenda_docs:
+            if meeting_status:
+                result["meeting_status"] = meeting_status
+            return result
+
+        # Set agenda_url to highest priority document
+        primary_doc, _ = agenda_docs[0]
+        query = urlencode({"meetingTemplateId": primary_doc["templateId"]})
+        result["agenda_url"] = f"{self.base_url}/Portal/Meeting?{query}"
+
+        # Log when fetching multiple agenda types
+        if len(agenda_docs) > 1:
+            agenda_types = [t for _, t in agenda_docs]
+            logger.info(
+                "fetching multiple agendas",
+                slug=self.slug,
+                title=title,
+                agenda_types=agenda_types
+            )
+
+        # Fetch all agendas in parallel
+        fetch_tasks = []
+        for doc, agenda_type in agenda_docs:
+            q = urlencode({"meetingTemplateId": doc["templateId"]})
+            url = f"{self.base_url}/Portal/Meeting?{q}"
+            fetch_tasks.append(self._fetch_agenda_with_type(url, agenda_type, title))
+
+        results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+
+        # Merge items in priority order, deduplicate by vendor_item_id
+        seen_ids = set()
+        merged_items = []
+        participation = {}
+
+        for items_data in results:
+            if isinstance(items_data, Exception):
+                continue
+            if items_data.get("participation") and not participation:
+                participation = items_data["participation"]
+            for item in items_data.get("items", []):
+                item_id = item.get("vendor_item_id")
+                if item_id and item_id not in seen_ids:
+                    seen_ids.add(item_id)
+                    merged_items.append(item)
+
+        if merged_items:
+            result["items"] = merged_items
+            logger.info(
+                "merged agenda items",
+                slug=self.slug,
+                title=title,
+                count=len(merged_items),
+                sources=len([r for r in results if not isinstance(r, Exception)])
+            )
+        if participation:
+            result["participation"] = participation
         if meeting_status:
             result["meeting_status"] = meeting_status
 
         return result
+
+    async def _fetch_agenda_with_type(
+        self, url: str, agenda_type: str, title: str
+    ) -> Dict[str, Any]:
+        """Fetch and parse a single agenda, with error handling."""
+        try:
+            return await self.fetch_html_agenda_items_async(url)
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, KeyError) as e:
+            logger.warning(
+                "failed to fetch agenda",
+                vendor="primegov",
+                slug=self.slug,
+                title=title,
+                agenda_type=agenda_type,
+                error=str(e)
+            )
+            return {"items": [], "participation": {}}
 
     async def fetch_html_agenda_items_async(self, html_url: str) -> Dict[str, Any]:
         """Fetch and parse HTML agenda for items and participation info."""
