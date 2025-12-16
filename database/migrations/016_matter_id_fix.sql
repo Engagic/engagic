@@ -1,0 +1,31 @@
+-- Migration 016: Matter ID Generation Fix
+--
+-- This migration was executed via scripts/migrate_matter_ids.py
+-- It recalculated all matter IDs using the updated generation logic.
+--
+-- CHANGES:
+-- 1. Matter ID generation now uses matter_file ALONE when present (ignores matter_id)
+--    - Previously: key = "{banana}:{matter_file}:{matter_id}"
+--    - Now: key = "{banana}:file:{matter_file}" when matter_file exists
+--    - This prevents duplicate matters when vendors change backend UUIDs
+--
+-- 2. Merged 60 duplicate matters (same matter_file, different IDs)
+--
+-- 3. Updated FK references in all related tables:
+--    - items: 11,216 rows
+--    - matter_appearances: 10,296 rows
+--    - matter_topics: 7,273 rows
+--    - votes: 27,059 rows
+--    - sponsorships: 1,508 rows
+--
+-- 4. Deleted 52 orphaned matters (had summaries but no items)
+--
+-- RESULT:
+-- - city_matters: 8,803 -> 8,691 (112 records removed)
+-- - Duplicate matters: 50 -> 0
+-- - Orphaned matters: 52 -> 0
+--
+-- NOTE: This migration cannot be rolled back (data was merged/deleted).
+-- The migration script is preserved at scripts/migrate_matter_ids.py for reference.
+
+SELECT 'Migration 016 executed via scripts/migrate_matter_ids.py' AS info;
