@@ -113,7 +113,7 @@ def parse_novusagenda_html_agenda(html: str) -> Dict[str, Any]:
             'participation': {},  # NovusAgenda doesn't have structured participation
             'items': [
                 {
-                    'item_id': str,
+                    'vendor_item_id': str,
                     'title': str,
                     'sequence': int,
                     'attachments': [{'name': str, 'url': str, 'type': str}]
@@ -155,7 +155,7 @@ def parse_novusagenda_html_agenda(html: str) -> Dict[str, Any]:
                     title = parent_td.get_text(strip=True)
 
             items.append({
-                'item_id': item_id,
+                'vendor_item_id': item_id,
                 'title': title,
                 'sequence': sequence,
                 'attachments': [],  # Will be populated if we fetch Coversheet page
@@ -216,13 +216,13 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             'participation': {},  # Legistar HTML doesn't have structured participation in detail page
             'items': [
                 {
-                    'item_id': str,        # Legislation ID from File # link
-                    'title': str,          # Full title from Title column
-                    'sequence': int,       # Row number
-                    'item_type': str,      # Type column (Ordinance, Resolution, etc.)
-                    'status': str,         # Status column
-                    'file_number': str,    # File # text
-                    'attachments': []      # Empty for now, could fetch from LegislationDetail later
+                    'vendor_item_id': str,  # Legislation ID from File # link
+                    'title': str,           # Full title from Title column
+                    'sequence': int,        # Row number
+                    'item_type': str,       # Type column (Ordinance, Resolution, etc.)
+                    'status': str,          # Status column
+                    'file_number': str,     # File # text
+                    'attachments': []       # Empty for now, could fetch from LegislationDetail later
                 }
             ]
         }
@@ -326,7 +326,7 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             legislation_url = urljoin(base_url, href) if href else None
 
             item_data = {
-                'item_id': legislation_id,
+                'vendor_item_id': legislation_id,
                 'title': item_title,
                 'sequence': sequence,
                 'file_number': file_number,

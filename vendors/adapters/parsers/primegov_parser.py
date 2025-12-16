@@ -34,7 +34,7 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
             'participation': {...},  # Contact info (email, phone, zoom, etc.)
             'items': [               # Agenda items
                 {
-                    'item_id': str,
+                    'vendor_item_id': str,
                     'title': str,
                     'sequence': int,
                     'attachments': [{'name': str, 'history_id': str, 'url': str}]
@@ -184,7 +184,7 @@ def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup) -> Optional[
         attachments = _extract_attachments(contents_div, item_id)
 
     item_dict = {
-        'item_id': str(item_id),
+        'vendor_item_id': str(item_id),
         'title': title,
         'sequence': 0,  # Will be set by caller if needed
         'attachments': attachments,
@@ -237,7 +237,7 @@ def _extract_palo_alto_pattern_item(item_div, soup: BeautifulSoup, sequence: int
         attachments = _extract_attachments(contents_div, item_id)
 
     item_dict = {
-        'item_id': item_id,
+        'vendor_item_id': item_id,
         'title': title,
         'sequence': sequence,
         'attachments': attachments,

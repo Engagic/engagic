@@ -377,7 +377,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
                             "vendor_item_id": legifile_id,  # Raw vendor ID, orchestrator generates final item_id
                             "title": item_title,
                             "sequence": item_counter,
-                            "item_number": item_number,
+                            "agenda_number": item_number,
                             "section": current_section,
                             "description": "",
                             "attachments": [],
@@ -451,7 +451,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
                             "vendor_item_id": legifile_id,  # Raw vendor ID, orchestrator generates final item_id
                             "title": item_title,
                             "sequence": item_counter,
-                            "item_number": item_number,
+                            "agenda_number": item_number,
                             "section": current_section,
                             "description": "",
                             "attachments": [],

@@ -44,7 +44,6 @@ class AgendaItemSchema(BaseModel):
     matter_file: Optional[str] = None
     matter_type: Optional[str] = None
     agenda_number: Optional[str] = None
-    item_number: Optional[str] = None  # Alias for agenda_number (some adapters use this)
     sponsors: Optional[List[str]] = None
     votes: Optional[List[Dict[str, Any]]] = None  # Vote records from adapter
     metadata: Optional[Dict[str, Any]] = None  # Vendor-specific metadata (action_name, section, etc.)

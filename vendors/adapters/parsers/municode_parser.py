@@ -49,7 +49,7 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
             'participation': {...},  # Contact info (email, phone, zoom, etc.)
             'items': [               # Agenda items
                 {
-                    'item_id': str,
+                    'vendor_item_id': str,
                     'title': str,
                     'sequence': int,
                     'agenda_number': str,
@@ -164,7 +164,7 @@ def _extract_item_from_li(li: Tag, sequence: int, section_name: str) -> Optional
         return None
 
     return {
-        'item_id': f"item_{sequence}",
+        'vendor_item_id': f"item_{sequence}",
         'title': title,
         'sequence': sequence,
         'agenda_number': agenda_number,
