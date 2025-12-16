@@ -374,3 +374,96 @@ class ItemRepository(BaseRepository):
                 build_agenda_item(row, topics_by_item.get(row["id"], []))
                 for row in rows
             ]
+
+    async def search_by_keyword(
+        self,
+        banana: str,
+        keyword: str,
+        since_date,
+        exclude_cancelled: bool = True
+    ) -> List[Dict]:
+        """
+        Search items by keyword in summary, with meeting context.
+
+        Used by userland matching engine.
+        Returns raw dicts with both item and meeting fields for flexibility.
+
+        Args:
+            banana: City banana identifier
+            keyword: Keyword to search (case-insensitive LIKE match)
+            since_date: Only include items from meetings after this date
+            exclude_cancelled: Filter out cancelled/postponed meetings
+
+        Returns:
+            List of dicts with item and meeting fields
+        """
+        status_filter = "AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))" if exclude_cancelled else ""
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                SELECT i.id, i.meeting_id, i.title, i.summary,
+                       i.agenda_number, i.matter_file, i.sequence,
+                       m.title as meeting_title, m.date, m.banana,
+                       m.agenda_url, m.status,
+                       c.name as city_name, c.state
+                FROM items i
+                JOIN meetings m ON i.meeting_id = m.id
+                JOIN cities c ON m.banana = c.banana
+                WHERE m.banana = $1
+                  AND m.date >= $2
+                  {status_filter}
+                  AND i.summary LIKE $3
+                ORDER BY m.date DESC
+                """,
+                banana,
+                since_date,
+                f"%{keyword}%",
+            )
+
+            return [dict(row) for row in rows]
+
+    async def search_upcoming_by_keyword(
+        self,
+        banana: str,
+        keyword: str,
+        start_date,
+        end_date
+    ) -> List[Dict]:
+        """
+        Search items by keyword in upcoming meetings (date range).
+
+        Used by weekly digest for forward-looking keyword matches.
+
+        Args:
+            banana: City banana identifier
+            keyword: Keyword to search (case-insensitive LIKE match)
+            start_date: Start of date range
+            end_date: End of date range
+
+        Returns:
+            List of dicts with item and meeting fields
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT i.id as item_id, i.meeting_id, i.title as item_title,
+                       i.summary, i.agenda_number, i.matter_file, i.sequence,
+                       m.title as meeting_title, m.date, m.banana,
+                       m.agenda_url, m.status
+                FROM items i
+                JOIN meetings m ON i.meeting_id = m.id
+                WHERE m.banana = $1
+                  AND m.date >= $2
+                  AND m.date <= $3
+                  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
+                  AND i.summary LIKE $4
+                ORDER BY m.date ASC
+                """,
+                banana,
+                start_date,
+                end_date,
+                f"%{keyword}%",
+            )
+
+            return [dict(row) for row in rows]

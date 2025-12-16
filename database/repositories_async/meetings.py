@@ -230,3 +230,59 @@ class MeetingRepository(BaseRepository):
             )
 
             return build_meeting(row, topics_map.get(row["id"], []))
+
+    async def get_upcoming_meetings(
+        self,
+        banana: str,
+        start_date,
+        end_date,
+        limit: int = 50
+    ) -> List[Meeting]:
+        """
+        Get upcoming meetings for a city in a date range.
+
+        Filters out cancelled/postponed meetings.
+        Used by userland weekly digest.
+
+        Args:
+            banana: City banana identifier
+            start_date: Start of date range
+            end_date: End of date range
+            limit: Maximum meetings to return
+
+        Returns:
+            List of Meeting objects ordered by date ascending
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id, banana, title, date, agenda_url, packet_url,
+                    summary, participation, status, processing_status,
+                    processing_method, processing_time, committee_id
+                FROM meetings
+                WHERE banana = $1
+                  AND date >= $2
+                  AND date <= $3
+                  AND (status IS NULL OR status NOT IN ('cancelled', 'postponed'))
+                ORDER BY date ASC
+                LIMIT $4
+                """,
+                banana,
+                start_date,
+                end_date,
+                limit,
+            )
+
+            if not rows:
+                return []
+
+            meeting_ids = [row["id"] for row in rows]
+            topics_by_meeting = await fetch_topics_for_ids(
+                conn, "meeting_topics", "meeting_id", meeting_ids
+            )
+
+            return [
+                build_meeting(row, topics_by_meeting.get(row["id"], []))
+                for row in rows
+            ]

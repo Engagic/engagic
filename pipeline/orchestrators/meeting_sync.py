@@ -18,7 +18,7 @@ from pipeline.orchestrators.vote_processor import VoteProcessor
 logger = get_logger(__name__).bind(component="meeting_sync")
 
 
-class MeetingStoreStats(TypedDict):
+class MeetingStoreStats(TypedDict, total=False):
     items_stored: int
     items_skipped_procedural: int
     matters_tracked: int
@@ -27,6 +27,7 @@ class MeetingStoreStats(TypedDict):
     appearances_created: int
     skip_reason: Optional[str]
     skipped_title: Optional[str]
+    enqueue_failures: int
 
 
 QUEUE_PRIORITY_BASE_SCORE = 150

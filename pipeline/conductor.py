@@ -341,8 +341,7 @@ class Conductor:
 
 
 
-# Global instance management removed - CLI commands create their own instances
-# TODO: If needed for daemon mode, implement using asyncio.run()
+# CLI commands create their own Conductor instances
 
 
 def _parse_city_list(arg: str) -> List[str]:

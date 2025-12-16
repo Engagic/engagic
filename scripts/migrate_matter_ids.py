@@ -272,7 +272,7 @@ async def run_migration(db: Database, dry_run: bool = True):
                 """)
             logger.info("recreated FK constraints")
 
-    print(f"\nMigration complete:")
+    print("\nMigration complete:")
     print(f"  - Updated {updated} matter IDs")
     print(f"  - Deleted {deleted} duplicate matters")
     print(f"  - Deleted {orphans_deleted} orphaned matters")

@@ -298,7 +298,6 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                     return
 
 
-# Confidence: 7/10
-# Tested against columbus-ga and tomball-tx HTML samples.
+# Confidence: 7/10 - Tested against columbus-ga and tomball-tx HTML samples.
 # API response format confirmed through exploration.
-# TODO: Verify with more cities when adding to production.
+# Further city validation recommended before broader rollout.

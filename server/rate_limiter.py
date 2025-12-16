@@ -187,7 +187,7 @@ class SQLiteRateLimiter:
                     try:
                         return RateLimitTier(result[0])
                     except ValueError:
-                        pass  # Invalid tier in DB, fall through to standard
+                        logger.warning("invalid tier in database, defaulting to standard", tier=result[0])
 
         # Everyone gets standard tier
         return RateLimitTier.STANDARD
@@ -233,7 +233,7 @@ class SQLiteRateLimiter:
                 )
                 conn.commit()
             except sqlite3.IntegrityError:
-                pass  # Duplicate timestamp, ignore
+                logger.debug("duplicate violation timestamp ignored", client_ip=client_ip[:16])
 
             # Count violations in last hour
             one_hour_ago = current_time - 3600
@@ -498,8 +498,7 @@ class SQLiteRateLimiter:
                 )
                 conn.commit()
             except sqlite3.IntegrityError:
-                # Duplicate timestamp for same IP (extremely rare)
-                pass
+                logger.debug("duplicate rate limit timestamp ignored", client_ip=client_ip[:16])
 
             remaining_minute = minute_limit - request_count - 1
             return True, max(0, remaining_minute), {

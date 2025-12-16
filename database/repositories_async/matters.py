@@ -451,3 +451,103 @@ class MatterRepository(BaseRepository):
             }
             for row in rows
         ]
+
+    async def search_by_keyword(
+        self,
+        bananas: List[str],
+        keyword: str,
+        since_date
+    ) -> List[Dict]:
+        """
+        Search matters by keyword in canonical_summary.
+
+        Used by userland matching engine for matter-level deduplication.
+
+        Args:
+            bananas: List of city banana identifiers
+            keyword: Keyword to search (case-insensitive LIKE match)
+            since_date: Only include matters seen after this date
+
+        Returns:
+            List of dicts with matter and city fields
+        """
+        if not bananas:
+            return []
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT cm.id, cm.banana, cm.matter_file, cm.matter_type,
+                       cm.title, cm.canonical_summary, cm.sponsors,
+                       cm.canonical_topics, cm.first_seen, cm.last_seen,
+                       cm.appearance_count,
+                       c.name as city_name, c.state
+                FROM city_matters cm
+                JOIN cities c ON cm.banana = c.banana
+                WHERE cm.banana = ANY($1::text[])
+                  AND cm.last_seen >= $2
+                  AND cm.canonical_summary LIKE $3
+                ORDER BY cm.last_seen DESC
+                """,
+                bananas,
+                since_date,
+                f"%{keyword}%",
+            )
+
+            return [dict(row) for row in rows]
+
+    async def get_timeline(self, matter_id: str) -> List[Dict]:
+        """
+        Get chronological timeline of a matter's appearances.
+
+        Used by userland matching to show matter evolution.
+
+        Args:
+            matter_id: Matter ID
+
+        Returns:
+            List of appearance dicts with meeting context, ordered by date
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT ma.appeared_at, ma.committee, ma.action,
+                       ma.item_id, ma.meeting_id,
+                       m.title as meeting_title
+                FROM matter_appearances ma
+                JOIN meetings m ON ma.meeting_id = m.id
+                WHERE ma.matter_id = $1
+                  AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'postponed'))
+                ORDER BY ma.appeared_at
+                """,
+                matter_id,
+            )
+
+            return [dict(row) for row in rows]
+
+    async def check_existing_match(self, alert_id: str, matter_id: str) -> bool:
+        """
+        Check if a matter was already matched for an alert.
+
+        Used by userland matching to prevent duplicate notifications.
+
+        Args:
+            alert_id: Alert ID
+            matter_id: Matter ID
+
+        Returns:
+            True if match already exists
+        """
+        async with self.pool.acquire() as conn:
+            exists = await conn.fetchval(
+                """
+                SELECT EXISTS(
+                    SELECT 1 FROM userland.alert_matches
+                    WHERE alert_id = $1
+                      AND matched_criteria->>'matter_id' = $2
+                )
+                """,
+                alert_id,
+                matter_id,
+            )
+            return exists
