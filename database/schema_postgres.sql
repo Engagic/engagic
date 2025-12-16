@@ -238,7 +238,8 @@ CREATE TABLE IF NOT EXISTS tracked_items (
     status TEXT DEFAULT 'active',
     metadata JSONB,  -- Was TEXT, now JSONB
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
+    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (first_mentioned_meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
 );
 
 -- Tracked item meetings: Link tracked items to meetings
@@ -407,12 +408,11 @@ CREATE TABLE IF NOT EXISTS deliberation_results (
 
 -- Happening Items: AI-curated important upcoming agenda items
 -- Populated by autonomous analysis, surfaced in "Happening This Week" section
--- NOTE: item_id/meeting_id FKs added via migration 014 (named constraints for existing data)
 CREATE TABLE IF NOT EXISTS happening_items (
     id SERIAL PRIMARY KEY,
     banana TEXT NOT NULL REFERENCES cities(banana) ON DELETE CASCADE,
-    item_id TEXT NOT NULL,
-    meeting_id TEXT NOT NULL,
+    item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
     meeting_date TIMESTAMP NOT NULL,
     rank INTEGER NOT NULL,
     reason TEXT NOT NULL,
