@@ -29,18 +29,24 @@ class AttachmentSchema(BaseModel):
 
 
 class AgendaItemSchema(BaseModel):
-    """Agenda item from adapter - validates before DB storage"""
+    """Agenda item from adapter - validates before DB storage.
+
+    Note: Adapters return vendor_item_id (raw vendor identifier).
+    Orchestrator generates final item_id via generate_item_id().
+    """
     model_config = ConfigDict(extra="allow")  # Allow adapter-specific extras
 
-    item_id: str
+    vendor_item_id: Optional[str] = None  # Raw vendor identifier (optional - falls back to sequence)
     title: str
     sequence: int  # MUST be int, not string
     attachments: List[AttachmentSchema] = []
-    matter_id: Optional[str] = None
+    matter_id: Optional[str] = None  # Vendor's matter ID (not our generated ID)
     matter_file: Optional[str] = None
     matter_type: Optional[str] = None
     agenda_number: Optional[str] = None
+    item_number: Optional[str] = None  # Alias for agenda_number (some adapters use this)
     sponsors: Optional[List[str]] = None
+    votes: Optional[List[Dict[str, Any]]] = None  # Vote records from adapter
     metadata: Optional[Dict[str, Any]] = None  # Vendor-specific metadata (action_name, section, etc.)
 
     @field_validator("sequence")
@@ -54,7 +60,7 @@ class AgendaItemSchema(BaseModel):
                 raise ValueError(f"Sequence must be integer, got string: {v}")
         return int(v)
 
-    @field_validator("item_id", "title")
+    @field_validator("title")
     @classmethod
     def validate_non_empty(cls, v: str) -> str:
         """Ensure required strings are non-empty"""
@@ -64,10 +70,14 @@ class AgendaItemSchema(BaseModel):
 
 
 class MeetingSchema(BaseModel):
-    """Meeting from adapter - validates before DB storage"""
+    """Meeting from adapter - validates before DB storage.
+
+    Note: Adapters return vendor_id (raw vendor identifier).
+    Orchestrator generates final meeting_id via generate_meeting_id().
+    """
     model_config = ConfigDict(extra="allow")  # Allow adapter-specific extras
 
-    meeting_id: str
+    vendor_id: str  # Raw vendor identifier (REQUIRED)
     title: str
     start: str  # ISO format string, NOT datetime object
     location: Optional[str] = None
@@ -76,6 +86,7 @@ class MeetingSchema(BaseModel):
     items: Optional[List[AgendaItemSchema]] = None
     participation: Optional[Dict[str, Any]] = None
     meeting_status: Optional[str] = None
+    vendor_body_id: Optional[str] = None  # Vendor's committee/body ID (Legistar provides this)
     metadata: Optional[Dict[str, Any]] = None
 
     @field_validator("start")
@@ -96,7 +107,7 @@ class MeetingSchema(BaseModel):
             raise ValueError(f"Invalid ISO datetime string: {v}") from e
         return v
 
-    @field_validator("meeting_id", "title")
+    @field_validator("vendor_id", "title")
     @classmethod
     def validate_non_empty(cls, v: str) -> str:
         """Ensure required strings are non-empty"""

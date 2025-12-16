@@ -8,9 +8,12 @@ from typing import List, Optional, Set
 from dataclasses import dataclass
 from enum import Enum
 
+import aiohttp
+
 from database.db_postgres import Database
 from database.models import City
 from exceptions import VendorError
+from vendors.adapters.base_adapter_async import FetchResult
 from vendors.factory import get_async_adapter
 from vendors.rate_limiter_async import AsyncRateLimiter
 from config import config, get_logger
@@ -192,9 +195,7 @@ class Fetcher:
             result.status = SyncStatus.IN_PROGRESS
 
             try:
-                all_meetings = await adapter.fetch_meetings()
-                total_items = sum(len(m.get("items", [])) for m in all_meetings)
-                total_matters = sum(1 for m in all_meetings for item in m.get("items", []) if item.get("matter_file") or item.get("matter_id"))
+                fetch_result: FetchResult = await adapter.fetch_meetings()
             except (VendorError, ValueError, KeyError) as e:
                 logger.error("error fetching meetings", city=city.banana, error=str(e))
                 result.status = SyncStatus.FAILED
@@ -202,6 +203,24 @@ class Fetcher:
                 self.metrics.vendor_requests.labels(vendor=city.vendor, status='error').inc()
                 self.metrics.record_error('vendor', e)
                 return result
+
+            # Check if adapter failed (distinct from "0 meetings")
+            if not fetch_result.success:
+                logger.error(
+                    "adapter fetch failed",
+                    city=city.banana,
+                    vendor=city.vendor,
+                    error=fetch_result.error,
+                    error_type=fetch_result.error_type
+                )
+                result.status = SyncStatus.FAILED
+                result.error_message = f"Adapter failed: {fetch_result.error}"
+                self.metrics.vendor_requests.labels(vendor=city.vendor, status='adapter_error').inc()
+                return result
+
+            all_meetings = fetch_result.meetings
+            total_items = sum(len(m.get("items", [])) for m in all_meetings)
+            total_matters = sum(1 for m in all_meetings for item in m.get("items", []) if item.get("matter_file") or item.get("matter_id"))
 
             result.meetings_found = len(all_meetings)
             logger.info("found meetings for city", city=city.banana, meeting_count=len(all_meetings), total_items=total_items, matters_with_tracking=total_matters)
@@ -245,7 +264,7 @@ class Fetcher:
 
             logger.info("sync complete", city=city.banana, vendor=city.vendor, meetings=processed_count, skipped_meetings=skipped_meetings, items=items_stored_count, new_matters=matters_tracked_count, duplicate_matters=matters_duplicate_count, duration_seconds=round(result.duration_seconds, 1))
 
-        except Exception as e:  # Operation boundary: record failure and continue
+        except (VendorError, asyncio.TimeoutError, aiohttp.ClientError) as e:
             result.status = SyncStatus.FAILED
             result.error_message = str(e)
             result.duration_seconds = time.time() - start_time
@@ -269,7 +288,7 @@ class Fetcher:
                 if result.status in (SyncStatus.COMPLETED, SyncStatus.SKIPPED):
                     return result
                 last_error = result.error_message or "Sync failed"
-            except Exception as e:  # Retry logic needs to catch all
+            except (VendorError, asyncio.TimeoutError, aiohttp.ClientError) as e:
                 last_error = str(e)
 
             if attempt >= max_retries - 1:
@@ -309,7 +328,7 @@ class Fetcher:
             else:
                 return hours_since_sync >= 168
 
-        except Exception as e:  # Graceful degradation: sync on error
+        except (AttributeError, TypeError) as e:
             logger.warning("error checking sync schedule", city=city.banana, error=str(e))
             return True
 

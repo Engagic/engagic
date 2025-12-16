@@ -248,7 +248,11 @@ class ItemRepository(BaseRepository):
         topics: Optional[List[str]] = None,
         **kwargs
     ) -> None:
-        """Update agenda item fields."""
+        """Update agenda item fields.
+
+        Uses single transaction for both item update and topics update
+        to prevent race conditions where item updates but topics fail.
+        """
         if summary is not None:
             kwargs["summary"] = summary
         if topics is not None:
@@ -268,17 +272,18 @@ class ItemRepository(BaseRepository):
             values.append(value)
             param_num += 1
 
-        if set_clauses:
-            values.append(item_id)  # WHERE clause parameter
-            query = f"""
-                UPDATE items
-                SET {', '.join(set_clauses)}
-                WHERE id = ${param_num}
-            """
-            await self._execute(query, *values)
+        # Single transaction for both item update and topics update
+        async with self.transaction() as conn:
+            if set_clauses:
+                values.append(item_id)  # WHERE clause parameter
+                query = f"""
+                    UPDATE items
+                    SET {', '.join(set_clauses)}
+                    WHERE id = ${param_num}
+                """
+                await conn.execute(query, *values)
 
-        if "topics" in kwargs and kwargs["topics"]:
-            async with self.transaction() as conn:
+            if "topics" in kwargs and kwargs["topics"]:
                 await replace_entity_topics(
                     conn, "item_topics", "item_id", item_id, kwargs["topics"]
                 )

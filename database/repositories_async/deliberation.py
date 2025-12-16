@@ -368,6 +368,12 @@ class DeliberationRepository(BaseRepository):
                     mod_status,
                 )
             except asyncpg.UniqueViolationError:
+                logger.warning(
+                    "duplicate comment rejected",
+                    deliberation_id=deliberation_id,
+                    user_id=user_id,
+                    participant_number=participant_number,
+                )
                 return {"error": "duplicate"}
 
             logger.info(
@@ -536,6 +542,12 @@ class DeliberationRepository(BaseRepository):
             )
             return None
         except asyncpg.ForeignKeyViolationError:
+            logger.warning(
+                "vote on non-existent comment",
+                comment_id=comment_id,
+                user_id=user_id,
+                vote=vote,
+            )
             return {"error": "not_found"}
 
     async def get_user_votes(
