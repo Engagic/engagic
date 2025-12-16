@@ -98,22 +98,13 @@ class GeminiSummarizer:
 
         return input_cost + output_cost
 
-    def _select_prompt_type(self, page_count: int) -> str:
-        """Select prompt type based on experiment setting.
-
-        Args:
-            page_count: Document page count (used for adaptive selection)
+    def _select_prompt_type(self) -> str:
+        """Select prompt type for item summarization.
 
         Returns:
-            Prompt type: "unified", "standard", or "large"
+            Prompt type: always "unified"
         """
-        experiment = config.PROMPT_EXPERIMENT
-
-        if experiment == "unified":
-            return "unified"
-        else:
-            # Default adaptive behavior: large for 100+ pages, standard otherwise
-            return "large" if page_count >= 100 else "standard"
+        return "unified"
 
     def _select_model(self, page_count: int, text_size: int) -> tuple[str, str]:
         """Select model based on config and document size.
@@ -308,8 +299,8 @@ class GeminiSummarizer:
         if page_count is None:
             page_count = self._estimate_page_count(text)
 
-        # Prompt selection based on experiment setting
-        prompt_type = self._select_prompt_type(page_count)
+        # Prompt selection
+        prompt_type = self._select_prompt_type()
 
         # Model selection based on config
         model_name, model_display = self._select_model(page_count, text_size)
@@ -868,8 +859,8 @@ class GeminiSummarizer:
                     if page_count is None:
                         page_count = self._estimate_page_count(text)
 
-                    # Prompt selection based on experiment setting
-                    prompt_type = self._select_prompt_type(page_count)
+                    # Prompt selection
+                    prompt_type = self._select_prompt_type()
 
                     # Build prompt and config
                     prompt = self._get_prompt(
@@ -980,7 +971,7 @@ class GeminiSummarizer:
                 for result in results:
                     req = request_map.get(result["item_id"], {})
                     page_count = req.get("page_count", 0) if req else 0
-                    prompt_type = self._select_prompt_type(page_count)
+                    prompt_type = self._select_prompt_type()
 
                     self.metrics.record_llm_call(
                         model="flash",
@@ -1020,7 +1011,7 @@ class GeminiSummarizer:
                 # Record failed batch metrics
                 for req in chunk_requests:
                     page_count = req.get("page_count", 0)
-                    prompt_type = self._select_prompt_type(page_count)
+                    prompt_type = self._select_prompt_type()
                     self.metrics.record_llm_call(
                         model="flash",
                         prompt_type=f"item_{prompt_type}_batch",

@@ -1,6 +1,8 @@
-# Happening This Week Analysis
+# Happening Today Analysis
 
-You are an autonomous civic analyst. Your job is to identify the most important upcoming agenda items for each active city and store rankings in the database.
+You are an autonomous civic analyst. Your job is to identify the most important agenda items happening TODAY for each active city and store rankings in the database.
+
+This runs daily at 8am EST to surface what matters for today's meetings.
 
 ## Database Connection
 
@@ -9,21 +11,21 @@ Connect via psql using environment variables:
 psql "$DATABASE_URL"
 ```
 
-## Step 1: Get Active Cities with Upcoming Meetings
+## Step 1: Get Active Cities with Meetings Today
 
-First, identify which cities have meetings in the next 14 days:
+First, identify which cities have meetings TODAY:
 
 ```sql
 SELECT DISTINCT c.banana, c.name, c.state
 FROM cities c
 JOIN meetings m ON m.banana = c.banana
 WHERE c.status = 'active'
-  AND m.date BETWEEN NOW() AND NOW() + INTERVAL '14 days'
+  AND m.date::date = CURRENT_DATE
   AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'deferred', 'postponed'))
 ORDER BY c.name;
 ```
 
-## Step 2: For Each City, Get Upcoming Items
+## Step 2: For Each City, Get Today's Items
 
 For each city from Step 1, fetch items with context:
 
@@ -41,7 +43,7 @@ SELECT
 FROM items i
 JOIN meetings m ON m.id = i.meeting_id
 WHERE m.banana = '{banana}'
-  AND m.date BETWEEN NOW() AND NOW() + INTERVAL '14 days'
+  AND m.date::date = CURRENT_DATE
   AND (m.status IS NULL OR m.status NOT IN ('cancelled', 'deferred', 'postponed'))
   AND i.summary IS NOT NULL
 ORDER BY m.date ASC, i.sequence ASC;
@@ -49,7 +51,7 @@ ORDER BY m.date ASC, i.sequence ASC;
 
 ## Step 3: Analyze and Rank
 
-For each city, review all upcoming items and select the TOP 5 most important ones.
+For each city, review all items happening TODAY and select the TOP 5 most important ones.
 
 **Ranking Criteria** (in order of weight):
 1. **Public Impact** - Items affecting many residents (zoning changes, budget allocations, service changes)
@@ -111,7 +113,8 @@ Reviewed: 47 items across 3 meetings
 ## Important Notes
 
 - Only rank items that have summaries (we can't evaluate items we haven't analyzed)
-- Skip cities with no upcoming meetings in the 14-day window
+- Skip cities with no meetings TODAY
 - Process all qualifying cities in a single run
 - Use single quotes for SQL strings, escape any apostrophes in reasons with ''
 - Prioritize items where public participation can still make a difference
+- This runs at 8am EST daily - items are for TODAY's meetings only
