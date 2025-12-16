@@ -1,14 +1,14 @@
 #!/bin/bash
-# Happening This Week Analysis Runner
+# Happening Today Analysis Runner
 #
-# Runs Claude Code autonomously to analyze upcoming agenda items
+# Runs Claude Code autonomously to analyze TODAY's agenda items
 # and populate the happening_items table.
 #
 # Usage:
 #   ./scripts/run_happening.sh
 #
-# Cron example (run twice daily at 6am and 6pm):
-#   0 6,18 * * * /opt/engagic/scripts/run_happening.sh >> /var/log/engagic/happening.log 2>&1
+# Cron (run daily at 8am EST / 13:00 UTC):
+#   0 13 * * * /opt/engagic/scripts/run_happening.sh >> /var/log/engagic/happening.log 2>&1
 
 set -e
 
@@ -40,10 +40,10 @@ if [ -z "$DATABASE_URL" ]; then
     export DATABASE_URL="postgresql://${PGUSER}:${PGPASS}@${PGHOST}:${PGPORT}/${PGDB}"
 fi
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') Starting Happening This Week analysis..."
+echo "$(date '+%Y-%m-%d %H:%M:%S') Starting Happening Today analysis..."
 
 # Run Claude Code with the happening prompt
 # --allowedTools restricts to Bash for database queries only
 claude -p "$(cat prompts/happening.md)" --allowedTools "Bash(psql:*)"
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') Happening analysis complete"
+echo "$(date '+%Y-%m-%d %H:%M:%S') Happening Today analysis complete"
