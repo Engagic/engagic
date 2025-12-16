@@ -1,20 +1,29 @@
 """
-ID Generation - Deterministic identifier generation for matters
+ID Generation - Deterministic identifier generation for civic entities
 
-Provides consistent, collision-free ID generation for matters across
-the system. Uses SHA256 hashing for determinism.
+Single source of truth for ALL ID generation. No adapter generates final IDs.
+
+Entity ID Patterns:
+- Meeting ID: {banana}_{8-char-md5} - e.g., "chicagoIL_a3f2c1d4"
+- Matter ID: {banana}_{16-char-sha256} - e.g., "nashvilleTN_7a8f3b2c1d9e4f5a"
+- Item ID: {meeting_id}_{suffix} - e.g., "chicagoIL_a3f2c1d4_ord2024-123"
+- Council Member ID: {banana}_cm_{16-char-sha256}
+- Committee ID: {banana}_comm_{16-char-sha256}
 
 Design Philosophy:
 - IDs are deterministic: same inputs always produce same ID
 - IDs are unique: hash collision probability is negligible
-- IDs are bidirectional: can lookup by original identifiers
-- Original data preserved: store matter_file and matter_id in record
+- IDs are hierarchical: items namespaced under meetings
+- Original data preserved: store vendor IDs in separate columns
+
+Item ID Fallback Hierarchy:
+1. vendor_item_id - Vendor's stable identifier (EventItemId, legifile number, etc.)
+2. sequence - Position-based fallback for vendors without stable item IDs
 
 Matter ID Fallback Hierarchy:
-1. matter_file (preferred) - Public legislative file number (Legistar, LA-style PrimeGov)
-2. matter_id (vendor UUID) - Backend identifier if stable
+1. matter_file - Public legislative file number (Legistar, LA-style PrimeGov)
+2. matter_id - Backend vendor identifier if stable
 3. title (normalized) - For cities without stable vendor IDs (Palo Alto-style PrimeGov)
-4. generated UUID - Last resort for generic items (always unique, no deduplication)
 """
 
 import hashlib
@@ -355,6 +364,127 @@ def validate_meeting_id(meeting_id: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def generate_item_id(
+    meeting_id: str,
+    sequence: int,
+    vendor_item_id: Optional[str] = None
+) -> str:
+    """Generate deterministic item ID. Single source of truth for all adapters.
+
+    All adapters now return raw vendor_item_id (or None). The orchestrator
+    calls this function to generate the final item ID.
+
+    Fallback hierarchy:
+    1. vendor_item_id - Vendor's stable identifier (EventItemId, legifile number, etc.)
+    2. sequence - Position in agenda (1-indexed)
+
+    Args:
+        meeting_id: Parent meeting ID (from generate_meeting_id)
+        sequence: Item position in agenda (1-indexed, used if no vendor_item_id)
+        vendor_item_id: Vendor's raw item identifier (preferred if stable)
+
+    Returns:
+        Composite ID: {meeting_id}_{normalized_vendor_id} or {meeting_id}_seq{NNN}_{hash}
+
+    Examples:
+        >>> generate_item_id("chicagoIL_a3f2c1d4", 1, "ORD2024-123")
+        'chicagoIL_a3f2c1d4_ord2024-123'
+
+        >>> generate_item_id("chicagoIL_a3f2c1d4", 3, None)
+        'chicagoIL_a3f2c1d4_seq003_8a7b6c5d'
+
+        >>> generate_item_id("chicagoIL_a3f2c1d4", 1, "12345")
+        'chicagoIL_a3f2c1d4_12345'
+
+    Design:
+        - Deterministic: Same inputs always produce same ID
+        - Prefixed: Items are namespaced under their meeting
+        - Stable: Vendor IDs preferred when available (legislative file numbers)
+        - Fallback: Sequence-based for vendors without stable item IDs
+
+    Confidence: 8/10
+    - Vendor IDs are stable when available (Legistar EventItemId, legifile numbers)
+    - Sequence fallback assumes agenda order is stable between syncs
+    - Some vendors may reorder items; sequence changes would orphan old records
+    """
+    if not meeting_id:
+        raise ValueError("meeting_id is required")
+    if sequence < 1:
+        raise ValueError("sequence must be >= 1")
+
+    if vendor_item_id:
+        # Normalize: strip whitespace, collapse internal spaces, lowercase
+        normalized = re.sub(r'\s+', '', vendor_item_id.strip().lower())
+        if normalized:
+            return f"{meeting_id}_{normalized}"
+
+    # Fallback: deterministic hash from meeting + sequence
+    stable_key = f"{meeting_id}:seq:{sequence}"
+    hash_suffix = hashlib.sha256(stable_key.encode()).hexdigest()[:8]
+    return f"{meeting_id}_seq{sequence:03d}_{hash_suffix}"
+
+
+def validate_item_id(item_id: str) -> bool:
+    """Validate item ID format.
+
+    Item IDs are composites: {meeting_id}_{item_suffix}
+    where meeting_id is {banana}_{8-char-hex}
+
+    Valid formats:
+        - chicagoIL_a3f2c1d4_ord2024-123 (vendor ID)
+        - chicagoIL_a3f2c1d4_seq003_8a7b6c5d (sequence fallback)
+        - chicagoIL_a3f2c1d4_12345 (numeric vendor ID)
+
+    Args:
+        item_id: Item ID to validate
+
+    Returns:
+        True if valid format, False otherwise
+    """
+    if not item_id:
+        return False
+
+    # Must have at least 3 parts: banana, meeting_hash, item_suffix
+    parts = item_id.split('_')
+    if len(parts) < 3:
+        return False
+
+    # First two parts should form a valid meeting ID
+    banana = parts[0]
+    meeting_hash = parts[1]
+
+    if not banana.isalnum():
+        return False
+
+    if len(meeting_hash) != 8:
+        return False
+
+    try:
+        int(meeting_hash, 16)
+    except ValueError:
+        return False
+
+    # Remaining parts form the item suffix (must exist)
+    item_suffix = '_'.join(parts[2:])
+    return bool(item_suffix)
+
+
+def extract_meeting_id_from_item_id(item_id: str) -> Optional[str]:
+    """Extract parent meeting ID from item ID.
+
+    Args:
+        item_id: Item ID (e.g., "chicagoIL_a3f2c1d4_ord2024-123")
+
+    Returns:
+        Meeting ID or None if invalid format
+    """
+    if not validate_item_id(item_id):
+        return None
+
+    parts = item_id.split('_')
+    return f"{parts[0]}_{parts[1]}"
 
 
 def hash_meeting_id(meeting_id: str) -> str:

@@ -47,7 +47,7 @@ cambridgeMA
 detroitMI
 
 # WISCONSIN
-milwaukeeWiiiiI
+milwaukeeWI
 
 # TENNESSEE (1 city)
 nashvilleTN

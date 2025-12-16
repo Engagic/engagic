@@ -13,6 +13,7 @@ import secrets
 from typing import Any, Dict, List, Optional, Union
 
 import asyncpg
+from asyncpg import Connection
 import numpy as np
 
 from database.repositories_async.base import BaseRepository
@@ -71,29 +72,36 @@ class DeliberationRepository(BaseRepository):
         matter_id: str,
         banana: str,
         topic: Optional[str] = None,
+        conn: Optional[Connection] = None,
     ) -> Dict[str, Any]:
         """Create a new deliberation for a matter.
 
         Args:
-            matter_id: Parent matter ID
+            matter_id: Parent matter ID (must exist - FK constraint)
             banana: City identifier
             topic: Optional custom topic (defaults to matter title)
+            conn: Optional connection for transaction participation
 
         Returns:
             Created deliberation record
+
+        Note:
+            Pass conn from caller's transaction when checking matter exists
+            in the same transaction as creating the deliberation.
         """
         deliberation_id = generate_deliberation_id(matter_id)
 
-        await self._execute(
-            """
-            INSERT INTO deliberations (id, matter_id, banana, topic, is_active, created_at)
-            VALUES ($1, $2, $3, $4, true, NOW())
-            """,
-            deliberation_id,
-            matter_id,
-            banana,
-            topic,
-        )
+        async with self._ensure_conn(conn) as c:
+            await c.execute(
+                """
+                INSERT INTO deliberations (id, matter_id, banana, topic, is_active, created_at)
+                VALUES ($1, $2, $3, $4, true, NOW())
+                """,
+                deliberation_id,
+                matter_id,
+                banana,
+                topic,
+            )
 
         logger.info(
             "created deliberation",

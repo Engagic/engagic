@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any, TypedDict
 from asyncpg import Connection
 
 from config import get_logger
-from database.id_generation import generate_meeting_id, generate_matter_id, validate_matter_id
+from database.id_generation import generate_meeting_id, generate_matter_id, generate_item_id, validate_matter_id
 from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata
 from database.repositories_async.helpers import deserialize_attachments
 from exceptions import DatabaseError, ValidationError
@@ -151,12 +151,40 @@ class MeetingSyncOrchestrator:
                         stats['appearances_created'] = appearances_count
 
             # Enqueue jobs after transaction commits (queue has FK to meetings)
+            # Wrapped in try/except - meeting data is committed, jobs can be recovered via re-sync
+            enqueue_failures = 0
             for job in pending_jobs:
-                await self._enqueue_matter_job(**job)
+                try:
+                    await self._enqueue_matter_job(**job)
+                except Exception as e:
+                    enqueue_failures += 1
+                    logger.warning(
+                        "failed to enqueue matter job",
+                        matter_id=job.get('matter_id'),
+                        error=str(e),
+                        error_type=type(e).__name__
+                    )
 
-            await self._enqueue_if_needed(
-                meeting_obj, meeting_date, agenda_items, items_data, stats
-            )
+            try:
+                await self._enqueue_if_needed(
+                    meeting_obj, meeting_date, agenda_items, items_data, stats
+                )
+            except Exception as e:
+                enqueue_failures += 1
+                logger.warning(
+                    "failed to enqueue meeting processing job",
+                    meeting_id=meeting_obj.id,
+                    error=str(e),
+                    error_type=type(e).__name__
+                )
+
+            if enqueue_failures > 0:
+                stats['enqueue_failures'] = enqueue_failures
+                logger.warning(
+                    "some jobs failed to enqueue - meeting data committed, jobs recoverable via re-sync",
+                    meeting_id=meeting_obj.id,
+                    failures=enqueue_failures
+                )
 
             # Notify users if this was the first meeting for the city
             if is_first_meeting:
@@ -243,8 +271,12 @@ class MeetingSyncOrchestrator:
         existing_items_map = {item.id: item for item in existing_items}
 
         agenda_items = []
-        for item_data in items_data:
-            item_id = f"{stored_meeting.id}_{item_data['item_id']}"
+        for idx, item_data in enumerate(items_data):
+            # Centralized item ID generation - adapters return vendor_item_id (or legacy item_id)
+            sequence = item_data.get("sequence", idx + 1)
+            vendor_item_id = item_data.get("vendor_item_id") or item_data.get("item_id")
+            item_id = generate_item_id(stored_meeting.id, sequence, vendor_item_id)
+
             item_attachments = deserialize_attachments(item_data.get("attachments"))
             matter_file = item_data.get("matter_file")
             matter_id_vendor = item_data.get("matter_id")
@@ -294,7 +326,8 @@ class MeetingSyncOrchestrator:
         if not items_data or not agenda_items:
             return stats
 
-        items_map = {item["item_id"]: item for item in items_data}
+        # Index by sequence for reliable lookup (item IDs may have complex formats)
+        items_map = {item.get("sequence", idx + 1): item for idx, item in enumerate(items_data)}
 
         for agenda_item in agenda_items:
             if not agenda_item.matter_id:
@@ -304,8 +337,7 @@ class MeetingSyncOrchestrator:
                 logger.error("invalid matter_id format", item_id=agenda_item.id, matter_id=agenda_item.matter_id)
                 continue
 
-            item_id_short = agenda_item.id.rsplit("_", 1)[1]
-            raw_item = items_map.get(item_id_short, {})
+            raw_item = items_map.get(agenda_item.sequence, {})
             sponsors = raw_item.get("sponsors", [])
             matter_type = raw_item.get("matter_type")
             raw_vendor_matter_id = raw_item.get("matter_id")

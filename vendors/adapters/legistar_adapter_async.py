@@ -7,6 +7,7 @@ API-first with HTML fallback. Cities: Seattle WA, NYC, Cambridge MA, and many ot
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse
+import json
 from json import JSONDecodeError
 import re
 import asyncio
@@ -106,11 +107,11 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             text = await response.text()
             events = self._parse_xml_events(text)
         else:
-            # Try JSON first, then XML
+            # Unknown content type - read text first to avoid stream consumption issues
+            text = await response.text()
             try:
-                events = await response.json()
+                events = json.loads(text)
             except (JSONDecodeError, ValueError):
-                text = await response.text()
                 events = self._parse_xml_events(text)
 
         if not isinstance(events, list):
@@ -336,7 +337,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
 
             # Build item dictionary
             item = {
-                "item_id": str(item_id),
+                "vendor_item_id": str(item_id),  # EventItemId - orchestrator generates final item_id
                 "title": title,
                 "sequence": sequence,
             }

@@ -18,7 +18,7 @@ import asyncio
 import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, parse_qs
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -364,10 +364,32 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         return None
 
     def _extract_meeting_id(self, url: str) -> str:
-        """Extract meeting ID from URL or generate hash fallback."""
+        """Extract meeting ID from URL or generate hash fallback.
+
+        Confidence: 8/10 - Normalized URL hash is stable across syncs.
+        Strips tracking params (session, utm_*) before hashing.
+        """
         parsed = urlparse(url)
-        if "id=" in parsed.query:
-            match = re.search(r"id=(\d+)", parsed.query)
+
+        # Prefer explicit id parameter
+        if "id=" in parsed.query.lower():
+            match = re.search(r"id=(\d+)", parsed.query, re.IGNORECASE)
             if match:
                 return f"civic_{match.group(1)}"
-        return f"civic_{hashlib.md5(url.encode()).hexdigest()[:8]}"
+
+        # Fallback: Hash normalized URL (strip tracking params for stability)
+        # Keep only path and meaningful params, ignore session/tracking
+        tracking_params = {'session', 'sessionid', 'sid', 'utm_source', 'utm_medium',
+                          'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid'}
+
+        query_params = parse_qs(parsed.query)
+        stable_params = {k: v for k, v in query_params.items()
+                        if k.lower() not in tracking_params}
+
+        # Build canonical URL for hashing
+        canonical = f"{parsed.netloc}{parsed.path}"
+        if stable_params:
+            sorted_params = sorted(stable_params.items())
+            canonical += "?" + "&".join(f"{k}={v[0]}" for k, v in sorted_params)
+
+        return f"civic_{hashlib.md5(canonical.encode()).hexdigest()[:8]}"

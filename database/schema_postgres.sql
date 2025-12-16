@@ -406,6 +406,7 @@ CREATE TABLE IF NOT EXISTS deliberation_results (
 
 -- Happening Items: AI-curated important upcoming agenda items
 -- Populated by autonomous analysis, surfaced in "Happening This Week" section
+-- NOTE: item_id/meeting_id FKs added via migration 014 (named constraints for existing data)
 CREATE TABLE IF NOT EXISTS happening_items (
     id SERIAL PRIMARY KEY,
     banana TEXT NOT NULL REFERENCES cities(banana) ON DELETE CASCADE,
