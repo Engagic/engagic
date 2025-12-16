@@ -29,7 +29,7 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
             'participation': {},  # NovusAgenda doesn't have structured participation
             'items': [
                 {
-                    'item_id': str,
+                    'vendor_item_id': str,
                     'title': str,
                     'sequence': int,
                     'attachments': [{'name': str, 'url': str, 'type': str}]
@@ -71,7 +71,7 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
                     title = parent_td.get_text(strip=True)
 
             items.append({
-                'item_id': item_id,
+                'vendor_item_id': item_id,
                 'title': title,
                 'sequence': sequence,
                 'attachments': [],  # Will be populated if we fetch Coversheet page

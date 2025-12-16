@@ -29,9 +29,9 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
             'participation': {},  # Granicus doesn't have structured participation info in HTML
             'items': [
                 {
-                    'item_id': str,        # File ID (e.g., "2025-00111")
-                    'title': str,          # Item title
-                    'sequence': int,       # Item number (1, 2, 3...)
+                    'vendor_item_id': str,  # File ID (e.g., "2025-00111")
+                    'title': str,           # Item title
+                    'sequence': int,        # Item number (1, 2, 3...)
                     'attachments': [{'name': str, 'url': str, 'meta_id': str}]
                 }
             ]
@@ -108,7 +108,7 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
 
         # Add matter tracking (File ID as matter_file)
         item_dict = {
-            'item_id': item_id,
+            'vendor_item_id': item_id,
             'title': title,
             'sequence': sequence,
             'attachments': attachments,

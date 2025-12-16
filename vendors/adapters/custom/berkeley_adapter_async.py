@@ -278,14 +278,14 @@ class AsyncBerkeleyAdapter(AsyncBaseAdapter):
                 })
 
             item_data = {
-                'item_id': str(item_number),
+                'vendor_item_id': str(item_number),
                 'title': title,
                 'sequence': item_number,
                 'attachments': attachments,
             }
 
             if sponsor:
-                item_data['sponsor'] = sponsor
+                item_data['sponsors'] = [sponsor]
             if recommendation:
                 item_data['recommendation'] = recommendation
 

@@ -288,7 +288,7 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
                 "vendor_item_id": item_id,  # Raw vendor ID, orchestrator generates final item_id
                 "title": title,
                 "sequence": item_counter,
-                "item_number": item_number,
+                "agenda_number": item_number,
                 "section": current_section,
                 "description": description,
                 "attachments": attachments,

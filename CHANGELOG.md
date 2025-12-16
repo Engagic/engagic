@@ -6,6 +6,66 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2025-12-15] Field Name Consistency Sweep
+
+Second audit round focused on field name mismatches between adapters, parsers, and orchestrator.
+
+### P0: Additional Field Name Fixes
+
+**1. `agenda_number` vs `item_number` Mismatch**
+- `meeting_sync.py:298` was reading `item_data.get("item_number")`
+- Legistar/Chicago adapters return `agenda_number`
+- Escribe/IQM2 adapters were returning `item_number` (wrong)
+- Fix: Orchestrator reads `agenda_number`, adapters updated to return it
+
+**2. Parser `vendor_item_id` Consistency**
+All 5 parsers were using `item_id` instead of `vendor_item_id`:
+- `granicus_parser.py:111`
+- `legistar_parser.py:158, 329`
+- `municode_parser.py:167`
+- `novusagenda_parser.py:74`
+- `primegov_parser.py:187, 240`
+
+Fix: All parsers now return `vendor_item_id`
+
+**3. Berkeley `vendor_item_id`**
+- `berkeley_adapter_async.py:281` was returning `item_id`
+- Fix: Changed to `vendor_item_id`
+
+**4. Berkeley `sponsor` vs `sponsors`**
+- `berkeley_adapter_async.py:288` was returning `'sponsor': sponsor` (singular string)
+- Orchestrator reads `'sponsors'` (plural list)
+- Fix: Changed to `'sponsors': [sponsor]`
+
+**5. Schema Cleanup**
+- Removed `item_number` alias from `vendors/schemas.py`
+- Was marked as "alias for agenda_number" but nothing used it
+
+### Files Changed
+```
+pipeline/orchestrators/meeting_sync.py             # item_number -> agenda_number
+vendors/adapters/escribe_adapter_async.py          # item_number -> agenda_number
+vendors/adapters/iqm2_adapter_async.py             # item_number -> agenda_number (2 places)
+vendors/adapters/custom/berkeley_adapter_async.py  # item_id -> vendor_item_id, sponsor -> sponsors
+vendors/adapters/parsers/granicus_parser.py        # item_id -> vendor_item_id + docstring
+vendors/adapters/parsers/legistar_parser.py        # item_id -> vendor_item_id (2 places) + docstrings
+vendors/adapters/parsers/municode_parser.py        # item_id -> vendor_item_id + docstring
+vendors/adapters/parsers/novusagenda_parser.py     # item_id -> vendor_item_id + docstring
+vendors/adapters/parsers/primegov_parser.py        # item_id -> vendor_item_id (2 places) + docstring
+vendors/schemas.py                                 # removed item_number alias
+```
+
+### Consistent Field Contract
+All adapters/parsers now return:
+- `vendor_item_id`: Raw vendor identifier
+- `agenda_number`: Position in meeting agenda
+- `sequence`: Ordering integer
+- `sponsors`: List of sponsor names (when available)
+
+Orchestrator reads these exact field names.
+
+---
+
 ## [2025-12-15] Architectural Coherence Audit
 
 Deep audit across adapters, repositories, and pipeline revealed additional issues beyond the orphan crisis. Focus: consistency, intuitive APIs, and eliminating silent failures.
