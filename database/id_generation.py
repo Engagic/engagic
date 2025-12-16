@@ -158,12 +158,15 @@ def generate_matter_id(
     matter_id: Optional[str] = None,
     title: Optional[str] = None
 ) -> Optional[str]:
-    """Generate deterministic matter ID from inputs with fallback hierarchy
+    """Generate deterministic matter ID from inputs with strict fallback hierarchy
 
     Fallback hierarchy (most stable to least):
-    1. matter_file - Public legislative file number (Legistar, LA-style PrimeGov)
-    2. matter_id - Backend vendor identifier (may be unstable for some vendors)
+    1. matter_file ALONE - Public legislative file number (ignores matter_id)
+    2. matter_id ALONE - Backend vendor identifier (only when no matter_file)
     3. title - Normalized title (Palo Alto-style PrimeGov fallback)
+
+    IMPORTANT: When matter_file exists, matter_id is IGNORED. Vendors often
+    create new backend IDs per agenda appearance while matter_file stays stable.
 
     Args:
         banana: City identifier (e.g., "sanfranciscoCA")
@@ -177,29 +180,29 @@ def generate_matter_id(
 
     Examples:
         >>> generate_matter_id("nashvilleTN", matter_file="BL2025-1098")
-        'nashvilleTN_7a8f3b2c1d9e4f5a'
+        'nashvilleTN_...'  # Uses matter_file only
+
+        >>> generate_matter_id("losangelesCA", matter_file="25-0583", matter_id="abc-123")
+        # Same as above with different matter_id - matter_id IGNORED
 
         >>> generate_matter_id("paloaltoCA", matter_id="fb36db52-...")
-        'paloaltoCA_a1b2c3d4e5f6g7h8'
+        'paloaltoCA_...'  # Uses matter_id (no matter_file available)
 
-        >>> generate_matter_id("paloaltoCA", title="FIRST READING: Ordinance 2025-123")
-        'paloaltoCA_c4d5e6f7a8b9c0d1'  # Uses normalized title
-
-        >>> generate_matter_id("paloaltoCA", title="Public Comment")
-        None  # Generic title excluded from deduplication
+        >>> generate_matter_id("paloaltoCA", title="Ordinance 2025-123")
+        'paloaltoCA_...'  # Uses normalized title
 
     Notes:
         - At least one of matter_file, matter_id, or title must be provided
-        - If multiple provided, uses first in hierarchy
+        - matter_file takes absolute precedence (matter_id ignored when present)
         - Same inputs always produce same ID (determinism)
         - Generic titles return None (caller should generate unique ID)
     """
-    # Hierarchy: matter_file > matter_id > title
-    # BACKWARD COMPATIBILITY: Maintain original key format for matter_file/matter_id
-    if matter_file or matter_id:
-        # Original format: "banana:matter_file:matter_id"
-        # Preserves existing matter IDs in database
-        key = f"{banana}:{matter_file or ''}:{matter_id or ''}"
+    # Strict hierarchy: matter_file > matter_id > title
+    # Each level is independent - no mixing
+    if matter_file:
+        key = f"{banana}:file:{matter_file}"
+    elif matter_id:
+        key = f"{banana}:id:{matter_id}"
     elif title:
         # NEW: Title-based fallback for cities without stable vendor IDs
         normalized = normalize_title_for_matter_id(title)
