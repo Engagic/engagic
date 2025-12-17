@@ -1,5 +1,6 @@
 """Repository helper functions for object construction and topic fetching."""
 
+import json
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,15 @@ def deserialize_participation(data: Any) -> Optional[ParticipationInfo]:
 def deserialize_city_participation(data: Any) -> Optional[CityParticipation]:
     """Deserialize JSONB city participation object to typed CityParticipation."""
     return CityParticipation(**data) if data else None
+
+
+def deserialize_agenda_sources(data: Any) -> Optional[List[Dict[str, str]]]:
+    """Deserialize JSONB agenda_sources to typed list."""
+    if not data:
+        return None
+    if isinstance(data, str):
+        return json.loads(data)
+    return data
 
 
 async def fetch_topics_for_ids(
@@ -94,7 +104,7 @@ def build_meeting(row: Any, topics: Optional[List[str]] = None) -> Meeting:
         title=row["title"],
         date=row["date"],
         agenda_url=row["agenda_url"],
-        agenda_sources=row.get("agenda_sources"),  # JSONB auto-deserialized by asyncpg
+        agenda_sources=deserialize_agenda_sources(row.get("agenda_sources")),
         packet_url=row["packet_url"],
         summary=row["summary"],
         participation=participation,

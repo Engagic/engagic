@@ -217,6 +217,7 @@ class Conductor:
                 "status": r.status.value,
                 "meetings_found": r.meetings_found,
                 "meetings_processed": r.meetings_processed,
+                "items_stored": r.items_stored,
                 "duration": r.duration_seconds,
                 "error": r.error_message,
             }
@@ -271,14 +272,16 @@ class Conductor:
         # Step 1: Sync all cities
         sync_results = await self.sync_cities(city_bananas)
         total_meetings = sum(r["meetings_found"] for r in sync_results)
+        total_items = sum(r["items_stored"] for r in sync_results)
 
-        logger.info("sync complete", total_meetings=total_meetings, city_count=len(city_bananas))
+        logger.info("sync complete", total_meetings=total_meetings, total_items=total_items, city_count=len(city_bananas))
 
         # Yield sync summary
         yield {
             "phase": "sync_complete",
             "sync_results": sync_results,
             "total_meetings_found": total_meetings,
+            "total_items_stored": total_items,
         }
 
         # Step 2: Process all queued jobs, yielding per-city results

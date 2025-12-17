@@ -17,9 +17,6 @@ class MeetingRepository(BaseRepository):
 
     async def store_meeting(self, meeting: Meeting, conn: Optional[Connection] = None) -> None:
         """Store or update a meeting with topic normalization."""
-        import json
-        agenda_sources_json = json.dumps(meeting.agenda_sources) if meeting.agenda_sources else None
-
         async with self._ensure_conn(conn) as c:
             await c.execute(
                 """
@@ -49,7 +46,7 @@ class MeetingRepository(BaseRepository):
                 meeting.title,
                 meeting.date,
                 meeting.agenda_url,
-                agenda_sources_json,
+                meeting.agenda_sources,
                 meeting.packet_url,
                 meeting.summary,
                 meeting.participation,
