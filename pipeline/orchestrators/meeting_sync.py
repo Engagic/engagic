@@ -275,7 +275,8 @@ class MeetingSyncOrchestrator:
         agenda_items = []
         for idx, item_data in enumerate(items_data):
             # Centralized item ID generation - all adapters return vendor_item_id
-            sequence = item_data.get("sequence", idx + 1)
+            # Use 'or' to handle both missing key AND explicit 0/None from vendors
+            sequence = item_data.get("sequence") or (idx + 1)
             vendor_item_id = item_data.get("vendor_item_id")
             item_id = generate_item_id(stored_meeting.id, sequence, vendor_item_id)
 
@@ -295,7 +296,7 @@ class MeetingSyncOrchestrator:
                 id=item_id,
                 meeting_id=stored_meeting.id,
                 title=item_data.get("title", "Untitled Item"),
-                sequence=item_data.get("sequence", 0),
+                sequence=sequence,
                 agenda_number=item_data.get("agenda_number"),
                 matter_file=matter_file,
                 matter_id=matter_id,

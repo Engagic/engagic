@@ -41,6 +41,7 @@ class SyncResult:
     meetings_found: int = 0
     meetings_processed: int = 0
     meetings_skipped: int = 0
+    items_stored: int = 0
     duration_seconds: float = 0.0
     error_message: Optional[str] = None
 
@@ -254,6 +255,7 @@ class Fetcher:
 
             result.meetings_processed = processed_count
             result.meetings_skipped = skipped_meetings
+            result.items_stored = items_stored_count
             result.status = SyncStatus.COMPLETED
             result.duration_seconds = time.time() - start_time
 
