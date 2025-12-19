@@ -10,6 +10,7 @@ Legislative formatting detection (strikethrough/underline):
 """
 
 import io
+import os
 import re
 import time
 import warnings
@@ -137,7 +138,7 @@ def _match_lines_to_text(page: fitz.Page, lines: List[Tuple[float, float, float]
     return result
 
 
-def _has_legislative_legend(doc: fitz.Document, proximity_chars: int = 200) -> bool:
+def _has_legislative_legend(doc: fitz.Document, proximity_chars: int = 200, max_pages: int = 5) -> bool:
     """Check if document contains legislative formatting legend (clustered keywords).
 
     A true legislative legend has all 4 keyword types appearing close together,
@@ -146,9 +147,13 @@ def _has_legislative_legend(doc: fitz.Document, proximity_chars: int = 200) -> b
     False positives occur when keywords are scattered throughout ordinance text
     describing what amendments do (e.g., "the addition of Section 12-345...").
 
+    Legislative legends typically appear on the first few pages (cover or TOC),
+    so we limit search to max_pages for performance.
+
     Args:
         doc: PyMuPDF document
         proximity_chars: Maximum distance between keywords to consider clustered (default 200)
+        max_pages: Maximum pages to search (default 5 - legends are in first few pages)
 
     Returns:
         True only if all 4 keyword types appear within proximity_chars of each other
@@ -159,7 +164,9 @@ def _has_legislative_legend(doc: fitz.Document, proximity_chars: int = 200) -> b
     underline_pattern = re.compile(r'\bunderline\b')
     strikethrough_pattern = re.compile(r'\bstrikethrough\b')
 
-    for page_num in range(len(doc)):
+    # Search only first max_pages (legends appear early in documents)
+    pages_to_search = min(len(doc), max_pages)
+    for page_num in range(pages_to_search):
         text = doc[page_num].get_text().lower()  # type: ignore[attr-defined]
 
         # Find all positions of each keyword type
@@ -240,7 +247,7 @@ def _extract_text_with_formatting(page: fitz.Page, page_num: int) -> str:
 class PdfExtractor:
     """PDF extractor using PyMuPDF with OCR fallback"""
 
-    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 150, detect_legislative_formatting: bool = True, max_ocr_workers: int = 4):
+    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 150, detect_legislative_formatting: bool = True, max_ocr_workers: int | None = None):
         """Initialize PDF extractor
 
         Args:
@@ -250,13 +257,31 @@ class PdfExtractor:
             detect_legislative_formatting: If True, detect strikethrough (deletions) and underline (additions)
                     in legislative documents with formatting legends and tag them as [DELETED: ...] and [ADDED: ...]
                     Only activates if document contains legislative formatting legend. Default: True (safe for all PDFs)
-            max_ocr_workers: Maximum parallel OCR workers. Default 4 for 2GB VPS.
-                    Higher values speed up OCR but increase memory usage (~300MB per worker at 150 DPI)
+            max_ocr_workers: Maximum parallel OCR workers. Default: CPU count (min 1, max 4).
+                    OCR is CPU-bound so more workers than cores causes thrashing.
         """
         self.ocr_threshold = ocr_threshold
         self.ocr_dpi = ocr_dpi
         self.detect_legislative_formatting = detect_legislative_formatting
-        self.max_ocr_workers = max_ocr_workers
+
+        # Auto-detect optimal worker count based on CPU cores
+        # OCR is CPU-bound, so workers > cores = context switch overhead
+        if max_ocr_workers is None:
+            cpu_count = os.cpu_count() or 1
+            self.max_ocr_workers = min(cpu_count, 4)  # Cap at 4 for memory
+        else:
+            self.max_ocr_workers = max_ocr_workers
+
+        # Prevent Tesseract internal threading when running multiple workers
+        # Each worker gets 1 thread to avoid CPU thrashing
+        os.environ.setdefault('OMP_THREAD_LIMIT', '1')
+
+        logger.info(
+            "PDF extractor initialized",
+            ocr_workers=self.max_ocr_workers,
+            ocr_dpi=self.ocr_dpi,
+            cpu_count=os.cpu_count()
+        )
 
     def _render_page_for_ocr(self, page) -> Optional[Tuple[bytes, int, int]]:
         """Render page to PNG bytes for OCR (main thread, not thread-safe)
@@ -304,11 +329,25 @@ class PdfExtractor:
             Extracted text from OCR, or empty string on failure
         """
         try:
-            img = Image.open(io.BytesIO(png_bytes))
-            text = pytesseract.image_to_string(img)
+            img = Image.open(io.BytesIO(png_bytes)).convert('L')  # Grayscale
+            # --oem 1: LSTM-only (2-3x faster than legacy+LSTM default)
+            # --psm 3: Fully automatic page segmentation
+            # timeout: Hard 60s cap per page to prevent hangs
+            text = pytesseract.image_to_string(
+                img,
+                config='--oem 1 --psm 3',
+                timeout=60
+            )
             return text
         except (Image.DecompressionBombError, Image.DecompressionBombWarning):
             logger.warning("page image too large for OCR", page_num=page_num)
+            return ""
+        except RuntimeError as e:
+            # pytesseract raises RuntimeError on timeout
+            if "Tesseract process timeout" in str(e):
+                logger.warning("OCR timeout on page", page_num=page_num)
+            else:
+                logger.error("OCR runtime error", page_num=page_num, error=str(e))
             return ""
         except (OSError, pytesseract.TesseractError) as e:
             logger.error("OCR failed", page_num=page_num, error=str(e), error_type=type(e).__name__)
@@ -453,6 +492,115 @@ class PdfExtractor:
             )
             return False
 
+    def _extract_from_document(self, doc: fitz.Document, extract_links: bool, start_time: float) -> Dict[str, Any]:
+        """Core extraction logic for opened PDF document
+
+        Args:
+            doc: Opened PyMuPDF document
+            extract_links: Whether to extract hyperlinks
+            start_time: Extraction start time (for timing)
+
+        Returns:
+            Dict with extraction results
+        """
+        page_texts = {}  # page_num -> text
+        all_links = []
+        ocr_tasks = []  # List of (page_num, png_bytes, original_text)
+
+        # Check for legislative legend once (if formatting detection enabled)
+        use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
+        if use_formatting:
+            logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
+
+        # Pass 1: Extract text from all pages, collect OCR tasks
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+
+            # Extract text (with or without legislative formatting detection)
+            if use_formatting:
+                page_text = _extract_text_with_formatting(page, page_num + 1)
+            else:
+                page_text = page.get_text()  # type: ignore[attr-defined]
+
+            initial_char_count = len(page_text.strip())
+
+            # If page has minimal text, queue for OCR
+            if initial_char_count < self.ocr_threshold:
+                logger.debug(
+                    "page queued for OCR",
+                    page_num=page_num + 1,
+                    char_count=initial_char_count,
+                    threshold=self.ocr_threshold
+                )
+                # Render page to PNG (main thread, PyMuPDF not thread-safe)
+                rendered = self._render_page_for_ocr(page)
+                if rendered:
+                    png_bytes, _, _ = rendered
+                    ocr_tasks.append((page_num + 1, png_bytes, page_text))
+                else:
+                    # Rendering failed, keep original
+                    page_texts[page_num + 1] = page_text
+            else:
+                page_texts[page_num + 1] = page_text
+
+            # Extract links if requested
+            if extract_links:
+                page_links = page.get_links()  # type: ignore[attr-defined]
+                for link in page_links:
+                    if 'uri' in link and link['uri']:
+                        all_links.append({
+                            'page': page_num + 1,
+                            'url': link['uri'],
+                            'rect': link.get('from', None),
+                        })
+
+        page_count = len(doc)
+
+        # Pass 2: Run OCR in parallel (outside doc context, PNG bytes already captured)
+        if ocr_tasks:
+            ocr_results = self._ocr_pages_parallel(ocr_tasks)
+            page_texts.update(ocr_results)
+
+        # Count OCR pages (pages where OCR was actually used, not just attempted)
+        ocr_pages = sum(
+            1 for page_num, _, original in ocr_tasks
+            if page_num in page_texts and page_texts[page_num] != original
+        )
+
+        # Assemble final text in page order
+        text_parts = [
+            f"--- PAGE {page_num} ---\n{page_texts[page_num]}"
+            for page_num in sorted(page_texts.keys())
+        ]
+        full_text = "\n\n".join(text_parts)
+
+        extraction_time = time.time() - start_time
+
+        # Determine extraction method
+        method = "pymupdf+ocr" if ocr_pages > 0 else "pymupdf"
+
+        log_msg = f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars"
+        if ocr_pages > 0:
+            log_msg += f" (OCR: {ocr_pages} pages)"
+        if extract_links:
+            log_msg += f", {len(all_links)} links"
+        log_msg += f" in {extraction_time:.2f}s"
+        logger.info(log_msg)
+
+        result = {
+            "success": True,
+            "text": full_text,
+            "method": method,
+            "page_count": page_count,
+            "extraction_time": extraction_time,
+            "ocr_pages": ocr_pages,
+        }
+
+        if extract_links:
+            result["links"] = all_links
+
+        return result
+
     def extract_from_url(self, url: str, extract_links: bool = False) -> Dict[str, Any]:
         """Extract text and optionally links from PDF URL
 
@@ -479,105 +627,8 @@ class PdfExtractor:
             response.raise_for_status()
             pdf_bytes = response.content
 
-            # Extract with PyMuPDF (with parallel OCR for scanned pages)
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                page_texts = {}  # page_num -> text
-                all_links = []
-                ocr_tasks = []  # List of (page_num, png_bytes, original_text)
-
-                # Check for legislative legend once (if formatting detection enabled)
-                use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
-                if use_formatting:
-                    logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
-
-                # Pass 1: Extract text from all pages, collect OCR tasks
-                for page_num in range(len(doc)):
-                    page = doc[page_num]
-
-                    # Extract text (with or without legislative formatting detection)
-                    if use_formatting:
-                        page_text = _extract_text_with_formatting(page, page_num + 1)
-                    else:
-                        page_text = page.get_text()  # type: ignore[attr-defined]
-
-                    initial_char_count = len(page_text.strip())
-
-                    # If page has minimal text, queue for OCR
-                    if initial_char_count < self.ocr_threshold:
-                        logger.debug(
-                            "page queued for OCR",
-                            page_num=page_num + 1,
-                            char_count=initial_char_count,
-                            threshold=self.ocr_threshold
-                        )
-                        # Render page to PNG (main thread, PyMuPDF not thread-safe)
-                        rendered = self._render_page_for_ocr(page)
-                        if rendered:
-                            png_bytes, _, _ = rendered
-                            ocr_tasks.append((page_num + 1, png_bytes, page_text))
-                        else:
-                            # Rendering failed, keep original
-                            page_texts[page_num + 1] = page_text
-                    else:
-                        page_texts[page_num + 1] = page_text
-
-                    # Extract links if requested
-                    if extract_links:
-                        page_links = page.get_links()  # type: ignore[attr-defined]
-                        for link in page_links:
-                            if 'uri' in link and link['uri']:
-                                all_links.append({
-                                    'page': page_num + 1,
-                                    'url': link['uri'],
-                                    'rect': link.get('from', None),
-                                })
-
-                page_count = len(doc)
-
-            # Pass 2: Run OCR in parallel (outside doc context, PNG bytes already captured)
-            if ocr_tasks:
-                ocr_results = self._ocr_pages_parallel(ocr_tasks)
-                page_texts.update(ocr_results)
-
-            # Count OCR pages (pages where OCR was actually used, not just attempted)
-            ocr_pages = sum(
-                1 for page_num, _, original in ocr_tasks
-                if page_num in page_texts and page_texts[page_num] != original
-            )
-
-            # Assemble final text in page order
-            text_parts = [
-                f"--- PAGE {page_num} ---\n{page_texts[page_num]}"
-                for page_num in sorted(page_texts.keys())
-            ]
-            full_text = "\n\n".join(text_parts)
-
-            extraction_time = time.time() - start_time
-
-            # Determine extraction method
-            method = "pymupdf+ocr" if ocr_pages > 0 else "pymupdf"
-
-            log_msg = f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars"
-            if ocr_pages > 0:
-                log_msg += f" (OCR: {ocr_pages} pages)"
-            if extract_links:
-                log_msg += f", {len(all_links)} links"
-            log_msg += f" in {extraction_time:.2f}s"
-            logger.info(log_msg)
-
-            result = {
-                "success": True,
-                "text": full_text,
-                "method": method,
-                "page_count": page_count,
-                "extraction_time": extraction_time,
-                "ocr_pages": ocr_pages,
-            }
-
-            if extract_links:
-                result["links"] = all_links
-
-            return result
+                return self._extract_from_document(doc, extract_links, start_time)
 
         except Exception as e:  # Intentionally broad: API boundary, convert to typed error
             extraction_time = time.time() - start_time
@@ -601,105 +652,8 @@ class PdfExtractor:
         start_time = time.time()
 
         try:
-            # Extract with PyMuPDF (with parallel OCR for scanned pages)
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                page_texts = {}  # page_num -> text
-                all_links = []
-                ocr_tasks = []  # List of (page_num, png_bytes, original_text)
-
-                # Check for legislative legend once (if formatting detection enabled)
-                use_formatting = self.detect_legislative_formatting and _has_legislative_legend(doc)
-                if use_formatting:
-                    logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
-
-                # Pass 1: Extract text from all pages, collect OCR tasks
-                for page_num in range(len(doc)):
-                    page = doc[page_num]
-
-                    # Extract text (with or without legislative formatting detection)
-                    if use_formatting:
-                        page_text = _extract_text_with_formatting(page, page_num + 1)
-                    else:
-                        page_text = page.get_text()  # type: ignore[attr-defined]
-
-                    initial_char_count = len(page_text.strip())
-
-                    # If page has minimal text, queue for OCR
-                    if initial_char_count < self.ocr_threshold:
-                        logger.debug(
-                            "page queued for OCR",
-                            page_num=page_num + 1,
-                            char_count=initial_char_count,
-                            threshold=self.ocr_threshold
-                        )
-                        # Render page to PNG (main thread, PyMuPDF not thread-safe)
-                        rendered = self._render_page_for_ocr(page)
-                        if rendered:
-                            png_bytes, _, _ = rendered
-                            ocr_tasks.append((page_num + 1, png_bytes, page_text))
-                        else:
-                            # Rendering failed, keep original
-                            page_texts[page_num + 1] = page_text
-                    else:
-                        page_texts[page_num + 1] = page_text
-
-                    # Extract links if requested
-                    if extract_links:
-                        page_links = page.get_links()  # type: ignore[attr-defined]
-                        for link in page_links:
-                            if 'uri' in link and link['uri']:
-                                all_links.append({
-                                    'page': page_num + 1,
-                                    'url': link['uri'],
-                                    'rect': link.get('from', None),
-                                })
-
-                page_count = len(doc)
-
-            # Pass 2: Run OCR in parallel (outside doc context, PNG bytes already captured)
-            if ocr_tasks:
-                ocr_results = self._ocr_pages_parallel(ocr_tasks)
-                page_texts.update(ocr_results)
-
-            # Count OCR pages (pages where OCR was actually used, not just attempted)
-            ocr_pages = sum(
-                1 for page_num, _, original in ocr_tasks
-                if page_num in page_texts and page_texts[page_num] != original
-            )
-
-            # Assemble final text in page order
-            text_parts = [
-                f"--- PAGE {page_num} ---\n{page_texts[page_num]}"
-                for page_num in sorted(page_texts.keys())
-            ]
-            full_text = "\n\n".join(text_parts)
-
-            extraction_time = time.time() - start_time
-
-            # Determine extraction method
-            method = "pymupdf+ocr" if ocr_pages > 0 else "pymupdf"
-
-            log_msg = f"[PyMuPDF] Extracted {page_count} pages, {len(full_text)} chars"
-            if ocr_pages > 0:
-                log_msg += f" (OCR: {ocr_pages} pages)"
-            if extract_links:
-                log_msg += f", {len(all_links)} links"
-            log_msg += f" in {extraction_time:.2f}s"
-            logger.info(log_msg)
-
-            result = {
-                "success": True,
-                "text": full_text,
-                "method": method,
-                "page_count": page_count,
-                "extraction_time": extraction_time,
-                "ocr_pages": ocr_pages,
-            }
-
-            if extract_links:
-                result['links'] = all_links
-
-            return result
+                return self._extract_from_document(doc, extract_links, start_time)
 
         except Exception as e:  # Intentionally broad: API boundary, convert to typed error
             extraction_time = time.time() - start_time

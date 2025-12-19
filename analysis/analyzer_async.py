@@ -26,7 +26,7 @@ from parsing.participation import parse_participation_info
 from analysis.llm.summarizer import GeminiSummarizer
 from pipeline.protocols import MetricsCollector, NullMetrics
 
-from config import get_logger
+from config import config, get_logger
 
 logger = get_logger(__name__).bind(component="pipeline")
 
@@ -386,14 +386,36 @@ class AsyncAnalyzer:
                     "error": str(e)
                 }
 
-        # Process items sequentially to avoid TPM rate limits
-        # Gemini API has strict tokens-per-minute limits that parallel calls exceed
-        results = []
-        for i, item in enumerate(item_requests):
-            logger.debug("processing item", index=i + 1, total=len(item_requests))
-            result = await process_item(item)
-            results.append(result)
+        # Process items with controlled concurrency
+        # Gemini API has TPM limits but built-in retry handles 429s
+        # Concurrency configurable via ENGAGIC_LLM_CONCURRENCY (default 3)
+        concurrency = config.LLM_CONCURRENCY
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def process_with_limit(item: Dict[str, Any], index: int) -> Dict[str, Any]:
+            async with semaphore:
+                logger.debug("processing item", index=index + 1, total=len(item_requests))
+                return await process_item(item)
+
+        # Concurrent processing with semaphore limiting
+        results = await asyncio.gather(
+            *[process_with_limit(item, i) for i, item in enumerate(item_requests)],
+            return_exceptions=True
+        )
+
+        # Handle any unexpected exceptions from gather
+        processed = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error("unexpected item exception", item_id=item_requests[i].get("item_id"), error=str(result))
+                processed.append({
+                    "item_id": item_requests[i]["item_id"],
+                    "success": False,
+                    "error": str(result)
+                })
+            else:
+                processed.append(result)
 
         # Return as single chunk (compatible with sync generator interface)
-        logger.info("batch processing complete", success=sum(1 for r in results if r["success"]), total=len(results))
-        return [results]
+        logger.info("batch processing complete", success=sum(1 for r in processed if r["success"]), total=len(processed), concurrency=concurrency)
+        return [processed]

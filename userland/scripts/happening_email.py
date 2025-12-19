@@ -14,6 +14,7 @@ Cron (9am PST / 17:00 UTC):
 import asyncio
 import os
 import sys
+from collections import defaultdict
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -52,29 +53,21 @@ def build_happening_email(items: list, today_str: str) -> str:
             padding="32px 40px"
         )
     else:
-        # Group by city
-        by_city = {}
+        by_city = defaultdict(list)
         for item in items:
-            city = item['banana']
-            if city not in by_city:
-                by_city[city] = []
-            by_city[city].append(item)
+            by_city[item['banana']].append(item)
 
         for city_banana, city_items in by_city.items():
             city_name = city_items[0].get('city_name', city_banana)
-            html += section_header(f"{city_name}", padding="32px 40px 16px 40px")
+            html += section_header(city_name, padding="32px 40px 16px 40px")
 
             for item in sorted(city_items, key=lambda x: x['rank']):
                 meeting_date = item['meeting_date']
                 if isinstance(meeting_date, datetime):
                     meeting_time = meeting_date.strftime("%I:%M %p")
-                else:
-                    meeting_time = str(meeting_date)
-
-                # Build item URL
-                if isinstance(meeting_date, datetime):
                     date_str = meeting_date.strftime("%Y-%m-%d")
                 else:
+                    meeting_time = str(meeting_date)
                     date_str = str(meeting_date).split()[0]
                 meeting_slug = f"{date_str}-{item['meeting_id']}"
                 item_url = f"https://engagic.org/{city_banana}/{meeting_slug}#item-{item['item_id']}"
@@ -144,7 +137,6 @@ async def send_happening_email():
                 JOIN meetings m ON h.meeting_id = m.id
                 JOIN cities c ON h.banana = c.banana
                 WHERE h.meeting_date::date = CURRENT_DATE
-                  AND h.expires_at > NOW()
                 ORDER BY c.name, h.rank
             """)
 

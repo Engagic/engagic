@@ -80,6 +80,10 @@ class Config:
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Google Gemini API
         self.LLM_API_KEY = os.getenv("LLM_API_KEY")  # Fallback
 
+        # LLM concurrency for batch item processing (default 3 concurrent items)
+        # Gemini has built-in retry, so parallel processing within limits is safe
+        self.LLM_CONCURRENCY = int(os.getenv("ENGAGIC_LLM_CONCURRENCY", "3"))
+
         # Payment processing
         self.STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
         self.STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")

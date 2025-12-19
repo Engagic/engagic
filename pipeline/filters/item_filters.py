@@ -128,6 +128,20 @@ SF_PROCEDURAL_PATTERNS = [
     r'hearing notice',  # Notice that hearing will occur - no content
 ]
 
+# Environmental Impact Reports - massive technical documents (200-500+ pages)
+# Important for environmental review but too large for LLM summarization
+EIR_PATTERNS = [
+    r'\bfeir\b',  # Final EIR
+    r'\bdeir\b',  # Draft EIR
+    r'\bseir\b',  # Supplemental EIR
+    r'\beir\b',   # Generic EIR reference
+    r'environmental impact report',
+    r'ceqa findings',  # CEQA findings document (different from CEQA Det form)
+    r'initial study',  # CEQA initial study
+    r'negative declaration',  # Mitigated Negative Declaration
+    r'notice of preparation',  # NOP for EIR
+]
+
 # Administrative matter types (not legislative)
 SKIP_MATTER_TYPES = [
     'Minutes (Min)',
@@ -169,12 +183,13 @@ def should_skip_matter(matter_type: str) -> bool:
 
 
 def is_public_comment_attachment(name: str) -> bool:
-    """Is attachment low-value for summarization (public comments, parcel tables, boilerplate, procedural)?"""
+    """Is attachment low-value for summarization (public comments, parcel tables, boilerplate, procedural, EIRs)?"""
     name_lower = name.lower()
     all_patterns = (
         PUBLIC_COMMENT_PATTERNS +
         PARCEL_TABLE_PATTERNS +
         BOILERPLATE_CONTRACT_PATTERNS +
-        SF_PROCEDURAL_PATTERNS
+        SF_PROCEDURAL_PATTERNS +
+        EIR_PATTERNS
     )
     return any(re.search(p, name_lower, re.IGNORECASE) for p in all_patterns)

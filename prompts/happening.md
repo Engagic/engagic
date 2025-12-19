@@ -64,12 +64,10 @@ For each city, review all items happening TODAY and select the TOP 5 most import
 
 ## Step 4: Update Database
 
-First, clear expired items for cities you're updating:
+First, clear all existing items (full replacement each morning):
 
 ```sql
-DELETE FROM happening_items
-WHERE banana = '{banana}'
-   OR expires_at < NOW();
+DELETE FROM happening_items;
 ```
 
 Then insert new rankings. For each top item:
@@ -78,7 +76,7 @@ Then insert new rankings. For each top item:
 INSERT INTO happening_items
     (banana, item_id, meeting_id, meeting_date, rank, reason, expires_at)
 VALUES
-    ('{banana}', '{item_id}', '{meeting_id}', '{meeting_date}', {rank}, '{reason}', '{meeting_date}'::timestamp + INTERVAL '1 hour')
+    ('{banana}', '{item_id}', '{meeting_id}', '{meeting_date}', {rank}, '{reason}', CURRENT_DATE + INTERVAL '1 day' + INTERVAL '13 hours')
 ON CONFLICT (banana, item_id) DO UPDATE SET
     rank = EXCLUDED.rank,
     reason = EXCLUDED.reason,
@@ -86,7 +84,7 @@ ON CONFLICT (banana, item_id) DO UPDATE SET
     expires_at = EXCLUDED.expires_at;
 ```
 
-**expires_at**: Set to meeting datetime + 1 hour (items expire after meeting ends).
+**expires_at**: Set to next day 8am EST (13:00 UTC) when the next run replaces them.
 
 ## Output Format
 
