@@ -310,6 +310,12 @@ class Database:
 
         return items_by_meeting
 
+    async def get_has_summarized_items(
+        self, meeting_ids: List[str]
+    ) -> Dict[str, bool]:
+        """Check which meetings have items with summaries - lightweight for listings."""
+        return await self.items.get_has_summarized_items(meeting_ids)
+
     async def get_matters_batch(self, matter_ids: List[str]) -> Dict[str, Any]:
         return await self.matters.get_matters_batch(matter_ids)
 

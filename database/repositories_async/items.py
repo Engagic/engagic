@@ -217,6 +217,32 @@ class ItemRepository(BaseRepository):
 
             return dict(items_by_meeting)
 
+    async def get_has_summarized_items(
+        self, meeting_ids: List[str]
+    ) -> Dict[str, bool]:
+        """Check which meetings have items with summaries - lightweight for listings.
+
+        Returns dict mapping meeting_id -> True if has summarized items.
+        Much faster than get_items_for_meetings when you only need to know
+        if items exist, not their content.
+        """
+        if not meeting_ids:
+            return {}
+
+        async with self.pool.acquire() as conn:
+            # Single aggregate query - no item content loaded
+            rows = await conn.fetch(
+                """
+                SELECT meeting_id, bool_or(summary IS NOT NULL) as has_summary
+                FROM items
+                WHERE meeting_id = ANY($1::text[])
+                GROUP BY meeting_id
+                """,
+                meeting_ids,
+            )
+
+            return {row["meeting_id"]: row["has_summary"] for row in rows}
+
     async def get_agenda_item(self, item_id: str) -> Optional[AgendaItem]:
         """Get a single agenda item by ID."""
         async with self.pool.acquire() as conn:

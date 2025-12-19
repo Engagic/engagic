@@ -8,7 +8,7 @@ from typing import cast, Dict, Any, List, Optional, TypedDict, Literal, Union
 from typing_extensions import NotRequired
 from difflib import get_close_matches
 from database.db_postgres import Database
-from server.services.meeting import get_meetings_with_items
+from server.services.meeting import get_meetings_for_listing
 from server.utils.geo import parse_city_state_input, get_state_abbreviation, get_state_full_name
 from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_name
 
@@ -147,7 +147,7 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
 
     if meetings:
         logger.info("found cached meetings", count=len(meetings), city=city.name, state=city.state)
-        meetings_with_items = await get_meetings_with_items(meetings, db)
+        meetings_with_items = await get_meetings_for_listing(meetings, db)
         return cast(SearchResponse, {
             "success": True,
             "city_name": city.name,
@@ -209,7 +209,7 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
 
     if meetings:
         logger.info("found cached meetings for city", count=len(meetings), city=city_name, state=state)
-        meetings_with_items = await get_meetings_with_items(meetings, db)
+        meetings_with_items = await get_meetings_for_listing(meetings, db)
         return cast(SearchResponse, {
             "success": True,
             "city_name": city.name,
@@ -398,7 +398,7 @@ async def _handle_single_city_match(
     if meetings:
         await _log_city_search(db, city.banana, original_input)
         logger.info("found cached meetings", count=len(meetings), city=city.name, state=city.state)
-        meetings_with_items = await get_meetings_with_items(meetings, db)
+        meetings_with_items = await get_meetings_for_listing(meetings, db)
         return {
             "success": True,
             "city_name": city.name,

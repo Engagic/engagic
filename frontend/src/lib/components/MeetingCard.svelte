@@ -44,7 +44,7 @@
 	});
 
 	function getStatusClass(meeting: Meeting): string {
-		if (meeting.items && meeting.items.length > 0 && meeting.items.some(item => item.summary)) {
+		if (meeting.has_items) {
 			return 'status-border-ai';
 		} else if (meeting.summary) {
 			return 'status-border-ai';
@@ -106,7 +106,7 @@
 		</div>
 
 		<div class="right-column">
-			{#if meeting.items && meeting.items.length > 0 && meeting.items.some(item => item.summary)}
+			{#if meeting.has_items}
 				<div class="meeting-status status-items">
 					<span class="status-icon">✓</span> AI Summary
 				</div>

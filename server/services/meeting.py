@@ -39,6 +39,38 @@ async def get_meeting_with_items(meeting: Meeting, db: Database) -> Dict[str, An
     return meeting_dict
 
 
+async def get_meetings_for_listing(
+    meetings: List[Meeting], db: Database
+) -> List[Dict[str, Any]]:
+    """Convert meetings to dicts with has_items flag - lightweight for listings.
+
+    Does NOT load full item content. Only checks if items with summaries exist.
+    Use this for search results and city landing pages where items aren't displayed.
+
+    Args:
+        meetings: List of Meeting objects
+        db: Database instance
+
+    Returns:
+        List of meeting dicts with has_items boolean (no items array)
+    """
+    if not meetings:
+        return []
+
+    meeting_ids = [m.id for m in meetings]
+
+    # Single aggregate query - much faster than loading all items
+    has_items_map = await db.get_has_summarized_items(meeting_ids)
+
+    results = []
+    for meeting in meetings:
+        meeting_dict = meeting.to_dict()
+        meeting_dict["has_items"] = has_items_map.get(meeting.id, False)
+        results.append(meeting_dict)
+
+    return results
+
+
 async def get_meetings_with_items(
     meetings: List[Meeting], db: Database
 ) -> List[Dict[str, Any]]:
