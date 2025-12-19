@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import stripe
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from config import config, get_logger
 from database.db_postgres import Database
@@ -87,6 +88,9 @@ app.add_middleware(  # type: ignore[arg-type]
 
 # Request ID middleware (must be early in stack for tracing)
 app.add_middleware(RequestIDMiddleware)  # type: ignore[arg-type]
+
+# GZip compression for responses > 500 bytes (significant bandwidth savings)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Initialize global instances (non-async)
 rate_limiter = SQLiteRateLimiter(
