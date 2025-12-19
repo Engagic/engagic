@@ -28,6 +28,23 @@ PUBLIC_COMMENT_LARGE_DOC_THRESHOLD = 50
 PUBLIC_COMMENT_OCR_THRESHOLD = 0.3
 PUBLIC_COMMENT_SIGNATURE_THRESHOLD = 20
 
+MEETING_SPECIFIC_PARTICIPATION_KEYS = (
+    'virtual_url', 'meeting_id', 'streaming_urls', 'is_hybrid', 'is_virtual_only'
+)
+
+
+def filter_participation_for_city(
+    parsed: Dict[str, Any], city_has_participation: bool
+) -> Dict[str, Any]:
+    """Filter participation data based on city configuration.
+
+    When city has centralized participation, only keep meeting-specific fields
+    (virtual_url, streaming) - skip email/phone which are noise from PDFs.
+    """
+    if not city_has_participation:
+        return parsed
+    return {k: v for k, v in parsed.items() if k in MEETING_SPECIFIC_PARTICIPATION_KEYS}
+
 
 def is_procedural_item(title: str) -> bool:
     return should_skip_processing(title)
@@ -310,10 +327,8 @@ class Processor:
             logger.info("skipping low-value item", title=item.title[:80], reason="public_comments_or_parcel_tables")
             return None
 
-        # Extract text from attachments
-        item_parts = []
-        total_page_count = 0
-
+        # Collect valid attachments to extract
+        attachments_to_extract = []
         for att in item.attachments:
             att_url, att_type, att_name = att.url, att.type, att.name
 
@@ -324,17 +339,45 @@ class Processor:
                 logger.info("skipping low-value attachment", name=att_name)
                 continue
 
-            try:
-                result = await self.analyzer.extract_pdf_async(att_url)
-                if result.get("success") and result.get("text"):
-                    if is_likely_public_comment_compilation(result, att_name or att_url):
-                        logger.info("skipping public comment compilation", name=att_name or att_url)
-                        continue
-                    item_parts.append(f"=== {att_name or att_url} ===\n{result['text']}")
-                    total_page_count += result.get("page_count", 0)
-                    logger.debug("extracted attachment text", attachment=att_name or att_url, pages=result.get('page_count', 0), chars=len(result['text']))
-            except (ExtractionError, OSError, IOError) as e:
-                logger.warning("failed to extract attachment", name=att_name or att_url, error=str(e))
+            attachments_to_extract.append((att_url, att_name))
+
+        # Concurrent PDF extraction
+        pdf_concurrency = config.LLM_CONCURRENCY
+        semaphore = asyncio.Semaphore(pdf_concurrency)
+
+        async def extract_attachment(att_url: str, att_name: Optional[str]) -> Optional[tuple[str, str, int]]:
+            async with semaphore:
+                try:
+                    result = await self.analyzer.extract_pdf_async(att_url)
+                    if result.get("success") and result.get("text"):
+                        if is_likely_public_comment_compilation(result, att_name or att_url):
+                            logger.info("skipping public comment compilation", name=att_name or att_url)
+                            return None
+                        logger.debug("extracted attachment text", attachment=att_name or att_url, pages=result.get('page_count', 0), chars=len(result['text']))
+                        return (att_name or att_url, result["text"], result.get("page_count", 0))
+                    return None
+                except (ExtractionError, OSError, IOError) as e:
+                    logger.warning("failed to extract attachment", name=att_name or att_url, error=str(e))
+                    return None
+
+        # Extract text from attachments concurrently
+        item_parts = []
+        total_page_count = 0
+
+        if attachments_to_extract:
+            results = await asyncio.gather(
+                *[extract_attachment(url, name) for url, name in attachments_to_extract],
+                return_exceptions=True
+            )
+
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error("unexpected extraction exception", error=str(result))
+                    continue
+                if result:
+                    name, text, page_count = result
+                    item_parts.append(f"=== {name} ===\n{text}")
+                    total_page_count += page_count
 
         if not item_parts:
             logger.warning("no text extracted for item", title=item.title[:50])
@@ -506,7 +549,9 @@ class Processor:
             logger.error("error processing summary", packet_url=meeting.packet_url, error=str(e))
             return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 1}
 
-    async def _extract_participation_info(self, meeting: Meeting) -> Dict[str, Any]:
+    async def _extract_participation_info(
+        self, meeting: Meeting, city_has_participation: bool = False
+    ) -> Dict[str, Any]:
         """Extract participation info from agenda_url (PDF or HTML)."""
         if not meeting.agenda_url:
             return {}
@@ -522,7 +567,8 @@ class Processor:
                 if agenda_result.get("success") and agenda_result.get("text"):
                     agenda_participation = parse_participation_info(agenda_result["text"][:5000])
                     if agenda_participation:
-                        return agenda_participation.model_dump(exclude_none=True)
+                        parsed = agenda_participation.model_dump(exclude_none=True)
+                        return filter_participation_for_city(parsed, city_has_participation)
 
             elif meeting.participation:
                 return meeting.participation.model_dump(exclude_none=True)
@@ -593,23 +639,51 @@ class Processor:
             logger.error("analyzer not initialized, cannot extract attachments")
             return {}, item_attachments, all_urls
 
+        # Filter out low-value attachments before extraction
+        urls_to_extract = []
         for att_url in all_urls:
             att_name = url_to_name.get(att_url, "")
             if att_name and is_public_comment_attachment(att_name):
                 logger.info("skipping low-value attachment", attachment_name=att_name)
                 continue
+            urls_to_extract.append((att_url, att_name))
 
-            try:
-                result = await self.analyzer.extract_pdf_async(att_url)
-                if result.get("success") and result.get("text"):
-                    if is_likely_public_comment_compilation(result, att_name or att_url):
-                        logger.info("skipping public comment compilation", attachment=att_name or att_url)
-                        continue
-                    document_cache[att_url] = {"text": result["text"], "page_count": result.get("page_count", 0), "name": att_name or att_url}
+        # Concurrent PDF extraction with semaphore
+        # Uses same concurrency as LLM to balance throughput and resource usage
+        pdf_concurrency = config.LLM_CONCURRENCY
+        semaphore = asyncio.Semaphore(pdf_concurrency)
+
+        async def extract_with_limit(att_url: str, att_name: str) -> tuple[str, Optional[Dict]]:
+            async with semaphore:
+                try:
+                    result = await self.analyzer.extract_pdf_async(att_url)
+                    if result.get("success") and result.get("text"):
+                        if is_likely_public_comment_compilation(result, att_name or att_url):
+                            logger.info("skipping public comment compilation", attachment=att_name or att_url)
+                            return att_url, None
+                        return att_url, {"text": result["text"], "page_count": result.get("page_count", 0), "name": att_name or att_url}
+                    return att_url, None
+                except (ExtractionError, OSError, IOError) as e:
+                    logger.warning("failed to extract document", attachment=att_name or att_url, error=str(e))
+                    return att_url, None
+
+        # Run extractions concurrently
+        if urls_to_extract:
+            logger.info("extracting documents concurrently", count=len(urls_to_extract), concurrency=pdf_concurrency)
+            extraction_results = await asyncio.gather(
+                *[extract_with_limit(url, name) for url, name in urls_to_extract],
+                return_exceptions=True
+            )
+
+            for result in extraction_results:
+                if isinstance(result, Exception):
+                    logger.error("unexpected extraction exception", error=str(result))
+                    continue
+                att_url, data = result
+                if data:
+                    document_cache[att_url] = data
                     item_count = len(url_to_items[att_url])
-                    logger.info("extracted document", attachment=att_name or att_url, pages=result.get('page_count', 0), shared=(item_count > 1))
-            except (ExtractionError, OSError, IOError) as e:
-                logger.warning("failed to extract document", attachment=att_name or att_url, error=str(e))
+                    logger.info("extracted document", attachment=data["name"], pages=data.get('page_count', 0), shared=(item_count > 1))
 
         shared_urls = {url for url, items in url_to_items.items() if len(items) > 1 and url in document_cache}
         logger.info("cached documents", total_cached=len(document_cache), shared_count=len(shared_urls))
@@ -624,7 +698,8 @@ class Processor:
         shared_urls: set,
         participation_data: Dict[str, Any],
         first_sequence: Optional[int],
-        last_sequence: Optional[int]
+        last_sequence: Optional[int],
+        city_has_participation: bool = False
     ) -> tuple[List[Dict], Dict, List[str]]:
         """Build batch requests from cached documents."""
         batch_requests = []
@@ -667,7 +742,9 @@ class Processor:
                 if item.sequence in (first_sequence, last_sequence):
                     item_participation = parse_participation_info(combined_text)
                     if item_participation:
-                        participation_data.update(item_participation.model_dump(exclude_none=True))
+                        parsed = item_participation.model_dump(exclude_none=True)
+                        filtered = filter_participation_for_city(parsed, city_has_participation)
+                        participation_data.update(filtered)
 
                 batch_requests.append({
                     "item_id": item.id,
@@ -770,11 +847,15 @@ class Processor:
             logger.warning("analyzer not available")
             return {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 0}
 
+        # Check if city has centralized participation configured
+        city = await self.db.cities.get_city(meeting.banana)
+        city_has_participation = bool(city and city.participation)
+
         item_sequences = [item.sequence for item in agenda_items]
         first_sequence = min(item_sequences) if item_sequences else None
         last_sequence = max(item_sequences) if item_sequences else None
 
-        participation_data = await self._extract_participation_info(meeting)
+        participation_data = await self._extract_participation_info(meeting, city_has_participation)
         already_processed, need_processing = await self._filter_processed_items(agenda_items)
         processed_items = list(already_processed)
         failed_items = []
@@ -794,7 +875,7 @@ class Processor:
 
             batch_requests, item_map, failed_items = self._build_batch_requests(
                 need_processing, document_cache, item_attachments, shared_urls,
-                participation_data, first_sequence, last_sequence
+                participation_data, first_sequence, last_sequence, city_has_participation
             )
 
             if batch_requests:

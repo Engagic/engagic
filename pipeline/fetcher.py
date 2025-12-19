@@ -24,6 +24,8 @@ logger = get_logger(__name__).bind(component="fetcher")
 
 SYNC_ERROR_DELAY_BASE = 2
 SYNC_ERROR_DELAY_JITTER = 1
+# Concurrent cities per vendor - balances throughput vs vendor politeness
+CITY_SYNC_CONCURRENCY = 2
 
 
 class SyncStatus(Enum):
@@ -105,24 +107,37 @@ class Fetcher:
                 break
 
             sorted_cities = await self._prioritize_cities(vendor_cities)
-            logger.info("syncing vendor cities", vendor=vendor, city_count=len(sorted_cities))
+            logger.info("syncing vendor cities", vendor=vendor, city_count=len(sorted_cities), concurrency=CITY_SYNC_CONCURRENCY)
 
-            for city in sorted_cities:
+            # Parallel sync with semaphore for controlled concurrency
+            semaphore = asyncio.Semaphore(CITY_SYNC_CONCURRENCY)
+
+            async def sync_city_with_limit(city: City) -> Optional[SyncResult]:
                 if not self.is_running:
-                    break
+                    return None
 
                 if not await self._should_sync_city(city):
                     logger.debug("skipping city - not due for sync", city_name=city.name)
-                    results.append(SyncResult(city_banana=city.banana, status=SyncStatus.SKIPPED, error_message="Not due for sync"))
-                    continue
+                    return SyncResult(city_banana=city.banana, status=SyncStatus.SKIPPED, error_message="Not due for sync")
 
-                await self.rate_limiter.wait_if_needed(vendor)
-                result = await self._sync_city_with_retry(city)
-                logger.info("sync completed", city=city.banana, status=result.status.value)
-                results.append(result)
+                async with semaphore:
+                    if not self.is_running:
+                        return None
+                    await self.rate_limiter.wait_if_needed(vendor)
+                    result = await self._sync_city_with_retry(city)
+                    logger.info("sync completed", city=city.banana, status=result.status.value)
 
-                if result.status == SyncStatus.FAILED:
-                    self.failed_cities.add(city.banana)
+                    if result.status == SyncStatus.FAILED:
+                        self.failed_cities.add(city.banana)
+                    return result
+
+            vendor_results = await asyncio.gather(*[sync_city_with_limit(c) for c in sorted_cities], return_exceptions=True)
+
+            for result in vendor_results:
+                if isinstance(result, Exception):
+                    logger.error("unexpected sync exception", error=str(result))
+                elif result is not None:
+                    results.append(result)
 
             if vendor_cities:
                 vendor_break = 30 + random.uniform(0, 10)
