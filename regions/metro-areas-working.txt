@@ -60,3 +60,6 @@ charlotteNC
 
 # PENNSYLVANIA (1 city)
 philadelphiaPA
+
+# VIRGINIA
+richmondVA

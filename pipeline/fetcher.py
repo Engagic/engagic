@@ -134,7 +134,7 @@ class Fetcher:
             vendor_results = await asyncio.gather(*[sync_city_with_limit(c) for c in sorted_cities], return_exceptions=True)
 
             for result in vendor_results:
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     logger.error("unexpected sync exception", error=str(result))
                 elif result is not None:
                     results.append(result)
