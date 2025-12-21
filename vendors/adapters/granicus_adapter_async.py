@@ -1,30 +1,42 @@
 """
-Async Granicus Adapter - Concurrent HTML scraping for Granicus/Legistar platform
+Async Granicus Adapter - Concurrent HTML scraping for Granicus platform
 
-Async version with:
-- Static view_id configuration (from data/granicus_view_ids.json)
-- Async HTML agenda parsing
-- S3 SSL workaround (handled in base adapter)
+Two-step fetching:
+1. ViewPublisher.php - List of meetings
+2. AgendaViewer.php -> follows redirect -> actual agenda HTML
 
-Cities using Granicus: Cambridge MA, Santa Monica CA, and many others
+Supports multiple HTML formats:
+- AgendaOnline (meetings.{city}.org) - parsed with parse_agendaonline_html
+- Original Granicus format - parsed with parse_agendaviewer_html
+
+Cities using Granicus: Cambridge MA, Santa Monica CA, Redwood City CA, and many others
 """
 
 import json
 import os
+import re
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
+
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.granicus_parser import parse_html_agenda
+from vendors.adapters.parsers.granicus_parser import (
+    parse_viewpublisher_listing,
+    parse_agendaonline_html,
+    parse_agendaviewer_html,
+)
 from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 
 
 class AsyncGranicusAdapter(AsyncBaseAdapter):
-    """Async adapter for cities using Granicus/Legistar platform"""
+    """Async adapter for cities using Granicus platform."""
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
-        """city_slug is the Granicus subdomain (e.g., "cambridge"). Raises ValueError if view_id not configured."""
+        """city_slug is the Granicus subdomain (e.g., "redwoodcity-ca"). Raises ValueError if view_id not configured."""
         super().__init__(city_slug, vendor="granicus", metrics=metrics)
         self.base_url = f"https://{self.slug}.granicus.com"
         self.view_ids_file = "data/granicus_view_ids.json"
@@ -56,55 +68,177 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             raise ValueError(f"Invalid JSON in {self.view_ids_file}: {e}")
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Fetch meetings from Granicus HTML via ViewPublisher.php."""
+        """Fetch meetings via two-step process: listing -> detail pages."""
         response = await self._get(self.list_url)
         html = await response.text()
-        parsed = await asyncio.to_thread(parse_html_agenda, html)
+        listing = await asyncio.to_thread(parse_viewpublisher_listing, html, self.base_url)
 
-        meetings = []
+        if not listing:
+            logger.warning("no meetings found in listing", vendor="granicus", slug=self.slug)
+            return []
+
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        for meeting_data in parsed.get("meetings", []):
+        meetings_in_range = []
+        for meeting_data in listing:
             date_str = meeting_data.get("start", "")
             if not date_str:
+                # No date - include anyway (might be upcoming with no time set)
+                meetings_in_range.append(meeting_data)
                 continue
 
             try:
                 meeting_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
                 meeting_date = meeting_date.replace(tzinfo=None)
-                if not (start_date <= meeting_date <= end_date):
-                    continue
+                if start_date <= meeting_date <= end_date:
+                    meetings_in_range.append(meeting_data)
             except (ValueError, AttributeError):
-                pass
+                # Can't parse date - include anyway
+                meetings_in_range.append(meeting_data)
 
-            meeting = {
-                "vendor_id": meeting_data.get("meeting_id", ""),
-                "title": meeting_data.get("title", ""),
-                "start": date_str,
-            }
+        logger.debug(
+            "filtered meetings by date",
+            vendor="granicus",
+            slug=self.slug,
+            total=len(listing),
+            in_range=len(meetings_in_range)
+        )
 
-            if meeting_data.get("agenda_url"):
-                meeting["agenda_url"] = meeting_data["agenda_url"]
-            if meeting_data.get("packet_url"):
-                meeting["packet_url"] = meeting_data["packet_url"]
+        if not meetings_in_range:
+            return []
 
-            if meeting_data.get("items"):
-                items = [
-                    item for item in meeting_data["items"]
-                    if not should_skip_item(item.get("title", ""))
-                ]
-                if items:
-                    meeting["items"] = items
+        detail_tasks = [
+            self._fetch_meeting_detail(meeting_data)
+            for meeting_data in meetings_in_range
+        ]
 
-            meetings.append(meeting)
+        results = await asyncio.gather(*detail_tasks, return_exceptions=True)
+
+        meetings = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    "failed to fetch meeting detail",
+                    vendor="granicus",
+                    slug=self.slug,
+                    event_id=meetings_in_range[i].get("event_id"),
+                    error=str(result)
+                )
+            elif result is not None:
+                meetings.append(result)
 
         logger.info(
             "meetings fetched",
             vendor="granicus",
             slug=self.slug,
-            count=len(meetings)
+            count=len(meetings),
+            with_items=sum(1 for m in meetings if m.get("items"))
         )
 
         return meetings
+
+    async def _fetch_meeting_detail(self, meeting_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Fetch and parse individual meeting agenda, choosing parser based on redirect destination."""
+        agenda_viewer_url = meeting_data.get("agenda_viewer_url")
+        event_id = meeting_data.get("event_id")
+
+        if not agenda_viewer_url:
+            logger.debug(
+                "no agenda viewer url",
+                vendor="granicus",
+                slug=self.slug,
+                event_id=event_id
+            )
+            return None
+
+        try:
+            response = await self._get(agenda_viewer_url)
+            final_url = str(response.url)
+            html = await response.text()
+
+            if "AgendaOnline" in final_url or "ViewAgenda" in final_url:
+                parsed = await asyncio.to_thread(parse_agendaonline_html, html, final_url)
+            else:
+                parsed = await asyncio.to_thread(parse_agendaviewer_html, html)
+
+            items = [
+                item for item in parsed.get("items", [])
+                if not should_skip_item(item.get("title", ""))
+            ]
+
+            meeting = {
+                "vendor_id": event_id,
+                "title": meeting_data.get("title", ""),
+                "start": meeting_data.get("start", ""),
+            }
+
+            if items:
+                meeting["items"] = items
+                meeting["agenda_url"] = final_url
+                logger.debug(
+                    "parsed meeting with items",
+                    vendor="granicus",
+                    slug=self.slug,
+                    event_id=event_id,
+                    item_count=len(items)
+                )
+            else:
+                packet_url = self._find_packet_url(html, final_url)
+                if packet_url:
+                    meeting["packet_url"] = packet_url
+                    logger.debug(
+                        "no items, using packet fallback",
+                        vendor="granicus",
+                        slug=self.slug,
+                        event_id=event_id
+                    )
+                else:
+                    logger.debug(
+                        "no items or packet found",
+                        vendor="granicus",
+                        slug=self.slug,
+                        event_id=event_id
+                    )
+
+            return meeting
+
+        except Exception as e:
+            logger.warning(
+                "error fetching meeting detail",
+                vendor="granicus",
+                slug=self.slug,
+                event_id=event_id,
+                error=str(e)
+            )
+            return None
+
+    def _find_packet_url(self, html: str, base_url: str) -> Optional[str]:
+        """Find agenda packet PDF URL: MetaViewer > agenda/packet PDF > any PDF."""
+        soup = BeautifulSoup(html, 'html.parser')
+
+        meta_link = soup.find('a', href=lambda x: x and 'MetaViewer' in x if x else False)
+        if meta_link:
+            href = meta_link['href']
+            if href.startswith('//'):
+                return 'https:' + href
+            return urljoin(base_url, href)
+
+        for link in soup.find_all('a', href=True):
+            href = link['href'].lower()
+            text = link.get_text(strip=True).lower()
+            if '.pdf' in href and ('agenda' in text or 'packet' in text or 'agenda' in href):
+                full_href = link['href']
+                if full_href.startswith('//'):
+                    return 'https:' + full_href
+                return urljoin(base_url, full_href)
+
+        pdf_link = soup.find('a', href=lambda x: x and '.pdf' in x.lower() if x else False)
+        if pdf_link:
+            href = pdf_link['href']
+            if href.startswith('//'):
+                return 'https:' + href
+            return urljoin(base_url, href)
+
+        return None

@@ -1,101 +1,259 @@
 """
-Granicus HTML Parser - Extract agenda items from AgendaViewer pages
+Granicus HTML Parser - Extract agenda items from Granicus pages
 
-Granicus structure:
-- Items in <table> elements with item number, title, File ID
-- Attachments as MetaViewer.php links following each item
-- Items grouped by sections (Consent Calendar, Discussion Calendar, etc.)
+Supports multiple HTML formats:
+1. ViewPublisher.php - Meeting listing page (parse_viewpublisher_listing)
+2. AgendaOnline/ViewAgenda - HTML agenda with items (parse_agendaonline_html)
+3. AgendaViewer.php - Original Granicus format (parse_agendaviewer_html)
 """
 
 import re
-from typing import Dict, Any
+from datetime import datetime
+from typing import Dict, Any, List, Optional
+from urllib.parse import urljoin
+
 from bs4 import BeautifulSoup
 
 from config import get_logger
+from parsing.participation import parse_participation_info
 
 logger = get_logger(__name__).bind(component="vendor")
 
 
+def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]]:
+    """Parse ViewPublisher.php listing to extract meetings with event_id, title, start, agenda_viewer_url."""
+    soup = BeautifulSoup(html, 'html.parser')
+    meetings = []
+    rows = soup.find_all('tr', class_=['odd', 'even'])
 
-def parse_html_agenda(html: str) -> Dict[str, Any]:
-    """
-    Parse Granicus AgendaViewer HTML to extract items and attachments.
+    for row in rows:
+        cells = row.find_all('td', class_='listItem')
+        if len(cells) < 2:
+            continue
 
-    Args:
-        html: HTML content from AgendaViewer.php page
+        title = cells[0].get_text(strip=True)
+        date_cell = cells[1]
+        timestamp_span = date_cell.find('span', style=lambda x: x and 'display:none' in x if x else False)
+        start = None
 
-    Returns:
-        {
-            'participation': {},  # Granicus doesn't have structured participation info in HTML
-            'items': [
-                {
-                    'vendor_item_id': str,  # File ID (e.g., "2025-00111")
-                    'title': str,           # Item title
-                    'sequence': int,        # Item number (1, 2, 3...)
-                    'attachments': [{'name': str, 'url': str, 'meta_id': str}]
-                }
-            ]
-        }
-    """
+        if timestamp_span:
+            try:
+                unix_ts = int(timestamp_span.get_text(strip=True))
+                start_dt = datetime.fromtimestamp(unix_ts)
+                start = start_dt.isoformat()
+            except (ValueError, OSError):
+                pass
+
+        if not start:
+            date_text = date_cell.get_text(strip=True)
+            start = _parse_granicus_date(date_text)
+
+        agenda_link = row.find('a', href=lambda x: x and 'AgendaViewer' in x if x else False)
+        if not agenda_link:
+            continue
+
+        href = agenda_link['href']
+        if href.startswith('//'):
+            href = 'https:' + href
+        elif not href.startswith('http'):
+            href = urljoin(base_url, href)
+
+        event_id_match = re.search(r'event_id=(\d+)', href)
+        event_id = event_id_match.group(1) if event_id_match else None
+
+        if not event_id:
+            continue
+
+        meetings.append({
+            'event_id': event_id,
+            'title': title,
+            'start': start,
+            'agenda_viewer_url': href,
+        })
+
+    logger.debug(
+        "parsed viewpublisher listing",
+        vendor="granicus",
+        meeting_count=len(meetings)
+    )
+
+    return meetings
+
+
+def _parse_granicus_date(date_text: str) -> Optional[str]:
+    """Parse Granicus date formats like 'December 22, 2025 - 06:00 PM'."""
+    date_text = date_text.replace('\xa0', ' ').strip()
+    formats = [
+        "%B %d, %Y - %I:%M %p",  # December 22, 2025 - 06:00 PM
+        "%B %d, %Y %I:%M %p",    # December 22, 2025 06:00 PM
+        "%B %d, %Y",             # December 22, 2025
+        "%m/%d/%Y %I:%M %p",     # 12/22/2025 06:00 PM
+        "%m/%d/%Y",              # 12/22/2025
+    ]
+
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(date_text, fmt)
+            return dt.isoformat()
+        except ValueError:
+            continue
+
+    return None
+
+
+def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
+    """Parse AgendaOnline HTML for items and participation. Returns {participation: {...}, items: [...]}."""
     soup = BeautifulSoup(html, 'html.parser')
     items = []
+    seen_ids = set()
 
-    # Find all tables (agenda items are in tables)
+    # Extract participation info (contact details, zoom links, etc.)
+    page_text = soup.get_text(separator=' ', strip=True)
+    participation_info = parse_participation_info(page_text)
+    participation = participation_info.model_dump() if participation_info else {}
+
+    # Extract council members from header
+    members = _extract_council_members(soup)
+    if members:
+        participation['members'] = members
+
+    all_tables = soup.find_all('table', style=lambda x: x and 'border-collapse' in x.lower() if x else False)
+
+    for table in all_tables:
+        rows = table.find_all('tr')
+        for row in rows:
+            cells = row.find_all('td')
+            if len(cells) < 2:
+                continue
+
+            number_cell = cells[0]
+            number_span = number_cell.find('span', style=lambda x: x and 'font-weight:bold' in x.lower() if x else False)
+
+            if not number_span:
+                bold = number_cell.find('b') or number_cell.find('strong')
+                if bold:
+                    agenda_number = bold.get_text(strip=True)
+                else:
+                    continue
+            else:
+                agenda_number = number_span.get_text(strip=True)
+
+            if not agenda_number or not re.match(r'^\d+\.?[A-Z]?\.?$', agenda_number):
+                continue
+
+            sequence = _parse_sequence(agenda_number)
+            content_cell = cells[1]
+            item_id = None
+
+            anchor = content_cell.find('a', attrs={'name': True})
+            if anchor:
+                name = anchor.get('name', '')
+                if name.startswith(('S', 'I')):
+                    item_id = name[1:]
+                elif name:
+                    item_id = name
+
+            if not item_id:
+                load_link = content_cell.find('a', href=lambda x: x and 'loadAgendaItem' in x if x else False)
+                if load_link:
+                    match = re.search(r'loadAgendaItem\((\d+)', load_link.get('href', ''))
+                    if match:
+                        item_id = match.group(1)
+
+            title_link = content_cell.find('a', href=True)
+            if title_link:
+                title = title_link.get_text(strip=True)
+            else:
+                title = content_cell.get_text(strip=True)
+
+            if not title or not item_id:
+                continue
+            if item_id in seen_ids:
+                continue
+            seen_ids.add(item_id)
+
+            recommendation = None
+            rec_match = content_cell.find(string=re.compile(r'Recommendation:', re.I))
+            if rec_match:
+                rec_parent = rec_match.find_parent('p') or rec_match.find_parent('td')
+                if rec_parent:
+                    rec_text = rec_parent.get_text(strip=True)
+                    if 'Recommendation:' in rec_text:
+                        recommendation = rec_text.split('Recommendation:', 1)[1].strip()
+
+            item_dict = {
+                'vendor_item_id': item_id,
+                'title': title,
+                'sequence': sequence,
+                'agenda_number': agenda_number,
+                'attachments': [],
+            }
+
+            if recommendation:
+                item_dict['recommendation'] = recommendation
+
+            items.append(item_dict)
+
+    logger.debug(
+        "parsed agendaonline html",
+        vendor="granicus",
+        item_count=len(items),
+        members=len(participation.get('members', []))
+    )
+
+    return {
+        'participation': participation,
+        'items': items,
+    }
+
+
+def _parse_sequence(agenda_number: str) -> int:
+    """Parse sequence from agenda number like '1.', '8.A.', '10.B.'."""
+    match = re.match(r'^(\d+)', agenda_number)
+    return int(match.group(1)) if match else 0
+
+
+
+def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
+    """Parse original Granicus AgendaViewer HTML for items with File IDs and MetaViewer attachments."""
+    soup = BeautifulSoup(html, 'html.parser')
+    items = []
     tables = soup.find_all('table', {'style': lambda x: x and 'BORDER-COLLAPSE: collapse' in x})
 
     for table in tables:
-        # Extract item number from first cell
         rows = table.find_all('tr')
-        if len(rows) < 1:
+        if not rows:
             continue
 
-        # First row has item number and title
         first_row = rows[0]
         cells = first_row.find_all('td')
         if len(cells) < 2:
             continue
 
-        # Item number (e.g., "1.", "2.")
-        number_cell = cells[0]
-        number_text = number_cell.get_text(strip=True)
-
-        # Skip if not a numbered item
+        number_text = cells[0].get_text(strip=True)
         if not number_text or not number_text.replace('.', '').isdigit():
             continue
 
         sequence = int(number_text.replace('.', ''))
+        title_full = cells[1].get_text(strip=True)
 
-        # Title and File ID
-        title_cell = cells[1]
-        title_full = title_cell.get_text(strip=True)
-
-        # Extract File ID from title (format: "Title File ID: 2025-00111")
-        item_id = None
         if 'File ID:' in title_full:
             parts = title_full.split('File ID:')
             title = parts[0].strip()
             item_id = parts[1].strip() if len(parts) > 1 else None
         else:
             title = title_full
-            # Fallback: use sequence as ID
             item_id = str(sequence)
 
-        # Find attachment link for this item
-        # It's usually in a blockquote following the table, with MetaViewer link
         attachments = []
-
-        # Look for next blockquote sibling after this table's parent
         parent = table.find_parent('div')
         if parent:
             next_blockquote = parent.find_next_sibling('blockquote')
             if next_blockquote:
-                # Find MetaViewer link
                 meta_links = next_blockquote.find_all('a', href=lambda x: x and 'MetaViewer' in x)
                 for link in meta_links:
                     href = link['href']
                     link_text = link.get_text(strip=True)
-
-                    # Extract meta_id from URL (e.g., meta_id=845318)
                     meta_id_match = re.search(r'meta_id=(\d+)', href)
                     meta_id = meta_id_match.group(1) if meta_id_match else None
 
@@ -103,10 +261,9 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
                         'name': link_text or f"Attachment {sequence}",
                         'url': href,
                         'meta_id': meta_id,
-                        'type': 'pdf',  # MetaViewer links are PDFs - conductor needs this for extraction
+                        'type': 'pdf',
                     })
 
-        # Add matter tracking (File ID as matter_file)
         item_dict = {
             'vendor_item_id': item_id,
             'title': title,
@@ -114,26 +271,18 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
             'attachments': attachments,
         }
 
-        # If item_id looks like a File ID (YYYY-NNNNN), treat as matter_file
-        # matter_file takes precedence in ID generation, no need to set matter_id
         if item_id and re.match(r'^\d{4}-\d+$', item_id):
             item_dict['matter_file'] = item_id
 
         items.append(item_dict)
 
-        logger.debug(
-            f"[HTMLParser:Granicus] Item {sequence}: '{title[:60]}...' "
-            f"({len(attachments)} attachments)"
-        )
+    logger.debug("parsed agendaviewer html", vendor="granicus", item_count=len(items))
 
-    logger.debug(
-        f"[HTMLParser:Granicus] Extracted {len(items)} agenda items"
-    )
+    return {'participation': {}, 'items': items}
 
-    return {
-        'participation': {},  # Granicus HTML doesn't have structured participation
-        'items': items,
-    }
+
+# Alias for backward compatibility
+parse_html_agenda = parse_agendaviewer_html
 
 
 # Confidence: 7/10
