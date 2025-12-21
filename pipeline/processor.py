@@ -278,9 +278,13 @@ class Processor:
                     if not isinstance(job.payload, MatterJob):
                         raise ValueError("Invalid payload type for matter job")
                     with self.metrics.processing_duration.labels(job_type="matter").time():
-                        await self.process_matter(job.payload.matter_id, job.payload.meeting_id, {"item_ids": job.payload.item_ids})
+                        matter_stats = await self.process_matter(job.payload.matter_id, job.payload.meeting_id, {"item_ids": job.payload.item_ids})
                     await self.db.queue.mark_processing_complete(queue_id)
                     processed_count += 1
+                    total_items_processed += matter_stats.get("items_processed", 0)
+                    total_items_new += matter_stats.get("items_new", 0)
+                    total_items_skipped += matter_stats.get("items_skipped", 0)
+                    total_items_failed += matter_stats.get("items_failed", 0)
                     logger.info("processed matter", matter_id=job.payload.matter_id, duration_seconds=round(time.time() - job_start_time, 1))
                     self.metrics.queue_jobs_processed.labels(job_type=job_type, status="completed").inc()
 
@@ -411,18 +415,19 @@ class Processor:
 
         raise ProcessingError("No results returned from batch processing", context={"item_id": item.id})
 
-    async def process_matter(self, matter_id: str, meeting_id: str, metadata: Optional[Dict] = None):
+    async def process_matter(self, matter_id: str, meeting_id: str, metadata: Optional[Dict] = None) -> Dict[str, int]:
         """Process a matter across all its appearances, updating canonical summary."""
         logger.info("processing matter", matter_id=matter_id)
+        empty_stats = {"items_processed": 0, "items_new": 0, "items_skipped": 0, "items_failed": 0}
 
         if not validate_matter_id(matter_id):
             logger.error("invalid matter_id format", matter_id=matter_id)
-            return
+            return empty_stats
 
         banana = extract_banana_from_matter_id(matter_id)
         if not banana:
             logger.error("could not extract banana from matter_id", matter_id=matter_id)
-            return
+            return empty_stats
 
         items = []
         if metadata:
@@ -437,7 +442,7 @@ class Processor:
 
         if not items:
             logger.error("no items found for matter", matter_id=matter_id)
-            return
+            return empty_stats
 
         all_attachments = []
         seen_urls = set()
@@ -454,24 +459,24 @@ class Processor:
 
         if not all_attachments:
             logger.debug("matter skipped - no attachments", matter_id=matter_id)
-            return
+            return {"items_processed": len(items), "items_new": 0, "items_skipped": len(items), "items_failed": 0}
 
         try:
             result = await self._process_single_item(representative_item)
         except ProcessingError as e:
             logger.error("matter processing failed", matter_id=matter_id, error=str(e))
             self.metrics.record_error("processor", e)
-            return
+            return {"items_processed": len(items), "items_new": 0, "items_skipped": 0, "items_failed": len(items)}
 
         if not result:
-            return
+            return {"items_processed": len(items), "items_new": 0, "items_skipped": 0, "items_failed": len(items)}
 
         summary = result.get("summary")
         topics = result.get("topics", [])
 
         if not summary:
             logger.warning("no summary generated for matter", matter_id=matter_id)
-            return
+            return {"items_processed": len(items), "items_new": 0, "items_skipped": 0, "items_failed": len(items)}
 
         attachment_hash = hash_attachments(representative_item.attachments)
         existing_matter = await self.db.matters.get_matter(matter_id)
@@ -499,6 +504,7 @@ class Processor:
         await self.db.items.bulk_update_item_summaries(item_ids=item_ids, summary=summary, topics=topics)
 
         logger.info("stored canonical summary and backfilled items", matter_id=matter_id, item_count=len(items))
+        return {"items_processed": len(items), "items_new": len(items), "items_skipped": 0, "items_failed": 0}
 
     async def process_meeting(self, meeting: Meeting):
         """Process summary for a single meeting (items > packet fallback)."""

@@ -21,6 +21,8 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
+from urllib.parse import urlparse, parse_qs, quote
+
 from config import get_logger
 from exceptions import ExtractionError
 
@@ -40,6 +42,63 @@ DEFAULT_HEADERS = {
 # Convert PIL warnings to errors to catch decompression bombs
 Image.MAX_IMAGE_PIXELS = 100000000
 warnings.simplefilter('error', Image.DecompressionBombWarning)
+
+
+def _fetch_agendaonline_pdf(url: str, timeout: int = 30) -> bytes:
+    """Fetch PDF from AgendaOnline DownloadFile URLs via two-step POST/GET."""
+    session = requests.Session()
+    session.headers.update(DEFAULT_HEADERS)
+
+    parsed = urlparse(url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+    params = parse_qs(parsed.query)
+
+    # Extract document name from path (after /DownloadFile/)
+    path_parts = parsed.path.split("/DownloadFile/")
+    if len(path_parts) < 2:
+        raise ValueError(f"Invalid DownloadFile URL: {url}")
+    doc_name = path_parts[1]
+
+    # Step 1: GET DownloadFile page to establish session
+    session.get(url, timeout=timeout)
+
+    # Step 2: POST to InvokeDownloadAttachment
+    meeting_id = params.get("meetingId", [""])[0]
+    item_id = params.get("itemId", [""])[0]
+    publish_id = params.get("publishId", [""])[0]
+    is_section = params.get("isSection", ["false"])[0].lower()
+    doc_type = params.get("documentType", ["1"])[0]
+
+    invoke_url = (
+        f"{base_url}/AgendaOnline/Documents/InvokeDownloadAttachment/{doc_name}"
+        f"?meetingId={meeting_id}&itemId={item_id}&publishId={publish_id}"
+        f"&isSection={is_section}&documentType={doc_type}"
+    )
+
+    invoke_resp = session.post(invoke_url, timeout=timeout)
+    invoke_resp.raise_for_status()
+    data = invoke_resp.json()
+
+    # Step 3: GET ViewDocument with response data
+    view_url = (
+        f"{base_url}/AgendaOnline/Documents/ViewDocument/{quote(data['DocumentName'], safe='')}"
+        f"?meetingId={data['MeetingId']}&documentType={data['DocumentType']}"
+        f"&itemId={data['ItemId']}&publishId={data['PublishId']}"
+        f"&isSection={str(data['IsSection']).lower()}"
+    )
+
+    pdf_resp = session.get(view_url, timeout=timeout)
+    pdf_resp.raise_for_status()
+
+    if not pdf_resp.content.startswith(b"%PDF"):
+        raise ValueError("ViewDocument did not return PDF content")
+
+    return pdf_resp.content
+
+
+def _is_agendaonline_url(url: str) -> bool:
+    """Check if URL is an AgendaOnline DownloadFile URL requiring two-step fetch."""
+    return "/AgendaOnline/Documents/DownloadFile/" in url
 
 
 
@@ -622,10 +681,13 @@ class PdfExtractor:
         start_time = time.time()
 
         try:
-            # Download PDF with browser-like headers to avoid bot detection
-            response = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
-            response.raise_for_status()
-            pdf_bytes = response.content
+            # AgendaOnline DownloadFile URLs need two-step fetch
+            if _is_agendaonline_url(url):
+                pdf_bytes = _fetch_agendaonline_pdf(url)
+            else:
+                response = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
+                response.raise_for_status()
+                pdf_bytes = response.content
 
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 return self._extract_from_document(doc, extract_links, start_time)

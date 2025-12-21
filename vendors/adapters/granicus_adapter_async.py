@@ -14,10 +14,11 @@ Cities using Granicus: Cambridge MA, Santa Monica CA, Redwood City CA, and many 
 
 import json
 import os
+import re
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, unquote
 
 from bs4 import BeautifulSoup
 
@@ -157,6 +158,16 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             final_url = str(response.url)
             html = await response.text()
 
+            # AgendaOnline ViewMeeting loads items via JS - use accessible view instead
+            if "AgendaOnline" in final_url and "/Meetings/ViewMeeting" in final_url:
+                if meeting_id_match := re.search(r'[?&]id=(\d+)', final_url):
+                    parsed_url = urlparse(final_url)
+                    accessible_url = f"{parsed_url.scheme}://{parsed_url.netloc}/AgendaOnline/Meetings/ViewMeetingAgenda?meetingId={meeting_id_match.group(1)}&type=agenda"
+                    logger.debug("fetching accessible agenda view", vendor="granicus", slug=self.slug, event_id=event_id)
+                    accessible_response = await self._get(accessible_url)
+                    html = await accessible_response.text()
+                    final_url = accessible_url
+
             if "AgendaOnline" in final_url or "ViewAgenda" in final_url:
                 parsed = await asyncio.to_thread(parse_agendaonline_html, html, final_url)
             else:
@@ -167,6 +178,17 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 if not should_skip_item(item.get("title", ""))
             ]
 
+            # Fetch attachments for AgendaOnline items
+            if items and "AgendaOnline" in final_url:
+                parsed_url = urlparse(final_url)
+                base_host = f"{parsed_url.scheme}://{parsed_url.netloc}"
+                meeting_id_match = re.search(r'meetingId=(\d+)', final_url)
+                if meeting_id_match:
+                    agendaonline_meeting_id = meeting_id_match.group(1)
+                    items = await self._fetch_agendaonline_attachments(
+                        items, agendaonline_meeting_id, base_host
+                    )
+
             meeting = {
                 "vendor_id": event_id,
                 "title": meeting_data.get("title", ""),
@@ -176,12 +198,14 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             if items:
                 meeting["items"] = items
                 meeting["agenda_url"] = final_url
+                attachment_count = sum(len(item.get("attachments", [])) for item in items)
                 logger.debug(
                     "parsed meeting with items",
                     vendor="granicus",
                     slug=self.slug,
                     event_id=event_id,
-                    item_count=len(items)
+                    item_count=len(items),
+                    attachment_count=attachment_count
                 )
             else:
                 packet_url = self._find_packet_url(html, final_url)
@@ -212,6 +236,42 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 error=str(e)
             )
             return None
+
+    async def _fetch_agendaonline_attachments(
+        self, items: List[Dict[str, Any]], meeting_id: str, base_host: str
+    ) -> List[Dict[str, Any]]:
+        """Fetch attachments for each item from AgendaOnline item detail pages."""
+        async def fetch_item_attachments(item: Dict[str, Any]) -> Dict[str, Any]:
+            if not (item_id := item.get("vendor_item_id")):
+                return item
+            detail_url = f"{base_host}/AgendaOnline/Meetings/ViewMeetingAgendaItem?meetingId={meeting_id}&itemId={item_id}&isSection=false&type=agenda"
+            try:
+                response = await self._get(detail_url)
+                html = await response.text()
+                if attachments := self._parse_agendaonline_attachments(html, base_host):
+                    item["attachments"] = attachments
+            except Exception as e:
+                logger.debug("failed to fetch item attachments", vendor="granicus", slug=self.slug, item_id=item_id, error=str(e))
+            return item
+
+        return list(await asyncio.gather(*[fetch_item_attachments(item) for item in items]))
+
+    def _parse_agendaonline_attachments(self, html: str, base_host: str) -> List[Dict[str, Any]]:
+        """Parse attachment links from AgendaOnline item detail page."""
+        soup = BeautifulSoup(html, "html.parser")
+        attachments = []
+        for link in soup.find_all("a", href=lambda x: x and "DownloadFile" in x and "isAttachment=True" in x):
+            href = link.get("href", "")
+            name = link.get_text(strip=True)
+            full_url = base_host + href if href.startswith("/") else href
+            if not name and (m := re.search(r'/DownloadFile/([^?]+)', href)):
+                name = unquote(m.group(1))
+            attachments.append({
+                "name": name,
+                "url": full_url,
+                "type": "pdf" if ".pdf" in href.lower() else "document",
+            })
+        return attachments
 
     def _find_packet_url(self, html: str, base_url: str) -> Optional[str]:
         """Find agenda packet PDF URL: MetaViewer > agenda/packet PDF > any PDF."""
