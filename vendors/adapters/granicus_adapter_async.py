@@ -35,8 +35,7 @@ from pipeline.protocols import MetricsCollector
 def _translate_downloadfile_to_viewdocument(url: str) -> str:
     """Translate AgendaOnline DownloadFile URL to ViewDocument URL.
 
-    DownloadFile URLs require session/POST dance. ViewDocument URLs work directly.
-    The doc_name in the path is already URL-encoded, so we use it as-is.
+    DownloadFile requires auth dance; ViewDocument serves PDFs directly.
     """
     if "/AgendaOnline/Documents/DownloadFile/" not in url:
         return url
