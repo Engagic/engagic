@@ -18,7 +18,7 @@ import re
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from urllib.parse import urljoin, urlparse, unquote
+from urllib.parse import urljoin, urlparse, unquote, parse_qs
 
 from bs4 import BeautifulSoup
 
@@ -30,6 +30,34 @@ from vendors.adapters.parsers.granicus_parser import (
 )
 from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
+
+
+def _translate_downloadfile_to_viewdocument(url: str) -> str:
+    """Translate AgendaOnline DownloadFile URL to ViewDocument URL.
+
+    DownloadFile URLs require session/POST dance. ViewDocument URLs work directly.
+    The doc_name in the path is already URL-encoded, so we use it as-is.
+    """
+    if "/AgendaOnline/Documents/DownloadFile/" not in url:
+        return url
+
+    parsed = urlparse(url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+    params = parse_qs(parsed.query)
+
+    path_parts = parsed.path.split("/DownloadFile/")
+    if len(path_parts) < 2:
+        return url
+    doc_name = path_parts[1]
+
+    return (
+        f"{base_url}/AgendaOnline/Documents/ViewDocument/{doc_name}"
+        f"?meetingId={params.get('meetingId', [''])[0]}"
+        f"&documentType={params.get('documentType', ['1'])[0]}"
+        f"&itemId={params.get('itemId', [''])[0]}"
+        f"&publishId={params.get('publishId', [''])[0]}"
+        f"&isSection={params.get('isSection', ['false'])[0].lower()}"
+    )
 
 
 class AsyncGranicusAdapter(AsyncBaseAdapter):
@@ -257,13 +285,18 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         return list(await asyncio.gather(*[fetch_item_attachments(item) for item in items]))
 
     def _parse_agendaonline_attachments(self, html: str, base_host: str) -> List[Dict[str, Any]]:
-        """Parse attachment links from AgendaOnline item detail page."""
+        """Parse attachment links from AgendaOnline item detail page.
+
+        Translates DownloadFile URLs to ViewDocument URLs for direct fetching.
+        """
         soup = BeautifulSoup(html, "html.parser")
         attachments = []
         for link in soup.find_all("a", href=lambda x: x and "DownloadFile" in x and "isAttachment=True" in x):
             href = link.get("href", "")
             name = link.get_text(strip=True)
             full_url = base_host + href if href.startswith("/") else href
+            # Translate to ViewDocument URL for direct fetching
+            full_url = _translate_downloadfile_to_viewdocument(full_url)
             if not name and (m := re.search(r'/DownloadFile/([^?]+)', href)):
                 name = unquote(m.group(1))
             attachments.append({
