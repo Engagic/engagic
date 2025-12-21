@@ -118,6 +118,7 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
         participation['members'] = members
 
     # Parse accessible view format (ViewMeetingAgenda)
+    sequence_counter = 0
     for item_div in soup.find_all('div', class_='accessible-item'):
         link = item_div.find('a', onclick=lambda x: x and 'loadAgendaItem' in x if x else False)
         if not link:
@@ -142,10 +143,11 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
         if not title:
             continue
 
+        sequence_counter += 1
         items.append({
             'vendor_item_id': item_id,
             'title': title,
-            'sequence': _parse_sequence(agenda_number) if agenda_number else 0,
+            'sequence': sequence_counter,
             'agenda_number': agenda_number,
             'attachments': [],
         })
@@ -156,6 +158,7 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
 
     # Strategy 2: Fallback to table-based parsing (older format)
     all_tables = soup.find_all('table', style=lambda x: x and 'border-collapse' in x.lower() if x else False)
+    sequence_counter = 0
 
     for table in all_tables:
         rows = table.find_all('tr')
@@ -179,7 +182,7 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
             if not agenda_number or not re.match(r'^\d+\.?[A-Z]?\.?$', agenda_number):
                 continue
 
-            sequence = _parse_sequence(agenda_number)
+            sequence_counter += 1
             content_cell = cells[1]
             item_id = None
 
@@ -222,7 +225,7 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
             item_dict = {
                 'vendor_item_id': item_id,
                 'title': title,
-                'sequence': sequence,
+                'sequence': sequence_counter,
                 'agenda_number': agenda_number,
                 'attachments': [],
             }
@@ -243,12 +246,6 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
         'participation': participation,
         'items': items,
     }
-
-
-def _parse_sequence(agenda_number: str) -> int:
-    """Parse sequence from agenda number like '1.', '8.A.', '10.B.'."""
-    match = re.match(r'^(\d+)', agenda_number)
-    return int(match.group(1)) if match else 0
 
 
 def _extract_council_members(soup: BeautifulSoup) -> List[str]:
@@ -300,6 +297,7 @@ def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
     soup = BeautifulSoup(html, 'html.parser')
     items = []
     tables = soup.find_all('table', {'style': lambda x: x and 'BORDER-COLLAPSE: collapse' in x})
+    sequence_counter = 0
 
     for table in tables:
         rows = table.find_all('tr')
@@ -315,7 +313,7 @@ def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
         if not number_text or not number_text.replace('.', '').isdigit():
             continue
 
-        sequence = int(number_text.replace('.', ''))
+        sequence_counter += 1
         title_full = cells[1].get_text(strip=True)
 
         if 'File ID:' in title_full:
@@ -324,7 +322,7 @@ def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
             item_id = parts[1].strip() if len(parts) > 1 else None
         else:
             title = title_full
-            item_id = str(sequence)
+            item_id = str(sequence_counter)
 
         attachments = []
         parent = table.find_parent('div')
@@ -339,7 +337,7 @@ def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
                     meta_id = meta_id_match.group(1) if meta_id_match else None
 
                     attachments.append({
-                        'name': link_text or f"Attachment {sequence}",
+                        'name': link_text or f"Attachment {sequence_counter}",
                         'url': href,
                         'meta_id': meta_id,
                         'type': 'pdf',
@@ -348,7 +346,7 @@ def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
         item_dict = {
             'vendor_item_id': item_id,
             'title': title,
-            'sequence': sequence,
+            'sequence': sequence_counter,
             'attachments': attachments,
         }
 
