@@ -65,6 +65,8 @@ class AsyncAnalyzer:
         self.http_session: Optional[aiohttp.ClientSession] = None
         self._request_count = 0
         self._recycle_after = 100  # Recycle session after N requests to prevent memory accumulation
+        self._in_flight = 0  # Track concurrent downloads to prevent recycling mid-download
+        self._recycle_lock = asyncio.Lock()  # Serialize recycle checks
 
         logger.info(
             "async analyzer initialized",
@@ -121,13 +123,16 @@ class AsyncAnalyzer:
         Raises:
             ExtractionError: If download fails
         """
-        # Recycle session periodically to prevent memory accumulation
-        self._request_count += 1
-        if self._request_count >= self._recycle_after:
-            await self.recycle_session()
+        # Acquire session with recycle check (serialized, but quick)
+        async with self._recycle_lock:
+            self._request_count += 1
+            # Only recycle when no downloads in flight
+            if self._request_count >= self._recycle_after and self._in_flight == 0:
+                await self.recycle_session()
+            session = await self._get_session()
+            self._in_flight += 1
 
-        session = await self._get_session()
-
+        # Actual download happens outside lock (concurrent)
         try:
             async with session.get(url, ssl=False) as resp:  # Disable SSL for Granicus S3
                 if resp.status != 200:
@@ -140,6 +145,8 @@ class AsyncAnalyzer:
         except aiohttp.ClientError as e:
             logger.error("pdf download failed", url=url, error=str(e))
             raise ExtractionError(f"Failed to download PDF: {e}") from e
+        finally:
+            self._in_flight -= 1
 
     async def extract_pdf_async(self, url: str) -> Dict[str, Any]:
         """

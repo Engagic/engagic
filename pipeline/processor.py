@@ -371,7 +371,7 @@ class Processor:
             )
 
             for result in results:
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     logger.error("unexpected extraction exception", error=str(result))
                     continue
                 if result:
@@ -676,7 +676,7 @@ class Processor:
             )
 
             for result in extraction_results:
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     logger.error("unexpected extraction exception", error=str(result))
                     continue
                 att_url, data = result
