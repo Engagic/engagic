@@ -117,6 +117,44 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
     if members:
         participation['members'] = members
 
+    # Parse accessible view format (ViewMeetingAgenda)
+    for item_div in soup.find_all('div', class_='accessible-item'):
+        link = item_div.find('a', onclick=lambda x: x and 'loadAgendaItem' in x if x else False)
+        if not link:
+            continue
+        if not (id_match := re.search(r'loadAgendaItem\((\d+)\)', link.get('onclick', ''))):
+            continue
+        item_id = id_match.group(1)
+        if item_id in seen_ids:
+            continue
+        seen_ids.add(item_id)
+
+        link_text = link.get_text(strip=True)
+        title_span = link.find('span', class_='accessible-item-text')
+        if title_span:
+            title = title_span.get_text(strip=True)
+            agenda_number = link_text.replace(title, '').strip()
+        elif num_match := re.match(r'^(\d+\.?[A-Z]?\.?)\s+(.+)$', link_text):
+            agenda_number, title = num_match.group(1), num_match.group(2)
+        else:
+            agenda_number, title = '', link_text
+
+        if not title:
+            continue
+
+        items.append({
+            'vendor_item_id': item_id,
+            'title': title,
+            'sequence': _parse_sequence(agenda_number) if agenda_number else 0,
+            'agenda_number': agenda_number,
+            'attachments': [],
+        })
+
+    if items:
+        logger.debug("parsed agendaonline accessible html", vendor="granicus", item_count=len(items), members=len(participation.get('members', [])))
+        return {'participation': participation, 'items': items}
+
+    # Strategy 2: Fallback to table-based parsing (older format)
     all_tables = soup.find_all('table', style=lambda x: x and 'border-collapse' in x.lower() if x else False)
 
     for table in all_tables:
