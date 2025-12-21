@@ -16,7 +16,6 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, Tuple, Optional
-from urllib.parse import urlparse, parse_qs, quote
 
 import fitz  # PyMuPDF
 import pytesseract
@@ -42,43 +41,6 @@ DEFAULT_HEADERS = {
 # Convert PIL warnings to errors to catch decompression bombs
 Image.MAX_IMAGE_PIXELS = 100000000
 warnings.simplefilter('error', Image.DecompressionBombWarning)
-
-
-def _fetch_agendaonline_pdf(url: str, timeout: int = 30) -> bytes:
-    """Fetch PDF directly from AgendaOnline ViewDocument endpoint.
-
-    DownloadFile URLs contain all parameters needed to construct ViewDocument URL directly.
-    """
-    parsed = urlparse(url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}"
-    params = parse_qs(parsed.query)
-
-    path_parts = parsed.path.split("/DownloadFile/")
-    if len(path_parts) < 2:
-        raise ValueError(f"Invalid DownloadFile URL: {url}")
-    doc_name = path_parts[1]
-
-    view_url = (
-        f"{base_url}/AgendaOnline/Documents/ViewDocument/{quote(doc_name, safe='')}"
-        f"?meetingId={params.get('meetingId', [''])[0]}"
-        f"&documentType={params.get('documentType', ['1'])[0]}"
-        f"&itemId={params.get('itemId', [''])[0]}"
-        f"&publishId={params.get('publishId', [''])[0]}"
-        f"&isSection={params.get('isSection', ['false'])[0].lower()}"
-    )
-
-    response = requests.get(view_url, headers=DEFAULT_HEADERS, timeout=timeout)
-    response.raise_for_status()
-
-    if not response.content.startswith(b"%PDF"):
-        raise ValueError("ViewDocument did not return PDF content")
-
-    return response.content
-
-
-def _is_agendaonline_download_url(url: str) -> bool:
-    """Check if URL is an AgendaOnline DownloadFile URL."""
-    return "/AgendaOnline/Documents/DownloadFile/" in url
 
 
 def _detect_horizontal_lines(page: fitz.Page) -> List[Tuple[float, float, float]]:
@@ -660,13 +622,9 @@ class PdfExtractor:
         start_time = time.time()
 
         try:
-            # AgendaOnline DownloadFile URLs need ViewDocument translation
-            if _is_agendaonline_download_url(url):
-                pdf_bytes = _fetch_agendaonline_pdf(url)
-            else:
-                response = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
-                response.raise_for_status()
-                pdf_bytes = response.content
+            response = requests.get(url, headers=DEFAULT_HEADERS, timeout=30)
+            response.raise_for_status()
+            pdf_bytes = response.content
 
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 return self._extract_from_document(doc, extract_links, start_time)
