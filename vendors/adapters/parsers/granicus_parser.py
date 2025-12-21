@@ -213,6 +213,49 @@ def _parse_sequence(agenda_number: str) -> int:
     return int(match.group(1)) if match else 0
 
 
+def _extract_council_members(soup: BeautifulSoup) -> List[str]:
+    """Extract council member names from header spans (typically blue-styled text)."""
+    members = []
+    seen = set()
+
+    # Look for spans with blue color styling (common in Granicus agendas)
+    blue_spans = soup.find_all('span', style=lambda x: x and '#0070c2' in x.lower() if x else False)
+
+    current_name = []
+    for span in blue_spans:
+        text = span.get_text(strip=True)
+        if not text or text == ',':
+            continue
+
+        # Role indicators suggest end of a name
+        role_keywords = ['mayor', 'vice mayor', 'council member', 'councilmember', 'president', 'vice president']
+        text_lower = text.lower()
+
+        is_role = any(kw in text_lower for kw in role_keywords)
+
+        if is_role:
+            # Append role to current name if we have one
+            if current_name:
+                full_name = ' '.join(current_name)
+                if text_lower not in full_name.lower():
+                    full_name = f"{full_name}, {text}"
+                if full_name not in seen:
+                    members.append(full_name)
+                    seen.add(full_name)
+                current_name = []
+        else:
+            # Accumulate name parts
+            current_name.append(text)
+
+    # Flush remaining name
+    if current_name:
+        full_name = ' '.join(current_name)
+        if full_name not in seen:
+            members.append(full_name)
+
+    return members
+
+
 
 def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
     """Parse original Granicus AgendaViewer HTML for items with File IDs and MetaViewer attachments."""
