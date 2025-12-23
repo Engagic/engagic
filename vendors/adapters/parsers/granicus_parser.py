@@ -33,20 +33,11 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
 
         title = cells[0].get_text(strip=True)
         date_cell = cells[1]
-        timestamp_span = date_cell.find('span', style=lambda x: x and 'display:none' in x if x else False)
-        start = None
 
-        if timestamp_span:
-            try:
-                unix_ts = int(timestamp_span.get_text(strip=True))
-                start_dt = datetime.fromtimestamp(unix_ts)
-                start = start_dt.isoformat()
-            except (ValueError, OSError):
-                pass
-
-        if not start:
-            date_text = date_cell.get_text(strip=True)
-            start = _parse_granicus_date(date_text)
+        # Parse human-readable date text (in meeting's local timezone)
+        # Avoid hidden Unix timestamps - they require timezone conversion
+        date_text = date_cell.get_text(strip=True)
+        start = _parse_granicus_date(date_text)
 
         agenda_link = row.find('a', href=lambda x: x and 'AgendaViewer' in x if x else False)
         if not agenda_link:
