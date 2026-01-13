@@ -92,6 +92,7 @@
 	});
 
 	// Derived: Check if city has qualifying matters (2+ appearances)
+	// Show toggle until we've checked and confirmed there are no matters
 	const hasQualifyingMatters = $derived(
 		!mattersChecked || (cityMatters && cityMatters.total_count > 0)
 	);
@@ -129,7 +130,7 @@
 			}
 		} catch (err) {
 			logger.error('Failed to load city matters', {}, err instanceof Error ? err : undefined);
-			mattersChecked = true;
+			// Don't mark as checked on error - allow retry
 		} finally {
 			mattersLoading = false;
 		}

@@ -105,6 +105,7 @@
 							<tr>
 								<th class="col-city">City</th>
 								<th class="col-coverage">Coverage</th>
+								<th class="col-count">Summaries</th>
 								<th class="col-pop">Population</th>
 							</tr>
 						</thead>
@@ -117,6 +118,7 @@
 											{coverageLabel(city.coverage_type)}
 										</span>
 									</td>
+									<td class="col-count">{city.summary_count.toLocaleString()}</td>
 									<td class="col-pop">{formatPop(city.population)}</td>
 								</tr>
 							{/each}
@@ -139,8 +141,8 @@
 					</div>
 					<div class="stat-title">Frequently Updated Cities</div>
 					<div class="stat-description">
-						{#if data.analytics.real_metrics.population_with_summaries > 0}
-							{formatPopulation(data.analytics.real_metrics.population_with_summaries)}
+						{#if data.analytics.real_metrics.frequently_updated_population > 0}
+							{formatPopulation(data.analytics.real_metrics.frequently_updated_population)}
 						{:else}
 							Cities with 7+ meetings with summaries
 						{/if}
@@ -169,8 +171,8 @@
 					<div class="number-primary">{formatNumber(data.analytics.real_metrics.unique_item_summaries)}</div>
 					<div class="stat-title">Unique Summaries</div>
 					<div class="stat-description">
-						{#if data.analytics.real_metrics.population_total > 0}
-							{formatPopulation(data.analytics.real_metrics.population_total)} in coverage
+						{#if data.analytics.real_metrics.population_with_summaries > 0}
+							{formatPopulation(data.analytics.real_metrics.population_with_summaries)} with summaries
 						{:else}
 							Across {formatNumber(data.analytics.real_metrics.meetings_with_items)} item-level meetings
 						{/if}
@@ -535,6 +537,16 @@
 
 	.col-coverage {
 		min-width: 140px;
+	}
+
+	.col-count {
+		min-width: 90px;
+		text-align: right;
+		font-family: 'IBM Plex Mono', monospace;
+	}
+
+	.city-table th.col-count {
+		text-align: right;
 	}
 
 	.col-pop {
