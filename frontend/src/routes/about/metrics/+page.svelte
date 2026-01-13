@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import type { CoverageType } from '$lib/api/types';
 
 	let { data }: { data: PageData } = $props();
+	let activeView: 'overview' | 'coverage' = $state('overview');
 
 	function formatNumber(num: number): string {
 		if (num >= 1000000) {
@@ -20,6 +22,33 @@
 		}
 		return num.toLocaleString() + ' people';
 	}
+
+	function formatPop(num: number): string {
+		if (num >= 1000000) {
+			return (num / 1000000).toFixed(2) + 'M';
+		} else if (num >= 1000) {
+			return Math.round(num / 1000).toLocaleString() + 'K';
+		}
+		return num.toLocaleString();
+	}
+
+	function coverageLabel(type: CoverageType): string {
+		switch (type) {
+			case 'matter': return 'Matter-level';
+			case 'item': return 'Item-level';
+			case 'monolithic': return 'Meeting-level';
+			default: return 'Pending';
+		}
+	}
+
+	function coverageClass(type: CoverageType): string {
+		switch (type) {
+			case 'matter': return 'coverage-matter';
+			case 'item': return 'coverage-item';
+			case 'monolithic': return 'coverage-monolithic';
+			default: return 'coverage-pending';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -28,7 +57,77 @@
 </svelte:head>
 
 <article class="metrics-container">
-	{#if data.analytics}
+	<div class="view-toggle">
+		<button
+			class="toggle-btn"
+			class:active={activeView === 'overview'}
+			onclick={() => activeView = 'overview'}
+		>
+			Overview
+		</button>
+		<button
+			class="toggle-btn"
+			class:active={activeView === 'coverage'}
+			onclick={() => activeView = 'coverage'}
+		>
+			City Coverage
+		</button>
+	</div>
+
+	{#if activeView === 'coverage'}
+		{#if data.cityCoverage}
+			<section class="metrics-section">
+				<h1 class="primary-heading">City Coverage</h1>
+				<p class="section-desc">All cities with active coverage, sorted by population. Coverage depth indicates the granularity of legislative tracking.</p>
+
+				<div class="coverage-summary">
+					<div class="summary-item">
+						<span class="summary-count">{data.cityCoverage.summary.matter}</span>
+						<span class="summary-label coverage-matter">Matter-level</span>
+					</div>
+					<div class="summary-item">
+						<span class="summary-count">{data.cityCoverage.summary.item}</span>
+						<span class="summary-label coverage-item">Item-level</span>
+					</div>
+					<div class="summary-item">
+						<span class="summary-count">{data.cityCoverage.summary.monolithic}</span>
+						<span class="summary-label coverage-monolithic">Meeting-level</span>
+					</div>
+					<div class="summary-item">
+						<span class="summary-count">{data.cityCoverage.summary.total}</span>
+						<span class="summary-label">Total Cities</span>
+					</div>
+				</div>
+
+				<div class="city-table-container">
+					<table class="city-table">
+						<thead>
+							<tr>
+								<th class="col-city">City</th>
+								<th class="col-coverage">Coverage</th>
+								<th class="col-pop">Population</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each data.cityCoverage.cities as city}
+								<tr>
+									<td class="col-city">{city.name}, {city.state}</td>
+									<td class="col-coverage">
+										<span class="coverage-badge {coverageClass(city.coverage_type)}">
+											{coverageLabel(city.coverage_type)}
+										</span>
+									</td>
+									<td class="col-pop">{formatPop(city.population)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{:else}
+			<div class="loading-container">Loading coverage data...</div>
+		{/if}
+	{:else if data.analytics}
 		<section class="metrics-section">
 			<h1 class="primary-heading">Coverage Overview</h1>
 			<div class="cards-grid">
@@ -316,6 +415,192 @@
 
 		.primary-heading {
 			font-size: 1.25rem;
+		}
+	}
+
+	/* View toggle */
+	.view-toggle {
+		display: flex;
+		gap: var(--space-xs);
+		padding: var(--space-xs);
+		background: var(--surface-secondary);
+		border-radius: var(--radius-md);
+		width: fit-content;
+	}
+
+	.toggle-btn {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 500;
+		padding: var(--space-sm) var(--space-lg);
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-secondary);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.toggle-btn:hover {
+		color: var(--text-primary);
+	}
+
+	.toggle-btn.active {
+		background: var(--surface-primary);
+		color: var(--civic-blue);
+		box-shadow: 0 1px 3px var(--shadow-sm);
+	}
+
+	/* Section description */
+	.section-desc {
+		font-size: 0.95rem;
+		color: var(--text-secondary);
+		margin: 0 0 var(--space-md) 0;
+		line-height: 1.5;
+	}
+
+	/* Coverage summary */
+	.coverage-summary {
+		display: flex;
+		gap: var(--space-xl);
+		flex-wrap: wrap;
+		margin-bottom: var(--space-lg);
+	}
+
+	.summary-item {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-sm);
+	}
+
+	.summary-count {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	.summary-label {
+		font-size: 0.9rem;
+		color: var(--text-secondary);
+	}
+
+	/* City table */
+	.city-table-container {
+		overflow-x: auto;
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-md);
+		max-height: 600px;
+		overflow-y: auto;
+	}
+
+	.city-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+	}
+
+	.city-table thead {
+		position: sticky;
+		top: 0;
+		background: var(--surface-secondary);
+		z-index: 1;
+	}
+
+	.city-table th {
+		font-family: 'IBM Plex Mono', monospace;
+		font-weight: 600;
+		text-align: left;
+		padding: var(--space-md) var(--space-lg);
+		border-bottom: 2px solid var(--border-primary);
+		color: var(--text-secondary);
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.city-table td {
+		padding: var(--space-md) var(--space-lg);
+		border-bottom: 1px solid var(--border-subtle);
+		color: var(--text-primary);
+	}
+
+	.city-table tbody tr:hover {
+		background: var(--surface-secondary);
+	}
+
+	.col-city {
+		min-width: 200px;
+	}
+
+	.col-coverage {
+		min-width: 140px;
+	}
+
+	.col-pop {
+		min-width: 100px;
+		text-align: right;
+		font-family: 'IBM Plex Mono', monospace;
+	}
+
+	.city-table th.col-pop {
+		text-align: right;
+	}
+
+	/* Coverage badges */
+	.coverage-badge {
+		display: inline-block;
+		padding: var(--space-xs) var(--space-sm);
+		border-radius: var(--radius-sm);
+		font-size: 0.8rem;
+		font-weight: 500;
+	}
+
+	.coverage-matter {
+		background: rgba(34, 197, 94, 0.15);
+		color: rgb(22, 163, 74);
+	}
+
+	.coverage-item {
+		background: rgba(59, 130, 246, 0.15);
+		color: rgb(37, 99, 235);
+	}
+
+	.coverage-monolithic {
+		background: rgba(168, 162, 158, 0.15);
+		color: var(--text-secondary);
+	}
+
+	.coverage-pending {
+		background: rgba(251, 191, 36, 0.15);
+		color: rgb(217, 119, 6);
+	}
+
+	@media (max-width: 768px) {
+		.view-toggle {
+			width: 100%;
+		}
+
+		.toggle-btn {
+			flex: 1;
+			text-align: center;
+		}
+
+		.coverage-summary {
+			gap: var(--space-md);
+		}
+
+		.summary-count {
+			font-size: 1.25rem;
+		}
+
+		.city-table th,
+		.city-table td {
+			padding: var(--space-sm) var(--space-md);
+		}
+
+		.col-city {
+			min-width: 150px;
 		}
 	}
 </style>

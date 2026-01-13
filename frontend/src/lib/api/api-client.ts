@@ -28,7 +28,8 @@ import type {
 	IssuesResponse,
 	ReportIssueResponse,
 	IssueType,
-	HappeningResponse
+	HappeningResponse,
+	CityCoverageResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -452,6 +453,11 @@ export const apiClient = {
 		})();
 		inflightRequests.set(cacheKey, request);
 		return request;
+	},
+
+	async getCityCoverage(): Promise<CityCoverageResponse> {
+		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/city-coverage`);
+		return response.json();
 	}
 };
 
@@ -541,6 +547,11 @@ export function createServerApiClient(clientIp: string | null, ssrAuthSecret?: s
 
 		async getCommittee(committeeId: string): Promise<CommitteeDetailResponse> {
 			const response = await serverFetch(`${config.apiBaseUrl}/api/committees/${committeeId}`);
+			return response.json();
+		},
+
+		async getCityCoverage(): Promise<CityCoverageResponse> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/city-coverage`);
 			return response.json();
 		}
 	};
