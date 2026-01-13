@@ -176,6 +176,7 @@ export interface AnalyticsData {
 		cities_covered: number;
 		active_cities: number;
 		frequently_updated_cities: number;
+		frequently_updated_population: number;
 		meetings_tracked: number;
 		meetings_with_items: number;
 		meetings_with_packet: number;
@@ -763,6 +764,7 @@ export interface CityWithCoverage {
 	state: string;
 	population: number;
 	coverage_type: CoverageType;
+	summary_count: number;
 }
 
 export interface CityCoverageSummary {

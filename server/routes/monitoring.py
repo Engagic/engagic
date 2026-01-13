@@ -344,14 +344,18 @@ async def get_analytics(db: Database = Depends(get_db)):
             unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
 
             # Frequently updated cities (cities with at least 7 meetings with summaries)
+            # Also get their combined population
             frequently_updated_stats = await conn.fetchrow("""
-                SELECT COUNT(*) as frequently_updated
+                SELECT
+                    COUNT(*) as frequently_updated,
+                    COALESCE(SUM(pop), 0) as population
                 FROM (
-                    SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count
+                    SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count, c.population as pop
                     FROM meetings m
+                    JOIN cities c ON m.banana = c.banana
                     WHERE (m.summary IS NOT NULL AND m.summary != '')
                        OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
-                    GROUP BY m.banana
+                    GROUP BY m.banana, c.population
                     HAVING COUNT(DISTINCT m.id) >= 7
                 ) AS subquery
             """)
@@ -389,6 +393,7 @@ async def get_analytics(db: Database = Depends(get_db)):
                 "cities_covered": total_cities["total_cities"],
                 "active_cities": active_cities_stats["active_cities"],
                 "frequently_updated_cities": frequently_updated_stats["frequently_updated"],
+                "frequently_updated_population": frequently_updated_stats["population"],
                 "meetings_tracked": meetings_stats["meetings_count"],
                 "meetings_with_items": meetings_with_items_stats["meetings_with_items"],
                 "meetings_with_packet": packets_stats["packets_count"],
@@ -411,13 +416,13 @@ async def get_analytics(db: Database = Depends(get_db)):
 
 @router.get("/api/city-coverage")
 async def get_city_coverage(db: Database = Depends(get_db)):
-    """Get city coverage breakdown: name, coverage type (matter/item/monolithic), population"""
+    """Get city coverage breakdown: name, coverage type, summary count, population"""
     try:
         async with db.pool.acquire() as conn:
-            # Determine coverage type per city:
-            # - matter: has city_matters with canonical_summary
-            # - item: has items with summary (but no matter summaries)
-            # - monolithic: only has meeting-level summaries
+            # Determine coverage type and count summaries per city:
+            # - matter: count city_matters with canonical_summary
+            # - item: count items with summary
+            # - monolithic: count meetings with summary
             rows = await conn.fetch("""
                 WITH city_coverage AS (
                     SELECT
@@ -425,25 +430,19 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                         c.name,
                         c.state,
                         c.population,
-                        EXISTS (
-                            SELECT 1 FROM city_matters cm
-                            WHERE cm.banana = c.banana
-                            AND cm.canonical_summary IS NOT NULL
-                            AND cm.canonical_summary != ''
-                        ) AS has_matter_summaries,
-                        EXISTS (
-                            SELECT 1 FROM items i
-                            JOIN meetings m ON i.meeting_id = m.id
-                            WHERE m.banana = c.banana
-                            AND i.summary IS NOT NULL
-                            AND i.summary != ''
-                        ) AS has_item_summaries,
-                        EXISTS (
-                            SELECT 1 FROM meetings m
-                            WHERE m.banana = c.banana
-                            AND m.summary IS NOT NULL
-                            AND m.summary != ''
-                        ) AS has_meeting_summaries
+                        (SELECT COUNT(*) FROM city_matters cm
+                         WHERE cm.banana = c.banana
+                         AND cm.canonical_summary IS NOT NULL
+                         AND cm.canonical_summary != '') AS matter_count,
+                        (SELECT COUNT(*) FROM items i
+                         JOIN meetings m ON i.meeting_id = m.id
+                         WHERE m.banana = c.banana
+                         AND i.summary IS NOT NULL
+                         AND i.summary != '') AS item_count,
+                        (SELECT COUNT(*) FROM meetings m
+                         WHERE m.banana = c.banana
+                         AND m.summary IS NOT NULL
+                         AND m.summary != '') AS meeting_count
                     FROM cities c
                     WHERE c.banana IN (SELECT DISTINCT banana FROM meetings)
                 )
@@ -452,13 +451,19 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                     state,
                     COALESCE(population, 0) AS population,
                     CASE
-                        WHEN has_matter_summaries THEN 'matter'
-                        WHEN has_item_summaries THEN 'item'
-                        WHEN has_meeting_summaries THEN 'monolithic'
+                        WHEN matter_count > 0 THEN 'matter'
+                        WHEN item_count > 0 THEN 'item'
+                        WHEN meeting_count > 0 THEN 'monolithic'
                         ELSE 'pending'
-                    END AS coverage_type
+                    END AS coverage_type,
+                    CASE
+                        WHEN matter_count > 0 THEN matter_count
+                        WHEN item_count > 0 THEN item_count
+                        WHEN meeting_count > 0 THEN meeting_count
+                        ELSE 0
+                    END AS summary_count
                 FROM city_coverage
-                WHERE has_matter_summaries OR has_item_summaries OR has_meeting_summaries
+                WHERE matter_count > 0 OR item_count > 0 OR meeting_count > 0
                 ORDER BY population DESC NULLS LAST
             """)
 
@@ -468,6 +473,7 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                     "state": row["state"],
                     "population": row["population"],
                     "coverage_type": row["coverage_type"],
+                    "summary_count": row["summary_count"],
                 }
                 for row in rows
             ]
