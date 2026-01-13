@@ -13,16 +13,18 @@ export function sortMeetingsByDate(meetings: Meeting[]): Meeting[] {
 }
 
 /**
- * Splits meetings into upcoming and past based on current date.
+ * Splits meetings into upcoming and past based on current time.
+ * Meetings persist as "upcoming" for 6 hours after their start time
+ * (since meetings typically last a few hours).
  * Meetings with invalid/missing dates are considered upcoming.
  */
 export function splitMeetingsByDate(meetings: Meeting[]): {
 	upcoming: Meeting[];
 	past: Meeting[];
 } {
-	// Get today's date at midnight (start of day) for date-only comparison
 	const now = new Date();
-	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	// 6 hours in milliseconds - meetings stay "upcoming" for this long after start
+	const MEETING_DURATION_MS = 6 * 60 * 60 * 1000;
 
 	const upcoming: Meeting[] = [];
 	const past: Meeting[] = [];
@@ -42,11 +44,9 @@ export function splitMeetingsByDate(meetings: Meeting[]): {
 			continue;
 		}
 
-		// Normalize meeting date to midnight for date-only comparison
-		const meetingDay = new Date(meetingDate.getFullYear(), meetingDate.getMonth(), meetingDate.getDate());
-
-		// Meeting is upcoming if it's today or later
-		if (meetingDay >= today) {
+		// Meeting is upcoming if current time is before (start time + 6 hours)
+		const meetingEndTime = meetingDate.getTime() + MEETING_DURATION_MS;
+		if (now.getTime() < meetingEndTime) {
 			upcoming.push(meeting);
 		} else {
 			past.push(meeting);
