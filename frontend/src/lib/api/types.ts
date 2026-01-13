@@ -754,3 +754,27 @@ export interface HappeningResponse {
 	count: number;
 	items: HappeningItem[];
 }
+
+// City coverage types for transparency page
+export type CoverageType = 'matter' | 'item' | 'monolithic' | 'pending';
+
+export interface CityWithCoverage {
+	name: string;
+	state: string;
+	population: number;
+	coverage_type: CoverageType;
+}
+
+export interface CityCoverageSummary {
+	matter: number;
+	item: number;
+	monolithic: number;
+	total: number;
+}
+
+export interface CityCoverageResponse {
+	success: boolean;
+	timestamp: string;
+	summary: CityCoverageSummary;
+	cities: CityWithCoverage[];
+}

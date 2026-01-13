@@ -407,3 +407,86 @@ async def get_analytics(db: Database = Depends(get_db)):
         raise HTTPException(
             status_code=500, detail="We humbly thank you for your patience"
         )
+
+
+@router.get("/api/city-coverage")
+async def get_city_coverage(db: Database = Depends(get_db)):
+    """Get city coverage breakdown: name, coverage type (matter/item/monolithic), population"""
+    try:
+        async with db.pool.acquire() as conn:
+            # Determine coverage type per city:
+            # - matter: has city_matters with canonical_summary
+            # - item: has items with summary (but no matter summaries)
+            # - monolithic: only has meeting-level summaries
+            rows = await conn.fetch("""
+                WITH city_coverage AS (
+                    SELECT
+                        c.banana,
+                        c.name,
+                        c.state,
+                        c.population,
+                        EXISTS (
+                            SELECT 1 FROM city_matters cm
+                            WHERE cm.banana = c.banana
+                            AND cm.canonical_summary IS NOT NULL
+                            AND cm.canonical_summary != ''
+                        ) AS has_matter_summaries,
+                        EXISTS (
+                            SELECT 1 FROM items i
+                            JOIN meetings m ON i.meeting_id = m.id
+                            WHERE m.banana = c.banana
+                            AND i.summary IS NOT NULL
+                            AND i.summary != ''
+                        ) AS has_item_summaries,
+                        EXISTS (
+                            SELECT 1 FROM meetings m
+                            WHERE m.banana = c.banana
+                            AND m.summary IS NOT NULL
+                            AND m.summary != ''
+                        ) AS has_meeting_summaries
+                    FROM cities c
+                    WHERE c.banana IN (SELECT DISTINCT banana FROM meetings)
+                )
+                SELECT
+                    name,
+                    state,
+                    COALESCE(population, 0) AS population,
+                    CASE
+                        WHEN has_matter_summaries THEN 'matter'
+                        WHEN has_item_summaries THEN 'item'
+                        WHEN has_meeting_summaries THEN 'monolithic'
+                        ELSE 'pending'
+                    END AS coverage_type
+                FROM city_coverage
+                WHERE has_matter_summaries OR has_item_summaries OR has_meeting_summaries
+                ORDER BY population DESC NULLS LAST
+            """)
+
+            cities = [
+                {
+                    "name": row["name"],
+                    "state": row["state"],
+                    "population": row["population"],
+                    "coverage_type": row["coverage_type"],
+                }
+                for row in rows
+            ]
+
+            # Summary counts
+            summary = {
+                "matter": sum(1 for c in cities if c["coverage_type"] == "matter"),
+                "item": sum(1 for c in cities if c["coverage_type"] == "item"),
+                "monolithic": sum(1 for c in cities if c["coverage_type"] == "monolithic"),
+                "total": len(cities),
+            }
+
+        return {
+            "success": True,
+            "timestamp": datetime.now().isoformat(),
+            "summary": summary,
+            "cities": cities,
+        }
+
+    except Exception as e:
+        logger.error("city coverage endpoint failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch city coverage")

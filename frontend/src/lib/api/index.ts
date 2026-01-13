@@ -50,3 +50,6 @@ export const logView = apiClient.logView.bind(apiClient);
 
 // Happening This Week endpoints
 export const getHappeningItems = apiClient.getHappeningItems.bind(apiClient);
+
+// Coverage transparency
+export const getCityCoverage = apiClient.getCityCoverage.bind(apiClient);
