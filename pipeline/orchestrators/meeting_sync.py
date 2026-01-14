@@ -204,13 +204,14 @@ class MeetingSyncOrchestrator:
             raise
 
     def _parse_meeting_date(self, meeting_dict: Dict[str, Any]) -> Optional[datetime]:
-        """Parse date string, trying ISO then common US formats."""
+        """Parse date string to timezone-naive datetime for DB storage."""
         date_str = meeting_dict.get("start")
         if not date_str:
             return None
 
         try:
-            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            return dt.replace(tzinfo=None)
         except ValueError:
             pass
 

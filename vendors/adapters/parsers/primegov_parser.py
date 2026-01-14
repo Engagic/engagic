@@ -23,25 +23,7 @@ logger = get_logger(__name__).bind(component="vendor")
 
 
 def parse_html_agenda(html: str) -> Dict[str, Any]:
-    """
-    Parse PrimeGov HTML agenda to extract items and participation info.
-
-    Args:
-        html: HTML content from /Portal/Meeting page
-
-    Returns:
-        {
-            'participation': {...},  # Contact info (email, phone, zoom, etc.)
-            'items': [               # Agenda items
-                {
-                    'vendor_item_id': str,
-                    'title': str,
-                    'sequence': int,
-                    'attachments': [{'name': str, 'history_id': str, 'url': str}]
-                }
-            ]
-        }
-    """
+    """Parse PrimeGov HTML agenda to extract items and participation info."""
     soup = BeautifulSoup(html, 'html.parser')
 
     # Extract participation info from page text (before agenda items)
@@ -54,8 +36,10 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
     # Get field names for logging
     participation_fields = list(participation_info.model_dump(exclude_none=True).keys()) if participation_info else []
     logger.debug(
-        f"[HTMLParser:PrimeGov] Extracted {len(items)} agenda items, "
-        f"participation fields: {participation_fields}"
+        "extracted agenda items",
+        parser="primegov",
+        item_count=len(items),
+        participation_fields=participation_fields
     )
 
     # Convert to dict for return, defaulting to empty dict if None
@@ -68,13 +52,7 @@ def parse_html_agenda(html: str) -> Dict[str, Any]:
 
 
 def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
-    """
-    Extract agenda items from HTML structure.
-
-    Handles two patterns:
-    1. LA/newer: meeting-item wrapper with matter tracking metadata
-    2. Palo Alto/older: direct agenda-item divs without matter tracking
-    """
+    """Extract agenda items from HTML (LA, Palo Alto, or Boulder patterns)."""
     items = []
 
     # Try newer pattern first (LA): meeting-item wrappers
@@ -86,13 +64,24 @@ def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
             item_dict = _extract_la_pattern_item(meeting_item_div, soup, sequence)
             if item_dict:
                 items.append(item_dict)
-    else:
-        # Fallback to older pattern (Palo Alto): direct agenda-item divs
-        agenda_items = soup.find_all('div', class_='agenda-item')
-        logger.debug("found agenda-item divs (Palo Alto pattern)", parser="primegov", item_count=len(agenda_items))
+        return items
 
+    # Try Palo Alto pattern: direct agenda-item divs
+    agenda_items = soup.find_all('div', class_='agenda-item')
+    if agenda_items:
+        logger.debug("found agenda-item divs (Palo Alto pattern)", parser="primegov", item_count=len(agenda_items))
         for sequence, item_div in enumerate(agenda_items, 1):
             item_dict = _extract_palo_alto_pattern_item(item_div, soup, sequence)
+            if item_dict:
+                items.append(item_dict)
+        return items
+
+    # Fallback to Boulder pattern: table elements with data-itemid
+    table_items = soup.find_all('table', attrs={'data-itemid': True})
+    if table_items:
+        logger.debug("found table items (Boulder pattern)", parser="primegov", item_count=len(table_items))
+        for sequence, table in enumerate(table_items, 1):
+            item_dict = _extract_boulder_pattern_item(table, soup, sequence)
             if item_dict:
                 items.append(item_dict)
 
@@ -100,35 +89,13 @@ def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
 
 
 def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup, sequence: int) -> Optional[Dict[str, Any]]:
-    """
-    Extract item from LA pattern (meeting-item wrapper with matter tracking).
-
-    Structure:
-      <div class="meeting-item" data-itemid="156460" data-mig="...uuid..." data-hasattachments="True">
-        <table class="item-table">
-          <tr>
-            <td class="number-cell">(1)</td>
-            <td class="item-cell">
-              <div class="agenda-item" id="AgendaItem_156460">
-                <table class="forcepopulate">
-                  <tr><td colspan="2">25-1209</td></tr>  <!-- matter_file -->
-                  <tr>
-                    <td>CD 12</td>  <!-- matter_type or metadata -->
-                    <td>Title text here...</td>
-                  </tr>
-                </table>
-              </div>
-            </td>
-          </tr>
-        </table>
-      </div>
-    """
+    """Extract item from LA pattern (meeting-item wrapper with matter tracking)."""
     # Extract metadata from meeting-item div
     item_id = meeting_item_div.get('data-itemid')
     matter_id = meeting_item_div.get('data-mig')  # Matter GUID
 
     if not item_id:
-        logger.debug("[HTMLParser:PrimeGov:LA] meeting-item missing data-itemid, skipping")
+        logger.debug("meeting-item missing data-itemid, skipping", parser="primegov", pattern="LA")
         return None
 
     # Find agenda-item div inside
@@ -201,20 +168,20 @@ def _extract_la_pattern_item(meeting_item_div, soup: BeautifulSoup, sequence: in
         item_dict['agenda_number'] = agenda_number
 
     logger.debug(
-        f"[HTMLParser:PrimeGov:LA] Item {item_id}: "
-        f"matter_file={matter_file}, matter_type={matter_type}, "
-        f"title='{title[:60] if title else ''}...'"
+        "parsed LA pattern item",
+        parser="primegov",
+        pattern="LA",
+        item_id=item_id,
+        matter_file=matter_file,
+        matter_type=matter_type,
+        title_preview=title[:60] if title else ''
     )
 
     return item_dict
 
 
 def _extract_palo_alto_pattern_item(item_div, soup: BeautifulSoup, sequence: int) -> Optional[Dict[str, Any]]:
-    """
-    Extract item from Palo Alto pattern (direct agenda-item divs without matter tracking).
-
-    Fallback for cities that don't use meeting-item wrappers.
-    """
+    """Extract item from Palo Alto pattern (direct agenda-item divs)."""
     # Get item ID from div (format: "AgendaItem_12345")
     item_full_id = item_div.get('id', '')
     if not item_full_id:
@@ -244,15 +211,81 @@ def _extract_palo_alto_pattern_item(item_div, soup: BeautifulSoup, sequence: int
     }
 
     logger.debug(
-        f"[HTMLParser:PrimeGov:PaloAlto] Item {sequence}: '{title[:60]}...' "
-        f"({len(attachments)} attachments)"
+        "parsed PaloAlto pattern item",
+        parser="primegov",
+        pattern="PaloAlto",
+        sequence=sequence,
+        title_preview=title[:60] if title else '',
+        attachments=len(attachments)
+    )
+
+    return item_dict
+
+
+def _extract_boulder_pattern_item(table, soup: BeautifulSoup, sequence: int) -> Optional[Dict[str, Any]]:
+    """Extract item from Boulder pattern (table elements with data-itemid)."""
+    item_id = table.get('data-itemid')
+    if not item_id:
+        return None
+
+    # Extract title from the third cell (index 2) which usually has class agenda-item
+    # or is the main content cell
+    cells = table.find_all('td')
+    title = None
+    agenda_number = None
+
+    for i, cell in enumerate(cells):
+        cell_classes = cell.get('class', [])
+        cell_text = cell.get_text(strip=True)
+
+        # Skip empty cells and attachment/button cells
+        if not cell_text or 'attachmentCell' in cell_classes or 'optionalButtonsCell' in cell_classes:
+            continue
+
+        # Short text like "A.", "B.", "1." is likely the agenda number
+        if len(cell_text) <= 3 and (cell_text.endswith('.') or cell_text.isdigit()):
+            agenda_number = cell_text.rstrip('.')
+            continue
+
+        # Otherwise it's the title
+        if not title:
+            title = cell_text
+
+    if not title:
+        logger.debug("table item has no title, skipping", parser="primegov", pattern="Boulder", item_id=item_id)
+        return None
+
+    # Find corresponding item_contents div for attachments
+    contents_id = f"agenda_item_area_{item_id}"
+    contents_div = soup.find('div', id=contents_id)
+    attachments = []
+    if contents_div:
+        attachments = _extract_attachments(contents_div, item_id)
+
+    item_dict = {
+        'vendor_item_id': str(item_id),
+        'title': title,
+        'sequence': sequence,
+        'attachments': attachments,
+    }
+
+    if agenda_number:
+        item_dict['agenda_number'] = agenda_number
+
+    logger.debug(
+        "parsed Boulder pattern item",
+        parser="primegov",
+        pattern="Boulder",
+        item_id=item_id,
+        title_preview=title[:60] if title else '',
+        attachments=len(attachments)
     )
 
     return item_dict
 
 
 def _extract_attachments(contents_div, item_id: str) -> List[Dict[str, Any]]:
-    """Extract attachment links from item_contents div"""
+    """Extract attachment links from item_contents div."""
     attachments = []
 
     # Find all links in the contents
@@ -280,8 +313,3 @@ def _extract_attachments(contents_div, item_id: str) -> List[Dict[str, Any]]:
                 })
 
     return attachments
-
-
-# Confidence: 8/10
-# Works with PrimeGov's current HTML structure.
-# LA pattern (matter tracking) and Palo Alto pattern (legacy) both supported.

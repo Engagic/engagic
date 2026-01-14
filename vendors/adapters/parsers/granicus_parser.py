@@ -250,6 +250,40 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
 
             items.append(item_dict)
 
+    # Strategy 3: Fallback to extracting all loadAgendaItem links (Durham-style)
+    if not items:
+        seen_ids = set()
+        sequence_counter = 0
+        for link in soup.find_all('a', href=lambda x: x and 'loadAgendaItem' in x if x else False):
+            href = link.get('href', '')
+            match = re.search(r'loadAgendaItem\((\d+)', href)
+            if not match:
+                continue
+
+            item_id = match.group(1)
+            if item_id in seen_ids:
+                continue
+            seen_ids.add(item_id)
+
+            title = link.get_text(strip=True)
+            if not title:
+                continue
+
+            # Skip section headers (usually short generic titles)
+            if title.lower() in ('call to order', 'roll call', 'adjournment'):
+                continue
+
+            sequence_counter += 1
+            items.append({
+                'vendor_item_id': item_id,
+                'title': title,
+                'sequence': sequence_counter,
+                'attachments': [],
+            })
+
+        if items:
+            logger.debug("parsed agendaonline via loadAgendaItem links", vendor="granicus", item_count=len(items))
+
     logger.debug(
         "parsed agendaonline html",
         vendor="granicus",
@@ -377,8 +411,3 @@ def parse_agendaviewer_html(html: str) -> Dict[str, Any]:
 
 # Alias for backward compatibility
 parse_html_agenda = parse_agendaviewer_html
-
-
-# Confidence: 7/10
-# Works with Granicus AgendaViewer HTML structure
-# MetaViewer PDF extraction requires follow-up HTTP requests

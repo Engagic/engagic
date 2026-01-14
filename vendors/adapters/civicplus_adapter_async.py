@@ -1,16 +1,18 @@
 """
-Async CivicPlus Adapter - Complex discovery and scraping for CivicPlus sites
+Async CivicPlus Adapter - Discovery and scraping for CivicPlus sites
 
-CivicPlus cities often redirect to other platforms (Granicus, Municode, etc.)
-This adapter handles:
-- Homepage scraping to detect external agenda systems
-- Multiple agenda URL patterns
-- PDF extraction from agenda pages
+CivicPlus cities use varied hosting:
+- *.civicplus.com (standard)
+- *.gov / *.org (custom domains like cityofithacany.gov)
 
-Async version with:
-- aiohttp for async HTTP requests
-- asyncio.to_thread for CPU-bound BeautifulSoup parsing
-- Non-blocking I/O for concurrent city fetching
+This adapter auto-discovers the working domain by trying candidates in order:
+1. {slug}.civicplus.com
+2. www.{slug}.gov
+3. {slug}.gov
+4. www.{slug}.org
+5. {slug}.org
+
+Use clean slugs (e.g., "cityofithacany" not "www.cityofithacany.gov").
 """
 
 import re
@@ -25,63 +27,34 @@ from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from pipeline.protocols import MetricsCollector
+from exceptions import VendorHTTPError
 
 
 class AsyncCivicPlusAdapter(AsyncBaseAdapter):
     """Async adapter for cities using CivicPlus CMS (often with external agenda systems)"""
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
-        """city_slug is the CivicPlus subdomain (e.g., "cityname")"""
+        """city_slug is clean city identifier (e.g., "cityofithacany")"""
         super().__init__(city_slug, vendor="civicplus", metrics=metrics)
-        self.base_url = f"https://{self.slug}.civicplus.com"
+        self.base_url = None  # Discovered during fetch
 
-    async def _check_for_external_system(self) -> None:
-        """Check homepage for external agenda system links (Granicus, Municode, Legistar, etc.)"""
-        try:
-            response = await self._get(self.base_url)
-            html = await response.text()
-            soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
-
-            known_systems = {
-                "municodemeetings.com": "municode",
-                "granicus.com": "granicus",
-                "legistar.com": "legistar",
-                "primegov.com": "primegov",
-                "civicclerk.com": "civicclerk",
-                "novusagenda.com": "novusagenda",
-                "iqm2.com": "iqm2",
-            }
-
-            for link in soup.find_all("a", href=True):
-                link_text = link.get_text().strip().lower()
-                href = link["href"]
-
-                if any(word in link_text for word in ["agenda", "meeting", "minutes"]):
-                    if href.startswith("http") and "civicplus.com" not in href:
-                        domain = urlparse(href).netloc
-
-                        for pattern, vendor in known_systems.items():
-                            if pattern in domain:
-                                logger.warning(
-                                    "city uses external agenda system",
-                                    vendor="civicplus",
-                                    slug=self.slug,
-                                    detected_vendor=vendor,
-                                    domain=domain,
-                                    action="update city config to use correct adapter"
-                                )
-                                break
-
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.debug(
-                "could not check for external system",
-                vendor="civicplus",
-                slug=self.slug,
-                error=str(e)
-            )
+    def _get_candidate_base_urls(self) -> List[str]:
+        """Return candidate base URLs to try, in priority order."""
+        slug = self.slug
+        candidates = [
+            f"https://{slug}.civicplus.com",
+            f"https://www.{slug}.gov",
+            f"https://{slug}.gov",
+            f"https://www.{slug}.org",
+            f"https://{slug}.org",
+        ]
+        # If slug already has a dot, it's a full domain - try it directly first
+        if "." in slug:
+            candidates.insert(0, f"https://{slug}")
+        return candidates
 
     async def _find_agenda_url(self) -> Optional[str]:
-        """Discover agenda page URL from common CivicPlus patterns."""
+        """Discover agenda page URL from common CivicPlus patterns across candidate domains."""
         patterns = [
             "/AgendaCenter",
             "/Calendar.aspx",
@@ -90,32 +63,33 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             "/agendas",
         ]
 
-        for pattern in patterns:
-            test_url = f"{self.base_url}{pattern}"
-            try:
-                response = await self._get(test_url)
-                html = await response.text()
-                if response.status == 200 and (
-                    "agenda" in html.lower()
-                    or "meeting" in html.lower()
-                ):
-                    logger.info("found agenda page", vendor="civicplus", slug=self.slug, pattern=pattern)
-                    return test_url
-            except (aiohttp.ClientError, asyncio.TimeoutError):
-                continue
+        for base_url in self._get_candidate_base_urls():
+            for pattern in patterns:
+                test_url = f"{base_url}{pattern}"
+                try:
+                    response = await self._get(test_url)
+                    html = await response.text()
+                    if response.status == 200 and (
+                        "agenda" in html.lower()
+                        or "meeting" in html.lower()
+                    ):
+                        self.base_url = base_url  # Store discovered base URL
+                        logger.info("found agenda page", vendor="civicplus", slug=self.slug, base_url=base_url, pattern=pattern)
+                        return test_url
+                except VendorHTTPError:
+                    continue
 
         logger.warning("could not find agenda page", vendor="civicplus", slug=self.slug)
         return None
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Scrape AgendaCenter HTML and filter meetings by date range."""
-        await self._check_for_external_system()
-
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
         agenda_url = await self._find_agenda_url()
+
         if not agenda_url:
             logger.error(
                 "no agenda page found - cannot fetch meetings",
