@@ -9,11 +9,64 @@ Adapted for async PostgreSQL with repository pattern
 import sys
 import os
 import asyncio
+import re
+from datetime import datetime
 from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from uszipcode import SearchEngine
+
 from database.db_postgres import Database
+from database.models import City
+
+
+# State abbreviation to FIPS code mapping
+STATE_TO_FIPS = {
+    'AL': '01', 'AK': '02', 'AZ': '04', 'AR': '05', 'CA': '06',
+    'CO': '08', 'CT': '09', 'DE': '10', 'DC': '11', 'FL': '12',
+    'GA': '13', 'HI': '15', 'ID': '16', 'IL': '17', 'IN': '18',
+    'IA': '19', 'KS': '20', 'KY': '21', 'LA': '22', 'ME': '23',
+    'MD': '24', 'MA': '25', 'MI': '26', 'MN': '27', 'MS': '28',
+    'MO': '29', 'MT': '30', 'NE': '31', 'NV': '32', 'NH': '33',
+    'NJ': '34', 'NM': '35', 'NY': '36', 'NC': '37', 'ND': '38',
+    'OH': '39', 'OK': '40', 'OR': '41', 'PA': '42', 'RI': '44',
+    'SC': '45', 'SD': '46', 'TN': '47', 'TX': '48', 'UT': '49',
+    'VT': '50', 'VA': '51', 'WA': '53', 'WV': '54', 'WI': '55', 'WY': '56'
+}
+
+
+def lookup_zipcodes(city_name: str, state: str) -> list[str]:
+    """Look up zipcodes for a city using uszipcode.
+
+    Returns list of zipcode strings.
+    """
+    se = SearchEngine(
+        simple_or_comprehensive=SearchEngine.SimpleOrComprehensiveArgEnum.comprehensive
+    )
+    results = se.query(city=city_name, state=state, returns=200)
+    return [z.zipcode for z in results if z.zipcode]
+
+
+async def lookup_census_population(db: Database, city_name: str, state: str) -> Optional[int]:
+    """Look up population from census_places table (Census 2023 estimates).
+
+    Returns population or None if not found.
+    """
+    fips = STATE_TO_FIPS.get(state.upper())
+    if not fips:
+        return None
+
+    async with db.pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT population FROM census_places
+            WHERE UPPER(name) = UPPER($1) AND statefp = $2
+            LIMIT 1
+            """,
+            city_name, fips
+        )
+        return row['population'] if row else None
 
 
 class DatabaseViewer:
@@ -108,7 +161,7 @@ class DatabaseViewer:
                 meetings.extend(city_meetings)
 
             # Sort by date and limit
-            meetings.sort(key=lambda m: m.get('date') or '', reverse=True)
+            meetings.sort(key=lambda m: m.date or datetime.min, reverse=True)
             meetings = meetings[:limit]
         else:
             # Get recent meetings across all cities
@@ -227,7 +280,7 @@ class DatabaseViewer:
                 )
 
     async def add_city(self):
-        """Interactive city addition"""
+        """Interactive city addition with auto-populated zipcodes and population."""
         print("\n=== ADD NEW CITY ===")
 
         try:
@@ -241,6 +294,21 @@ class DatabaseViewer:
                 print("State must be 2-letter code (e.g., CA)")
                 return False
 
+            # Auto-lookup zipcodes (from uszipcode) and population (from Census)
+            print(f"Looking up {city_name}, {state}...")
+            auto_zipcodes = lookup_zipcodes(city_name, state)
+            auto_population = await lookup_census_population(self.db, city_name, state)
+
+            if auto_zipcodes:
+                print(f"   Found {len(auto_zipcodes)} zipcodes (uszipcode)")
+            else:
+                print("   No zipcodes found in uszipcode database")
+
+            if auto_population:
+                print(f"   Population: {auto_population:,} (Census 2023)")
+            else:
+                print("   No Census population found")
+
             slug = input("Slug (vendor-specific): ").strip()
             if not slug:
                 print("Slug required")
@@ -253,28 +321,40 @@ class DatabaseViewer:
 
             county = input("County (optional): ").strip() or None
 
-            zipcodes_input = input("Zipcodes (comma-separated, optional): ").strip()
-            zipcodes = (
-                [z.strip() for z in zipcodes_input.split(",")] if zipcodes_input else []
-            )
+            # Allow manual zipcode override
+            zipcodes_input = input(
+                f"Zipcodes (comma-separated, Enter to use {len(auto_zipcodes)} auto-detected): "
+            ).strip()
+            if zipcodes_input:
+                zipcodes = [z.strip() for z in zipcodes_input.split(",")]
+            else:
+                zipcodes = auto_zipcodes
+
+            # Allow manual population override
+            pop_default = f"{auto_population:,}" if auto_population else "none"
+            pop_input = input(f"Population (Enter to use {pop_default}): ").strip()
+            if pop_input:
+                population = int(pop_input)
+            else:
+                population = auto_population
 
             # Generate banana
-            import re
             banana = re.sub(r"[^a-zA-Z0-9]", "", city_name).lower() + state.upper()
 
-            city_data = {
-                'banana': banana,
-                'name': city_name,
-                'state': state,
-                'vendor': vendor,
-                'slug': slug,
-                'county': county,
-                'status': 'active'
-            }
+            city = City(
+                banana=banana,
+                name=city_name,
+                state=state,
+                vendor=vendor,
+                slug=slug,
+                county=county,
+                status='active',
+                population=population
+            )
 
-            await self.db.cities.upsert_city(city_data)
+            await self.db.cities.upsert_city(city)
 
-            # Add zipcodes if provided
+            # Add zipcodes
             if zipcodes:
                 async with self.db.pool.acquire() as conn:
                     for i, zipcode in enumerate(zipcodes):
@@ -289,8 +369,10 @@ class DatabaseViewer:
                         )
 
             print(f"Added city '{city_name}, {state}' with banana {banana}")
+            if population:
+                print(f"   Population: {population:,}")
             if zipcodes:
-                print(f"   Added {len(zipcodes)} zipcodes: {', '.join(zipcodes)}")
+                print(f"   Added {len(zipcodes)} zipcodes")
             return True
 
         except KeyboardInterrupt:

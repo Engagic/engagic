@@ -90,15 +90,16 @@ class CityRepository(BaseRepository):
         async with self.transaction() as conn:
             await conn.execute(
                 """
-                INSERT INTO cities (banana, name, state, vendor, slug, county, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO cities (banana, name, state, vendor, slug, county, status, population)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT (banana) DO UPDATE SET
                     name = EXCLUDED.name,
                     state = EXCLUDED.state,
                     vendor = EXCLUDED.vendor,
                     slug = EXCLUDED.slug,
                     county = COALESCE(EXCLUDED.county, cities.county),
-                    status = COALESCE(EXCLUDED.status, cities.status)
+                    status = COALESCE(EXCLUDED.status, cities.status),
+                    population = COALESCE(EXCLUDED.population, cities.population)
                 """,
                 city.banana,
                 city.name,
@@ -107,6 +108,7 @@ class CityRepository(BaseRepository):
                 city.slug,
                 city.county,
                 city.status or "active",
+                city.population,
             )
 
             # Insert zipcodes (batch for efficiency)

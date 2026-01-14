@@ -287,22 +287,24 @@ class MatterRepository(BaseRepository):
     ) -> List[Matter]:
         """Full-text search on matters using PostgreSQL FTS."""
         # Uses search_vector stored column (requires migration 012_fts_optimization)
+        # Filters orphan matters (0 items) to prevent stale duplicates from old ID generation
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
                 SELECT
-                    id, banana, matter_id, matter_file, matter_type,
-                    title, sponsors, canonical_summary, canonical_topics,
-                    attachments, metadata, first_seen, last_seen,
-                    appearance_count, status, final_vote_date, quality_score, rating_count,
-                    ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
-                FROM city_matters
-                WHERE banana = $2
+                    cm.id, cm.banana, cm.matter_id, cm.matter_file, cm.matter_type,
+                    cm.title, cm.sponsors, cm.canonical_summary, cm.canonical_topics,
+                    cm.attachments, cm.metadata, cm.first_seen, cm.last_seen,
+                    cm.appearance_count, cm.status, cm.final_vote_date, cm.quality_score, cm.rating_count,
+                    ts_rank(cm.search_vector, plainto_tsquery('english', $1)) AS rank
+                FROM city_matters cm
+                WHERE cm.banana = $2
                   AND (
-                      search_vector @@ plainto_tsquery('english', $1)
-                      OR matter_file ILIKE '%' || $1 || '%'
+                      cm.search_vector @@ plainto_tsquery('english', $1)
+                      OR cm.matter_file ILIKE '%' || $1 || '%'
                   )
-                ORDER BY rank DESC, last_seen DESC
+                  AND EXISTS (SELECT 1 FROM items i WHERE i.matter_id = cm.id)
+                ORDER BY rank DESC, cm.last_seen DESC
                 LIMIT $3
                 """,
                 query,

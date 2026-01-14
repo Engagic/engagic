@@ -72,12 +72,28 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
 
 
 def _parse_granicus_date(date_text: str) -> Optional[str]:
-    """Parse Granicus date formats like 'December 22, 2025 - 06:00 PM'."""
+    """Parse Granicus date formats like 'December 22, 2025 - 06:00 PM'.
+
+    Handles hidden Unix timestamp prefix (e.g., '1768204800Jan 12, 2026')
+    and falls back to Unix timestamp if plain text parsing fails.
+    """
     date_text = date_text.replace('\xa0', ' ').strip()
+
+    # Extract Unix timestamp prefix if present (hidden span gets concatenated)
+    unix_timestamp = None
+    if date_text and date_text[0].isdigit():
+        match = re.match(r'^(\d{10,})', date_text)
+        if match:
+            unix_timestamp = int(match.group(1))
+            date_text = date_text[len(match.group(1)):].strip()
+
     formats = [
         "%B %d, %Y - %I:%M %p",  # December 22, 2025 - 06:00 PM
         "%B %d, %Y %I:%M %p",    # December 22, 2025 06:00 PM
         "%B %d, %Y",             # December 22, 2025
+        "%b %d, %Y - %I:%M %p",  # Dec 22, 2025 - 06:00 PM
+        "%b %d, %Y %I:%M %p",    # Dec 22, 2025 06:00 PM
+        "%b %d, %Y",             # Dec 22, 2025
         "%m/%d/%Y %I:%M %p",     # 12/22/2025 06:00 PM
         "%m/%d/%Y",              # 12/22/2025
     ]
@@ -88,6 +104,14 @@ def _parse_granicus_date(date_text: str) -> Optional[str]:
             return dt.isoformat()
         except ValueError:
             continue
+
+    # Fallback: use Unix timestamp if plain text parsing failed
+    if unix_timestamp:
+        try:
+            dt = datetime.fromtimestamp(unix_timestamp)
+            return dt.isoformat()
+        except (ValueError, OSError):
+            pass
 
     return None
 

@@ -12,9 +12,11 @@ menloparkCA
 mountainviewCA
 sanjoseCA
 losangelesCA
+sacramentoCA
 
 # FLORIDA
 miamiFL
+jacksonvilleFL
 
 # TEXAS (2 cities)
 dallasTX
@@ -22,6 +24,8 @@ austinTX
 houstonTX
 sanantonioTX
 tomballTX
+elpasoTX
+fortworthTX
 
 # GEORGIA
 atlantaGA
@@ -32,6 +36,13 @@ columbusOH
 
 # COLORADO (1 city)
 denverCO
+boulderCO
+
+# LOUISIANA
+neworleansLA
+
+# NEVADA
+lasvegasNV
 
 # NEW YORK (1 city)
 newyorkNY
@@ -39,9 +50,15 @@ newyorkNY
 # ARIZONA (1 city)
 phoenixAZ
 
+# OKLAHOMA
+oklahomacityOK
+
 # MASSACHUSETTS (1 city)
 bostonMA
 cambridgeMA
+
+# KENTUCKY
+louisvilleKY
 
 # MICHIGAN
 detroitMI
@@ -54,12 +71,16 @@ nashvilleTN
 
 # WASHINGTON (1 city)
 bellevueWA
+seattleWA
 
 # NORTH CAROLINA (1 city)
 charlotteNC
 
 # PENNSYLVANIA (1 city)
 philadelphiaPA
+
+# MARYLAND
+baltimoreMD
 
 # VIRGINIA
 richmondVA
