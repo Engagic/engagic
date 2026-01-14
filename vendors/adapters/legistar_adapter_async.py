@@ -41,7 +41,8 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             logger.info("legistar using API", slug=self.slug)
             meetings = await self._fetch_meetings_api(days_back, days_forward)
         except (VendorHTTPError, aiohttp.ClientError) as e:
-            if isinstance(e, VendorHTTPError) and e.status_code in [400, 403, 404]:
+            # Fall back to HTML for client errors (API disabled) and server errors (API broken)
+            if isinstance(e, VendorHTTPError) and e.status_code in [400, 403, 404, 500, 502, 503]:
                 logger.warning(
                     "legistar API failed, falling back to HTML",
                     slug=self.slug,
@@ -519,6 +520,11 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
 
                 if not url:
                     continue
+
+                # Some Legistar instances (e.g., Madison) return just a filename
+                # instead of a full URL. Construct the proper URL in that case.
+                if not url.startswith("http"):
+                    url = f"https://{self.slug}.legistar1.com/{self.slug}/attachments/{url}"
 
                 # Determine file type from URL
                 url_lower = url.lower()

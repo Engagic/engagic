@@ -11,6 +11,7 @@ from vendors.adapters.granicus_adapter_async import AsyncGranicusAdapter
 from vendors.adapters.iqm2_adapter_async import AsyncIQM2Adapter
 from vendors.adapters.legistar_adapter_async import AsyncLegistarAdapter
 from vendors.adapters.novusagenda_adapter_async import AsyncNovusAgendaAdapter
+from vendors.adapters.onbase_adapter_async import AsyncOnBaseAdapter
 from vendors.adapters.primegov_adapter_async import AsyncPrimeGovAdapter
 from vendors.adapters.civicclerk_adapter_async import AsyncCivicClerkAdapter
 from vendors.adapters.civicplus_adapter_async import AsyncCivicPlusAdapter
@@ -27,6 +28,7 @@ VENDOR_ADAPTERS = {
     "iqm2": AsyncIQM2Adapter,
     "legistar": AsyncLegistarAdapter,
     "novusagenda": AsyncNovusAgendaAdapter,
+    "onbase": AsyncOnBaseAdapter,
     "primegov": AsyncPrimeGovAdapter,
     "civicclerk": AsyncCivicClerkAdapter,
     "civicplus": AsyncCivicPlusAdapter,

@@ -1,0 +1,132 @@
+# Metro Areas - All Working Cities
+# Last updated: 2026-01-14
+
+# ARIZONA
+mesaAZ
+phoenixAZ
+tucsonAZ
+
+# CALIFORNIA
+alamedaCA
+berkeleyCA
+cupertinoCA
+fresnoCA
+longbeachCA
+losangelesCA
+menloparkCA
+mountainviewCA
+oaklandCA
+paloaltoCA
+sacramentoCA
+sandiegoCA
+sanfranciscoCA
+sanjoseCA
+santaclaraCA
+santacruzCA
+southsanfranciscoCA
+sunnyvaleCA
+
+# COLORADO
+boulderCO
+coloradospringsCO
+denverCO
+
+# CONNECTICUT
+newhavenCT
+
+# FLORIDA
+fortlauderdaleFL
+jacksonvilleFL
+miamiFL
+tampaFL
+
+# GEORGIA
+atlantaGA
+columbusGA
+roswellGA
+sandyspringsGA
+
+# KENTUCKY
+lexingtonKY
+louisvilleKY
+
+# LOUISIANA
+neworleansLA
+
+# MARYLAND
+baltimoreMD
+
+# MASSACHUSETTS
+bostonMA
+cambridgeMA
+
+# MICHIGAN
+annarborMI
+detroitMI
+
+# MINNESOTA
+saintpaulMN
+
+# MISSOURI
+kansascityMO
+stlouisMO
+
+# NEVADA
+lasvegasNV
+northlasvegasNV
+renoNV
+
+# NEW JERSEY
+newarkNJ
+princetonNJ
+
+# NEW MEXICO
+albuquerqueNM
+
+# NEW YORK
+ithacaNY
+newyorkNY
+
+# NORTH CAROLINA
+chapelhillNC
+charlotteNC
+durhamNC
+
+# OHIO
+cincinnatiOH
+clevelandOH
+columbusOH
+
+# OKLAHOMA
+oklahomacityOK
+
+# PENNSYLVANIA
+philadelphiaPA
+pittsburghPA
+
+# TENNESSEE
+nashvilleTN
+
+# TEXAS
+arlingtonTX
+austinTX
+corpuschristiTX
+dallasTX
+elpasoTX
+fortworthTX
+houstonTX
+sanantonioTX
+tomballTX
+
+# VIRGINIA
+richmondVA
+
+# WASHINGTON
+bellevueWA
+redmondWA
+seattleWA
+tacomaWA
+
+# WISCONSIN
+madisonWI
+milwaukeeWI
