@@ -69,6 +69,72 @@ async def lookup_census_population(db: Database, city_name: str, state: str) -> 
         return row['population'] if row else None
 
 
+async def lookup_census_geometry(db: Database, city_name: str, state: str) -> Optional[bytes]:
+    """Look up geometry from census_places table.
+
+    Tries multiple name variations to handle Census naming quirks:
+    - Exact match
+    - With hyphen (Winston Salem -> Winston-Salem)
+    - Township/town suffix
+    - St./Saint normalization
+    """
+    fips = STATE_TO_FIPS.get(state.upper())
+    if not fips:
+        return None
+
+    name_upper = city_name.upper()
+
+    # Build list of name variations to try
+    variations = [name_upper]
+
+    # Add hyphenated version (Winston Salem -> Winston-Salem)
+    if ' ' in name_upper:
+        variations.append(name_upper.replace(' ', '-'))
+
+    # St. Paul -> Saint Paul and vice versa
+    if name_upper.startswith('SAINT '):
+        variations.append('ST. ' + name_upper[6:])
+    elif name_upper.startswith('ST. '):
+        variations.append('SAINT ' + name_upper[4:])
+
+    # Township variations for MI, NJ, PA
+    if state.upper() in ('MI', 'NJ', 'PA'):
+        variations.append(f"{name_upper} TOWNSHIP")
+        variations.append(f"{name_upper} CHARTER TOWNSHIP")
+        if name_upper.endswith(' TOWNSHIP'):
+            base = name_upper[:-9]
+            variations.append(base)
+            variations.append(f"{base} CHARTER TOWNSHIP")
+
+    # Opa Locka -> Opa-locka
+    if 'OPA ' in name_upper:
+        variations.append(name_upper.replace('OPA ', 'OPA-').lower().title())
+
+    async with db.pool.acquire() as conn:
+        for variation in variations:
+            row = await conn.fetchrow(
+                """
+                SELECT wkb_geometry FROM census_places
+                WHERE UPPER(name) = $1 AND statefp = $2
+                LIMIT 1
+                """,
+                variation.upper(), fips
+            )
+            if row:
+                return row['wkb_geometry']
+
+        # Fallback: fuzzy LIKE match
+        row = await conn.fetchrow(
+            """
+            SELECT wkb_geometry FROM census_places
+            WHERE UPPER(name) LIKE $1 AND statefp = $2
+            LIMIT 1
+            """,
+            f"%{name_upper}%", fips
+        )
+        return row['wkb_geometry'] if row else None
+
+
 class DatabaseViewer:
     def __init__(self):
         self.db = None
@@ -294,10 +360,11 @@ class DatabaseViewer:
                 print("State must be 2-letter code (e.g., CA)")
                 return False
 
-            # Auto-lookup zipcodes (from uszipcode) and population (from Census)
+            # Auto-lookup zipcodes, population, and geometry from Census
             print(f"Looking up {city_name}, {state}...")
             auto_zipcodes = lookup_zipcodes(city_name, state)
             auto_population = await lookup_census_population(self.db, city_name, state)
+            auto_geometry = await lookup_census_geometry(self.db, city_name, state)
 
             if auto_zipcodes:
                 print(f"   Found {len(auto_zipcodes)} zipcodes (uszipcode)")
@@ -308,6 +375,11 @@ class DatabaseViewer:
                 print(f"   Population: {auto_population:,} (Census 2023)")
             else:
                 print("   No Census population found")
+
+            if auto_geometry:
+                print("   Geometry: found (Census TIGER)")
+            else:
+                print("   No Census geometry found")
 
             slug = input("Slug (vendor-specific): ").strip()
             if not slug:
@@ -368,11 +440,21 @@ class DatabaseViewer:
                             banana, zipcode, is_primary
                         )
 
+            # Add geometry if found
+            if auto_geometry:
+                async with self.db.pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE cities SET geom = $1 WHERE banana = $2",
+                        auto_geometry, banana
+                    )
+
             print(f"Added city '{city_name}, {state}' with banana {banana}")
             if population:
                 print(f"   Population: {population:,}")
             if zipcodes:
                 print(f"   Added {len(zipcodes)} zipcodes")
+            if auto_geometry:
+                print("   Added geometry")
             return True
 
         except KeyboardInterrupt:

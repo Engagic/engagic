@@ -179,27 +179,54 @@ async def import_to_staging() -> None:
         await conn.close()
 
 
-def normalize_city_name(name: str) -> str:
-    """Normalize city name for matching.
+def get_name_variations(name: str, state: str) -> list[str]:
+    """Generate name variations to try for Census matching.
 
-    Handles common variations:
-    - Fort/Ft.
-    - Saint/St.
-    - Township/Twp
-    - City suffix
+    Handles:
+    - Hyphens (Winston Salem -> Winston-Salem)
+    - Township suffixes (Canton -> Canton charter township)
+    - Saint/St. variations
+    - Opa Locka -> Opa-locka
     """
-    name = name.strip().upper()
+    name_upper = name.strip().upper()
+    variations = [name_upper]
 
-    # Expand abbreviations
-    name = re.sub(r"\bFT\.?\b", "FORT", name)
-    name = re.sub(r"\bST\.?\b", "SAINT", name)
-    name = re.sub(r"\bMT\.?\b", "MOUNT", name)
-    name = re.sub(r"\bTWP\.?\b", "TOWNSHIP", name)
+    # Hyphenated version
+    if ' ' in name_upper:
+        variations.append(name_upper.replace(' ', '-'))
 
-    # Remove common suffixes for matching
-    name = re.sub(r"\s+(CITY|TOWN|VILLAGE|CDP)$", "", name)
+    # Saint/St. variations
+    if name_upper.startswith('SAINT '):
+        variations.append('ST. ' + name_upper[6:])
+    elif name_upper.startswith('ST ') or name_upper.startswith('ST. '):
+        base = re.sub(r'^ST\.?\s+', '', name_upper)
+        variations.append('SAINT ' + base)
 
-    return name
+    # Township variations for MI, NJ, PA
+    if state.upper() in ('MI', 'NJ', 'PA'):
+        variations.append(f"{name_upper} TOWNSHIP")
+        variations.append(f"{name_upper} CHARTER TOWNSHIP")
+        if name_upper.endswith(' TOWNSHIP'):
+            base = name_upper[:-9]
+            variations.append(base)
+            variations.append(f"{base} CHARTER TOWNSHIP")
+
+    # Opa Locka special case
+    if 'OPA ' in name_upper:
+        variations.append(name_upper.replace('OPA ', 'OPA-'))
+
+    # City/town suffixes
+    variations.append(f"{name_upper} CITY")
+    variations.append(f"{name_upper} TOWN")
+
+    # Expand abbreviations for fuzzy matching
+    expanded = name_upper
+    expanded = re.sub(r"\bFT\.?\b", "FORT", expanded)
+    expanded = re.sub(r"\bMT\.?\b", "MOUNT", expanded)
+    if expanded != name_upper:
+        variations.append(expanded)
+
+    return variations
 
 
 async def match_cities() -> None:
@@ -232,30 +259,25 @@ async def match_cities() -> None:
                 unmatched.append({"banana": banana, "reason": "unknown_state"})
                 continue
 
-            # Try exact match first
-            place = await conn.fetchrow("""
-                SELECT wkb_geometry
-                FROM census_places
-                WHERE UPPER(name) = $1 AND statefp = $2
-            """, name.upper(), state_fips)
+            # Try name variations
+            place = None
+            variations = get_name_variations(name, state)
+            for variation in variations:
+                place = await conn.fetchrow("""
+                    SELECT wkb_geometry
+                    FROM census_places
+                    WHERE UPPER(name) = $1 AND statefp = $2
+                """, variation, state_fips)
+                if place:
+                    break
 
-            # Try normalized match if exact fails
+            # Fallback: fuzzy LIKE match
             if not place:
-                normalized = normalize_city_name(name)
                 place = await conn.fetchrow("""
                     SELECT wkb_geometry
                     FROM census_places
                     WHERE UPPER(name) LIKE $1 AND statefp = $2
-                """, f"%{normalized}%", state_fips)
-
-            # Try with city suffix
-            if not place:
-                place = await conn.fetchrow("""
-                    SELECT wkb_geometry
-                    FROM census_places
-                    WHERE (UPPER(name) = $1 OR UPPER(name) = $2)
-                      AND statefp = $3
-                """, f"{name.upper()} CITY", f"{name.upper()} TOWN", state_fips)
+                """, f"%{name.upper()}%", state_fips)
 
             if place:
                 await conn.execute("""
