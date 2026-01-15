@@ -29,7 +29,8 @@ import type {
 	ReportIssueResponse,
 	IssueType,
 	HappeningResponse,
-	CityCoverageResponse
+	CityCoverageResponse,
+	CivicInfrastructureResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
 
@@ -458,6 +459,11 @@ export const apiClient = {
 	async getCityCoverage(): Promise<CityCoverageResponse> {
 		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/city-coverage`);
 		return response.json();
+	},
+
+	async getCivicInfrastructure(): Promise<CivicInfrastructureResponse> {
+		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/civic-infrastructure/cities`);
+		return response.json();
 	}
 };
 
@@ -552,6 +558,11 @@ export function createServerApiClient(clientIp: string | null, ssrAuthSecret?: s
 
 		async getCityCoverage(): Promise<CityCoverageResponse> {
 			const response = await serverFetch(`${config.apiBaseUrl}/api/city-coverage`);
+			return response.json();
+		},
+
+		async getCivicInfrastructure(): Promise<CivicInfrastructureResponse> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/civic-infrastructure/cities`);
 			return response.json();
 		}
 	};

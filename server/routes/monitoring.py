@@ -311,99 +311,73 @@ async def prometheus_metrics(db: Database = Depends(get_db)):
 async def get_analytics(db: Database = Depends(get_db)):
     """Get comprehensive analytics for public dashboard"""
     try:
-        # Get stats using async PostgreSQL
+        # Consolidated query: combine simple counts into single round-trip
         async with db.pool.acquire() as conn:
-            # City stats
-            total_cities = await conn.fetchrow("SELECT COUNT(*) as total_cities FROM cities")
-            active_cities_stats = await conn.fetchrow("SELECT COUNT(DISTINCT banana) as active_cities FROM meetings")
-
-            # Meeting stats
-            meetings_stats = await conn.fetchrow("SELECT COUNT(*) as meetings_count FROM meetings")
-            meetings_with_items_stats = await conn.fetchrow(
-                "SELECT COUNT(*) as meetings_with_items FROM meetings WHERE id IN (SELECT DISTINCT meeting_id FROM items)"
-            )
-            packets_stats = await conn.fetchrow(
-                "SELECT COUNT(*) as packets_count FROM meetings WHERE packet_url IS NOT NULL AND packet_url != ''"
-            )
-            summaries_stats = await conn.fetchrow(
-                "SELECT COUNT(*) as summaries_count FROM meetings WHERE summary IS NOT NULL AND summary != ''"
-            )
-
-            # Item-level stats (matters-first architecture)
-            items_stats = await conn.fetchrow("SELECT COUNT(*) as items_count FROM items")
-            matters_stats = await conn.fetchrow("SELECT COUNT(*) as matters_count FROM city_matters")
-
-            # Unique summaries = deduplicated matters + standalone items with summaries
-            matters_summarized = await conn.fetchrow(
-                "SELECT COUNT(*) as matters_with_summary FROM city_matters WHERE canonical_summary IS NOT NULL AND canonical_summary != ''"
-            )
-            standalone_items = await conn.fetchrow(
-                "SELECT COUNT(*) as standalone_items FROM items WHERE matter_id IS NULL AND summary IS NOT NULL AND summary != ''"
-            )
-
-            unique_summaries = matters_summarized["matters_with_summary"] + standalone_items["standalone_items"]
-
-            # Frequently updated cities (cities with at least 7 meetings with summaries)
-            # Also get their combined population
-            frequently_updated_stats = await conn.fetchrow("""
+            # Single query for all basic counts (scalar subqueries execute in parallel)
+            counts = await conn.fetchrow("""
                 SELECT
-                    COUNT(*) as frequently_updated,
-                    COALESCE(SUM(pop), 0) as population
-                FROM (
-                    SELECT m.banana, COUNT(DISTINCT m.id) as meeting_count, c.population as pop
-                    FROM meetings m
-                    JOIN cities c ON m.banana = c.banana
-                    WHERE (m.summary IS NOT NULL AND m.summary != '')
-                       OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
-                    GROUP BY m.banana, c.population
-                    HAVING COUNT(DISTINCT m.id) >= 7
-                ) AS subquery
+                    (SELECT COUNT(*) FROM cities) as total_cities,
+                    (SELECT COUNT(DISTINCT banana) FROM meetings) as active_cities,
+                    (SELECT COUNT(*) FROM meetings) as meetings_count,
+                    (SELECT COUNT(DISTINCT meeting_id) FROM items) as meetings_with_items,
+                    (SELECT COUNT(*) FROM meetings WHERE packet_url IS NOT NULL AND packet_url != '') as packets_count,
+                    (SELECT COUNT(*) FROM meetings WHERE summary IS NOT NULL AND summary != '') as summaries_count,
+                    (SELECT COUNT(*) FROM items) as items_count,
+                    (SELECT COUNT(*) FROM city_matters) as matters_count,
+                    (SELECT COUNT(*) FROM city_matters WHERE canonical_summary IS NOT NULL AND canonical_summary != '') as matters_with_summary,
+                    (SELECT COUNT(*) FROM items WHERE matter_id IS NULL AND summary IS NOT NULL AND summary != '') as standalone_items
             """)
 
-            # Population metrics by coverage tier
-            # Total population: all cities with geometry
-            total_population = await conn.fetchrow("""
-                SELECT COALESCE(SUM(population), 0) as total_pop
-                FROM cities WHERE geom IS NOT NULL
-            """)
+            unique_summaries = counts["matters_with_summary"] + counts["standalone_items"]
 
-            # Population with any meeting data
-            population_with_data = await conn.fetchrow("""
-                SELECT COALESCE(SUM(c.population), 0) as pop_with_data
-                FROM cities c
-                WHERE c.banana IN (SELECT DISTINCT banana FROM meetings)
-            """)
-
-            # Population with summarized content
-            population_with_summaries = await conn.fetchrow("""
-                SELECT COALESCE(SUM(c.population), 0) as pop_with_summaries
-                FROM cities c
-                WHERE c.banana IN (
-                    SELECT DISTINCT m.banana
-                    FROM meetings m
-                    WHERE (m.summary IS NOT NULL AND m.summary != '')
-                       OR m.id IN (SELECT DISTINCT meeting_id FROM items WHERE summary IS NOT NULL AND summary != '')
-                )
+            # Complex aggregations that need CTEs - batch together
+            complex_stats = await conn.fetchrow("""
+                WITH
+                    summarized_meetings AS (
+                        SELECT DISTINCT m.id, m.banana
+                        FROM meetings m
+                        LEFT JOIN items i ON m.id = i.meeting_id AND i.summary IS NOT NULL AND i.summary != ''
+                        WHERE (m.summary IS NOT NULL AND m.summary != '') OR i.id IS NOT NULL
+                    ),
+                    frequently_updated AS (
+                        SELECT sm.banana, c.population as pop
+                        FROM summarized_meetings sm
+                        JOIN cities c ON sm.banana = c.banana
+                        GROUP BY sm.banana, c.population
+                        HAVING COUNT(*) >= 7
+                    ),
+                    active_bananas AS (
+                        SELECT DISTINCT banana FROM meetings
+                    ),
+                    summarized_bananas AS (
+                        SELECT DISTINCT banana FROM summarized_meetings
+                    )
+                SELECT
+                    (SELECT COUNT(*) FROM frequently_updated) as frequently_updated,
+                    (SELECT COALESCE(SUM(pop), 0) FROM frequently_updated) as frequently_updated_pop,
+                    (SELECT COALESCE(SUM(population), 0) FROM cities WHERE geom IS NOT NULL) as total_pop,
+                    (SELECT COALESCE(SUM(c.population), 0) FROM cities c JOIN active_bananas ab ON c.banana = ab.banana) as pop_with_data,
+                    (SELECT COALESCE(SUM(c.population), 0) FROM cities c JOIN summarized_bananas sb ON c.banana = sb.banana) as pop_with_summaries
             """)
 
         return {
             "success": True,
             "timestamp": datetime.now().isoformat(),
             "real_metrics": {
-                "cities_covered": total_cities["total_cities"],
-                "active_cities": active_cities_stats["active_cities"],
-                "frequently_updated_cities": frequently_updated_stats["frequently_updated"],
-                "frequently_updated_population": frequently_updated_stats["population"],
-                "meetings_tracked": meetings_stats["meetings_count"],
-                "meetings_with_items": meetings_with_items_stats["meetings_with_items"],
-                "meetings_with_packet": packets_stats["packets_count"],
-                "agendas_summarized": summaries_stats["summaries_count"],
-                "agenda_items_processed": items_stats["items_count"],
-                "matters_tracked": matters_stats["matters_count"],
+                "cities_covered": counts["total_cities"],
+                "active_cities": counts["active_cities"],
+                "frequently_updated_cities": complex_stats["frequently_updated"],
+                "frequently_updated_population": complex_stats["frequently_updated_pop"],
+                "meetings_tracked": counts["meetings_count"],
+                "meetings_with_items": counts["meetings_with_items"],
+                "meetings_with_packet": counts["packets_count"],
+                "agendas_summarized": counts["summaries_count"],
+                "agenda_items_processed": counts["items_count"],
+                "matters_tracked": counts["matters_count"],
                 "unique_item_summaries": unique_summaries,
-                "population_total": total_population["total_pop"],
-                "population_with_data": population_with_data["pop_with_data"],
-                "population_with_summaries": population_with_summaries["pop_with_summaries"],
+                "population_total": complex_stats["total_pop"],
+                "population_with_data": complex_stats["pop_with_data"],
+                "population_with_summaries": complex_stats["pop_with_summaries"],
             },
         }
 
@@ -423,48 +397,54 @@ async def get_city_coverage(db: Database = Depends(get_db)):
             # - matter: count city_matters with canonical_summary
             # - item: count items with summary
             # - monolithic: count meetings with summary
+            # Use pre-aggregated CTEs + JOINs instead of correlated subqueries (O(3) vs O(3n))
             rows = await conn.fetch("""
-                WITH city_coverage AS (
-                    SELECT
-                        c.banana,
-                        c.name,
-                        c.state,
-                        c.population,
-                        (SELECT COUNT(*) FROM city_matters cm
-                         WHERE cm.banana = c.banana
-                         AND cm.canonical_summary IS NOT NULL
-                         AND cm.canonical_summary != '') AS matter_count,
-                        (SELECT COUNT(*) FROM items i
-                         JOIN meetings m ON i.meeting_id = m.id
-                         WHERE m.banana = c.banana
-                         AND i.summary IS NOT NULL
-                         AND i.summary != '') AS item_count,
-                        (SELECT COUNT(*) FROM meetings m
-                         WHERE m.banana = c.banana
-                         AND m.summary IS NOT NULL
-                         AND m.summary != '') AS meeting_count
-                    FROM cities c
-                    WHERE c.banana IN (SELECT DISTINCT banana FROM meetings)
-                )
+                WITH
+                    matter_counts AS (
+                        SELECT banana, COUNT(*) AS cnt
+                        FROM city_matters
+                        WHERE canonical_summary IS NOT NULL AND canonical_summary != ''
+                        GROUP BY banana
+                    ),
+                    item_counts AS (
+                        SELECT m.banana, COUNT(*) AS cnt
+                        FROM items i
+                        JOIN meetings m ON i.meeting_id = m.id
+                        WHERE i.summary IS NOT NULL AND i.summary != ''
+                        GROUP BY m.banana
+                    ),
+                    meeting_counts AS (
+                        SELECT banana, COUNT(*) AS cnt
+                        FROM meetings
+                        WHERE summary IS NOT NULL AND summary != ''
+                        GROUP BY banana
+                    ),
+                    active_bananas AS (
+                        SELECT DISTINCT banana FROM meetings
+                    )
                 SELECT
-                    name,
-                    state,
-                    COALESCE(population, 0) AS population,
+                    c.name,
+                    c.state,
+                    COALESCE(c.population, 0) AS population,
                     CASE
-                        WHEN matter_count > 0 THEN 'matter'
-                        WHEN item_count > 0 THEN 'item'
-                        WHEN meeting_count > 0 THEN 'monolithic'
+                        WHEN COALESCE(mc.cnt, 0) > 0 THEN 'matter'
+                        WHEN COALESCE(ic.cnt, 0) > 0 THEN 'item'
+                        WHEN COALESCE(mtg.cnt, 0) > 0 THEN 'monolithic'
                         ELSE 'pending'
                     END AS coverage_type,
                     CASE
-                        WHEN matter_count > 0 THEN matter_count
-                        WHEN item_count > 0 THEN item_count
-                        WHEN meeting_count > 0 THEN meeting_count
+                        WHEN COALESCE(mc.cnt, 0) > 0 THEN mc.cnt
+                        WHEN COALESCE(ic.cnt, 0) > 0 THEN ic.cnt
+                        WHEN COALESCE(mtg.cnt, 0) > 0 THEN mtg.cnt
                         ELSE 0
                     END AS summary_count
-                FROM city_coverage
-                WHERE matter_count > 0 OR item_count > 0 OR meeting_count > 0
-                ORDER BY population DESC NULLS LAST
+                FROM cities c
+                JOIN active_bananas ab ON c.banana = ab.banana
+                LEFT JOIN matter_counts mc ON c.banana = mc.banana
+                LEFT JOIN item_counts ic ON c.banana = ic.banana
+                LEFT JOIN meeting_counts mtg ON c.banana = mtg.banana
+                WHERE COALESCE(mc.cnt, 0) > 0 OR COALESCE(ic.cnt, 0) > 0 OR COALESCE(mtg.cnt, 0) > 0
+                ORDER BY c.population DESC NULLS LAST
             """)
 
             cities = [
@@ -496,3 +476,82 @@ async def get_city_coverage(db: Database = Depends(get_db)):
     except Exception as e:
         logger.error("city coverage endpoint failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch city coverage")
+
+
+@router.get("/api/civic-infrastructure/cities")
+async def get_civic_infrastructure_by_city(db: Database = Depends(get_db)):
+    """Get per-city breakdown of civic infrastructure data (council members, committees)."""
+    try:
+        async with db.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                WITH
+                    council_counts AS (
+                        SELECT banana,
+                               COUNT(*) AS council_member_count,
+                               COALESCE(SUM(vote_count), 0) AS vote_count
+                        FROM council_members
+                        GROUP BY banana
+                    ),
+                    committee_counts AS (
+                        SELECT banana,
+                               COUNT(*) AS committee_count
+                        FROM committees
+                        GROUP BY banana
+                    ),
+                    assignment_counts AS (
+                        SELECT c.banana,
+                               COUNT(*) AS assignment_count
+                        FROM committee_members cm
+                        JOIN committees c ON cm.committee_id = c.id
+                        GROUP BY c.banana
+                    )
+                SELECT
+                    ci.banana,
+                    ci.name AS city_name,
+                    ci.state,
+                    COALESCE(ci.population, 0) AS population,
+                    COALESCE(cc.council_member_count, 0) AS council_member_count,
+                    COALESCE(cc.vote_count, 0) AS vote_count,
+                    COALESCE(cmt.committee_count, 0) AS committee_count,
+                    COALESCE(ac.assignment_count, 0) AS assignment_count
+                FROM cities ci
+                LEFT JOIN council_counts cc ON ci.banana = cc.banana
+                LEFT JOIN committee_counts cmt ON ci.banana = cmt.banana
+                LEFT JOIN assignment_counts ac ON ci.banana = ac.banana
+                WHERE cc.council_member_count > 0 OR cmt.committee_count > 0
+                ORDER BY ci.population DESC NULLS LAST
+            """)
+
+            cities = [
+                {
+                    "banana": row["banana"],
+                    "city_name": row["city_name"],
+                    "state": row["state"],
+                    "population": row["population"],
+                    "council_member_count": row["council_member_count"],
+                    "vote_count": row["vote_count"],
+                    "committee_count": row["committee_count"],
+                    "assignment_count": row["assignment_count"],
+                }
+                for row in rows
+            ]
+
+            totals = {
+                "cities_with_council_members": sum(1 for c in cities if c["council_member_count"] > 0),
+                "cities_with_committees": sum(1 for c in cities if c["committee_count"] > 0),
+                "total_council_members": sum(c["council_member_count"] for c in cities),
+                "total_votes": sum(c["vote_count"] for c in cities),
+                "total_committees": sum(c["committee_count"] for c in cities),
+                "total_assignments": sum(c["assignment_count"] for c in cities),
+            }
+
+        return {
+            "success": True,
+            "timestamp": datetime.now().isoformat(),
+            "cities": cities,
+            "totals": totals,
+        }
+
+    except Exception as e:
+        logger.error("civic infrastructure endpoint failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch civic infrastructure")

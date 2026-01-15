@@ -185,17 +185,19 @@
 			<section class="metrics-section">
 				<h2 class="primary-heading">Civic Infrastructure</h2>
 				<div class="cards-grid">
-					<div class="stats-card">
+					<a href="/council-members" class="stats-card stats-card-link">
 						<div class="number-primary">{formatNumber(data.platformMetrics.civic_infrastructure.council_members)}</div>
 						<div class="stat-title">Council Members</div>
 						<div class="stat-description">Elected officials tracked</div>
-					</div>
+						<span class="card-arrow">View by city</span>
+					</a>
 
-					<div class="stats-card">
+					<a href="/committees" class="stats-card stats-card-link">
 						<div class="number-primary">{formatNumber(data.platformMetrics.civic_infrastructure.committees)}</div>
 						<div class="stat-title">Committees</div>
 						<div class="stat-description">Legislative bodies monitored</div>
-					</div>
+						<span class="card-arrow">View by city</span>
+					</a>
 
 					<div class="stats-card">
 						<div class="number-primary">{formatNumber(data.platformMetrics.civic_infrastructure.committee_assignments)}</div>
@@ -317,6 +319,30 @@
 
 	.stats-card.highlight-card .number-primary {
 		color: var(--civic-blue);
+	}
+
+	.stats-card-link {
+		text-decoration: none;
+		cursor: pointer;
+		position: relative;
+	}
+
+	.stats-card-link:hover {
+		transform: translateY(-4px);
+	}
+
+	.card-arrow {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--civic-blue);
+		opacity: 0;
+		transition: opacity var(--transition-fast);
+		margin-top: var(--space-xs);
+	}
+
+	.stats-card-link:hover .card-arrow {
+		opacity: 1;
 	}
 
 	.stat-numbers-split {
