@@ -780,3 +780,31 @@ export interface CityCoverageResponse {
 	summary: CityCoverageSummary;
 	cities: CityWithCoverage[];
 }
+
+// Civic infrastructure types for council-members and committees pages
+export interface CivicInfrastructureCity {
+	banana: string;
+	city_name: string;
+	state: string;
+	population: number;
+	council_member_count: number;
+	vote_count: number;
+	committee_count: number;
+	assignment_count: number;
+}
+
+export interface CivicInfrastructureTotals {
+	cities_with_council_members: number;
+	cities_with_committees: number;
+	total_council_members: number;
+	total_votes: number;
+	total_committees: number;
+	total_assignments: number;
+}
+
+export interface CivicInfrastructureResponse {
+	success: boolean;
+	timestamp: string;
+	cities: CivicInfrastructureCity[];
+	totals: CivicInfrastructureTotals;
+}

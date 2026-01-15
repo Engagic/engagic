@@ -53,3 +53,6 @@ export const getHappeningItems = apiClient.getHappeningItems.bind(apiClient);
 
 // Coverage transparency
 export const getCityCoverage = apiClient.getCityCoverage.bind(apiClient);
+
+// Civic infrastructure breakdown
+export const getCivicInfrastructure = apiClient.getCivicInfrastructure.bind(apiClient);
