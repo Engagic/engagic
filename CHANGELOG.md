@@ -6,6 +6,22 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-01-15] Human Context in Appeals/Variances
+
+Enhanced summarizer prompt to capture narrative context in quasi-judicial items (appeals, variances, hearings).
+
+### Problem
+Summaries for appeals/variances were technically accurate but missed human circumstances. Example: Jacksonville daycare variance V-25-22 summary listed distance requirements but omitted that the facility operated 22 years, the previous owner died, and the predator was grandfathered while the daycare faced closure.
+
+### Changes
+- **prompts_v2.json**: Added new document type for "appeal, variance, or quasi-judicial hearing" with extraction guidance for backstory, timeline, stakeholders, procedural history, and applicant statements
+- **prompts_v2.json**: Added two real-world examples (Jacksonville daycare, Las Vegas carport) demonstrating human-context extraction without editorializing
+
+### Result
+New summaries capture circumstances driving the request while maintaining factual objectivity. Technical details still included; human context now surfaced when present in source documents.
+
+---
+
 ## [2025-12-16] Unified Summarizer Prompt
 
 Replaced page-count-based prompt selection with single unified prompt. LLM now determines output depth based on content complexity, not document length.
