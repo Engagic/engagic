@@ -94,10 +94,22 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in {self.view_ids_file}: {e}")
 
+    async def _read_text(self, response) -> str:
+        """Read response as text with encoding fallback.
+
+        Granicus servers often misreport Content-Type as UTF-8 when actual content
+        is ISO-8859-1. Try UTF-8 first, fall back to latin-1 which never fails.
+        """
+        data = await response.read()
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError:
+            return data.decode("latin-1")
+
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings via two-step process: listing -> detail pages."""
         response = await self._get(self.list_url)
-        html = await response.text()
+        html = await self._read_text(response)
         listing = await asyncio.to_thread(parse_viewpublisher_listing, html, self.base_url)
 
         if not listing:
@@ -183,7 +195,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         try:
             response = await self._get(agenda_viewer_url)
             final_url = str(response.url)
-            html = await response.text()
+            html = await self._read_text(response)
 
             # AgendaOnline ViewMeeting loads items via JS - use accessible view instead
             if "AgendaOnline" in final_url and "/Meetings/ViewMeeting" in final_url:
@@ -192,7 +204,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     accessible_url = f"{parsed_url.scheme}://{parsed_url.netloc}/AgendaOnline/Meetings/ViewMeetingAgenda?meetingId={meeting_id_match.group(1)}&type=agenda"
                     logger.debug("fetching accessible agenda view", vendor="granicus", slug=self.slug, event_id=event_id)
                     accessible_response = await self._get(accessible_url)
-                    html = await accessible_response.text()
+                    html = await self._read_text(accessible_response)
                     final_url = accessible_url
 
             if "AgendaOnline" in final_url or "ViewAgenda" in final_url:
@@ -274,7 +286,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             detail_url = f"{base_host}/AgendaOnline/Meetings/ViewMeetingAgendaItem?meetingId={meeting_id}&itemId={item_id}&isSection=false&type=agenda"
             try:
                 response = await self._get(detail_url)
-                html = await response.text()
+                html = await self._read_text(response)
                 if attachments := self._parse_agendaonline_attachments(html, base_host):
                     item["attachments"] = attachments
             except Exception as e:

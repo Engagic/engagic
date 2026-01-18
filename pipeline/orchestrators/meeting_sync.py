@@ -557,7 +557,7 @@ class MeetingSyncOrchestrator:
 
             # Update city_request status to 'added'
             await self.db.userland.update_city_request_status(
-                city_banana=city.banana,
+                banana=city.banana,
                 status='added',
                 notes=f'First meeting synced {datetime.now().isoformat()}'
             )
