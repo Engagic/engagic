@@ -245,7 +245,7 @@ async def get_city_matters(
             "state": city.state,
             "banana": banana,
             "matters": matters_list,
-            "total": total_count,
+            "total_count": total_count,
             "limit": limit,
             "offset": offset
         }
