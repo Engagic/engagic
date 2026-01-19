@@ -108,6 +108,10 @@
 			// Use cached data - instant load
 			cityMatters = cached.data;
 			mattersChecked = true;
+			// If cached data shows no qualifying matters, switch back to meetings view
+			if (cached.data.total_count === 0) {
+				viewMode = 'meetings';
+			}
 			return;
 		}
 
