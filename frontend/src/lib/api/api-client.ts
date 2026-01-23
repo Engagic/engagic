@@ -10,6 +10,7 @@ import type {
 	GetMeetingResponse,
 	GetCityMattersResponse,
 	GetStateMattersResponse,
+	GetStateMeetingsResponse,
 	SearchCityMeetingsResponse,
 	SearchCityMattersResponse,
 	MatterVotesResponse,
@@ -242,6 +243,13 @@ export const apiClient = {
 		if (topic) {
 			url.searchParams.set('topic', topic);
 		}
+		const response = await fetchWithRetry(url.toString());
+		return response.json();
+	},
+
+	async getStateMeetings(stateCode: string, limit: number = 50): Promise<GetStateMeetingsResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/state/${stateCode}/meetings`);
+		url.searchParams.set('limit', limit.toString());
 		const response = await fetchWithRetry(url.toString());
 		return response.json();
 	},
@@ -563,6 +571,23 @@ export function createServerApiClient(clientIp: string | null, ssrAuthSecret?: s
 
 		async getCivicInfrastructure(): Promise<CivicInfrastructureResponse> {
 			const response = await serverFetch(`${config.apiBaseUrl}/api/civic-infrastructure/cities`);
+			return response.json();
+		},
+
+		async getStateMatters(stateCode: string, topic?: string, limit: number = 100): Promise<GetStateMattersResponse> {
+			const url = new URL(`${config.apiBaseUrl}/api/state/${stateCode}/matters`);
+			url.searchParams.set('limit', limit.toString());
+			if (topic) {
+				url.searchParams.set('topic', topic);
+			}
+			const response = await serverFetch(url.toString());
+			return response.json();
+		},
+
+		async getStateMeetings(stateCode: string, limit: number = 50): Promise<GetStateMeetingsResponse> {
+			const url = new URL(`${config.apiBaseUrl}/api/state/${stateCode}/meetings`);
+			url.searchParams.set('limit', limit.toString());
+			const response = await serverFetch(url.toString());
 			return response.json();
 		}
 	};

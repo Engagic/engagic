@@ -456,6 +456,106 @@ async def get_state_matters(
         raise HTTPException(status_code=500, detail="Error retrieving state matters")
 
 
+@router.get("/state/{state_code}/meetings")
+async def get_state_meetings(
+    state_code: str,
+    limit: int = 50,
+    include_past: bool = False,
+    db: Database = Depends(get_db)
+):
+    """Get upcoming meetings across all cities in a state.
+
+    Returns meetings sorted by date ascending (soonest first).
+    Includes city name and banana for display/navigation.
+    """
+    try:
+        # Validate state code (2 letters)
+        if len(state_code) != 2:
+            raise HTTPException(status_code=400, detail="Invalid state code")
+
+        state_code = state_code.upper()
+
+        # Track state meetings page view
+        metrics.page_views.labels(page_type='state_meetings').inc()
+
+        async with db.pool.acquire() as conn:
+            # Build query based on include_past flag
+            if include_past:
+                meetings = await conn.fetch(
+                    """
+                    SELECT
+                        m.*,
+                        c.name as city_name,
+                        c.banana as city_banana
+                    FROM meetings m
+                    JOIN cities c ON m.banana = c.banana
+                    WHERE c.state = $1
+                    ORDER BY m.date DESC
+                    LIMIT $2
+                    """,
+                    state_code, limit
+                )
+            else:
+                # Filter to upcoming meetings (date >= now - 6 hours for buffer)
+                meetings = await conn.fetch(
+                    """
+                    SELECT
+                        m.*,
+                        c.name as city_name,
+                        c.banana as city_banana
+                    FROM meetings m
+                    JOIN cities c ON m.banana = c.banana
+                    WHERE c.state = $1
+                    AND m.date >= NOW() - INTERVAL '6 hours'
+                    ORDER BY m.date ASC
+                    LIMIT $2
+                    """,
+                    state_code, limit
+                )
+
+            # Get total count for upcoming meetings
+            total_row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) as count
+                FROM meetings m
+                JOIN cities c ON m.banana = c.banana
+                WHERE c.state = $1
+                AND m.date >= NOW() - INTERVAL '6 hours'
+                """,
+                state_code
+            )
+
+        meetings_list = []
+        for meeting in meetings:
+            meetings_list.append({
+                "id": meeting["id"],
+                "banana": meeting["banana"],
+                "title": meeting["title"],
+                "date": meeting["date"].isoformat() if meeting["date"] else None,
+                "agenda_url": meeting["agenda_url"],
+                "packet_url": meeting["packet_url"],
+                "summary": meeting["summary"],
+                "meeting_status": meeting["meeting_status"],
+                "topics": meeting["topics"],
+                "has_items": meeting["has_items"],
+                "city_name": meeting["city_name"],
+                "city_banana": meeting["city_banana"]
+            })
+
+        return {
+            "success": True,
+            "state": state_code,
+            "meetings": meetings_list,
+            "total": total_row["count"] if total_row else 0
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("error fetching state meetings", state_code=state_code, error=str(e))
+        raise HTTPException(status_code=500, detail="Error retrieving state meetings")
+
+
 @router.get("/random-matter")
 async def get_random_matter(db: Database = Depends(get_db)):
     """Get a random high-quality matter (2+ appearances)
