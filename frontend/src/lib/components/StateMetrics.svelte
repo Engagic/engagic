@@ -184,7 +184,7 @@
 		<!-- Upcoming Meetings Section -->
 		{#if meetings && meetings.meetings.length > 0}
 			<div class="upcoming-meetings-section">
-				<h4 class="section-title">Upcoming Meetings Across {stateName || metrics.state}</h4>
+				<h4 class="section-title">Upcoming Meetings Across {stateName || metrics.state} ({meetings.total})</h4>
 				<div class="meetings-list">
 					{#each meetings.meetings.slice(0, 8) as meeting (meeting.id)}
 						{@const meetingSlug = generateMeetingSlug(meeting)}
@@ -219,14 +219,20 @@
 					{/each}
 				</div>
 				{#if meetings.total > 8}
-					<div class="more-meetings-note">
-						and {meetings.total - 8} more upcoming meetings
+					<div class="more-meetings-footer">
+						<span class="more-meetings-note">and {meetings.total - 8} more upcoming meetings</span>
+						<a href="/state/{stateCode.toLowerCase()}/meetings" class="view-all-link">View All Meetings →</a>
 					</div>
 				{/if}
 			</div>
 		{:else if meetingsLoading}
 			<div class="upcoming-meetings-section loading-section">
 				<div class="loading-text">Loading upcoming meetings...</div>
+			</div>
+		{:else if meetings}
+			<div class="upcoming-meetings-section empty-section">
+				<div class="empty-meetings-text">No upcoming meetings scheduled across {stateName || metrics.state}</div>
+				<div class="empty-meetings-subtext">Check back soon for new meeting announcements</div>
 			</div>
 		{/if}
 
@@ -633,14 +639,53 @@
 		flex-wrap: wrap;
 	}
 
-	.more-meetings-note {
+	.more-meetings-footer {
 		margin-top: 1rem;
 		padding-top: 1rem;
 		border-top: 1px solid var(--border-primary);
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+
+	.more-meetings-note {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		color: var(--civic-gray);
+	}
+
+	.view-all-link {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--civic-blue);
+		text-decoration: none;
+		transition: color 0.2s ease;
+	}
+
+	.view-all-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
+	.empty-section {
 		text-align: center;
+		padding: 2rem;
+	}
+
+	.empty-meetings-text {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		color: var(--text-primary);
+		margin-bottom: 0.5rem;
+	}
+
+	.empty-meetings-subtext {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		color: var(--civic-gray);
 	}
 
 	/* Cities Section (Collapsible) */
