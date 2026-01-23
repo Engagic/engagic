@@ -33,6 +33,30 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
 
         logger.info("initialized async IQM2 adapter", vendor="iqm2", slug=self.slug)
 
+    def _dedupe_attachments(self, attachments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Deduplicate attachments by file ID extracted from URL.
+
+        IQM2 URLs look like: FileOpen.aspx?Type=4&ID=12345 or FileOpen.aspx?Type=4&ID=12345&MeetingID=999
+        We extract the ID parameter and keep only the first occurrence of each unique ID.
+        """
+        seen_ids = set()
+        unique_attachments = []
+
+        for attachment in attachments:
+            url = attachment.get("url", "")
+            # Extract the file ID from the URL (ignoring MeetingID parameter)
+            id_match = re.search(r'[?&]ID=(\d+)', url)
+            if id_match:
+                file_id = id_match.group(1)
+                if file_id not in seen_ids:
+                    seen_ids.add(file_id)
+                    unique_attachments.append(attachment)
+            else:
+                # No ID found, keep it (shouldn't happen but be safe)
+                unique_attachments.append(attachment)
+
+        return unique_attachments
+
     async def _fetch_meetings_impl(
         self, days_back: int = 7, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
@@ -525,6 +549,22 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
 
         if current_item:
             items.append(current_item)
+
+        # Deduplicate attachments for each item (same files appear in both
+        # Detail_LegiFile page and inline agenda with different URL formats)
+        for item in items:
+            if item.get("attachments"):
+                original_count = len(item["attachments"])
+                item["attachments"] = self._dedupe_attachments(item["attachments"])
+                if len(item["attachments"]) < original_count:
+                    logger.debug(
+                        "deduped attachments",
+                        vendor="iqm2",
+                        slug=self.slug,
+                        item_title=item.get("title", "")[:50],
+                        original=original_count,
+                        deduped=len(item["attachments"])
+                    )
 
         logger.info(
             "parsed items from MeetingDetail table",

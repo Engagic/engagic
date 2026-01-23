@@ -10,13 +10,16 @@ tucsonAZ
 alamedaCA
 berkeleyCA
 cupertinoCA
+fremontCA
 fresnoCA
+haywardCA
 longbeachCA
 losangelesCA
 menloparkCA
 mountainviewCA
 oaklandCA
 paloaltoCA
+redwoodcityCA
 sacramentoCA
 sandiegoCA
 sanfranciscoCA
