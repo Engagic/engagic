@@ -554,12 +554,12 @@ async def get_state_meetings(
                 "banana": meeting["banana"],
                 "title": meeting["title"],
                 "date": meeting["date"].isoformat() if meeting["date"] else None,
-                "agenda_url": meeting["agenda_url"],
-                "packet_url": meeting["packet_url"],
-                "summary": meeting["summary"],
-                "meeting_status": meeting["meeting_status"],
-                "topics": meeting["topics"],
-                "has_items": meeting["has_items"],
+                "agenda_url": meeting.get("agenda_url"),
+                "packet_url": meeting.get("packet_url"),
+                "summary": meeting.get("summary"),
+                "meeting_status": meeting.get("status"),  # DB column is 'status', frontend expects 'meeting_status'
+                "topics": meeting.get("topics"),
+                "has_items": meeting.get("has_items", False),
                 "city_name": meeting["city_name"],
                 "city_banana": meeting["city_banana"]
             })
