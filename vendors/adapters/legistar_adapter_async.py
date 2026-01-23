@@ -845,6 +845,19 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if not meeting_dt:
                 return None
 
+            # Extract time from lblTime span (separate column in some Legistar instances)
+            time_span = row.find("span", id=lambda x: x and "lblTime" in x)
+            if time_span:
+                time_text = time_span.get_text(strip=True)
+                if time_text and time_text.lower() not in ["", "tbd", "n/a"]:
+                    # Combine date with time
+                    combined = combine_date_time(meeting_dt.isoformat(), time_text)
+                    if combined:
+                        try:
+                            meeting_dt = datetime.fromisoformat(combined)
+                        except ValueError:
+                            pass  # Keep original date if combining fails
+
             # Filter by date range
             if not (start_date <= meeting_dt <= end_date):
                 return None

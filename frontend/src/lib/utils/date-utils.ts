@@ -30,6 +30,14 @@ export function extractTime(dateString: string | null): string {
 		return '';
 	}
 
+	// Treat midnight (00:00) as "no time specified" since most meetings
+	// without a set time default to midnight in the database
+	const hours = date.getHours();
+	const minutes = date.getMinutes();
+	if (hours === 0 && minutes === 0) {
+		return '';
+	}
+
 	return date.toLocaleTimeString('en-US', {
 		hour: 'numeric',
 		minute: '2-digit',
