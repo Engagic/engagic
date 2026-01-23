@@ -1,15 +1,17 @@
-# Bay Area Cities (San Francisco Peninsula + East Bay)
-# One city banana per line, comments start with #
+# Bay Area Cities
+# Last updated: 2026-01-23
 
-# Peninsula
+# Peninsula / South Bay
 sanfranciscoCA
+southsanfranciscoCA
+redwoodcityCA
+menloparkCA
 paloaltoCA
 mountainviewCA
 sunnyvaleCA
+cupertinoCA
 santaclaraCA
 sanjoseCA
-redwoodcityCA
-menloparkCA
 
 # East Bay
 oaklandCA
