@@ -781,6 +781,19 @@ export interface CityCoverageResponse {
 	cities: CityWithCoverage[];
 }
 
+// State meetings types
+export interface StateMeeting extends Meeting {
+	city_name: string;
+	city_banana: string;
+}
+
+export interface GetStateMeetingsResponse {
+	success: boolean;
+	state: string;
+	meetings: StateMeeting[];
+	total: number;
+}
+
 // Civic infrastructure types for council-members and committees pages
 export interface CivicInfrastructureCity {
 	banana: string;

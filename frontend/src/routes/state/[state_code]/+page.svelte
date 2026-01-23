@@ -50,6 +50,7 @@
 			stateCode={data.stateCode}
 			stateName={stateName}
 			initialMetrics={data.metrics}
+			initialMeetings={data.meetings ?? undefined}
 		/>
 	</div>
 

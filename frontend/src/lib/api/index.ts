@@ -14,6 +14,7 @@ export const generateFlyer = apiClient.generateFlyer.bind(apiClient);
 export const getMatterTimeline = apiClient.getMatterTimeline.bind(apiClient);
 export const getCityMatters = apiClient.getCityMatters.bind(apiClient);
 export const getStateMatters = apiClient.getStateMatters.bind(apiClient);
+export const getStateMeetings = apiClient.getStateMeetings.bind(apiClient);
 export const searchCityMeetings = apiClient.searchCityMeetings.bind(apiClient);
 export const searchCityMatters = apiClient.searchCityMatters.bind(apiClient);
 

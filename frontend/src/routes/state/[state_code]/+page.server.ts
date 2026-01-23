@@ -1,9 +1,9 @@
 import type { PageServerLoad } from './$types';
-import { configureApiForRequest, apiClient } from '$lib/api/server';
+import { createServerApiClient } from '$lib/api/server';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
-	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 	const stateCode = params.state_code.toUpperCase();
 
 	if (!/^[A-Z]{2}$/.test(stateCode)) {
@@ -11,7 +11,15 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 	}
 
 	try {
-		const metrics = await apiClient.getStateMatters(stateCode, undefined, 100);
+		// Fetch metrics and meetings in parallel
+		const [metrics, meetings] = await Promise.all([
+			apiClient.getStateMatters(stateCode, undefined, 100),
+			apiClient.getStateMeetings(stateCode, 50).catch(err => {
+				// Meetings are non-critical, log and continue
+				console.error('Failed to load state meetings:', err);
+				return null;
+			})
+		]);
 
 		setHeaders({
 			'cache-control': 'public, max-age=600'
@@ -19,7 +27,8 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 
 		return {
 			stateCode,
-			metrics
+			metrics,
+			meetings
 		};
 	} catch (err) {
 		console.error('Failed to load state metrics:', err);
