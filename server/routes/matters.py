@@ -383,15 +383,37 @@ async def get_state_matters(
             )
 
             # Get meeting statistics for this state
+            # with_summaries counts meetings that have at least one item with a summary
+            # (the real AI analysis happens at item level, not meeting level)
             meeting_stats = await conn.fetchrow(
                 """
                 SELECT
                     COUNT(*) as total_meetings,
                     SUM(CASE WHEN agenda_url IS NOT NULL OR packet_url IS NOT NULL THEN 1 ELSE 0 END) as with_agendas,
-                    SUM(CASE WHEN summary IS NOT NULL THEN 1 ELSE 0 END) as with_summaries
+                    (SELECT COUNT(DISTINCT i.meeting_id)
+                     FROM items i
+                     JOIN meetings m2 ON i.meeting_id = m2.id
+                     JOIN cities c2 ON m2.banana = c2.banana
+                     WHERE c2.state = $1 AND i.summary IS NOT NULL) as with_summaries
                 FROM meetings m
                 JOIN cities c ON m.banana = c.banana
                 WHERE c.state = $1
+                """,
+                state_code
+            )
+
+            # Get total count of recurring matters (not limited by pagination)
+            total_recurring_count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT m.id
+                    FROM city_matters m
+                    JOIN cities c ON m.banana = c.banana
+                    LEFT JOIN items i ON i.matter_id = m.id
+                    WHERE c.state = $1
+                    GROUP BY m.id
+                    HAVING COUNT(i.id) >= 2
+                ) subq
                 """,
                 state_code
             )
@@ -439,7 +461,7 @@ async def get_state_matters(
             "cities_count": len(cities_list),
             "cities": cities_list,
             "matters": matters_list,
-            "total_matters": len(matters_list),
+            "total_matters": total_recurring_count or 0,
             "topic_distribution": topic_aggregation,
             "filtered_by_topic": topic,
             "meeting_stats": {
