@@ -547,6 +547,10 @@ async def get_state_meetings(
                 state_code
             )
 
+        # Compute has_items for all meetings (checks if items with summaries exist)
+        meeting_ids = [m["id"] for m in meetings]
+        has_items_map = await db.get_has_summarized_items(meeting_ids) if meeting_ids else {}
+
         meetings_list = []
         for meeting in meetings:
             meetings_list.append({
@@ -559,7 +563,7 @@ async def get_state_meetings(
                 "summary": meeting.get("summary"),
                 "meeting_status": meeting.get("status"),  # DB column is 'status', frontend expects 'meeting_status'
                 "topics": meeting.get("topics"),
-                "has_items": meeting.get("has_items", False),
+                "has_items": has_items_map.get(meeting["id"], False),
                 "city_name": meeting["city_name"],
                 "city_banana": meeting["city_banana"]
             })
