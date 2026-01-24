@@ -143,16 +143,18 @@ EIR_PATTERNS = [
 ]
 
 # Administrative matter types (not legislative)
+# Removed generic 'Information' - it was incorrectly skipping 'Informational Report' (substantive)
 SKIP_MATTER_TYPES = [
     'Minutes (Min)',
     'Introduction & Referral Calendar (IRC)',
     'Information Item (Inf)',
-    # Add city-specific variants
+    'Information Item',
+    'Information Only',
+    # City-specific variants
     'Minutes',
     'Min',
     'IRC',
     'Inf',
-    'Information',
     'Referral Calendar',
 ]
 
