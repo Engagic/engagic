@@ -33,12 +33,13 @@ ADAPTER_SKIP_PATTERNS = [
 ]
 
 # Processor level: items worth saving but not LLM-processing
+# Note: Use \b word boundaries to avoid substring matches (e.g., "commendation" in "Recommendation")
 PROCESSOR_SKIP_PATTERNS = [
     # Ceremonial items - who/what is searchable, but no need to summarize
-    r'proclamation',
-    r'commendation',
-    r'recognition',
-    r'ceremonial',
+    r'\bproclamation\b',
+    r'\bcommendation\b',
+    r'\brecognition\b',
+    r'\bceremonial\b',
     r'(?i)congratulations (to|extended to|for)',
     r'(?i)tribute to (late|the late)',
     r'(?i)\bon (his|her|their) retirement\b',
@@ -47,8 +48,8 @@ PROCESSOR_SKIP_PATTERNS = [
     r'(?i)birthday (wishes|greetings|recognition|celebration)',
 
     # Appointments/confirmations - names matter, details don't need LLM
-    r'appointment',
-    r'confirmation',
+    r'\bappointment\b',
+    r'\bconfirmation\b',
 
     # Low-value administrative - save for record, don't process
     r'(?i)liquor license',
@@ -143,7 +144,7 @@ EIR_PATTERNS = [
 ]
 
 # Administrative matter types (not legislative)
-# Removed generic 'Information' - it was incorrectly skipping 'Informational Report' (substantive)
+# Note: uses substring matching - removed 'Information' and 'Inf' as they match 'Informational Report'
 SKIP_MATTER_TYPES = [
     'Minutes (Min)',
     'Introduction & Referral Calendar (IRC)',
@@ -154,7 +155,6 @@ SKIP_MATTER_TYPES = [
     'Minutes',
     'Min',
     'IRC',
-    'Inf',
     'Referral Calendar',
 ]
 

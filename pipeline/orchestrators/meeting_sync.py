@@ -137,10 +137,8 @@ class MeetingSyncOrchestrator:
                         stats['items_skipped_procedural'] = matters_stats.get('skipped_procedural', 0)
                         pending_jobs = matters_stats.get('pending_jobs', [])
 
-                        skipped_ids = matters_stats.get('skipped_item_ids', set())
-                        for item in agenda_items:
-                            if item.id in skipped_ids:
-                                item.matter_id = None
+                        # Note: we no longer null out matter_id for skipped items
+                        # Skipped items still get Matter records (for FK), just no queue jobs
 
                         stored_count = await self.db.items.store_agenda_items(
                             meeting_obj.id, agenda_items, conn=conn
@@ -309,9 +307,14 @@ class MeetingSyncOrchestrator:
             )
 
             existing_item = existing_items_map.get(item_id)
-            if existing_item and existing_item.summary:
-                agenda_item.summary = existing_item.summary
-                agenda_item.topics = existing_item.topics
+            if existing_item:
+                # Preserve summaries from previous processing
+                if existing_item.summary:
+                    agenda_item.summary = existing_item.summary
+                    agenda_item.topics = existing_item.topics
+                # Preserve attachments if vendor didn't return them this sync
+                if not agenda_item.attachments and existing_item.attachments:
+                    agenda_item.attachments = existing_item.attachments
 
             agenda_items.append(agenda_item)
 
@@ -346,11 +349,12 @@ class MeetingSyncOrchestrator:
             matter_type = raw_item.get("matter_type")
             raw_vendor_matter_id = raw_item.get("matter_id")
 
-            if self.matter_filter.should_skip(matter_type):
+            # Procedural matters: still create Matter record (for FK), but skip LLM queue
+            is_procedural = self.matter_filter.should_skip(matter_type)
+            if is_procedural:
                 stats['skipped_procedural'] += 1
                 stats['skipped_item_ids'].add(agenda_item.id)
-                logger.debug("skipping procedural matter", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type)
-                continue
+                logger.debug("procedural matter - will track but skip queue", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type)
 
             existing_matter = await self.db.matters.get_matter(agenda_item.matter_id)
             attachment_hash = hash_attachments(agenda_item.attachments or [])
@@ -368,6 +372,10 @@ class MeetingSyncOrchestrator:
                 stats['duplicate'] += 1
                 if not appearance_exists and (agenda_item.matter_file or raw_vendor_matter_id):
                     logger.info("matter new appearance", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type)
+
+                # Skip queueing for procedural matters
+                if is_procedural:
+                    continue
 
                 should_enqueue, _ = self.matter_enqueue_decider.should_enqueue_matter(
                     existing_matter=existing_matter,
@@ -409,6 +417,10 @@ class MeetingSyncOrchestrator:
 
                 if agenda_item.matter_file or raw_vendor_matter_id:
                     logger.info("new matter tracked", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type, sponsor_count=len(sponsors))
+
+                # Skip queueing for procedural matters
+                if is_procedural:
+                    continue
 
                 if agenda_item.attachments:
                     stats['pending_jobs'].append({
