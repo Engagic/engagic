@@ -1,21 +1,28 @@
 """
 Async Municode Adapter - API integration for Municode municipal meetings
 
-Cities using Municode: Columbus GA, Tomball TX, Los Gatos CA, and many others
+Cities using Municode: Columbus GA, Tomball TX, Los Gatos CA, Cedar Park TX, and many others
 Platform owned by CivicPlus, uses REST API + HTML agenda packets.
 
 URL patterns:
-- API base: https://{slug}.municodemeetings.com
-- HTML packet: https://meetings.municode.com/adaHtmlDocument/index?cc={CITY_CODE}&me={GUID}&ip=True
-- PDF packet: https://mccmeetings.blob.core.usgovcloudapi.net/{slug-no-hyphens}-pubu/MEET-Packet-{GUID}.pdf
+  Subdomain API (columbus-ga, tomball-tx):
+    - API base: https://{slug}.municodemeetings.com
+    - HTML packet: https://meetings.municode.com/adaHtmlDocument/index?cc={CITY_CODE}&me={GUID}&ip=True
+    - PDF packet: https://mccmeetings.blob.core.usgovcloudapi.net/{slug-no-hyphens}-pubu/MEET-Packet-{GUID}.pdf
+
+  PublishPage HTML (CPTX, etc.):
+    - Listing: https://meetings.municode.com/PublishPage/index?cid={CODE}&ppid=0&p=-1
+    - Uses city code as slug directly (e.g., "CPTX" for Cedar Park TX)
 """
 
 import asyncio
 import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
+from urllib.parse import urljoin
 
 import aiohttp
+from bs4 import BeautifulSoup
 
 from config import get_logger
 from pipeline.filters import should_skip_item
@@ -37,9 +44,35 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
 
     def __init__(self, city_slug: str, city_code: Optional[str] = None, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="municode", metrics=metrics)
-        self.base_url = f"https://{self.slug}.municodemeetings.com"
-        self._city_code_override = city_code
+
+        # Detect if slug is a city code (short, no hyphens, uppercase-ish like "CPTX")
+        # vs a subdomain slug (like "columbus-ga")
+        self._is_publish_page = self._detect_publish_page_mode(self.slug)
+
+        if self._is_publish_page:
+            # PublishPage mode: slug IS the city code
+            self.base_url = "https://meetings.municode.com"
+            self._city_code_override = self.slug.upper()
+        else:
+            # Subdomain API mode
+            self.base_url = f"https://{self.slug}.municodemeetings.com"
+            self._city_code_override = city_code
+
         self._discovered_city_code: Optional[str] = None
+
+    def _detect_publish_page_mode(self, slug: str) -> bool:
+        """Detect if slug is a city code for PublishPage vs subdomain slug.
+
+        City codes: short (2-8 chars), no hyphens, alphanumeric (e.g., CPTX, COLUMGA)
+        Subdomain slugs: longer, have hyphens (e.g., columbus-ga, tomball-tx)
+        """
+        # If it has a hyphen, it's a subdomain slug
+        if "-" in slug:
+            return False
+        # Short alphanumeric strings are likely city codes
+        if len(slug) <= 10 and slug.replace("-", "").isalnum():
+            return True
+        return False
 
     @property
     def city_code(self) -> str:
@@ -123,7 +156,11 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
             return None
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Fetch meetings from Municode API and parse HTML agendas."""
+        """Fetch meetings from Municode API or PublishPage HTML."""
+        if self._is_publish_page:
+            return await self._fetch_publish_page_meetings(days_back, days_forward)
+
+        # Subdomain API mode
         meetings = await self._fetch_meeting_list(days_back, days_forward)
 
         logger.info("municode meetings retrieved", vendor="municode", slug=self.slug, count=len(meetings))
@@ -142,6 +179,153 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         logger.info("municode meetings processed", vendor="municode", slug=self.slug, processed=len(processed), total=len(meetings))
 
         return processed
+
+    async def _fetch_publish_page_meetings(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
+        """Fetch meetings from PublishPage HTML table (Cedar Park style)."""
+        today = datetime.now()
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=days_forward)
+
+        # PublishPage URL: cid=CITYCODE, ppid=0 for main page, p=-1 for all meetings
+        url = f"{self.base_url}/PublishPage/index?cid={self.city_code}&ppid=0&p=-1"
+
+        try:
+            response = await self._get(url)
+            html = await response.text()
+            meetings = await asyncio.to_thread(self._parse_publish_page_html, html)
+
+            # Filter by date range
+            filtered = []
+            for meeting in meetings:
+                meeting_date = meeting.get("_parsed_date")
+                if meeting_date:
+                    if start_date <= meeting_date <= end_date:
+                        filtered.append(meeting)
+                else:
+                    # Include meetings with unparseable dates
+                    filtered.append(meeting)
+
+            logger.info(
+                "municode PublishPage meetings fetched",
+                vendor="municode",
+                slug=self.slug,
+                total=len(meetings),
+                in_range=len(filtered)
+            )
+
+            return filtered
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error("failed to fetch PublishPage", vendor="municode", slug=self.slug, error=str(e))
+            return []
+
+    def _parse_publish_page_html(self, html: str) -> List[Dict[str, Any]]:
+        """Parse PublishPage HTML table into meeting dicts.
+
+        Table columns: Meeting | Date | Time | Venue | Agenda | Packet | Minutes
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        meetings = []
+
+        # Find the meeting table - look for table with expected headers
+        table = soup.find("table")
+        if not table:
+            logger.warning("no table found in PublishPage", vendor="municode", slug=self.slug)
+            return []
+
+        rows = table.find_all("tr")
+        if len(rows) < 2:
+            return []
+
+        # Skip header row
+        for row in rows[1:]:
+            cells = row.find_all("td")
+            if len(cells) < 5:
+                continue
+
+            try:
+                meeting_type = cells[0].get_text(strip=True)
+                date_str = cells[1].get_text(strip=True)
+                time_str = cells[2].get_text(strip=True)
+                venue = cells[3].get_text(strip=True)
+
+                # Parse date
+                parsed_date = self._parse_publish_page_date(date_str, time_str)
+
+                # Extract PDF links
+                agenda_link = cells[4].find("a", href=True) if len(cells) > 4 else None
+                packet_link = cells[5].find("a", href=True) if len(cells) > 5 else None
+                minutes_link = cells[6].find("a", href=True) if len(cells) > 6 else None
+
+                agenda_url = urljoin(self.base_url, agenda_link["href"]) if agenda_link else None
+                packet_url = urljoin(self.base_url, packet_link["href"]) if packet_link else None
+
+                # Build vendor_id from date + meeting type
+                vendor_id = f"{date_str.replace('/', '-')}_{meeting_type[:20]}".replace(" ", "_")
+
+                title = f"{meeting_type} - {date_str}" if meeting_type else date_str
+
+                meeting: Dict[str, Any] = {
+                    "vendor_id": vendor_id,
+                    "title": title,
+                    "start": parsed_date.isoformat() if parsed_date else None,
+                    "_parsed_date": parsed_date,  # For filtering, removed later
+                }
+
+                if agenda_url:
+                    meeting["agenda_url"] = agenda_url
+                if packet_url:
+                    meeting["packet_url"] = packet_url
+                if venue:
+                    meeting["location"] = venue
+
+                # Check for meeting status in title
+                meeting_status = self._parse_meeting_status(meeting_type)
+                if meeting_status:
+                    meeting["meeting_status"] = meeting_status
+
+                meetings.append(meeting)
+
+            except (IndexError, AttributeError) as e:
+                logger.debug("failed to parse PublishPage row", vendor="municode", slug=self.slug, error=str(e))
+                continue
+
+        # Remove internal _parsed_date field
+        for meeting in meetings:
+            meeting.pop("_parsed_date", None)
+
+        return meetings
+
+    def _parse_publish_page_date(self, date_str: str, time_str: str) -> Optional[datetime]:
+        """Parse date and time from PublishPage table cells."""
+        if not date_str:
+            return None
+
+        # Try common date formats: 1/22/2026, 01/22/2026
+        date_formats = ["%m/%d/%Y", "%m/%d/%y"]
+
+        for fmt in date_formats:
+            try:
+                parsed = datetime.strptime(date_str, fmt)
+
+                # Try to add time if available
+                if time_str:
+                    time_match = re.match(r"(\d{1,2}):(\d{2})\s*(AM|PM)?", time_str, re.I)
+                    if time_match:
+                        hour = int(time_match.group(1))
+                        minute = int(time_match.group(2))
+                        ampm = time_match.group(3)
+                        if ampm and ampm.upper() == "PM" and hour != 12:
+                            hour += 12
+                        elif ampm and ampm.upper() == "AM" and hour == 12:
+                            hour = 0
+                        parsed = parsed.replace(hour=hour, minute=minute)
+
+                return parsed
+            except ValueError:
+                continue
+
+        return None
 
     async def _fetch_meeting_list(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
         """Fetch meeting list from API with date range."""
