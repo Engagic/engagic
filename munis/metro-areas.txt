@@ -113,12 +113,20 @@ nashvilleTN
 # TEXAS
 arlingtonTX
 austinTX
+cedarparkTX
 corpuschristiTX
 dallasTX
 elpasoTX
 fortworthTX
+friscoTX
+georgetownTX
 houstonTX
+mckinneyTX
+newbraunfelsTX
+planoTX
+roundrockTX
 sanantonioTX
+sugarlandTX
 tomballTX
 
 # VIRGINIA

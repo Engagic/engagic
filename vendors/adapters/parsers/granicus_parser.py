@@ -24,7 +24,8 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
     """Parse ViewPublisher.php listing to extract meetings with event_id, title, start, agenda_viewer_url."""
     soup = BeautifulSoup(html, 'html.parser')
     meetings = []
-    rows = soup.find_all('tr', class_=['odd', 'even'])
+    # Some Granicus sites use 'odd'/'even', others use 'listingRow'
+    rows = soup.find_all('tr', class_=['odd', 'even', 'listingRow'])
 
     for row in rows:
         cells = row.find_all('td', class_='listItem')

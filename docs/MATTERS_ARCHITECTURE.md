@@ -372,6 +372,74 @@ Not huge savings, but **timeline value is priceless** for civic engagement.
 
 ---
 
+## Known Vendor Data Model Issues
+
+### Charlotte NC (Legistar) - Multiple MatterFiles per Petition
+
+**Discovered:** 2026-01-28
+
+Charlotte's Legistar creates a **new MatterFile** for each procedural stage of the same rezoning petition:
+
+| File # | Type | Stage |
+|--------|------|-------|
+| 15-25213 | Zoning Hearing | Initial public hearing |
+| 15-25255 | Zoning Item | Committee review |
+| 15-25304 | Consent Item | Final vote |
+
+All three have the same title: "Rezoning Petition: 2025-103 by Pappas Properties"
+
+**Impact:** 45+ rezoning petitions appear as 3-4 separate matters each (86 excess rows).
+
+**Root cause:** Charlotte encodes the stable identifier (petition number like "2025-103") in the title, but creates new backend MatterFile IDs per stage. Our system keys on MatterFile.
+
+**Potential fix:** Extract petition number from title pattern `Rezoning Petition: (\d{4}-\d{3})` and use as dedup key for Charlotte.
+
+### Colorado Springs (Legistar) - Multiple Data Model Issues
+
+**Discovered:** 2026-01-28
+
+**Issue 1: MatterFile != Ordinance Number**
+
+Colorado Springs MatterFile (e.g., `ZONE-25-0025`) differs from the actual citywide ordinance number (e.g., `25-103` in the title "Ordinance No. 25-103").
+
+**Impact:** Unknown - needs investigation. May cause duplicate matters if same ordinance gets different internal file numbers.
+
+**Issue 2: MatterSponsor = Planning Commission**
+
+For zoning items, Colorado Springs lists "City Planning Commission" as the MatterSponsor (because they forward items to council). This is technically accurate but useless for identifying who actually championed the legislation.
+
+**What we get:** `["City Planning Commission", "City Planning Commission", "City Planning Commission"]`
+
+**What we should show:** Mover (Nadine Hensler), Seconder (Brian Clements) - available in `EventItemMover`/`EventItemSeconder` fields that we don't currently extract.
+
+**Note:** Most Legistar cities use MatterSponsor correctly (actual council members). Colorado Springs is an outlier. The fix is to also extract EventItemMover/Seconder as supplementary data, not replace MatterSponsor logic.
+
+### Legistar API Limitation - Mover/Seconder Not Exposed
+
+**Discovered:** 2026-01-28
+
+The Legistar web frontend displays Mover/Seconder for actions, but the API returns `null` for `EventItemMover` and `EventItemSeconder` fields. Tested on both Colorado Springs and Nashville - both return null.
+
+**What the frontend shows:**
+- Mover: Brian Risley
+- Seconder: Tom Bailey
+
+**What the API returns:**
+```json
+{
+  "EventItemMover": null,
+  "EventItemSeconder": null,
+  "EventItemPassedFlag": 1,
+  "EventItemActionName": "finally passed"
+}
+```
+
+**Impact:** Cannot extract Mover/Seconder via API. Would require HTML scraping of Legistar web pages.
+
+**Workaround:** The votes endpoint (`/eventitems/{id}/votes`) does return individual votes with person names and values (Aye/Nay/Absent/Recused). Could potentially infer mover from vote order, but not reliable.
+
+---
+
 ## Future Improvements
 
 ### 1. Fuzzy Title Matching
