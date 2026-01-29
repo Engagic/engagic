@@ -16,6 +16,8 @@ URL patterns:
 """
 
 import asyncio
+import json
+import os
 import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
@@ -31,6 +33,16 @@ from vendors.adapters.base_adapter_async import AsyncBaseAdapter
 from vendors.adapters.parsers.municode_parser import parse_html_agenda
 
 logger = get_logger(__name__).bind(component="vendor")
+
+MUNICODE_CONFIG_FILE = "data/municode_sites.json"
+
+
+def _load_municode_config() -> Dict[str, Any]:
+    """Load Municode site-specific config (ppid overrides, etc)."""
+    if not os.path.exists(MUNICODE_CONFIG_FILE):
+        return {}
+    with open(MUNICODE_CONFIG_FILE, "r") as f:
+        return json.load(f)
 
 
 class AsyncMunicodeAdapter(AsyncBaseAdapter):
@@ -59,6 +71,9 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
             self._city_code_override = city_code
 
         self._discovered_city_code: Optional[str] = None
+
+        # Load site-specific config (ppid overrides, etc)
+        self._site_config = _load_municode_config().get(self.city_code, {})
 
     def _detect_publish_page_mode(self, slug: str) -> bool:
         """Detect if slug is a city code for PublishPage vs subdomain slug.
@@ -186,8 +201,9 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        # PublishPage URL: cid=CITYCODE, ppid=0 for main page, p=-1 for all meetings
-        url = f"{self.base_url}/PublishPage/index?cid={self.city_code}&ppid=0&p=-1"
+        # PublishPage URL: cid=CITYCODE, ppid for page ID (0 default, some cities need specific UUID), p=-1 for all meetings
+        ppid = self._site_config.get("ppid", "0")
+        url = f"{self.base_url}/PublishPage/index?cid={self.city_code}&ppid={ppid}&p=-1"
 
         try:
             response = await self._get(url)

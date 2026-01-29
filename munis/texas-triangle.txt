@@ -1,0 +1,25 @@
+# Texas Triangle Cities
+# Last updated: 2026-01-29
+
+# Dallas-Fort Worth
+dallasTX
+fortworthTX
+arlingtonTX
+planoTX
+friscoTX
+mckinneyTX
+
+# Houston
+houstonTX
+tomballTX
+sugarlandTX
+
+# Austin
+austinTX
+roundrockTX
+georgetownTX
+cedarparkTX
+
+# San Antonio
+sanantonioTX
+newbraunfelsTX
