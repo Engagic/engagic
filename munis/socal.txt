@@ -1,0 +1,35 @@
+# SoCal Cities
+# Last updated: 2026-01-30
+
+# LA Metro
+losangelesCA
+longbeachCA
+santamonicaCA
+glendaleCA
+burbankCA
+torranceCA
+culvercityCA
+
+# Orange County
+anaheimCA
+irvineCA
+santaanaCA
+huntingtonbeachCA
+costamesaCA
+newportbeachCA
+fullertonCA
+orangeCA
+
+# Inland Empire
+riversideCA
+sanbernardinoCA
+ontarioCA
+ranchocucamongaCA
+fontanaCA
+coronaCA
+pomonaCA
+
+# San Diego
+sandiegoCA
+chulavistaCA
+oceansideCA
