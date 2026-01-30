@@ -438,6 +438,32 @@ The Legistar web frontend displays Mover/Seconder for actions, but the API retur
 
 **Workaround:** The votes endpoint (`/eventitems/{id}/votes`) does return individual votes with person names and values (Aye/Nay/Absent/Recused). Could potentially infer mover from vote order, but not reliable.
 
+### San Antonio (PrimeGov) - No Stable Matter IDs
+
+**Discovered:** 2026-01-30
+
+San Antonio uses PrimeGov but the `data-mig` GUID changes with each meeting appearance:
+- Nov 19: `data-mig="b3622b34-5f78-46d5-b1dd-623c51a41fd1"` (item 214102)
+- Jan 14: `data-mig="6a8ddd67-1f46-407c-9b94-8566859d9509"` (item 215142)
+- Jan 28: `data-mig="9caffc72-2742-4c6b-8a06-cf9380aa1c06"` (item 215552)
+
+All three are the same Plan Amendment case PA-2025-11600064.
+
+**Root cause:** PrimeGov `data-mig` is per-meeting-item, not per-matter. No backend stable identifier exposed.
+
+**Potential fix:** Extract case numbers from title text using regex patterns:
+
+```python
+SA_CASE_PATTERNS = [
+    r'(PA-\d{4}-\d{8})',           # Plan Amendment: PA-2025-11600064
+    r'(Z-\d{4}-\d{8})',            # Zoning: Z-2025-10700155
+    r'(LAND-PLAT-\d{2}-\d{8})',    # Plat: LAND-PLAT-24-11800449
+    r'(REQ-[A-Z]+-\d{2}-\d+)',     # Request/Variance: REQ-CMRORAEVR-25-44400482
+]
+```
+
+Could implement as a city-specific title extractor that returns case number as `matter_file`.
+
 ---
 
 ## Future Improvements
