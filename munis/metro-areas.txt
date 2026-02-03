@@ -1,5 +1,5 @@
 # Metro Areas - All Working Cities
-# Last updated: 2026-01-14
+# Last updated: 2026-01-30
 
 # ARIZONA
 mesaAZ
@@ -8,26 +8,48 @@ tucsonAZ
 
 # CALIFORNIA
 alamedaCA
+anaheimCA
 berkeleyCA
+burbankCA
+chulavistaCA
+coronaCA
+costamesaCA
+culvercityCA
 cupertinoCA
+fontanaCA
 fremontCA
 fresnoCA
+fullertonCA
+glendaleCA
 haywardCA
+huntingtonbeachCA
+irvineCA
 longbeachCA
 losangelesCA
 menloparkCA
 mountainviewCA
+newportbeachCA
 oaklandCA
+oceansideCA
+ontarioCA
+orangeCA
 paloaltoCA
+pomonaCA
+ranchocucamongaCA
 redwoodcityCA
+riversideCA
 sacramentoCA
+sanbernardinoCA
 sandiegoCA
 sanfranciscoCA
 sanjoseCA
+santaanaCA
 santaclaraCA
 santacruzCA
+santamonicaCA
 southsanfranciscoCA
 sunnyvaleCA
+torranceCA
 
 # COLORADO
 boulderCO
@@ -107,6 +129,9 @@ oklahomacityOK
 philadelphiaPA
 pittsburghPA
 
+# RHODE ISLAND
+providenceRI
+
 # TENNESSEE
 nashvilleTN
 
@@ -130,6 +155,7 @@ sugarlandTX
 tomballTX
 
 # VIRGINIA
+alexandriaVA
 richmondVA
 
 # WASHINGTON

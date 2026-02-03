@@ -1,0 +1,30 @@
+# Northeastern Corridor (BosWash Megalopolis)
+# Boston to Washington D.C.
+
+# MASSACHUSETTS
+bostonMA
+cambridgeMA
+
+# RHODE ISLAND
+providenceRI
+
+# CONNECTICUT
+newhavenCT
+
+# NEW YORK
+newyorkNY
+ithacaNY
+
+# NEW JERSEY
+newarkNJ
+princetonNJ
+
+# PENNSYLVANIA
+philadelphiaPA
+
+# MARYLAND
+baltimoreMD
+
+# VIRGINIA
+alexandriaVA
+richmondVA
