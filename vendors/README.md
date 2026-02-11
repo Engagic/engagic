@@ -1,8 +1,8 @@
 # Vendors Module - Civic Tech Platform Adapters
 
-**Fetch meeting data from 12 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
+**Fetch meeting data from 13 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
 
-**Last Updated:** December 2025
+**Last Updated:** February 2026
 
 ---
 
@@ -12,43 +12,41 @@ The vendors module provides adapters for fetching meeting data from civic techno
 
 **Architecture Pattern:** AsyncBaseAdapter + Vendor-Specific Parsers + Shared Utilities
 
-**Migration Status:** All 12 adapters async (migration complete Nov 2025)
-
 ```
 vendors/
-├── adapters/           # 12 async adapters
-│   ├── base_adapter_async.py       # Async base (233 lines)
-│   ├── legistar_adapter_async.py   # Legistar async (1189 lines)
-│   ├── primegov_adapter_async.py   # PrimeGov async (263 lines)
-│   ├── granicus_adapter_async.py   # Granicus async (110 lines)
-│   ├── iqm2_adapter_async.py       # IQM2 async (536 lines)
-│   ├── novusagenda_adapter_async.py # NovusAgenda async (199 lines)
-│   ├── escribe_adapter_async.py    # eScribe async (420 lines) - ITEM-LEVEL
-│   ├── civicclerk_adapter_async.py # CivicClerk async (104 lines)
-│   ├── civicplus_adapter_async.py  # CivicPlus async (373 lines)
-│   ├── municode_adapter_async.py   # Municode async (304 lines)
+├── adapters/           # 13 async adapters
+│   ├── base_adapter_async.py          # Async base (262 lines)
+│   ├── legistar_adapter_async.py      # Legistar async (1212 lines)
+│   ├── primegov_adapter_async.py      # PrimeGov async (320 lines)
+│   ├── granicus_adapter_async.py      # Granicus async (347 lines)
+│   ├── iqm2_adapter_async.py          # IQM2 async (576 lines)
+│   ├── novusagenda_adapter_async.py   # NovusAgenda async (199 lines)
+│   ├── escribe_adapter_async.py       # eScribe async (420 lines)
+│   ├── civicclerk_adapter_async.py    # CivicClerk async (362 lines)
+│   ├── civicplus_adapter_async.py     # CivicPlus async (369 lines)
+│   ├── municode_adapter_async.py      # Municode async (503 lines)
+│   ├── onbase_adapter_async.py        # OnBase async (464 lines)
 │   ├── custom/
 │   │   ├── berkeley_adapter_async.py  # Berkeley async (295 lines)
 │   │   ├── chicago_adapter_async.py   # Chicago async (796 lines)
 │   │   └── menlopark_adapter_async.py # Menlo Park async (182 lines)
 │   └── parsers/        # 5 vendor-specific HTML parsers
-│       ├── legistar_parser.py      # Legistar HTML tables - 373 lines
-│       ├── primegov_parser.py      # PrimeGov HTML tables - 287 lines
-│       ├── granicus_parser.py      # Granicus HTML tables - 141 lines
-│       ├── municode_parser.py      # Municode HTML - 213 lines
-│       └── novusagenda_parser.py   # NovusAgenda HTML - 116 lines
+│       ├── legistar_parser.py         # Legistar HTML tables (373 lines)
+│       ├── primegov_parser.py         # PrimeGov HTML items (315 lines)
+│       ├── granicus_parser.py         # Granicus HTML formats (414 lines)
+│       ├── municode_parser.py         # Municode HTML sections (213 lines)
+│       └── novusagenda_parser.py      # NovusAgenda HTML items (116 lines)
 ├── extractors/         # Data extraction utilities
-│   └── council_member_extractor.py # Sponsor extraction (281 lines)
+│   └── council_member_extractor.py    # Sponsor extraction (281 lines)
 ├── utils/              # Shared utilities
-│   ├── item_filters.py    # DEPRECATED: Re-exports from pipeline.filters
-│   └── attachments.py     # Attachment deduplication (162 lines)
-├── factory.py          # Adapter dispatcher (60 lines)
-├── rate_limiter_async.py  # Async vendor rate limiting (53 lines)
-├── session_manager_async.py  # Async HTTP pooling (143 lines)
+│   └── attachments.py                 # Attachment version filtering (162 lines)
+├── factory.py          # Adapter dispatcher (62 lines)
+├── rate_limiter_async.py              # Async vendor rate limiting (53 lines)
+├── session_manager_async.py           # Async HTTP pooling (143 lines)
 ├── validator.py        # Domain validation (270 lines)
-└── schemas.py          # Pydantic validation schemas (145 lines)
+└── schemas.py          # Pydantic validation schemas (155 lines)
 
-**Total:** ~7,314 lines (all async, sync code removed Nov 2025)
+Total: ~8,905 lines
 ```
 
 ---
@@ -58,31 +56,57 @@ vendors/
 ### AsyncBaseAdapter Pattern
 
 All vendor adapters inherit from `AsyncBaseAdapter`, which provides:
-- **Async HTTP client** (aiohttp) with retry logic and timeout handling
-- **Date parsing** utilities (handles various formats)
-- **Rate limiting** integration (async-aware)
-- **Error handling** with context (vendor, city, URL)
-- **Common interface** (`fetch_meetings()` async method)
+- **Async HTTP client** (aiohttp via `AsyncSessionManager`) with timeout and error handling
+- **Date parsing** utilities (handles various vendor formats)
+- **Metrics collection** via `MetricsCollector` protocol
+- **Error handling** with `VendorHTTPError` (vendor, URL, city context)
+- **Fallback vendor ID generation** (SHA256 hash for vendors without native IDs)
+- **Meeting status detection** (cancelled, postponed, deferred, revised)
+- **Meeting validation** (requires vendor_id, title, start)
+- **FetchResult contract** - distinguishes "0 meetings" from "adapter failed"
 
 ```python
 # vendors/adapters/base_adapter_async.py
+
+@dataclass
+class FetchResult:
+    """Distinguishes success from failure."""
+    meetings: List[Dict[str, Any]] = field(default_factory=list)
+    success: bool = True
+    error: Optional[str] = None
+    error_type: Optional[str] = None
+
 class AsyncBaseAdapter:
-    def __init__(self, city_slug: str, vendor: str):
+    def __init__(self, city_slug: str, vendor: str, metrics: Optional[MetricsCollector] = None):
         self.slug = city_slug
         self.vendor = vendor
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.metrics = metrics or NullMetrics()
 
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict]:
-        """Fetch meetings for date range. MUST be implemented by subclass."""
+    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> FetchResult:
+        """Validates results, catches exceptions, returns FetchResult."""
+        # Calls _fetch_meetings_impl(), validates each meeting, wraps result
+
+    async def _fetch_meetings_impl(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
+        """Subclass must implement. Return raw meeting dicts."""
         raise NotImplementedError
 
-    async def _get(self, url: str, params: Optional[Dict] = None) -> aiohttp.ClientResponse:
-        """Async HTTP GET with retry and rate limiting."""
-        # Shared async retry logic
+    async def _get(self, url: str, **kwargs) -> aiohttp.ClientResponse:
+        """GET request via shared session. Raises VendorHTTPError on failure."""
+
+    async def _post(self, url: str, **kwargs) -> aiohttp.ClientResponse:
+        """POST request. Raises VendorHTTPError on failure."""
+
+    async def _get_json(self, url: str, **kwargs) -> Any:
+        """GET + JSON parse. Handles content-type mismatches."""
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
-        """Parse date from various vendor formats."""
-        # Handles: "11/20/2025", "2025-11-20", "Nov 20, 2025", etc.
+        """Parse vendor date formats (ISO, US, human-readable)."""
+
+    def _generate_fallback_vendor_id(self, title: str, date: Optional[datetime], ...) -> str:
+        """SHA256 hash (12 hex chars) for vendors without native IDs."""
+
+    def _parse_meeting_status(self, title: str, date_str: Optional[str] = None) -> Optional[str]:
+        """Detect cancelled/postponed/deferred/revised/rescheduled from text."""
 ```
 
 ### Adapter ID Contract
@@ -95,9 +119,12 @@ Adapters return `vendor_id` (the native vendor identifier), NOT canonical `meeti
     "vendor_id": "12345",           # Native ID from vendor (required)
     "title": "City Council",
     "start": "2025-11-10T18:00:00",
-    "agenda_url": "https://...",    # HTML agenda (item-level)
-    "packet_url": "https://...",    # PDF packet (monolithic)
+    "agenda_url": "https://...",    # HTML agenda (when items extracted)
+    "packet_url": "https://...",    # PDF packet (monolithic fallback)
     "items": [...],                 # Optional: extracted agenda items
+    "participation": {...},         # Optional: public comment info
+    "meeting_status": "cancelled",  # Optional: cancelled/postponed/etc.
+    "metadata": {...},              # Optional: vendor-specific extras
 }
 ```
 
@@ -108,14 +135,16 @@ Adapters return `vendor_id` (the native vendor identifier), NOT canonical `meeti
 | Legistar | `EventId` from API | `"98765"` |
 | PrimeGov | `id` from API | `"12345"` |
 | Chicago | `meetingId` from API | `"abc-uuid-123"` |
-| NovusAgenda | `MeetingID` from HTML | `"4567"` |
-| CivicClerk | `id` from API | `"789"` |
-| IQM2 | ID extracted from URL | `"meeting_123"` |
-| CivicPlus | ID extracted from URL | `"civic_456"` |
-| Escribe | ID from URL or generated | `"esc_789"` |
-| Granicus | `meeting_id` from API | `"gran_123"` |
-| Berkeley | Date string (no native ID) | `"20251110"` |
-| Menlo Park | Date string (no native ID) | `"20251110"` |
+| NovusAgenda | `MeetingID` from HTML or fallback hash | `"4567"` |
+| CivicClerk | `id` from OData API | `"789"` |
+| IQM2 | ID from Detail_Meeting URL | `"1234"` |
+| CivicPlus | `civic_` + ID from URL or MD5 hash | `"civic_456"` |
+| eScribe | `escribe_` + UUID from meeting URL | `"escribe_7b0..."` |
+| Granicus | `event_id` from ViewPublisher listing | `"5678"` |
+| OnBase | Meeting ID from page JSON/HTML | `"9012"` |
+| Municode | `MeetingID` from API or date+type composite | `"3456"` |
+| Berkeley | SHA256 hash of URL path + date | `"a1b2c3d4e5f6"` |
+| Menlo Park | SHA256 hash of PDF URL + date | `"f6e5d4c3b2a1"` |
 
 **Database generates canonical ID:** `{banana}_{8-char-md5-hash}`
 
@@ -125,104 +154,141 @@ See `database/README.md` for ID generation details.
 
 ## Vendor Adapters
 
-### Item-Level Adapters (7 adapters - 88% of cities)
+### Item-Level Adapters (11 adapters)
 
-These adapters extract **structured agenda items** from HTML agendas or APIs. Items are stored separately with `matter_id`, `matter_file`, titles, and PDF links.
+These adapters extract **structured agenda items** from HTML agendas, APIs, or PDFs. Items are stored separately with `matter_id`, `matter_file`, titles, and PDF links.
 
-**1. Legistar (1189 lines) - 110 cities**
-- **Dual mode:** API-first, fallback to HTML scraping
-- **API:** `/events.json` endpoint with structured JSON
-- **HTML:** Calendar view → meeting detail pages → item tables
+**1. Legistar (1212 lines)**
+- **Dual mode:** API-first (`/Events` endpoint), HTML fallback (`Calendar.aspx` scraping)
+- **API:** OData-style filtering, handles both JSON and XML responses (NYC returns XML)
+- **HTML:** Calendar RadGrid → meeting detail pages → item tables via `legistar_parser.py`
 - **Item extraction:**
-  - API: Direct JSON parsing of `EventItems` array
-  - HTML: `legistar_parser.py` parses `<tr>` tables with `data-id` attributes
-- **Matter tracking:** `File #` column → `matter_file`, `EventItemMatterId` → `matter_id`
-- **PDF links:** Attachment URLs from `EventItemAgendaFile` or HTML hrefs
-- **City examples:** NYC, Los Angeles, San Francisco, Seattle, Boston
+  - API: `EventItems` endpoint per event, concurrent fetches
+  - HTML: `parse_html_agenda()` parses `rgMasterTable` with column mapping
+- **Matter tracking:** `EventItemMatterId`, `EventItemMatterFile`, sponsors from `/matters/{id}/sponsors`
+- **Votes:** Fetched from `/EventItems/{id}/Votes` with normalization (yea→yes, nay→no, etc.)
+- **Attachments:** From `/matters/{id}/attachments`, filters Leg Ver versions (keeps highest)
+- **Roster:** `fetch_roster_data()` fetches Bodies and OfficeRecords for committee membership
+- **City examples:** Seattle WA, NYC, Cambridge MA
 
-**2. PrimeGov (263 lines) - 64 cities**
-- **HTML scraping only:** Agenda list → detail pages → item tables
-- **Parser:** `primegov_parser.py` handles `<table class="agenda">` structure
-- **Item extraction:**
-  - Title from `<td class="title">` or first `<td>`
-  - Matter from `<td class="file">` or pattern matching in title
-  - PDF links from `<a href="/agendas/...">` in row
-- **Quirks:** Some cities use non-standard table classes (handled via selectors)
-- **City examples:** Austin TX, Portland OR, San Diego CA
+**2. PrimeGov (320 lines)**
+- **API + HTML scraping:** REST API for meeting lists, HTML scraping for item extraction
+- **API endpoints:** `/api/v2/PublicPortal/ListUpcomingMeetings` and `/ListArchivedMeetings?year=`
+- **Multiple agenda types:** Regular, Continuation, Special agendas fetched in parallel, merged with deduplication
+- **Parser:** `primegov_parser.py` handles three HTML patterns (LA/newer, Palo Alto/older, Boulder/table)
+- **Matter tracking:** `data-mig` GUID, `data-itemid`, `forcepopulate` table metadata
+- **Attachments:** Via `historyattachment` API endpoint with `history_id`
+- **Participation:** Extracted from agenda HTML (contact info, zoom links)
+- **City examples:** Palo Alto CA, Mountain View CA, Sunnyvale CA
 
-**3. Granicus (110 lines) - 467 cities (200+ with item extraction)**
-- **Hybrid:** API for meeting list, HTML scraping for items
-- **API:** `/meetings` JSON endpoint for meeting metadata
-- **HTML:** Meeting detail pages → `granicus_parser.py` parses agenda tables
-- **Item extraction:**
-  - Title from `<div class="item-title">` or `<h3>` tags
-  - Matter from `<span class="item-number">` or title prefixes
-  - PDF links from `<a class="attachment">` or inline PDFs
-- **Coverage:** Not all Granicus cities have structured agendas (fallback to monolithic)
-- **City examples:** Sacramento CA, Denver CO, Phoenix AZ
+**3. Granicus (347 lines)**
+- **HTML scraping:** Two-step process - ViewPublisher.php listing → AgendaViewer/AgendaOnline detail
+- **Config dependency:** Requires `data/granicus_view_ids.json` mapping base URLs to view IDs
+- **Parser:** `granicus_parser.py` handles three HTML formats:
+  - AgendaOnline accessible view (`ViewMeetingAgenda`)
+  - AgendaOnline table-based (older format)
+  - Original AgendaViewer with File IDs and MetaViewer attachments
+- **Attachments:** Fetched from AgendaOnline item detail pages, DownloadFile→ViewDocument URL translation
+- **Encoding:** UTF-8 with latin-1 fallback (Granicus often misreports encoding)
+- **SSL:** Disabled for Granicus domains (cert issues on S3 redirects)
+- **Participation:** Council member extraction from blue-styled header spans
+- **City examples:** Cambridge MA, Santa Monica CA, Redwood City CA
 
-**4. IQM2 (536 lines) - 45 cities**
-- **HTML scraping:** Agenda calendar → detail pages → item tables
-- **No dedicated parser:** Inline parsing in adapter (could extract to parser)
-- **Item extraction:**
-  - Title from `<div class="agenda-item-title">`
-  - Matter from `<span class="item-number">` or title prefix
-  - PDF links from `<a class="pdf-link">`
-- **City examples:** Fremont CA, Alameda CA
+**4. IQM2 (576 lines)**
+- **HTML scraping:** Calendar page → Detail_Meeting.aspx → MeetingDetail table
+- **Multiple URL patterns:** Tries `/Citizens`, `/Citizens/Calendar.aspx`, `/Citizens/Default.aspx`
+- **Inline parsing:** No dedicated parser; parses MeetingDetail table directly in adapter
+- **Matter tracking:** LegiFile IDs from `Detail_LegiFile.aspx` links, case numbers extracted via regex
+- **Metadata:** Fetches matter_type, sponsors, department, attachments from Detail_LegiFile pages
+- **Attachment dedup:** By file ID parameter in URL (same files appear in multiple views)
+- **City examples:** Boise ID, Santa Monica CA, Cambridge MA, Buffalo NY
 
-**5. NovusAgenda (199 lines) - 38 cities**
-- **HTML scraping:** Meeting list → detail → `novusagenda_parser.py`
-- **Parser:** Handles `<table id="agenda">` with rowspan/colspan complexity
-- **Item extraction:**
-  - Title from `<td class="title">` (may span multiple rows)
-  - Matter from `<td class="number">` or pattern in title
-  - PDF attachments from nested `<ul class="attachments">`
-- **Quirks:** Heavy use of rowspan/colspan requires careful DOM traversal
-- **City examples:** Santa Clara CA, Sunnyvale CA
+**5. NovusAgenda (199 lines)**
+- **HTML scraping:** `/agendapublic` page → RadGrid table rows → MeetingView.aspx for items
+- **Parser:** `novusagenda_parser.py` extracts items via CoverSheet.aspx links
+- **Agenda selection:** Prioritizes "HTML Agenda" over "View Agenda" over generic links
+- **Date format:** `%m/%d/%y` (2-digit year)
+- **City examples:** Hagerstown MD, Houston TX
 
-**6. Chicago (796 lines) - 1 city (custom)**
-- **Custom REST API** at `api.chicityclerkelms.chicago.gov` (NOT Legistar)
-- **Endpoints:** `/meeting-agenda` with OData filtering, `/meeting-agenda/{id}` for details
-- **Item extraction:** Nested `agenda.groups[].items[]` structure from API
-- **Matter tracking:** Record numbers (e.g., "O2024-9876") with votes and deadlines
-- **Fallback:** PDF parsing via regex when API agenda is empty
-- **Stats tracking:** Per-sync metrics collection
+**6. Chicago (796 lines) - Custom**
+- **REST API** at `api.chicityclerkelms.chicago.gov`
+- **OData-style filtering** with pagination (500 per page, 2000 cap)
+- **Item extraction hierarchy:** API `agenda.groups[].items[]` → PDF extraction → packet fallback
+- **PDF fallback:** Extracts record numbers (O2025-0019668) from agenda PDF, fetches matter data via `/matter/recordNumber/`
+- **Matter data:** Attachments, sponsors, status, votes all from `/matter/{id}` (votes embedded in actions)
+- **Vote normalization:** Yea→yes, Nay→no, etc.
+- **Stats tracking:** Per-sync metrics (meetings, items, votes, attachments, API requests)
+- **Participation:** Public comment deadline and instructions
+- **Metadata:** Video links, transcript links, body info, related meetings
 
-**7. eScribe (420 lines) - ~20 cities**
-- **HTML scraping:** Meeting list -> Agenda=Merged view for items
-- **Item extraction:** Via `.AgendaItemContainer` elements with unique IDs
-- **Matter tracking:** Extracts case numbers from title prefixes (BOA-0039-2025, etc.)
-- **Per-item attachments:** `FileStream.ashx?DocumentId=` links per item
-- **Section hierarchy:** Nested containers with indentation
-- **City examples:** Raleigh NC, Canadian cities (supports French language)
+**7. eScribe (420 lines)**
+- **Calendar API + HTML scraping:** POST to `/MeetingsCalendarView.aspx/GetCalendarMeetings`, then `/Meeting.aspx?Agenda=Merged` for items
+- **Date handling:** Parses `/Date(timestamp)/` format (millisecond timestamps)
+- **Item extraction:** `.AgendaItemContainer` elements with numeric IDs from CSS classes
+- **Matter tracking:** Extracts case numbers via regex patterns (BOA-0039-2025, RES-2025-123, etc.)
+- **Matter type inference:** Derives type from prefix (BOA→Board of Adjustment, ORD→Ordinance, etc.)
+- **Per-item attachments:** `FileStream.ashx?DocumentId=` links
+- **City examples:** Raleigh NC
+
+**8. CivicClerk (362 lines)**
+- **OData REST API** at `{slug}.api.civicclerk.com`
+- **OData pagination:** Follows `@odata.nextLink` for multi-page results
+- **Item extraction:** Fetches structured items from `/v1/Meetings/{agendaId}`, flattens section hierarchy (recursive `isSection` traversal)
+- **Bill parsing:** Extracts Board Bill, Resolution, Ordinance numbers from HTML titles
+- **Attachments:** Per-item `attachmentsList` with `pdfVersionFullPath`/`mediaFullPath` URLs
+- **CORS headers:** Requires Origin/Referer headers matching portal domain
+- **City examples:** St. Louis MO, Montpelier VT, Burlington VT
+
+**9. Municode (503 lines)**
+- **Dual mode:** Subdomain API (`{slug}.municodemeetings.com/api/v1/`) or PublishPage HTML (`meetings.municode.com/PublishPage/`)
+- **Mode detection:** Hyphens in slug = subdomain API; short alphanumeric = PublishPage city code
+- **Config dependency:** `data/municode_sites.json` for ppid overrides
+- **Parser:** `municode_parser.py` extracts items from `<section class="agenda-section">` structure
+- **HTML agenda:** Fetches from `/adaHtmlDocument/index?cc={code}&me={guid}&ip=True`
+- **City code discovery:** Auto-discovers from API response URLs (`cc=` param, blob paths)
+- **Participation:** Extracted from HTML (contact info, zoom links)
+- **City examples:** Columbus GA, Tomball TX, Los Gatos CA, Cedar Park TX
+
+**10. OnBase (464 lines)**
+- **Config-based:** Sites configured in `data/onbase_sites.json`, keyed by banana
+- **Platform:** Hyland OnBase Agenda Online (direct instances, not via Granicus)
+- **Deployments:** Hyland Cloud (`{city}.hylandcloud.com`), self-hosted, multiple sites per city
+- **Meeting listing:** JSON extraction from inline page data or static HTML links
+- **Item extraction:** Reuses `granicus_parser.parse_agendaonline_html()` (shared format)
+- **Attachments:** Fetched from item detail pages, DownloadFile→ViewDocument URL translation
+- **Multi-URL strategy:** Tries `Documents/ViewAgenda` and `Meetings/ViewMeetingAgenda`, keeps best result
+- **City examples:** San Diego CA, Tucson AZ, Tampa FL, Durham NC
+
+**11. Berkeley (295 lines) - Custom**
+- **Custom Drupal CMS** at `berkeleyca.gov`
+- **HTML scraping:** Table rows with `<time>` tags for dates
+- **Item extraction:** `<strong>1.</strong><a href="...pdf">Title</a>` pattern
+- **Sponsors:** From `From:` lines following items
+- **Recommendations:** Extracted from `Recommendation:` lines
+- **Participation:** Zoom URL, phone number, email from intro paragraphs
+- **Attachments:** PDF links from item anchors
 
 ---
 
-### Monolithic Adapters (4 adapters - 12% of cities)
+### Monolithic Adapters (2 adapters)
 
 These adapters fetch **PDF packet URLs only** (no structured items). Meetings are processed with comprehensive LLM summarization.
 
-**8. CivicClerk (104 lines) - ~30 cities**
-- **HTML scraping:** Agenda calendar -> packet PDF links
-- **No item extraction:** Only stores `packet_url`
-- **PDF structure:** Single PDF with all agenda items (no separation)
-- **City examples:** Multiple small CA cities
-
-**9. CivicPlus (373 lines) - ~25 cities**
-- **HTML scraping:** Meeting list -> packet PDF links
-- **No item extraction:** Monolithic PDFs
-- **Quirks:** Some cities hide PDFs behind JavaScript modals
+**12. CivicPlus (369 lines)**
+- **Domain discovery:** Tries `{slug}.civicplus.com`, `{slug}.gov`, `{slug}.org` variants
+- **HTML scraping:** AgendaCenter pages → ViewFile/Agenda links or meeting detail pages
+- **No item extraction:** Fetches packet PDFs only
+- **Meeting ID:** Extracts from URL `id=` param or generates MD5 hash of normalized URL
+- **Date extraction:** From URL pattern (`_MMDDYYYY-ID`) or page text
+- **Deduplication:** By date (keeps last uploaded, typically packet over agenda)
 - **City examples:** Various mid-size cities
 
-**10. Berkeley (295 lines) - 1 city (custom)**
-- **Custom scraper** for Berkeley CA's unique system
-- **Monolithic:** Fetches packet PDFs only
-- **Special handling:** Berkeley uses custom CMS with non-standard structure
-
-**11. Menlo Park (182 lines) - 1 city (custom)**
-- **Custom scraper** for Menlo Park CA
-- **Monolithic:** Packet URLs only
-- **Historical:** One of the first adapters (predates item-level pattern)
+**13. Menlo Park (182 lines) - Custom**
+- **Custom scraper** for Menlo Park CA's table-based website
+- **PDF item extraction:** Downloads agenda PDF, extracts text via `PdfExtractor`, parses items via `parse_menlopark_pdf_agenda()`
+- **Item format:** Letter-based sections (H., I., J., K.) with numbered items (H1., J1.)
+- **Attachments:** Hyperlinked PDFs within agenda PDF (Staff Reports, Presentations)
+- **Note:** While items are extracted from PDFs, the source document is a PDF rather than structured HTML/API data
 
 ---
 
@@ -230,114 +296,107 @@ These adapters fetch **PDF packet URLs only** (no structured items). Meetings ar
 
 **Separation of Concerns:** Adapters fetch data, Parsers extract structure.
 
-### Parser Pattern
+### Parser Inventory
 
-```python
-# vendors/adapters/parsers/legistar_parser.py
-class LegistarParser:
-    """Parse Legistar HTML agenda tables into structured items."""
+| Parser | Adapter | Patterns Handled |
+|--------|---------|-----------------|
+| `legistar_parser.py` | Legistar | `rgMasterTable` RadGrid with column mapping; `LegislationDetail.aspx` attachments |
+| `primegov_parser.py` | PrimeGov | LA pattern (meeting-item + forcepopulate), Palo Alto (agenda-item), Boulder (table data-itemid) |
+| `granicus_parser.py` | Granicus, OnBase | ViewPublisher listing, AgendaOnline accessible/table views, AgendaViewer with MetaViewer |
+| `municode_parser.py` | Municode | `agenda-section` → `agenda-items` → `agenda_item_attachments` |
+| `novusagenda_parser.py` | NovusAgenda | CoverSheet.aspx links, exploratory multi-pattern detection |
 
-    @staticmethod
-    def parse_agenda_items(html: str, meeting_id: str) -> List[Dict]:
-        """
-        Extract items from Legistar HTML table.
-
-        Returns:
-            [
-                {
-                    "title": "Ordinance 2025-001",
-                    "matter_file": "BL2025-1005",
-                    "matter_id": "251041",
-                    "matter_type": "Bill",
-                    "sequence": 1,
-                    "agenda_url": "https://...",
-                    "attachments": [{"url": "...", "name": "...", "type": "pdf"}]
-                },
-                ...
-            ]
-        """
-        soup = BeautifulSoup(html, "html.parser")
-        items = []
-
-        # Find agenda table
-        table = soup.find("table", {"id": "ctl00_ContentPlaceHolder1_gridMain_ctl00"})
-        if not table:
-            return []
-
-        for row in table.find_all("tr", class_="rgRow"):
-            # Extract title
-            title_cell = row.find("td", class_="rgSorted")
-            title = title_cell.get_text(strip=True) if title_cell else ""
-
-            # Extract matter file
-            file_cell = row.find("td", {"data-title": "File #"})
-            matter_file = file_cell.get_text(strip=True) if file_cell else None
-
-            # Extract attachments
-            attachment_links = row.find_all("a", href=re.compile(r"Attachments/.*\.pdf"))
-            attachments = [...]
-
-            items.append({...})
-
-        return items
-```
+**Adapters without dedicated parsers** (inline parsing): IQM2, eScribe, CivicClerk, CivicPlus, Berkeley, Chicago, Menlo Park.
 
 **Why separate parsers?**
 - **Vendor updates:** HTML changes → update parser only, adapter unchanged
 - **Testing:** Can test parsing logic independently
-- **Reusability:** Same parser works across multiple cities using same vendor
+- **Reusability:** Granicus parser is reused by OnBase adapter
 - **Clarity:** Adapter focuses on HTTP/retry, parser focuses on DOM traversal
 
 ---
 
 ## Shared Utilities
 
-### Item Filtering (DEPRECATED)
+### Attachment Version Filtering (vendors/utils/attachments.py)
 
-**Location moved:** Item filtering logic now lives in `pipeline/filters/item_filters.py`.
-
-The `vendors/utils/item_filters.py` file is deprecated and only re-exports from the pipeline module for backwards compatibility:
+**Version-based deduplication:** Filters to include at most one version of versioned documents.
 
 ```python
-# vendors/utils/item_filters.py - DEPRECATED
-"""DEPRECATED: Use pipeline.filters instead"""
+def filter_version_attachments(attachments, version_patterns=None, name_key='name'):
+    """
+    Filter attachments to include at most one version of versioned documents.
+    Prefers higher version numbers (Ver2 > Ver1).
+    Default patterns: ['leg ver', 'legislative version'] (Legistar)
+    """
 
-from pipeline.filters.item_filters import (
-    should_skip_item,
-    should_skip_processing,
-    should_skip_matter,
-    is_public_comment_attachment,
-    ADAPTER_SKIP_PATTERNS,
-    PROCESSOR_SKIP_PATTERNS,
-    # ...
-)
+def normalize_attachment_metadata(attachment, vendor):
+    """Normalize attachment fields across vendors to consistent {name, url, metadata} format."""
 ```
 
-See `pipeline/README.md` for current item filtering documentation.
+### Council Member Extractor (vendors/extractors/council_member_extractor.py)
 
-### Attachment Deduplication (vendors/utils/attachments.py)
-
-**Hash-based deduplication:** Prevents processing same PDF multiple times.
+**Sponsor extraction** from adapter output with normalization and deduplication.
 
 ```python
-def compute_attachment_hash(attachments: List[Dict]) -> str:
-    """
-    Compute stable hash of attachment URLs.
+class CouncilMemberExtractor:
+    """Extract council member/sponsor data from vendor output."""
 
-    Used for matters-first deduplication:
-    - Matter appears in 3 meetings
-    - If attachment URLs unchanged → reuse canonical summary
-    - If attachment URLs changed → re-process matter
-    """
-    # Sort URLs for stable hash
-    urls = sorted([att["url"] for att in attachments])
-    combined = "|".join(urls)
-    return hashlib.sha256(combined.encode()).hexdigest()[:16]
+    @staticmethod
+    def extract_sponsors_from_item(item) -> List[str]:
+        """Handles: item["sponsors"] (list), item["sponsor"] (str), item["metadata"]["sponsors"]."""
+
+    @staticmethod
+    def extract_all_sponsors_from_meeting(meeting) -> Dict[str, List[str]]:
+        """Returns mapping of matter_id -> sponsor names for linking."""
+
+    @staticmethod
+    def normalize_sponsors(sponsors) -> List[str]:
+        """Normalize via database.id_generation.normalize_sponsor_name()."""
+
+async def process_meeting_sponsors(meeting, banana, council_member_repo, meeting_date=None) -> int:
+    """Convenience: extract sponsors, create/update council members, create sponsorship links."""
 ```
 
-**Deployed in:** `database/services/meeting_ingestion.py` for matters-first processing
+---
 
-**Impact:** Prevents redundant LLM calls when matter appears in multiple meetings
+## Pydantic Validation (schemas.py)
+
+**Runtime validation** at adapter boundaries before database storage.
+
+```python
+class MeetingSchema(BaseModel):
+    vendor_id: str          # Required, non-empty
+    title: str              # Required, non-empty
+    start: str              # ISO format string (NOT datetime object)
+    location: Optional[str]
+    agenda_url: Optional[str]
+    packet_url: Optional[str]
+    items: Optional[List[AgendaItemSchema]]
+    participation: Optional[Dict]
+    meeting_status: Optional[str]
+    vendor_body_id: Optional[str]   # Legistar committee/body ID
+    metadata: Optional[Dict]
+
+class AgendaItemSchema(BaseModel):
+    vendor_item_id: Optional[str]   # Falls back to sequence
+    title: str                      # Required, non-empty
+    sequence: int                   # Coerced from string if needed
+    attachments: List[AttachmentSchema] = []
+    matter_id: Optional[str]
+    matter_file: Optional[str]
+    matter_type: Optional[str]
+    agenda_number: Optional[str]
+    sponsors: Optional[List[str]]
+    votes: Optional[List[Dict]]
+    metadata: Optional[Dict]
+
+class AttachmentSchema(BaseModel):
+    name: str
+    url: str                        # Required, non-empty
+    type: str                       # pdf, doc, spreadsheet, unknown
+    history_id: Optional[str]       # PrimeGov-specific
+```
 
 ---
 
@@ -348,19 +407,16 @@ def compute_attachment_hash(attachments: List[Dict]) -> str:
 ```python
 # vendors/rate_limiter_async.py
 class AsyncRateLimiter:
-    """Async vendor-aware rate limiter using delay between requests."""
-
-    # Minimum delay in seconds between requests per vendor
     delays = {
-        "primegov": 3.0,    # PrimeGov cities
-        "granicus": 4.0,    # Conservative (API undocumented)
-        "civicclerk": 3.0,  # CivicClerk cities
-        "legistar": 3.0,    # Direct Legistar
-        "civicplus": 8.0,   # Aggressive blocking, needs longer delays
-        "novusagenda": 4.0, # NovusAgenda cities
-        "iqm2": 3.0,        # IQM2 cities
-        "escribe": 3.0,     # eScribe cities
-        "unknown": 5.0,     # Fallback for unknown vendors
+        "primegov": 3.0,
+        "granicus": 4.0,
+        "civicclerk": 3.0,
+        "legistar": 3.0,
+        "civicplus": 8.0,    # Aggressive blocking, needs longer delays
+        "novusagenda": 4.0,
+        "iqm2": 3.0,
+        "escribe": 3.0,
+        "unknown": 5.0,      # Fallback (municode, berkeley, chicago, menlopark, onbase)
     }
 ```
 
@@ -368,7 +424,21 @@ class AsyncRateLimiter:
 - Async-safe with `asyncio.Lock()`
 - Per-vendor delay tracking
 - CivicPlus gets extra random jitter (0-2s) to avoid pattern detection
+- All other vendors get 0-1s random jitter
 - Non-blocking delays via `asyncio.sleep()`
+
+---
+
+## Session Management (session_manager_async.py)
+
+**Centralized HTTP pooling** using aiohttp for all vendor adapters.
+
+- **One session per vendor** (not per city) with connection reuse
+- **Connection limits:** 20 total, 5 per host, DNS cache 5 min
+- **Browser-like headers** to avoid bot detection
+- **Configurable timeout:** 30s default (total), 10s connect
+- **Lazy creation:** Sessions created on first use
+- **Stats:** `get_stats()` returns active sessions and connection counts
 
 ---
 
@@ -377,55 +447,25 @@ class AsyncRateLimiter:
 **Adapter dispatcher:** Maps vendor name → async adapter class.
 
 ```python
-# vendors/factory.py
-from vendors.adapters.legistar_adapter_async import AsyncLegistarAdapter
-from vendors.adapters.primegov_adapter_async import AsyncPrimeGovAdapter
-# ... all 12 async adapters
-
 VENDOR_ADAPTERS = {
-    "legistar": AsyncLegistarAdapter,
-    "primegov": AsyncPrimeGovAdapter,
     "granicus": AsyncGranicusAdapter,
     "iqm2": AsyncIQM2Adapter,
+    "legistar": AsyncLegistarAdapter,
     "novusagenda": AsyncNovusAgendaAdapter,
-    "escribe": AsyncEscribeAdapter,
+    "onbase": AsyncOnBaseAdapter,
+    "primegov": AsyncPrimeGovAdapter,
     "civicclerk": AsyncCivicClerkAdapter,
     "civicplus": AsyncCivicPlusAdapter,
+    "escribe": AsyncEscribeAdapter,
     "municode": AsyncMunicodeAdapter,
     "berkeley": AsyncBerkeleyAdapter,
     "chicago": AsyncChicagoAdapter,
     "menlopark": AsyncMenloParkAdapter,
 }
 
-def get_async_adapter(vendor: str, city_slug: str, **kwargs) -> AsyncBaseAdapter:
-    """
-    Get async adapter instance for vendor.
-
-    Args:
-        vendor: Vendor identifier (e.g., "legistar", "primegov")
-        city_slug: City identifier (e.g., "nyc", "losangeles")
-        **kwargs: Additional arguments (api_token, etc.)
-
-    Returns:
-        Async adapter instance
-
-    Raises:
-        VendorError: If vendor not supported
-    """
-    adapter_class = VENDOR_ADAPTERS.get(vendor)
-    if not adapter_class:
-        raise VendorError(f"Unsupported vendor: {vendor}")
-
-    return adapter_class(city_slug=city_slug, **kwargs)
-```
-
-**Usage:**
-```python
-# In pipeline/fetcher.py
-from vendors.factory import get_async_adapter
-
-adapter = get_async_adapter(vendor="legistar", city_slug="nyc")
-meetings = await adapter.fetch_meetings(days_back=7, days_forward=14)
+def get_async_adapter(vendor: str, city_slug: str, metrics: Optional[MetricsCollector] = None, **kwargs):
+    """Get async adapter instance. Raises VendorError if unsupported.
+    Passes api_token for Legistar if provided in kwargs."""
 ```
 
 ---
@@ -434,118 +474,48 @@ meetings = await adapter.fetch_meetings(days_back=7, days_forward=14)
 
 **Domain validation** prevents data corruption by verifying URLs match vendor configuration.
 
-```python
-# vendors/validator.py
-class MeetingValidator:
-    """Validates meeting URLs before storage to prevent corruption."""
+- Validates `packet_url`, `agenda_url`, and attachment URLs against expected vendor domains
+- Supports domain patterns per vendor (including CDN domains like S3, CloudFront)
+- **Return actions:** `store` (valid), `warn` (suspicious but allowed), `reject` (domain mismatch)
+- **Note:** Currently used in tests only; not integrated into production pipeline
 
-    VENDOR_DOMAINS = {
-        "primegov": lambda slug: [f"{slug}.primegov.com"],
-        "granicus": lambda slug: [
-            f"{slug}.granicus.com",
-            "s3.amazonaws.com",      # Granicus S3 CDN
-            "cloudfront.net",        # CloudFront CDN
-            "legistar.granicus.com",
-        ],
-        "legistar": lambda slug: [
-            "legistar.granicus.com",
-            f"{slug}.legistar.com",
-        ],
-        "chicago": lambda slug: ["occprodstoragev1.blob.core.usgovcloudapi.net"],
-        # ... other vendors
-    }
+Vendors with configured domains: primegov, granicus, legistar, civicclerk, novusagenda, civicplus, civicweb, iqm2, municode, escribe, menlopark, berkeley, chicago.
 
-    @classmethod
-    def validate_url(cls, url, url_type, city_banana, city_name, vendor, slug):
-        """Validate URL domain matches vendor configuration.
+---
 
-        Returns: {'valid': bool, 'action': 'store'|'warn'|'reject', ...}
-        """
-```
+## Configuration Dependencies
 
-**Return actions:**
-- `store`: URL valid, store normally
-- `warn`: URL suspicious but allowed (relative URLs, unknown vendors)
-- `reject`: Domain mismatch, block storage
+Several adapters require static configuration files:
 
-**Note:** Currently used in tests only; not integrated into production pipeline.
+| Adapter | Config File | Contents |
+|---------|------------|----------|
+| Granicus | `data/granicus_view_ids.json` | Maps base URLs to `view_id` integers |
+| OnBase | `data/onbase_sites.json` | Maps banana to list of site URL paths |
+| Municode | `data/municode_sites.json` | Per-city overrides (ppid, etc.) |
+
+Adapters fail fast in `__init__` if their config is missing or the city is not configured.
 
 ---
 
 ## Adding a New Vendor Adapter
-
-**Step-by-step guide for adding support for a new civic tech platform.**
 
 ### 1. Create Async Adapter Class
 
 ```python
 # vendors/adapters/newvendor_adapter_async.py
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from typing import List, Dict, Any
-import asyncio
+from pipeline.protocols import MetricsCollector
 
 class AsyncNewVendorAdapter(AsyncBaseAdapter):
-    """Async adapter for NewVendor civic tech platform."""
+    def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
+        super().__init__(city_slug, vendor="newvendor", metrics=metrics)
+        self.base_url = f"https://{self.slug}.newvendor.com"
 
-    def __init__(self, city_slug: str):
-        super().__init__(city_slug, vendor="newvendor")
-        self.base_url = f"https://{city_slug}.newvendor.com"
-
-    async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """
-        Fetch meetings from NewVendor platform (async).
-
-        Returns:
-            [
-                {
-                    "meeting_id": "meeting_12345",
-                    "title": "City Council Meeting",
-                    "start": "2025-11-20T19:00:00",
-                    "agenda_url": "https://...",  # If available
-                    "packet_url": "https://...",  # Fallback
-                    "items": [...]  # If item-level
-                },
-                ...
-            ]
-        """
-        # 1. Construct URL for meeting list
-        url = f"{self.base_url}/meetings"
-
-        # 2. Fetch with async retry
-        response = await self._get(url)
-        html = await response.text()
-
-        # 3. Parse response (CPU-bound, run in thread pool)
-        meetings = await asyncio.to_thread(self._parse_meetings, html)
-
-        # 4. Fetch details concurrently
-        detail_tasks = [self._fetch_meeting_details(m["meeting_id"]) for m in meetings]
-        details = await asyncio.gather(*detail_tasks, return_exceptions=True)
-
-        for meeting, detail in zip(meetings, details):
-            if not isinstance(detail, Exception):
-                meeting.update(detail)
-
-        return meetings
-
-    async def _fetch_meeting_details(self, meeting_id: str) -> Dict[str, Any]:
-        """Fetch agenda items for a meeting (async)."""
-        url = f"{self.base_url}/meetings/{meeting_id}/items"
-        response = await self._get(url)
-        html = await response.text()
-        items = await asyncio.to_thread(self._parse_items, html)
-        return {"items": items, "agenda_url": url}
-
-    def _parse_meetings(self, html: str) -> List[Dict]:
-        """Parse meeting list (sync, run in thread pool)."""
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, 'html.parser')
-        # Extract meetings...
-        ...
-
-    def _parse_items(self, html: str) -> List[Dict]:
-        """Parse agenda items (sync, run in thread pool)."""
-        # If complex, extract to vendors/adapters/parsers/newvendor_parser.py
+    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+        # 1. Fetch meeting list (API or HTML)
+        # 2. Filter by date range
+        # 3. Fetch details concurrently
+        # 4. Return list of meeting dicts with vendor_id, title, start, items/packet_url
         ...
 ```
 
@@ -561,32 +531,15 @@ VENDOR_ADAPTERS = {
 }
 ```
 
-### 3. Add Cities to Database
+### 3. Add Rate Limiting (Optional)
 
-```python
-# In pipeline/conductor.py or admin script
-db.add_city(
-    banana="examplecityCA",
-    name="Example City",
-    state="CA",
-    vendor="newvendor",
-    city_slug="examplecity",  # Used in adapter URL construction
-    timezone="America/Los_Angeles",
-)
-```
+Add vendor-specific delay to `rate_limiter_async.py` if needed (otherwise defaults to 5.0s "unknown").
 
-### 4. Test Adapter
+### 4. Test
 
 ```bash
-# Sync one city to verify
 python -m pipeline.conductor sync-city examplecityCA --force
 ```
-
-### 5. Monitor & Iterate
-
-- Check logs for errors: `tail -f logs/engagic.log | grep newvendor`
-- Verify data in database: `sqlite3 data/engagic.db "SELECT * FROM meetings WHERE banana = 'examplecityCA'"`
-- Adjust parser if HTML structure varies across cities
 
 ---
 
@@ -597,123 +550,24 @@ python -m pipeline.conductor sync-city examplecityCA --force
 **1. No meetings returned**
 - Check date range (some vendors only show future meetings)
 - Verify URL construction (city_slug might be case-sensitive)
-- Check HTTP response (might be 404, 403, or 500)
-
-```python
-# Add debug logging
-self.logger.debug("fetching meetings", url=url, date_range=f"{start_date} to {end_date}")
-response = self._get_with_retry(url)
-self.logger.debug("response received", status_code=response.status_code, content_length=len(response.text))
-```
+- Check HTTP response via debug logging
 
 **2. Parsing failures**
 - HTML structure changed (vendor updated their site)
 - BeautifulSoup selectors too specific
 - Missing null checks on DOM elements
 
-```python
-# Defensive parsing
-title_elem = row.find("td", class_="title")
-title = title_elem.get_text(strip=True) if title_elem else "Untitled"
-```
-
 **3. Rate limiting (429 errors)**
-- Reduce requests per minute in `rate_limiter.py`
-- Add delays between requests: `time.sleep(0.5)`
-- Check if vendor has official rate limit documentation
+- Increase delay in `rate_limiter_async.py`
+- CivicPlus is most aggressive; uses 8s + 0-2s jitter
 
-**4. Authentication required**
-- Some vendors require API tokens
-- Pass via `api_token` kwarg in adapter constructor
-- Store in environment variable (`LEGISTAR_API_TOKEN`, etc.)
-
----
-
-## Performance Metrics
-
-**Adapter efficiency** (average across all vendors):
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| Success rate | 94% | Failures mostly due to vendor downtime |
-| Avg response time | 2.3s | Includes retry attempts |
-| Meetings/city/sync | 8.2 | Depends on city size and meeting frequency |
-| Items/meeting (item-level) | 12.4 | Avg for structured adapters |
-
-**Bottlenecks:**
-- HTML parsing (BeautifulSoup): ~200ms/page (negligible)
-- HTTP requests: ~1-3s/request (vendor response time)
-- Rate limiting: Adds 0-60s/city (depending on vendor limits)
-
-**Optimization opportunities:**
-- Parallel fetching (currently sequential per city)
-- Cache meeting lists (reduce re-fetching unchanged data)
-- Batch API requests (some vendors support this)
-
----
-
-## Testing
-
-**Unit tests:** `tests/test_vendors.py`
-
-```python
-# Test adapter parsing with fixture HTML
-def test_legistar_parse_items():
-    html = load_fixture("legistar_agenda.html")
-    parser = LegistarParser()
-    items = parser.parse_agenda_items(html, meeting_id="test_123")
-
-    assert len(items) == 15
-    assert items[0]["title"] == "Ordinance 2025-001"
-    assert items[0]["matter_file"] == "BL2025-1005"
-```
-
-**Integration tests:** `tests/integration/test_vendor_adapters.py`
-
-```python
-# Test live adapter (uses VCR.py to record HTTP)
-@vcr.use_cassette("legistar_nyc_meetings.yaml")
-def test_legistar_fetch_meetings():
-    adapter = LegistarAdapter(city_slug="nyc")
-    meetings = adapter.fetch_meetings(start_date, end_date)
-
-    assert len(meetings) > 0
-    assert all(m["agenda_url"] or m["packet_url"] for m in meetings)
-```
-
-**Manual testing:**
-```bash
-# Sync single city
-python -m pipeline.conductor sync-city paloaltoCA --force
-
-# Check results
-sqlite3 data/engagic.db "SELECT COUNT(*) FROM meetings WHERE banana = 'paloaltoCA'"
-```
-
----
-
-## Future Work
-
-**Expansion:**
-- [x] Municode adapter added (304 lines, 213-line parser)
-- [ ] Add support for Novus (different from NovusAgenda)
-- [ ] Improve Granicus item extraction (currently only 200/467 cities)
-
-**Optimization:**
-- [ ] Parallel city syncing (process multiple cities concurrently)
-- [ ] Incremental updates (only fetch new meetings since last sync)
-- [ ] API v2: Vendors provide structured JSON (reduce HTML parsing)
-
-**Reliability:**
-- [ ] Health checks for each vendor (detect when vendor site is down)
-- [ ] Adapter versioning (track when HTML structure changes)
-- [ ] Fallback strategies (try HTML if API fails, vice versa)
+**4. SSL errors**
+- Granicus has known SSL cert issues on S3 redirects (SSL disabled in base adapter for granicus domains)
 
 ---
 
 **See Also:**
 - [pipeline/README.md](../pipeline/README.md) - How adapters integrate with processing pipeline
 - [database/README.md](../database/README.md) - How meeting data is stored
-- [VISION.md](../docs/VISION.md) - Product roadmap and vendor expansion plans
 
-**Last Updated:** 2025-12-13 (Documentation audit: line counts, rate limiting, validator, deprecations)
+**Last Updated:** 2026-02-10 (Full code audit: line counts, adapter capabilities, patterns, config deps)

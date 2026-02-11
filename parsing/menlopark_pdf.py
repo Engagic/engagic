@@ -103,7 +103,7 @@ def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Di
 
             # Determine end position
             if next_item:
-                end_pos = start_pos + next_item.start()
+                end_pos = next_item.start()
             elif next_section:
                 end_pos = start_pos + next_section.start()
             else:

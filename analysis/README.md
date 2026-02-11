@@ -2,8 +2,6 @@
 
 **Transform raw meeting documents into actionable civic intelligence.** Async orchestration, Gemini API integration, adaptive prompting, topic normalization.
 
-**Last Updated:** December 13, 2025
-
 ---
 
 ## Overview
@@ -11,27 +9,27 @@
 The analysis module provides LLM-powered intelligence for civic meeting documents. Orchestrates Google's Gemini API to generate summaries, extract topics, and assess citizen impact from agenda items and meeting packets.
 
 **Core Capabilities:**
-- **Async orchestration:** Concurrent PDF downloads, non-blocking extraction
+- **Async orchestration:** Concurrent PDF downloads, semaphore-limited LLM calls
 - **Reactive rate limiting:** Respects Gemini's `retryDelay` on 429 errors with exponential backoff
-- **Adaptive summarization:** Item-level (1-5 sentences) vs comprehensive (5-10 sentences) based on document size
+- **Unified adaptive prompting:** Single prompt lets the LLM scale output depth to document complexity (2-10 sentences)
 - **Topic extraction:** 16 canonical civic topics (housing, zoning, transportation, etc.)
 - **Citizen impact assessment:** "Why should residents care?" analysis
-- **Batch processing:** 50% cost savings via Gemini Batch API
+- **Batch processing:** 50% cost savings via Gemini Batch API (JSONL file method)
 - **JSON structured output:** Schema-validated responses (no parsing failures)
 
 **Architecture Pattern:** AsyncAnalyzer (orchestration) → GeminiSummarizer (LLM + rate limiting) → TopicNormalizer (mapping)
 
 ```
 analysis/
-├── analyzer_async.py       # 400 lines - Async orchestration
+├── analyzer_async.py       # 428 lines - Async orchestration
 ├── llm/
-│   ├── summarizer.py       # 1,304 lines - Gemini API + reactive rate limiting
-│   └── prompts_v2.json     # 149 lines - Prompt templates
+│   ├── summarizer.py       # 1,309 lines - Gemini API + reactive rate limiting
+│   └── prompts_v2.json     # 82 lines - Unified prompt template
 └── topics/
-    ├── normalizer.py       # 231 lines - Topic normalization
+    ├── normalizer.py       # 230 lines - Topic normalization
     └── taxonomy.json       # 242 lines - 16 canonical topics
 
-**Total:** 1,935 lines Python + 391 lines JSON = 2,326 lines
+**Total:** 1,967 lines Python + 324 lines JSON = 2,291 lines
 ```
 
 ---
@@ -50,7 +48,7 @@ class AsyncAnalyzer:
     Key Features:
     - Async PDF downloads (aiohttp, concurrent)
     - CPU-bound extraction in thread pool (non-blocking)
-    - Concurrent batch processing
+    - Concurrent batch processing with configurable semaphore
 
     Rate limiting handled reactively by summarizer via Gemini's retry instructions.
     """
@@ -106,25 +104,35 @@ async def process_batch_items_async(
     meeting_id: Optional[str] = None
 ) -> List[List[Dict[str, Any]]]:
     """
-    Process multiple agenda items sequentially (to avoid TPM rate limits).
+    Process multiple agenda items concurrently (semaphore-limited).
+    Concurrency controlled by config.LLM_CONCURRENCY (default 3).
     Returns: [[{item_id, success, summary, topics, error?}, ...]]
     """
 ```
 
-**Why async?**
-- **I/O parallelism:** Download PDFs concurrently instead of sequentially
-- **Non-blocking:** Event loop continues while waiting on HTTP/API responses
-- **Resource efficiency:** Thread pool for CPU-bound work (PyMuPDF), async for I/O
+**Concurrency Model:**
+
+Items are processed concurrently via `asyncio.gather` with a semaphore limiting parallel LLM calls:
+
+```python
+concurrency = config.LLM_CONCURRENCY  # Default 3 (configurable via ENGAGIC_LLM_CONCURRENCY)
+semaphore = asyncio.Semaphore(concurrency)
+
+results = await asyncio.gather(
+    *[process_with_limit(item, i) for i, item in enumerate(item_requests)],
+    return_exceptions=True
+)
+```
 
 **Session Management:**
 
-HTTP sessions are automatically recycled after 100 requests to prevent memory accumulation:
+HTTP sessions are automatically recycled after 100 requests to prevent memory accumulation. Recycling is serialized via `asyncio.Lock` and skipped when downloads are in-flight:
 
 ```python
-# Internal recycling (automatic)
-self._request_count += 1
-if self._request_count >= self._recycle_after:  # Default: 100
-    await self.recycle_session()  # Close and recreate
+async with self._recycle_lock:
+    self._request_count += 1
+    if self._request_count >= self._recycle_after and self._in_flight == 0:
+        await self.recycle_session()
 ```
 
 **Timeout Structure:**
@@ -133,6 +141,11 @@ Defense-in-depth timeout hierarchy prevents hangs:
 - PDF extraction: 10 minutes (includes OCR budget)
 - LLM summarization: 5 minutes per call
 - Retry budget: 3 minutes total (within LLM timeout)
+
+**Exceptions:**
+
+- `AnalysisError`: Raised when document analysis fails (scanned/complex PDF)
+- Wraps `ExtractionError` (PDF failures) and `LLMError` (Gemini failures)
 
 **Usage:**
 ```python
@@ -151,7 +164,7 @@ await analyzer.close()  # Cleanup HTTP session
 
 ### GeminiSummarizer (analysis/llm/summarizer.py)
 
-**Gemini API orchestration** with model selection, adaptive prompting, reactive rate limiting, and batch processing.
+**Gemini API orchestration** with config-driven model selection, unified adaptive prompting, reactive rate limiting, and batch processing.
 
 ```python
 class GeminiSummarizer:
@@ -164,12 +177,13 @@ class GeminiSummarizer:
         metrics: Optional[MetricsCollector] = None
     ):
         self.metrics = metrics or NullMetrics()
-        self.client = genai.Client(api_key=api_key)
+        # API key: api_key param > GEMINI_API_KEY env > LLM_API_KEY env
+        self.client = genai.Client(api_key=self.api_key)
         self.flash_model_name = "gemini-2.5-flash"
         self.flash_lite_model_name = "gemini-2.5-flash-lite"
 
-        # Load prompts from JSON (v2 only)
-        self.prompts = json.load(open(prompts_path or "analysis/llm/prompts_v2.json"))
+        # Load prompts from JSON (v2 only, via importlib.resources)
+        self.prompts = json.loads(files("analysis.llm").joinpath("prompts_v2.json").read_text())
 ```
 
 **Reactive Rate Limiting:**
@@ -177,74 +191,90 @@ class GeminiSummarizer:
 Instead of proactive token bucket limiting, we trust Gemini to tell us when to retry. The `_call_with_retry()` method parses `retryDelay` from 429 responses:
 
 ```python
-def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3):
+def _call_with_retry(self, model_name: str, prompt: str, config, max_retries=3, max_retry_seconds=180):
     """
     Call Gemini API with automatic retry on 429 rate limits.
 
-    Gemini returns retryDelay in 429 responses - we parse and respect it.
-    Fallback: exponential backoff (30s, 60s, 90s) if no retryDelay provided.
+    - Parses retryDelay from Gemini's 429 error response (handles multiple quote/format styles)
+    - Fallback: exponential backoff (30s, 60s, 90s) if no retryDelay provided
+    - Total retry time capped at max_retry_seconds (default 3 minutes)
+    - Non-rate-limit errors raise immediately
     """
-    for attempt in range(max_retries):
-        try:
-            return self.client.models.generate_content(model=model_name, contents=prompt, config=config)
-        except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                # Parse retryDelay from Gemini's error response
-                retry_match = re.search(r'"retryDelay":\s*"(\d+)s"', str(e))
-                delay = int(retry_match.group(1)) + 1 if retry_match else 30 * (attempt + 1)
-                time.sleep(delay)
-                continue
-            raise
 ```
 
-**Model Selection:**
+**Model Selection (config-driven):**
 
-| Model | Speed | Quality | Cost (per 1M tokens) | Use Case |
-|-------|-------|---------|----------------------|----------|
-| Flash-2.5 | Fast (2-5s) | Good | $0.075 input, $0.30 output | Standard items, batch processing |
-| Flash-2.5-Lite | Very fast (1-2s) | Acceptable | $0.0375 input, $0.15 output | Simple items (<50 pages, <200K chars) |
+| Model | Use Case | Controlled By |
+|-------|----------|---------------|
+| Flash-2.5 (default) | All items by default | Always selected unless USE_FLASH_LITE is enabled |
+| Flash-2.5-Lite | Small docs (<50 pages AND <200K chars) | Only when `config.USE_FLASH_LITE = True` |
 
-**Adaptive Prompt Selection:**
+```python
+def _select_model(self, page_count: int, text_size: int) -> tuple[str, str]:
+    # Default: Flash for everything (consistent quality)
+    # If USE_FLASH_LITE enabled: use Flash-Lite for small docs (cost savings)
+    if config.USE_FLASH_LITE:
+        if text_size < 200_000 and page_count <= 50:
+            return self.flash_lite_model_name, "flash-lite"
+    return self.flash_model_name, "flash"
+```
+
+**Unified Prompt (replaces standard/large split):**
+
+A single `"unified"` prompt handles all item sizes. The LLM decides output depth based on content complexity:
+
+```python
+def _select_prompt_type(self) -> str:
+    return "unified"  # Always unified - LLM scales output to complexity
+```
+
+The unified prompt provides detailed guidance for output length:
+- **Simple items** (appointments, routine renewals): 2-3 sentences
+- **Moderate items** (budget amendments, permits): 4-5 sentences
+- **Complex items** (ordinances, developments, fiscal reports): 6-10 sentences with sections
+
+**Adaptive Thinking Configuration:**
+
+Thinking budget scales with document complexity:
+
+```python
+def _get_thinking_config(page_count, text_size, model_name):
+    """
+    - Simple (≤10 pages, ≤30K chars): thinking_budget=0 (disabled for speed)
+    - Medium (≤50 pages, ≤150K chars):
+        - Flash-Lite: thinking_budget=2048 (explicit, doesn't think by default)
+        - Flash: no thinking config (model decides dynamically)
+    - Complex (>50 pages or >150K chars): thinking_budget=-1 (dynamic/unlimited)
+    """
+```
+
+**Item Summarization:**
 
 ```python
 def summarize_item(item_title: str, text: str, page_count: Optional[int] = None) -> Tuple[str, List[str]]:
     """
-    Summarize agenda item with adaptive prompting.
+    Summarize agenda item with unified prompt.
 
-    Prompt selection:
-    - Standard items (<100 pages): focused prompt, 1-5 sentence summary
-    - Large items (100+ pages): comprehensive prompt, 5-10 sentence summary
+    Always uses max_output_tokens=8192 and response_mime_type="application/json".
+    Response is parsed into combined markdown (## Summary + ## Citizen Impact + ## Confidence)
+    and a validated topic list.
 
-    Model selection:
-    - Flash-Lite: <50 pages AND <200K chars
-    - Flash: Everything else
-
-    Returns: (summary_markdown, topics_list)
+    Returns: (summary_markdown, canonical_topics_list)
     """
-    if page_count >= 100:
-        prompt_type = "large"
-        model = self.flash_model_name  # Always Flash for large items
-    else:
-        prompt_type = "standard"
-        model = self.flash_lite_model_name if self._is_simple(text, page_count) else self.flash_model_name
-
-    prompt = self._get_prompt("item", prompt_type, title=item_title, text=text)
-    response = self.client.models.generate_content(model=model, contents=prompt, config=config)
-
-    return self._parse_item_response(response.text)
 ```
 
-**Adaptive Thinking Configuration:**
-
-Thinking budget scales with document complexity for optimal quality/speed tradeoff:
+**Meeting Summarization (fallback):**
 
 ```python
-def _get_thinking_config(page_count: int, text_size: int, model_name: str):
+def summarize_meeting(text: str) -> str:
     """
-    Thinking budget by complexity:
-    - Simple (≤10 pages, ≤30K chars): thinking_budget=0 (disabled for speed)
-    - Medium (≤50 pages, ≤150K chars): thinking_budget=2048 (moderate)
-    - Complex (>50 pages or >150K chars): thinking_budget=-1 (dynamic/unlimited)
+    Summarize full meeting agenda (plain markdown, no JSON).
+
+    Prompt selection by document size:
+    - ≤30 pages: "short_agenda" prompt
+    - >30 pages: "comprehensive" prompt
+
+    Used as fallback when item-level processing is unavailable.
     """
 ```
 
@@ -263,25 +293,20 @@ async def summarize_batch(
     - 5 items per chunk (respects TPM quota)
     - 120-second delays between chunks (allows quota refill)
     - Exponential backoff on 429 errors (60s, 120s, 240s)
+    - JSONL file upload method (client.batches.create)
 
     Yields: List of results per chunk
     """
     # Create cache for shared context (if token count >= 1024)
-    cache_name = None
     if shared_context and len(shared_context) // 4 >= 1024:
-        cache = self.client.caches.create(model=self.flash_model_name, contents=[shared_context])
-        cache_name = cache.name
+        cache = self.client.caches.create(model=..., config=CreateCachedContentConfig(
+            contents=[shared_context], ttl="3600s"  # 1 hour
+        ))
 
-    # Process chunks with async delay between each
-    for chunk in chunks:
-        chunk_results = await self._process_batch_chunk(chunk, cache_name, shared_context)
-        yield chunk_results
-        await asyncio.sleep(120)  # 120s delay for quota refill
+    # Process chunks, yield results, cleanup cache in finally block
 ```
 
 **Truncated Response Recovery:**
-
-When Gemini truncates output mid-response (common with large documents), the `_salvage_truncated_response()` method attempts to recover usable content:
 
 ```python
 def _salvage_truncated_response(response_text: str) -> tuple[str, list[str]] | None:
@@ -290,10 +315,33 @@ def _salvage_truncated_response(response_text: str) -> tuple[str, list[str]] | N
 
     Truncation typically happens mid-field, but summary_markdown is usually
     complete since it comes first. Uses regex to extract whatever fields
-    are available.
+    are available. Adds truncation notice to recovered summary.
 
     Returns (summary, topics) if salvageable, None if insufficient content.
-    Adds truncation notice to recovered summary.
+    """
+```
+
+**Response Parsing:**
+
+Item responses are parsed from JSON into a combined markdown document:
+
+```python
+def _parse_item_response(response_text: str) -> Tuple[str, List[str]]:
+    """
+    Parse JSON response into (summary, topics).
+
+    Output format:
+        ## Summary
+        {summary_markdown}
+
+        ## Citizen Impact
+        {citizen_impact_markdown}
+
+        ## Confidence
+        {confidence}
+
+    Topics are validated against canonical taxonomy via TopicNormalizer.
+    Invalid topics are rejected (logged); falls back to ["other"] if all invalid.
     """
 ```
 
@@ -301,56 +349,48 @@ def _salvage_truncated_response(response_text: str) -> tuple[str, list[str]] | N
 
 ## Prompts Architecture (prompts_v2.json)
 
-**JSON-structured prompts** with schema-validated responses and adaptive complexity.
+**JSON-structured prompts** with schema-validated responses.
 
 **Structure:**
 ```json
 {
   "item": {
-    "standard": {
-      "description": "For individual agenda items - JSON structured output",
+    "unified": {
+      "description": "Unified prompt for all agenda items - LLM determines output length",
       "variables": ["title", "text"],
       "output_format": "json",
       "response_schema": { ... },
       "system_instruction": "You are an expert at analyzing city council agenda items...",
       "template": "Analyze this city council agenda item...\n\n# Item Title\n\"{title}\"\n..."
-    },
-    "large": {
-      "description": "For complex/lengthy agenda items (100+ pages) - enhanced analysis",
-      "variables": ["title", "text"],
-      "output_format": "json",
-      "response_schema": { ... },
-      "system_instruction": "You are an expert at analyzing complex city council items...",
-      "template": "Analyze this complex city council agenda item...\n..."
     }
   },
   "meeting": {
     "short_agenda": {
-      "description": "FALLBACK: For full meeting packets ≤30 pages when item-level processing unavailable",
+      "description": "FALLBACK: For full meeting packets ≤30 pages",
       "variables": ["text"],
-      "template": "This is a city council meeting agenda. Provide a clear, concise summary..."
+      "template": "This is a city council meeting agenda..."
     },
     "comprehensive": {
-      "description": "FALLBACK: For large/complex agendas >30 pages when item-level processing unavailable",
+      "description": "FALLBACK: For large/complex agendas >30 pages",
       "variables": ["text"],
-      "template": "Analyze this city council meeting agenda and provide comprehensive summary..."
+      "template": "Analyze this city council meeting agenda..."
     }
   }
 }
 ```
 
-**Response Schema (item prompts):**
+**Response Schema (item.unified):**
 ```json
 {
   "type": "object",
   "properties": {
     "summary_markdown": {
       "type": "string",
-      "description": "Main summary in markdown format (1-5 or 5-10 sentences)"
+      "description": "Summary in markdown format (2-10 sentences depending on complexity)"
     },
     "citizen_impact_markdown": {
       "type": "string",
-      "description": "How this affects residents (1 or 2-3 sentences)"
+      "description": "1-3 sentences in markdown explaining how this affects residents"
     },
     "topics": {
       "type": "array",
@@ -361,8 +401,7 @@ def _salvage_truncated_response(response_text: str) -> tuple[str, list[str]] | N
                  "education", "health", "planning", "permits", "contracts",
                  "appointments", "other"]
       },
-      "minItems": 1,
-      "maxItems": 3
+      "description": "1-3 canonical topics from the allowed list"
     },
     "confidence": {
       "type": "string",
@@ -373,33 +412,20 @@ def _salvage_truncated_response(response_text: str) -> tuple[str, list[str]] | N
 }
 ```
 
-**Why JSON prompts?**
-- **Version control:** Track prompt changes in git
-- **Schema enforcement:** Gemini validates response against schema (no parsing errors)
-- **A/B testing:** Easy to swap prompts and compare quality
-- **Documentation:** Self-documenting with descriptions and variable lists
+**Unified Prompt Design:**
 
-**Prompt Guidelines (from templates):**
+The unified prompt includes detailed extraction rules for different document types:
+- **Legislative documents:** Dollar amounts, addresses, ordinance numbers, vote counts
+- **Data presentations:** Percentages, trends, before/after comparisons, frameworks
+- **Staff memos:** Recommendations, cost-benefit, stakeholder input
+- **Appeals/variances:** Backstory, timeline, stakeholders, procedural history
+- **Fiscal reports:** Credit ratings, structural risk factors, political contingencies
 
-**Standard items:**
-- 1-5 sentences (simple appointments: 1-2, complex developments: 4-5)
-- Include dollar amounts, addresses, dates, ordinance numbers
-- Use **bold** for key numbers and names
-- Plain language, no jargon
+Seven worked examples are embedded in the prompt covering simple appointments through complex ordinances and fiscal health reports.
 
-**Large items:**
-- 5-10 sentences with markdown sections
-- Break into ## Financial, ## Timeline, ## Impact if needed
-- Include ALL dollar amounts, addresses, dates
-- Use lists for multiple components
-- Cross-reference documents for consistency
-
-**Meeting summaries (fallback only):**
-- Plain markdown text (no JSON)
-- List all agenda items with descriptions
-- Include all financial details
-- Preserve exact dollar amounts and addresses
-- Note public participation opportunities
+**Meeting prompts (fallback only):**
+- Plain markdown output (no JSON, no topics)
+- Used when item-level processing is unavailable (vendor limitations, parsing failures)
 
 ---
 
@@ -432,38 +458,6 @@ CANONICAL_TOPICS = [
 ]
 ```
 
-**Synonym Mapping:**
-```json
-{
-  "housing": {
-    "canonical": "housing",
-    "display_name": "Housing & Development",
-    "synonyms": [
-      "affordable housing",
-      "housing affordability",
-      "low-income housing",
-      "workforce housing",
-      "residential development",
-      "homeless services",
-      "homelessness"
-    ]
-  },
-  "zoning": {
-    "canonical": "zoning",
-    "display_name": "Zoning & Land Use",
-    "synonyms": [
-      "rezoning",
-      "zoning changes",
-      "land use",
-      "conditional use permit",
-      "variance",
-      "general plan"
-    ]
-  },
-  ...
-}
-```
-
 ### Normalizer Logic
 
 ```python
@@ -482,36 +476,25 @@ class TopicNormalizer:
 
         Returns: Sorted list of canonical topics (deduplicated)
         """
-        canonical_topics = set()
 
-        for topic in topics:
-            topic_lower = topic.strip().lower()
+    def normalize_single(topic: str) -> str:
+        """Normalize a single topic. Returns canonical form or lowercased original if no match."""
 
-            # Direct match
-            if topic_lower in self._synonym_map:
-                canonical_topics.add(self._synonym_map[topic_lower])
-            # Word-boundary-aware partial match
-            elif matched := self._find_word_match(topic_lower):
-                canonical_topics.add(matched)
-            else:
-                # Track unknown topics for taxonomy improvement
-                self._track_unknown_topic(topic_lower)
+    def get_display_name(canonical_topic: str) -> str:
+        """Get human-friendly display name (e.g., 'public_safety' → 'Public Safety')."""
 
-        return sorted(list(canonical_topics))
+    def get_all_canonical_topics() -> List[str]:
+        """Get list of all canonical topic strings for validation."""
 
-    def _contains_word(text: str, word: str) -> bool:
-        """
-        Check if word appears as complete word(s) in text.
-        Prevents false positives like "park" matching "parking".
-        Uses regex word boundaries: r'\bword\b'
-        """
+    def get_prompt_examples() -> str:
+        """Get comma-separated topic list for embedding in LLM prompts."""
 ```
 
 **Usage:**
 ```python
 from analysis.topics.normalizer import get_normalizer
 
-normalizer = get_normalizer()
+normalizer = get_normalizer()  # Global singleton
 raw_topics = ["Affordable Housing", "bike lanes", "budget"]
 canonical = normalizer.normalize(raw_topics)
 # Returns: ["budget", "housing", "transportation"]
@@ -519,14 +502,53 @@ canonical = normalizer.normalize(raw_topics)
 
 **Why normalize topics?**
 - **Consistent filtering:** Frontend can filter by "housing" reliably across all cities
-- **User-friendly labels:** "Housing & Development" vs raw "affordable housing units"
-- **Analytics:** Aggregate "how often does housing appear?" across all cities
+- **User-friendly labels:** "Housing & Development" via `get_display_name()`
+- **Analytics:** Aggregate topic frequency across all cities
 - **Taxonomy evolution:** Unknown topics logged to `{DB_DIR}/unknown_topics.log` for review
 
-**Unknown Topic Tracking:**
-- Logs to `{DB_DIR}/unknown_topics.log` when no match found
-- Review periodically to expand taxonomy
-- Example: If "cannabis" appears 50 times, add to taxonomy
+---
+
+## Error Handling
+
+**Broad exception catches are intentional** at API boundaries - comments in code explain each one. All exceptions are converted to typed errors (`LLMError`, `ExtractionError`, `AnalysisError`) with context.
+
+### 1. Rate Limiting (429 / RESOURCE_EXHAUSTED)
+
+Handled reactively via `_call_with_retry()`:
+- Parses `retryDelay` from Gemini's 429 error response (handles multiple format styles)
+- Fallback: exponential backoff (30s, 60s, 90s)
+- Total retry time capped at 180s (3 minutes)
+- Batch processing: 5 items per chunk with 120s delays between chunks
+
+### 2. Truncated Responses (MAX_TOKENS)
+
+When Gemini truncates output mid-JSON:
+- `_salvage_truncated_response()` extracts summary/topics via regex
+- Adds truncation notice to recovered summary
+- Falls back to error if no summary content salvageable
+
+### 3. Empty Responses
+
+When `response.text` is None:
+- `_extract_text_from_response()` navigates the candidates/parts structure
+- Skips thinking blocks, extracts text from content parts
+- Logs prompt_feedback for debugging safety blocks
+
+### 4. Invalid Topics
+
+When Gemini returns topics not in the canonical taxonomy:
+- Invalid topics are rejected and logged as warnings
+- Falls back to `["other"]` if all topics are invalid
+
+### 5. PDF Extraction Failures
+
+```python
+async def extract_pdf_async(url: str) -> Dict[str, Any]:
+    """
+    Extract text from PDF with error handling.
+    Downloads async, extracts in thread pool, raises ExtractionError on failure.
+    """
+```
 
 ---
 
@@ -534,213 +556,62 @@ canonical = normalizer.normalize(raw_topics)
 
 ### 1. Model Selection
 
-- **Flash-Lite (50%):** Simple items <50 pages, <200K chars → 50% cost savings
-- **Flash (default):** Standard items, all batch processing
-- **Never Pro:** Not cost-justified for agenda items
+- **Flash (default):** Consistent quality for all items
+- **Flash-Lite (opt-in via `USE_FLASH_LITE` config):** 50% cost savings for simple items (<50 pages, <200K chars)
 
-### 2. Adaptive Prompting
+### 2. Unified Prompt
 
-```python
-# Standard item: shorter prompt, shorter output
-if page_count < 100:
-    prompt = SHORT_PROMPT      # ~500 tokens
-    max_output = 2048          # 1-5 sentences
+Single prompt with adaptive output guidance replaces separate standard/large prompts. The LLM scales output depth to content complexity, reducing over-generation on simple items.
 
-# Large item: longer prompt, detailed output
-else:
-    prompt = LONG_PROMPT       # ~1000 tokens
-    max_output = 8192          # 5-10 sentences
-```
+### 3. Thinking Budget
 
-**Savings:** Reduces output tokens by 50-70% for standard items
+Disabled (`budget=0`) for simple documents (≤10 pages), saving thinking tokens. Dynamic for complex documents.
 
-### 3. Batch Processing
+### 4. Batch Processing
 
-- **50% cost reduction** for batch API
-- **Process overnight:** 100 items = $0.50 instead of $1.00
-- **Trade-off:** 5-15 minute latency (acceptable for background processing)
+- **50% cost reduction** via Gemini Batch API
+- JSONL file upload method with async polling
+- Trade-off: minutes of latency (acceptable for background processing)
 
-### 4. Context Caching
+### 5. Context Caching
 
 ```python
-# Create cache for shared meeting context (>1024 tokens)
+# Create cache for shared meeting context (≥1024 estimated tokens)
 if len(shared_context) // 4 >= 1024:
     cache = client.caches.create(
         model=flash_model_name,
-        contents=[shared_context],
-        ttl="3600s"  # 1 hour
+        config=CreateCachedContentConfig(
+            contents=[shared_context],
+            ttl="3600s"  # 1 hour
+        )
     )
-    # Reuse cache across all items in meeting
-```
-
-**Savings:** Cached tokens cost 10% of normal input tokens
-
-**Monthly cost estimate (500 cities, ~10K items/month):**
-- Real-time Flash: $150/month
-- Batch Flash: $75/month
-- Batch Flash + caching: $60/month
-- **Total savings: $90/month ($1,080/year)**
-
----
-
-## Error Handling
-
-**Common failure modes and recovery strategies:**
-
-### 1. Rate Limiting (429 / RESOURCE_EXHAUSTED)
-
-Handled reactively via `_call_with_retry()`:
-- Parses `retryDelay` from Gemini's 429 error response
-- Fallback: exponential backoff (30s, 60s, 90s)
-- Batch processing: 5 items per chunk with 120s delays between chunks
-
-```python
-def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 3):
-    for attempt in range(max_retries):
-        try:
-            return self.client.models.generate_content(...)
-        except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                # Parse retryDelay or use exponential backoff
-                delay = parse_retry_delay(e) or 30 * (attempt + 1)
-                time.sleep(delay)
-                continue
-            raise
-```
-
-### 2. Content Filtering (Safety blocks)
-```python
-try:
-    response = client.generate_content(prompt)
-except ContentFilterError as e:
-    logger.warning("content filtered", item_id=item_id, reason=str(e))
-    return {
-        "summary": "[Content unavailable due to safety filters]",
-        "topics": ["other"],
-        "confidence": "low"
-    }
-```
-
-### 3. Schema Validation Failure
-- With `response_schema`, Gemini enforces JSON structure
-- If malformed JSON: retry with explicit error message in prompt
-- Track finish_reason: if "MAX_TOKENS", increase max_output_tokens
-
-### 4. PDF Extraction Failures
-```python
-async def extract_pdf_async(url: str) -> Dict[str, Any]:
-    """Extract text from PDF with error handling"""
-    try:
-        pdf_bytes = await self.download_pdf_async(url)
-        result = await asyncio.to_thread(self.pdf_extractor.extract_from_bytes, pdf_bytes)
-
-        if not result.get("success"):
-            raise ExtractionError(f"PDF extraction failed: {result.get('error')}")
-
-        return result
-    except (ExtractionError, aiohttp.ClientError) as e:
-        logger.error("pdf processing failed", url=url, error=str(e))
-        raise
+    # Reuse cache across all items in meeting, cleanup in finally block
 ```
 
 ---
 
-## Quality Metrics
+## Metrics
 
-**Target metrics:**
-
-| Metric | Target | Notes |
-|--------|--------|-------|
-| Summary accuracy | >90% | Human reviewers rate 4+/5 = accurate |
-| Topic precision | >85% | Match against human-labeled ground truth |
-| Confidence calibration | >0.85 | Model confidence correlates with accuracy |
-| JSON parse success | 100% | Schema enforcement ensures this |
-
-**Definitions:**
-- **Summary accuracy:** Human reviewers rate summaries on 5-point scale, 4+ = accurate
-- **Topic precision:** % of extracted topics that match human-labeled ground truth
-- **Confidence calibration:** Correlation between model confidence ("high"/"medium"/"low") and human accuracy ratings
-- **JSON parse success:** % of responses that parse without errors (schema enforcement ensures 100%)
-
----
-
-## Testing
-
-**Topic normalization testing:**
+All LLM calls record metrics via the `MetricsCollector` protocol:
 
 ```python
-from analysis.topics.normalizer import get_normalizer
-
-normalizer = get_normalizer()
-raw = ["Affordable Housing", "bike lanes", "budget"]
-normalized = normalizer.normalize(raw)
-
-assert "housing" in normalized
-assert "transportation" in normalized
-assert "budget" in normalized
-```
-
-**Adaptive prompt selection:**
-
-```python
-# Standard item (<100 pages)
-prompt_type = "large" if 50 >= 100 else "standard"
-assert prompt_type == "standard"
-
-# Large item (100+ pages)
-prompt_type = "large" if 150 >= 100 else "standard"
-assert prompt_type == "large"
-```
-
-**Live API testing:**
-
-```python
-# Test live Gemini API
-summarizer = GeminiSummarizer(api_key=os.getenv("GEMINI_API_KEY"))
-
-summary, topics = summarizer.summarize_item(
-    item_title="Zoning Variance Request",
-    text="The applicant requests a variance to allow...",
-    page_count=5
+self.metrics.record_llm_call(
+    model="flash",
+    prompt_type="item_unified",
+    duration_seconds=duration,
+    input_tokens=input_tokens,
+    output_tokens=output_tokens,
+    cost_dollars=self._calculate_cost(model_name, input_tokens, output_tokens),
+    success=True
 )
-
-assert len(summary) > 0
-assert len(topics) > 0
 ```
 
----
-
-## Future Work
-
-**Model improvements:**
-- [ ] Test Gemini-2.5 Flash Thinking (experimental extended thinking mode)
-- [ ] A/B test Flash vs Flash-Lite on accuracy (validate cost savings)
-- [ ] Fine-tuning: Train custom model on civic-specific language (requires 1000+ examples)
-
-**Prompt engineering:**
-- [ ] Chain-of-thought prompting (explicit step-by-step reasoning)
-- [ ] Few-shot examples (include 2-3 example summaries in prompt for consistency)
-- [ ] Prompt versioning infrastructure (track changes, measure quality regression)
-
-**Topic extraction:**
-- [ ] Expand to 20 topics (add "climate", "immigration", "cannabis", "housing")
-- [ ] Multi-label confidence scores (probability per topic instead of binary)
-- [ ] Topic hierarchy (parent-child relationships: "housing" → "affordable housing", "senior housing")
-
-**Cost optimization:**
-- [ ] Embedding-based deduplication (cache embeddings for repeated text)
-- [ ] Summarize-then-expand: Quick summary first, expand only if user clicks
-- [ ] Local models: Run Llama-3 locally for simple items (<10 pages), Gemini for complex
-
-**Async improvements:**
-- [ ] Connection pooling for HTTP session (single session across all tasks)
-- [ ] Structured concurrency (task groups for better error handling)
+Cost calculation uses per-model pricing:
+- Flash: $0.075/1M input, $0.30/1M output
+- Flash-Lite: $0.0375/1M input, $0.15/1M output
 
 ---
 
 **See Also:**
 - [pipeline/README.md](../pipeline/README.md) - How analysis integrates with processing
 - [database/README.md](../database/README.md) - How summaries are stored
-- [VISION.md](../docs/VISION.md) - Roadmap for intelligence features (Phase 6)
-
-**Last Updated:** 2025-12-13 (Documentation accuracy audit)
