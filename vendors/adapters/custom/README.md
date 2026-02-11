@@ -28,6 +28,7 @@ Custom adapters are 1:1 with specific high-value cities that don't use standard 
 - Menlo Park, CA (35k population) - Simple table, monolithic processing
 
 **Potential Future:**
+- Honolulu, HI (350k) - City Council meetings at https://hnldoc.ehawaii.gov/hnldoc/videos. Has agendas (`/hnldoc/agenda/`), YouTube video links, and minutes (`/hnldoc/document-download/`). No API/RSS — would need HTML scraping. Year filter covers 2019-2027. Committees: Budget, Zoning & Planning, Energy, Infrastructure, etc.
 - San Francisco, CA (815k) - High value if feasible
 - Oakland, CA (440k) - High value if feasible
 - Mountain View, CA (82k) - If table structure is similar to Menlo Park

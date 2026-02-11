@@ -67,12 +67,12 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 │  │              │                                    │                    │ │
 │  │              ▼                                    ▼                    │ │
 │  │  ┌───────────────────────┐          ┌─────────────────────────────┐   │ │
-│  │  │  Vendors (11)         │          │  Analysis (LLM)             │   │ │
+│  │  │  Vendors (13)         │          │  Analysis (LLM)             │   │ │
 │  │  │  - Legistar (110)     │          │  - Gemini 2.5 Flash/Lite    │   │ │
 │  │  │  - Granicus (467)     │          │  - Adaptive prompting       │   │ │
 │  │  │  - PrimeGov (64)      │          │  - 16 topic taxonomy        │   │ │
 │  │  │  - IQM2 (45)          │          │  - Batch processing (50%)   │   │ │
-│  │  │  - 8 more adapters    │          │  - Context caching          │   │ │
+│  │  │  - 9 more adapters    │          │  - Context caching          │   │ │
 │  │  └───────────┬───────────┘          └──────────────┬──────────────┘   │ │
 │  └──────────────┼──────────────────────────────────────┼─────────────────┘ │
 │                 │                                      │                   │
@@ -99,17 +99,17 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**~29,000 lines Python backend** organized into 8 focused modules:
+**~35,000 lines Python backend** organized into 8 focused modules:
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| [vendors/](vendors/README.md) | ~7,300 | 12 async adapters for Legistar, Granicus, PrimeGov, IQM2, NovusAgenda, CivicClerk, CivicPlus, eScribe, Municode, Berkeley, Chicago, Menlo Park. HTML parsers, rate limiting, vendor-agnostic ID contract. |
-| [database/](database/README.md) | ~7,700 | PostgreSQL with 14 async repositories (cities, meetings, items, matters, queue, search, council_members, committees, votes, engagement, feedback, deliberation, happening, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
-| [pipeline/](pipeline/README.md) | ~3,200 | Conductor orchestration with dual loops: Fetcher (72h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
-| [analysis/](analysis/README.md) | ~2,300 | Gemini API integration with reactive rate limiting, adaptive prompting (standard vs large items), 16-topic taxonomy, batch processing (50% cost savings), context caching. |
-| [server/](server/README.md) | ~3,500 | FastAPI with 17 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring, events, happening). Tiered rate limiting, JWT sessions. |
-| [userland/](userland/README.md) | ~1,500 | Civic alerts: magic link auth, weekly digests (Sundays 9am), dual-track matching (keyword + matter-based), Mailgun delivery. |
-| [parsing/](parsing/README.md) | ~800 | PDF extraction: PyMuPDF primary, OCR fallback (Tesseract), legislative formatting detection ([DELETED]/[ADDED]), participation info parsing (emails, phones, Zoom links). |
+| [vendors/](vendors/README.md) | ~8,900 | 13 async adapters for Legistar, Granicus, PrimeGov, IQM2, NovusAgenda, CivicClerk, CivicPlus, eScribe, Municode, OnBase, Berkeley, Chicago, Menlo Park. HTML parsers, rate limiting, vendor-agnostic ID contract. |
+| [database/](database/README.md) | ~8,300 | PostgreSQL with 14 async repositories (cities, meetings, items, matters, queue, search, userland, council_members, committees, engagement, feedback, deliberation, happening, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
+| [pipeline/](pipeline/README.md) | ~3,900 | Conductor orchestration with dual loops: Fetcher (72h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
+| [analysis/](analysis/README.md) | ~2,300 | Gemini API integration with reactive rate limiting, unified adaptive prompting, 16-topic taxonomy, batch processing (50% cost savings), context caching. |
+| [server/](server/README.md) | ~8,100 | FastAPI with 17 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring, events, happening). Tiered rate limiting, JWT sessions. |
+| [userland/](userland/README.md) | ~2,500 | Civic alerts: magic link auth, weekly digests (Sundays 9am), dual-track matching (keyword + matter-based), Mailgun delivery. |
+| [parsing/](parsing/README.md) | ~1,200 | PDF extraction: PyMuPDF primary, OCR fallback (Tesseract), legislative formatting detection ([DELETED]/[ADDED]), participation info parsing (emails, phones, Zoom links). |
 | [deliberation/](deliberation/README.md) | ~300 | Opinion clustering: PCA to 2D, dynamic K-means, Laplace-smoothed consensus detection, group vote tallies. |
 
 ---
@@ -126,9 +126,9 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 
 **Legislative Accountability:** Council members tracked across votes and sponsorships. Committees tracked with rosters. Vote outcomes computed per matter per meeting.
 
-**Repository Pattern:** 14 async repositories with shared connection pool. Each repository handles one domain (cities, meetings, items, matters, queue, search, userland, council_members, committees, engagement, feedback, deliberation, helpers).
+**Repository Pattern:** 14 async repositories with shared connection pool. Each repository handles one domain (cities, meetings, items, matters, queue, search, userland, council_members, committees, engagement, feedback, deliberation, happening, helpers).
 
-**AsyncBaseAdapter:** All 11 vendor adapters implement unified interface. Async HTTP with retry, rate limiting, date parsing. Adapters return `vendor_id`, database generates canonical IDs.
+**AsyncBaseAdapter:** All 13 vendor adapters implement unified interface. Async HTTP with retry, rate limiting, date parsing. Adapters return `vendor_id`, database generates canonical IDs.
 
 **Orchestrator Delegation:** Pipeline delegates business logic to orchestrators (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). Enables testing and separation of concerns.
 
@@ -140,7 +140,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  SYNC LOOP (every 72h)                                                      │
 │                                                                             │
-│    Conductor ──► Fetcher ──► Vendors (11 adapters)                          │
+│    Conductor ──► Fetcher ──► Vendors (13 adapters)                          │
 │                     │              │                                        │
 │                     │              ▼                                        │
 │                     │        External APIs (Legistar, Granicus, etc.)       │

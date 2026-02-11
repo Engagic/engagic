@@ -8,14 +8,17 @@ Provides:
 - Topic browsing and filtering
 - Matter tracking with legislative timeline
 - Council/committee voting records
-- User engagement (watches, trending)
+- User engagement (watches)
 - Feedback collection (ratings, issue reports)
 - Deliberation (opinion clustering for civic engagement)
-- Admin operations (force sync, status)
-- Monitoring (health, stats, metrics)
+- Admin operations (force sync, status, Prometheus proxy)
+- Monitoring (health, stats, metrics, analytics, city coverage, civic infrastructure)
 - Flyer generation (civic action printables)
 - Authentication (magic link, JWT sessions)
-- User dashboard (alerts, subscriptions)
+- User dashboard (alerts, subscriptions, city requests)
+- State-level views (matters and meetings across cities)
+- Frontend analytics (event tracking, user journeys)
+- Happening This Week (Claude-analyzed important items)
 
 ---
 
@@ -31,23 +34,23 @@ server/
 ├── metrics.py              - Prometheus instrumentation
 │
 ├── routes/                 - HTTP request handlers (17 modules)
-│   ├── search.py           - Universal search endpoint
+│   ├── search.py           - Universal search + city full-text search
 │   ├── meetings.py         - Meeting retrieval
 │   ├── topics.py           - Topic browsing
 │   ├── admin.py            - Admin operations (auth required)
-│   ├── monitoring.py       - Health, stats, metrics
+│   ├── monitoring.py       - Health, stats, metrics, analytics, coverage
 │   ├── flyer.py            - Civic action flyer generation
-│   ├── matters.py          - Matter tracking, timeline
+│   ├── matters.py          - Matter tracking, timeline, state-level views
 │   ├── donate.py           - Stripe donation integration
 │   ├── auth.py             - Magic link authentication, JWT sessions
-│   ├── dashboard.py        - User dashboard and alerts
+│   ├── dashboard.py        - User dashboard, alerts, city requests
 │   ├── votes.py            - Voting records, council member analysis
 │   ├── committees.py       - Committee rosters, voting history
-│   ├── engagement.py       - User watches, trending topics
+│   ├── engagement.py       - User watches, activity tracking
 │   ├── feedback.py         - User ratings, issue reporting
 │   ├── deliberation.py     - Opinion clustering for civic engagement
 │   ├── events.py           - Frontend analytics events
-│   └── happening.py        - Active/upcoming items
+│   └── happening.py        - Claude-analyzed important items per city
 │
 ├── services/               - Business logic
 │   ├── meeting.py          - Meeting retrieval with items
@@ -134,26 +137,39 @@ response = requests.post("http://localhost:8000/api/search/by-topic", json={
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize async PostgreSQL connection pool
-    db = Database()
-    await db.connect()
+    db = await Database.create()
     app.state.db = db
     yield
     await db.close()
 
-app = FastAPI(title="engagic API", lifespan=lifespan)
+app = FastAPI(title="engagic API", description="EGMI", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(CORSMiddleware, allow_origins=config.ALLOWED_ORIGINS, ...)
 
+# Request ID middleware (must be early in stack for tracing)
+app.add_middleware(RequestIDMiddleware)
+
+# GZip compression for responses > 500 bytes
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # Global rate limiter (SQLite-based)
 rate_limiter = SQLiteRateLimiter(db_path="rate_limits.db", ...)
 
-# Middleware registration
-app.add_middleware(RequestIDMiddleware)
+# Stripe and JWT initialization at startup
+stripe.api_key = config.STRIPE_SECRET_KEY
+init_jwt(config.USERLAND_JWT_SECRET)
+
+# Middleware registration (execution order: metrics -> rate limiting -> logging)
+# FastAPI middleware stack: last registered runs first, so register in reverse order
+@app.middleware("http")
+async def log_requests_middleware(request, call_next): ...
 
 @app.middleware("http")
-async def rate_limit_middleware_wrapper(request, call_next):
-    return await rate_limit_middleware(request, call_next, rate_limiter)
+async def rate_limit_middleware_wrapper(request, call_next): ...
+
+@app.middleware("http")
+async def metrics_middleware_wrapper(request, call_next): ...
 
 # Route mounting (17 routers)
 app.include_router(monitoring.router)
@@ -163,16 +179,16 @@ app.include_router(topics.router)
 app.include_router(admin.router)
 app.include_router(flyer.router)
 app.include_router(matters.router)
-app.include_router(donate.router)
-app.include_router(auth.router)
-app.include_router(dashboard.router)
 app.include_router(votes.router)
 app.include_router(committees.router)
 app.include_router(engagement.router)
 app.include_router(feedback.router)
+app.include_router(donate.router)
+app.include_router(auth.router)
+app.include_router(dashboard.router)
 app.include_router(deliberation.router)
-app.include_router(events.router)
 app.include_router(happening.router)
+app.include_router(events.router)
 ```
 
 #### Dependency Injection Pattern
@@ -180,7 +196,7 @@ app.include_router(happening.router)
 **Database:**
 ```python
 # In dependencies.py:
-async def get_db(request: Request) -> Database:
+def get_db(request: Request) -> Database:
     """Get shared async PostgreSQL database from app state"""
     return request.app.state.db
 
@@ -188,6 +204,17 @@ async def get_db(request: Request) -> Database:
 @router.post("/search")
 async def search_meetings(request: SearchRequest, db: Database = Depends(get_db)):
     city = await db.get_city(zipcode=request.query)
+```
+
+**User authentication:**
+```python
+# In dependencies.py:
+async def get_current_user(request: Request) -> User:
+    """Extract and validate JWT from Authorization header or refresh cookie"""
+    # Tries access token first, falls back to refresh token cookie
+
+async def get_optional_user(request: Request) -> Optional[User]:
+    """Returns None if not authenticated (no 401)"""
 ```
 
 **Why async PostgreSQL?** Connection pooling, better concurrency, production-ready.
@@ -222,9 +249,15 @@ is_allowed, remaining, limit_info = rate_limiter.check_rate_limit(
 **Features:**
 - **Endpoint-aware:** Different limits per endpoint (e.g., lighter for analytics)
 - **Dual limits:** Per-minute burst + daily quota
-- **Progressive penalties:** Temp bans for repeated violations (10+ violations = 1h, 50+ = 24h, 100+ = 7d)
+- **Progressive penalties:** Temp bans for repeated violations (10+ in 1h = 1h ban, 50+ in 1h = 24h ban, 100+ in 24h = 7d ban)
 - **Persistent:** SQLite, survives API restarts, WAL mode for concurrency
 - **nginx integration:** Exports blocked IPs for nginx geo blocking
+- **Admin whitelist:** Configurable IPs bypass rate limits entirely
+
+**Also includes:**
+- `RateLimitHandler` - Exponential backoff with jitter for outbound API calls
+- `APIRateLimitManager` - Global pause across multiple API endpoints
+- `with_rate_limit_retry` - Decorator for functions that need retry on rate limit
 
 ---
 
@@ -259,6 +292,17 @@ metrics.record_llm_call(
 metrics.matter_engagement.labels(action='votes').inc()
 ```
 
+**Metric families:**
+- Sync: meetings_synced, items_extracted, matters_tracked
+- Processing: processing_duration, pdf_extraction_duration
+- LLM: llm_api_calls, llm_api_duration, llm_api_tokens, llm_api_cost
+- Queue: queue_size (gauge), queue_jobs_processed
+- API: api_requests, api_request_duration
+- User behavior: page_views, search_queries, matter_engagement
+- Errors: errors (by component and type)
+- Vendor: vendor_requests, vendor_request_duration
+- Database: db_operations, db_operation_duration
+
 #### Prometheus Endpoint
 
 ```
@@ -273,23 +317,16 @@ GET /metrics  # Returns Prometheus text format
 
 ### 1. `routes/search.py`
 
-**Single unified search endpoint** - handles zipcode, city, or state.
+**Search endpoints** - universal search + city-scoped full-text search.
 
 ```python
 @router.post("/api/search")
 async def search_meetings(request: SearchRequest, db: Database = Depends(get_db)):
     """Universal search - detects input type and routes appropriately"""
-    query = request.query.strip()
 
-    is_zipcode = query.isdigit() and len(query) == 5
-    is_state = is_state_query(query)
-
-    if is_zipcode:
-        return await handle_zipcode_search(query, db)
-    elif is_state:
-        return await handle_state_search(query, db)
-    else:
-        return await handle_city_search(query, db)
+@router.get("/api/city/{banana}/search/meetings")
+async def search_city_meetings(banana: str, q: str, limit: int = 50, db: Database = Depends(get_db)):
+    """Full-text search items within a city using PostgreSQL FTS"""
 ```
 
 **Examples:**
@@ -298,6 +335,7 @@ POST /api/search {"query": "94301"}           # Zipcode -> Palo Alto meetings
 POST /api/search {"query": "Palo Alto, CA"}   # City + State
 POST /api/search {"query": "Springfield"}     # Ambiguous -> city options
 POST /api/search {"query": "California"}      # State -> city list
+GET  /api/city/paloaltoCA/search/meetings?q=housing  # Full-text search within city
 ```
 
 ---
@@ -311,9 +349,9 @@ POST /api/search {"query": "California"}      # State -> city list
 async def get_meeting(meeting_id: str, db: Database = Depends(get_db)):
     """Get single meeting by ID with items attached"""
 
-@router.get("/api/city/{banana}/meetings")
-async def get_city_meetings(banana: str, db: Database = Depends(get_db)):
-    """Get meetings for a city"""
+@router.post("/api/process-agenda")
+async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)):
+    """INFO-ONLY: Check agenda processing status (no on-demand processing)"""
 
 @router.get("/api/random-meeting-with-items")
 async def get_random_meeting_with_items(db: Database = Depends(get_db)):
@@ -329,7 +367,7 @@ async def get_random_meeting_with_items(db: Database = Depends(get_db)):
 ```python
 @router.get("/api/topics")
 async def get_all_topics():
-    """Get all canonical topics (16 topics from taxonomy.json)"""
+    """Get all canonical topics from taxonomy"""
 
 @router.post("/api/search/by-topic")
 async def search_by_topic(request: TopicSearchRequest, db: Database = Depends(get_db)):
@@ -338,10 +376,6 @@ async def search_by_topic(request: TopicSearchRequest, db: Database = Depends(ge
 @router.get("/api/topics/popular")
 async def get_popular_topics(db: Database = Depends(get_db)):
     """Get most common topics (for UI suggestions)"""
-
-@router.get("/api/city/{banana}/topics")
-async def get_city_topics(banana: str, db: Database = Depends(get_db)):
-    """Get topics discussed in a city's meetings"""
 ```
 
 ---
@@ -352,23 +386,35 @@ async def get_city_topics(banana: str, db: Database = Depends(get_db)):
 
 ```python
 async def verify_admin_token(authorization: str = Header(None)):
-    """Verify admin bearer token"""
+    """Verify admin bearer token (constant-time comparison)"""
+
+@router.get("/api/admin/city-requests")
+async def get_city_requests(...):
+    """Get pending city requests ordered by demand"""
 
 @router.post("/api/admin/sync-city/{banana}")
-async def force_sync_city(banana: str, is_admin: bool = Depends(verify_admin_token)):
-    """Force sync a specific city"""
+async def force_sync_city(banana: str, ...):
+    """INFO-ONLY: Returns CLI command to sync a city"""
+
+@router.post("/api/admin/process-meeting")
+async def force_process_meeting(request: ProcessRequest, ...):
+    """INFO-ONLY: Returns CLI command to process a meeting"""
 
 @router.get("/api/admin/dead-letter-queue")
-async def get_dead_letter_queue(is_admin: bool = Depends(verify_admin_token)):
+async def get_dead_letter_queue(...):
     """Get failed items from dead letter queue"""
 
+@router.get("/api/admin/prometheus-query")
+async def prometheus_query(query: str, start=None, end=None, step=None, ...):
+    """Proxy queries to Prometheus for dashboard metrics"""
+
 @router.get("/api/admin/activity-feed")
-async def get_activity_feed(is_admin: bool = Depends(verify_admin_token)):
-    """Get recent processing activity"""
+async def get_activity_feed(limit: int = 100, ...):
+    """Get recent user activity from API logs (journalctl)"""
 
 @router.get("/api/admin/live-metrics")
-async def get_live_metrics(is_admin: bool = Depends(verify_admin_token)):
-    """Get real-time system metrics"""
+async def get_live_metrics(...):
+    """Get real-time Prometheus metrics snapshot as JSON"""
 ```
 
 **Usage:**
@@ -381,7 +427,7 @@ curl -X POST http://localhost:8000/api/admin/sync-city/paloaltoCA \
 
 ### 5. `routes/monitoring.py`
 
-**Health checks, stats, metrics, and analytics.**
+**Health checks, stats, metrics, analytics, and coverage data.**
 
 ```python
 @router.get("/")
@@ -390,23 +436,39 @@ async def root():
 
 @router.get("/api/health")
 async def health_check(db: Database = Depends(get_db)):
-    """Health check with detailed status"""
+    """Health check with detailed status (db, queue, LLM, config)"""
 
 @router.get("/api/stats")
 async def get_stats(db: Database = Depends(get_db)):
     """System statistics"""
 
+@router.get("/api/platform-metrics")
+async def get_platform_metrics(db: Database = Depends(get_db)):
+    """Comprehensive platform metrics for impact/about page"""
+
 @router.get("/api/queue-stats")
 async def get_queue_stats(db: Database = Depends(get_db)):
     """Processing queue statistics"""
 
+@router.get("/api/metrics")
+async def get_metrics(db: Database = Depends(get_db)):
+    """Basic metrics (JSON)"""
+
 @router.get("/metrics")
 async def prometheus_metrics(db: Database = Depends(get_db)):
-    """Prometheus metrics endpoint"""
+    """Prometheus metrics endpoint (text format)"""
 
 @router.get("/api/analytics")
 async def get_analytics(db: Database = Depends(get_db)):
-    """Public dashboard analytics"""
+    """Public dashboard analytics (cities, meetings, population coverage)"""
+
+@router.get("/api/city-coverage")
+async def get_city_coverage(db: Database = Depends(get_db)):
+    """City coverage breakdown: name, coverage type, summary count, population"""
+
+@router.get("/api/civic-infrastructure/cities")
+async def get_civic_infrastructure_by_city(db: Database = Depends(get_db)):
+    """Per-city breakdown of council members, committees, votes"""
 ```
 
 ---
@@ -441,28 +503,36 @@ POST /api/flyer/generate
 
 ### 7. `routes/matters.py`
 
-**Matter tracking and timeline endpoints.**
+**Matter tracking, timeline, state-level views, and search.**
 
 ```python
-@router.get("/api/matters/{matter_id}")
-async def get_matter(matter_id: str, db: Database = Depends(get_db)):
-    """Get matter details with timeline across all appearances"""
-
-@router.get("/api/city/{banana}/matters")
-async def get_city_matters(banana: str, db: Database = Depends(get_db)):
-    """Get all tracked matters for a city"""
+@router.get("/api/matters/{matter_id}/timeline")
+async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
+    """Get timeline of a matter across multiple meetings"""
 
 @router.get("/api/matters/{matter_id}/sponsors")
 async def get_matter_sponsors(matter_id: str, db: Database = Depends(get_db)):
     """Get sponsors/introducers for a matter"""
 
+@router.get("/api/city/{banana}/matters")
+async def get_city_matters(banana: str, limit: int = 50, offset: int = 0, db: Database = Depends(get_db)):
+    """Get all tracked matters for a city (paginated, with timelines)"""
+
 @router.get("/api/city/{banana}/search/matters")
-async def search_city_matters(banana: str, q: str, db: Database = Depends(get_db)):
-    """Search matters within a city"""
+async def search_city_matters(banana: str, q: str, limit: int = 50, db: Database = Depends(get_db)):
+    """Full-text search matters within a city"""
+
+@router.get("/api/state/{state_code}/matters")
+async def get_state_matters(state_code: str, topic: str = None, limit: int = 100, db: Database = Depends(get_db)):
+    """Get matters across all cities in a state (with topic filter)"""
+
+@router.get("/api/state/{state_code}/meetings")
+async def get_state_meetings(state_code: str, limit: int = 50, include_past: bool = False, db: Database = Depends(get_db)):
+    """Get upcoming meetings across all cities in a state"""
 
 @router.get("/api/random-matter")
 async def get_random_matter(db: Database = Depends(get_db)):
-    """Get a random matter with good data (for demos)"""
+    """Get a random matter with good data (2+ appearances, for demos)"""
 ```
 
 ---
@@ -475,9 +545,6 @@ async def get_random_matter(db: Database = Depends(get_db)):
 @router.post("/api/donate/checkout")
 async def create_checkout_session(donate_request: DonateRequest):
     """Create Stripe checkout session for one-time donations
-
-    Args:
-        donate_request: Contains amount in cents
 
     Returns:
         dict with checkout_url for redirecting user to Stripe Checkout
@@ -511,11 +578,11 @@ async def verify_magic_link(token: str, response: Response, request: Request):
 
 @router.post("/api/auth/refresh")
 async def refresh_access_token(request: Request, response: Response):
-    """Refresh access token using refresh token from cookie"""
+    """Refresh access token using refresh token from cookie (token rotation)"""
 
 @router.post("/api/auth/logout")
-async def logout(response: Response):
-    """Logout by clearing refresh token cookie"""
+async def logout(request: Request, response: Response):
+    """Revoke refresh token and clear cookie"""
 
 @router.get("/api/auth/me")
 async def get_current_user_endpoint(user: User = Depends(get_current_user)):
@@ -524,6 +591,10 @@ async def get_current_user_endpoint(user: User = Depends(get_current_user)):
 @router.get("/api/auth/unsubscribe")
 async def unsubscribe(token: str, request: Request):
     """One-click unsubscribe from email digest (CAN-SPAM compliance)"""
+
+@router.get("/api/auth/unsubscribe-token")
+async def get_unsubscribe_token(user: User = Depends(get_current_user)):
+    """Get unsubscribe token for current user (testing/debugging)"""
 ```
 
 **Security features:**
@@ -531,13 +602,15 @@ async def unsubscribe(token: str, request: Request):
 - Tokens hashed with SHA-256 before storage
 - Single-use magic links (15-minute expiry)
 - JWT access tokens (15-minute expiry)
-- Refresh tokens in httpOnly cookies (30-day expiry)
+- Refresh tokens in httpOnly cookies (30-day expiry, rotation on refresh)
+- Anti-enumeration: same response for existing/unknown emails
+- Per-email rate limiting (3 emails/hour, in-memory)
 
 ---
 
 ### 10. `routes/dashboard.py`
 
-**User dashboard for alert management.**
+**User dashboard for alert management and city requests.**
 
 ```python
 @router.get("/api/dashboard")
@@ -551,6 +624,10 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
 @router.get("/api/dashboard/activity")
 async def get_recent_activity(user: User = Depends(get_current_user)):
     """Get recent match activity"""
+
+@router.get("/api/dashboard/config")
+async def get_alert_config(user: User = Depends(get_current_user)):
+    """Get alert configuration summary"""
 
 @router.put("/api/dashboard/alert/{alert_id}")
 async def update_alert(alert_id: str, update_request: AlertUpdateRequest, user: User = Depends(get_current_user)):
@@ -574,7 +651,15 @@ async def remove_keyword_from_alert(alert_id: str, keyword_data: Dict[str, str])
 
 @router.post("/api/dashboard/alerts/{alert_id}/cities")
 async def add_city_to_alert(alert_id: str, city_data: Dict[str, str]):
-    """Set city for alert (simplified UX: 1 city only)"""
+    """Set city for alert (simplified UX: 1 city only, replaces existing)"""
+
+@router.delete("/api/dashboard/alerts/{alert_id}/cities")
+async def remove_city_from_alert(alert_id: str, city_data: Dict[str, str]):
+    """Remove city from alert"""
+
+@router.post("/api/dashboard/request-city")
+async def request_city(city_data: Dict[str, str], user: User = Depends(get_current_user)):
+    """Request coverage for an uncovered city (records demand + adds to user's alert)"""
 ```
 
 ---
@@ -593,7 +678,7 @@ async def get_meeting_votes(meeting_id: str, db: Database = Depends(get_db)):
     """Get all votes cast in a meeting, grouped by matter"""
 
 @router.get("/api/council-members/{member_id}/votes")
-async def get_member_votes(member_id: str, db: Database = Depends(get_db)):
+async def get_member_votes(member_id: str, limit: int = 100, db: Database = Depends(get_db)):
     """Get voting record for a council member"""
 
 @router.get("/api/city/{banana}/council-members")
@@ -609,7 +694,7 @@ async def get_city_council(banana: str, db: Database = Depends(get_db)):
 
 ```python
 @router.get("/api/city/{banana}/committees")
-async def get_city_committees(banana: str, db: Database = Depends(get_db)):
+async def get_city_committees(banana: str, status: str = None, db: Database = Depends(get_db)):
     """Get all committees for a city with member counts"""
 
 @router.get("/api/committees/{committee_id}")
@@ -621,11 +706,11 @@ async def get_committee_members(committee_id: str, active_only: bool = True, as_
     """Get committee membership roster (supports historical queries)"""
 
 @router.get("/api/committees/{committee_id}/votes")
-async def get_committee_votes(committee_id: str, db: Database = Depends(get_db)):
+async def get_committee_votes(committee_id: str, limit: int = 50, db: Database = Depends(get_db)):
     """Get voting history for a committee"""
 
 @router.get("/api/council-members/{member_id}/committees")
-async def get_member_committees(member_id: str, db: Database = Depends(get_db)):
+async def get_member_committees(member_id: str, active_only: bool = True, db: Database = Depends(get_db)):
     """Get committees a council member serves on"""
 ```
 
@@ -633,7 +718,7 @@ async def get_member_committees(member_id: str, db: Database = Depends(get_db)):
 
 ### 13. `routes/engagement.py`
 
-**User engagement tracking - watches and trending.**
+**User engagement tracking - watches and activity logging.**
 
 ```python
 @router.post("/api/watch/{entity_type}/{entity_id}")
@@ -647,10 +732,6 @@ async def unwatch_entity(entity_type: str, entity_id: str, user: User = Depends(
 @router.get("/api/me/watching")
 async def get_user_watches(entity_type: str = None, user: User = Depends(get_current_user)):
     """Get user's watched entities"""
-
-@router.get("/api/trending/matters")
-async def get_trending_matters(limit: int = 20, db: Database = Depends(get_db)):
-    """Get trending matters based on engagement (public)"""
 
 @router.get("/api/matters/{matter_id}/engagement")
 async def get_matter_engagement(matter_id: str, request: Request):
@@ -797,12 +878,16 @@ async def get_dropoffs(hours: int = 24, _: bool = Depends(verify_admin_token)):
 
 ### 17. `routes/happening.py`
 
-**Active/upcoming items** - Claude-analyzed important civic items.
+**Happening This Week** - Claude-analyzed important civic items per city.
 
 ```python
-@router.get("/api/happening")
-async def get_happening(banana: Optional[str] = None, db: Database = Depends(get_db)):
-    """Get important/trending items for this week"""
+@router.get("/api/city/{banana}/happening")
+async def get_happening_items(banana: str, limit: int = 10, db: Database = Depends(get_db)):
+    """Get ranked important items for a specific city"""
+
+@router.get("/api/happening/active")
+async def get_all_happening(limit: int = 50, db: Database = Depends(get_db)):
+    """Get all active happening items across all cities (admin/debug)"""
 ```
 
 ---
@@ -833,6 +918,7 @@ async def handle_ambiguous_city_search(city_name: str, original_input: str, db: 
 - **Cache-first:** Only return cached data, never fetch live
 - **Fuzzy matching:** Handle typos with `difflib.get_close_matches()`
 - **Ambiguous handling:** Return city options when multiple matches
+- **uszipcode resolution:** Resolve unknown cities to states via zip data
 
 ---
 
@@ -842,7 +928,10 @@ Meeting retrieval with items attached.
 
 ```python
 async def get_meeting_with_items(meeting: Meeting, db: Database) -> Dict[str, Any]:
-    """Convert meeting to dict with items attached"""
+    """Convert meeting to dict with items attached (eagerly loads matters)"""
+
+async def get_meetings_for_listing(meetings: List[Meeting], db: Database) -> List[Dict[str, Any]]:
+    """Lightweight listing - only checks if items with summaries exist (no items array)"""
 
 async def get_meetings_with_items(meetings: List[Meeting], db: Database) -> List[Dict[str, Any]]:
     """Batch fetch items for all meetings - eliminates N+1 queries"""
@@ -873,6 +962,7 @@ async def generate_meeting_flyer(
 - Participation info (email, phone, virtual URL)
 - Position-specific styling (support/oppose/more_info)
 - Dark mode support
+- Embedded logo as data URL
 
 ---
 
@@ -882,21 +972,41 @@ async def generate_meeting_flyer(
 
 ### `middleware/rate_limiting.py`
 
-Rate limit enforcement with endpoint-aware limits and comprehensive 429 responses.
+Rate limit enforcement with endpoint-aware limits.
 
 ```python
 async def rate_limit_middleware(request: Request, call_next, rate_limiter: SQLiteRateLimiter):
     """Check rate limits with unified endpoint-aware system
 
-    IP Detection:
-    - CF-Connecting-IP (Cloudflare, trusted)
-    - X-Forwarded-For (nginx fallback, for local dev)
+    IP Detection Chain (priority order):
+    1. X-Forwarded-Client-IP + X-SSR-Auth: SSR requests from Cloudflare Pages
+       (Pages worker forwards user's cf-connecting-ip, validated by shared secret)
+    2. CF-Connecting-IP: Direct browser requests via Cloudflare CDN
+    3. X-Forwarded-For: Local dev fallback (first IP in chain)
+    4. request.client.host: Direct connection fallback
 
     Features:
     - Endpoint-aware: /api/events gets 120/min, others get 60/min
     - Privacy-preserving IP hashing (SHA256[:16])
     - Graduated responses: friendly for burst limits, firm for daily limits
     - Temp ban for repeated violations (nginx IP blocking)
+    - Whitelists health/metrics endpoints from rate limiting
+    """
+```
+
+---
+
+### `middleware/metrics.py`
+
+Prometheus request instrumentation.
+
+```python
+async def metrics_middleware(request: Request, call_next):
+    """Record Prometheus metrics for all API requests
+
+    Normalizes endpoint paths for cardinality control:
+    /api/meeting/12345 -> /api/meeting/:meeting_id
+    /api/city/sfCA/matters -> /api/city/:city_banana/matters
     """
 ```
 
@@ -911,8 +1021,24 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     """Add unique request ID for tracing across logs
 
     - Generated or accepted from X-Request-ID header
-    - Bound to structlog context (appears in all logs)
+    - Bound to structlog contextvars (appears in all logs)
     - Returned in X-Request-ID response header
+    """
+```
+
+---
+
+### `middleware/logging.py`
+
+Request/response logging.
+
+```python
+async def log_requests(request: Request, call_next):
+    """Log incoming requests and responses
+
+    - One-line format: "POST /api/search user:abc1234 -> 200 (0.045s)"
+    - Includes search query when available
+    - Skips /metrics endpoint (Prometheus scraping noise)
     """
 ```
 
@@ -997,6 +1123,9 @@ async def require_matter(db, matter_id: str):
 
 async def require_council_member(db, member_id: str):
     """Get council member or raise 404"""
+
+async def require_item(db, item_id: str):
+    """Get agenda item or raise 404"""
 ```
 
 ---
@@ -1010,7 +1139,8 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
     """Construct the source URL for a city's meeting calendar
 
     Supports: legistar, primegov, granicus, iqm2, novusagenda,
-              escribe, civicclerk, civicplus, berkeley, chicago, menlopark
+              escribe, civicclerk, civicplus, municode, onbase,
+              berkeley, chicago, menlopark
     """
 
 def get_vendor_display_name(vendor: str) -> str:
@@ -1024,35 +1154,36 @@ def get_vendor_display_name(vendor: str) -> str:
 ### Search
 
 ```
-POST   /api/search                   Search by zipcode/city/state
-POST   /api/search/by-topic          Search meetings by topic
+POST   /api/search                          Search by zipcode/city/state
+POST   /api/search/by-topic                 Search meetings by topic
+GET    /api/city/{banana}/search/meetings    Full-text search items in a city
+GET    /api/city/{banana}/search/matters     Full-text search matters in a city
 ```
 
 ### Meetings
 
 ```
 GET    /api/meeting/{meeting_id}     Get single meeting with items
-GET    /api/city/{banana}/meetings   Get meetings for a city
+POST   /api/process-agenda           Check agenda processing status (info-only)
 GET    /api/random-meeting-with-items Get random meeting (for demos)
-POST   /api/process-agenda           Get cached meeting summary
 ```
 
 ### Topics
 
 ```
-GET    /api/topics                   Get all canonical topics (16 topics)
+GET    /api/topics                   Get all canonical topics
 GET    /api/topics/popular           Get most common topics
-GET    /api/city/{banana}/topics     Get topics for a city
 ```
 
 ### Matters
 
 ```
-GET    /api/matters/{matter_id}           Get matter with timeline
-GET    /api/matters/{matter_id}/sponsors  Get matter sponsors
-GET    /api/city/{banana}/matters         Get all matters for a city
-GET    /api/city/{banana}/search/matters  Search matters in a city
-GET    /api/random-matter                 Get random matter (for demos)
+GET    /api/matters/{matter_id}/timeline     Get matter timeline across meetings
+GET    /api/matters/{matter_id}/sponsors     Get matter sponsors
+GET    /api/city/{banana}/matters            Get all matters for a city (paginated)
+GET    /api/state/{state_code}/matters       Get matters across all cities in a state
+GET    /api/state/{state_code}/meetings      Get upcoming meetings across a state
+GET    /api/random-matter                    Get random matter (for demos)
 ```
 
 ### Votes
@@ -1080,7 +1211,6 @@ GET    /api/council-members/{member_id}/committees Get member's committees
 POST   /api/watch/{entity_type}/{entity_id}   Watch an entity (auth required)
 DELETE /api/watch/{entity_type}/{entity_id}   Unwatch an entity
 GET    /api/me/watching                       Get user's watched entities
-GET    /api/trending/matters                  Get trending matters (public)
 GET    /api/matters/{matter_id}/engagement    Get matter engagement stats
 GET    /api/meetings/{meeting_id}/engagement  Get meeting engagement stats
 POST   /api/activity/view/{entity_type}/{entity_id}  Log page view
@@ -1120,10 +1250,11 @@ POST   /api/v1/deliberations/{deliberation_id}/compute   Admin: compute clusters
 POST   /api/auth/signup              Create account, send magic link
 POST   /api/auth/login               Send magic link to existing user
 GET    /api/auth/verify              Verify magic link, create session
-POST   /api/auth/refresh             Refresh access token
-POST   /api/auth/logout              Clear session
+POST   /api/auth/refresh             Refresh access token (token rotation)
+POST   /api/auth/logout              Revoke refresh token, clear cookie
 GET    /api/auth/me                  Get current user profile
 GET    /api/auth/unsubscribe         One-click unsubscribe from digests
+GET    /api/auth/unsubscribe-token   Get unsubscribe token (debug)
 ```
 
 ### Dashboard
@@ -1140,6 +1271,7 @@ POST   /api/dashboard/alerts/{id}/keywords   Add keyword
 DELETE /api/dashboard/alerts/{id}/keywords   Remove keyword
 POST   /api/dashboard/alerts/{id}/cities     Set city
 DELETE /api/dashboard/alerts/{id}/cities     Remove city
+POST   /api/dashboard/request-city           Request coverage for uncovered city
 ```
 
 ### Flyer
@@ -1166,18 +1298,20 @@ GET    /api/funnel/dropoffs          Admin: Get dropoff points
 ### Happening
 
 ```
-GET    /api/happening                Get important items this week
+GET    /api/city/{banana}/happening  Get important items for a city this week
+GET    /api/happening/active         Get all active happening items (all cities)
 ```
 
 ### Admin (requires Bearer token)
 
 ```
 GET    /api/admin/city-requests      View requested cities
-POST   /api/admin/sync-city/{banana} Force sync city
-POST   /api/admin/process-meeting    Force process meeting
+POST   /api/admin/sync-city/{banana} Info: CLI command to sync city
+POST   /api/admin/process-meeting    Info: CLI command to process meeting
 GET    /api/admin/dead-letter-queue  Get failed items
-GET    /api/admin/activity-feed      Get processing activity
-GET    /api/admin/live-metrics       Get real-time metrics
+GET    /api/admin/prometheus-query   Proxy PromQL queries to Prometheus
+GET    /api/admin/activity-feed      Get user activity from logs
+GET    /api/admin/live-metrics       Get real-time Prometheus metrics as JSON
 ```
 
 ### Monitoring
@@ -1186,10 +1320,13 @@ GET    /api/admin/live-metrics       Get real-time metrics
 GET    /                             API status and documentation
 GET    /api/health                   Health check
 GET    /api/stats                    System statistics
+GET    /api/platform-metrics         Comprehensive platform metrics
 GET    /api/queue-stats              Processing queue statistics
 GET    /api/metrics                  Basic metrics (JSON)
 GET    /metrics                      Prometheus metrics (text format)
 GET    /api/analytics                Public dashboard analytics
+GET    /api/city-coverage            City coverage breakdown by type
+GET    /api/civic-infrastructure/cities  Per-city council/committee data
 ```
 
 ---
@@ -1220,7 +1357,7 @@ ENGAGIC_ADMIN_TOKEN=your_secret_token_here
 
 **Auth:**
 ```bash
-JWT_SECRET=your_jwt_secret
+USERLAND_JWT_SECRET=your_jwt_secret
 COOKIE_SECURE=true
 COOKIE_SAMESITE=lax
 SSR_AUTH_SECRET=your_ssr_secret
@@ -1256,7 +1393,7 @@ FRONTEND_URL=https://engagic.org
 4. **Service layer:** Business logic separated from HTTP concerns
 5. **Dependency injection:** Database and rate limiter injected via FastAPI deps
 6. **Persistent rate limiting:** SQLite-based, survives restarts, supports tiers
-7. **Modular routes:** 16 focused modules instead of one monolith
+7. **Modular routes:** 17 focused modules instead of one monolith
 8. **Pydantic validation:** Input validation + SQL injection prevention
 9. **Prometheus metrics:** Comprehensive instrumentation for observability
 10. **JWT sessions:** Stateless authentication with refresh token rotation
@@ -1274,4 +1411,4 @@ FRONTEND_URL=https://engagic.org
 
 ---
 
-**Last Updated:** 2025-12-13 (17 route modules, funnel analytics documented)
+**Last Updated:** 2026-02-10 (17 route modules, all endpoints audited against code)
