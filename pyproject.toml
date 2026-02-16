@@ -54,6 +54,7 @@ dependencies = [
     "pydantic>=2.11.7",
     "python-dotenv>=1.0.0",
     "scikit-learn>=1.6.0",
+    "mcp>=1.26.0",
 ]
 
 [project.scripts]
