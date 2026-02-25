@@ -46,6 +46,12 @@ class MeetingValidator:
             "granicus.com",  # CivicPlus often redirects to Granicus
             "municodemeetings.com",  # Or Municode
         ],
+        "civicengage": lambda slug: [
+            f"{slug}.gov",
+            f"www.{slug}.gov",
+            f"{slug}.org",
+            f"www.{slug}.org",
+        ],
         "civicweb": lambda slug: [f"{slug}.civicweb.net"],
         "iqm2": lambda slug: [f"{slug}.iqm2.com", "granicus.com"],
         "municode": lambda slug: [
