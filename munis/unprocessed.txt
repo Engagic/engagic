@@ -1,0 +1,140 @@
+# Never-Processed Cities - Synced with items, zero completed meetings
+# 76 cities
+# Generated: 2026-02-18
+
+# ARIZONA
+yumaAZ
+
+# CALIFORNIA
+camarilloCA
+chinoCA
+costamesaCA
+culvercityCA
+fullertonCA
+glendaleCA
+longbeachCA
+mantecaCA
+newportbeachCA
+oceansideCA
+orangeCA
+pomonaCA
+redlandsCA
+redondobeachCA
+riversideCA
+sacramentoCA
+sanmarcosCA
+santaanaCA
+santamariaCA
+santamonicaCA
+temeculaCA
+visaliaCA
+
+# COLORADO
+longmontCO
+
+# CONNECTICUT
+newhavenCT
+
+# DELAWARE
+newarkDE
+wilmingtonDE
+
+# FLORIDA
+deltonaFL
+fortwaltonbeachFL
+hallandaleFL
+ocalaFL
+oviedoFL
+pompanobeachFL
+veniceFL
+wellingtonFL
+
+# GEORGIA
+cantonGA
+columbusGA
+fayettevilleGA
+hamptonGA
+powderspringsGA
+
+# ILLINOIS
+orlandparkIL
+romeovilleIL
+
+# KANSAS
+olatheKS
+
+# LOUISIANA
+lakecharlesLA
+shreveportLA
+
+# MASSACHUSETTS
+maldenMA
+
+# MARYLAND
+hagerstownMD
+
+# MICHIGAN
+detroitMI
+
+# MISSOURI
+columbiaMO
+
+# MISSISSIPPI
+columbusMS
+laurelMS
+
+# NORTH CAROLINA
+claytonNC
+lexingtonNC
+
+# NEW JERSEY
+newarkNJ
+passaicNJ
+
+# NEW MEXICO
+alamogordoNM
+
+# NEW YORK
+buffaloNY
+mountvernonNY
+yonkersNY
+
+# OHIO
+grovecityOH
+
+# OKLAHOMA
+brokenarrowOK
+
+# PENNSYLVANIA
+westchesterPA
+
+# RHODE ISLAND
+providenceRI
+
+# TENNESSEE
+crossvilleTN
+
+# TEXAS
+boerneTX
+dentonTX
+desotoTX
+galvestonTX
+
+# UTAH
+saltlakecityUT
+westjordanUT
+
+# VIRGINIA
+alexandriaVA
+salemVA
+
+# WASHINGTON
+redmondWA
+
+# WISCONSIN
+appletonWI
+westbendWI
+
+# WYOMING
+laramieWY
+

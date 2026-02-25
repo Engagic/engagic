@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Engagic MCP Server -- civic data tools for Claude clients via SSE.
+"""Engagic MCP Server -- civic data tools for Claude clients.
 
 Exposes the Engagic database conversationally to any MCP-compatible client
 (browser Claude, desktop Claude, Claude Code). Runs on port 8003 behind nginx.
+Uses streamable-http transport (POST+GET on single endpoint).
 """
 
 import os
@@ -15,6 +16,7 @@ import uvicorn
 from starlette.responses import Response
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from database.db_postgres import Database
 from config import get_logger
@@ -37,6 +39,10 @@ mcp = FastMCP(
         "Cities use 'banana' IDs (e.g. 'paloaltoCA', 'jacksonvilleFL'). "
         "Use list_cities to discover available cities and their banana IDs."
     ),
+    # Endpoint at / since nginx strips /mcp/ prefix
+    streamable_http_path="/",
+    # Behind nginx -- host validation happens there, not here
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
 
@@ -161,7 +167,7 @@ async def run_query(sql: str) -> str:
         return json.dumps({"error": str(exc)})
 
 
-# -- Auth middleware (ASGI-level, SSE-safe -- no response buffering) --
+# -- Auth middleware (ASGI-level, streaming-safe -- no response buffering) --
 
 
 class BearerAuthMiddleware:
@@ -190,8 +196,8 @@ async def run():
     db = await Database.create(min_size=2, max_size=5)
     logger.info("mcp.started", port=8003)
 
-    sse_app = mcp.sse_app()
-    app = BearerAuthMiddleware(sse_app, MCP_TOKEN)
+    http_app = mcp.streamable_http_app()
+    app = BearerAuthMiddleware(http_app, MCP_TOKEN)
 
     server_config = uvicorn.Config(
         app,
