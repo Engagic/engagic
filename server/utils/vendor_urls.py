@@ -113,6 +113,7 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
         "escribe": f"https://{slug}.escribemeetings.com",
         "civicclerk": f"https://{slug}.api.civicclerk.com",
         "civicplus": f"https://{slug}.civicplus.com/AgendaCenter",
+        "civicengage": f"https://{slug}.gov/Archive.aspx",
         # Custom adapters
         "berkeley": "https://berkeleyca.gov/your-government/city-council/city-council-agendas",
         "chicago": "https://chicityclerkelms.chicago.gov/Meetings/",
@@ -143,6 +144,7 @@ def get_vendor_display_name(vendor: str) -> str:
         "escribe": "eScribe",
         "civicclerk": "CivicClerk",
         "civicplus": "CivicPlus",
+        "civicengage": "CivicEngage",
         "onbase": "OnBase Agenda Online",
         "municode": "Municode",
         # Custom adapters

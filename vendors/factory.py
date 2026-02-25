@@ -15,6 +15,7 @@ from vendors.adapters.onbase_adapter_async import AsyncOnBaseAdapter
 from vendors.adapters.primegov_adapter_async import AsyncPrimeGovAdapter
 from vendors.adapters.civicclerk_adapter_async import AsyncCivicClerkAdapter
 from vendors.adapters.civicplus_adapter_async import AsyncCivicPlusAdapter
+from vendors.adapters.civicengage_adapter_async import AsyncCivicEngageAdapter
 from vendors.adapters.escribe_adapter_async import AsyncEscribeAdapter
 from vendors.adapters.municode_adapter_async import AsyncMunicodeAdapter
 from vendors.adapters.custom.berkeley_adapter_async import AsyncBerkeleyAdapter
@@ -32,6 +33,7 @@ VENDOR_ADAPTERS = {
     "primegov": AsyncPrimeGovAdapter,
     "civicclerk": AsyncCivicClerkAdapter,
     "civicplus": AsyncCivicPlusAdapter,
+    "civicengage": AsyncCivicEngageAdapter,
     "escribe": AsyncEscribeAdapter,
     "municode": AsyncMunicodeAdapter,
     "berkeley": AsyncBerkeleyAdapter,

@@ -28,6 +28,7 @@ class AsyncRateLimiter:
             "civicclerk": 3.0,  # CivicClerk cities
             "legistar": 3.0,  # Direct Legistar
             "civicplus": 8.0,  # CivicPlus cities - aggressive blocking, need longer delays
+            "civicengage": 5.0,  # CivicEngage Archive Center (.gov sites)
             "novusagenda": 4.0,  # NovusAgenda cities
             "iqm2": 3.0,  # IQM2 cities
             "escribe": 3.0,  # eScribe cities
