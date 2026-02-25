@@ -1,0 +1,30 @@
+# SBC Cities - Intersection of metro-areas with SBC locations
+# Last updated: 2026-02-20
+
+# Office locations (permanent)
+chicagoIL
+sanfranciscoCA
+bostonMA
+seattleWA
+losangelesCA
+
+# Midwest
+milwaukeeWI
+
+# West
+oaklandCA
+berkeleyCA
+culvercityCA
+redmondWA
+tucsonAZ
+phoenixAZ
+
+# South
+nashvilleTN
+fortlauderdaleFL
+sanantonioTX
+baltimoreMD
+
+# Northeast
+philadelphiaPA
+newyorkNY

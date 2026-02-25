@@ -1,0 +1,201 @@
+city,banana,vendor,population,coverage,meeting_count
+"New York, NY",newyorkNY,legistar,8258035,has_summaries,231
+"Los Angeles, CA",losangelesCA,primegov,3820914,has_summaries,177
+"Chicago, IL",chicagoIL,chicago,2664452,has_summaries,29
+"Houston, TX",houstonTX,primegov,2314157,has_summaries,37
+"Phoenix, AZ",phoenixAZ,legistar,1650070,has_summaries,34
+"Philadelphia, PA",philadelphiaPA,legistar,1550542,has_summaries,32
+"San Antonio, TX",sanantonioTX,primegov,1495295,has_summaries,244
+"San Diego, CA",sandiegoCA,onbase,1388320,has_summaries,14
+"Dallas, TX",dallasTX,legistar,1302868,has_summaries,161
+"Jacksonville, FL",jacksonvilleFL,legistar,985843,has_summaries,37
+"Austin, TX",austinTX,legistar,979882,has_summaries,39
+"Fort Worth, TX",fortworthTX,legistar,978468,has_summaries,13
+"San Jose, CA",sanjoseCA,legistar,969655,has_summaries,148
+"Columbus, OH",columbusOH,legistar,913175,has_summaries,10
+"Charlotte, NC",charlotteNC,legistar,911311,has_summaries,20
+"Indianapolis, IN",indianapolisIN,granicus,910148,config_only,0
+"San Francisco, CA",sanfranciscoCA,legistar,808988,has_summaries,70
+"Seattle, WA",seattleWA,legistar,755078,has_summaries,43
+"Saint Paul, MN",saintpaulMN,legistar,753116,has_summaries,36
+"Louisville, KY",louisvilleKY,primegov,735981,meetings_only,67
+"Denver, CO",denverCO,legistar,716577,has_summaries,153
+"Oklahoma City, OK",oklahomacityOK,primegov,702767,has_summaries,91
+"Washington, DC",washingtonDC,granicus,678972,config_only,0
+"El Paso, TX",elpasoTX,legistar,678958,has_summaries,46
+"Las Vegas, NV",lasvegasNV,primegov,660929,has_summaries,52
+"Boston, MA",bostonMA,legistar,653833,has_summaries,54
+"Detroit, MI",detroitMI,escribe,633218,has_items,10
+"Memphis, TN",memphisTN,granicus,618639,config_only,0
+"Baltimore, MD",baltimoreMD,legistar,565239,has_summaries,39
+"Milwaukee, WI",milwaukeeWI,legistar,561385,has_summaries,59
+"Albuquerque, NM",albuquerqueNM,legistar,560274,has_summaries,27
+"Tucson, AZ",tucsonAZ,onbase,547239,config_only,0
+"Fresno, CA",fresnoCA,legistar,545716,has_summaries,50
+"Sacramento, CA",sacramentoCA,legistar,526384,has_items,47
+"Mesa, AZ",mesaAZ,legistar,511648,has_summaries,35
+"Atlanta, GA",atlantaGA,iqm2,510823,has_summaries,51
+"Kansas City, MO",kansascityMO,legistar,510704,has_summaries,61
+"Staten Island, NY",statenislandNY,granicus,495747,config_only,0
+"Colorado Springs, CO",coloradospringsCO,legistar,488664,has_summaries,14
+"Raleigh, NC",raleighNC,escribe,482295,has_summaries,57
+"Miami, FL",miamiFL,iqm2,455924,has_summaries,53
+"Long Beach, CA",longbeachCA,primegov,449468,has_items,74
+"Oakland, CA",oaklandCA,legistar,436504,has_summaries,56
+"Nashville, TN",nashvilleTN,legistar,429204,has_summaries,56
+"Bakersfield, CA",bakersfieldCA,escribe,413381,config_only,0
+"Tulsa, OK",tulsaOK,granicus,411894,config_only,0
+"Tampa, FL",tampaFL,onbase,403364,has_summaries,9
+"Arlington, TX",arlingtonTX,granicus,398431,config_only,0
+"Wichita, KS",wichitaKS,granicus,396119,config_only,0
+"Aurora, CO",auroraCO,legistar,395052,config_only,0
+"New Orleans, LA",neworleansLA,legistar,364136,has_summaries,3
+"Cleveland, OH",clevelandOH,legistar,362656,has_summaries,26
+"Anaheim, CA",anaheimCA,granicus,340512,config_only,0
+"Orlando, FL",orlandoFL,granicus,320742,config_only,0
+"Stockton, CA",stocktonCA,granicus,319543,config_only,0
+"Riverside, CA",riversideCA,legistar,318858,has_items,38
+"Corpus Christi, TX",corpuschristiTX,legistar,316595,has_summaries,42
+"Irvine, CA",irvineCA,granicus,314621,config_only,0
+"Cincinnati, OH",cincinnatiOH,legistar,311097,has_summaries,6
+"Santa Ana, CA",santaanaCA,primegov,310539,has_items,15
+"Newark, NJ",newarkNJ,legistar,304960,has_items,4
+"Pittsburgh, PA",pittsburghPA,legistar,303255,has_summaries,25
+"Greensboro, NC",greensboroNC,legistar,302296,config_only,0
+"Durham, NC",durhamNC,onbase,296186,has_summaries,1
+"Lexington, KY",lexingtonKY,legistar,294163,has_summaries,16
+"Plano, TX",planoTX,novusagenda,290190,has_items,88
+"North Las Vegas, NV",northlasvegasNV,primegov,284771,has_summaries,16
+"St. Louis, MO",stlouisMO,civicclerk,281754,has_summaries,9
+"Madison, WI",madisonWI,legistar,280305,has_summaries,117
+"Gilbert, AZ",gilbertAZ,granicus,275411,config_only,0
+"Reno, NV",renoNV,primegov,274915,has_summaries,39
+"Buffalo, NY",buffaloNY,iqm2,274678,has_items,63
+"Chula Vista, CA",chulavistaCA,escribe,274333,config_only,0
+"Lubbock, TX",lubbockTX,granicus,266878,config_only,0
+"Toledo, OH",toledoOH,granicus,265304,config_only,0
+"Laredo, TX",laredoTX,granicus,257602,config_only,0
+"Chesapeake, VA",chesapeakeVA,granicus,253886,config_only,0
+"Glendale, AZ",glendaleAZ,granicus,253855,config_only,0
+"Winston Salem, NC",winstonsalemNC,granicus,246278,config_only,0
+"Scottsdale, AZ",scottsdaleAZ,granicus,244394,config_only,0
+"Boise, ID",boiseID,iqm2,235684,has_summaries,45
+"Norfolk, VA",norfolkVA,granicus,230930,config_only,0
+"Spokane, WA",spokaneWA,granicus,229447,config_only,0
+"Richmond, VA",richmondVA,legistar,229247,has_summaries,33
+"Fremont, CA",fremontCA,iqm2,226208,has_summaries,14
+"Huntsville, AL",huntsvilleAL,granicus,225564,config_only,0
+"Frisco, TX",friscoTX,onbase,225007,has_summaries,25
+"Cape Coral, FL",capecoralFL,novusagenda,224455,config_only,0
+"Santa Clarita, CA",santaclaritaCA,primegov,224028,config_only,0
+"San Bernardino, CA",sanbernardinoCA,primegov,223728,meetings_only,14
+"Tacoma, WA",tacomaWA,legistar,222906,has_summaries,22
+"Baton Rouge, LA",batonrougeLA,civicplus,219573,config_only,0
+"Fontana, CA",fontanaCA,legistar,215465,has_items,15
+"Mckinney, TX",mckinneyTX,legistar,213509,has_summaries,52
+"Fayetteville, NC",fayettevilleNC,granicus,209749,config_only,0
+"Salt Lake City, UT",saltlakecityUT,primegov,209593,has_items,2
+"Yonkers, NY",yonkersNY,legistar,207657,has_items,21
+"Worcester, MA",worcesterMA,primegov,207621,has_summaries,139
+"Arlington, VA",arlingtonVA,granicus,207410,config_only,0
+"Sioux Falls, SD",siouxfallsSD,novusagenda,206410,config_only,0
+"Little Rock, AR",littlerockAR,novusagenda,203842,config_only,0
+"Amarillo, TX",amarilloTX,civicclerk,202408,config_only,0
+"Tallahassee, FL",tallahasseeFL,granicus,202221,config_only,0
+"Grand Prairie, TX",grandprairieTX,legistar,202134,config_only,0
+"Columbus, GA",columbusGA,municode,201877,has_items,2
+"Peoria, AZ",peoriaAZ,granicus,198750,config_only,0
+"Oxnard, CA",oxnardCA,granicus,198488,config_only,0
+"Knoxville, TN",knoxvilleTN,primegov,198162,meetings_only,9
+"Grand Rapids, MI",grandrapidsMI,granicus,196608,config_only,0
+"Vancouver, WA",vancouverWA,primegov,196442,config_only,0
+"Montgomery, AL",montgomeryAL,granicus,195287,config_only,0
+"Providence, RI",providenceRI,iqm2,194706,has_items,26
+"Huntington Beach, CA",huntingtonbeachCA,legistar,192129,has_summaries,37
+"Tempe, AZ",tempeAZ,granicus,189834,config_only,0
+"Glendale, CA",glendaleCA,primegov,187050,has_items,78
+"Chattanooga, TN",chattanoogaTN,granicus,187030,config_only,0
+"Fort Lauderdale, FL",fortlauderdaleFL,legistar,184255,has_summaries,22
+"Newport News, VA",newportnewsVA,novusagenda,183118,config_only,0
+"Mobile, AL",mobileAL,novusagenda,182595,config_only,0
+"Ontario, CA",ontarioCA,granicus,182457,config_only,0
+"Cary, NC",caryNC,granicus,180010,config_only,0
+"Elk Grove, CA",elkgroveCA,granicus,178444,config_only,0
+"Shreveport, LA",shreveportLA,primegov,177959,has_items,12
+"Aurora, IL",auroraIL,granicus,177563,config_only,0
+"Salem, OR",salemOR,granicus,177432,config_only,0
+"Santa Rosa, CA",santarosaCA,legistar,175845,has_items,51
+"Rancho Cucamonga, CA",ranchocucamongaCA,primegov,174405,meetings_only,7
+"Springfield, MO",springfieldMO,primegov,170188,config_only,0
+"Oceanside, CA",oceansideCA,legistar,170020,has_items,11
+"Garden Grove, CA",gardengroveCA,novusagenda,168234,config_only,0
+"Lancaster, CA",lancasterCA,granicus,166236,config_only,0
+"Palmdale, CA",palmdaleCA,granicus,161404,config_only,0
+"Corona, CA",coronaCA,escribe,160238,config_only,0
+"Killeen, TX",killeenTX,granicus,159643,config_only,0
+"Salinas, CA",salinasCA,legistar,159506,has_items,30
+"Roseville, CA",rosevilleCA,novusagenda,159135,config_only,0
+"Denton, TX",dentonTX,legistar,158349,has_items,67
+"Hayward, CA",haywardCA,legistar,155675,has_summaries,39
+"Charleston, SC",charlestonSC,granicus,155369,config_only,0
+"Alexandria, VA",alexandriaVA,legistar,155230,has_items,20
+"Hollywood, FL",hollywoodFL,granicus,153859,config_only,0
+"Springfield, MA",springfieldMA,granicus,153672,config_only,0
+"Kansas City, KS",kansascityKS,granicus,152933,config_only,0
+"Sunnyvale, CA",sunnyvaleCA,legistar,151967,has_summaries,65
+"Bellevue, WA",bellevueWA,legistar,151574,has_summaries,37
+"Joliet, IL",jolietIL,granicus,150489,config_only,0
+"Naperville, IL",napervilleIL,legistar,150245,has_items,36
+"Savannah, GA",savannahGA,granicus,147748,config_only,0
+"Olathe, KS",olatheKS,legistar,147461,has_items,14
+"Mesquite, TX",mesquiteTX,legistar,147317,has_items,8
+"Mcallen, TX",mcallenTX,civicclerk,146593,config_only,0
+"Rockford, IL",rockfordIL,iqm2,146120,config_only,0
+"Gainesville, FL",gainesvilleFL,granicus,145812,config_only,0
+"Pomona, CA",pomonaCA,legistar,145502,has_items,32
+"Visalia, CA",visaliaCA,legistar,144998,has_items,10
+"Waco, TX",wacoTX,granicus,144816,config_only,0
+"Jackson, MS",jacksonMS,granicus,143709,config_only,0
+"Fullerton, CA",fullertonCA,legistar,139250,has_items,18
+"Torrance, CA",torranceCA,primegov,139224,meetings_only,5
+"Victorville, CA",victorvilleCA,granicus,138869,config_only,0
+"Midland, TX",midlandTX,primegov,138397,config_only,0
+"Orange, CA",orangeCA,legistar,138337,has_items,14
+"Hampton, VA",hamptonVA,granicus,137098,config_only,0
+"Stamford, CT",stamfordCT,granicus,136226,config_only,0
+"Palm Bay, FL",palmbayFL,primegov,135566,config_only,0
+"Dayton, OH",daytonOH,civicplus,135512,meetings_only,2
+"New Haven, CT",newhavenCT,legistar,135319,has_items,7
+"Coral Springs, FL",coralspringsFL,granicus,134906,config_only,0
+"Pasadena, CA",pasadenaCA,granicus,133560,config_only,0
+"Lewisville, TX",lewisvilleTX,granicus,133553,config_only,0
+"Kent, WA",kentWA,granicus,133378,config_only,0
+"Sterling Heights, MI",sterlingheightsMI,civicplus,133306,config_only,0
+"Carrollton, TX",carrolltonTX,granicus,132918,config_only,0
+"Santa Clara, CA",santaclaraCA,legistar,131062,has_summaries,50
+"Round Rock, TX",roundrockTX,legistar,130406,has_summaries,12
+"Norman, OK",normanOK,legistar,130046,config_only,0
+"Columbia, MO",columbiaMO,legistar,129330,has_items,103
+"Clovis, CA",clovisCA,granicus,125826,config_only,0
+"Topeka, KS",topekaKS,novusagenda,125475,meetings_only,1
+"Simi Valley, CA",simivalleyCA,granicus,125113,config_only,0
+"Allentown, PA",allentownPA,granicus,124880,config_only,0
+"Wilmington, NC",wilmingtonNC,granicus,122698,config_only,0
+"Rochester, MN",rochesterMN,granicus,122413,config_only,0
+"Concord, CA",concordCA,granicus,122315,config_only,0
+"Lakeland, FL",lakelandFL,primegov,122264,config_only,0
+"Lafayette, LA",lafayetteLA,granicus,121467,config_only,0
+"Independence, MO",independenceMO,novusagenda,120922,config_only,0
+"Fairfield, CA",fairfieldCA,novusagenda,120768,config_only,0
+"Ann Arbor, MI",annarborMI,legistar,119381,has_summaries,17
+"Broken Arrow, OK",brokenarrowOK,legistar,119194,has_summaries,68
+"Berkeley, CA",berkeleyCA,berkeley,118962,has_summaries,16
+"Cambridge, MA",cambridgeMA,iqm2,118214,has_summaries,40
+"High Point, NC",highpointNC,granicus,116926,config_only,0
+"Clearwater, FL",clearwaterFL,granicus,116850,config_only,0
+"League City, TX",leaguecityTX,granicus,116320,config_only,0
+"Odessa, TX",odessaTX,civicclerk,115743,config_only,0
+"Evansville, IN",evansvilleIN,granicus,115332,config_only,0
+"West Jordan, UT",westjordanUT,primegov,114908,has_items,30
+"Westminster, CO",westminsterCO,granicus,114875,config_only,0
+"Nampa, ID",nampaID,primegov,114268,meetings_only,46

@@ -71,6 +71,9 @@ columbusGA
 roswellGA
 sandyspringsGA
 
+# ILLINOIS
+chicagoIL
+
 # KENTUCKY
 lexingtonKY
 louisvilleKY
