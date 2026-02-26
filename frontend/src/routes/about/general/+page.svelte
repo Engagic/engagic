@@ -1,22 +1,12 @@
-<svelte:head>
-	<title>About Engagic - Help Shape Your City</title>
-	<meta name="description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
-	<link rel="canonical" href="https://engagic.org/about/general" />
+<script lang="ts">
+	import SeoHead from '$lib/components/SeoHead.svelte';
+</script>
 
-	<!-- Open Graph -->
-	<meta property="og:title" content="About Engagic - Help Shape Your City" />
-	<meta property="og:description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/about/general" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-
-	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="About Engagic - Help Shape Your City" />
-	<meta name="twitter:description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="About Engagic - Help Shape Your City"
+	description="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information."
+	url="https://engagic.org/about/general"
+/>
 
 <article class="about-content">
 	<section class="section">

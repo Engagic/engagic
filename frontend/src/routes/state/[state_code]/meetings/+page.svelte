@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { generateMeetingSlug } from '$lib/utils/utils';
 	import Footer from '$lib/components/Footer.svelte';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -61,22 +62,11 @@
 	});
 </script>
 
-<svelte:head>
-	<title>Upcoming Meetings in {stateName} - engagic</title>
-	<meta name="description" content="View all upcoming city council and government meetings across {stateName}" />
-	<link rel="canonical" href="https://engagic.org/state/{data.stateCode}/meetings" />
-
-	<meta property="og:title" content="Upcoming Meetings in {stateName} - engagic" />
-	<meta property="og:description" content="View all upcoming city council and government meetings across {stateName}" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/state/{data.stateCode}/meetings" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="Upcoming Meetings in {stateName} - engagic" />
-	<meta name="twitter:description" content="View all upcoming city council and government meetings across {stateName}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="Upcoming Meetings in {stateName} - engagic"
+	description="View all upcoming city council and government meetings across {stateName}"
+	url="https://engagic.org/state/{data.stateCode}/meetings"
+/>
 
 <div class="meetings-page">
 	<div class="meetings-container">

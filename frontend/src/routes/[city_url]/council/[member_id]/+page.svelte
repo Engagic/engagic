@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { getCouncilMemberVotes, getMemberCommittees } from '$lib/api';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import type { CouncilMember, VoteRecord, VoteTally, CommitteeAssignment } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
 	import { logger } from '$lib/services/logger';
@@ -76,18 +77,12 @@
 	}
 </script>
 
-<svelte:head>
-	<title>{member?.name || 'Council Member'} - {city_banana} - engagic</title>
-	<meta name="description" content="Voting record for {member?.name || 'council member'}" />
-	<link rel="canonical" href="https://engagic.org/{city_banana}/council/{$page.params.member_id}" />
-
-	<meta property="og:title" content="{member?.name || 'Council Member'} - engagic" />
-	<meta property="og:description" content="Voting record for {member?.name || 'council member'}" />
-	<meta property="og:type" content="profile" />
-	<meta property="og:url" content="https://engagic.org/{city_banana}/council/{$page.params.member_id}" />
-	<meta property="og:site_name" content="engagic" />
-	<meta name="twitter:card" content="summary" />
-</svelte:head>
+<SeoHead
+	title="{member?.name || 'Council Member'} - {city_banana} - engagic"
+	description="Voting record for {member?.name || 'council member'}"
+	url="https://engagic.org/{city_banana}/council/{$page.params.member_id}"
+	type="profile"
+/>
 
 <div class="container">
 	<div class="top-nav">

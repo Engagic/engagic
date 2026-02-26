@@ -1,27 +1,14 @@
 <script lang="ts">
 	import CityMap from '$lib/components/CityMap.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 </script>
 
-<svelte:head>
-	<title>Coverage Map | engagic</title>
-	<meta name="description" content="Explore engagic's coverage of local government meetings across the United States" />
-	<link rel="canonical" href="https://engagic.org/country" />
-
-	<!-- Open Graph -->
-	<meta property="og:title" content="Coverage Map - engagic" />
-	<meta property="og:description" content="Explore engagic's coverage of local government meetings across the United States" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/country" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-
-	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="Coverage Map - engagic" />
-	<meta name="twitter:description" content="Explore engagic's coverage of local government meetings across the United States" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="Coverage Map - engagic"
+	description="Explore engagic's coverage of local government meetings across the United States"
+	url="https://engagic.org/country"
+/>
 
 <div class="country-page">
 	<header class="page-header">
