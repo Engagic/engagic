@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS items (
     sequence INTEGER NOT NULL,
     attachments JSONB,     -- Complex structure: [{url, title, pages}], keep as JSONB
     attachment_hash TEXT,
+    body_text TEXT,        -- Coversheet/detail page text (when no PDF attachments)
     matter_id TEXT,        -- References city_matters.id (includes city_banana in hash)
     matter_file TEXT,      -- Denormalized for query performance
     matter_type TEXT,

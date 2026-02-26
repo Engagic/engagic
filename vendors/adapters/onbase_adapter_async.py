@@ -440,7 +440,7 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
             attachments.append({
                 "name": name or "Attachment",
                 "url": full_url,
-                "type": "pdf" if ".pdf" in href.lower() else "document",
+                "type": "pdf" if ".pdf" in href.lower() else "unknown",
             })
 
         return attachments

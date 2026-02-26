@@ -322,8 +322,8 @@ class Processor:
             logger.debug("skipping procedural item", title=item.title[:50])
             return None
 
-        if not item.attachments:
-            logger.debug("no attachments for item", title=item.title[:50])
+        if not item.attachments and not item.body_text:
+            logger.debug("no attachments or body text for item", title=item.title[:50])
             return None
 
         # Check if entire item is public comments or parcel tables
@@ -336,7 +336,7 @@ class Processor:
         for att in item.attachments:
             att_url, att_type, att_name = att.url, att.type, att.name
 
-            if att_type not in ("pdf", "doc", "unknown") or not att_url:
+            if att_type not in ("pdf", "doc", "document", "unknown") or not att_url:
                 continue
 
             if att_name and is_public_comment_attachment(att_name):
@@ -594,8 +594,8 @@ class Processor:
                 logger.debug("skipping procedural item", title=item.title[:50])
                 continue
 
-            if not item.attachments:
-                logger.debug("skipping item without attachments", title=item.title[:50])
+            if not item.attachments and not item.body_text:
+                logger.debug("skipping item without attachments or body text", title=item.title[:50])
                 continue
 
             if item.matter_id:
@@ -626,8 +626,8 @@ class Processor:
 
         for item in need_processing:
             item_urls = []
-            for att in item.attachments:
-                if att.type in ("pdf", "doc", "unknown") and att.url:
+            for att in (item.attachments or []):
+                if att.type in ("pdf", "doc", "document", "unknown") and att.url:
                     item_urls.append(att.url)
                     if att.name and att.url not in url_to_name:
                         url_to_name[att.url] = att.name
@@ -740,6 +740,9 @@ class Processor:
                     desc = getattr(item, 'description', '') or ''
                     combined_text = f"[Item: {item.title}]\n{desc}".strip() if desc else f"[Item: {item.title}]"
                     logger.debug("item uses shared attachments only", title=item.title[:50])
+                elif item.body_text:
+                    combined_text = item.body_text
+                    logger.debug("using coversheet body text", title=item.title[:50], chars=len(combined_text))
                 else:
                     logger.warning("no text extracted for item", title=item.title[:50])
                     failed_items.append(item.title)

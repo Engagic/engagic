@@ -422,6 +422,7 @@ class AgendaItem:
     sequence: int  # Order in agenda
     attachments: Optional[List[AttachmentInfo]] = None  # Attachment metadata (name, url, type)
     attachment_hash: Optional[str] = None  # SHA-256 hash of attachments for change detection
+    body_text: Optional[str] = None  # Coversheet/detail page text (when no PDF attachments)
     matter_id: Optional[str] = None  # Backend unique identifier
     matter_file: Optional[str] = None  # Official public identifier (BL2025-1005, 25-1209)
     matter_type: Optional[str] = None  # Flexible metadata (Ordinance, CD 12, etc.)

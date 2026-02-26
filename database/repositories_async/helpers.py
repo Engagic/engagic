@@ -129,6 +129,7 @@ def build_agenda_item(row: Any, topics: Optional[List[str]] = None) -> AgendaIte
         sequence=row["sequence"],
         attachments=attachments,
         attachment_hash=row["attachment_hash"],
+        body_text=row.get("body_text"),
         matter_id=row["matter_id"],
         matter_file=row["matter_file"],
         matter_type=row["matter_type"],

@@ -313,7 +313,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             attachments.append({
                 "name": name,
                 "url": full_url,
-                "type": "pdf" if ".pdf" in href.lower() else "document",
+                "type": "pdf" if ".pdf" in href.lower() else "unknown",
             })
         return attachments
 

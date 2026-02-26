@@ -100,6 +100,7 @@ class ItemRepository(BaseRepository):
                     item.sequence,
                     item.attachments,
                     item.attachment_hash,
+                    item.body_text,
                     item.matter_id,
                     item.matter_file,
                     item.matter_type,
@@ -115,15 +116,16 @@ class ItemRepository(BaseRepository):
                 """
                 INSERT INTO items (
                     id, meeting_id, title, sequence, attachments,
-                    attachment_hash, matter_id, matter_file, matter_type,
+                    attachment_hash, body_text, matter_id, matter_file, matter_type,
                     agenda_number, sponsors, summary, topics
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (id) DO UPDATE SET
                     title = EXCLUDED.title,
                     sequence = EXCLUDED.sequence,
                     attachments = EXCLUDED.attachments,
                     attachment_hash = EXCLUDED.attachment_hash,
+                    body_text = COALESCE(EXCLUDED.body_text, items.body_text),
                     matter_id = EXCLUDED.matter_id,
                     matter_file = EXCLUDED.matter_file,
                     matter_type = EXCLUDED.matter_type,
@@ -158,7 +160,7 @@ class ItemRepository(BaseRepository):
                 """
                 SELECT
                     id, meeting_id, title, sequence, attachments,
-                    attachment_hash, matter_id, matter_file, matter_type,
+                    attachment_hash, body_text, matter_id, matter_file, matter_type,
                     agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE meeting_id = $1
@@ -193,7 +195,7 @@ class ItemRepository(BaseRepository):
                 """
                 SELECT
                     id, meeting_id, title, sequence, attachments,
-                    attachment_hash, matter_id, matter_file, matter_type,
+                    attachment_hash, body_text, matter_id, matter_file, matter_type,
                     agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE meeting_id = ANY($1::text[])
@@ -250,7 +252,7 @@ class ItemRepository(BaseRepository):
                 """
                 SELECT
                     id, meeting_id, title, sequence, attachments,
-                    attachment_hash, matter_id, matter_file, matter_type,
+                    attachment_hash, body_text, matter_id, matter_file, matter_type,
                     agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE id = $1
@@ -326,7 +328,7 @@ class ItemRepository(BaseRepository):
                 """
                 SELECT
                     id, meeting_id, title, sequence, attachments,
-                    attachment_hash, matter_id, matter_file, matter_type,
+                    attachment_hash, body_text, matter_id, matter_file, matter_type,
                     agenda_number, sponsors, summary, topics, quality_score, rating_count
                 FROM items
                 WHERE matter_id = $1
