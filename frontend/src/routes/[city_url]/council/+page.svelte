@@ -56,6 +56,20 @@
 <svelte:head>
 	<title>City Council - {cityName || city_banana} - engagic</title>
 	<meta name="description" content="City council roster and voting records for {cityName}" />
+	<link rel="canonical" href="https://engagic.org/{city_banana}/council" />
+
+	<meta property="og:title" content="City Council - {cityName || city_banana} - engagic" />
+	<meta property="og:description" content="City council roster and voting records for {cityName}" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/{city_banana}/council" />
+	<meta property="og:image" content="https://engagic.org/og?type=city&title={encodeURIComponent(`${cityName || city_banana} Council`)}&subtitle={encodeURIComponent('Council roster & voting records')}" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:site_name" content="engagic" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="City Council - {cityName || city_banana} - engagic" />
+	<meta name="twitter:description" content="City council roster and voting records for {cityName}" />
+	<meta name="twitter:image" content="https://engagic.org/og?type=city&title={encodeURIComponent(`${cityName || city_banana} Council`)}&subtitle={encodeURIComponent('Council roster & voting records')}" />
 </svelte:head>
 
 <div class="container">

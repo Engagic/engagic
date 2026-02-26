@@ -64,6 +64,20 @@
 <svelte:head>
 	<title>Upcoming Meetings in {stateName} - engagic</title>
 	<meta name="description" content="View all upcoming city council and government meetings across {stateName}" />
+	<link rel="canonical" href="https://engagic.org/state/{data.stateCode}/meetings" />
+
+	<meta property="og:title" content="Upcoming Meetings in {stateName} - engagic" />
+	<meta property="og:description" content="View all upcoming city council and government meetings across {stateName}" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/state/{data.stateCode}/meetings" />
+	<meta property="og:image" content="https://engagic.org/og?type=state&title={encodeURIComponent(`${stateName} Meetings`)}&subtitle={encodeURIComponent('Upcoming city council meetings')}" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:site_name" content="engagic" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Upcoming Meetings in {stateName} - engagic" />
+	<meta name="twitter:description" content="View all upcoming city council and government meetings across {stateName}" />
+	<meta name="twitter:image" content="https://engagic.org/og?type=state&title={encodeURIComponent(`${stateName} Meetings`)}&subtitle={encodeURIComponent('Upcoming city council meetings')}" />
 </svelte:head>
 
 <div class="meetings-page">

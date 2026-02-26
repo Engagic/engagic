@@ -79,6 +79,14 @@
 <svelte:head>
 	<title>{member?.name || 'Council Member'} - {city_banana} - engagic</title>
 	<meta name="description" content="Voting record for {member?.name || 'council member'}" />
+	<link rel="canonical" href="https://engagic.org/{city_banana}/council/{$page.params.member_id}" />
+
+	<meta property="og:title" content="{member?.name || 'Council Member'} - engagic" />
+	<meta property="og:description" content="Voting record for {member?.name || 'council member'}" />
+	<meta property="og:type" content="profile" />
+	<meta property="og:url" content="https://engagic.org/{city_banana}/council/{$page.params.member_id}" />
+	<meta property="og:site_name" content="engagic" />
+	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
 <div class="container">

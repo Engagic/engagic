@@ -84,6 +84,9 @@
 	const ogDescription = $derived(
 		truncateForMeta(matter.canonical_summary) || 'Legislative matter tracked by engagic'
 	);
+	const matterOgImage = $derived(
+		`https://engagic.org/og?type=matter&title=${encodeURIComponent(matter.matter_file || matter.title || 'Legislation')}&subtitle=${encodeURIComponent(firstAppearance ? `${firstAppearance.city_name}, ${firstAppearance.state}` : '')}`
+	);
 
 	// JSON-LD structured data for Legislation schema
 	const jsonLd = $derived.by(() => {
@@ -137,20 +140,23 @@
 <svelte:head>
 	<title>{matter.matter_file ? `${matter.matter_file} - ` : ''}{matter.title} - engagic</title>
 	<meta name="description" content="{ogDescription}" />
+	<link rel="canonical" href="https://engagic.org/matter/{data.matterId}" />
 
 	<!-- Open Graph -->
 	<meta property="og:title" content="{ogTitle}" />
 	<meta property="og:description" content="{ogDescription}" />
 	<meta property="og:type" content="article" />
 	<meta property="og:url" content="https://engagic.org/matter/{data.matterId}" />
-	<meta property="og:image" content="https://engagic.org/icon-192.png" />
+	<meta property="og:image" content="{matterOgImage}" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
 	<meta property="og:site_name" content="engagic" />
 
 	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content="{ogTitle}" />
 	<meta name="twitter:description" content="{ogDescription}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-192.png" />
+	<meta name="twitter:image" content="{matterOgImage}" />
 
 	<!-- JSON-LD Structured Data -->
 	{@html `<script type="application/ld+json">${jsonLd}</script>`}
