@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import type { CoverageType } from '$lib/api/types';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 
 	let { data }: { data: PageData } = $props();
 	let activeView: 'overview' | 'coverage' = $state('overview');
@@ -51,22 +52,11 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Impact Metrics - Engagic</title>
-	<meta name="description" content="Real-time metrics on Engagic's coverage, processing, and civic engagement impact" />
-	<link rel="canonical" href="https://engagic.org/about/metrics" />
-
-	<meta property="og:title" content="Impact Metrics - engagic" />
-	<meta property="og:description" content="Real-time metrics on Engagic's coverage, processing, and civic engagement impact" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/about/metrics" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="Impact Metrics - engagic" />
-	<meta name="twitter:description" content="Real-time metrics on Engagic's coverage, processing, and civic engagement impact" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="Impact Metrics - engagic"
+	description="Real-time metrics on Engagic's coverage, processing, and civic engagement impact"
+	url="https://engagic.org/about/metrics"
+/>
 
 <article class="metrics-container">
 	<div class="view-toggle">

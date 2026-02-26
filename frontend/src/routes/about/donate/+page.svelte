@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 
 	const API_URL = import.meta.env.VITE_API_URL || 'https://api.engagic.org';
 
@@ -108,18 +109,11 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Donate - Engagic</title>
-	<meta name="description" content="Support civic infrastructure that keeps democracy accessible" />
-	<link rel="canonical" href="https://engagic.org/about/donate" />
-
-	<meta property="og:title" content="Donate - engagic" />
-	<meta property="og:description" content="Support civic infrastructure that keeps democracy accessible" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/about/donate" />
-	<meta property="og:site_name" content="engagic" />
-	<meta name="twitter:card" content="summary" />
-</svelte:head>
+<SeoHead
+	title="Donate - engagic"
+	description="Support civic infrastructure that keeps democracy accessible"
+	url="https://engagic.org/about/donate"
+/>
 
 <article class="about-content">
 	{#if showSuccess}

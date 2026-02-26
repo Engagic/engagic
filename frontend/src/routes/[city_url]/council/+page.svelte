@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { getCityCouncilMembers, searchMeetings } from '$lib/api';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import type { CouncilMember } from '$lib/api/types';
 	import { isSearchSuccess } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
@@ -53,22 +54,11 @@
 	}
 </script>
 
-<svelte:head>
-	<title>City Council - {cityName || city_banana} - engagic</title>
-	<meta name="description" content="City council roster and voting records for {cityName}" />
-	<link rel="canonical" href="https://engagic.org/{city_banana}/council" />
-
-	<meta property="og:title" content="City Council - {cityName || city_banana} - engagic" />
-	<meta property="og:description" content="City council roster and voting records for {cityName}" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/{city_banana}/council" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="City Council - {cityName || city_banana} - engagic" />
-	<meta name="twitter:description" content="City council roster and voting records for {cityName}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="City Council - {cityName || city_banana} - engagic"
+	description="City council roster and voting records for {cityName}"
+	url="https://engagic.org/{city_banana}/council"
+/>
 
 <div class="container">
 	<div class="top-nav">
