@@ -1,140 +1,55 @@
-# Never-Processed Cities - Synced with items, zero completed meetings
-# 76 cities
-# Generated: 2026-02-18
-
-# ARIZONA
-yumaAZ
+# Metro Area Cities - Synced but not yet processed
+# 32 cities
+# Generated: 2026-02-26
 
 # CALIFORNIA
-camarilloCA
-chinoCA
+anaheimCA
+burbankCA
+chulavistaCA
+coronaCA
 costamesaCA
-culvercityCA
 fullertonCA
 glendaleCA
+irvineCA
 longbeachCA
-mantecaCA
 newportbeachCA
 oceansideCA
+ontarioCA
 orangeCA
 pomonaCA
-redlandsCA
-redondobeachCA
+ranchocucamongaCA
 riversideCA
 sacramentoCA
-sanmarcosCA
+sanbernardinoCA
 santaanaCA
-santamariaCA
 santamonicaCA
-temeculaCA
-visaliaCA
-
-# COLORADO
-longmontCO
+torranceCA
 
 # CONNECTICUT
 newhavenCT
 
-# DELAWARE
-newarkDE
-wilmingtonDE
-
-# FLORIDA
-deltonaFL
-fortwaltonbeachFL
-hallandaleFL
-ocalaFL
-oviedoFL
-pompanobeachFL
-veniceFL
-wellingtonFL
-
 # GEORGIA
-cantonGA
 columbusGA
-fayettevilleGA
-hamptonGA
-powderspringsGA
 
-# ILLINOIS
-orlandparkIL
-romeovilleIL
-
-# KANSAS
-olatheKS
-
-# LOUISIANA
-lakecharlesLA
-shreveportLA
-
-# MASSACHUSETTS
-maldenMA
-
-# MARYLAND
-hagerstownMD
+# KENTUCKY
+louisvilleKY
 
 # MICHIGAN
 detroitMI
 
-# MISSOURI
-columbiaMO
-
-# MISSISSIPPI
-columbusMS
-laurelMS
-
-# NORTH CAROLINA
-claytonNC
-lexingtonNC
-
 # NEW JERSEY
 newarkNJ
-passaicNJ
-
-# NEW MEXICO
-alamogordoNM
-
-# NEW YORK
-buffaloNY
-mountvernonNY
-yonkersNY
-
-# OHIO
-grovecityOH
-
-# OKLAHOMA
-brokenarrowOK
-
-# PENNSYLVANIA
-westchesterPA
 
 # RHODE ISLAND
 providenceRI
 
-# TENNESSEE
-crossvilleTN
-
 # TEXAS
-boerneTX
-dentonTX
-desotoTX
-galvestonTX
+arlingtonTX
+georgetownTX
+tomballTX
 
 # UTAH
 saltlakecityUT
-westjordanUT
 
 # VIRGINIA
 alexandriaVA
-salemVA
-
-# WASHINGTON
-redmondWA
-
-# WISCONSIN
-appletonWI
-westbendWI
-
-# WYOMING
-laramieWY
-

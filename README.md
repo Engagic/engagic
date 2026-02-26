@@ -56,7 +56,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 │  ┌────────────────────────────────────────────────────────┴───────────────┐ │
 │  │  Pipeline (Conductor)                                                  │ │
 │  │  ┌─────────────────────────┐    ┌────────────────────────────────────┐ │ │
-│  │  │  Sync Loop (72h)        │    │  Processing Loop (continuous)      │ │ │
+│  │  │  Sync Loop (24h)        │    │  Processing Loop (continuous)      │ │ │
 │  │  │  ┌─────────────────┐    │    │  ┌──────────────────────────────┐  │ │ │
 │  │  │  │ Fetcher         │    │    │  │ Processor                    │  │ │ │
 │  │  │  │ - rate limiting │    │    │  │ - item-level path (86%)      │  │ │ │
@@ -105,7 +105,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 |--------|-------|---------|
 | [vendors/](vendors/README.md) | ~8,900 | 13 async adapters for Legistar, Granicus, PrimeGov, IQM2, NovusAgenda, CivicClerk, CivicPlus, eScribe, Municode, OnBase, Berkeley, Chicago, Menlo Park. HTML parsers, rate limiting, vendor-agnostic ID contract. |
 | [database/](database/README.md) | ~8,300 | PostgreSQL with 14 async repositories (cities, meetings, items, matters, queue, search, userland, council_members, committees, engagement, feedback, deliberation, happening, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
-| [pipeline/](pipeline/README.md) | ~3,900 | Conductor orchestration with dual loops: Fetcher (72h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
+| [pipeline/](pipeline/README.md) | ~3,900 | Conductor orchestration with dual loops: Fetcher (24h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
 | [analysis/](analysis/README.md) | ~2,300 | Gemini API integration with reactive rate limiting, unified adaptive prompting, 16-topic taxonomy, batch processing (50% cost savings), context caching. |
 | [server/](server/README.md) | ~8,100 | FastAPI with 17 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring, events, happening). Tiered rate limiting, JWT sessions. |
 | [userland/](userland/README.md) | ~2,500 | Civic alerts: magic link auth, weekly digests (Sundays 9am), dual-track matching (keyword + matter-based), Mailgun delivery. |
@@ -120,7 +120,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 
 **Item-Level Processing:** HTML agendas parsed into structured items. Each item gets focused summary. Topics aggregated to meeting level.
 
-**Cache-First API:** Server never fetches live. Background daemon syncs cities every 72 hours, processes queue continuously.
+**Cache-First API:** Server never fetches live. Background daemon syncs cities every 24 hours, processes queue continuously.
 
 **Async PostgreSQL:** Connection pooling (asyncpg, 5-20 connections), `FOR UPDATE SKIP LOCKED` for queue processing, UPSERT for idempotent updates.
 
@@ -138,7 +138,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  SYNC LOOP (every 72h)                                                      │
+│  SYNC LOOP (every 24h)                                                      │
 │                                                                             │
 │    Conductor ──► Fetcher ──► Vendors (13 adapters)                          │
 │                     │              │                                        │

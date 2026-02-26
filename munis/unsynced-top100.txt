@@ -11,6 +11,7 @@ montgomeryAL  # pop 195,287, granicus
 # ARIZONA
 gilbertAZ  # pop 275,411, granicus
 glendaleAZ  # pop 253,855, granicus
+goodyearAZ  # pop 111,805, granicus
 peoriaAZ  # pop 198,750, granicus
 scottsdaleAZ  # pop 244,394, granicus
 tempeAZ  # pop 189,834, granicus
@@ -20,12 +21,8 @@ littlerockAR  # pop 203,842, novusagenda
 
 # CALIFORNIA
 anaheimCA  # pop 340,512, granicus
-bakersfieldCA  # pop 413,381, escribe
-chulavistaCA  # pop 274,333, escribe
-clovisCA  # pop 125,826, granicus
 concordCA  # pop 122,315, granicus
-coronaCA  # pop 160,238, escribe
-elkgroveCA  # pop 178,444, granicus
+elmonteCA  # pop 103,794, granicus
 fairfieldCA  # pop 120,768, novusagenda
 gardengroveCA  # pop 168,234, novusagenda
 irvineCA  # pop 314,621, granicus
@@ -35,6 +32,7 @@ ontarioCA  # pop 182,457, granicus
 oxnardCA  # pop 198,488, granicus
 palmdaleCA  # pop 161,404, granicus
 pasadenaCA  # pop 133,560, granicus
+rialtoCA  # pop 103,391, granicus
 richmondCA  # pop 114,106, granicus
 rosevilleCA  # pop 159,135, novusagenda
 santaclaritaCA  # pop 224,028, primegov
@@ -45,6 +43,7 @@ victorvilleCA  # pop 138,869, granicus
 
 # COLORADO
 auroraCO  # pop 395,052, legistar
+greeleyCO  # pop 112,609, granicus
 westminsterCO  # pop 114,875, granicus
 
 # CONNECTICUT
@@ -56,10 +55,9 @@ washingtonDC  # pop 678,972, granicus
 # FLORIDA
 capecoralFL  # pop 224,455, novusagenda
 clearwaterFL  # pop 116,850, granicus
-coralspringsFL  # pop 134,906, granicus
 gainesvilleFL  # pop 145,812, granicus
-hollywoodFL  # pop 153,859, granicus
 lakelandFL  # pop 122,264, primegov
+miamigardensFL  # pop 110,717, granicus
 orlandoFL  # pop 320,742, granicus
 palmbayFL  # pop 135,566, primegov
 tallahasseeFL  # pop 202,221, granicus
@@ -71,29 +69,29 @@ savannahGA  # pop 147,748, granicus
 auroraIL  # pop 177,563, granicus
 elginIL  # pop 113,310, granicus
 jolietIL  # pop 150,489, granicus
+peoriaIL  # pop 110,460, granicus
 rockfordIL  # pop 146,120, iqm2
+springfieldIL  # pop 112,544, primegov
 
 # INDIANA
-evansvilleIN  # pop 115,332, granicus
 indianapolisIN  # pop 910,148, granicus
+southbendIN  # pop 103,395, granicus
 
 # KANSAS
 kansascityKS  # pop 152,933, granicus
 wichitaKS  # pop 396,119, granicus
 
 # LOUISIANA
-batonrougeLA  # pop 219,573, civicplus
 lafayetteLA  # pop 121,467, granicus
 
 # MASSACHUSETTS
 springfieldMA  # pop 153,672, granicus
 
 # MICHIGAN
+dearbornMI  # pop 105,811, civicplus
 grandrapidsMI  # pop 196,608, granicus
+lansingMI  # pop 112,115, granicus
 sterlingheightsMI  # pop 133,306, civicplus
-
-# MINNESOTA
-rochesterMN  # pop 122,413, granicus
 
 # MISSISSIPPI
 jacksonMS  # pop 143,709, granicus
@@ -101,6 +99,12 @@ jacksonMS  # pop 143,709, granicus
 # MISSOURI
 independenceMO  # pop 120,922, novusagenda
 springfieldMO  # pop 170,188, primegov
+
+# NEVADA
+sparksNV  # pop 110,323, granicus
+
+# NEW MEXICO
+rioranchoNM  # pop 110,660, granicus
 
 # NEW YORK
 statenislandNY  # pop 495,747, granicus
@@ -113,18 +117,13 @@ highpointNC  # pop 116,926, granicus
 wilmingtonNC  # pop 122,698, granicus
 winstonsalemNC  # pop 246,278, granicus
 
-# OHIO
-toledoOH  # pop 265,304, granicus
-
 # OKLAHOMA
 normanOK  # pop 130,046, legistar
 tulsaOK  # pop 411,894, granicus
 
 # OREGON
+greshamOR  # pop 110,685, granicus
 salemOR  # pop 177,432, granicus
-
-# PENNSYLVANIA
-allentownPA  # pop 124,880, granicus
 
 # SOUTH CAROLINA
 charlestonSC  # pop 155,369, granicus
@@ -137,18 +136,16 @@ chattanoogaTN  # pop 187,030, granicus
 memphisTN  # pop 618,639, granicus
 
 # TEXAS
-amarilloTX  # pop 202,408, civicclerk
+allenTX  # pop 111,620, granicus
 arlingtonTX  # pop 398,431, granicus
-carrolltonTX  # pop 132,918, granicus
+beaumontTX  # pop 112,193, primegov
+edinburgTX  # pop 105,799, granicus
 grandprairieTX  # pop 202,134, legistar
-killeenTX  # pop 159,643, granicus
 laredoTX  # pop 257,602, granicus
 leaguecityTX  # pop 116,320, granicus
-lewisvilleTX  # pop 133,553, granicus
 lubbockTX  # pop 266,878, granicus
-mcallenTX  # pop 146,593, civicclerk
 midlandTX  # pop 138,397, primegov
-odessaTX  # pop 115,743, civicclerk
+tylerTX  # pop 110,327, granicus
 wacoTX  # pop 144,816, granicus
 
 # VIRGINIA
@@ -157,8 +154,10 @@ chesapeakeVA  # pop 253,886, granicus
 hamptonVA  # pop 137,098, granicus
 newportnewsVA  # pop 183,118, novusagenda
 norfolkVA  # pop 230,930, granicus
+springfieldVA  # pop 104,396, primegov
 
 # WASHINGTON
+everettWA  # pop 111,180, granicus
 kentWA  # pop 133,378, granicus
-spokaneWA  # pop 229,447, granicus
 vancouverWA  # pop 196,442, primegov
+

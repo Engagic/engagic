@@ -54,7 +54,7 @@ async def process_agenda(request: ProcessRequest, db: Database = Depends(get_db)
     via the background daemon (conductor.py). Returns estimated wait time.
 
     To ensure your city gets processed: watch the city to add it to priority queue.
-    Priority cities are synced every 72 hours automatically.
+    Priority cities are synced every 24 hours automatically.
     """
     try:
         return {
