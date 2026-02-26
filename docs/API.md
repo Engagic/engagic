@@ -1379,7 +1379,7 @@ curl -X POST https://api.engagic.org/api/admin/process-meeting \
 
 ### Cache-First Architecture
 - API never fetches live data
-- Background daemon syncs cities every 72 hours
+- Background daemon syncs cities every 24 hours
 - Always check `cached` field in response
 - Empty meetings array means data not synced yet
 

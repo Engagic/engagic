@@ -1,13 +1,14 @@
-# Synced but Unprocessed Cities - Have meeting data, no item summaries
-# 143 cities
+# Synced but Unprocessed Cities - Have meeting data, no summaries
+# 240 cities
 # Generated: 2026-02-26
 
 # ALABAMA
 daphneAL
 dothanAL
+florenceAL
 
 # ARIZONA
-prescottvalleyAZ
+buckeyeAZ
 yumaAZ
 
 # ARKANSAS
@@ -15,49 +16,75 @@ jacksonvilleAR
 russellvilleAR
 
 # CALIFORNIA
+alisoviejoCA
+bakersfieldCA
 beaumontCA
-burlingameCA
+burbankCA
 camarilloCA
-cathedralcityCA
 chinoCA
+chulavistaCA
+citrusheightsCA
+claremontCA
+clovisCA
+coltonCA
+coronaCA
 costamesaCA
-fontanaCA
+dalycityCA
+dublinCA
+encinitasCA
+eurekaCA
 fullertonCA
 gilroyCA
 glendaleCA
-goletaCA
 hemetCA
+lagunaniguelCA
 lahabraCA
 lakeelsinoreCA
-lakeforestCA
+livermoreCA
 longbeachCA
+manhattanbeachCA
 mantecaCA
+mercedCA
+milpitasCA
+murrietaCA
 newportbeachCA
+oakleyCA
 oceansideCA
 orangeCA
 paramountCA
 pomonaCA
+ranchocordovaCA
 ranchocucamongaCA
 ranchopalosverdesCA
 redlandsCA
 redondobeachCA
 riversideCA
+rosemeadCA
 sacramentoCA
-salinasCA
 sanbernardinoCA
 sanbrunoCA
 sanmarcosCA
+sanmateoCA
 santaanaCA
 santamariaCA
 santamonicaCA
 temeculaCA
 torranceCA
 visaliaCA
+vistaCA
+westminsterCA
 
 # COLORADO
+commercecityCO
+goldenCO
+grandjunctionCO
+littletonCO
 longmontCO
+puebloCO
 
 # CONNECTICUT
+bristolCT
+enfieldCT
 newhavenCT
 norwichCT
 
@@ -66,37 +93,59 @@ wilmingtonDE
 
 # FLORIDA
 altamontespringsFL
+bradentonFL
+coralspringsFL
 deltonaFL
+dunedinFL
+dunnellonFL
 fortwaltonbeachFL
 hallandaleFL
+hollywoodFL
+lakecityFL
 miamibeachFL
+naplesFL
+newportricheyFL
 ocalaFL
 oviedoFL
+palmettoFL
 pompanobeachFL
+puntagordaFL
 rockledgeFL
 veniceFL
 wellingtonFL
 
 # GEORGIA
+acworthGA
 cantonGA
 columbusGA
 fayettevilleGA
+griffinGA
 hamptonGA
-jonesboroGA
-lilburnGA
 powderspringsGA
-sandyspringsGA
 
 # IDAHO
 nampaID
 
 # ILLINOIS
+dekalbIL
 kankakeeIL
-napervilleIL
 orlandparkIL
+parkridgeIL
 romeovilleIL
 
+# INDIANA
+evansvilleIN
+newalbanyIN
+valparaisoIN
+westlafayetteIN
+
+# IOWA
+councilbluffsIA
+siouxcityIA
+urbandaleIA
+
 # KANSAS
+lenexaKS
 olatheKS
 topekaKS
 
@@ -104,54 +153,78 @@ topekaKS
 louisvilleKY
 
 # LOUISIANA
+batonrougeLA
 covingtonLA
 lakecharlesLA
 shreveportLA
 
 # MARYLAND
+annapolisMD
 hagerstownMD
 westminsterMD
 
 # MASSACHUSETTS
+beverlyMA
 lawrenceMA
 maldenMA
-marlboroughMA
+westfieldMA
 
 # MICHIGAN
-cantonMI
+clintontownshipMI
 detroitMI
+kalamazooMI
+rochesterMI
+westlandMI
+
+# MINNESOTA
+rochesterMN
 
 # MISSISSIPPI
 columbusMS
 laurelMS
+starkvilleMS
 
 # MISSOURI
 columbiaMO
 
 # MONTANA
 helenaMT
+missoulaMT
+
+# NEVADA
+carsoncityNV
 
 # NEW JERSEY
-cherryhillNJ
 millvilleNJ
 morristownNJ
 newarkNJ
 passaicNJ
+trentonNJ
+westorangeNJ
 
 # NEW MEXICO
 alamogordoNM
+clovisNM
 
 # NEW YORK
+auburnNY
 buffaloNY
+elmiraNY
 freeportNY
-ithacaNY
+monroeNY
 mountvernonNY
-patchogueNY
+saratogaspringsNY
+scarsdaleNY
+schenectadyNY
+smithtownNY
+whiteplainsNY
 yonkersNY
 
 # NORTH CAROLINA
 claytonNC
+gastoniaNC
 lexingtonNC
+mooresvilleNC
 mountairyNC
 
 # OHIO
@@ -159,58 +232,97 @@ daytonOH
 grovecityOH
 limaOH
 miamisburgOH
+toledoOH
+zanesvilleOH
+
+# OKLAHOMA
+ardmoreOK
+
+# OREGON
+bendOR
 
 # PENNSYLVANIA
+allentownPA
+altoonaPA
 hanoverPA
 lansdalePA
+morrisvillePA
 westchesterPA
 
-# RHODE ISLAND
+# RI
 providenceRI
+
+# SOUTH CAROLINA
+goosecreekSC
+lexingtonSC
 
 # TENNESSEE
 crossvilleTN
+germantownTN
 knoxvilleTN
 
 # TEXAS
-bedfordTX
+amarilloTX
 boerneTX
-cedarparkTX
+carrolltonTX
 dentonTX
 desotoTX
 galvestonTX
 georgetownTX
-mesquiteTX
-planoTX
+granburyTX
+kellerTX
+killeenTX
+kyleTX
+lewisvilleTX
+mcallenTX
+nacogdochesTX
+odessaTX
 rosenbergTX
 sanbenitoTX
-templeTX
+sanmarcosTX
 
 # UTAH
 clearfieldUT
+laytonUT
+lehiUT
 ogdenUT
 provoUT
+rivertonUT
 saltlakecityUT
 westjordanUT
 
 # VIRGINIA
 alexandriaVA
+fairfaxVA
 fredericksburgVA
+leesburgVA
+manassasVA
 salemVA
+viennaVA
 
 # WASHINGTON
-moseslakeWA
+lynnwoodWA
 mountvernonWA
 oakharborWA
 portangelesWA
+portorchardWA
+spokaneWA
 
 # WEST VIRGINIA
+charlestonWV
 fairmontWV
+martinsburgWV
 
 # WISCONSIN
 appletonWI
+fonddulacWI
+kenoshaWI
+newberlinWI
 sunprairieWI
+waukeshaWI
 westbendWI
 
 # WYOMING
+cheyenneWY
 laramieWY
+

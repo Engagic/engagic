@@ -51,7 +51,7 @@ Conductor
 
 #### Responsibilities
 - Start/stop background daemon (async tasks)
-- Sync loop (runs every 72 hours)
+- Sync loop (runs every 24 hours)
 - Processing loop (continuously processes queue)
 - Admin commands (force sync, status, preview)
 - Watchlist operations (user-demanded cities)
@@ -112,7 +112,7 @@ engagic-conductor preview-items MEETING_ID --extract-text
 
 #### Async Architecture
 - **Single event loop:** Uses `asyncio.create_task()` for concurrent loops
-- **Sync task:** Runs every 72 hours (calls `fetcher.sync_all()`)
+- **Sync task:** Runs every 24 hours (calls `fetcher.sync_all()`)
 - **Processing task:** Runs continuously (calls `processor.process_queue()`)
 - **Graceful shutdown:** `asyncio.Event`-based, checked via `is_running` property; SIGTERM/SIGINT handlers
 - **Interruptible sleep:** 1-second poll interval during 72-hour waits (immediate shutdown response)
@@ -688,7 +688,7 @@ outcome = processor.determine_outcome(tally)
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Conductor (Async Event Loop)                                    │
-│  ├─ Sync Task (every 72 hours)                                  │
+│  ├─ Sync Task (every 24 hours)                                  │
 │  │   └─> Fetcher.sync_all()                                     │
 │  │                                                               │
 │  └─ Processing Task (continuous)                                │
@@ -867,7 +867,7 @@ engagic-conductor daemon
 ```
 
 **Deployment:** VPS runs two systemd services:
-1. **`engagic-fetcher.service`** - Syncs cities every 72 hours
+1. **`engagic-fetcher.service`** - Syncs cities every 24 hours
 2. **`engagic-processor.service`** - Processes queue continuously (recovers stale jobs on startup)
 
 ---

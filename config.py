@@ -122,8 +122,8 @@ class Config:
             os.getenv("ENGAGIC_BACKGROUND_PROCESSING", "true").lower() == "true"
         )
         self.SYNC_INTERVAL_HOURS = int(
-            os.getenv("ENGAGIC_SYNC_INTERVAL_HOURS", "72")
-        )  # 3 days
+            os.getenv("ENGAGIC_SYNC_INTERVAL_HOURS", "24")
+        )  # daily
         self.PROCESSING_INTERVAL_HOURS = int(
             os.getenv("ENGAGIC_PROCESSING_INTERVAL_HOURS", "2")
         )
