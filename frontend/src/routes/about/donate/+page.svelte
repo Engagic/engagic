@@ -111,6 +111,14 @@
 <svelte:head>
 	<title>Donate - Engagic</title>
 	<meta name="description" content="Support civic infrastructure that keeps democracy accessible" />
+	<link rel="canonical" href="https://engagic.org/about/donate" />
+
+	<meta property="og:title" content="Donate - engagic" />
+	<meta property="og:description" content="Support civic infrastructure that keeps democracy accessible" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/about/donate" />
+	<meta property="og:site_name" content="engagic" />
+	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
 <article class="about-content">

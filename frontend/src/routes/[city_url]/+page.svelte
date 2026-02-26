@@ -48,6 +48,10 @@
 	const upcomingMeetings = $derived(data.upcomingMeetings || []);
 	const pastMeetings = $derived(data.pastMeetings || []);
 
+	// SEO meta
+	const cityDisplayName = $derived(searchResults && 'city_name' in searchResults ? `${searchResults.city_name}, ${searchResults.state}` : 'City');
+	const cityDesc = $derived(searchResults && 'city_name' in searchResults ? `City council meetings, agendas, and AI summaries for ${searchResults.city_name}, ${searchResults.state}` : 'Local government meetings and agendas');
+
 	// Reset matters and search state when city changes (client-side navigation)
 	$effect(() => {
 		// Access city_banana to create dependency
@@ -228,8 +232,25 @@
 </script>
 
 <svelte:head>
-	<title>{searchResults && 'city_name' in searchResults ? `${searchResults.city_name}, ${searchResults.state}` : 'City'} - engagic</title>
-	<meta name="description" content="Local government meetings and agendas" />
+	<title>{cityDisplayName} - engagic</title>
+	<meta name="description" content="{cityDesc}" />
+	<link rel="canonical" href="https://engagic.org/{city_banana}" />
+
+	<!-- Open Graph -->
+	<meta property="og:title" content="{cityDisplayName} - engagic" />
+	<meta property="og:description" content="{cityDesc}" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/{city_banana}" />
+	<meta property="og:image" content="https://engagic.org/og?type=city&title={encodeURIComponent(cityDisplayName)}&subtitle={encodeURIComponent('City Council Meetings & Agendas')}" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:site_name" content="engagic" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="{cityDisplayName} - engagic" />
+	<meta name="twitter:description" content="{cityDesc}" />
+	<meta name="twitter:image" content="https://engagic.org/og?type=city&title={encodeURIComponent(cityDisplayName)}&subtitle={encodeURIComponent('City Council Meetings & Agendas')}" />
 </svelte:head>
 
 <div class="container">

@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /login
+Disallow: /signup
+Disallow: /auth/
+Disallow: /dashboard
+Disallow: /funnel
+
+Sitemap: https://engagic.org/sitemap.xml

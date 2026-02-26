@@ -185,6 +185,9 @@
 	const ogUrl = $derived(
 		`https://engagic.org/${city_banana}/${$page.params.meeting_slug}`
 	);
+	const ogImage = $derived(
+		`https://engagic.org/og?type=meeting&title=${encodeURIComponent(selectedMeeting?.title || 'Meeting')}&subtitle=${encodeURIComponent(cityName ? `${cityName}, ${cityState}` : '')}`
+	);
 
 	// JSON-LD structured data for Event schema
 	const jsonLd = $derived.by(() => {
@@ -245,20 +248,23 @@
 <svelte:head>
 	<title>{selectedMeeting?.title || 'Meeting'} - engagic</title>
 	<meta name="description" content="{ogDescription}" />
+	<link rel="canonical" href="{ogUrl}" />
 
 	<!-- Open Graph -->
 	<meta property="og:title" content="{ogTitle}" />
 	<meta property="og:description" content="{ogDescription}" />
 	<meta property="og:type" content="article" />
 	<meta property="og:url" content="{ogUrl}" />
-	<meta property="og:image" content="https://engagic.org/icon-192.png" />
+	<meta property="og:image" content="{ogImage}" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
 	<meta property="og:site_name" content="engagic" />
 
 	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content="{ogTitle}" />
 	<meta name="twitter:description" content="{ogDescription}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-192.png" />
+	<meta name="twitter:image" content="{ogImage}" />
 
 	<!-- JSON-LD Structured Data -->
 	{#if jsonLd}

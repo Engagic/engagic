@@ -28,6 +28,23 @@
 <svelte:head>
 	<title>Council Members by City - Engagic</title>
 	<meta name="description" content="View council member coverage across cities tracked by Engagic" />
+	<link rel="canonical" href="https://engagic.org/council-members" />
+
+	<!-- Open Graph -->
+	<meta property="og:title" content="Council Members by City - engagic" />
+	<meta property="og:description" content="View council member coverage across cities tracked by Engagic" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/council-members" />
+	<meta property="og:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Council Members')}&subtitle={encodeURIComponent('City council member coverage')}" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:site_name" content="engagic" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Council Members by City - engagic" />
+	<meta name="twitter:description" content="View council member coverage across cities tracked by Engagic" />
+	<meta name="twitter:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Council Members')}&subtitle={encodeURIComponent('City council member coverage')}" />
 </svelte:head>
 
 <article class="page-container">

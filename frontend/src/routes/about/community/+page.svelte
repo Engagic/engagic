@@ -10,6 +10,14 @@
 <svelte:head>
 	<title>Community & Ecosystem - Engagic</title>
 	<meta name="description" content="Get help, contribute code, or connect with the Engagic community" />
+	<link rel="canonical" href="https://engagic.org/about/community" />
+
+	<meta property="og:title" content="Community & Ecosystem - engagic" />
+	<meta property="og:description" content="Get help, contribute code, or connect with the Engagic community" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/about/community" />
+	<meta property="og:site_name" content="engagic" />
+	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
 <article class="community-content">

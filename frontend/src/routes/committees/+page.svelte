@@ -29,6 +29,23 @@
 <svelte:head>
 	<title>Committees by City - Engagic</title>
 	<meta name="description" content="View committee coverage across cities tracked by Engagic" />
+	<link rel="canonical" href="https://engagic.org/committees" />
+
+	<!-- Open Graph -->
+	<meta property="og:title" content="Committees by City - engagic" />
+	<meta property="og:description" content="View committee coverage across cities tracked by Engagic" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/committees" />
+	<meta property="og:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Committees by City')}&subtitle={encodeURIComponent('City council committee coverage')}" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:site_name" content="engagic" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Committees by City - engagic" />
+	<meta name="twitter:description" content="View committee coverage across cities tracked by Engagic" />
+	<meta name="twitter:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Committees by City')}&subtitle={encodeURIComponent('City council committee coverage')}" />
 </svelte:head>
 
 <article class="page-container">

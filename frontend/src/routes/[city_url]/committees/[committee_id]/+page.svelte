@@ -52,6 +52,14 @@
 <svelte:head>
 	<title>{committee?.name || 'Committee'} - {cityName || city_banana} - engagic</title>
 	<meta name="description" content="Committee details and voting history" />
+	<link rel="canonical" href="https://engagic.org/{city_banana}/committees/{$page.params.committee_id}" />
+
+	<meta property="og:title" content="{committee?.name || 'Committee'} - {cityName || city_banana} - engagic" />
+	<meta property="og:description" content="Committee details and voting history" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://engagic.org/{city_banana}/committees/{$page.params.committee_id}" />
+	<meta property="og:site_name" content="engagic" />
+	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
 <div class="container">
