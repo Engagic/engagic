@@ -7,6 +7,9 @@ import os
 from typing import Optional
 
 from config import config
+from config import get_logger
+
+log = get_logger("engagic.vendor_urls")
 
 
 def _get_granicus_url(slug: str) -> Optional[str]:
@@ -31,7 +34,7 @@ def _get_granicus_url(slug: str) -> Optional[str]:
                 if view_id:
                     return f"{base_url}/ViewPublisher.php?view_id={view_id}"
         except Exception:
-            pass  # Fall through to default
+            log.warning("failed to read granicus view_ids", file=view_ids_file, slug=slug)
 
     # Fallback: return base URL without view_id
     # (better than nothing, user can navigate from there)
@@ -68,11 +71,12 @@ def _get_onbase_url(slug: str) -> Optional[str]:
                 sites = json.load(f)
                 urls = sites.get(slug, [])
                 if urls:
-                    # Return first configured URL (primary site)
                     return f"https://{urls[0]}"
         except Exception:
-            pass
+            log.warning("failed to read onbase config", file=config_file, slug=slug)
+            return None
 
+    log.warning("onbase config not found", file=config_file)
     return None
 
 
