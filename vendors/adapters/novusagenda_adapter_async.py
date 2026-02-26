@@ -203,6 +203,12 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
 
         return meetings
 
+    # NovusAgenda coversheets are server-rendered ASP.NET pages that can be
+    # legitimately slow. Longer timeout + single retry prevents silent data loss.
+    _COVERSHEET_TIMEOUT = aiohttp.ClientTimeout(total=45)
+    _COVERSHEET_CONCURRENCY = 3
+    _COVERSHEET_RETRY_DELAY = 2.0
+
     async def _fetch_coversheet_attachments(
         self, items: List[Dict[str, Any]], meeting_id: str
     ) -> List[Dict[str, Any]]:
@@ -211,28 +217,51 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
         NovusAgenda hosts item documents behind CoverSheet pages. Each page
         contains AttachmentViewer.ashx links pointing to the actual PDFs.
         """
-        sem = asyncio.Semaphore(5)
+        sem = asyncio.Semaphore(self._COVERSHEET_CONCURRENCY)
 
         async def fetch_one(item: Dict[str, Any]) -> Dict[str, Any]:
             item_id = item.get("vendor_item_id")
             if not item_id:
                 return item
             url = f"{self.base_url}/agendapublic/CoverSheet.aspx?ItemID={item_id}&MeetingID={meeting_id}"
+            title = item.get("title", "unknown")
             async with sem:
-                try:
-                    response = await self._get(url)
-                    html = await response.text()
-                    attachments = self._parse_coversheet_attachments(html)
-                    if attachments:
-                        item["attachments"] = attachments
-                except Exception as e:
-                    logger.debug(
-                        "failed to fetch coversheet",
-                        vendor="novusagenda",
-                        slug=self.slug,
-                        item_id=item_id,
-                        error=str(e)
-                    )
+                for attempt in range(2):
+                    try:
+                        response = await self._get(url, timeout=self._COVERSHEET_TIMEOUT)
+                        html = await response.text()
+                        attachments = self._parse_coversheet_attachments(html)
+                        if attachments:
+                            item["attachments"] = attachments
+                        return item
+                    except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
+                        if attempt == 0:
+                            logger.debug(
+                                "coversheet timeout, retrying",
+                                vendor="novusagenda",
+                                slug=self.slug,
+                                item_id=item_id,
+                            )
+                            await asyncio.sleep(self._COVERSHEET_RETRY_DELAY)
+                            continue
+                        logger.warning(
+                            "coversheet fetch failed after retry",
+                            vendor="novusagenda",
+                            slug=self.slug,
+                            item_id=item_id,
+                            title=title,
+                            error=str(e),
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "coversheet fetch failed",
+                            vendor="novusagenda",
+                            slug=self.slug,
+                            item_id=item_id,
+                            title=title,
+                            error=str(e),
+                        )
+                        break
             return item
 
         return list(await asyncio.gather(*[fetch_one(item) for item in items]))

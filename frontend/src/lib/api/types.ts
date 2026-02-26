@@ -757,7 +757,7 @@ export interface HappeningResponse {
 }
 
 // City coverage types for transparency page
-export type CoverageType = 'matter' | 'item' | 'monolithic' | 'pending';
+export type CoverageType = 'matter' | 'item' | 'monolithic' | 'synced' | 'pending';
 
 export interface CityWithCoverage {
 	name: string;
@@ -771,6 +771,7 @@ export interface CityCoverageSummary {
 	matter: number;
 	item: number;
 	monolithic: number;
+	synced: number;
 	total: number;
 }
 

@@ -1,9 +1,10 @@
 # Metro Areas - All Working Cities
-# Last updated: 2026-01-30
+# Last updated: 2026-02-26
 
 # ARIZONA
 mesaAZ
 phoenixAZ
+prescottvalleyAZ
 tucsonAZ
 
 # CALIFORNIA
@@ -11,6 +12,8 @@ alamedaCA
 anaheimCA
 berkeleyCA
 burbankCA
+burlingameCA
+cathedralcityCA
 chulavistaCA
 coronaCA
 costamesaCA
@@ -21,9 +24,11 @@ fremontCA
 fresnoCA
 fullertonCA
 glendaleCA
+goletaCA
 haywardCA
 huntingtonbeachCA
 irvineCA
+lakeforestCA
 longbeachCA
 losangelesCA
 menloparkCA
@@ -39,14 +44,17 @@ ranchocucamongaCA
 redwoodcityCA
 riversideCA
 sacramentoCA
+salinasCA
 sanbernardinoCA
 sandiegoCA
 sanfranciscoCA
 sanjoseCA
 santaanaCA
+santabarbaraCA
 santaclaraCA
 santacruzCA
 santamonicaCA
+santarosaCA
 southsanfranciscoCA
 sunnyvaleCA
 torranceCA
@@ -68,11 +76,17 @@ tampaFL
 # GEORGIA
 atlantaGA
 columbusGA
+jonesboroGA
+lilburnGA
 roswellGA
 sandyspringsGA
 
+# IDAHO
+boiseID
+
 # ILLINOIS
 chicagoIL
+napervilleIL
 
 # KENTUCKY
 lexingtonKY
@@ -87,9 +101,12 @@ baltimoreMD
 # MASSACHUSETTS
 bostonMA
 cambridgeMA
+marlboroughMA
+worcesterMA
 
 # MICHIGAN
 annarborMI
+cantonMI
 detroitMI
 
 # MINNESOTA
@@ -105,6 +122,7 @@ northlasvegasNV
 renoNV
 
 # NEW JERSEY
+cherryhillNJ
 newarkNJ
 princetonNJ
 
@@ -114,11 +132,13 @@ albuquerqueNM
 # NEW YORK
 ithacaNY
 newyorkNY
+patchogueNY
 
 # NORTH CAROLINA
 chapelhillNC
 charlotteNC
 durhamNC
+raleighNC
 
 # OHIO
 cincinnatiOH
@@ -126,6 +146,7 @@ clevelandOH
 columbusOH
 
 # OKLAHOMA
+brokenarrowOK
 oklahomacityOK
 
 # PENNSYLVANIA
@@ -136,11 +157,13 @@ pittsburghPA
 providenceRI
 
 # TENNESSEE
+clevelandTN
 nashvilleTN
 
 # TEXAS
 arlingtonTX
 austinTX
+bedfordTX
 cedarparkTX
 corpuschristiTX
 dallasTX
@@ -150,11 +173,13 @@ friscoTX
 georgetownTX
 houstonTX
 mckinneyTX
+mesquiteTX
 newbraunfelsTX
 planoTX
 roundrockTX
 sanantonioTX
 sugarlandTX
+templeTX
 tomballTX
 
 # UTAH
@@ -166,10 +191,12 @@ richmondVA
 
 # WASHINGTON
 bellevueWA
+moseslakeWA
 redmondWA
 seattleWA
 tacomaWA
 
 # WISCONSIN
 madisonWI
+manitowocWI
 milwaukeeWI

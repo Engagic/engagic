@@ -38,6 +38,7 @@
 			case 'matter': return 'Matter-level';
 			case 'item': return 'Item-level';
 			case 'monolithic': return 'Meeting-level';
+			case 'synced': return 'Synced';
 			default: return 'Pending';
 		}
 	}
@@ -47,6 +48,7 @@
 			case 'matter': return 'coverage-matter';
 			case 'item': return 'coverage-item';
 			case 'monolithic': return 'coverage-monolithic';
+			case 'synced': return 'coverage-synced';
 			default: return 'coverage-pending';
 		}
 	}
@@ -96,6 +98,10 @@
 						<span class="summary-label coverage-monolithic">Meeting-level</span>
 					</div>
 					<div class="summary-item">
+						<span class="summary-count">{data.cityCoverage.summary.synced}</span>
+						<span class="summary-label coverage-synced">Synced</span>
+					</div>
+					<div class="summary-item">
 						<span class="summary-count">{data.cityCoverage.summary.total}</span>
 						<span class="summary-label">Total Cities</span>
 					</div>
@@ -107,7 +113,7 @@
 							<tr>
 								<th class="col-city">City</th>
 								<th class="col-coverage">Coverage</th>
-								<th class="col-count">Summaries</th>
+								<th class="col-count">Count</th>
 								<th class="col-pop">Population</th>
 							</tr>
 						</thead>
@@ -609,6 +615,11 @@
 	.coverage-monolithic {
 		background: rgba(168, 162, 158, 0.15);
 		color: var(--text-secondary);
+	}
+
+	.coverage-synced {
+		background: rgba(168, 85, 247, 0.15);
+		color: rgb(147, 51, 234);
 	}
 
 	.coverage-pending {
