@@ -147,12 +147,17 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                             filtered_count=items_filtered
                         )
 
+                    # Fetch attachments from CoverSheet detail pages
+                    if items:
+                        items = await self._fetch_coversheet_attachments(items, meeting_id)
+
                     logger.info(
                         "extracted items from HTML agenda",
                         vendor="novusagenda",
                         slug=self.slug,
                         meeting_id=meeting_id,
-                        item_count=len(items)
+                        item_count=len(items),
+                        items_with_attachments=sum(1 for i in items if i.get("attachments"))
                     )
                 except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                     logger.warning(
@@ -197,3 +202,72 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
         )
 
         return meetings
+
+    async def _fetch_coversheet_attachments(
+        self, items: List[Dict[str, Any]], meeting_id: str
+    ) -> List[Dict[str, Any]]:
+        """Fetch attachments from CoverSheet.aspx detail pages for each item.
+
+        NovusAgenda hosts item documents behind CoverSheet pages. Each page
+        contains AttachmentViewer.ashx links pointing to the actual PDFs.
+        """
+        sem = asyncio.Semaphore(5)
+
+        async def fetch_one(item: Dict[str, Any]) -> Dict[str, Any]:
+            item_id = item.get("vendor_item_id")
+            if not item_id:
+                return item
+            url = f"{self.base_url}/agendapublic/CoverSheet.aspx?ItemID={item_id}&MeetingID={meeting_id}"
+            async with sem:
+                try:
+                    response = await self._get(url)
+                    html = await response.text()
+                    attachments = self._parse_coversheet_attachments(html)
+                    if attachments:
+                        item["attachments"] = attachments
+                except Exception as e:
+                    logger.debug(
+                        "failed to fetch coversheet",
+                        vendor="novusagenda",
+                        slug=self.slug,
+                        item_id=item_id,
+                        error=str(e)
+                    )
+            return item
+
+        return list(await asyncio.gather(*[fetch_one(item) for item in items]))
+
+    def _parse_coversheet_attachments(self, html: str) -> List[Dict[str, str]]:
+        """Extract attachment links from a CoverSheet.aspx page.
+
+        Looks for AttachmentViewer.ashx links which are the standard
+        NovusAgenda pattern for hosted documents.
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        attachments = []
+        seen_ids = set()
+
+        for link in soup.find_all("a", href=re.compile(r"AttachmentViewer\.ashx", re.IGNORECASE)):
+            href = link.get("href", "")
+            att_id_match = re.search(r"AttachmentID=(\d+)", href)
+            if not att_id_match:
+                continue
+            att_id = att_id_match.group(1)
+            if att_id in seen_ids:
+                continue
+            seen_ids.add(att_id)
+
+            name = link.get_text(strip=True)
+            if not name:
+                parent = link.find_parent("td") or link.find_parent("div")
+                if parent:
+                    name = parent.get_text(strip=True)
+            if not name:
+                name = f"Attachment {att_id}"
+
+            full_url = href if href.startswith("http") else f"{self.base_url}/agendapublic/{href}"
+            file_type = "pdf" if ".pdf" in name.lower() or ".pdf" in href.lower() else "document"
+
+            attachments.append({"name": name, "url": full_url, "type": file_type})
+
+        return attachments
