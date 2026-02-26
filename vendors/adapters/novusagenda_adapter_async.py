@@ -149,7 +149,7 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
 
                     # Fetch attachments from CoverSheet detail pages
                     if items:
-                        items = await self._fetch_coversheet_attachments(items, meeting_id)
+                        items = await self._fetch_coversheet_details(items, meeting_id)
 
                     logger.info(
                         "extracted items from HTML agenda",
@@ -209,13 +209,14 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
     _COVERSHEET_CONCURRENCY = 3
     _COVERSHEET_RETRY_DELAY = 2.0
 
-    async def _fetch_coversheet_attachments(
+    async def _fetch_coversheet_details(
         self, items: List[Dict[str, Any]], meeting_id: str
     ) -> List[Dict[str, Any]]:
-        """Fetch attachments from CoverSheet.aspx detail pages for each item.
+        """Fetch attachments and body text from CoverSheet.aspx detail pages.
 
         NovusAgenda hosts item documents behind CoverSheet pages. Each page
-        contains AttachmentViewer.ashx links pointing to the actual PDFs.
+        contains AttachmentViewer.ashx links pointing to actual PDFs, plus
+        the item's description/staff report as HTML body text.
         """
         sem = asyncio.Semaphore(self._COVERSHEET_CONCURRENCY)
 
@@ -233,6 +234,9 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                         attachments = self._parse_coversheet_attachments(html)
                         if attachments:
                             item["attachments"] = attachments
+                        body_text = self._extract_coversheet_text(html)
+                        if body_text:
+                            item["body_text"] = body_text
                         return item
                     except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
                         if attempt == 0:
@@ -295,8 +299,37 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                 name = f"Attachment {att_id}"
 
             full_url = href if href.startswith("http") else f"{self.base_url}/agendapublic/{href}"
-            file_type = "pdf" if ".pdf" in name.lower() or ".pdf" in href.lower() else "document"
+            file_type = "pdf" if ".pdf" in name.lower() or ".pdf" in href.lower() else "unknown"
 
             attachments.append({"name": name, "url": full_url, "type": file_type})
 
         return attachments
+
+    def _extract_coversheet_text(self, html: str) -> str:
+        """Extract body text from a CoverSheet.aspx page.
+
+        NovusAgenda coversheets are ASP.NET pages with item descriptions,
+        staff reports, and recommendations in #ns-ContentArea. The text
+        is useful as-is for items that have no PDF attachments.
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        content = soup.find(id="ns-ContentArea")
+        if not content:
+            content = soup.find("body")
+        if not content:
+            return ""
+
+        # Strip elements that add noise
+        for tag in content.find_all(["script", "style", "input", "select", "button", "noscript"]):
+            tag.decompose()
+        # Strip attachment links -- those are handled separately
+        for tag in content.find_all("a", href=re.compile(r"AttachmentViewer\.ashx", re.IGNORECASE)):
+            tag.decompose()
+
+        text = content.get_text(separator="\n", strip=True)
+        # Collapse runs of blank lines
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        # Skip if too short to be meaningful (just a header or empty page)
+        if len(text) < 50:
+            return ""
+        return text

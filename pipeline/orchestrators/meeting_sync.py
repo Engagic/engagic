@@ -302,6 +302,7 @@ class MeetingSyncOrchestrator:
                 matter_type=item_data.get("matter_type"),
                 sponsors=item_data.get("sponsors", []),
                 attachments=item_attachments,
+                body_text=item_data.get("body_text"),
                 summary=None,
                 topics=None,
             )
