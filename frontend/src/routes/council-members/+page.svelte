@@ -35,16 +35,14 @@
 	<meta property="og:description" content="View council member coverage across cities tracked by Engagic" />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://engagic.org/council-members" />
-	<meta property="og:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Council Members')}&subtitle={encodeURIComponent('City council member coverage')}" />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
+	<meta property="og:image" content="https://engagic.org/icon-512.png" />
 	<meta property="og:site_name" content="engagic" />
 
 	<!-- Twitter -->
-	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="Council Members by City - engagic" />
 	<meta name="twitter:description" content="View council member coverage across cities tracked by Engagic" />
-	<meta name="twitter:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Council Members')}&subtitle={encodeURIComponent('City council member coverage')}" />
+	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
 </svelte:head>
 
 <article class="page-container">

@@ -185,9 +185,6 @@
 	const ogUrl = $derived(
 		`https://engagic.org/${city_banana}/${$page.params.meeting_slug}`
 	);
-	const ogImage = $derived(
-		`https://engagic.org/og?type=meeting&title=${encodeURIComponent(selectedMeeting?.title || 'Meeting')}&subtitle=${encodeURIComponent(cityName ? `${cityName}, ${cityState}` : '')}`
-	);
 
 	// JSON-LD structured data for Event schema
 	const jsonLd = $derived.by(() => {
@@ -255,16 +252,14 @@
 	<meta property="og:description" content="{ogDescription}" />
 	<meta property="og:type" content="article" />
 	<meta property="og:url" content="{ogUrl}" />
-	<meta property="og:image" content="{ogImage}" />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
+	<meta property="og:image" content="https://engagic.org/icon-512.png" />
 	<meta property="og:site_name" content="engagic" />
 
 	<!-- Twitter -->
-	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="{ogTitle}" />
 	<meta name="twitter:description" content="{ogDescription}" />
-	<meta name="twitter:image" content="{ogImage}" />
+	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
 
 	<!-- JSON-LD Structured Data -->
 	{#if jsonLd}

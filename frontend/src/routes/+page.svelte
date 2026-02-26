@@ -226,16 +226,14 @@
 	<meta property="og:description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://engagic.org" />
-	<meta property="og:image" content="https://engagic.org/og?type=home" />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
+	<meta property="og:image" content="https://engagic.org/icon-512.png" />
 	<meta property="og:site_name" content="engagic" />
 
 	<!-- Twitter -->
-	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="engagic - Help shape your city" />
 	<meta name="twitter:description" content="Stay informed. Make your voice heard. AI summaries of local government meetings and civic participation information." />
-	<meta name="twitter:image" content="https://engagic.org/og?type=home" />
+	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
 </svelte:head>
 
 <div class="container">
