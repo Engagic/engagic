@@ -419,8 +419,12 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                         WHERE summary IS NOT NULL AND summary != ''
                         GROUP BY banana
                     ),
-                    active_bananas AS (
-                        SELECT DISTINCT banana FROM meetings
+                    synced_counts AS (
+                        SELECT banana, COUNT(*) AS cnt
+                        FROM meetings
+                        WHERE title IS NOT NULL AND title != ''
+                          AND date IS NOT NULL
+                        GROUP BY banana
                     )
                 SELECT
                     c.name,
@@ -430,20 +434,21 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                         WHEN COALESCE(mc.cnt, 0) > 0 THEN 'matter'
                         WHEN COALESCE(ic.cnt, 0) > 0 THEN 'item'
                         WHEN COALESCE(mtg.cnt, 0) > 0 THEN 'monolithic'
+                        WHEN COALESCE(sc.cnt, 0) > 0 THEN 'synced'
                         ELSE 'pending'
                     END AS coverage_type,
                     CASE
                         WHEN COALESCE(mc.cnt, 0) > 0 THEN mc.cnt
                         WHEN COALESCE(ic.cnt, 0) > 0 THEN ic.cnt
                         WHEN COALESCE(mtg.cnt, 0) > 0 THEN mtg.cnt
+                        WHEN COALESCE(sc.cnt, 0) > 0 THEN sc.cnt
                         ELSE 0
                     END AS summary_count
                 FROM cities c
-                JOIN active_bananas ab ON c.banana = ab.banana
+                JOIN synced_counts sc ON c.banana = sc.banana
                 LEFT JOIN matter_counts mc ON c.banana = mc.banana
                 LEFT JOIN item_counts ic ON c.banana = ic.banana
                 LEFT JOIN meeting_counts mtg ON c.banana = mtg.banana
-                WHERE COALESCE(mc.cnt, 0) > 0 OR COALESCE(ic.cnt, 0) > 0 OR COALESCE(mtg.cnt, 0) > 0
                 ORDER BY c.population DESC NULLS LAST
             """)
 
@@ -463,6 +468,7 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                 "matter": sum(1 for c in cities if c["coverage_type"] == "matter"),
                 "item": sum(1 for c in cities if c["coverage_type"] == "item"),
                 "monolithic": sum(1 for c in cities if c["coverage_type"] == "monolithic"),
+                "synced": sum(1 for c in cities if c["coverage_type"] == "synced"),
                 "total": len(cities),
             }
 
