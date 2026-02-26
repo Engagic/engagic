@@ -1,0 +1,216 @@
+# Synced but Unprocessed Cities - Have meeting data, no item summaries
+# 143 cities
+# Generated: 2026-02-26
+
+# ALABAMA
+daphneAL
+dothanAL
+
+# ARIZONA
+prescottvalleyAZ
+yumaAZ
+
+# ARKANSAS
+jacksonvilleAR
+russellvilleAR
+
+# CALIFORNIA
+beaumontCA
+burlingameCA
+camarilloCA
+cathedralcityCA
+chinoCA
+costamesaCA
+fontanaCA
+fullertonCA
+gilroyCA
+glendaleCA
+goletaCA
+hemetCA
+lahabraCA
+lakeelsinoreCA
+lakeforestCA
+longbeachCA
+mantecaCA
+newportbeachCA
+oceansideCA
+orangeCA
+paramountCA
+pomonaCA
+ranchocucamongaCA
+ranchopalosverdesCA
+redlandsCA
+redondobeachCA
+riversideCA
+sacramentoCA
+salinasCA
+sanbernardinoCA
+sanbrunoCA
+sanmarcosCA
+santaanaCA
+santamariaCA
+santamonicaCA
+temeculaCA
+torranceCA
+visaliaCA
+
+# COLORADO
+longmontCO
+
+# CONNECTICUT
+newhavenCT
+norwichCT
+
+# DELAWARE
+wilmingtonDE
+
+# FLORIDA
+altamontespringsFL
+deltonaFL
+fortwaltonbeachFL
+hallandaleFL
+miamibeachFL
+ocalaFL
+oviedoFL
+pompanobeachFL
+rockledgeFL
+veniceFL
+wellingtonFL
+
+# GEORGIA
+cantonGA
+columbusGA
+fayettevilleGA
+hamptonGA
+jonesboroGA
+lilburnGA
+powderspringsGA
+sandyspringsGA
+
+# IDAHO
+nampaID
+
+# ILLINOIS
+kankakeeIL
+napervilleIL
+orlandparkIL
+romeovilleIL
+
+# KANSAS
+olatheKS
+topekaKS
+
+# KENTUCKY
+louisvilleKY
+
+# LOUISIANA
+covingtonLA
+lakecharlesLA
+shreveportLA
+
+# MARYLAND
+hagerstownMD
+westminsterMD
+
+# MASSACHUSETTS
+lawrenceMA
+maldenMA
+marlboroughMA
+
+# MICHIGAN
+cantonMI
+detroitMI
+
+# MISSISSIPPI
+columbusMS
+laurelMS
+
+# MISSOURI
+columbiaMO
+
+# MONTANA
+helenaMT
+
+# NEW JERSEY
+cherryhillNJ
+millvilleNJ
+morristownNJ
+newarkNJ
+passaicNJ
+
+# NEW MEXICO
+alamogordoNM
+
+# NEW YORK
+buffaloNY
+freeportNY
+ithacaNY
+mountvernonNY
+patchogueNY
+yonkersNY
+
+# NORTH CAROLINA
+claytonNC
+lexingtonNC
+mountairyNC
+
+# OHIO
+daytonOH
+grovecityOH
+limaOH
+miamisburgOH
+
+# PENNSYLVANIA
+hanoverPA
+lansdalePA
+westchesterPA
+
+# RHODE ISLAND
+providenceRI
+
+# TENNESSEE
+crossvilleTN
+knoxvilleTN
+
+# TEXAS
+bedfordTX
+boerneTX
+cedarparkTX
+dentonTX
+desotoTX
+galvestonTX
+georgetownTX
+mesquiteTX
+planoTX
+rosenbergTX
+sanbenitoTX
+templeTX
+
+# UTAH
+clearfieldUT
+ogdenUT
+provoUT
+saltlakecityUT
+westjordanUT
+
+# VIRGINIA
+alexandriaVA
+fredericksburgVA
+salemVA
+
+# WASHINGTON
+moseslakeWA
+mountvernonWA
+oakharborWA
+portangelesWA
+
+# WEST VIRGINIA
+fairmontWV
+
+# WISCONSIN
+appletonWI
+sunprairieWI
+westbendWI
+
+# WYOMING
+laramieWY

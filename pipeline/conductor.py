@@ -724,7 +724,7 @@ def main():
                 signal.signal(signal.SIGINT, signal_handler)
 
                 logger.info("starting fetcher service (sync only, no processing)")
-                logger.info("sync interval: 72 hours")
+                logger.info("sync interval: 24 hours")
 
                 conductor.is_running = True
                 conductor.fetcher.is_running = True
@@ -738,8 +738,8 @@ def main():
                         failed = len([r for r in results if r.status == SyncStatus.FAILED])
                         logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
 
-                        logger.info("sleeping for 72 hours until next sync")
-                        for _ in range(72 * 60 * 60):
+                        logger.info("sleeping for 24 hours until next sync")
+                        for _ in range(24 * 60 * 60):
                             if not conductor.is_running:
                                 break
                             await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)
@@ -822,7 +822,7 @@ def main():
                 signal.signal(signal.SIGINT, signal_handler)
 
                 logger.info("starting combined daemon (sync + processing)")
-                logger.info("sync interval: 72 hours")
+                logger.info("sync interval: 24 hours")
 
                 conductor.is_running = True
                 conductor.fetcher.is_running = True
@@ -830,7 +830,7 @@ def main():
 
                 # Define sync loop as async task
                 async def sync_task():
-                    """Sync loop - runs every 72 hours"""
+                    """Sync loop - runs every 24 hours"""
                     while conductor.is_running:
                         try:
                             logger.info("starting city sync cycle")
@@ -840,8 +840,8 @@ def main():
                             failed = len([r for r in results if r.status == SyncStatus.FAILED])
                             logger.info("sync cycle complete", succeeded=succeeded, failed=failed)
 
-                            logger.info("sleeping for 72 hours until next sync")
-                            for _ in range(72 * 60 * 60):
+                            logger.info("sleeping for 24 hours until next sync")
+                            for _ in range(24 * 60 * 60):
                                 if not conductor.is_running:
                                     break
                                 await asyncio.sleep(SHUTDOWN_POLL_INTERVAL)

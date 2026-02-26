@@ -14,7 +14,7 @@ from database.db_postgres import Database
 from database.models import City
 from exceptions import VendorError
 from vendors.adapters.base_adapter_async import FetchResult
-from vendors.factory import get_async_adapter
+from vendors.factory import get_async_adapter, VENDOR_ADAPTERS
 from vendors.rate_limiter_async import AsyncRateLimiter
 from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
@@ -84,21 +84,20 @@ class Fetcher:
         cities = await self.db.cities.get_all_cities(status="active")
         logger.info("syncing cities with rate limiting", city_count=len(cities))
 
-        # Disabled vendors: granicus (timeouts), civicclerk (rate limiting), civicplus (HTML changes), escribe (few cities)
-        supported_vendors = {"primegov", "legistar", "novusagenda", "iqm2"}
-
         by_vendor = {}
         skipped_count = 0
 
         for city in cities:
-            if city.vendor in supported_vendors:
+            if city.vendor in VENDOR_ADAPTERS:
                 by_vendor.setdefault(city.vendor, []).append(city)
             else:
                 skipped_count += 1
-                logger.debug("skipping city with unsupported vendor", city_name=city.name, vendor=city.vendor)
+                logger.debug("skipping city with no adapter", city_name=city.name, vendor=city.vendor)
 
         total_supported = sum(len(v) for v in by_vendor.values())
-        logger.info("processing cities with supported adapters", supported_count=total_supported, skipped_count=skipped_count)
+        if skipped_count:
+            logger.info("cities skipped due to missing adapter", skipped_count=skipped_count)
+        logger.info("processing cities", vendor_count=len(by_vendor), city_count=total_supported)
 
         results = []
 
