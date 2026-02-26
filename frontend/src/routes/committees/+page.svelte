@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -26,25 +27,11 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Committees by City - Engagic</title>
-	<meta name="description" content="View committee coverage across cities tracked by Engagic" />
-	<link rel="canonical" href="https://engagic.org/committees" />
-
-	<!-- Open Graph -->
-	<meta property="og:title" content="Committees by City - engagic" />
-	<meta property="og:description" content="View committee coverage across cities tracked by Engagic" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/committees" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-
-	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="Committees by City - engagic" />
-	<meta name="twitter:description" content="View committee coverage across cities tracked by Engagic" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="Committees by City - engagic"
+	description="View committee coverage across cities tracked by Engagic"
+	url="https://engagic.org/committees"
+/>
 
 <article class="page-container">
 	<header class="page-header">
