@@ -45,16 +45,14 @@
 	<meta property="og:description" content="Track legislative matters and civic activity across {stateName}" />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://engagic.org/state/{data.stateCode}" />
-	<meta property="og:image" content="https://engagic.org/og?type=state&title={encodeURIComponent(stateName)}&subtitle={encodeURIComponent('Legislative Intelligence')}" />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
+	<meta property="og:image" content="https://engagic.org/icon-512.png" />
 	<meta property="og:site_name" content="engagic" />
 
 	<!-- Twitter -->
-	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="{stateName} Legislative Intelligence - engagic" />
 	<meta name="twitter:description" content="Track legislative matters and civic activity across {stateName}" />
-	<meta name="twitter:image" content="https://engagic.org/og?type=state&title={encodeURIComponent(stateName)}&subtitle={encodeURIComponent('Legislative Intelligence')}" />
+	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
 </svelte:head>
 
 <div class="state-page">

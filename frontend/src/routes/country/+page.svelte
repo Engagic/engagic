@@ -13,16 +13,14 @@
 	<meta property="og:description" content="Explore engagic's coverage of local government meetings across the United States" />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://engagic.org/country" />
-	<meta property="og:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Coverage Map')}&subtitle={encodeURIComponent('Local government meetings across the US')}" />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
+	<meta property="og:image" content="https://engagic.org/icon-512.png" />
 	<meta property="og:site_name" content="engagic" />
 
 	<!-- Twitter -->
-	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="Coverage Map - engagic" />
 	<meta name="twitter:description" content="Explore engagic's coverage of local government meetings across the United States" />
-	<meta name="twitter:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Coverage Map')}&subtitle={encodeURIComponent('Local government meetings across the US')}" />
+	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
 </svelte:head>
 
 <div class="country-page">

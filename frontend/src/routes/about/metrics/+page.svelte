@@ -60,14 +60,12 @@
 	<meta property="og:description" content="Real-time metrics on Engagic's coverage, processing, and civic engagement impact" />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://engagic.org/about/metrics" />
-	<meta property="og:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Impact Metrics')}&subtitle={encodeURIComponent('Coverage & civic engagement data')}" />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
+	<meta property="og:image" content="https://engagic.org/icon-512.png" />
 	<meta property="og:site_name" content="engagic" />
-	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:card" content="summary" />
 	<meta name="twitter:title" content="Impact Metrics - engagic" />
 	<meta name="twitter:description" content="Real-time metrics on Engagic's coverage, processing, and civic engagement impact" />
-	<meta name="twitter:image" content="https://engagic.org/og?type=home&title={encodeURIComponent('Impact Metrics')}&subtitle={encodeURIComponent('Coverage & civic engagement data')}" />
+	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
 </svelte:head>
 
 <article class="metrics-container">
