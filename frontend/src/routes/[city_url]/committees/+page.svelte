@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { getCityCommittees, searchMeetings } from '$lib/api';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import type { Committee } from '$lib/api/types';
 	import { isSearchSuccess } from '$lib/api/types';
 	import Footer from '$lib/components/Footer.svelte';
@@ -43,18 +44,11 @@
 	});
 </script>
 
-<svelte:head>
-	<title>Committees - {cityName || city_banana} - engagic</title>
-	<meta name="description" content="Legislative committees for {cityName}" />
-	<link rel="canonical" href="https://engagic.org/{city_banana}/committees" />
-
-	<meta property="og:title" content="Committees - {cityName || city_banana} - engagic" />
-	<meta property="og:description" content="Legislative committees for {cityName}" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/{city_banana}/committees" />
-	<meta property="og:site_name" content="engagic" />
-	<meta name="twitter:card" content="summary" />
-</svelte:head>
+<SeoHead
+	title="Committees - {cityName || city_banana} - engagic"
+	description="Legislative committees for {cityName}"
+	url="https://engagic.org/{city_banana}/committees"
+/>
 
 <div class="container">
 	<div class="top-nav">

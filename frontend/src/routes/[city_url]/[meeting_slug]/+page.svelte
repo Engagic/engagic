@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { marked } from 'marked';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import type { SearchResult, Meeting, MeetingVotesResponse, MeetingVoteMatter } from '$lib/api/index';
 	import { isSearchSuccess, getMeetingVotes } from '$lib/api/index';
 	import { extractTime } from '$lib/utils/date-utils';
@@ -242,30 +243,18 @@
 	});
 </script>
 
-<svelte:head>
-	<title>{selectedMeeting?.title || 'Meeting'} - engagic</title>
-	<meta name="description" content="{ogDescription}" />
-	<link rel="canonical" href="{ogUrl}" />
-
-	<!-- Open Graph -->
-	<meta property="og:title" content="{ogTitle}" />
-	<meta property="og:description" content="{ogDescription}" />
-	<meta property="og:type" content="article" />
-	<meta property="og:url" content="{ogUrl}" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-
-	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="{ogTitle}" />
-	<meta name="twitter:description" content="{ogDescription}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-
-	<!-- JSON-LD Structured Data -->
-	{#if jsonLd}
-		{@html `<script type="application/ld+json">${jsonLd}</script>`}
-	{/if}
-</svelte:head>
+<SeoHead
+	title="{ogTitle}"
+	description="{ogDescription}"
+	url="{ogUrl}"
+	type="article"
+>
+	{#snippet extra()}
+		{#if jsonLd}
+			{@html `<script type="application/ld+json">${jsonLd}</script>`}
+		{/if}
+	{/snippet}
+</SeoHead>
 
 <div class="container">
 	<div class="main-content">

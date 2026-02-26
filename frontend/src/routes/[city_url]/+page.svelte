@@ -16,6 +16,7 @@
 	import HappeningSection from '$lib/components/HappeningSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import WatchCityModal from '$lib/components/WatchCityModal.svelte';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import { logger } from '$lib/services/logger';
 	import { authState } from '$lib/stores/auth.svelte';
 	import type { PageData } from './$types';
@@ -231,25 +232,11 @@
 
 </script>
 
-<svelte:head>
-	<title>{cityDisplayName} - engagic</title>
-	<meta name="description" content="{cityDesc}" />
-	<link rel="canonical" href="https://engagic.org/{city_banana}" />
-
-	<!-- Open Graph -->
-	<meta property="og:title" content="{cityDisplayName} - engagic" />
-	<meta property="og:description" content="{cityDesc}" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/{city_banana}" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-
-	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="{cityDisplayName} - engagic" />
-	<meta name="twitter:description" content="{cityDesc}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="{cityDisplayName} - engagic"
+	description="{cityDesc}"
+	url="https://engagic.org/{city_banana}"
+/>
 
 <div class="container">
 	<div class="main-content">

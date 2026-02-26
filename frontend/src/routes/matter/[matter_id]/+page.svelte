@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
 	import { cleanSummary } from '$lib/utils/markdown-utils';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import { truncateForMeta } from '$lib/utils/utils';
 	import { getMatterSponsors, getCityCouncilMembers } from '$lib/api';
 	import type { CouncilMember, MatterVotesResponse } from '$lib/api/types';
@@ -133,28 +134,16 @@
 	};
 </script>
 
-<svelte:head>
-	<title>{matter.matter_file ? `${matter.matter_file} - ` : ''}{matter.title} - engagic</title>
-	<meta name="description" content="{ogDescription}" />
-	<link rel="canonical" href="https://engagic.org/matter/{data.matterId}" />
-
-	<!-- Open Graph -->
-	<meta property="og:title" content="{ogTitle}" />
-	<meta property="og:description" content="{ogDescription}" />
-	<meta property="og:type" content="article" />
-	<meta property="og:url" content="https://engagic.org/matter/{data.matterId}" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-
-	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="{ogTitle}" />
-	<meta name="twitter:description" content="{ogDescription}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-
-	<!-- JSON-LD Structured Data -->
-	{@html `<script type="application/ld+json">${jsonLd}</script>`}
-</svelte:head>
+<SeoHead
+	title="{ogTitle}"
+	description="{ogDescription}"
+	url="https://engagic.org/matter/{data.matterId}"
+	type="article"
+>
+	{#snippet extra()}
+		{@html `<script type="application/ld+json">${jsonLd}</script>`}
+	{/snippet}
+</SeoHead>
 
 <div class="matter-page">
 	<div class="matter-container">

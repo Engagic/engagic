@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Footer from '$lib/components/Footer.svelte';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 
 	// Smooth scroll to section
 	function scrollToSection(id: string) {
@@ -22,17 +23,11 @@
 	};
 </script>
 
-<svelte:head>
-	<title>Terms of Service - Engagic</title>
-	<meta name="description" content="Engagic API Terms of Service - Usage tiers, attribution requirements, and acceptable use policy" />
-	<link rel="canonical" href="https://engagic.org/about/terms" />
-
-	<meta property="og:title" content="Terms of Service - engagic" />
-	<meta property="og:description" content="Engagic API Terms of Service - Usage tiers, attribution requirements, and acceptable use policy" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/about/terms" />
-	<meta property="og:site_name" content="engagic" />
-</svelte:head>
+<SeoHead
+	title="Terms of Service - engagic"
+	description="Engagic API Terms of Service - Usage tiers, attribution requirements, and acceptable use policy"
+	url="https://engagic.org/about/terms"
+/>
 
 <article class="terms-content">
 

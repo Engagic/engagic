@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import StateMetrics from '$lib/components/StateMetrics.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import SeoHead from '$lib/components/SeoHead.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -35,25 +36,11 @@
 	};
 </script>
 
-<svelte:head>
-	<title>{stateName} Legislative Intelligence - engagic</title>
-	<meta name="description" content="Track legislative matters and civic activity across {stateName}" />
-	<link rel="canonical" href="https://engagic.org/state/{data.stateCode}" />
-
-	<!-- Open Graph -->
-	<meta property="og:title" content="{stateName} Legislative Intelligence - engagic" />
-	<meta property="og:description" content="Track legislative matters and civic activity across {stateName}" />
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content="https://engagic.org/state/{data.stateCode}" />
-	<meta property="og:image" content="https://engagic.org/icon-512.png" />
-	<meta property="og:site_name" content="engagic" />
-
-	<!-- Twitter -->
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="{stateName} Legislative Intelligence - engagic" />
-	<meta name="twitter:description" content="Track legislative matters and civic activity across {stateName}" />
-	<meta name="twitter:image" content="https://engagic.org/icon-512.png" />
-</svelte:head>
+<SeoHead
+	title="{stateName} Legislative Intelligence - engagic"
+	description="Track legislative matters and civic activity across {stateName}"
+	url="https://engagic.org/state/{data.stateCode}"
+/>
 
 <div class="state-page">
 	<div class="state-container">
