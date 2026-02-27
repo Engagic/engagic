@@ -434,6 +434,7 @@ class AgendaItem:
     created_at: Optional[datetime] = None
     quality_score: Optional[float] = None  # Denormalized from ratings
     rating_count: int = 0  # Denormalized from ratings
+    filter_reason: Optional[str] = None  # procedural, ceremonial, administrative, or None
 
     def __post_init__(self):
         """Validate agenda item data after initialization"""

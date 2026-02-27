@@ -39,7 +39,6 @@ import aiohttp
 from parsing.chicago_pdf import parse_chicago_agenda_pdf
 from parsing.pdf import PdfExtractor
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 
 
@@ -403,7 +402,6 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
     async def _extract_agenda_items(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract agenda items; fetches matter data concurrently for items with matterId."""
         items = []
-        items_filtered = 0
         item_counter = 0
 
         # Get meeting ID for vote fetching
@@ -453,12 +451,6 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 item_id = matter_id or comment_id
                 if not item_id:
                     logger.debug("item missing id skipping", vendor="chicago", slug=self.slug, title_prefix=title[:60])
-                    continue
-
-                # Skip procedural items (adapter-level filtering)
-                if should_skip_item(title, matter_type or ""):
-                    items_filtered += 1
-                    logger.debug("skipping procedural item", vendor="chicago", slug=self.slug, title_prefix=title[:60])
                     continue
 
                 # Increment counter for non-filtered items
@@ -549,10 +541,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
 
             items.append(item_data)
 
-        if items_filtered > 0:
-            logger.info("filtered procedural items", vendor="chicago", slug=self.slug, filtered_count=items_filtered)
-
-        logger.debug("extracted substantive items", vendor="chicago", slug=self.slug, item_count=len(items))
+        logger.debug("extracted items", vendor="chicago", slug=self.slug, item_count=len(items))
         return items
 
     async def _extract_items_from_pdf(self, meeting_detail: Dict[str, Any]) -> List[Dict[str, Any]]:

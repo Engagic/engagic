@@ -12,7 +12,6 @@ from urllib.parse import urljoin
 import aiohttp
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 from bs4 import BeautifulSoup
 
@@ -190,21 +189,6 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
 
         # Extract items from MeetingDetail table
         items = await self._parse_agenda_items(soup, meeting_id, detail_url)
-
-        # Filter procedural items (roll call, approval of minutes, etc.)
-        items_before = len(items)
-        items = [
-            item for item in items
-            if not should_skip_item(item.get('title', ''))
-        ]
-        items_filtered = items_before - len(items)
-        if items_filtered > 0:
-            logger.info(
-                "filtered procedural items",
-                vendor="iqm2",
-                slug=self.slug,
-                filtered_count=items_filtered
-            )
 
         # Extract packet URL if available
         packet_url = None

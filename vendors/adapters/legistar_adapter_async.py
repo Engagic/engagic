@@ -14,7 +14,7 @@ import asyncio
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.legistar_parser import parse_html_agenda, parse_legislation_attachments
-from pipeline.filters import should_skip_item, should_skip_meeting
+from pipeline.filters import should_skip_meeting, should_skip_processing
 from pipeline.utils import combine_date_time
 from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError, VendorParsingError
@@ -278,12 +278,12 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
 
             processed_items = await asyncio.gather(*item_tasks, return_exceptions=True)
 
-            # Filter out errors and procedural items
+            # Filter out errors
             items = []
             for idx, item in enumerate(processed_items):
                 if isinstance(item, Exception):
                     logger.warning("item processing failed", event_id=event_id, item_index=idx, error=str(item))
-                elif isinstance(item, dict) and not should_skip_item(item.get("title", "")):
+                elif isinstance(item, dict):
                     items.append(item)
 
             return items
@@ -904,25 +904,21 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             # Parse agenda items from detail page using dedicated parser
             items = await asyncio.to_thread(self._parse_html_agenda_items, soup, meeting_id, base_url)
 
-            # Filter and fetch attachments (only for non-procedural items)
-            items_filtered = 0
+            # Map item_type to matter_type and identify substantive items for attachment fetching
             substantive_items = []
 
             for item in items:
                 item_title = item.get('title', '')
                 item_type = item.get('item_type', '')
 
-                # Skip procedural items
-                if should_skip_item(item_title, item_type):
-                    items_filtered += 1
-                    continue
-
                 # Map item_type to matter_type for HTML-parsed items
                 # (API path handles this separately via _fetch_matter_metadata_async)
                 if item_type and 'matter_type' not in item:
                     item['matter_type'] = item_type
 
-                substantive_items.append(item)
+                # Only fetch attachments for non-procedural items (network optimization)
+                if not should_skip_processing(item_title, item_type):
+                    substantive_items.append(item)
 
             # Fetch attachments for substantive items concurrently
             if substantive_items:
@@ -935,8 +931,6 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 for item, attachments in zip(substantive_items, attachment_results):
                     if isinstance(attachments, list) and attachments:
                         item['attachments'] = attachments
-
-            items = substantive_items
 
             # Look for agenda PDF link if not provided from calendar
             if not packet_url:

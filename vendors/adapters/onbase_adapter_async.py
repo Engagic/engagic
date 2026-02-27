@@ -23,7 +23,6 @@ from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.granicus_parser import parse_agendaonline_html
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 
 
@@ -323,10 +322,7 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
             # Use already-parsed items
             parsed = {"items": best_items}
 
-            items = [
-                item for item in parsed.get("items", [])
-                if not should_skip_item(item.get("title", ""))
-            ]
+            items = parsed.get("items", [])
 
             # Fetch attachments for items
             if items:

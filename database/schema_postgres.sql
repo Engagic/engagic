@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS items (
     topics JSONB,          -- Will normalize to item_topics table
     quality_score REAL,    -- Denormalized from ratings for efficient queries
     rating_count INTEGER DEFAULT 0,
+    filter_reason TEXT,    -- Why item was skipped: 'procedural', 'ceremonial', 'administrative', or NULL
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
     FOREIGN KEY (matter_id) REFERENCES city_matters(id) ON DELETE SET NULL
@@ -490,6 +491,7 @@ CREATE INDEX IF NOT EXISTS idx_items_matter_id ON items(matter_id) WHERE matter_
 CREATE INDEX IF NOT EXISTS idx_items_meeting_id ON items(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_items_matter_meeting ON items(matter_id, meeting_id) WHERE matter_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_items_meeting_summarized ON items(meeting_id) WHERE summary IS NOT NULL;  -- For stats query: meetings with summarized items
+CREATE INDEX IF NOT EXISTS idx_items_filter_reason ON items(filter_reason) WHERE filter_reason IS NOT NULL;
 
 -- Item topics (new normalized table)
 CREATE INDEX IF NOT EXISTS idx_item_topics_topic ON item_topics(topic);

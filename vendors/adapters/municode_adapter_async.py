@@ -27,7 +27,6 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from config import get_logger
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter
 from vendors.adapters.parsers.municode_parser import parse_html_agenda
@@ -453,19 +452,6 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
             # Fallback: discover city code from attachment URLs
             if not self._discovered_city_code:
                 self._try_discover_city_code_from_items(parsed.get("items", []))
-
-            # Filter procedural items
-            items_before = len(parsed.get("items", []))
-            parsed["items"] = [
-                item for item in parsed.get("items", [])
-                if not should_skip_item(
-                    item.get("title", ""),
-                    item.get("item_type", "")
-                )
-            ]
-            items_filtered = items_before - len(parsed["items"])
-            if items_filtered > 0:
-                logger.debug("filtered procedural items", vendor="municode", slug=self.slug, count=items_filtered)
 
             # Count attachments for logging
             total_attachments = sum(
