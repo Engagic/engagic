@@ -1,118 +1,82 @@
 # Synced but Unprocessed Cities - Have meeting data, no summaries
-# 240 cities
-# Generated: 2026-02-26
+# 214 cities
+# Generated: 2026-02-27
+# Definition: matches dashboard /about/metrics "Synced" count
+#   = has meetings with title+date, but zero matter/item/monolithic summaries
 
 # ALABAMA
 daphneAL
 dothanAL
 florenceAL
 
+# ARKANSAS
+fortsmithAR
+jacksonvilleAR
+jonesboroAR
+
 # ARIZONA
 buckeyeAZ
-yumaAZ
-
-# ARKANSAS
-jacksonvilleAR
-russellvilleAR
+lakehavasucityAZ
 
 # CALIFORNIA
 alisoviejoCA
+azusaCA
 bakersfieldCA
 beaumontCA
 burbankCA
-camarilloCA
-chinoCA
 chulavistaCA
-citrusheightsCA
 claremontCA
 clovisCA
-coltonCA
 coronaCA
-costamesaCA
-dalycityCA
 dublinCA
 encinitasCA
 eurekaCA
-fullertonCA
 gilroyCA
-glendaleCA
 hemetCA
 lagunaniguelCA
-lahabraCA
 lakeelsinoreCA
+lincolnCA
 livermoreCA
-longbeachCA
 manhattanbeachCA
-mantecaCA
 mercedCA
-milpitasCA
 murrietaCA
-newportbeachCA
-oakleyCA
-oceansideCA
-orangeCA
-paramountCA
-pomonaCA
-ranchocordovaCA
+placentiaCA
 ranchocucamongaCA
 ranchopalosverdesCA
 redlandsCA
-redondobeachCA
-riversideCA
-rosemeadCA
-sacramentoCA
 sanbernardinoCA
 sanbrunoCA
-sanmarcosCA
+sanleandroCA
 sanmateoCA
-santaanaCA
-santamariaCA
-santamonicaCA
-temeculaCA
 torranceCA
-visaliaCA
+tustinCA
 vistaCA
 westminsterCA
 
 # COLORADO
+castlerockCO
 commercecityCO
-goldenCO
-grandjunctionCO
 littletonCO
-longmontCO
-puebloCO
-
-# CONNECTICUT
-bristolCT
-enfieldCT
-newhavenCT
-norwichCT
-
-# DELAWARE
-wilmingtonDE
 
 # FLORIDA
 altamontespringsFL
-bradentonFL
 coralspringsFL
-deltonaFL
 dunedinFL
-dunnellonFL
-fortwaltonbeachFL
-hallandaleFL
 hollywoodFL
+hudsonFL
 lakecityFL
 miamibeachFL
 naplesFL
 newportricheyFL
-ocalaFL
 oviedoFL
 palmettoFL
+pinellasparkFL
 pompanobeachFL
 puntagordaFL
 rockledgeFL
 veniceFL
 wellingtonFL
+winterspringsFL
 
 # GEORGIA
 acworthGA
@@ -130,6 +94,7 @@ nampaID
 dekalbIL
 kankakeeIL
 orlandparkIL
+oswegoIL
 parkridgeIL
 romeovilleIL
 
@@ -140,6 +105,7 @@ valparaisoIN
 westlafayetteIN
 
 # IOWA
+amesIA
 councilbluffsIA
 siouxcityIA
 urbandaleIA
@@ -148,6 +114,7 @@ urbandaleIA
 lenexaKS
 olatheKS
 topekaKS
+wichitaKS
 
 # KENTUCKY
 louisvilleKY
@@ -185,11 +152,19 @@ laurelMS
 starkvilleMS
 
 # MISSOURI
+capegirardeauMO
 columbiaMO
 
 # MONTANA
 helenaMT
 missoulaMT
+
+# NORTH CAROLINA
+claytonNC
+gastoniaNC
+lexingtonNC
+mooresvilleNC
+mountairyNC
 
 # NEVADA
 carsoncityNV
@@ -220,18 +195,12 @@ smithtownNY
 whiteplainsNY
 yonkersNY
 
-# NORTH CAROLINA
-claytonNC
-gastoniaNC
-lexingtonNC
-mooresvilleNC
-mountairyNC
-
 # OHIO
 daytonOH
 grovecityOH
 limaOH
 miamisburgOH
+powellOH
 toledoOH
 zanesvilleOH
 
@@ -244,12 +213,13 @@ bendOR
 # PENNSYLVANIA
 allentownPA
 altoonaPA
+eriePA
 hanoverPA
 lansdalePA
 morrisvillePA
 westchesterPA
 
-# RI
+# RHODE ISLAND
 providenceRI
 
 # SOUTH CAROLINA
@@ -301,12 +271,14 @@ salemVA
 viennaVA
 
 # WASHINGTON
+everettWA
 lynnwoodWA
 mountvernonWA
 oakharborWA
 portangelesWA
 portorchardWA
 spokaneWA
+yakimaWA
 
 # WEST VIRGINIA
 charlestonWV
@@ -325,4 +297,3 @@ westbendWI
 # WYOMING
 cheyenneWY
 laramieWY
-

@@ -134,7 +134,7 @@ class ItemRepository(BaseRepository):
                     sponsors = EXCLUDED.sponsors,
                     summary = COALESCE(EXCLUDED.summary, items.summary),
                     topics = COALESCE(EXCLUDED.topics, items.topics),
-                    filter_reason = EXCLUDED.filter_reason
+                    filter_reason = COALESCE(EXCLUDED.filter_reason, items.filter_reason)
                 """,
                 item_records,
             )

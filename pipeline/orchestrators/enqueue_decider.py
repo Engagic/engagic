@@ -23,10 +23,11 @@ class EnqueueDecider:
         Returns (should_enqueue, skip_reason) tuple.
         """
         # Check for item-level summaries (golden path)
+        # Items with filter_reason are intentionally skipped and will never get summaries
         if has_items and agenda_items:
-            items_with_summaries = [item for item in agenda_items if item.summary]
-            if items_with_summaries and len(items_with_summaries) == len(agenda_items):
-                return False, f"all {len(agenda_items)} items already have summaries"
+            items_done = [item for item in agenda_items if item.summary or item.filter_reason]
+            if items_done and len(items_done) == len(agenda_items):
+                return False, f"all {len(agenda_items)} items already processed"
 
         # Check for monolithic summary (fallback path)
         if meeting.summary:
