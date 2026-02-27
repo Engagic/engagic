@@ -294,6 +294,13 @@ class Processor:
                 self.metrics.record_error(component="processor", error=e)
                 logger.error("job processing failed", queue_id=queue_id, job_type=job_type, duration_seconds=round(time.time() - job_start_time, 1), error=str(e))
 
+            except Exception as e:
+                await self.db.queue.mark_processing_failed(queue_id, str(e))
+                failed_count += 1
+                self.metrics.queue_jobs_processed.labels(job_type=job_type, status="failed").inc()
+                self.metrics.record_error(component="processor", error=e)
+                logger.error("unexpected job failure", queue_id=queue_id, job_type=job_type, error=str(e), error_type=type(e).__name__, duration_seconds=round(time.time() - job_start_time, 1))
+
         logger.info("processing complete for city", city=city_banana, meetings_succeeded=processed_count, meetings_failed=failed_count, items_processed=total_items_processed, items_new=total_items_new, items_skipped=total_items_skipped, items_failed=total_items_failed)
 
         return {
