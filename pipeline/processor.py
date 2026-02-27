@@ -15,7 +15,7 @@ from analysis.topics.normalizer import get_normalizer
 from parsing.participation import parse_participation_info
 from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
-from pipeline.filters import should_skip_processing, is_public_comment_attachment
+from pipeline.filters import get_skip_reason, is_public_comment_attachment
 from vendors.session_manager_async import AsyncSessionManager
 
 logger = get_logger(__name__).bind(component="processor")
@@ -44,10 +44,6 @@ def filter_participation_for_city(
     if not city_has_participation:
         return parsed
     return {k: v for k, v in parsed.items() if k in MEETING_SPECIFIC_PARTICIPATION_KEYS}
-
-
-def is_procedural_item(title: str) -> bool:
-    return should_skip_processing(title)
 
 
 def is_likely_public_comment_compilation(
@@ -317,9 +313,11 @@ class Processor:
                 context={"component": "processor", "function": "_process_single_item"}
             )
 
-        # Skip procedural items
-        if is_procedural_item(item.title):
-            logger.debug("skipping procedural item", title=item.title[:50])
+        # Skip filtered items (procedural, ceremonial, administrative)
+        skip_reason = get_skip_reason(item.title)
+        if skip_reason:
+            logger.debug("skipping item", title=item.title[:50], reason=skip_reason)
+            await self.db.items.update_filter_reason(item.id, skip_reason)
             return None
 
         if not item.attachments and not item.body_text:
@@ -590,8 +588,10 @@ class Processor:
         need_processing = []
 
         for item in agenda_items:
-            if is_procedural_item(item.title):
-                logger.debug("skipping procedural item", title=item.title[:50])
+            skip_reason = get_skip_reason(item.title)
+            if skip_reason:
+                logger.debug("skipping item", title=item.title[:50], reason=skip_reason)
+                await self.db.items.update_filter_reason(item.id, skip_reason)
                 continue
 
             if not item.attachments and not item.body_text:

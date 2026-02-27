@@ -174,7 +174,8 @@ class Database:
                     (SELECT COUNT(DISTINCT SPLIT_PART(council_member_id, '_', 1)) FROM votes) as cities_with_votes,
                     -- Processing stats
                     (SELECT COUNT(*) FROM meetings WHERE summary IS NOT NULL) as summarized_meetings,
-                    (SELECT COUNT(*) FROM items WHERE summary IS NOT NULL) as summarized_items
+                    (SELECT COUNT(*) FROM items WHERE summary IS NOT NULL) as summarized_items,
+                    (SELECT COUNT(*) FROM items WHERE filter_reason IS NOT NULL) as filtered_items
             """)
 
             metrics = dict(result)

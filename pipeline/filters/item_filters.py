@@ -1,6 +1,7 @@
-"""Item filtering - two-tier: adapter level (skip entirely) vs processor level (skip LLM)"""
+"""Item filtering - store everything, filter at processing time"""
 
 import re
+from typing import Optional
 
 # Meeting level: test/demo meetings to skip entirely
 MEETING_SKIP_PATTERNS = [
@@ -11,15 +12,15 @@ MEETING_SKIP_PATTERNS = [
     r'\bpractice\b',  # "Practice Meeting"
 ]
 
-# Adapter level: items with zero metadata value (not saved)
-ADAPTER_SKIP_PATTERNS = [
-    # Core procedural items - no value even as metadata
+# --- Processing skip patterns (organized by category) ---
+
+# Procedural — zero substantive content (formerly ADAPTER_SKIP_PATTERNS)
+PROCEDURAL_PATTERNS = [
     r'roll call',
     r'invocation',
     r'pledge of allegiance',
-    r'approval of (minutes|agenda)',
-    r'approval of.*minutes',  # "Approval of Draft Raleigh Board of Adjustment Minutes"
-    r'approve the minutes',  # Austin variant ("approve the minutes of...")
+    r'approval of\b.*\b(minutes|agenda)',  # "Approval of Draft Raleigh Board of Adjustment Minutes"
+    r'approve\b.*\bminutes',  # "Approve the minutes of...", "Approve the Liquor Commission meeting minutes of..."
     r'adopt minutes',
     r'review of minutes',
     r'^minutes of',  # Standalone minutes items
@@ -32,10 +33,8 @@ ADAPTER_SKIP_PATTERNS = [
     r'meeting schedule for',  # Calendar scheduling items
 ]
 
-# Processor level: items worth saving but not LLM-processing
-# Note: Use \b word boundaries to avoid substring matches (e.g., "commendation" in "Recommendation")
-PROCESSOR_SKIP_PATTERNS = [
-    # Ceremonial items - who/what is searchable, but no need to summarize
+# Ceremonial — searchable names, no policy substance
+CEREMONIAL_PATTERNS = [
     r'\bproclamation\b',
     r'\bcommendation\b',
     r'\brecognition\b',
@@ -46,12 +45,12 @@ PROCESSOR_SKIP_PATTERNS = [
     r'(?i)retirement of',
     r'(?i)happy birthday',
     r'(?i)birthday (wishes|greetings|recognition|celebration)',
+]
 
-    # Appointments/confirmations - names matter, details don't need LLM
+# Administrative — save for record, no LLM value
+ADMINISTRATIVE_PATTERNS = [
     r'\bappointment\b',
     r'\bconfirmation\b',
-
-    # Low-value administrative - save for record, don't process
     r'(?i)liquor license',
     r'(?i)beer (and|&) wine license',
     r'(?i)alcoholic beverage license',
@@ -60,6 +59,9 @@ PROCESSOR_SKIP_PATTERNS = [
     r'fee waiver for',
     r'(various )?small claims?',
 ]
+
+# Combined for the single skip check
+PROCESSOR_SKIP_PATTERNS = PROCEDURAL_PATTERNS + CEREMONIAL_PATTERNS + ADMINISTRATIVE_PATTERNS
 
 # High token cost, low value (scanned form letters, bulk documents)
 PUBLIC_COMMENT_PATTERNS = [
@@ -164,16 +166,24 @@ def should_skip_meeting(title: str) -> bool:
     return any(re.search(p, title, re.IGNORECASE) for p in MEETING_SKIP_PATTERNS)
 
 
-def should_skip_item(title: str, item_type: str = "") -> bool:
-    """Adapter level: should item be skipped entirely (not saved)?"""
+def get_skip_reason(title: str, item_type: str = "") -> Optional[str]:
+    """Get the skip reason category for an item, or None if it should be processed.
+
+    Returns: "procedural", "ceremonial", "administrative", or None.
+    """
     combined = f"{title} {item_type}".lower()
-    return any(re.search(p, combined, re.IGNORECASE) for p in ADAPTER_SKIP_PATTERNS)
+    if any(re.search(p, combined, re.IGNORECASE) for p in PROCEDURAL_PATTERNS):
+        return "procedural"
+    if any(re.search(p, combined, re.IGNORECASE) for p in CEREMONIAL_PATTERNS):
+        return "ceremonial"
+    if any(re.search(p, combined, re.IGNORECASE) for p in ADMINISTRATIVE_PATTERNS):
+        return "administrative"
+    return None
 
 
 def should_skip_processing(title: str, item_type: str = "") -> bool:
     """Processor level: should item skip LLM processing (but still be saved)?"""
-    combined = f"{title} {item_type}".lower()
-    return any(re.search(p, combined, re.IGNORECASE) for p in PROCESSOR_SKIP_PATTERNS)
+    return get_skip_reason(title, item_type) is not None
 
 
 def should_skip_matter(matter_type: str) -> bool:

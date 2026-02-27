@@ -108,6 +108,7 @@ class ItemRepository(BaseRepository):
                     item.sponsors,
                     item.summary,
                     item.topics,
+                    item.filter_reason,
                 )
                 for item in items
             ]
@@ -117,9 +118,9 @@ class ItemRepository(BaseRepository):
                 INSERT INTO items (
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, body_text, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics
+                    agenda_number, sponsors, summary, topics, filter_reason
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT (id) DO UPDATE SET
                     title = EXCLUDED.title,
                     sequence = EXCLUDED.sequence,
@@ -132,7 +133,8 @@ class ItemRepository(BaseRepository):
                     agenda_number = EXCLUDED.agenda_number,
                     sponsors = EXCLUDED.sponsors,
                     summary = COALESCE(EXCLUDED.summary, items.summary),
-                    topics = COALESCE(EXCLUDED.topics, items.topics)
+                    topics = COALESCE(EXCLUDED.topics, items.topics),
+                    filter_reason = EXCLUDED.filter_reason
                 """,
                 item_records,
             )
@@ -161,7 +163,8 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, body_text, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics, quality_score, rating_count
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count,
+                    filter_reason
                 FROM items
                 WHERE meeting_id = $1
                 ORDER BY sequence
@@ -196,7 +199,8 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, body_text, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics, quality_score, rating_count
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count,
+                    filter_reason
                 FROM items
                 WHERE meeting_id = ANY($1::text[])
                 ORDER BY meeting_id, sequence
@@ -253,7 +257,8 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, body_text, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics, quality_score, rating_count
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count,
+                    filter_reason
                 FROM items
                 WHERE id = $1
                 """,
@@ -318,6 +323,15 @@ class ItemRepository(BaseRepository):
 
         logger.debug("updated agenda item", item_id=item_id, fields=list(kwargs.keys()))
 
+    async def update_filter_reason(self, item_id: str, reason: str) -> None:
+        """Update the filter_reason for an item."""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE items SET filter_reason = $1 WHERE id = $2",
+                reason,
+                item_id,
+            )
+
     async def get_all_items_for_matter(self, matter_id: str) -> List[AgendaItem]:
         """Get all agenda items across all meetings for a given matter."""
         if not matter_id:
@@ -329,7 +343,8 @@ class ItemRepository(BaseRepository):
                 SELECT
                     id, meeting_id, title, sequence, attachments,
                     attachment_hash, body_text, matter_id, matter_file, matter_type,
-                    agenda_number, sponsors, summary, topics, quality_score, rating_count
+                    agenda_number, sponsors, summary, topics, quality_score, rating_count,
+                    filter_reason
                 FROM items
                 WHERE matter_id = $1
                 ORDER BY meeting_id, sequence

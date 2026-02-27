@@ -314,22 +314,13 @@ batch_request = {
 MEETING_SKIP_PATTERNS = ["mock", "test", "demo", "training", "practice"]
 ```
 
-**Adapter level - discard item entirely (zero metadata value):**
+**Processor level - save all items, skip LLM for low-value ones (with filter_reason):**
 
 ```python
-ADAPTER_SKIP_PATTERNS = [
-    "roll call", "invocation", "pledge of allegiance",
-    "approval of minutes", "adjourn", "public comment", ...
-]
-```
-
-**Processor level - save but skip LLM (searchable metadata):**
-
-```python
-PROCESSOR_SKIP_PATTERNS = [
-    "proclamation", "commendation", "appointment",
-    "liquor license", "signboard permit", ...
-]
+# Three categories, merged into PROCESSOR_SKIP_PATTERNS:
+PROCEDURAL_PATTERNS = ["roll call", "invocation", "pledge of allegiance", ...]
+CEREMONIAL_PATTERNS = ["proclamation", "commendation", "recognition", ...]
+ADMINISTRATIVE_PATTERNS = ["appointment", "liquor license", "signboard permit", ...]
 ```
 
 **Attachment level - skip low-value documents:**

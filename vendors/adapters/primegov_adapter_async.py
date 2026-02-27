@@ -11,7 +11,6 @@ import asyncio
 import aiohttp
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.primegov_parser import parse_html_agenda
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 
 
@@ -260,21 +259,6 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         html = await response.text()
         parsed = await asyncio.to_thread(parse_html_agenda, html)
 
-        items_before = len(parsed['items'])
-        parsed['items'] = [
-            item for item in parsed['items']
-            if not should_skip_item(
-                item.get('title', ''),
-                item.get('item_type', '')
-            )
-        ]
-        items_filtered = items_before - len(parsed['items'])
-        if items_filtered > 0:
-            logger.info(
-                "filtered procedural items",
-                slug=self.slug,
-                count=items_filtered
-            )
 
         total_attachments = 0
         for item in parsed['items']:

@@ -21,7 +21,6 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 
 
@@ -220,8 +219,6 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         soup = BeautifulSoup(html, 'html.parser')
 
         items = await self._parse_agenda_items(soup, meeting_uuid, merged_url)
-
-        items = [item for item in items if not should_skip_item(item.get('title', ''))]
 
         meeting_data = {
             "vendor_id": basic_meeting["vendor_id"],

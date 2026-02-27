@@ -11,7 +11,6 @@ from typing import Dict, Any, List, Optional
 import aiohttp
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.novusagenda_parser import parse_html_agenda
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 from bs4 import BeautifulSoup
 
@@ -133,19 +132,6 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                     agenda_html = await response.text()
                     parsed = parse_html_agenda(agenda_html)
                     items = parsed.get('items', [])
-                    items_before = len(items)
-                    items = [
-                        item for item in items
-                        if not should_skip_item(item.get('title', ''))
-                    ]
-                    items_filtered = items_before - len(items)
-                    if items_filtered > 0:
-                        logger.info(
-                            "filtered procedural items",
-                            vendor="novusagenda",
-                            slug=self.slug,
-                            filtered_count=items_filtered
-                        )
 
                     # Fetch attachments from CoverSheet detail pages
                     if items:

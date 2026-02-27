@@ -28,7 +28,6 @@ from vendors.adapters.parsers.granicus_parser import (
     parse_agendaonline_html,
     parse_agendaviewer_html,
 )
-from pipeline.filters import should_skip_item
 from pipeline.protocols import MetricsCollector
 
 
@@ -212,10 +211,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             else:
                 parsed = await asyncio.to_thread(parse_agendaviewer_html, html)
 
-            items = [
-                item for item in parsed.get("items", [])
-                if not should_skip_item(item.get("title", ""))
-            ]
+            items = parsed.get("items", [])
 
             # Fetch attachments for AgendaOnline items
             if items and "AgendaOnline" in final_url:

@@ -139,6 +139,7 @@ def build_agenda_item(row: Any, topics: Optional[List[str]] = None) -> AgendaIte
         topics=topics or [],
         quality_score=row.get("quality_score"),
         rating_count=row.get("rating_count", 0),
+        filter_reason=row.get("filter_reason"),
     )
 
 
