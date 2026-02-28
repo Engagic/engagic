@@ -251,23 +251,33 @@ async def generate_city_headlines(
         for kw in match.get("matched_keywords", []):
             groups.setdefault((mid, kw), []).append(match)
 
-    cache: Dict[tuple, str] = {}
+    # Build tasks for parallel execution
+    keys = []
+    tasks = []
     for (mid, kw), group in groups.items():
         first = group[0]
         items_with_summaries = [m for m in group if m.get("item_summary")]
         if not items_with_summaries:
             continue
 
-        headline = await generate_headline(
+        keys.append((mid, kw))
+        tasks.append(generate_headline(
             client=client,
             city_name=city_name,
             meeting_title=first["meeting_title"],
             meeting_date=first["meeting_date"],
             keyword=kw,
             items_with_summaries=items_with_summaries,
-        )
-        if headline:
-            cache[(mid, kw)] = headline
+        ))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    cache: Dict[tuple, str] = {}
+    for key, result in zip(keys, results):
+        if isinstance(result, BaseException):
+            logger.warning("headline generation failed", key=str(key), error=str(result))
+        elif isinstance(result, str):
+            cache[key] = result
 
     return cache
 
@@ -427,7 +437,7 @@ def build_digest_email(
                 prefix = f'<strong style="color: {indigo};">{entry["keyword"]}:</strong> ' if show_keyword_prefix else ""
 
                 if entry['sentence']:
-                    sentences = [s.strip() for s in entry['sentence'].split('. ') if s.strip()]
+                    sentences = [s.strip() for s in entry['sentence'].strip().split('\n') if s.strip()]
                     for i, sentence in enumerate(sentences):
                         if not sentence.endswith('.'):
                             sentence += '.'
