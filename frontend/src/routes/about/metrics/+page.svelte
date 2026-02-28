@@ -24,6 +24,13 @@
 		return num.toLocaleString() + ' people';
 	}
 
+	function formatGrowth(num: number): string {
+		if (num >= 1000) {
+			return '+' + (num / 1000).toFixed(1) + 'K this month';
+		}
+		return '+' + num.toLocaleString() + ' this month';
+	}
+
 	function formatPop(num: number): string {
 		if (num >= 1000000) {
 			return (num / 1000000).toFixed(2) + 'M';
@@ -172,7 +179,13 @@
 				<div class="stats-card">
 					<div class="number-primary">{formatNumber(data.analytics.real_metrics.matters_tracked)}</div>
 					<div class="stat-title">Legislative Matters</div>
-					<div class="stat-description">Across {formatNumber(data.analytics.real_metrics.agenda_items_processed)} agenda items</div>
+					<div class="stat-description">
+						{#if data.platformMetrics?.growth.matters_30d > 0}
+							{formatGrowth(data.platformMetrics.growth.matters_30d)}
+						{:else}
+							Across {formatNumber(data.analytics.real_metrics.agenda_items_processed)} agenda items
+						{/if}
+					</div>
 				</div>
 
 				<div class="stats-card">
@@ -227,7 +240,13 @@
 					<div class="stats-card highlight-card">
 						<div class="number-primary">{formatNumber(data.platformMetrics.accountability.votes)}</div>
 						<div class="stat-title">Votes Recorded</div>
-						<div class="stat-description">Individual voting records captured</div>
+						<div class="stat-description">
+							{#if data.platformMetrics.growth.votes_30d > 0}
+								{formatGrowth(data.platformMetrics.growth.votes_30d)}
+							{:else}
+								Individual voting records captured
+							{/if}
+						</div>
 					</div>
 
 					<div class="stats-card">
@@ -241,13 +260,48 @@
 						<div class="stat-title">Cities with Vote Data</div>
 						<div class="stat-description">Full voting record coverage</div>
 					</div>
+				</div>
+			</section>
+
+			<section class="metrics-section">
+				<h2 class="primary-heading">AI Processing</h2>
+				<div class="cards-grid">
+					<div class="stats-card highlight-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.processing.summarized_items)}</div>
+						<div class="stat-title">Substantive Items</div>
+						<div class="stat-description">Identified from {formatNumber(data.platformMetrics.processing.items_analyzed)} analyzed</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.content.agenda_items)}</div>
+						<div class="stat-title">Agenda Items Ingested</div>
+						<div class="stat-description">
+							{#if data.platformMetrics.growth.items_30d > 0}
+								{formatGrowth(data.platformMetrics.growth.items_30d)}
+							{:else}
+								Total items collected from agendas
+							{/if}
+						</div>
+					</div>
 
 					<div class="stats-card">
 						<div class="stat-numbers-split">
 							<span class="number-primary">{data.platformMetrics.processing.item_summary_rate}%</span>
 						</div>
-						<div class="stat-title">Item Summary Rate</div>
-						<div class="stat-description">{formatNumber(data.platformMetrics.processing.summarized_items)} items processed</div>
+						<div class="stat-title">Substantive Rate</div>
+						<div class="stat-description">Of analyzed items require AI summaries</div>
+					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.processing.summarized_meetings)}</div>
+						<div class="stat-title">Meetings Summarized</div>
+						<div class="stat-description">
+							{#if data.platformMetrics.growth.meetings_30d > 0}
+								{formatGrowth(data.platformMetrics.growth.meetings_30d)} ingested
+							{:else}
+								Full meeting summaries generated
+							{/if}
+						</div>
 					</div>
 				</div>
 			</section>
