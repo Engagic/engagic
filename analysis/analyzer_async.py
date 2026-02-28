@@ -16,8 +16,10 @@ Rate limiting is handled by the summarizer via Gemini's retry instructions.
 """
 
 import asyncio
+import multiprocessing
 import time
 from typing import List, Dict, Any, Optional, Tuple
+
 import aiohttp
 
 from exceptions import ExtractionError, LLMError
@@ -29,6 +31,59 @@ from pipeline.protocols import MetricsCollector, NullMetrics
 from config import config, get_logger
 
 logger = get_logger(__name__).bind(component="pipeline")
+
+# Pre-warm forkserver once at import time so subprocess spawns are fast
+_forkserver_ctx = multiprocessing.get_context("forkserver")
+
+
+def _extract_pdf_worker(result_queue, pdf_bytes, ocr_threshold, ocr_dpi,
+                        detect_legislative_formatting, max_ocr_workers):
+    """Worker target for subprocess PDF extraction. Runs in child process."""
+    try:
+        from parsing.pdf import PdfExtractor
+        extractor = PdfExtractor(ocr_threshold, ocr_dpi, detect_legislative_formatting, max_ocr_workers)
+        result = extractor.extract_from_bytes(pdf_bytes)
+        result_queue.put(("ok", result))
+    except Exception as e:
+        result_queue.put(("error", str(e), type(e).__name__))
+
+
+def _extract_pdf_in_subprocess(pdf_bytes, ocr_threshold, ocr_dpi,
+                               detect_legislative_formatting, max_ocr_workers):
+    """Run PDF extraction in an isolated subprocess. Segfault-safe.
+
+    PyMuPDF is a C extension that can segfault on malformed PDFs.
+    Running in a subprocess means a segfault kills only the child,
+    not the main process.
+    """
+    result_queue = _forkserver_ctx.Queue()
+    proc = _forkserver_ctx.Process(
+        target=_extract_pdf_worker,
+        args=(result_queue, pdf_bytes, ocr_threshold, ocr_dpi,
+              detect_legislative_formatting, max_ocr_workers),
+    )
+    proc.start()
+    proc.join(timeout=600)
+
+    if proc.is_alive():
+        proc.kill()
+        proc.join()
+        raise ExtractionError("PDF extraction subprocess timed out after 600s")
+
+    if proc.exitcode != 0:
+        raise ExtractionError(
+            f"PDF extraction subprocess crashed (exit code {proc.exitcode}, likely segfault on malformed PDF)"
+        )
+
+    try:
+        status, *data = result_queue.get_nowait()
+    except Exception:
+        raise ExtractionError("PDF extraction subprocess produced no result")
+
+    if status == "error":
+        raise ExtractionError(f"PDF extraction failed: {data[0]} ({data[1]})")
+
+    return data[0]
 
 
 class AnalysisError(Exception):
@@ -152,7 +207,8 @@ class AsyncAnalyzer:
         """
         Extract text from PDF asynchronously.
 
-        Downloads PDF with async HTTP, extracts text in thread pool (CPU-bound).
+        Downloads PDF with async HTTP, runs extraction in isolated subprocess.
+        Subprocess isolation protects against PyMuPDF C-level segfaults on malformed PDFs.
 
         Args:
             url: PDF URL
@@ -161,24 +217,27 @@ class AsyncAnalyzer:
             Dict with keys: success, text, page_count, etc.
 
         Raises:
-            ExtractionError: If extraction fails or times out
+            ExtractionError: If extraction fails, times out, or subprocess crashes
         """
-        # Download PDF (async I/O)
         pdf_bytes = await self.download_pdf_async(url)
 
-        # Extract text in thread pool with timeout (defense in depth)
-        # 10 min budget for huge PDFs with OCR - OCR itself has 5 min internal timeout
+        # Run in subprocess via thread (proc.join is blocking)
+        # Subprocess isolates against PyMuPDF segfaults on malformed PDFs
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(
-                    self.pdf_extractor.extract_from_bytes,
-                    pdf_bytes
+                    _extract_pdf_in_subprocess,
+                    pdf_bytes,
+                    self.pdf_extractor.ocr_threshold,
+                    self.pdf_extractor.ocr_dpi,
+                    self.pdf_extractor.detect_legislative_formatting,
+                    self.pdf_extractor.max_ocr_workers,
                 ),
-                timeout=600
+                timeout=620
             )
         except asyncio.TimeoutError:
-            logger.error("PDF extraction timed out after 10 minutes", url=url[:100])
-            raise ExtractionError(f"PDF extraction timed out after 10 minutes: {url[:100]}")
+            logger.error("PDF extraction timed out", url=url[:100])
+            raise ExtractionError(f"PDF extraction timed out: {url[:100]}")
 
         if not result.get("success"):
             raise ExtractionError(f"PDF extraction failed: {result.get('error', 'Unknown error')}")
