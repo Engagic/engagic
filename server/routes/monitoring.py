@@ -227,8 +227,16 @@ async def get_platform_metrics(db: Database = Depends(get_db)):
             "processing": {
                 "summarized_meetings": metrics["summarized_meetings"],
                 "summarized_items": metrics["summarized_items"],
+                "filtered_items": metrics["filtered_items"],
+                "items_analyzed": metrics["items_analyzed"],
                 "meeting_summary_rate": metrics["meeting_summary_rate"],
                 "item_summary_rate": metrics["item_summary_rate"],
+            },
+            "growth": {
+                "meetings_30d": metrics["meetings_30d"],
+                "items_30d": metrics["items_30d"],
+                "matters_30d": metrics["matters_30d"],
+                "votes_30d": metrics["votes_30d"],
             },
         }
     except Exception as e:

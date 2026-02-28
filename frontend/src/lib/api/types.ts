@@ -219,8 +219,16 @@ export interface PlatformMetrics {
 	processing: {
 		summarized_meetings: number;
 		summarized_items: number;
+		filtered_items: number;
+		items_analyzed: number;
 		meeting_summary_rate: number;
 		item_summary_rate: number;
+	};
+	growth: {
+		meetings_30d: number;
+		items_30d: number;
+		matters_30d: number;
+		votes_30d: number;
 	};
 }
 

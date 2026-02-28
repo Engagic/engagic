@@ -175,19 +175,39 @@ class Database:
                     -- Processing stats
                     (SELECT COUNT(*) FROM meetings WHERE summary IS NOT NULL) as summarized_meetings,
                     (SELECT COUNT(*) FROM items WHERE summary IS NOT NULL) as summarized_items,
-                    (SELECT COUNT(*) FROM items WHERE filter_reason IS NOT NULL) as filtered_items
+                    (SELECT COUNT(*) FROM items WHERE filter_reason IS NOT NULL) as filtered_items,
+                    -- Items from meetings that have actually been processed
+                    (SELECT COUNT(*) FROM items i
+                     WHERE EXISTS (
+                         SELECT 1 FROM items i2
+                         WHERE i2.meeting_id = i.meeting_id
+                         AND i2.summary IS NOT NULL
+                     ) OR EXISTS (
+                         SELECT 1 FROM meetings m
+                         WHERE m.id = i.meeting_id
+                         AND m.summary IS NOT NULL
+                     )) as items_analyzed,
+                    -- 30-day growth
+                    (SELECT COUNT(*) FROM meetings
+                     WHERE created_at >= NOW() - INTERVAL '30 days') as meetings_30d,
+                    (SELECT COUNT(*) FROM items
+                     WHERE created_at >= NOW() - INTERVAL '30 days') as items_30d,
+                    (SELECT COUNT(*) FROM city_matters
+                     WHERE created_at >= NOW() - INTERVAL '30 days') as matters_30d,
+                    (SELECT COUNT(*) FROM votes
+                     WHERE created_at >= NOW() - INTERVAL '30 days') as votes_30d
             """)
 
             metrics = dict(result)
 
-            # Calculate rates
+            # Calculate rates using correct denominator (items from processed meetings)
             if metrics['meetings'] > 0:
                 metrics['meeting_summary_rate'] = round(metrics['summarized_meetings'] / metrics['meetings'] * 100, 1)
             else:
                 metrics['meeting_summary_rate'] = 0
 
-            if metrics['agenda_items'] > 0:
-                metrics['item_summary_rate'] = round(metrics['summarized_items'] / metrics['agenda_items'] * 100, 1)
+            if metrics['items_analyzed'] > 0:
+                metrics['item_summary_rate'] = round(metrics['summarized_items'] / metrics['items_analyzed'] * 100, 1)
             else:
                 metrics['item_summary_rate'] = 0
 
