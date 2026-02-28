@@ -1,9 +1,8 @@
 """
 Weekly Digest Script
 
-Runs every Sunday at 9am. Sends users a digest of:
-1. Keyword matches (items mentioning their keywords)
-2. Upcoming meetings this week (all meetings for their city)
+Runs every Sunday at 9am. Sends users a digest of personalized keyword
+headlines linking to specific agenda items, or a CTA to configure keywords.
 
 Note: "Alert" in the codebase = Weekly Digest Subscription (not real-time alerts)
 
@@ -19,7 +18,10 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+from google import genai
+from google.genai import types
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -28,76 +30,30 @@ from config import config, get_logger
 from database.db_postgres import Database
 from userland.auth.jwt import generate_unsubscribe_token, init_jwt
 from userland.email.emailer import EmailService
-from userland.email.templates import DARK_MODE_CSS
 
 logger = get_logger(__name__)
-
-
-def highlight_keywords(text: str, keywords: List[str]) -> str:
-    """
-    Highlight all occurrences of keywords in text with HTML strong tags.
-
-    Case-insensitive matching, preserves original case in output.
-
-    Args:
-        text: Plain text to search
-        keywords: List of keywords to highlight
-
-    Returns:
-        HTML string with keywords wrapped in <strong> tags
-    """
-    if not text or not keywords:
-        return text
-
-    # Build regex pattern that matches any keyword (case-insensitive)
-    # Use word boundaries to avoid partial word matches
-    escaped_keywords = [re.escape(kw) for kw in keywords]
-    pattern = r'\b(' + '|'.join(escaped_keywords) + r')\b'
-
-    # Replace with highlighted version
-    highlighted = re.sub(
-        pattern,
-        r'<strong style="color: #4f46e5; font-weight: 600;">\1</strong>',
-        text,
-        flags=re.IGNORECASE
-    )
-
-    return highlighted
 
 
 def generate_anchor_id(item: Dict[str, Any]) -> str:
     """
     Generate item anchor ID matching frontend logic.
 
-    Priority hierarchy:
-    1. agenda_number (meeting-specific position, e.g., "5-E" → "item-5-e")
-    2. matter_file (legislative file number, e.g., "BL2025-1005" → "bl2025-1005")
-    3. item_id (fallback unique identifier)
-
-    Args:
-        item: Dict with optional agenda_number, matter_file, and item_id
-
-    Returns:
-        Anchor ID string suitable for URL fragments
+    Priority: agenda_number > matter_file > item_id.
     """
-    # Priority 1: agenda_number (meeting-specific position)
     if item.get('agenda_number'):
         normalized = item['agenda_number'].lower()
-        normalized = re.sub(r'[^a-z0-9]', '-', normalized)  # Replace non-alphanumeric with hyphens
-        normalized = re.sub(r'-+', '-', normalized)         # Collapse multiple hyphens
-        normalized = normalized.strip('-')                   # Trim leading/trailing hyphens
+        normalized = re.sub(r'[^a-z0-9]', '-', normalized)
+        normalized = re.sub(r'-+', '-', normalized)
+        normalized = normalized.strip('-')
         return f"item-{normalized}"
 
-    # Priority 2: matter_file (legislative identifier)
     if item.get('matter_file'):
         normalized = item['matter_file'].lower()
-        normalized = re.sub(r'[^a-z0-9-]', '-', normalized)  # Keep hyphens, replace others
+        normalized = re.sub(r'[^a-z0-9-]', '-', normalized)
         return normalized
 
-    # Priority 3: item ID (fallback) - extract just the sequence part
     item_id = item.get('item_id', '')
     if '_' in item_id:
-        # Extract sequence from composite ID (city_meeting_sequence)
         sequence = item_id.split('_')[-1]
         return f"item-{sequence}"
     return f"item-{item_id}"
@@ -108,20 +64,14 @@ async def get_city_name(db: Database, city_banana: str) -> str:
     city = await db.cities.get_city(city_banana)
     if city:
         return f"{city.name}, {city.state}"
-    return city_banana  # Fallback
+    return city_banana
 
 
 async def get_upcoming_meetings(db: Database, city_banana: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
-    """
-    Get upcoming meetings for a city in the next N days.
-
-    FILTERS OUT cancelled/postponed meetings.
-    Uses repository pattern.
-    """
+    """Get upcoming meetings for a city. Filters out cancelled/postponed."""
     today = datetime.now().date()
     end_date = today + timedelta(days=days_ahead)
 
-    # Use repository method instead of raw SQL
     meetings = await db.meetings.get_upcoming_meetings(
         banana=city_banana,
         start_date=today,
@@ -151,9 +101,7 @@ async def find_keyword_matches(
 ) -> List[Dict[str, Any]]:
     """
     Find items in upcoming meetings that mention user's keywords.
-
-    FILTERS OUT cancelled/postponed meetings.
-    Uses repository pattern.
+    Filters out cancelled/postponed. Deduplicates by item_id.
     """
     if not keywords:
         return []
@@ -164,7 +112,6 @@ async def find_keyword_matches(
     all_matches = []
 
     for keyword in keywords:
-        # Use repository method instead of raw SQL
         rows = await db.items.search_upcoming_by_keyword(
             banana=city_banana,
             keyword=keyword,
@@ -173,41 +120,22 @@ async def find_keyword_matches(
         )
 
         for row in rows:
-            # Extract context around keyword
-            summary = row['summary'] or ""
-            keyword_lower = keyword.lower()
-            summary_lower = summary.lower()
-
-            # Find keyword position and extract context
-            context = ""
-            if keyword_lower in summary_lower:
-                pos = summary_lower.index(keyword_lower)
-                start = max(0, pos - 150)
-                end = min(len(summary), pos + 150)
-                context = summary[start:end].strip()
-                if start > 0:
-                    context = "..." + context
-                if end < len(summary):
-                    context = context + "..."
-
             all_matches.append({
                 'keyword': keyword,
                 'item_id': row['item_id'],
                 'meeting_id': row['meeting_id'],
                 'item_title': row['item_title'],
-                'item_summary': summary,
-                'item_position': row['agenda_number'] or row['sequence'] or '?',
+                'item_summary': row['summary'] or "",
                 'meeting_title': row['meeting_title'],
                 'meeting_date': str(row['date']),
                 'agenda_url': row['agenda_url'],
                 'banana': row['banana'],
-                'context': context,
-                # Fields needed for proper anchor generation
                 'agenda_number': row['agenda_number'],
-                'matter_file': row['matter_file']
+                'matter_file': row['matter_file'],
+                'sponsor_count': len(row['sponsors']) if row.get('sponsors') else 0,
             })
 
-    # Deduplicate by item_id and aggregate matched keywords
+    # Deduplicate by item_id, aggregate matched keywords
     deduplicated = {}
     for match in all_matches:
         item_id = match['item_id']
@@ -215,188 +143,390 @@ async def find_keyword_matches(
             deduplicated[item_id] = match.copy()
             deduplicated[item_id]['matched_keywords'] = [match['keyword']]
         else:
-            # Item already exists, just add this keyword if not already present
             if match['keyword'] not in deduplicated[item_id]['matched_keywords']:
                 deduplicated[item_id]['matched_keywords'].append(match['keyword'])
 
     return list(deduplicated.values())
 
 
+def _extract_summary_section(text: str) -> str:
+    """Strip a summary to just the ## Summary section, removing Citizen Impact, Confidence, etc."""
+    # Find start of Summary section
+    start = text.find("## Summary")
+    if start == -1:
+        return text.strip()
+    # Content starts after the header line
+    content_start = text.find("\n", start)
+    if content_start == -1:
+        return text[start:].strip()
+    # Find next ## heading or end of text
+    next_heading = text.find("\n##", content_start + 1)
+    if next_heading == -1:
+        return text[content_start:].strip()
+    return text[content_start:next_heading].strip()
+
+
+async def generate_headline(
+    client: genai.Client,
+    city_name: str,
+    meeting_title: str,
+    meeting_date: str,
+    keyword: str,
+    items_with_summaries: List[Dict[str, Any]],
+) -> Optional[str]:
+    """
+    One Flash-Lite call per (meeting, keyword) pair: produce a single
+    personalized sentence about what's being proposed that affects this interest.
+    Returns None on any failure.
+    """
+    # Build context blocks with metadata
+    blocks = []
+    for item in items_with_summaries:
+        summary_text = _extract_summary_section(item['item_summary'])
+        meta = f"Title: {item['item_title']}"
+        if item.get('sponsor_count'):
+            meta += f"\nSponsors: {item['sponsor_count']}"
+        blocks.append(f"{meta}\n{summary_text}")
+    context = "\n---\n".join(blocks)
+
+    # Format meeting time for the model
+    date_obj = datetime.fromisoformat(meeting_date)
+    day_name = date_obj.strftime("%A")
+    time_str = date_obj.strftime("%I:%M %p").lstrip("0")
+
+    prompt = (
+        f"Items from {city_name} {meeting_title} on {day_name} at {time_str}:\n\n"
+        f"{context}\n\n"
+        f"Pick the two highest-impact items. Ignore procedural items.\n\n"
+        f'A resident cares about "{keyword}". Write exactly two sentences, '
+        f"one per item. Each sentence must include: (1) the day and time, "
+        f"(2) the most concrete proposal with numbers, (3) sponsor count if "
+        f"available. Never predict whether legislation will pass. State only "
+        f"what is being proposed. No hedging words like 'may', 'aims to', "
+        f"'seeks to', 'work toward'. 30 words max per sentence.\n\n"
+        f"Respond with ONLY the two sentences. No titles, no labels, no preamble."
+    )
+
+    try:
+        resp = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.5-flash-lite",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=200,
+            ),
+        )
+        if not resp.text or not resp.text.strip():
+            return None
+        headline = resp.text.strip().strip('"')
+        words = headline.split()
+        if len(words) > 70:
+            headline = " ".join(words[:70]).rstrip(".,") + "."
+        return headline
+    except Exception as e:
+        logger.warning("headline generation failed", meeting=meeting_title, keyword=keyword, error=str(e))
+        return None
+
+
+async def generate_city_headlines(
+    keyword_matches: List[Dict[str, Any]],
+    city_name: str,
+) -> Dict[tuple, str]:
+    """
+    Generate headlines for all (meeting_id, keyword) pairs in a city.
+    Returns {(meeting_id, keyword): headline_sentence}.
+    Called once per city, shared across all users watching that city.
+    """
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY")
+    if not api_key:
+        return {}
+
+    client = genai.Client(api_key=api_key)
+
+    # Group by (meeting_id, keyword)
+    groups: Dict[tuple, List[Dict[str, Any]]] = {}
+    for match in keyword_matches:
+        mid = match["meeting_id"]
+        for kw in match.get("matched_keywords", []):
+            groups.setdefault((mid, kw), []).append(match)
+
+    cache: Dict[tuple, str] = {}
+    for (mid, kw), group in groups.items():
+        first = group[0]
+        items_with_summaries = [m for m in group if m.get("item_summary")]
+        if not items_with_summaries:
+            continue
+
+        headline = await generate_headline(
+            client=client,
+            city_name=city_name,
+            meeting_title=first["meeting_title"],
+            meeting_date=first["meeting_date"],
+            keyword=kw,
+            items_with_summaries=items_with_summaries,
+        )
+        if headline:
+            cache[(mid, kw)] = headline
+
+    return cache
+
+
+def _build_headline_groups(
+    all_matches: List[Dict[str, Any]],
+    headline_cache: Dict[tuple, str],
+    user_keywords: set,
+) -> List[Dict[str, Any]]:
+    """
+    Build per-meeting headline groups filtered to a specific user's keywords.
+    Each group contains headlines and the specific items that triggered them.
+    """
+    # Group matches by (meeting_id, keyword), filtered to user's keywords
+    # Key: (meeting_id, keyword) -> list of match dicts
+    mk_groups: Dict[tuple, List[Dict[str, Any]]] = {}
+    meeting_meta: Dict[str, Dict[str, Any]] = {}
+
+    for match in all_matches:
+        overlap = user_keywords & set(match['matched_keywords'])
+        if not overlap:
+            continue
+        mid = match['meeting_id']
+        if mid not in meeting_meta:
+            meeting_meta[mid] = {
+                'meeting_title': match['meeting_title'],
+                'meeting_date': match['meeting_date'],
+                'meeting_id': mid,
+                'banana': match['banana'],
+            }
+        for kw in overlap:
+            mk_groups.setdefault((mid, kw), []).append(match)
+
+    # Build output grouped by meeting
+    by_meeting: Dict[str, List[Dict[str, Any]]] = {}
+    for (mid, kw), items in mk_groups.items():
+        if mid not in by_meeting:
+            by_meeting[mid] = []
+        sentence = headline_cache.get((mid, kw))
+        by_meeting[mid].append({
+            'keyword': kw,
+            'sentence': sentence,
+            'items': items,
+        })
+
+    groups = []
+    for mid, keyword_entries in by_meeting.items():
+        meta = meeting_meta[mid]
+        groups.append({
+            **meta,
+            'keyword_entries': sorted(keyword_entries, key=lambda e: e['keyword']),
+        })
+
+    groups.sort(key=lambda g: g['meeting_date'])
+    return groups
+
+
+def _format_date(date_str: str) -> str:
+    return datetime.fromisoformat(date_str).strftime("%a, %b %d")
+
+
+def _truncate_title(title: str, max_len: int = 65) -> str:
+    """Truncate at word boundary."""
+    if len(title) <= max_len:
+        return title
+    truncated = title[:max_len].rsplit(' ', 1)[0]
+    return truncated.rstrip('.,;:') + "..."
+
+
+def _meeting_url(app_url: str, banana: str, meeting_id: str, meeting_date: str) -> str:
+    date_obj = datetime.fromisoformat(meeting_date)
+    slug = f"{date_obj.strftime('%Y-%m-%d')}-{meeting_id}"
+    return f"{app_url}/{banana}/{slug}"
+
+
 def build_digest_email(
-    user_name: str,
     city_name: str,
     city_banana: str,
-    keyword_matches: List[Dict[str, Any]],
     keywords: List[str],
-    upcoming_meetings: List[Dict[str, Any]],
+    headline_groups: List[Dict[str, Any]],
+    meeting_count: int,
     app_url: str,
     unsubscribe_token: str,
-    is_donor: bool = False
+    is_donor: bool = False,
 ) -> str:
     """
-    Build HTML email for weekly digest.
-
-    Clean format: Upcoming meetings first, then keyword matches.
-    Uses shared template components with full dark mode support.
+    Build HTML email for weekly digest. Single font, content-first.
     """
+    city_url = f"{app_url}/{city_banana}"
+    unsubscribe_url = f"https://api.engagic.org/api/auth/unsubscribe?token={unsubscribe_token}"
+    show_keyword_prefix = len(keywords) > 1
 
-    # Format meeting dates
-    def format_date(date_str: str) -> str:
-        date_obj = datetime.fromisoformat(date_str)
-        return date_obj.strftime("%a, %b %d")
+    # Shared styles
+    font = "Georgia, 'Times New Roman', serif"
+    mono = "'Courier New', Courier, monospace"
+    indigo = "#4f46e5"
+    gray = "#6b7280"
+    dark = "#111827"
 
-    # Header with branding
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="color-scheme" content="light dark">
-    <meta name="supported-color-schemes" content="light dark">
-    <title>This week in {city_name}</title>
-{DARK_MODE_CSS}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>This week in {city_name}</title>
+<style>
+:root {{ color-scheme: light dark; }}
+@media (prefers-color-scheme: dark) {{
+    body, table {{ background-color: #111827 !important; }}
+    h1[style*="color: {dark}"],
+    p[style*="color: {dark}"] {{ color: #f3f4f6 !important; }}
+    p[style*="color: {gray}"] {{ color: #9ca3af !important; }}
+    p[style*="color: #9ca3af"] {{ color: #6b7280 !important; }}
+    div[style*="border-bottom: 2px solid {indigo}"] {{ border-color: {indigo} !important; }}
+    div[style*="border-bottom: 1px solid #e5e7eb"] {{ border-color: #374151 !important; }}
+    a[style*="color: {indigo}"] {{ color: #818cf8 !important; }}
+}}
+</style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Courier New', monospace;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8fafc;">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: {font};">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6;">
+<tr><td align="center" style="padding: 32px 16px;">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="560" style="max-width: 560px;">
 
-                    <!-- Branded Header -->
-                    <tr>
-                        <td style="padding: 32px 40px 28px 40px; background-color: #4f46e5; border-radius: 9px 9px 0 0;">
-                            <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 16px;">
-                                <img src="https://engagic.org/icon-192.png" alt="Engagic" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);" />
-                                <div style="display: inline-block; padding: 6px 14px; background-color: rgba(255, 255, 255, 0.15); border-radius: 6px; backdrop-filter: blur(10px);">
-                                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: 0.02em;">engagic</span>
-                                </div>
-                            </div>
-                            <h1 style="margin: 0 0 10px 0; font-size: 26px; font-weight: 700; color: #ffffff; line-height: 1.3; letter-spacing: -0.02em; font-family: 'IBM Plex Mono', monospace;">
-                                This week in {city_name}
-                            </h1>
-                            <p style="margin: 0; font-size: 15px; color: #ffffff; opacity: 0.92; font-family: Georgia, serif; line-height: 1.5;">
-                                Your weekly civic digest
-                            </p>
-                        </td>
-                    </tr>
+    <!-- Header -->
+    <tr><td style="padding: 0 0 24px 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+            <td style="padding-right: 12px; vertical-align: middle;">
+                <img src="https://engagic.org/icon-192.png" alt="" width="28" height="28" style="display: block; border-radius: 6px;" />
+            </td>
+            <td style="vertical-align: middle; font-family: {mono}; font-size: 14px; font-weight: 700; color: {indigo}; letter-spacing: 0.02em;">
+                engagic
+            </td>
+        </tr></table>
+    </td></tr>
+
+    <!-- Title -->
+    <tr><td style="padding: 0 0 8px 0;">
+        <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: {dark}; font-family: {font}; line-height: 1.3;">
+            This week in {city_name}
+        </h1>
+    </td></tr>
+
+    <tr><td style="padding: 0 0 28px 0;">
+        <div style="border-bottom: 2px solid {indigo}; width: 40px;"></div>
+    </td></tr>
 """
 
-    # Upcoming Meetings Section FIRST (always shown if there are any)
-    if upcoming_meetings:
-        html += """
-                    <tr>
-                        <td style="padding: 32px 40px 24px 40px;">
-                            <h2 style="margin: 0 0 20px 0; font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.1em; font-family: 'IBM Plex Mono', monospace;">
-                                Upcoming Meetings This Week
-                            </h2>
-"""
-        for meeting in upcoming_meetings:
-            meeting_date_obj = datetime.fromisoformat(meeting['date'])
-            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{meeting['id']}"
-            meeting_url = f"{app_url}/{meeting['banana']}/{meeting_slug}"
+    # -- Headlines --
+    if keywords and headline_groups:
+        for group in headline_groups:
+            m_url = _meeting_url(app_url, group['banana'], group['meeting_id'], group['meeting_date'])
 
+            # Headlines
+            for entry in group['keyword_entries']:
+                prefix = f'<strong style="color: {indigo};">{entry["keyword"]}:</strong> ' if show_keyword_prefix else ""
+
+                if entry['sentence']:
+                    sentences = [s.strip() for s in entry['sentence'].split('. ') if s.strip()]
+                    for i, sentence in enumerate(sentences):
+                        if not sentence.endswith('.'):
+                            sentence += '.'
+                        label = prefix if i == 0 else ""
+                        html += f"""
+    <tr><td style="padding: 0 0 16px 0;">
+        <p style="margin: 0; font-size: 17px; color: {dark}; font-family: {font}; line-height: 1.55;">
+            {label}{sentence}
+        </p>
+    </td></tr>
+"""
+                else:
+                    html += f"""
+    <tr><td style="padding: 0 0 16px 0;">
+        <p style="margin: 0; font-size: 17px; color: {gray}; font-family: {font}; line-height: 1.55;">
+            {prefix}Items matching this keyword found.
+        </p>
+    </td></tr>
+"""
+
+            # Item count + meeting link on one line
+            item_count = len(set(
+                item['item_id']
+                for entry in group['keyword_entries']
+                for item in entry['items']
+            ))
             html += f"""
-                            <div style="margin-bottom: 16px; padding: 20px 24px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-                                <p style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #0f172a; line-height: 1.4; font-family: 'IBM Plex Mono', monospace;">
-                                    {format_date(meeting['date'])} - {meeting['title']}
-                                </p>
-                                <a href="{meeting_url}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; transition: color 0.2s;">
-                                    View agenda →
-                                </a>
-                            </div>
-"""
-        html += """
-                        </td>
-                    </tr>
+    <tr><td style="padding: 0 0 24px 0;">
+        <p style="margin: 0; font-size: 14px; color: {gray}; font-family: {font};">
+            <a href="{m_url}" style="color: {indigo}; text-decoration: none; font-weight: 600;">{item_count} agenda item{'s' if item_count != 1 else ''}</a>
+            &nbsp;&middot;&nbsp; {group['meeting_title']} &nbsp;&middot;&nbsp; {_format_date(group['meeting_date'])}
+        </p>
+    </td></tr>
 """
 
-    # Keyword Matches Section (if any)
-    if keyword_matches:
+        # Separator before next section or footer
+        html += """
+    <tr><td style="padding: 0 0 24px 0;">
+        <div style="border-bottom: 1px solid #e5e7eb;"></div>
+    </td></tr>
+"""
+
+    elif keywords:
         html += f"""
-                    <tr>
-                        <td style="padding: 32px 40px 24px 40px; border-top: 2px solid #e2e8f0;">
-                            <h2 style="margin: 0 0 20px 0; font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.1em; font-family: 'IBM Plex Mono', monospace;">
-                                Your Keywords: {', '.join(keywords).upper()}
-                            </h2>
-"""
-        for match in keyword_matches:
-            meeting_date_obj = datetime.fromisoformat(match['meeting_date'])
-            meeting_slug = f"{meeting_date_obj.strftime('%Y-%m-%d')}-{match['meeting_id']}"
-            meeting_url = f"{app_url}/{match['banana']}/{meeting_slug}"
-
-            # Generate proper anchor matching frontend logic
-            anchor = generate_anchor_id(match)
-            item_url = f"{meeting_url}#{anchor}"
-
-            # Use context field (keyword-highlighted text) instead of summary
-            context = match.get('context', match.get('item_summary', ''))
-            if len(context) > 300:
-                context = context[:297] + "..."
-
-            # Get all matched keywords (from deduplicated list) or fallback to single keyword
-            matched_keywords = match.get('matched_keywords', [match.get('keyword', '')])
-            keywords_display = '", "'.join(matched_keywords)
-
-            # Highlight all matched keywords in the context text
-            context = highlight_keywords(context, matched_keywords)
-
-            html += f"""
-                            <div style="margin-bottom: 24px; padding: 24px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; box-shadow: 0 2px 4px rgba(0,0,0,0.06);">
-                                <p style="margin: 0 0 10px 0; font-size: 17px; font-weight: 600; color: #0f172a; line-height: 1.4; font-family: 'IBM Plex Mono', monospace;">
-                                    {match['item_title']}
-                                </p>
-                                <p style="margin: 0 0 14px 0; font-size: 13px; color: #64748b; font-family: Georgia, serif; font-style: italic;">
-                                    {match['meeting_title']} • {format_date(match['meeting_date'])}
-                                </p>
-                                <p style="margin: 0 0 14px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
-                                    Matched: <strong style="color: #4f46e5; font-weight: 600;">"{keywords_display}"</strong>
-                                </p>
-                                <p style="margin: 0 0 20px 0; font-size: 14px; color: #334155; line-height: 1.7; font-family: Georgia, serif;">
-                                    {context}
-                                </p>
-                                <a href="{item_url}" style="display: inline-block; padding: 12px 28px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 7px; font-weight: 600; font-size: 14px; font-family: 'IBM Plex Mono', monospace; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);">
-                                    View Item →
-                                </a>
-                            </div>
-"""
-        html += """
-                        </td>
-                    </tr>
+    <tr><td style="padding: 0 0 16px 0;">
+        <p style="margin: 0; font-size: 16px; color: {gray}; font-family: {font}; line-height: 1.55;">
+            No items matched your keywords this week.
+        </p>
+    </td></tr>
+    <tr><td style="padding: 0 0 24px 0;">
+        <p style="margin: 0; font-size: 14px; color: {gray}; font-family: {font};">
+            {meeting_count} meeting{'s' if meeting_count != 1 else ''} scheduled &mdash;
+            <a href="{city_url}" style="color: {indigo}; text-decoration: none; font-weight: 600;">browse on engagic.org</a>
+        </p>
+    </td></tr>
+    <tr><td style="padding: 0 0 24px 0;">
+        <div style="border-bottom: 1px solid #e5e7eb;"></div>
+    </td></tr>
 """
 
-    # Footer with one-click unsubscribe (CAN-SPAM compliant)
-    unsubscribe_url = f"https://api.engagic.org/api/auth/unsubscribe?token={unsubscribe_token}"
+    else:
+        html += f"""
+    <tr><td style="padding: 0 0 16px 0;">
+        <p style="margin: 0; font-size: 16px; color: {dark}; font-family: {font}; line-height: 1.55;">
+            {meeting_count} meeting{'s' if meeting_count != 1 else ''} scheduled in {city_name} this week.
+        </p>
+    </td></tr>
+    <tr><td style="padding: 0 0 8px 0;">
+        <p style="margin: 0; font-size: 14px; color: {gray}; font-family: {font}; line-height: 1.55;">
+            Set up keyword alerts to receive personalized headlines about topics that matter to you.
+        </p>
+    </td></tr>
+    <tr><td style="padding: 0 0 24px 0;">
+        <a href="{app_url}/dashboard" style="color: {indigo}; text-decoration: none; font-size: 14px; font-weight: 600; font-family: {font};">Configure keywords &#8594;</a>
+    </td></tr>
+    <tr><td style="padding: 0 0 24px 0;">
+        <div style="border-bottom: 1px solid #e5e7eb;"></div>
+    </td></tr>
+"""
 
-    # Donation CTA - hidden for donors
-    donation_cta = ""
+    # Footer
+    donation_line = ""
     if not is_donor:
-        donation_cta = """
-                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif; line-height: 1.7;">
-                                Engagic is free and open-source. If you find it valuable, please <a href="https://engagic.org/about/donate" style="color: #8B5CF6; text-decoration: none; font-weight: 600;">support the project</a>.
-                            </p>"""
+        donation_line = f"""
+        <br>Free and open-source. <a href="https://engagic.org/about/donate" style="color: {indigo}; text-decoration: none;">Support the project</a>."""
 
     html += f"""
-                    <tr>
-                        <td style="padding: 32px 40px; border-top: 1px solid #e2e8f0;">
-                            <p style="margin: 0 0 16px 0; font-size: 12px; color: #475569; font-family: Georgia, serif; line-height: 1.7;">
-                                You're receiving this because you're watching {city_name}
-                            </p>{donation_cta}
-                            <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b; font-family: Georgia, serif;">
-                                Questions? Visit <a href="https://engagic.org" style="color: #4f46e5; text-decoration: none;">engagic.org</a>
-                            </p>
-                            <p style="margin: 0; font-size: 12px; font-family: Georgia, serif;">
-                                <a href="{app_url}/dashboard" style="color: #64748b; text-decoration: underline;">Manage subscription</a>
-                                <span style="margin: 0 8px; color: #cbd5e1;">|</span>
-                                <a href="{unsubscribe_url}" style="color: #64748b; text-decoration: none;">Unsubscribe</a>
-                            </p>
-                        </td>
-                    </tr>
+    <tr><td style="padding: 0 0 8px 0;">
+        <p style="margin: 0; font-size: 12px; color: #9ca3af; font-family: {font}; line-height: 1.7;">
+            Watching {city_name}.{donation_line}
+            <br><a href="{app_url}/dashboard" style="color: #9ca3af; text-decoration: underline;">Manage</a>
+            &nbsp;&middot;&nbsp;
+            <a href="{unsubscribe_url}" style="color: #9ca3af; text-decoration: underline;">Unsubscribe</a>
+        </p>
+    </td></tr>
 
-                </table>
-            </td>
-        </tr>
-    </table>
+</table>
+</td></tr>
+</table>
 </body>
 </html>
 """
@@ -408,12 +538,13 @@ async def send_weekly_digest():
     """
     Main function: Send weekly digests to all active users.
 
-    Note: This queries "alerts" but they represent weekly digest subscriptions.
+    Three phases for city-level headline caching:
+    1. Collect all alerts, group by city
+    2. Per city: find all keyword matches, generate all headlines once
+    3. Per user: filter to their keywords, build and send email
     """
-
     app_url = os.getenv('APP_URL', 'https://engagic.org')
 
-    # Initialize JWT for unsubscribe token generation
     if config.USERLAND_JWT_SECRET:
         try:
             init_jwt(config.USERLAND_JWT_SECRET)
@@ -426,79 +557,110 @@ async def send_weekly_digest():
     try:
         email_service = EmailService()
 
-        # Get all active alerts (weekly digest subscriptions)
         active_alerts = await db.userland.get_active_alerts()
         logger.info("found active alerts", count=len(active_alerts))
 
+        # Phase 1: Collect all work by city, resolve users upfront
+        city_alerts: Dict[str, List[tuple]] = {}
+        for alert in active_alerts:
+            user = await db.userland.get_user(alert.user_id)
+            if not user:
+                logger.warning("user not found for alert", alert_id=alert.id)
+                continue
+            if not alert.cities or len(alert.cities) == 0:
+                logger.warning("alert has no cities configured", alert_id=alert.id)
+                continue
+            banana = alert.cities[0]
+            city_alerts.setdefault(banana, []).append((alert, user))
+
+        # Phase 2: Per-city data collection and headline generation
+        city_data: Dict[str, Dict] = {}
+        for banana, alert_users in city_alerts.items():
+            city_name = await get_city_name(db, banana)
+
+            # Union of all keywords across users watching this city
+            all_keywords: set = set()
+            for alert, _user in alert_users:
+                all_keywords.update(alert.criteria.get('keywords', []))
+
+            all_matches = []
+            if all_keywords:
+                all_matches = await find_keyword_matches(
+                    db, banana, list(all_keywords), days_ahead=10
+                )
+
+            upcoming = await get_upcoming_meetings(db, banana, days_ahead=10)
+
+            headline_cache: Dict[tuple, str] = {}
+            if all_matches:
+                headline_cache = await generate_city_headlines(all_matches, city_name)
+                logger.info("generated headlines",
+                    city=banana,
+                    pairs=len(headline_cache),
+                    matches=len(all_matches))
+
+            city_data[banana] = {
+                'city_name': city_name,
+                'all_matches': all_matches,
+                'headline_cache': headline_cache,
+                'meeting_count': len(upcoming),
+            }
+
+        # Phase 3: Build and send per-user emails
         sent_count = 0
         error_count = 0
 
-        for alert in active_alerts:
-            try:
-                # Get user
-                user = await db.userland.get_user(alert.user_id)
-                if not user:
-                    logger.warning("user not found for alert", alert_id=alert.id)
+        for banana, alert_users in city_alerts.items():
+            data = city_data[banana]
+
+            for alert, user in alert_users:
+                try:
+                    keywords = alert.criteria.get('keywords', [])
+                    user_keywords = set(keywords)
+
+                    logger.info("processing digest", email=user.email, city=banana)
+
+                    headline_groups = _build_headline_groups(
+                        data['all_matches'], data['headline_cache'], user_keywords
+                    )
+
+                    # Skip if truly nothing to show
+                    if not headline_groups and data['meeting_count'] == 0 and not keywords:
+                        logger.info("no content for user, skipping", email=user.email)
+                        continue
+
+                    unsubscribe_token = generate_unsubscribe_token(user.id)
+
+                    html = build_digest_email(
+                        city_name=data['city_name'],
+                        city_banana=banana,
+                        keywords=keywords,
+                        headline_groups=headline_groups,
+                        meeting_count=data['meeting_count'],
+                        app_url=app_url,
+                        unsubscribe_token=unsubscribe_token,
+                        is_donor=user.is_donor,
+                    )
+
+                    subject = f"This week in {data['city_name']}"
+                    if headline_groups:
+                        n = sum(len(g['keyword_entries']) for g in headline_groups)
+                        subject += f" -- {n} update{'s' if n != 1 else ''} for your keywords"
+
+                    await email_service.send_email(
+                        to_email=user.email,
+                        subject=subject,
+                        html_body=html,
+                        from_address="Engagic Digest <digest@engagic.org>",
+                    )
+
+                    sent_count += 1
+                    logger.info("sent digest", email=user.email)
+
+                except Exception as e:
+                    error_count += 1
+                    logger.error("failed to send digest", alert_id=alert.id, error=str(e))
                     continue
-
-                # Get primary city (first city in alert)
-                if not alert.cities or len(alert.cities) == 0:
-                    logger.warning("alert has no cities configured", alert_id=alert.id)
-                    continue
-
-                primary_city = alert.cities[0]
-                logger.info("processing digest", email=user.email, city=primary_city)
-
-                # Get actual city name (not banana)
-                city_name = await get_city_name(db, primary_city)
-
-                # Get keyword matches (direct SQL queries)
-                keywords = alert.criteria.get('keywords', [])
-                keyword_matches = await find_keyword_matches(db, primary_city, keywords, days_ahead=10)
-
-                # Get upcoming meetings (direct SQL queries)
-                upcoming_meetings = await get_upcoming_meetings(db, primary_city, days_ahead=10)
-
-                # Skip if no content
-                if not keyword_matches and not upcoming_meetings:
-                    logger.info("no content for user, skipping", email=user.email)
-                    continue
-
-                # Generate unsubscribe token for this user
-                unsubscribe_token = generate_unsubscribe_token(user.id)
-
-                # Build email
-                html = build_digest_email(
-                    user_name=user.name,
-                    city_name=city_name,
-                    city_banana=primary_city,
-                    keyword_matches=keyword_matches,
-                    keywords=keywords,
-                    upcoming_meetings=upcoming_meetings,
-                    app_url=app_url,
-                    unsubscribe_token=unsubscribe_token,
-                    is_donor=user.is_donor
-                )
-
-                # Send email
-                subject = f"This week in {city_name}"
-                if keyword_matches:
-                    subject += f" - {len(keyword_matches)} keyword match{'es' if len(keyword_matches) > 1 else ''}"
-
-                await email_service.send_email(
-                    to_email=user.email,
-                    subject=subject,
-                    html_body=html,
-                    from_address="Engagic Digest <digest@engagic.org>"
-                )
-
-                sent_count += 1
-                logger.info("sent digest", email=user.email)
-
-            except Exception as e:
-                error_count += 1
-                logger.error("failed to send digest", alert_id=alert.id, error=str(e))
-                continue
 
         logger.info("weekly digest complete", sent_count=sent_count, error_count=error_count)
         return sent_count, error_count
