@@ -239,6 +239,7 @@ async def get_platform_metrics(db: Database = Depends(get_db)):
                 "matters_30d": metrics["matters_30d"],
                 "votes_30d": metrics["votes_30d"],
             },
+            "trends": metrics["trends"],
         }
     except Exception as e:
         logger.error("error fetching platform metrics", error=str(e))

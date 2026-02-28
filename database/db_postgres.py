@@ -225,6 +225,51 @@ class Database:
             """)
             metrics['votes_by_city'] = [dict(row) for row in vote_breakdown]
 
+            # Weekly trends for sparklines (last 8 weeks)
+            trends = await conn.fetch("""
+                WITH weeks AS (
+                    SELECT generate_series(
+                        date_trunc('week', NOW() - INTERVAL '7 weeks'),
+                        date_trunc('week', NOW()),
+                        INTERVAL '1 week'
+                    ) AS week_start
+                )
+                SELECT
+                    w.week_start::date as week,
+                    COALESCE(m.cnt, 0) as meetings,
+                    COALESCE(i.cnt, 0) as items,
+                    COALESCE(mat.cnt, 0) as matters,
+                    COALESCE(v.cnt, 0) as votes
+                FROM weeks w
+                LEFT JOIN (
+                    SELECT date_trunc('week', created_at) AS wk, COUNT(*) AS cnt
+                    FROM meetings WHERE created_at >= NOW() - INTERVAL '8 weeks'
+                    GROUP BY 1
+                ) m ON m.wk = w.week_start
+                LEFT JOIN (
+                    SELECT date_trunc('week', created_at) AS wk, COUNT(*) AS cnt
+                    FROM items WHERE created_at >= NOW() - INTERVAL '8 weeks'
+                    GROUP BY 1
+                ) i ON i.wk = w.week_start
+                LEFT JOIN (
+                    SELECT date_trunc('week', created_at) AS wk, COUNT(*) AS cnt
+                    FROM city_matters WHERE created_at >= NOW() - INTERVAL '8 weeks'
+                    GROUP BY 1
+                ) mat ON mat.wk = w.week_start
+                LEFT JOIN (
+                    SELECT date_trunc('week', created_at) AS wk, COUNT(*) AS cnt
+                    FROM votes WHERE created_at >= NOW() - INTERVAL '8 weeks'
+                    GROUP BY 1
+                ) v ON v.wk = w.week_start
+                ORDER BY w.week_start
+            """)
+            metrics['trends'] = {
+                'meetings': [row['meetings'] for row in trends],
+                'items': [row['items'] for row in trends],
+                'matters': [row['matters'] for row in trends],
+                'votes': [row['votes'] for row in trends],
+            }
+
             return metrics
 
     async def get_city(

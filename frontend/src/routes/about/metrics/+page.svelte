@@ -59,6 +59,21 @@
 			default: return 'coverage-pending';
 		}
 	}
+
+	function sparklinePath(values: number[], width: number = 80, height: number = 24): string {
+		if (!values || values.length < 2) return '';
+		const max = Math.max(...values);
+		const min = Math.min(...values);
+		const range = max - min || 1;
+		const step = width / (values.length - 1);
+		return values
+			.map((v, i) => {
+				const x = i * step;
+				const y = height - ((v - min) / range) * (height - 4) - 2;
+				return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+			})
+			.join(' ');
+	}
 </script>
 
 <SeoHead
@@ -167,25 +182,33 @@
 				<div class="stats-card">
 					<div class="number-primary">{formatNumber(data.analytics.real_metrics.meetings_tracked)}</div>
 					<div class="stat-title">Meetings Tracked</div>
-					<div class="stat-description">
-						{#if data.analytics.real_metrics.population_with_data > 0}
-							{formatPopulation(data.analytics.real_metrics.population_with_data)}
-						{:else}
-							City council sessions monitored
-						{/if}
-					</div>
+					{#if data.platformMetrics?.trends.meetings}
+						<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none">
+							<path d={sparklinePath(data.platformMetrics.trends.meetings)} fill="none" stroke="var(--civic-blue)" stroke-width="1.5" />
+						</svg>
+						<div class="stat-description">{formatGrowth(data.platformMetrics.growth.meetings_30d)}</div>
+					{:else}
+						<div class="stat-description">
+							{#if data.analytics.real_metrics.population_with_data > 0}
+								{formatPopulation(data.analytics.real_metrics.population_with_data)}
+							{:else}
+								City council sessions monitored
+							{/if}
+						</div>
+					{/if}
 				</div>
 
 				<div class="stats-card">
 					<div class="number-primary">{formatNumber(data.analytics.real_metrics.matters_tracked)}</div>
 					<div class="stat-title">Legislative Matters</div>
-					<div class="stat-description">
-						{#if data.platformMetrics?.growth.matters_30d > 0}
-							{formatGrowth(data.platformMetrics.growth.matters_30d)}
-						{:else}
-							Across {formatNumber(data.analytics.real_metrics.agenda_items_processed)} agenda items
-						{/if}
-					</div>
+					{#if data.platformMetrics?.trends.matters}
+						<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none">
+							<path d={sparklinePath(data.platformMetrics.trends.matters)} fill="none" stroke="var(--civic-blue)" stroke-width="1.5" />
+						</svg>
+						<div class="stat-description">{formatGrowth(data.platformMetrics.growth.matters_30d)}</div>
+					{:else}
+						<div class="stat-description">Across {formatNumber(data.analytics.real_metrics.agenda_items_processed)} agenda items</div>
+					{/if}
 				</div>
 
 				<div class="stats-card">
@@ -240,13 +263,14 @@
 					<div class="stats-card highlight-card">
 						<div class="number-primary">{formatNumber(data.platformMetrics.accountability.votes)}</div>
 						<div class="stat-title">Votes Recorded</div>
-						<div class="stat-description">
-							{#if data.platformMetrics.growth.votes_30d > 0}
-								{formatGrowth(data.platformMetrics.growth.votes_30d)}
-							{:else}
-								Individual voting records captured
-							{/if}
-						</div>
+						{#if data.platformMetrics.trends.votes}
+							<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none">
+								<path d={sparklinePath(data.platformMetrics.trends.votes)} fill="none" stroke="var(--civic-blue)" stroke-width="1.5" />
+							</svg>
+							<div class="stat-description">{formatGrowth(data.platformMetrics.growth.votes_30d)}</div>
+						{:else}
+							<div class="stat-description">Individual voting records captured</div>
+						{/if}
 					</div>
 
 					<div class="stats-card">
@@ -281,13 +305,14 @@
 					<div class="stats-card">
 						<div class="number-primary">{formatNumber(data.platformMetrics.content.agenda_items)}</div>
 						<div class="stat-title">Agenda Items Ingested</div>
-						<div class="stat-description">
-							{#if data.platformMetrics.growth.items_30d > 0}
-								{formatGrowth(data.platformMetrics.growth.items_30d)}
-							{:else}
-								Total items collected from agendas
-							{/if}
-						</div>
+						{#if data.platformMetrics.trends.items}
+							<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none">
+								<path d={sparklinePath(data.platformMetrics.trends.items)} fill="none" stroke="var(--civic-blue)" stroke-width="1.5" />
+							</svg>
+							<div class="stat-description">{formatGrowth(data.platformMetrics.growth.items_30d)}</div>
+						{:else}
+							<div class="stat-description">Total items collected from agendas</div>
+						{/if}
 					</div>
 
 					<div class="stats-card">
@@ -301,13 +326,14 @@
 					<div class="stats-card">
 						<div class="number-primary">{formatNumber(data.platformMetrics.processing.summarized_meetings)}</div>
 						<div class="stat-title">Meetings Summarized</div>
-						<div class="stat-description">
-							{#if data.platformMetrics.growth.meetings_30d > 0}
-								{formatGrowth(data.platformMetrics.growth.meetings_30d)} ingested
-							{:else}
-								Full meeting summaries generated
-							{/if}
-						</div>
+						{#if data.platformMetrics.trends.meetings}
+							<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none">
+								<path d={sparklinePath(data.platformMetrics.trends.meetings)} fill="none" stroke="var(--civic-blue)" stroke-width="1.5" />
+							</svg>
+							<div class="stat-description">{formatGrowth(data.platformMetrics.growth.meetings_30d)} ingested</div>
+						{:else}
+							<div class="stat-description">Full meeting summaries generated</div>
+						{/if}
 					</div>
 				</div>
 			</section>
@@ -451,6 +477,12 @@
 		font-size: 0.9rem;
 		color: var(--text-secondary);
 		line-height: 1.5;
+	}
+
+	.sparkline {
+		width: 80px;
+		height: 24px;
+		overflow: visible;
 	}
 
 	.loading-container {
