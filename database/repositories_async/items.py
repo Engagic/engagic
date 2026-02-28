@@ -497,6 +497,7 @@ class ItemRepository(BaseRepository):
                 """
                 SELECT i.id as item_id, i.meeting_id, i.title as item_title,
                        i.summary, i.agenda_number, i.matter_file, i.sequence,
+                       i.sponsors,
                        m.title as meeting_title, m.date, m.banana,
                        m.agenda_url, m.status
                 FROM items i

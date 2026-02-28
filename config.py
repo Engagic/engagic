@@ -7,12 +7,14 @@ from typing import Optional
 from dotenv import load_dotenv
 import structlog
 
-# Auto-load .env file from project root before any config reads
-# This eliminates need for shell scripts to source .env manually
+# Auto-load env files from project root before any config reads
 _project_root = Path(__file__).parent
 _env_file = _project_root / ".env"
 if _env_file.exists():
     load_dotenv(_env_file)
+_secrets_file = _project_root / ".llm_secrets"
+if _secrets_file.exists():
+    load_dotenv(_secrets_file, override=True)
 
 logger = logging.getLogger("engagic")
 

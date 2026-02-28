@@ -571,6 +571,21 @@ GROUP BY u.id, u.email, u.created_at
 ORDER BY u.created_at DESC;
 "
     echo ""
+    echo -e "${BLUE}=== Keyword Alerts ===${NC}"
+    PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
+SELECT
+    u.email,
+    STRING_AGG(DISTINCT elem::text, ', ') as cities,
+    a.criteria->>'keywords' as keywords
+FROM userland.alerts a
+JOIN userland.users u ON u.id = a.user_id
+LEFT JOIN LATERAL jsonb_array_elements_text(a.cities) elem ON true
+WHERE a.active = true
+  AND jsonb_array_length(COALESCE(a.criteria->'keywords', '[]'::jsonb)) > 0
+GROUP BY u.email, a.id, a.criteria
+ORDER BY u.email;
+"
+    echo ""
     echo -e "${BLUE}=== City Requests WITH Email (priority) ===${NC}"
     PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U "$ENGAGIC_POSTGRES_USER" -d "$ENGAGIC_POSTGRES_DB" -h localhost -c "
 SELECT DISTINCT elem as requested_city, u.email, a.created_at::date as requested
