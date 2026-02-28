@@ -210,6 +210,7 @@ export interface PlatformMetrics {
 		votes: number;
 		sponsorships: number;
 		cities_with_votes: number;
+		officials_with_votes: number;
 		votes_by_city: Array<{
 			city: string;
 			votes: number;

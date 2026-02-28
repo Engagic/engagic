@@ -222,6 +222,7 @@ async def get_platform_metrics(db: Database = Depends(get_db)):
                 "votes": metrics["votes"],
                 "sponsorships": metrics["sponsorships"],
                 "cities_with_votes": metrics["cities_with_votes"],
+                "officials_with_votes": metrics["officials_with_votes"],
                 "votes_by_city": metrics["votes_by_city"],
             },
             "processing": {
