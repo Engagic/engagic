@@ -245,7 +245,14 @@ class Conductor:
                     break
 
                 logger.info("processing jobs for city", city=banana)
-                stats = await self.processor.process_city_jobs(banana)
+                try:
+                    stats = await self.processor.process_city_jobs(banana)
+                except Exception as e:
+                    logger.error("city processing failed", city=banana,
+                                 error=str(e), error_type=type(e).__name__)
+                    stats = {"processed_count": 0, "failed_count": 1,
+                             "items_processed": 0, "items_new": 0,
+                             "items_skipped": 0, "items_failed": 0}
 
                 # Yield immediately - don't accumulate results in memory
                 yield {

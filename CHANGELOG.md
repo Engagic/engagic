@@ -6,6 +6,20 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-02-28] Subprocess Isolation for PDF Extraction
+
+PyMuPDF segfaults on certain malformed municipal PDFs, killing the entire process-cities run with no traceback or log. Two segfaults confirmed in dmesg (`SIGSEGV` in python3.13 and libc.so.6). No Python exception handler can catch a C-level segfault.
+
+### Changes
+- **analysis/analyzer_async.py**: PDF extraction now runs in an isolated child process via `multiprocessing` forkserver. A segfault kills only the child; the parent gets a non-zero exit code and raises `ExtractionError` with the signal info. Processing continues to the next meeting.
+- **pipeline/processor.py**: Added `except Exception` catch-all in `process_city_jobs` for Python-level exceptions outside the narrow `(ProcessingError, LLMError, ExtractionError)` list.
+- **pipeline/conductor.py**: Wrapped per-city `process_city_jobs` call in try/except so a city-level failure doesn't kill the entire multi-city loop.
+
+### Result
+A malformed PDF that previously killed the entire 214-city batch run now logs a failed extraction and moves on.
+
+---
+
 ## [2026-01-15] Human Context in Appeals/Variances
 
 Enhanced summarizer prompt to capture narrative context in quasi-judicial items (appeals, variances, hearings).
