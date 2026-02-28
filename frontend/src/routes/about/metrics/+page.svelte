@@ -260,6 +260,12 @@
 						<div class="stat-title">Cities with Vote Data</div>
 						<div class="stat-description">Full voting record coverage</div>
 					</div>
+
+					<div class="stats-card">
+						<div class="number-primary">{formatNumber(data.platformMetrics.accountability.officials_with_votes)}</div>
+						<div class="stat-title">Officials Tracked</div>
+						<div class="stat-description">Individual voting records on file</div>
+					</div>
 				</div>
 			</section>
 

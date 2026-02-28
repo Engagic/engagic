@@ -172,6 +172,7 @@ class Database:
                     (SELECT COUNT(*) FROM votes) as votes,
                     (SELECT COUNT(*) FROM sponsorships) as sponsorships,
                     (SELECT COUNT(DISTINCT SPLIT_PART(council_member_id, '_', 1)) FROM votes) as cities_with_votes,
+                    (SELECT COUNT(DISTINCT council_member_id) FROM votes) as officials_with_votes,
                     -- Processing stats
                     (SELECT COUNT(*) FROM meetings WHERE summary IS NOT NULL) as summarized_meetings,
                     (SELECT COUNT(*) FROM items WHERE summary IS NOT NULL) as summarized_items,
