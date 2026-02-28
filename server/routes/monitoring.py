@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from config import config, get_logger
 from database.db_postgres import Database
@@ -92,6 +92,34 @@ async def root():
             "Direct city websites",
         ],
     }
+
+
+@router.get("/api/map-stats")
+async def get_map_stats(db: Database = Depends(get_db)):
+    """Compact per-city meeting stats for map feature-state overlay."""
+    try:
+        async with db.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT
+                    banana,
+                    COUNT(*) as meeting_count,
+                    COUNT(*) FILTER (WHERE summary IS NOT NULL) as summarized_count
+                FROM meetings
+                GROUP BY banana
+            """)
+
+        stats = {
+            row["banana"]: {"m": row["meeting_count"], "s": row["summarized_count"]}
+            for row in rows
+        }
+
+        return JSONResponse(
+            content=stats,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+    except Exception as e:
+        logger.error("map stats endpoint failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch map stats")
 
 
 @router.get("/api/health")

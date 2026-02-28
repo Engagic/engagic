@@ -7,3 +7,5 @@ node_modules/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 stats.html
+.wrangler/
+static/tiles/

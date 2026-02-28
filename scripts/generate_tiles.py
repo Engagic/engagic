@@ -7,6 +7,7 @@ to generate PMTiles file for MapLibre GL JS.
 Usage:
     python scripts/generate_tiles.py --export    # Export to GeoJSON
     python scripts/generate_tiles.py --tiles     # Generate PMTiles
+    python scripts/generate_tiles.py --upload    # Upload PMTiles to R2
     python scripts/generate_tiles.py --all       # Full pipeline
 
 Requirements:
@@ -17,6 +18,7 @@ Requirements:
 import argparse
 import asyncio
 import json
+import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -192,11 +194,63 @@ def deploy_tiles() -> None:
     print(f"\nTiles deployed to: {dest}")
 
 
+FRONTEND_DIR = Path("/opt/engagic/frontend")
+
+
+def upload_r2() -> None:
+    """Upload PMTiles to Cloudflare R2 via wrangler CLI."""
+    if not PMTILES_PATH.exists():
+        logger.error("pmtiles not found, run --tiles first")
+        return
+
+    # Load token from .llm_secrets if not already in environment
+    token = os.environ.get("CLOUDFLARE_API_TOKEN")
+    if not token:
+        secrets_path = Path("/opt/engagic/.llm_secrets")
+        if secrets_path.exists():
+            for line in secrets_path.read_text().splitlines():
+                if line.startswith("CLOUDFLARE_API_TOKEN="):
+                    token = line.split("=", 1)[1]
+                    break
+    if not token:
+        logger.error("CLOUDFLARE_API_TOKEN not found in environment or .llm_secrets")
+        print("Error: set CLOUDFLARE_API_TOKEN or add it to .llm_secrets")
+        return
+
+    env = {**os.environ, "CLOUDFLARE_API_TOKEN": token}
+
+    size_mb = PMTILES_PATH.stat().st_size / (1024 * 1024)
+    logger.info("uploading to R2", file=str(PMTILES_PATH), size_mb=f"{size_mb:.1f}")
+    print(f"\nUploading {size_mb:.1f} MB to R2 bucket engagic-tiles...")
+
+    result = subprocess.run(
+        [
+            "npx", "wrangler", "r2", "object", "put",
+            "engagic-tiles/cities.pmtiles",
+            f"--file={PMTILES_PATH}",
+            "--content-type=application/octet-stream",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=FRONTEND_DIR,
+        env=env,
+    )
+
+    if result.returncode != 0:
+        logger.error("R2 upload failed", stderr=result.stderr)
+        print(f"Error: {result.stderr}")
+        return
+
+    logger.info("R2 upload complete")
+    print("R2 upload complete: engagic-tiles/cities.pmtiles")
+
+
 async def main():
     parser = argparse.ArgumentParser(description="Generate map tiles")
     parser.add_argument("--export", action="store_true", help="Export GeoJSON from database")
     parser.add_argument("--tiles", action="store_true", help="Generate PMTiles")
     parser.add_argument("--deploy", action="store_true", help="Deploy to static directory")
+    parser.add_argument("--upload", action="store_true", help="Upload PMTiles to Cloudflare R2")
     parser.add_argument("--all", action="store_true", help="Full pipeline")
     args = parser.parse_args()
 
@@ -209,7 +263,10 @@ async def main():
     if args.all or args.deploy:
         deploy_tiles()
 
-    if not any([args.export, args.tiles, args.deploy, args.all]):
+    if args.all or args.upload:
+        upload_r2()
+
+    if not any([args.export, args.tiles, args.deploy, args.upload, args.all]):
         parser.print_help()
 
 

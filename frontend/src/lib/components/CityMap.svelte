@@ -3,6 +3,7 @@
 	import { Protocol } from 'pmtiles';
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
+	import { config } from '$lib/api/config';
 
 	interface Props {
 		tilesUrl?: string;
@@ -12,7 +13,8 @@
 
 	let mapContainer: HTMLDivElement;
 	let map: maplibregl.Map | null = $state(null);
-	let hoveredCity: { name: string; state: string; meeting_count: number } | null = $state(null);
+	let hoveredCity: { name: string; state: string; meeting_count: number; summarized_count: number } | null = $state(null);
+	let cityStats: Record<string, { m: number; s: number }> = {};
 
 	// Theme color palettes - MapLibre requires actual hex values, not CSS vars
 	const themes = {
@@ -50,7 +52,8 @@
 			sources: {
 				cities: {
 					type: 'vector',
-					url: `pmtiles://${tilesUrl}`
+					url: `pmtiles://${tilesUrl}`,
+					promoteId: 'banana'
 				},
 				// US state boundaries (bundled locally for performance)
 				states: {
@@ -109,7 +112,7 @@
 						'fill-opacity': [
 							'interpolate',
 							['linear'],
-							['get', 'meeting_count'],
+							['coalesce', ['feature-state', 'meeting_count'], ['get', 'meeting_count'], 0],
 							0, 0.3,
 							50, 0.5,
 							200, 0.7
@@ -127,7 +130,7 @@
 						'fill-opacity': [
 							'interpolate',
 							['linear'],
-							['get', 'summarized_count'],
+							['coalesce', ['feature-state', 'summarized_count'], ['get', 'summarized_count'], 0],
 							0, 0.4,
 							20, 0.6,
 							100, 0.8
@@ -142,9 +145,9 @@
 					paint: {
 						'line-color': [
 							'case',
-							['==', ['get', 'has_summaries'], true],
+							['coalesce', ['feature-state', 'has_summaries'], ['get', 'has_summaries'], false],
 							colors.summarized,
-							['==', ['get', 'has_data'], true],
+							['coalesce', ['feature-state', 'has_data'], ['get', 'has_data'], false],
 							colors.active,
 							colors.inactiveOutline
 						],
@@ -185,9 +188,9 @@
 		mapInstance.setPaintProperty('city-hover', 'fill-color', colors.hover);
 		mapInstance.setPaintProperty('city-outline', 'line-color', [
 			'case',
-			['==', ['get', 'has_summaries'], true],
+			['coalesce', ['feature-state', 'has_summaries'], ['get', 'has_summaries'], false],
 			colors.summarized,
-			['==', ['get', 'has_data'], true],
+			['coalesce', ['feature-state', 'has_data'], ['get', 'has_data'], false],
 			colors.active,
 			colors.inactiveOutline
 		]);
@@ -219,6 +222,29 @@
 		// Navigation controls
 		mapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+		// Fetch live stats and overlay via feature-state
+		mapInstance.on('load', async () => {
+			try {
+				const res = await fetch(`${config.apiBaseUrl}/api/map-stats`);
+				if (!res.ok) return;
+				const stats: Record<string, { m: number; s: number }> = await res.json();
+				cityStats = stats;
+				for (const [banana, s] of Object.entries(stats)) {
+					mapInstance.setFeatureState(
+						{ source: 'cities', sourceLayer: 'cities', id: banana },
+						{
+							meeting_count: s.m,
+							summarized_count: s.s,
+							has_data: s.m > 0,
+							has_summaries: s.s > 0
+						}
+					);
+				}
+			} catch {
+				// Graceful degradation -- tile-baked data remains
+			}
+		});
+
 		// Click to navigate to city page
 		mapInstance.on('click', 'city-fill-active', (e) => {
 			if (e.features && e.features[0]) {
@@ -239,31 +265,24 @@
 		});
 
 		// Hover effects
-		mapInstance.on('mouseenter', 'city-fill-active', (e) => {
+		function handleHover(e: maplibregl.MapMouseEvent & { features?: maplibregl.GeoJSONFeature[] }) {
 			mapInstance.getCanvas().style.cursor = 'pointer';
 			if (e.features && e.features[0]) {
 				const props = e.features[0].properties;
+				const banana = props?.banana || '';
+				const live = cityStats[banana];
 				hoveredCity = {
 					name: props?.name || 'Unknown',
 					state: props?.state || '',
-					meeting_count: props?.meeting_count || 0
+					meeting_count: live?.m ?? props?.meeting_count ?? 0,
+					summarized_count: live?.s ?? props?.summarized_count ?? 0
 				};
-				mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], props?.banana || '']);
+				mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], banana]);
 			}
-		});
+		}
 
-		mapInstance.on('mouseenter', 'city-fill-summarized', (e) => {
-			mapInstance.getCanvas().style.cursor = 'pointer';
-			if (e.features && e.features[0]) {
-				const props = e.features[0].properties;
-				hoveredCity = {
-					name: props?.name || 'Unknown',
-					state: props?.state || '',
-					meeting_count: props?.meeting_count || 0
-				};
-				mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], props?.banana || '']);
-			}
-		});
+		mapInstance.on('mouseenter', 'city-fill-active', handleHover);
+		mapInstance.on('mouseenter', 'city-fill-summarized', handleHover);
 
 		mapInstance.on('mouseleave', 'city-fill-active', () => {
 			mapInstance.getCanvas().style.cursor = '';
@@ -309,7 +328,9 @@
 	{#if hoveredCity}
 		<div class="tooltip">
 			<div class="tooltip-city">{hoveredCity.name}, {hoveredCity.state}</div>
-			<div class="tooltip-stats">{hoveredCity.meeting_count} meetings</div>
+			<div class="tooltip-stats">
+				{hoveredCity.meeting_count} meetings{#if hoveredCity.summarized_count > 0} / {hoveredCity.summarized_count} summarized{/if}
+			</div>
 		</div>
 	{/if}
 
