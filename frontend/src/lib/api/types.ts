@@ -231,6 +231,12 @@ export interface PlatformMetrics {
 		matters_30d: number;
 		votes_30d: number;
 	};
+	trends: {
+		meetings: number[];
+		items: number[];
+		matters: number[];
+		votes: number[];
+	};
 }
 
 // Flyer generation types (mirrors backend Pydantic models)
