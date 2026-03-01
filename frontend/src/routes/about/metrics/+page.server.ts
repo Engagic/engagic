@@ -13,9 +13,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 		return { analytics, platformMetrics, cityCoverage };
 	} catch (error) {
 		console.error('Failed to load metrics:', error);
-		const errMsg = error instanceof Error
-			? `${error.name}: ${error.message} | status=${(error as any).status ?? '?'} | ${JSON.stringify(error).slice(0, 200)}`
-			: String(error);
-		return { analytics: null, platformMetrics: null, cityCoverage: null, _debug_error: errMsg };
+		return { analytics: null, platformMetrics: null, cityCoverage: null };
 	}
 };
