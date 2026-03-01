@@ -340,7 +340,7 @@
 		{/if}
 
 	{:else}
-		<div class="loading-container">Loading metrics...</div>
+		<div class="loading-container">Loading metrics...{#if data._debug_error}<br/><small style="color: red; font-family: monospace;">{data._debug_error}</small>{/if}</div>
 	{/if}
 </article>
 
