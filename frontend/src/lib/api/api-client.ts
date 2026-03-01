@@ -82,6 +82,7 @@ async function fetchWithRetry(
 		const response = await fetch(url, {
 			...options,
 			headers: {
+				'User-Agent': 'engagic-ssr/1.0',
 				...extraHeaders,
 				...(requestHeaders || {}),
 				...(options.headers || {})
