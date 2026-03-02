@@ -190,32 +190,40 @@ class Processor:
             return False  # Normal timeout, continue processing
 
     async def process_queue(self):
-        """Process jobs from the processing queue continuously"""
-        logger.info("starting queue processor")
+        """Process jobs from the processing queue continuously.
+
+        Claims up to JOB_CONCURRENCY jobs at a time and runs them in parallel.
+        Most job time is network I/O, so overlapping gives significant throughput.
+        """
+        concurrency = config.JOB_CONCURRENCY
+        logger.info("starting queue processor", concurrency=concurrency)
 
         while self.is_running:
             try:
-                job = await self.db.queue.get_next_for_processing()
+                # Claim up to `concurrency` jobs
+                batch = []
+                for _ in range(concurrency):
+                    job = await self.db.queue.get_next_for_processing()
+                    if not job:
+                        break
+                    batch.append(job)
 
-                if not job:
-                    # Use interruptible wait instead of sleep
+                if not batch:
                     if await self._wait_with_shutdown_check(QUEUE_POLL_INTERVAL):
                         logger.info("shutdown signaled during queue poll")
                         break
                     continue
 
-                queue_id = job.id
-                logger.info("processing queue job", queue_id=queue_id, job_type=job.job_type)
-
-                await self._dispatch_and_process_job(job, queue_id)
+                logger.info("processing queue batch", batch_size=len(batch))
+                await asyncio.gather(
+                    *[self._dispatch_and_process_job(job, job.id) for job in batch]
+                )
 
             except (ProcessingError, LLMError, ExtractionError) as e:
-                # Expected errors during job processing - log and continue
                 logger.error("queue processor error", error=str(e), error_type=type(e).__name__)
                 if await self._wait_with_shutdown_check(QUEUE_FATAL_ERROR_BACKOFF):
                     break
             except Exception as e:
-                # Catch-all for unexpected errors - log and continue to prevent crash
                 logger.error(
                     "unexpected queue processor error",
                     error=str(e),
@@ -227,24 +235,19 @@ class Processor:
         logger.info("queue processor stopped")
 
     async def process_city_jobs(self, city_banana: str) -> dict:
-        """Process all queued jobs for a specific city."""
-        logger.info("processing queued jobs for city", city=city_banana)
-        processed_count = 0
-        failed_count = 0
-        total_items_processed = 0
-        total_items_new = 0
-        total_items_skipped = 0
-        total_items_failed = 0
+        """Process all queued jobs for a specific city with concurrent execution.
 
-        while True:
-            job = await self.db.queue.get_next_for_processing(banana=city_banana)
-            if not job:
-                break
+        Runs up to JOB_CONCURRENCY jobs in parallel. Most job time is network I/O
+        (PDF downloads, LLM API calls), so overlapping jobs gives significant
+        throughput gains even on single-core machines.
+        """
+        logger.info("processing queued jobs for city", city=city_banana, concurrency=config.JOB_CONCURRENCY)
+        stats = Counter()
 
+        async def run_single_job(job) -> None:
             queue_id = job.id
             job_type = job.job_type
-            logger.info("processing job", queue_id=queue_id, job_type=job_type)
-            job_start_time = time.time()
+            job_start = time.time()
 
             try:
                 if job_type == "meeting":
@@ -254,19 +257,19 @@ class Processor:
                     meeting = await self.db.meetings.get_meeting(job.payload.meeting_id)
                     if not meeting:
                         await self.db.queue.mark_processing_failed(queue_id, "Meeting not found")
-                        failed_count += 1
+                        stats["failed"] += 1
                         self.metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
-                        continue
+                        return
                     with self.metrics.processing_duration.labels(job_type="meeting").time():
                         item_stats = await self.process_meeting(meeting)
                     await self.db.queue.mark_processing_complete(queue_id)
-                    processed_count += 1
+                    stats["processed"] += 1
                     if item_stats:
-                        total_items_processed += item_stats.get("items_processed", 0)
-                        total_items_new += item_stats.get("items_new", 0)
-                        total_items_skipped += item_stats.get("items_skipped", 0)
-                        total_items_failed += item_stats.get("items_failed", 0)
-                    logger.info("processed meeting", meeting_id=job.payload.meeting_id, duration_seconds=round(time.time() - job_start_time, 1))
+                        stats["items_processed"] += item_stats.get("items_processed", 0)
+                        stats["items_new"] += item_stats.get("items_new", 0)
+                        stats["items_skipped"] += item_stats.get("items_skipped", 0)
+                        stats["items_failed"] += item_stats.get("items_failed", 0)
+                    logger.info("processed meeting", meeting_id=job.payload.meeting_id, duration_seconds=round(time.time() - job_start, 1))
                     self.metrics.queue_jobs_processed.labels(job_type=job_type, status="completed").inc()
 
                 elif job_type == "matter":
@@ -276,12 +279,12 @@ class Processor:
                     with self.metrics.processing_duration.labels(job_type="matter").time():
                         matter_stats = await self.process_matter(job.payload.matter_id, job.payload.meeting_id, {"item_ids": job.payload.item_ids})
                     await self.db.queue.mark_processing_complete(queue_id)
-                    processed_count += 1
-                    total_items_processed += matter_stats.get("items_processed", 0)
-                    total_items_new += matter_stats.get("items_new", 0)
-                    total_items_skipped += matter_stats.get("items_skipped", 0)
-                    total_items_failed += matter_stats.get("items_failed", 0)
-                    logger.info("processed matter", matter_id=job.payload.matter_id, duration_seconds=round(time.time() - job_start_time, 1))
+                    stats["processed"] += 1
+                    stats["items_processed"] += matter_stats.get("items_processed", 0)
+                    stats["items_new"] += matter_stats.get("items_new", 0)
+                    stats["items_skipped"] += matter_stats.get("items_skipped", 0)
+                    stats["items_failed"] += matter_stats.get("items_failed", 0)
+                    logger.info("processed matter", matter_id=job.payload.matter_id, duration_seconds=round(time.time() - job_start, 1))
                     self.metrics.queue_jobs_processed.labels(job_type=job_type, status="completed").inc()
 
                 else:
@@ -289,27 +292,44 @@ class Processor:
 
             except (ProcessingError, LLMError, ExtractionError) as e:
                 await self.db.queue.mark_processing_failed(queue_id, str(e))
-                failed_count += 1
+                stats["failed"] += 1
                 self.metrics.queue_jobs_processed.labels(job_type=job_type, status="failed").inc()
                 self.metrics.record_error(component="processor", error=e)
-                logger.error("job processing failed", queue_id=queue_id, job_type=job_type, duration_seconds=round(time.time() - job_start_time, 1), error=str(e))
+                logger.error("job processing failed", queue_id=queue_id, job_type=job_type, duration_seconds=round(time.time() - job_start, 1), error=str(e))
 
             except Exception as e:
                 await self.db.queue.mark_processing_failed(queue_id, str(e))
-                failed_count += 1
+                stats["failed"] += 1
                 self.metrics.queue_jobs_processed.labels(job_type=job_type, status="failed").inc()
                 self.metrics.record_error(component="processor", error=e)
-                logger.error("unexpected job failure", queue_id=queue_id, job_type=job_type, error=str(e), error_type=type(e).__name__, duration_seconds=round(time.time() - job_start_time, 1))
+                logger.error("unexpected job failure", queue_id=queue_id, job_type=job_type, error=str(e), error_type=type(e).__name__, duration_seconds=round(time.time() - job_start, 1))
 
-        logger.info("processing complete for city", city=city_banana, meetings_succeeded=processed_count, meetings_failed=failed_count, items_processed=total_items_processed, items_new=total_items_new, items_skipped=total_items_skipped, items_failed=total_items_failed)
+        # Claim and run jobs in batches of JOB_CONCURRENCY
+        concurrency = config.JOB_CONCURRENCY
+        while True:
+            # Claim up to `concurrency` jobs atomically
+            batch = []
+            for _ in range(concurrency):
+                job = await self.db.queue.get_next_for_processing(banana=city_banana)
+                if not job:
+                    break
+                batch.append(job)
+
+            if not batch:
+                break
+
+            logger.info("processing job batch", city=city_banana, batch_size=len(batch))
+            await asyncio.gather(*[run_single_job(j) for j in batch])
+
+        logger.info("processing complete for city", city=city_banana, meetings_succeeded=stats["processed"], meetings_failed=stats["failed"], items_processed=stats["items_processed"], items_new=stats["items_new"], items_skipped=stats["items_skipped"], items_failed=stats["items_failed"])
 
         return {
-            "processed_count": processed_count,
-            "failed_count": failed_count,
-            "items_processed": total_items_processed,
-            "items_new": total_items_new,
-            "items_skipped": total_items_skipped,
-            "items_failed": total_items_failed,
+            "processed_count": stats["processed"],
+            "failed_count": stats["failed"],
+            "items_processed": stats["items_processed"],
+            "items_new": stats["items_new"],
+            "items_skipped": stats["items_skipped"],
+            "items_failed": stats["items_failed"],
         }
 
     async def _process_single_item(self, item):
