@@ -38,7 +38,7 @@ check_uv() {
         log "Installing uv..."
         curl -LsSf https://astral.sh/uv/install.sh | sh
         export PATH="$HOME/.local/bin:$PATH"
-        source ~/.bashrc
+        source "$HOME/.bashrc"
     fi
 }
 
@@ -52,9 +52,9 @@ load_env() {
         set +a
     fi
     # Source API keys (Gemini, etc.)
-    if [ -f ~/.llm_secrets ]; then
+    if [ -f "$APP_DIR/.llm_secrets" ]; then
         set -a
-        source ~/.llm_secrets
+        source "$APP_DIR/.llm_secrets"
         set +a
     fi
     # Use colored dev logs for interactive CLI (systemd services use JSON)
@@ -265,7 +265,6 @@ kill_background_processes() {
     # Broader pattern to catch ALL engagic processes:
     # - engagic-daemon, engagic-conductor, engagic-*
     # - pipeline.conductor, pipeline.processor, pipeline.fetcher, pipeline.analyzer
-    # - Any python running from /root/engagic
     local PATTERN="engagic-|pipeline\.|/opt/engagic.*python"
 
     # Check for ANY running processes
@@ -492,7 +491,7 @@ process_cities() {
         cd $APP_DIR
         source $VENV_DIR/bin/activate
         if [ -f $APP_DIR/.env ]; then set -a; source $APP_DIR/.env; set +a; fi
-        if [ -f ~/.llm_secrets ]; then set -a; source ~/.llm_secrets; set +a; fi
+        if [ -f $APP_DIR/.llm_secrets ]; then set -a; source $APP_DIR/.llm_secrets; set +a; fi
         export ENGAGIC_LOG_FORMAT=dev
         echo 'Starting process-cities...'
         echo ''
