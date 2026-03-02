@@ -12,8 +12,8 @@ echo "Installing Prometheus (native binary, no Docker)..."
 # Configuration
 PROMETHEUS_VERSION="2.48.0"
 PROMETHEUS_URL="https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
-INSTALL_DIR="/root/engagic"
-DATA_DIR="/root/engagic/data/prometheus"
+INSTALL_DIR="/opt/engagic"
+DATA_DIR="/opt/engagic/data/prometheus"
 
 # Download Prometheus
 cd "$INSTALL_DIR"

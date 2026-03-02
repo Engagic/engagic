@@ -150,7 +150,7 @@ class Config:
         self.ADMIN_WHITELIST_IPS = self._parse_whitelist_ips(
             os.getenv(
                 "ENGAGIC_ADMIN_WHITELIST_IPS",
-                "165.232.158.241"
+                "5.78.189.81"
             )
         )
 
