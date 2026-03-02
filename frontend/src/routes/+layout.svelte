@@ -19,6 +19,28 @@
 		$page.url.pathname === '/country'
 	);
 
+	// Determine if this is a city or meeting page for topographic background
+	const isTopoPage = $derived(() => {
+		const path = $page.url.pathname;
+		// Exclude known non-city routes
+		if (path === '/' || path === '/country' || path.startsWith('/about/') ||
+			path.startsWith('/dashboard') || path.startsWith('/login') ||
+			path.startsWith('/signup') || path.startsWith('/state/') ||
+			path.startsWith('/matter/') || path.startsWith('/search')) {
+			return false;
+		}
+		// Match /:city_url or /:city_url/:meeting_slug patterns
+		const segments = path.split('/').filter(Boolean);
+		return segments.length >= 1 && segments.length <= 2;
+	});
+
+	// Apply body class reactively
+	$effect(() => {
+		if (typeof document !== 'undefined') {
+			document.body.classList.toggle('bg-topo', isTopoPage());
+		}
+	});
+
 	// Track page views on navigation
 	afterNavigate(({ from, to }) => {
 		if (to?.url) {

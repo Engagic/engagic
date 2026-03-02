@@ -30,6 +30,7 @@ import type {
 	ReportIssueResponse,
 	IssueType,
 	HappeningResponse,
+	GlobalHappeningResponse,
 	CityCoverageResponse,
 	CivicInfrastructureResponse
 } from './types';
@@ -464,6 +465,13 @@ export const apiClient = {
 		return request;
 	},
 
+	async getGlobalHappening(limit: number = 5): Promise<GlobalHappeningResponse> {
+		const url = new URL(`${config.apiBaseUrl}/api/happening/active`);
+		url.searchParams.set('limit', limit.toString());
+		const response = await fetchWithRetry(url.toString());
+		return response.json();
+	},
+
 	async getCityCoverage(): Promise<CityCoverageResponse> {
 		const response = await fetchWithRetry(`${config.apiBaseUrl}/api/city-coverage`);
 		return response.json();
@@ -525,6 +533,13 @@ export function createServerApiClient(clientIp: string | null, ssrAuthSecret?: s
 
 		async getHappeningItems(banana: string, limit: number = 10): Promise<HappeningResponse> {
 			const url = new URL(`${config.apiBaseUrl}/api/city/${banana}/happening`);
+			url.searchParams.set('limit', limit.toString());
+			const response = await serverFetch(url.toString());
+			return response.json();
+		},
+
+		async getGlobalHappening(limit: number = 5): Promise<GlobalHappeningResponse> {
+			const url = new URL(`${config.apiBaseUrl}/api/happening/active`);
 			url.searchParams.set('limit', limit.toString());
 			const response = await serverFetch(url.toString());
 			return response.json();

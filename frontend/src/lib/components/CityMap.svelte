@@ -22,9 +22,9 @@
 			background: '#f8fafc',
 			inactive: '#e2e8f0',
 			inactiveOutline: '#475569',
-			active: '#4f46e5',
+			active: '#0f766e',
 			summarized: '#10b981',
-			hover: '#8b5cf6',
+			hover: '#0d9488',
 			stateBorder: '#cbd5e1',
 			countryFill: '#f1f5f9'
 		},
@@ -32,9 +32,9 @@
 			background: '#1e293b',
 			inactive: '#334155',
 			inactiveOutline: '#64748b',
-			active: '#4f46e5',
+			active: '#0f766e',
 			summarized: '#10b981',
-			hover: '#8b5cf6',
+			hover: '#0d9488',
 			stateBorder: '#475569',
 			countryFill: '#0f172a'
 		}

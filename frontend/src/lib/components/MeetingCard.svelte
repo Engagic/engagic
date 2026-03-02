@@ -176,7 +176,10 @@
 	}
 
 	.meeting-card.status-border-ai {
-		border-left: 4px solid var(--civic-green);
+		border-left: 4px solid transparent;
+		border-image: linear-gradient(to bottom, var(--civic-green), transparent) 1;
+		border-image-slice: 1;
+		border-image-width: 0 0 0 4px;
 	}
 
 	.meeting-card.status-border-agenda {
