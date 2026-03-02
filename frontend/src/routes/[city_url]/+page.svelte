@@ -568,7 +568,7 @@
 	}
 
 	.compact-logo:hover {
-		transform: scale(1.05);
+		opacity: 0.8;
 	}
 
 	.logo-icon {
@@ -652,7 +652,7 @@
 		cursor: pointer;
 		transition: all 0.2s;
 		white-space: nowrap;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 	}
 
 	.watch-city-btn:hover {
@@ -670,8 +670,7 @@
 	}
 
 	.watch-city-btn.watching:hover {
-		background: #059669;
-		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+		background: var(--action-yes-hover);
 	}
 
 	.source-row {
@@ -905,7 +904,7 @@
 		font-size: 0.85rem;
 		font-weight: 700;
 		color: var(--badge-matter-text);
-		background: linear-gradient(135deg, var(--badge-matter-bg-start) 0%, var(--badge-matter-bg-end) 100%);
+		background: var(--badge-matter-bg);
 		border: 1.5px solid var(--badge-matter-border);
 		padding: 0.35rem 0.75rem;
 		border-radius: 8px;
@@ -934,7 +933,7 @@
 	}
 
 	.matter-card-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -952,16 +951,16 @@
 	.matter-topic-tag {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
-		padding: 0.25rem 0.6rem;
-		background: var(--surface-secondary);
-		color: var(--civic-blue);
-		border: 1px solid var(--border-primary);
+		padding: 0.25rem 0.55rem;
+		background: var(--topic-tag-bg);
+		color: var(--topic-tag-text);
+		border: 1px solid var(--topic-tag-border);
 		border-radius: 4px;
 		font-weight: 500;
 	}
 
 	.matter-card-summary {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		line-height: 1.6;
 		color: var(--text-secondary);
@@ -1046,7 +1045,7 @@
 	}
 
 	.cta-subtext {
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.85rem;
 		color: var(--text-tertiary);
 		margin: 0.75rem 0 0 0;
@@ -1153,5 +1152,57 @@
 		.no-upcoming-cta p {
 			font-size: 1rem;
 		}
+	}
+
+	/* Meeting list & filter styles (extracted from app.css) */
+	.meeting-list {
+		display: grid;
+		gap: 1rem;
+		grid-template-columns: 1fr;
+		width: 100%;
+	}
+
+	.meetings-filter {
+		margin-bottom: 1.5rem;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 1rem;
+		width: 100%;
+	}
+
+	.meetings-section-title {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 1.3rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin: 0;
+	}
+
+	.toggle-past-btn {
+		padding: 0.5rem 1rem;
+		background: var(--surface-primary);
+		color: var(--civic-blue);
+		border: 2px solid var(--civic-blue);
+		border-radius: 6px;
+		cursor: pointer;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		transition: all 0.2s ease;
+	}
+
+	.toggle-past-btn:hover {
+		background: var(--civic-blue);
+		color: var(--surface-primary);
+	}
+
+	.past-meetings-divider {
+		margin: 2rem 0 1rem 0;
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--border-primary);
+		color: var(--text-secondary);
+		font-size: 1.1rem;
+		font-weight: 500;
 	}
 </style>

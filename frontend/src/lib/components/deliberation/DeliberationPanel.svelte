@@ -373,14 +373,14 @@
 	.submit-error {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		color: #ef4444;
+		color: var(--civic-red);
 		margin: 0.5rem 0 0 0;
 	}
 
 	.submit-success {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		color: #22c55e;
+		color: var(--civic-green);
 		margin: 0.5rem 0 0 0;
 	}
 
@@ -448,8 +448,8 @@
 
 	.consensus-score {
 		display: inline-block;
-		background: #dcfce7;
-		color: #16a34a;
+		background: var(--deliberation-agree-bg);
+		color: var(--deliberation-agree-text);
 		padding: 0.15rem 0.4rem;
 		border-radius: 3px;
 		font-family: 'IBM Plex Mono', monospace;

@@ -150,14 +150,14 @@
 	.icon-check {
 		width: 64px;
 		height: 64px;
-		background: #d1fae5;
-		border: 1px solid #10b981;
+		background: var(--success-bg);
+		border: 1px solid var(--success-border);
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		font-size: 2rem;
-		color: #10b981;
+		color: var(--success-border);
 		font-weight: bold;
 	}
 
@@ -211,7 +211,7 @@
 		width: 100%;
 		padding: 0.75rem 1rem;
 		font-size: 1rem;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		color: var(--text-primary);
 		background: var(--surface-primary);
 		border: 2px solid var(--civic-border);
@@ -232,15 +232,15 @@
 	}
 
 	.input::placeholder {
-		color: #9ca3af;
+		color: var(--civic-gray);
 	}
 
 	.error-banner {
 		padding: 1rem;
-		background: #fef2f2;
-		border: 1px solid #ef4444;
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
 		border-radius: 8px;
-		color: #991b1b;
+		color: var(--error-text);
 		font-size: 0.875rem;
 		margin-bottom: 1.5rem;
 		font-weight: 500;
@@ -248,10 +248,10 @@
 
 	.session-expired-banner {
 		padding: 1rem;
-		background: #fef3c7;
-		border: 1px solid #f59e0b;
+		background: var(--warning-bg);
+		border: 1px solid var(--warning-border);
 		border-radius: 8px;
-		color: #92400e;
+		color: var(--warning-text);
 		font-size: 0.875rem;
 		margin-bottom: 1.5rem;
 		font-weight: 500;
@@ -269,7 +269,7 @@
 		border-radius: 8px;
 		cursor: pointer;
 		transition: all 0.2s;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 	}
 
 	.btn-primary:hover:not(:disabled) {
@@ -327,15 +327,4 @@
 		}
 	}
 
-	:global(.dark) .error-banner {
-		background: #450a0a;
-		border-color: #991b1b;
-		color: #fca5a5;
-	}
-
-	:global(.dark) .session-expired-banner {
-		background: #78350f;
-		border-color: #b45309;
-		color: #fef3c7;
-	}
 </style>

@@ -608,11 +608,11 @@
 	}
 
 	.error-banner {
-		background: #fef2f2;
-		border: 1px solid #fecaca;
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
 		border-radius: var(--radius-md);
 		padding: 1rem;
-		color: #991b1b;
+		color: var(--error-text);
 		text-align: center;
 	}
 
@@ -1071,9 +1071,4 @@
 		}
 	}
 
-	:global(.dark) .error-banner {
-		background: #450a0a;
-		border-color: #991b1b;
-		color: #fca5a5;
-	}
 </style>

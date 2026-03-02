@@ -460,7 +460,7 @@
 	}
 
 	.meeting-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 2rem;
 		color: var(--text-primary);
 		margin: 0;
@@ -525,15 +525,15 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.35rem 0.75rem;
-		background: #eff6ff;
-		border: 1px solid #93c5fd;
+		background: var(--info-bg);
+		border: 1px solid var(--info-border);
 		border-radius: 6px;
 	}
 
 	.helper-dot {
 		width: 8px;
 		height: 8px;
-		background: #3b82f6;
+		background: var(--info-icon);
 		border-radius: 50%;
 		flex-shrink: 0;
 	}
@@ -541,7 +541,7 @@
 	.helper-text-inline {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
-		color: #1e40af;
+		color: var(--info-text);
 		font-weight: 500;
 	}
 
@@ -619,7 +619,7 @@
 	.agenda-item-error {
 		padding: 1rem;
 		background: var(--surface-secondary);
-		border: 2px solid #ef4444;
+		border: 1.5px solid var(--civic-red);
 		border-radius: 8px;
 		text-align: center;
 		margin: 1rem 0;
@@ -633,12 +633,12 @@
 	}
 
 	.error-detail-small {
-		color: #ef4444;
+		color: var(--civic-red);
 		font-size: 0.75rem;
 	}
 
 	.meeting-summary {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		line-height: 1.8;
 		font-size: 1.05rem;
 		color: var(--text-primary);
@@ -653,7 +653,7 @@
 	.meeting-summary :global(h4),
 	.meeting-summary :global(h5),
 	.meeting-summary :global(h6) {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		color: var(--text-primary);
 		margin-top: 2.5rem;
 		margin-bottom: 1rem;
@@ -696,7 +696,7 @@
 	}
 
 	.meeting-summary :global(code) {
-		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9em;
 		background: var(--surface-secondary);
 		color: var(--text-primary);
@@ -762,7 +762,7 @@
 	}
 
 	.processing-message {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.05rem;
 		line-height: 1.7;
 		color: var(--text-primary);
@@ -781,16 +781,16 @@
 	}
 
 	.error-message {
-		font-family: Georgia, 'Times New Roman', Times, serif;
-		color: #92400e;
+		font-family: 'IBM Plex Sans', sans-serif;
+		color: var(--warning-text);
 		padding: 1.2rem;
-		background: #fef3c7;
-		border: 1px solid #fde68a;
+		background: var(--warning-bg);
+		border: 1px solid var(--warning-border);
 		border-radius: 12px;
 		margin-top: 1rem;
 		font-size: 0.95rem;
 		line-height: 1.6;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		box-shadow: 0 2px 4px var(--shadow-sm);
 	}
 
 	@media (max-width: 640px) {
@@ -929,22 +929,4 @@
 		}
 	}
 
-	:global(.dark) .meeting-helper {
-		background: #1e3a5f;
-		border-color: #3b82f6;
-	}
-
-	:global(.dark) .helper-dot {
-		background: #60a5fa;
-	}
-
-	:global(.dark) .helper-text-inline {
-		color: #93c5fd;
-	}
-
-	:global(.dark) .error-message {
-		background: #78350f;
-		border-color: #b45309;
-		color: #fef3c7;
-	}
 </style>

@@ -239,15 +239,15 @@
 			<p><strong>Questions, partnerships, or access requests:</strong></p>
 			<div class="contact-links">
 				<a href="mailto:hello@engagic.org" class="contact-button">
-					<span class="contact-icon">✉</span>
+					<svg class="contact-icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="m2 6 8 5 8-5"/></svg>
 					<span>hello@engagic.org</span>
 				</a>
 				<a href="https://github.com/Engagic/engagic" target="_blank" rel="noopener" class="contact-button">
-					<span class="contact-icon">⚙</span>
+					<svg class="contact-icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 16c-4.17 1.25-4.17-2.08-5.83-2.5m11.66 5v-3.23a2.81 2.81 0 0 0-.78-2.17c2.62-.29 5.37-1.28 5.37-5.83a4.53 4.53 0 0 0-1.25-3.15 4.22 4.22 0 0 0-.08-3.15s-1-.33-3.33 1.23a11.15 11.15 0 0 0-5.83 0C5 .87 4 1.2 4 1.2a4.22 4.22 0 0 0-.08 3.15 4.53 4.53 0 0 0-1.25 3.15c0 4.52 2.75 5.5 5.37 5.83a2.81 2.81 0 0 0-.79 2.14V18.5"/></svg>
 					<span>GitHub Repository</span>
 				</a>
 				<a href="https://github.com/Engagic/engagic/issues" target="_blank" rel="noopener" class="contact-button">
-					<span class="contact-icon">⚠</span>
+					<svg class="contact-icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6.5" x2="10" y2="10"/><line x1="10" y1="13" x2="10.01" y2="13"/></svg>
 					<span>Report Issues</span>
 				</a>
 			</div>
@@ -350,7 +350,7 @@
 		background: none;
 		border: none;
 		color: var(--civic-blue);
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		padding: 0.5rem 0.75rem;
 		cursor: pointer;
@@ -390,7 +390,7 @@
 	}
 
 	.terms-section p {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		line-height: 1.7;
 		color: var(--text-primary);
@@ -398,7 +398,7 @@
 	}
 
 	.terms-section ul {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		line-height: 1.7;
 		color: var(--text-primary);
@@ -506,7 +506,7 @@
 	}
 
 	.tier-use-case {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		line-height: 1.6;
 		color: var(--text-secondary);
@@ -540,7 +540,7 @@
 	}
 
 	.tier-requirement {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		color: var(--civic-gray);
 		font-style: italic;
@@ -667,7 +667,7 @@
 		gap: 0.5rem;
 		padding: 0.75rem 1.25rem;
 		background: var(--surface-primary);
-		border: 2px solid var(--civic-blue);
+		border: 1.5px solid var(--civic-blue);
 		border-radius: 8px;
 		color: var(--civic-blue);
 		text-decoration: none;
@@ -684,8 +684,10 @@
 		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
 	}
 
-	.contact-icon {
-		font-size: 1.2rem;
+	.contact-icon-svg {
+		width: 18px;
+		height: 18px;
+		flex-shrink: 0;
 	}
 
 	/* Text Variants */
@@ -701,8 +703,9 @@
 
 	/* Philosophy Section (highlighted) */
 	.philosophy-section {
-		background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
-		border: 2px solid var(--civic-blue);
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-left: 4px solid var(--civic-blue);
 		border-radius: 12px;
 		padding: 2rem;
 		margin-top: 4rem;
@@ -733,7 +736,7 @@
 	}
 
 	.philosophy-grid p {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		line-height: 1.8;
 		color: var(--text-secondary);
@@ -744,7 +747,7 @@
 	}
 
 	.philosophy-footer {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		color: var(--text-secondary);
 		margin-top: 2rem;
 		padding-top: 1.5rem;

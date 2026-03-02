@@ -419,7 +419,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-xs);
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 		margin-top: 0.25rem;

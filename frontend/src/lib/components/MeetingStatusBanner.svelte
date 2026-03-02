@@ -20,8 +20,8 @@
 
 <style>
 	.meeting-alert-banner {
-		background: #fef2f2;
-		border: 1px solid #fecaca;
+		background: var(--alert-bg);
+		border: 1px solid var(--alert-border);
 		border-radius: 6px;
 		padding: 0.75rem 1rem;
 		margin-bottom: 1.5rem;
@@ -31,8 +31,8 @@
 	}
 
 	.meeting-info-banner {
-		background: #eff6ff;
-		border: 1px solid #bfdbfe;
+		background: var(--info-bg);
+		border: 1px solid var(--info-border);
 		border-radius: 6px;
 		padding: 0.75rem 1rem;
 		margin-bottom: 1.5rem;
@@ -45,7 +45,7 @@
 		flex-shrink: 0;
 		width: 24px;
 		height: 24px;
-		background: #dc2626;
+		background: var(--alert-icon);
 		color: white;
 		border-radius: 50%;
 		display: flex;
@@ -56,43 +56,17 @@
 	}
 
 	.meeting-info-banner .alert-icon {
-		background: #2563eb;
+		background: var(--info-icon);
 	}
 
 	.alert-text {
-		color: #991b1b;
+		color: var(--alert-text);
 		font-weight: 600;
 		font-size: 0.95rem;
 		text-transform: capitalize;
 	}
 
 	.meeting-info-banner .alert-text {
-		color: #1e40af;
-	}
-
-	:global(.dark) .meeting-alert-banner {
-		background: #450a0a;
-		border-color: #991b1b;
-	}
-
-	:global(.dark) .meeting-info-banner {
-		background: #1e3a5f;
-		border-color: #3b82f6;
-	}
-
-	:global(.dark) .alert-icon {
-		background: #ef4444;
-	}
-
-	:global(.dark) .meeting-info-banner .alert-icon {
-		background: #3b82f6;
-	}
-
-	:global(.dark) .alert-text {
-		color: #fca5a5;
-	}
-
-	:global(.dark) .meeting-info-banner .alert-text {
-		color: #93c5fd;
+		color: var(--info-text);
 	}
 </style>

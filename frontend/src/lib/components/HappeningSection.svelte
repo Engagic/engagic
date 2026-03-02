@@ -119,16 +119,19 @@
 								<div class="participation-links">
 									{#if item.participation.email}
 										<a href="mailto:{item.participation.email}" class="action-btn email-btn">
-											Email Comment
+											<svg class="action-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="m1.5 4.5 6.5 5 6.5-5"/></svg>
+											Email
 										</a>
 									{/if}
 									{#if item.participation.virtual_url}
 										<a href={item.participation.virtual_url} target="_blank" rel="noopener noreferrer" class="action-btn virtual-btn">
+											<svg class="action-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="14" height="9" rx="1.5"/><path d="M5 14.5h6"/><path d="M8 12v2.5"/></svg>
 											Join Virtual
 										</a>
 									{/if}
 									{#if item.participation.phone}
 										<a href="tel:{item.participation.phone}" class="action-btn phone-btn">
+											<svg class="action-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 11.2v1.8a1.2 1.2 0 0 1-1.31 1.2 11.88 11.88 0 0 1-5.18-1.84 11.7 11.7 0 0 1-3.6-3.6A11.88 11.88 0 0 1 2.57 3.57 1.2 1.2 0 0 1 3.76 2.3h1.8a1.2 1.2 0 0 1 1.2 1.03c.08.57.22 1.13.42 1.67a1.2 1.2 0 0 1-.27 1.27l-.76.76a9.6 9.6 0 0 0 3.6 3.6l.76-.76a1.2 1.2 0 0 1 1.27-.27c.54.2 1.1.34 1.67.42a1.2 1.2 0 0 1 1.03 1.18Z"/></svg>
 											Call In
 										</a>
 									{/if}
@@ -154,10 +157,10 @@
 	.happening-section {
 		margin-bottom: 3rem;
 		padding: 1.5rem;
-		background: linear-gradient(135deg, var(--surface-secondary) 0%, var(--surface-primary) 100%);
-		border: 2px solid var(--civic-blue);
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
 		border-radius: 16px;
-		box-shadow: 0 4px 20px rgba(79, 70, 229, 0.1);
+		box-shadow: 0 2px 8px var(--shadow-sm);
 	}
 
 	.happening-header {
@@ -234,7 +237,7 @@
 		font-size: 0.75rem;
 		font-weight: 700;
 		color: var(--badge-matter-text);
-		background: linear-gradient(135deg, var(--badge-matter-bg-start) 0%, var(--badge-matter-bg-end) 100%);
+		background: var(--badge-matter-bg);
 		border: 1px solid var(--badge-matter-border);
 		padding: 0.25rem 0.5rem;
 		border-radius: 6px;
@@ -251,7 +254,7 @@
 	}
 
 	.item-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		font-weight: 600;
 		line-height: 1.4;
@@ -279,8 +282,8 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 500;
-		color: var(--civic-green);
-		background: rgba(34, 197, 94, 0.1);
+		color: var(--reason-text);
+		background: var(--reason-bg);
 		border-left: 3px solid var(--civic-green);
 		padding: 0.75rem;
 		margin: 0 0 0.75rem 0;
@@ -288,13 +291,8 @@
 		line-height: 1.5;
 	}
 
-	:global(.dark) .reason {
-		background: rgba(34, 197, 94, 0.15);
-		color: #86efac;
-	}
-
 	.summary {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		line-height: 1.6;
 		color: var(--text-secondary);
@@ -342,10 +340,16 @@
 		gap: 0.5rem;
 	}
 
+	.action-icon {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+	}
+
 	.action-btn {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.35rem;
+		gap: 0.4rem;
 		padding: 0.5rem 1rem;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;

@@ -61,15 +61,9 @@
 
 	/* Danger: failed, vetoed */
 	.danger {
-		background: #fee2e2;
-		border-color: #fca5a5;
-		color: #991b1b;
-	}
-
-	:global(.dark) .danger {
-		background: #7f1d1d;
-		border-color: #ef4444;
-		color: #fca5a5;
+		background: var(--badge-danger-bg);
+		border-color: var(--badge-danger-border);
+		color: var(--badge-danger-text);
 	}
 
 	/* Info: active, amended */

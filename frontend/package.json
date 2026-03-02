@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.0.0",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
     "date-fns": "^3.0.0",
     "maplibre-gl": "^4.7.1",
     "marked": "^16.4.1",

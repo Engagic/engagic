@@ -152,11 +152,11 @@
 	}
 
 	.star.filled {
-		color: #fbbf24;
+		color: var(--star-filled);
 	}
 
 	.star.user-rated {
-		color: #f59e0b;
+		color: var(--star-user-rated);
 	}
 
 	.medium .star svg {
@@ -201,7 +201,7 @@
 	.error-msg {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
-		color: #ef4444;
+		color: var(--civic-red);
 		margin-left: 0.5rem;
 	}
 </style>

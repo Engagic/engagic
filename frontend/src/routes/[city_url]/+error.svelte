@@ -146,7 +146,7 @@
 	}
 
 	.error-message {
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		color: var(--text-secondary);
 		margin: 1rem 0;
@@ -154,7 +154,7 @@
 	}
 
 	.error-hint {
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		color: var(--text-tertiary);
 		margin: 1.5rem 0;
@@ -215,7 +215,7 @@
 	}
 
 	.cta-success {
-		color: #059669;
+		color: var(--civic-green);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.95rem;
 		font-weight: 500;
@@ -223,14 +223,14 @@
 	}
 
 	.cta-error {
-		color: #dc2626;
-		font-family: system-ui, -apple-system, sans-serif;
+		color: var(--civic-red);
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.85rem;
 		margin: 0.5rem 0 0 0;
 	}
 
 	.cta-subtext {
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.85rem;
 		color: var(--text-tertiary);
 		margin: 0.75rem 0 0 0;

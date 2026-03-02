@@ -446,7 +446,7 @@
 	}
 
 	.matter-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.25rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -486,24 +486,44 @@
 
 	.topic-tag {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 600;
-		padding: 0.3rem 0.7rem;
-		background: var(--civic-blue);
-		color: var(--civic-white);
-		border-radius: 6px;
+		font-size: 0.7rem;
+		font-weight: 500;
+		padding: 0.25rem 0.55rem;
+		background: var(--topic-tag-bg);
+		color: var(--topic-tag-text);
+		border: 1px solid var(--topic-tag-border);
+		border-radius: 4px;
 		transition: all 0.2s ease;
 	}
 
-	.topic-tag:hover {
-		background: var(--civic-accent);
-		transform: translateY(-1px);
+	.matter-summary-section {
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-left: 4px solid var(--item-summary-border);
+		border-radius: 12px;
+		padding: 2rem;
+		margin-bottom: 1.5rem;
+		box-shadow: 0 2px 8px var(--shadow-sm);
 	}
 
-	.matter-summary-section,
 	.attachments-section,
-	.sponsors-section,
-	.voting-section,
+	.sponsors-section {
+		background: var(--surface-secondary);
+		border: 1px solid var(--border-primary);
+		border-radius: 10px;
+		padding: 1.25rem;
+		margin-bottom: 1rem;
+	}
+
+	.voting-section {
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: 12px;
+		padding: 1.5rem;
+		margin-bottom: 1.5rem;
+		box-shadow: 0 1px 3px var(--shadow-sm);
+	}
+
 	.timeline-section {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
@@ -521,7 +541,7 @@
 		display: block;
 		text-align: center;
 		padding: 1rem 1.5rem;
-		background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+		background: var(--action-deliberate);
 		color: white;
 		border-radius: 12px;
 		font-family: 'IBM Plex Mono', monospace;
@@ -530,13 +550,11 @@
 		text-decoration: none;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
-		transition: all 0.2s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.deliberate-link:hover {
-		background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+		background: var(--action-deliberate-hover);
 		transform: translateY(-1px);
 	}
 
@@ -589,7 +607,7 @@
 	}
 
 	.matter-summary {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.05rem;
 		line-height: 1.8;
 		color: var(--text-primary);
@@ -601,7 +619,7 @@
 	.matter-summary :global(h2),
 	.matter-summary :global(h3),
 	.matter-summary :global(h4) {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		color: var(--text-primary);
 		margin-top: 2.5rem;
 		margin-bottom: 1rem;
@@ -644,7 +662,7 @@
 	}
 
 	.matter-summary :global(code) {
-		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9em;
 		background: var(--surface-secondary);
 		color: var(--text-primary);
@@ -812,14 +830,10 @@
 		text-transform: uppercase;
 	}
 
-	.vote-value.yes { background: #dcfce7; color: #16a34a; }
-	.vote-value.no { background: #fee2e2; color: #dc2626; }
-	.vote-value.abstain { background: #fef3c7; color: #d97706; }
-	.vote-value.absent { background: var(--surface-secondary); color: var(--civic-gray); }
-
-	:global(.dark) .vote-value.yes { background: #14532d; color: #86efac; }
-	:global(.dark) .vote-value.no { background: #7f1d1d; color: #fca5a5; }
-	:global(.dark) .vote-value.abstain { background: #78350f; color: #fcd34d; }
+	.vote-value.yes { background: var(--vote-yes-bg); color: var(--vote-yes-text); }
+	.vote-value.no { background: var(--vote-no-bg); color: var(--vote-no-text); }
+	.vote-value.abstain { background: var(--vote-abstain-bg); color: var(--vote-abstain-text); }
+	.vote-value.absent { background: var(--vote-absent-bg); color: var(--vote-absent-text); }
 
 	/* Votes grouped by committee */
 	.votes-by-committee {
@@ -893,7 +907,7 @@
 	.error-message {
 		padding: 1.5rem;
 		background: var(--surface-secondary);
-		border: 2px solid #ef4444;
+		border: 1.5px solid var(--civic-red);
 		border-radius: 8px;
 		text-align: center;
 	}
@@ -906,7 +920,7 @@
 	}
 
 	.error-detail {
-		color: #ef4444;
+		color: var(--civic-red);
 		font-size: 0.85rem;
 	}
 
@@ -928,9 +942,15 @@
 			gap: 0.75rem;
 		}
 
-		.matter-summary-section,
+		.matter-summary-section {
+			padding: 1.5rem;
+		}
+
 		.attachments-section,
-		.sponsors-section,
+		.sponsors-section {
+			padding: 1rem;
+		}
+
 		.voting-section,
 		.timeline-section {
 			padding: 1.25rem;

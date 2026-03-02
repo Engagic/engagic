@@ -275,7 +275,7 @@
 		max-width: 1000px;
 		margin: 0 auto;
 		padding: 2rem;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 	}
 
 	.auth-container {
@@ -293,14 +293,16 @@
 	.token-input {
 		flex: 1;
 		padding: 0.75rem 1rem;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-primary);
 		border-radius: 6px;
 		font-size: 0.9rem;
+		background: var(--surface-primary);
+		color: var(--text-primary);
 	}
 
 	.auth-form button {
 		padding: 0.75rem 1.5rem;
-		background: #3b82f6;
+		background: var(--civic-blue);
 		color: white;
 		border: none;
 		border-radius: 6px;
@@ -309,12 +311,12 @@
 	}
 
 	.auth-form button:disabled {
-		background: #93c5fd;
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
 	.auth-error {
-		color: #dc2626;
+		color: var(--civic-red);
 		margin-top: 1rem;
 		font-size: 0.9rem;
 	}
@@ -328,15 +330,15 @@
 	.logout-btn {
 		padding: 0.4rem 0.8rem;
 		background: none;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-primary);
 		border-radius: 4px;
 		font-size: 0.8rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 		cursor: pointer;
 	}
 
 	.logout-btn:hover {
-		background: #f3f4f6;
+		background: var(--surface-secondary);
 	}
 
 	.page-header {
@@ -349,7 +351,7 @@
 	}
 
 	.subtitle {
-		color: #666;
+		color: var(--text-secondary);
 		margin: 0 0 1rem 0;
 	}
 
@@ -370,14 +372,14 @@
 
 	.user-count {
 		font-size: 0.9rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 	}
 
 	.tabs {
 		display: flex;
 		gap: 0.5rem;
 		margin-bottom: 1.5rem;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--border-primary);
 		padding-bottom: 0.5rem;
 	}
 
@@ -386,17 +388,17 @@
 		border: none;
 		background: none;
 		font-size: 0.9rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 		cursor: pointer;
 		border-radius: 4px;
 	}
 
 	.tabs button:hover {
-		background: #f3f4f6;
+		background: var(--surface-secondary);
 	}
 
 	.tabs button.active {
-		background: #3b82f6;
+		background: var(--civic-blue);
 		color: white;
 	}
 
@@ -405,15 +407,15 @@
 	.empty {
 		text-align: center;
 		padding: 3rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 	}
 
 	.error {
-		color: #dc2626;
+		color: var(--civic-red);
 	}
 
 	.journey-card {
-		background: #f9fafb;
+		background: var(--surface-secondary);
 		border-radius: 8px;
 		padding: 1rem;
 		margin-bottom: 1rem;
@@ -424,20 +426,20 @@
 		justify-content: space-between;
 		margin-bottom: 0.75rem;
 		padding-bottom: 0.5rem;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--border-primary);
 	}
 
 	.user-hash {
-		font-family: monospace;
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
-		background: #e5e7eb;
+		background: var(--border-primary);
 		padding: 0.2rem 0.5rem;
 		border-radius: 4px;
 	}
 
 	.event-count {
 		font-size: 0.85rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 	}
 
 	.event-timeline {
@@ -466,17 +468,17 @@
 	}
 
 	.event-url {
-		color: #6b7280;
+		color: var(--text-secondary);
 		flex: 1;
 	}
 
 	.event-time {
-		color: #9ca3af;
+		color: var(--civic-gray);
 		font-size: 0.8rem;
 	}
 
 	.section-desc {
-		color: #6b7280;
+		color: var(--text-secondary);
 		font-size: 0.9rem;
 		margin-bottom: 1rem;
 	}
@@ -494,29 +496,29 @@
 		align-items: center;
 		gap: 1rem;
 		padding: 0.75rem 1rem;
-		background: #f9fafb;
+		background: var(--surface-secondary);
 		border-radius: 6px;
 	}
 
 	.pattern-rank,
 	.dropoff-rank {
 		font-weight: 600;
-		color: #9ca3af;
+		color: var(--civic-gray);
 		width: 2rem;
 	}
 
 	.pattern-path {
 		flex: 1;
-		font-family: monospace;
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
-		color: #374151;
+		color: var(--text-primary);
 	}
 
 	.pattern-count,
 	.dropoff-count {
 		font-size: 0.85rem;
-		color: #6b7280;
-		background: #e5e7eb;
+		color: var(--text-secondary);
+		background: var(--border-primary);
 		padding: 0.2rem 0.5rem;
 		border-radius: 4px;
 	}
@@ -528,6 +530,6 @@
 
 	.dropoff-url {
 		flex: 1;
-		color: #6b7280;
+		color: var(--text-secondary);
 	}
 </style>

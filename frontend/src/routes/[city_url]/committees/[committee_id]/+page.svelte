@@ -292,7 +292,7 @@
 	}
 
 	.committee-name {
-		font-family: Georgia, 'Times New Roman', serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 2rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -324,7 +324,7 @@
 	}
 
 	.committee-description {
-		font-family: Georgia, 'Times New Roman', serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		color: var(--text-secondary);
 		line-height: 1.5;
@@ -401,12 +401,12 @@
 	}
 
 	.member-card.chair {
-		border-left-color: #d97706;
-		background: linear-gradient(to right, rgba(217, 119, 6, 0.05), transparent);
+		border-left-color: var(--civic-orange);
+		background: linear-gradient(to right, rgba(249, 115, 22, 0.05), transparent);
 	}
 
 	.member-card.vice-chair {
-		border-left-color: #0891b2;
+		border-left-color: var(--civic-blue);
 	}
 
 	.member-info {
@@ -495,7 +495,7 @@
 
 	.vote-title {
 		display: block;
-		font-family: Georgia, 'Times New Roman', serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		color: var(--text-primary);
 		line-height: 1.4;

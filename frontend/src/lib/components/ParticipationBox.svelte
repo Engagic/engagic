@@ -170,37 +170,23 @@
 	.participation-box {
 		flex: 1;
 		padding: 1.25rem 1.5rem;
-		background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-		border: 2px solid #22c55e;
-		border-right: 1px solid #22c55e;
+		background: var(--participation-box-bg);
+		border: 2px solid var(--participation-box-border);
+		border-right: 1px solid var(--participation-box-border);
 		border-radius: 6px 0 0 6px;
 		box-shadow: none;
 		transition: all 0.3s ease;
 	}
 
-	:global(.dark) .participation-box {
-		background: linear-gradient(135deg, #3b0764 0%, #581c87 100%);
-		border: 2px solid #c084fc;
-		border-right: 1px solid #c084fc;
-		box-shadow: none;
-	}
-
 	.viewing-box {
 		flex: 1;
 		padding: 0.85rem 1.25rem;
-		background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-		border: 2px solid #93c5fd;
-		border-left: 1px solid #93c5fd;
+		background: var(--viewing-box-bg);
+		border: 2px solid var(--viewing-box-border);
+		border-left: 1px solid var(--viewing-box-border);
 		border-radius: 0 6px 6px 0;
 		box-shadow: none;
 		transition: all 0.3s ease;
-	}
-
-	:global(.dark) .viewing-box {
-		background: linear-gradient(135deg, #3b0764 0%, #581c87 100%);
-		border: 2px solid #c084fc;
-		border-left: 1px solid #c084fc;
-		box-shadow: none;
 	}
 
 	.viewing-header {
@@ -213,15 +199,11 @@
 	.viewing-label {
 		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 600;
-		color: #1e40af;
+		color: var(--viewing-label-color);
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 		transition: color 0.3s ease;
-	}
-
-	:global(.dark) .viewing-label {
-		color: #e9d5ff;
 	}
 
 	.viewing-content {
@@ -237,7 +219,7 @@
 	}
 
 	.viewing-link {
-		color: #1e40af;
+		color: var(--viewing-link-color);
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
@@ -245,29 +227,17 @@
 		transition: color 0.2s;
 	}
 
-	:global(.dark) .viewing-link {
-		color: #f5d0fe;
-	}
-
 	.viewing-link:hover {
-		color: #1e3a8a;
+		color: var(--viewing-link-hover);
 		text-decoration: underline;
 	}
 
-	:global(.dark) .viewing-link:hover {
-		color: #fae8ff;
-	}
-
 	.viewing-text {
-		color: #1e40af;
+		color: var(--viewing-link-color);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 500;
 		transition: color 0.3s ease;
-	}
-
-	:global(.dark) .viewing-text {
-		color: #f5d0fe;
 	}
 
 	.viewing-icon {
@@ -285,14 +255,9 @@
 		}
 
 		.participation-box {
-			border: 2px solid #22c55e;
+			border: 2px solid var(--participation-box-border);
 			border-radius: 6px;
 			box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
-		}
-
-		:global(.dark) .participation-box {
-			border: 2px solid #c084fc;
-			box-shadow: 0 4px 12px rgba(192, 132, 252, 0.3);
 		}
 
 		.streaming-toggle-mobile {
@@ -324,15 +289,11 @@
 	.participation-label {
 		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 600;
-		color: #15803d;
+		color: var(--participation-label);
 		font-size: 0.85rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 		transition: color 0.3s ease;
-	}
-
-	:global(.dark) .participation-label {
-		color: #e9d5ff;
 	}
 
 	.streaming-toggle-mobile {
@@ -341,28 +302,18 @@
 		width: 1.75rem;
 		height: 1.75rem;
 		background: transparent;
-		border: 1.5px solid #15803d;
+		border: 1.5px solid var(--participation-label);
 		border-radius: 6px;
-		color: #15803d;
+		color: var(--participation-label);
 		font-size: 1.1rem;
 		font-weight: 400;
 		cursor: pointer;
 		transition: all 0.2s ease;
 	}
 
-	:global(.dark) .streaming-toggle-mobile {
-		border-color: #86efac;
-		color: #86efac;
-	}
-
 	.streaming-toggle-mobile:hover {
-		background: #15803d;
+		background: var(--participation-label);
 		color: white;
-	}
-
-	:global(.dark) .streaming-toggle-mobile:hover {
-		background: #86efac;
-		color: #000;
 	}
 
 	.streaming-section-mobile {
@@ -373,7 +324,7 @@
 
 	.streaming-divider {
 		height: 1px;
-		background: #86efac;
+		background: var(--participation-box-border);
 		margin-bottom: 0.75rem;
 		opacity: 0.3;
 	}
@@ -385,14 +336,10 @@
 	.streaming-label-mobile {
 		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 600;
-		color: #15803d;
+		color: var(--participation-label);
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-	}
-
-	:global(.dark) .streaming-label-mobile {
-		color: #86efac;
 	}
 
 	.streaming-content-mobile {
@@ -415,27 +362,15 @@
 	}
 
 	.badge-hybrid {
-		background: #fef3c7;
-		color: #92400e;
-		border: 1px solid #fbbf24;
+		background: var(--badge-hybrid-bg);
+		color: var(--badge-hybrid-text);
+		border: 1px solid var(--badge-hybrid-border);
 	}
 
 	.badge-virtual {
-		background: #dbeafe;
-		color: #1e40af;
-		border: 1px solid #60a5fa;
-	}
-
-	:global(.dark) .badge-hybrid {
-		background: #78350f;
-		color: #fef3c7;
-		border-color: #b45309;
-	}
-
-	:global(.dark) .badge-virtual {
-		background: #1e3a5f;
-		color: #93c5fd;
-		border-color: #3b82f6;
+		background: var(--badge-virtual-bg);
+		color: var(--badge-virtual-text);
+		border: 1px solid var(--badge-virtual-border);
 	}
 
 	.participation-content {
@@ -457,7 +392,7 @@
 	}
 
 	.participation-link {
-		color: #15803d;
+		color: var(--participation-link-color);
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
@@ -465,40 +400,24 @@
 		transition: color 0.2s;
 	}
 
-	:global(.dark) .participation-link {
-		color: #f5d0fe;
-	}
-
 	.participation-link:hover {
-		color: #166534;
+		color: var(--participation-link-hover);
 		text-decoration: underline;
 	}
 
-	:global(.dark) .participation-link:hover {
-		color: #fae8ff;
-	}
-
 	.meeting-id {
-		color: #6b7280;
+		color: var(--text-secondary);
 		font-size: 0.8rem;
 		font-family: 'IBM Plex Mono', monospace;
 		margin-left: 0.5rem;
 		transition: color 0.3s ease;
 	}
 
-	:global(.dark) .meeting-id {
-		color: #e9d5ff;
-	}
-
 	.participation-text {
-		color: #15803d;
+		color: var(--participation-link-color);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 500;
 		transition: color 0.3s ease;
-	}
-
-	:global(.dark) .participation-text {
-		color: #f5d0fe;
 	}
 </style>
