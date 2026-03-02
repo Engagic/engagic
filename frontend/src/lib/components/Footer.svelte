@@ -1,8 +1,50 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { apiClient } from '$lib/api/api-client';
+	import type { AnalyticsData } from '$lib/api/types';
+
+	let { analytics }: { analytics?: AnalyticsData | null } = $props();
+
+	let clientAnalytics: AnalyticsData | null = $state(null);
+
+	function getMetrics() {
+		const source = analytics ?? clientAnalytics;
+		return source?.real_metrics ?? null;
+	}
+
+	const metrics = $derived(getMetrics());
+
+	onMount(async () => {
+		if (!analytics) {
+			try {
+				clientAnalytics = await apiClient.getAnalytics();
+			} catch {
+				// Graceful degradation — footer just won't show stats
+			}
+		}
+	});
+</script>
+
 <footer class="site-footer">
-	<p class="footer-message">
-		by continuing you adhere to our <a href="/about/terms" class="terms-link">terms</a>. made with love and rizz
-	</p>
-	<a href="/about" class="about-nav-link">About</a>
+	<div class="footer-brand">engagic is open-source (AGPL-3.0)</div>
+
+	<nav class="footer-links" aria-label="Footer navigation">
+		<a href="https://github.com/engagic" class="footer-link" target="_blank" rel="noopener noreferrer">GitHub</a>
+		<span class="footer-sep" aria-hidden="true">&bull;</span>
+		<a href="/about/community" class="footer-link">Community</a>
+		<span class="footer-sep" aria-hidden="true">&bull;</span>
+		<a href="/about/donate" class="footer-link">Donate</a>
+		<span class="footer-sep" aria-hidden="true">&bull;</span>
+		<a href="/about/terms" class="footer-link">Terms</a>
+	</nav>
+
+	{#if metrics}
+		<p class="footer-stats">
+			Tracking {metrics.cities_covered} cities &bull; {metrics.meetings_tracked.toLocaleString()} meetings analyzed
+		</p>
+	{/if}
+
+	<p class="footer-tagline">made with love and rizz</p>
 </footer>
 
 <style>
@@ -10,42 +52,59 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--space-md);
-		padding: var(--space-2xl) 0;
+		gap: var(--space-sm);
+		padding: var(--space-2xl) 0 var(--space-xl);
 		margin-top: var(--space-3xl);
 		border-top: 1px solid var(--border-primary);
 	}
 
-	.footer-message {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.875rem;
+	.footer-brand {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
 		color: var(--text-secondary);
 		text-align: center;
+	}
+
+	.footer-links {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	.footer-link {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		color: var(--civic-blue);
+		text-decoration: none;
+		transition: color var(--transition-fast);
+	}
+
+	.footer-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
+	.footer-sep {
+		color: var(--civic-gray);
+		font-size: 0.7rem;
+		opacity: 0.4;
+	}
+
+	.footer-stats {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		color: var(--text-secondary);
 		margin: 0;
-		line-height: 1.6;
+		opacity: 0.7;
 	}
 
-	.terms-link {
-		color: var(--civic-blue);
-		text-decoration: none;
-		transition: color var(--transition-fast);
-	}
-
-	.terms-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
-	}
-
-	.about-nav-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.875rem;
-		color: var(--civic-blue);
-		text-decoration: none;
-		transition: color var(--transition-fast);
-	}
-
-	.about-nav-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
+	.footer-tagline {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--text-secondary);
+		margin: 0;
+		opacity: 0.5;
 	}
 </style>

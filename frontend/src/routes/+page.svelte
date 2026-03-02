@@ -224,11 +224,11 @@
 />
 
 <div class="container">
-	<header class="header">
+	<header class="header anim-entry" style="animation-delay: 0ms;">
 		<p class="tagline">Know what your city council is deciding — before they decide it.</p>
 	</header>
 
-		<div class="search-section">
+		<div class="search-section anim-entry" style="animation-delay: 80ms;">
 		<input
 			type="text"
 			class="search-input"
@@ -284,7 +284,7 @@
 			<div class="error-inline" id="search-error" role="alert">{error}</div>
 		{/if}
 
-		<div class="random-buttons">
+		<div class="random-buttons anim-entry" style="animation-delay: 160ms;">
 			<button
 				class="random-button random-meeting"
 				onclick={handleRandomMeeting}
@@ -303,33 +303,25 @@
 		</div>
 	</div>
 
-	<section class="preview-section">
-		<p class="preview-label">What you'll see</p>
-		<div class="preview-item-expanded">
-			<div class="preview-item-header">
-				<div class="preview-item-title-row">
-					<span class="preview-item-number">5.</span>
-					<h3 class="preview-item-title">Affordable Housing Overlay District</h3>
-				</div>
-				<div class="preview-item-badges">
-					<span class="preview-badge preview-badge-matter">ORD-2025-0142</span>
-					<span class="preview-tag">Housing</span>
-					<span class="preview-tag">Zoning</span>
-				</div>
+	{#if data.happening?.items && data.happening.items.length > 0}
+		<section class="happening-section anim-entry" style="animation-delay: 300ms;">
+			<h2 class="happening-title">What's Happening</h2>
+			<div class="happening-list">
+				{#each data.happening.items as item (item.item_id)}
+					<a href="/{item.banana}" class="happening-card">
+						<div class="happening-card-header">
+							<span class="happening-city">{item.banana}</span>
+							{#if item.meeting_date}
+								<span class="happening-date">{new Date(item.meeting_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+							{/if}
+						</div>
+						<h3 class="happening-item-title">{item.item_title || item.meeting_title || 'Agenda Item'}</h3>
+						<p class="happening-reason">{item.reason}</p>
+					</a>
+				{/each}
 			</div>
-			<div class="preview-summary">
-				<p>This ordinance creates a new Affordable Housing Overlay District that would allow <strong>increased building density</strong> for residential projects that include at least 20% affordable units.</p>
-				<p>The overlay would apply to three neighborhoods currently zoned single-family: Westbrook, Cedar Hills, and Riverside Commons. Developers opting in could build up to <strong>4 stories</strong> instead of the current 2-story limit.</p>
-				<p><strong>Key provisions:</strong></p>
-				<ul>
-					<li>Affordable units must remain price-controlled for a minimum of <strong>30 years</strong></li>
-					<li>Projects must include at least 10% units accessible to households earning below 50% of area median income</li>
-					<li>Developers receive expedited permitting and reduced impact fees in exchange for affordability commitments</li>
-				</ul>
-				<p>The Planning Commission voted 5-2 to recommend approval. Two commissioners dissented, citing concerns about <strong>infrastructure capacity</strong> in the affected neighborhoods. Public comment period closes February 28.</p>
-			</div>
-		</div>
-	</section>
+		</section>
+	{/if}
 
 	<section class="bottom-links">
 		<div class="bottom-links-row">
@@ -342,7 +334,7 @@
 		<p class="bottom-note">Open-source and community-driven</p>
 	</section>
 
-	<Footer />
+	<Footer analytics={data.analytics} />
 </div>
 
 <style>
@@ -352,13 +344,18 @@
 		margin-bottom: 2rem;
 	}
 
+	.anim-entry {
+		animation: fadeSlideUp 0.5s ease-out both;
+	}
+
 	.tagline {
-		font-family: 'IBM Plex Sans', sans-serif;
-		color: var(--text-secondary);
-		font-size: 0.95rem;
-		line-height: 1.5;
+		font-family: var(--font-display);
+		color: var(--text-primary);
+		font-size: 1.6rem;
+		font-weight: 400;
+		line-height: 1.4;
 		margin-bottom: 1rem;
-		max-width: 400px;
+		max-width: 440px;
 		margin-left: auto;
 		margin-right: auto;
 	}
@@ -474,126 +471,88 @@
 		opacity: 0.5;
 	}
 
-	/* Preview section */
-	.preview-section {
+	/* Happening section */
+	.happening-section {
 		margin-top: 2rem;
 		margin-bottom: 2rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid var(--border-primary);
 	}
 
-	.preview-label {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--civic-gray);
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		margin: 0 0 0.75rem 0;
+	.happening-title {
+		font-family: var(--font-display);
+		font-size: 1.2rem;
+		font-weight: 700;
+		color: var(--text-primary);
 		text-align: center;
-		opacity: 0.7;
+		margin: 0 0 1rem 0;
 	}
 
-	.preview-item-expanded {
+	.happening-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.happening-card {
+		display: block;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-left: 4px solid var(--item-summary-border);
-		border-radius: var(--radius-lg);
-		padding: 1.25rem 1.5rem;
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		border-left: 3px solid var(--civic-green);
+		border-radius: var(--radius-md);
+		padding: 1rem 1.25rem;
+		text-decoration: none;
+		color: inherit;
+		transition: all var(--transition-normal);
 	}
 
-	.preview-item-header {
-		margin-bottom: 1rem;
+	.happening-card:hover {
+		border-color: var(--border-hover);
+		border-left-color: var(--civic-accent);
+		box-shadow: 0 4px 12px var(--shadow-lg);
+		transform: translateY(-2px);
 	}
 
-	.preview-item-title-row {
+	.happening-card-header {
 		display: flex;
-		align-items: baseline;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.4rem;
 	}
 
-	.preview-item-number {
-		color: var(--civic-gray);
-		font-size: 1rem;
-		font-weight: 500;
-		flex-shrink: 0;
-	}
-
-	.preview-item-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 1.05rem;
+	.happening-city {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
 		font-weight: 600;
+		color: var(--civic-blue);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.happening-date {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+	}
+
+	.happening-item-title {
+		font-family: var(--font-display);
+		font-size: 1rem;
+		font-weight: 700;
 		color: var(--text-primary);
-		margin: 0;
+		margin: 0 0 0.35rem 0;
 		line-height: 1.4;
 	}
 
-	.preview-item-badges {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-
-	.preview-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		font-weight: 700;
-		padding: 0.2rem 0.6rem;
-		border-radius: var(--radius-lg);
-		letter-spacing: 0.3px;
-	}
-
-	.preview-badge-matter {
-		background: var(--badge-matter-bg);
-		color: var(--badge-matter-text);
-		border: 1.5px solid var(--badge-matter-border);
-	}
-
-	.preview-tag {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		padding: 0.25rem 0.55rem;
-		background: var(--topic-tag-bg);
-		color: var(--topic-tag-text);
-		border: 1px solid var(--topic-tag-border);
-		border-radius: var(--radius-xs);
-		font-weight: 500;
-	}
-
-	.preview-summary {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 0.95rem;
-		line-height: 1.7;
-		color: var(--text-primary);
-		border-top: 1px solid var(--border-primary);
-		padding-top: 1rem;
-	}
-
-	.preview-summary p {
-		margin: 0.75rem 0;
-	}
-
-	.preview-summary p:first-child {
-		margin-top: 0;
-	}
-
-	.preview-summary p:last-child {
-		margin-bottom: 0;
-	}
-
-	.preview-summary strong {
-		font-weight: 700;
-		color: var(--text-primary);
-	}
-
-	.preview-summary ul {
-		margin: 0.75rem 0;
-		padding-left: 1.25rem;
-	}
-
-	.preview-summary li {
-		margin: 0.35rem 0;
+	.happening-reason {
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+		margin: 0;
+		line-height: 1.5;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 
 	/* Bottom links */
@@ -730,7 +689,7 @@
 		}
 
 		.tagline {
-			font-size: 0.85rem;
+			font-size: 1.3rem;
 		}
 
 		.search-input {
@@ -750,18 +709,6 @@
 		.random-button {
 			padding: 0.85rem;
 			font-size: 0.95rem;
-		}
-
-		.preview-item-expanded {
-			padding: 1rem 1.25rem;
-		}
-
-		.preview-item-title {
-			font-size: 0.95rem;
-		}
-
-		.preview-summary {
-			font-size: 0.9rem;
 		}
 
 		.bottom-links-row {

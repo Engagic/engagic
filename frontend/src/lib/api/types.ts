@@ -771,6 +771,27 @@ export interface HappeningResponse {
 	items: HappeningItem[];
 }
 
+// Global happening items (all cities)
+export interface GlobalHappeningItem {
+	banana: string;
+	item_id: string;
+	meeting_id: string;
+	meeting_date: string | null;
+	meeting_title: string | null;
+	rank: number;
+	reason: string;
+	item_title: string | null;
+	created_at: string | null;
+}
+
+export interface GlobalHappeningResponse {
+	success: boolean;
+	cities_count: number;
+	cities: string[];
+	items_count: number;
+	items: GlobalHappeningItem[];
+}
+
 // City coverage types for transparency page
 export type CoverageType = 'matter' | 'item' | 'monolithic' | 'synced' | 'pending';
 
