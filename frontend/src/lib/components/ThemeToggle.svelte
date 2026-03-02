@@ -52,7 +52,7 @@
 		padding: 0.75rem 1.25rem;
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
-		border-radius: 50px;
+		border-radius: var(--radius-pill);
 		cursor: pointer;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;

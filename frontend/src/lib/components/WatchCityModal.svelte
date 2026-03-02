@@ -375,9 +375,9 @@
 	.modal {
 		background: var(--civic-white);
 		border: 1px solid var(--civic-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 2rem;
-		max-width: 480px;
+		max-width: var(--width-auth);
 		width: 100%;
 		max-height: 90vh;
 		overflow-y: auto;
@@ -398,7 +398,7 @@
 		width: 32px;
 		height: 32px;
 		line-height: 1;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
 	}
 
 	.close-btn:hover {
@@ -416,7 +416,7 @@
 		color: white;
 		font-size: 0.75rem;
 		font-weight: 600;
-		border-radius: 9999px;
+		border-radius: var(--radius-pill);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		margin-bottom: 0.5rem;
@@ -485,7 +485,7 @@
 		padding: 0.375rem 0.75rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--civic-border);
-		border-radius: 9999px;
+		border-radius: var(--radius-pill);
 		font-size: 0.875rem;
 		color: var(--civic-dark);
 	}
@@ -498,7 +498,7 @@
 		line-height: 1;
 		padding: 0;
 		cursor: pointer;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
 	}
 
 	.remove-keyword:hover {
@@ -526,9 +526,9 @@
 		background: var(--civic-blue);
 		color: white;
 		border: none;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all var(--transition-normal);
 		white-space: nowrap;
 	}
 
@@ -567,8 +567,8 @@
 		color: var(--text-primary);
 		background: var(--surface-primary);
 		border: 2px solid var(--civic-border);
-		border-radius: 8px;
-		transition: all 0.2s;
+		border-radius: var(--radius-md);
+		transition: all var(--transition-normal);
 	}
 
 	.input:focus {
@@ -594,7 +594,7 @@
 		padding: 0.75rem;
 		background: var(--error-bg);
 		border: 1px solid var(--error-border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		color: var(--error-text);
 		font-size: 0.875rem;
 		margin-bottom: 1.25rem;
@@ -609,9 +609,9 @@
 		background: var(--civic-blue);
 		color: white;
 		border: none;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all var(--transition-normal);
 		font-family: 'IBM Plex Sans', sans-serif;
 	}
 
@@ -635,9 +635,9 @@
 		background: transparent;
 		color: var(--civic-gray);
 		border: 1px solid var(--civic-border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all var(--transition-normal);
 		font-family: 'IBM Plex Sans', sans-serif;
 	}
 

@@ -178,7 +178,7 @@
 	}
 
 	.compact-logo {
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-normal);
 	}
 
 	.compact-logo:hover {
@@ -188,7 +188,7 @@
 	.logo-icon {
 		width: 48px;
 		height: 48px;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 
@@ -217,7 +217,7 @@
 		text-align: center;
 		padding: 3rem;
 		background: var(--surface-secondary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		border: 1px solid var(--border-primary);
 	}
 
@@ -244,7 +244,7 @@
 		padding: 0.5rem 1rem;
 		background: var(--civic-blue);
 		color: white;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
@@ -256,7 +256,7 @@
 		padding: 1.25rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		margin-bottom: 1.5rem;
 		justify-content: center;
 	}
@@ -295,9 +295,9 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-decoration: none;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.council-member-card:hover {
@@ -337,7 +337,7 @@
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
 		border: 1px solid var(--border-primary);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		text-transform: uppercase;
 	}
 

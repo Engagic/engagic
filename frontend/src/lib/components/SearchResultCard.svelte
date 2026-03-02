@@ -241,14 +241,14 @@
 	.result-card {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		overflow: hidden;
-		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+		transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 	}
 
 	.result-card.expanded {
 		border-color: var(--civic-blue);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 4px 12px var(--shadow-md);
 	}
 
 	.result-card-header {
@@ -262,7 +262,7 @@
 		border: none;
 		text-align: left;
 		cursor: pointer;
-		transition: background 0.1s ease;
+		transition: background var(--transition-fast);
 	}
 
 	.result-card-header:hover {
@@ -287,7 +287,7 @@
 		padding: 2px 8px;
 		background: var(--civic-blue);
 		color: white;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
@@ -298,7 +298,7 @@
 		padding: 2px 8px;
 		background: var(--surface-secondary);
 		color: var(--text-secondary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 500;
 		font-family: 'IBM Plex Mono', monospace;
@@ -310,7 +310,7 @@
 		background: var(--surface-hover);
 		border: 1px solid var(--civic-blue);
 		color: var(--civic-blue);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
@@ -322,7 +322,7 @@
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
 		color: var(--text-secondary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 500;
 	}
@@ -380,11 +380,11 @@
 		height: 1.75rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		color: var(--text-primary);
 		font-size: 1.25rem;
 		font-weight: bold;
-		transition: all 0.1s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.result-card-header:hover .expand-icon {
@@ -398,7 +398,7 @@
 		padding: 1rem;
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border-primary);
-		animation: slideDown 0.15s ease-out;
+		animation: slideDown var(--transition-fast);
 	}
 
 	@keyframes slideDown {
@@ -424,7 +424,7 @@
 		padding: 2px 8px;
 		background: var(--surface-hover);
 		color: var(--civic-blue);
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		font-size: 0.75rem;
 		font-weight: 500;
 	}
@@ -449,7 +449,7 @@
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
 		color: var(--text-secondary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 500;
 	}
@@ -458,7 +458,7 @@
 		padding: 1rem;
 		background: var(--surface-primary);
 		border-left: 3px solid var(--civic-blue);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		margin-bottom: 0.75rem;
 		font-size: 0.9rem;
 		line-height: 1.7;
@@ -512,14 +512,14 @@
 		font-size: 0.85em;
 		background: var(--surface-secondary);
 		padding: 0.15rem 0.35rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.full-summary :global(pre) {
 		margin: 0.75rem 0;
 		padding: 1rem;
 		background: var(--surface-secondary);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		overflow-x: auto;
 	}
 
@@ -534,7 +534,7 @@
 		color: var(--civic-gray);
 		font-style: italic;
 		background: var(--surface-secondary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		margin-bottom: 0.75rem;
 	}
 
@@ -555,11 +555,11 @@
 		background: var(--surface-primary);
 		color: var(--civic-blue);
 		border: 1px solid var(--border-primary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		text-decoration: none;
 		font-size: 0.8rem;
 		font-weight: 500;
-		transition: all 0.1s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.attachment-link:hover {
@@ -580,8 +580,8 @@
 		text-decoration: none;
 		font-weight: 500;
 		font-size: 0.85rem;
-		border-radius: 6px;
-		transition: all 0.1s ease;
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-fast);
 	}
 
 	.action-link.primary {

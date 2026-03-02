@@ -156,7 +156,7 @@
 		box-sizing: border-box;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 		cursor: pointer;
 		transition: all var(--transition-normal);
@@ -289,7 +289,7 @@
 		background: var(--topic-tag-bg);
 		color: var(--topic-tag-text);
 		border: 1px solid var(--topic-tag-border);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-weight: 500;
 		transition: background var(--transition-normal), border-color var(--transition-normal);
 	}
@@ -316,7 +316,7 @@
 		margin-top: 0.375rem;
 		padding: 0.25rem 0.5rem;
 		background: var(--participation-bg);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		display: inline-block;
 	}
 

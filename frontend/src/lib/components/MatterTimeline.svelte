@@ -157,7 +157,7 @@
 	.matter-timeline {
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 		margin: 1.5rem 0;
 	}
@@ -184,7 +184,7 @@
 		padding: 0.35rem 0.75rem;
 		background: var(--badge-blue-bg);
 		border: 2px solid var(--badge-blue-border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 	}
 
 	.appearance-count {
@@ -213,7 +213,7 @@
 
 	.flow-step {
 		position: relative;
-		animation: fadeIn 0.3s ease-out;
+		animation: fadeIn var(--transition-slow);
 	}
 
 	@keyframes fadeIn {
@@ -236,9 +236,9 @@
 		background: var(--surface-secondary);
 		border: 2px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		font-family: 'IBM Plex Mono', monospace;
 		text-align: left;
 	}
@@ -246,7 +246,7 @@
 	.step-card:hover {
 		transform: translateX(4px);
 		border-left-width: 6px;
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+		box-shadow: 0 4px 12px var(--shadow-lg);
 	}
 
 	.step-card.committee {
@@ -267,7 +267,7 @@
 
 	.flow-step.selected .step-card {
 		border-left-width: 6px;
-		box-shadow: 0 6px 16px rgba(79, 70, 229, 0.2);
+		box-shadow: 0 6px 16px var(--shadow-lg);
 	}
 
 	.step-number {
@@ -321,7 +321,7 @@
 		padding: 0.2rem 0.5rem;
 		background: var(--civic-blue);
 		color: var(--civic-white);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 		font-weight: 700;
@@ -365,7 +365,7 @@
 		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
 		color: var(--badge-purple-text, #7c3aed);
 		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-weight: 600;
 	}
 
@@ -376,10 +376,10 @@
 		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
 		color: var(--badge-purple-text, #7c3aed);
 		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.step-committee-link:hover {
@@ -397,7 +397,7 @@
 		flex-shrink: 0;
 		font-size: 1.2rem;
 		color: var(--civic-blue);
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-normal);
 	}
 
 	@media (max-width: 640px) {

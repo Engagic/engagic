@@ -423,7 +423,7 @@
 	.state-metrics {
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
-		border-radius: 16px;
+		border-radius: var(--radius-xl);
 		padding: 2rem;
 		margin: 2rem 0;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -482,9 +482,9 @@
 	.metric-card {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.25rem;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 	}
 
@@ -525,7 +525,7 @@
 		padding: 1.5rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 	}
 
 	.upcoming-meetings-section.loading-section {
@@ -545,10 +545,10 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 1rem 1.25rem;
 		text-decoration: none;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		cursor: pointer;
 	}
 
@@ -574,7 +574,7 @@
 		color: var(--badge-purple-text, var(--civic-blue));
 		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
 		padding: 0.25rem 0.6rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
 	}
 
@@ -610,7 +610,7 @@
 		font-size: 0.65rem;
 		font-weight: 600;
 		padding: 0.2rem 0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 	}
@@ -662,7 +662,7 @@
 		font-weight: 600;
 		color: var(--civic-blue);
 		text-decoration: none;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 	}
 
 	.view-all-link:hover {
@@ -693,7 +693,7 @@
 		margin: 2rem 0;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		overflow: hidden;
 	}
 
@@ -706,7 +706,7 @@
 		background: transparent;
 		border: none;
 		cursor: pointer;
-		transition: background 0.2s ease;
+		transition: background var(--transition-normal);
 	}
 
 	.cities-header:hover {
@@ -719,7 +719,7 @@
 
 	.expand-icon {
 		color: var(--civic-gray);
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-normal);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -748,9 +748,9 @@
 		padding: 1rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-decoration: none;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		cursor: pointer;
 	}
 
@@ -781,7 +781,7 @@
 		padding: 2rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-align: center;
 	}
 
@@ -824,9 +824,9 @@
 		padding: 0.5rem 1rem;
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
-		border-radius: 24px;
+		border-radius: var(--radius-pill);
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		font-family: 'IBM Plex Mono', monospace;
 	}
 
@@ -857,7 +857,7 @@
 		color: var(--civic-blue);
 		background: var(--surface-hover);
 		padding: 0.15rem 0.5rem;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		min-width: 24px;
 		text-align: center;
 	}
@@ -872,7 +872,7 @@
 		padding: 0.75rem 1rem;
 		background: var(--badge-info-bg);
 		border: 1px solid var(--badge-info-border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 		color: var(--badge-info-text);
@@ -887,12 +887,12 @@
 		background: var(--civic-blue);
 		color: var(--civic-white);
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.clear-filter:hover {
@@ -910,9 +910,9 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 1rem 1.25rem;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		text-decoration: none;
 		cursor: pointer;
 	}
@@ -946,7 +946,7 @@
 		color: var(--badge-blue-text);
 		background: var(--badge-blue-bg);
 		padding: 0.25rem 0.6rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--badge-blue-border);
 	}
 
@@ -970,7 +970,7 @@
 		color: var(--badge-green-text);
 		background: var(--badge-green-bg);
 		padding: 0.25rem 0.5rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--badge-green-border);
 	}
 
@@ -994,7 +994,7 @@
 		padding: 0.2rem 0.5rem;
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-weight: 500;
 	}
 
@@ -1009,10 +1009,10 @@
 	.intel-panel {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.25rem;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.intel-panel:hover {
@@ -1046,14 +1046,14 @@
 		border-bottom: 1px solid var(--border-primary);
 		text-decoration: none;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.intel-item:hover {
 		background: var(--surface-hover);
 		padding-left: 0.5rem;
 		margin-left: -0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.intel-item:last-child {
@@ -1075,7 +1075,7 @@
 		color: var(--badge-blue-text);
 		background: var(--badge-blue-bg);
 		padding: 0.2rem 0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		border: 1px solid var(--badge-blue-border);
 	}
 
@@ -1086,7 +1086,7 @@
 		color: var(--badge-green-text);
 		background: var(--badge-green-bg);
 		padding: 0.2rem 0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.intel-title {
@@ -1116,8 +1116,8 @@
 		gap: 1rem;
 		padding: 0.75rem;
 		background: var(--surface-secondary);
-		border-radius: 8px;
-		transition: all 0.2s ease;
+		border-radius: var(--radius-md);
+		transition: all var(--transition-normal);
 		text-decoration: none;
 		cursor: pointer;
 	}
@@ -1186,15 +1186,15 @@
 		flex: 1;
 		height: 24px;
 		background: var(--surface-secondary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		overflow: hidden;
 	}
 
 	.type-bar {
 		height: 100%;
 		background: linear-gradient(90deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
-		transition: width 0.3s ease;
-		border-radius: 4px;
+		transition: width var(--transition-slow);
+		border-radius: var(--radius-xs);
 	}
 
 	.type-count {

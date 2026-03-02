@@ -376,7 +376,7 @@
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);
 		gap: var(--space-lg);
-		max-width: 1400px;
+		max-width: var(--width-state);
 	}
 
 	@media (max-width: 1200px) {

@@ -162,7 +162,7 @@
 		gap: 0;
 		margin: 1.5rem 0;
 		align-items: stretch;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		overflow: hidden;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	}
@@ -173,9 +173,9 @@
 		background: var(--participation-box-bg);
 		border: 2px solid var(--participation-box-border);
 		border-right: 1px solid var(--participation-box-border);
-		border-radius: 6px 0 0 6px;
+		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 		box-shadow: none;
-		transition: all 0.3s ease;
+		transition: all var(--transition-slow);
 	}
 
 	.viewing-box {
@@ -184,9 +184,9 @@
 		background: var(--viewing-box-bg);
 		border: 2px solid var(--viewing-box-border);
 		border-left: 1px solid var(--viewing-box-border);
-		border-radius: 0 6px 6px 0;
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 		box-shadow: none;
-		transition: all 0.3s ease;
+		transition: all var(--transition-slow);
 	}
 
 	.viewing-header {
@@ -203,7 +203,7 @@
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		transition: color 0.3s ease;
+		transition: color var(--transition-slow);
 	}
 
 	.viewing-content {
@@ -224,7 +224,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 500;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
 	}
 
 	.viewing-link:hover {
@@ -237,7 +237,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 500;
-		transition: color 0.3s ease;
+		transition: color var(--transition-slow);
 	}
 
 	.viewing-icon {
@@ -256,7 +256,7 @@
 
 		.participation-box {
 			border: 2px solid var(--participation-box-border);
-			border-radius: 6px;
+			border-radius: var(--radius-sm);
 			box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
 		}
 
@@ -293,7 +293,7 @@
 		font-size: 0.85rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		transition: color 0.3s ease;
+		transition: color var(--transition-slow);
 	}
 
 	.streaming-toggle-mobile {
@@ -303,12 +303,12 @@
 		height: 1.75rem;
 		background: transparent;
 		border: 1.5px solid var(--participation-label);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		color: var(--participation-label);
 		font-size: 1.1rem;
 		font-weight: 400;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.streaming-toggle-mobile:hover {
@@ -355,7 +355,7 @@
 
 	.participation-badge {
 		padding: 0.2rem 0.6rem;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-size: 0.75rem;
 		font-weight: 500;
 		font-family: 'IBM Plex Mono', monospace;
@@ -397,7 +397,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 500;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
 	}
 
 	.participation-link:hover {
@@ -410,7 +410,7 @@
 		font-size: 0.8rem;
 		font-family: 'IBM Plex Mono', monospace;
 		margin-left: 0.5rem;
-		transition: color 0.3s ease;
+		transition: color var(--transition-slow);
 	}
 
 	.participation-text {
@@ -418,6 +418,6 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 500;
-		transition: color 0.3s ease;
+		transition: color var(--transition-slow);
 	}
 </style>

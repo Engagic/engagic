@@ -137,7 +137,7 @@
 		padding: 0;
 		cursor: pointer;
 		color: var(--border-primary);
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 		display: flex;
 		align-items: center;
 		justify-content: center;

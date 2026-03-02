@@ -151,7 +151,7 @@
 
 	.meetings-container {
 		width: 100%;
-		max-width: 900px;
+		max-width: var(--width-dashboard);
 		margin: 0 auto;
 	}
 
@@ -164,7 +164,7 @@
 		font-size: 0.9rem;
 		color: var(--text-link);
 		text-decoration: none;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 		font-weight: 500;
 	}
 
@@ -212,7 +212,7 @@
 		align-items: center;
 		padding: 0.75rem 1rem;
 		background: var(--surface-secondary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		border-left: 4px solid var(--civic-blue);
 	}
 
@@ -240,10 +240,10 @@
 		display: block;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 1rem 1.25rem;
 		text-decoration: none;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.meeting-card:hover {
@@ -268,7 +268,7 @@
 		color: var(--badge-purple-text, var(--civic-blue));
 		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
 		padding: 0.25rem 0.6rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
 	}
 
@@ -299,7 +299,7 @@
 		font-size: 0.65rem;
 		font-weight: 600;
 		padding: 0.2rem 0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 	}
@@ -340,7 +340,7 @@
 		padding: 0.2rem 0.5rem;
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-weight: 500;
 	}
 
@@ -349,7 +349,7 @@
 		padding: 4rem 2rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 	}
 
 	.empty-title {

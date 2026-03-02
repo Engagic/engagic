@@ -104,7 +104,7 @@
 		flex-direction: column;
 		gap: var(--space-xl);
 		padding: var(--space-xl) var(--space-lg);
-		max-width: 1200px;
+		max-width: var(--width-global);
 		margin: 0 auto;
 		color: var(--text-primary);
 	}
@@ -156,7 +156,7 @@
 	}
 
 	.summary-count.has-votes {
-		color: rgb(22, 163, 74);
+		color: var(--vote-yes-text);
 	}
 
 	.summary-count.no-votes {
@@ -250,12 +250,12 @@
 	}
 
 	.vote-yes {
-		background: rgba(34, 197, 94, 0.15);
-		color: rgb(22, 163, 74);
+		background: var(--coverage-matter-bg);
+		color: var(--vote-yes-text);
 	}
 
 	.vote-no {
-		background: rgba(168, 162, 158, 0.15);
+		background: var(--coverage-monolithic-bg);
 		color: var(--text-secondary);
 	}
 

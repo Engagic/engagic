@@ -328,11 +328,11 @@
 <style>
 	.agenda-item {
 		background: var(--surface-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--border-primary);
 		box-shadow: 0 1px 3px var(--shadow-sm);
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		overflow: hidden;
 	}
 
@@ -356,13 +356,13 @@
 
 	.agenda-item:hover {
 		border-left-color: var(--civic-accent);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+		box-shadow: 0 4px 12px var(--shadow-sm);
 	}
 
 	.item-header-clickable {
 		padding: 1rem 1.25rem;
 		cursor: pointer;
-		transition: background 0.15s ease;
+		transition: background var(--transition-fast);
 	}
 
 	.item-header-clickable:hover {
@@ -397,7 +397,7 @@
 		background: var(--badge-procedural-bg);
 		color: var(--badge-procedural-text);
 		border: 1px solid var(--badge-procedural-border);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
@@ -411,7 +411,7 @@
 		background: var(--badge-matter-bg);
 		color: var(--badge-matter-text);
 		border: 1.5px solid var(--badge-matter-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-size: 0.7rem;
 		font-weight: 700;
 		font-family: 'IBM Plex Mono', monospace;
@@ -436,7 +436,7 @@
 		background: var(--item-type-bg);
 		color: var(--item-type-text);
 		border: 1px solid var(--item-type-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
@@ -450,7 +450,7 @@
 		background: var(--badge-sponsor-bg);
 		color: var(--badge-sponsor-text);
 		border: 1.5px solid var(--badge-sponsor-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
@@ -464,7 +464,7 @@
 		background: var(--badge-sponsor-bg);
 		color: var(--badge-sponsor-text);
 		border: 1.5px solid var(--badge-sponsor-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
@@ -484,7 +484,7 @@
 		background: var(--badge-timeline-bg);
 		color: var(--badge-timeline-text);
 		border: 1.5px solid var(--badge-timeline-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-size: 0.65rem;
 		font-weight: 700;
 		font-family: 'IBM Plex Mono', monospace;
@@ -503,7 +503,7 @@
 		padding: 0.75rem;
 		background: var(--surface-secondary);
 		border-left: 2px solid var(--border-primary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		line-height: 1.6;
@@ -540,7 +540,7 @@
 		padding: 0 0.35rem;
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
 		font-weight: 600;
@@ -555,16 +555,16 @@
 		height: 1.75rem;
 		background: transparent;
 		border: 1.5px solid var(--border-primary);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		color: var(--civic-gray);
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.expand-icon svg {
 		width: 14px;
 		height: 14px;
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-normal);
 	}
 
 	.expand-icon.expanded svg {
@@ -603,7 +603,7 @@
 		background: var(--topic-tag-bg);
 		color: var(--topic-tag-text);
 		border: 1px solid var(--topic-tag-border);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 0.7rem;
 		font-weight: 500;
 		font-family: 'IBM Plex Mono', monospace;
@@ -619,7 +619,7 @@
 	.item-expanded-content {
 		padding: 0 1.25rem 1.25rem 1.25rem;
 		border-top: 1px solid var(--border-primary);
-		animation: slideDown 0.2s ease-out;
+		animation: slideDown var(--transition-normal);
 	}
 
 	@keyframes slideDown {
@@ -704,12 +704,12 @@
 		background: var(--surface-primary);
 		color: var(--civic-blue);
 		border: 1.5px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-decoration: none;
 		font-size: 0.85rem;
 		font-weight: 600;
 		font-family: 'IBM Plex Mono', monospace;
-		transition: all 0.2s;
+		transition: all var(--transition-normal);
 		box-shadow: 0 1px 2px var(--shadow-sm);
 	}
 
@@ -741,12 +741,12 @@
 		justify-content: center;
 		gap: 0.4rem;
 		padding: 0.55rem 1rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 		letter-spacing: 0.2px;
 		text-decoration: none;
 	}

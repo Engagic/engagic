@@ -121,7 +121,7 @@
 	}
 
 	svg {
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.legend {

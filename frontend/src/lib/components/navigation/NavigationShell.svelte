@@ -126,11 +126,11 @@
 	}
 
 	.shell-content > :global(*) {
-		max-width: 1200px;
+		max-width: var(--width-global);
 	}
 
 	.shell-content.wide > :global(*) {
-		max-width: 1400px;
+		max-width: var(--width-state);
 	}
 
 	.mobile-back-button {
@@ -164,7 +164,7 @@
 		.logo-image {
 			width: 40px;
 			height: 40px;
-			border-radius: 10px;
+			border-radius: var(--radius-md);
 		}
 
 		.shell-sidebar {

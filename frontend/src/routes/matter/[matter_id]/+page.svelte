@@ -373,7 +373,7 @@
 
 	.matter-container {
 		width: 100%;
-		max-width: 1000px;
+		max-width: var(--width-detail);
 		margin: 0 auto;
 	}
 
@@ -389,7 +389,7 @@
 		font-size: 0.9rem;
 		color: var(--text-link);
 		text-decoration: none;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 		font-weight: 500;
 	}
 
@@ -405,7 +405,7 @@
 	.matter-header {
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
-		border-radius: 16px;
+		border-radius: var(--radius-xl);
 		padding: 2rem;
 		margin-bottom: 2rem;
 		box-shadow: 0 2px 8px var(--shadow-sm);
@@ -423,7 +423,7 @@
 		font-size: 0.8rem;
 		font-weight: 700;
 		padding: 0.4rem 0.8rem;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		border: 1px solid;
 	}
 
@@ -492,15 +492,15 @@
 		background: var(--topic-tag-bg);
 		color: var(--topic-tag-text);
 		border: 1px solid var(--topic-tag-border);
-		border-radius: 4px;
-		transition: all 0.2s ease;
+		border-radius: var(--radius-xs);
+		transition: all var(--transition-normal);
 	}
 
 	.matter-summary-section {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--item-summary-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 2rem;
 		margin-bottom: 1.5rem;
 		box-shadow: 0 2px 8px var(--shadow-sm);
@@ -510,7 +510,7 @@
 	.sponsors-section {
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		padding: 1.25rem;
 		margin-bottom: 1rem;
 	}
@@ -518,7 +518,7 @@
 	.voting-section {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 		margin-bottom: 1.5rem;
 		box-shadow: 0 1px 3px var(--shadow-sm);
@@ -527,7 +527,7 @@
 	.timeline-section {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 		margin-bottom: 1.5rem;
 		box-shadow: 0 1px 3px var(--shadow-sm);
@@ -543,7 +543,7 @@
 		padding: 1rem 1.5rem;
 		background: var(--action-deliberate);
 		color: white;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 700;
@@ -598,7 +598,7 @@
 		border-left: 6px solid transparent;
 		border-right: 6px solid transparent;
 		border-top: 8px solid var(--civic-gray);
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-normal);
 		flex-shrink: 0;
 	}
 
@@ -674,7 +674,7 @@
 		margin: 2rem 0;
 		padding: 1.5rem;
 		background: var(--surface-secondary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		overflow-x: auto;
 	}
 
@@ -701,7 +701,7 @@
 	.matter-summary :global(a) {
 		color: var(--text-link);
 		text-decoration: underline;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 	}
 
 	.matter-summary :global(a:hover) {
@@ -711,7 +711,7 @@
 	.matter-summary :global(img) {
 		max-width: 100%;
 		height: auto;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		margin: 2rem 0;
 	}
 
@@ -729,12 +729,12 @@
 		padding: 0.75rem 1rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-decoration: none;
 		color: var(--text-primary);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.attachment-link:hover {
@@ -765,7 +765,7 @@
 		color: var(--civic-blue);
 		text-decoration: none;
 		font-weight: 500;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 	}
 
 	.sponsor-link:hover {
@@ -799,7 +799,7 @@
 		align-items: center;
 		padding: 0.5rem 0.75rem;
 		background: var(--surface-secondary);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.voter-link {
@@ -826,7 +826,7 @@
 		font-size: 0.75rem;
 		font-weight: 600;
 		padding: 0.2rem 0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		text-transform: uppercase;
 	}
 
@@ -845,7 +845,7 @@
 
 	.committee-vote-group {
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		overflow: hidden;
 	}
 
@@ -878,7 +878,7 @@
 		font-weight: 600;
 		color: var(--badge-purple-text, #7c3aed);
 		text-decoration: none;
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.committee-name-link:hover {
@@ -908,7 +908,7 @@
 		padding: 1.5rem;
 		background: var(--surface-secondary);
 		border: 1.5px solid var(--civic-red);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-align: center;
 	}
 

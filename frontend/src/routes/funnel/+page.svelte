@@ -272,7 +272,7 @@
 
 <style>
 	.journey-page {
-		max-width: 1000px;
+		max-width: var(--width-detail);
 		margin: 0 auto;
 		padding: 2rem;
 		font-family: 'IBM Plex Sans', sans-serif;
@@ -294,7 +294,7 @@
 		flex: 1;
 		padding: 0.75rem 1rem;
 		border: 1px solid var(--border-primary);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-size: 0.9rem;
 		background: var(--surface-primary);
 		color: var(--text-primary);
@@ -305,7 +305,7 @@
 		background: var(--civic-blue);
 		color: white;
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-size: 0.9rem;
 		cursor: pointer;
 	}
@@ -331,7 +331,7 @@
 		padding: 0.4rem 0.8rem;
 		background: none;
 		border: 1px solid var(--border-primary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 		cursor: pointer;
@@ -364,7 +364,7 @@
 	select {
 		padding: 0.5rem 1rem;
 		border: 1px solid var(--civic-border);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-size: 0.9rem;
 		color: var(--text-primary);
 		background: var(--surface-primary);
@@ -390,7 +390,7 @@
 		font-size: 0.9rem;
 		color: var(--text-secondary);
 		cursor: pointer;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.tabs button:hover {
@@ -416,7 +416,7 @@
 
 	.journey-card {
 		background: var(--surface-secondary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 1rem;
 		margin-bottom: 1rem;
 	}
@@ -434,7 +434,7 @@
 		font-size: 0.85rem;
 		background: var(--border-primary);
 		padding: 0.2rem 0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.event-count {
@@ -497,7 +497,7 @@
 		gap: 1rem;
 		padding: 0.75rem 1rem;
 		background: var(--surface-secondary);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.pattern-rank,
@@ -520,7 +520,7 @@
 		color: var(--text-secondary);
 		background: var(--border-primary);
 		padding: 0.2rem 0.5rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.dropoff-event {
@@ -531,5 +531,40 @@
 	.dropoff-url {
 		flex: 1;
 		color: var(--text-secondary);
+	}
+
+	@media (max-width: 640px) {
+		.tabs {
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+			white-space: nowrap;
+		}
+
+		h1 {
+			font-size: 1.25rem;
+		}
+
+		.subtitle {
+			font-size: 0.85rem;
+		}
+
+		.journey-card {
+			padding: 0.75rem;
+		}
+
+		.pattern-row,
+		.dropoff-row {
+			padding: 0.5rem 0.75rem;
+			font-size: 0.8rem;
+		}
+
+		.event-item {
+			font-size: 0.8rem;
+			gap: 0.5rem;
+		}
+
+		.event-name {
+			min-width: auto;
+		}
 	}
 </style>

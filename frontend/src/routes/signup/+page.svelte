@@ -167,15 +167,15 @@
 
 	.container {
 		width: 100%;
-		max-width: 480px;
+		max-width: var(--width-auth);
 	}
 
 	.card {
 		background: var(--civic-white);
 		border: 1px solid var(--civic-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 2.5rem;
-		box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 8px 16px var(--shadow-md);
 	}
 
 	.success-state {
@@ -209,9 +209,9 @@
 	.city-badge {
 		display: inline-block;
 		padding: 0.5rem 1rem;
-		background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+		background: var(--badge-info-bg);
 		border: 1px solid var(--civic-blue);
-		border-radius: 20px;
+		border-radius: var(--radius-pill);
 		font-size: 0.875rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -259,7 +259,7 @@
 		padding: 0.75rem 1rem;
 		background: var(--success-bg);
 		border: 1px solid var(--success-border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		line-height: 1.5;
 	}
 
@@ -283,14 +283,14 @@
 		color: var(--text-primary);
 		background: var(--surface-primary);
 		border: 2px solid var(--civic-border);
-		border-radius: 8px;
-		transition: all 0.2s;
+		border-radius: var(--radius-md);
+		transition: all var(--transition-normal);
 	}
 
 	.input:focus {
 		outline: none;
 		border: 2px solid var(--civic-blue);
-		box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+		box-shadow: 0 0 0 3px var(--shadow-sm);
 	}
 
 	.input:disabled {
@@ -307,7 +307,7 @@
 		padding: 1rem;
 		background: var(--error-bg);
 		border: 1px solid var(--error-border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		color: var(--error-text);
 		font-size: 0.875rem;
 		margin-bottom: 1.5rem;
@@ -322,16 +322,16 @@
 		background: var(--civic-blue);
 		color: white;
 		border: none;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all var(--transition-normal);
 		font-family: 'IBM Plex Sans', sans-serif;
 	}
 
 	.btn-primary:hover:not(:disabled) {
 		background: var(--civic-accent);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+		box-shadow: 0 4px 12px var(--shadow-lg);
 	}
 
 	.btn-primary:active:not(:disabled) {
@@ -355,7 +355,7 @@
 		color: var(--civic-blue);
 		text-decoration: none;
 		font-weight: 600;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
 	}
 
 	.footer-text a:hover {

@@ -70,7 +70,7 @@
 
 	.state-container {
 		width: 100%;
-		max-width: 1400px;
+		max-width: var(--width-state);
 		margin: 0 auto;
 	}
 
@@ -83,7 +83,7 @@
 		font-size: 0.9rem;
 		color: var(--text-link);
 		text-decoration: none;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 		font-weight: 500;
 	}
 

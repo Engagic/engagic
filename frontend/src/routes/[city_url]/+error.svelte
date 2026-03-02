@@ -166,7 +166,7 @@
 		padding: 1.5rem;
 		background: var(--surface-secondary);
 		border: 2px solid var(--civic-blue);
-		border-radius: 11px;
+		border-radius: var(--radius-lg);
 	}
 
 	.cta-text {

@@ -258,7 +258,7 @@
 	}
 
 	.compact-logo {
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-normal);
 	}
 
 	.compact-logo:hover {
@@ -268,7 +268,7 @@
 	.logo-icon {
 		width: 48px;
 		height: 48px;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 
@@ -278,7 +278,7 @@
 		text-align: center;
 		padding: 3rem;
 		background: var(--surface-secondary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		border: 1px solid var(--border-primary);
 	}
 
@@ -300,7 +300,7 @@
 		padding: 0.5rem 1rem;
 		background: var(--civic-blue);
 		color: white;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
@@ -357,7 +357,7 @@
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		text-transform: uppercase;
 	}
 
@@ -377,7 +377,7 @@
 		padding: 1rem 1.25rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		min-width: 100px;
 	}
 
@@ -413,7 +413,7 @@
 		padding: 1.25rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 	}
 
 	.vote-bars {
@@ -445,14 +445,14 @@
 		flex: 1;
 		height: 16px;
 		background: var(--surface-secondary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		overflow: hidden;
 	}
 
 	.bar-fill {
 		height: 100%;
-		border-radius: 8px;
-		transition: width 0.3s ease;
+		border-radius: var(--radius-md);
+		transition: width var(--transition-slow);
 	}
 
 	.bar-fill.yes { background: var(--vote-yes-text); }
@@ -473,7 +473,7 @@
 		padding: 1.25rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 	}
 
 	.committees-list {
@@ -489,9 +489,9 @@
 		padding: 0.5rem 0.75rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-decoration: none;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.committee-chip:hover {
@@ -517,7 +517,7 @@
 		padding: 0.1rem 0.4rem;
 		background: var(--civic-blue);
 		color: white;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		text-transform: uppercase;
 	}
 
@@ -541,9 +541,9 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 3px solid var(--civic-blue);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		text-decoration: none;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.vote-row:hover {
@@ -577,7 +577,7 @@
 		padding: 0.1rem 0.4rem;
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		text-transform: uppercase;
 	}
 
@@ -604,7 +604,7 @@
 		font-size: 0.8rem;
 		font-weight: 700;
 		padding: 0.3rem 0.75rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.vote-yes {

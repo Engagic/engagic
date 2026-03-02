@@ -43,9 +43,9 @@
 		padding: 0.75rem 1rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-decoration: none;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 		cursor: pointer;
 	}
 
@@ -90,7 +90,7 @@
 		height: 32px;
 		background: var(--tab-theme-color);
 		color: var(--civic-white);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		flex-shrink: 0;
 	}
 
@@ -104,14 +104,14 @@
 		font-size: 0.95rem;
 		font-weight: 500;
 		color: var(--civic-dark);
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 	}
 
 	.tab-chevron-indicator {
 		color: var(--civic-gray);
 		font-size: 1.1rem;
 		opacity: 0;
-		transition: opacity 0.2s ease;
+		transition: opacity var(--transition-normal);
 	}
 
 	.nav-tab-link:hover .tab-chevron-indicator {
