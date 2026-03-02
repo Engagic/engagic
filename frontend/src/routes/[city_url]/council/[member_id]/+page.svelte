@@ -322,7 +322,7 @@
 	}
 
 	.member-name {
-		font-family: Georgia, 'Times New Roman', serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 2rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -436,10 +436,10 @@
 		text-align: right;
 	}
 
-	.vote-type.yes { color: #16a34a; }
-	.vote-type.no { color: #dc2626; }
-	.vote-type.abstain { color: #d97706; }
-	.vote-type.absent { color: var(--civic-gray); }
+	.vote-type.yes { color: var(--vote-yes-text); }
+	.vote-type.no { color: var(--vote-no-text); }
+	.vote-type.abstain { color: var(--vote-abstain-text); }
+	.vote-type.absent { color: var(--vote-absent-text); }
 
 	.bar-track {
 		flex: 1;
@@ -455,10 +455,10 @@
 		transition: width 0.3s ease;
 	}
 
-	.bar-fill.yes { background: #16a34a; }
-	.bar-fill.no { background: #dc2626; }
-	.bar-fill.abstain { background: #d97706; }
-	.bar-fill.absent { background: var(--civic-gray); }
+	.bar-fill.yes { background: var(--vote-yes-text); }
+	.bar-fill.no { background: var(--vote-no-text); }
+	.bar-fill.abstain { background: var(--vote-abstain-text); }
+	.bar-fill.absent { background: var(--vote-absent-text); }
 
 	.vote-count {
 		font-family: 'IBM Plex Mono', monospace;
@@ -583,7 +583,7 @@
 
 	.vote-title {
 		display: block;
-		font-family: Georgia, 'Times New Roman', serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		color: var(--text-primary);
 		line-height: 1.4;
@@ -608,21 +608,21 @@
 	}
 
 	.vote-yes {
-		background: #dcfce7;
-		color: #16a34a;
-		border: 1px solid #86efac;
+		background: var(--vote-yes-bg);
+		color: var(--vote-yes-text);
+		border: 1px solid var(--vote-yes-text);
 	}
 
 	.vote-no {
-		background: #fee2e2;
-		color: #dc2626;
-		border: 1px solid #fca5a5;
+		background: var(--vote-no-bg);
+		color: var(--vote-no-text);
+		border: 1px solid var(--vote-no-text);
 	}
 
 	.vote-abstain {
-		background: #fef3c7;
-		color: #d97706;
-		border: 1px solid #fcd34d;
+		background: var(--vote-abstain-bg);
+		color: var(--vote-abstain-text);
+		border: 1px solid var(--vote-abstain-text);
 	}
 
 	.vote-absent {
@@ -637,24 +637,6 @@
 		border: 1px solid var(--border-primary);
 	}
 
-	/* Dark mode overrides */
-	:global(.dark) .vote-yes {
-		background: #14532d;
-		color: #86efac;
-		border-color: #16a34a;
-	}
-
-	:global(.dark) .vote-no {
-		background: #7f1d1d;
-		color: #fca5a5;
-		border-color: #dc2626;
-	}
-
-	:global(.dark) .vote-abstain {
-		background: #78350f;
-		color: #fcd34d;
-		border-color: #d97706;
-	}
 
 	@media (max-width: 640px) {
 		.container {

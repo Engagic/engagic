@@ -137,7 +137,7 @@
 		gap: var(--space-md);
 		padding: var(--space-xl);
 		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-md);
 		text-decoration: none;
 		transition: all var(--transition-normal);
@@ -167,19 +167,19 @@
 	}
 
 	.github-icon {
-		background: #8842cd;
+		background: var(--contact-github);
 	}
 
 	.email-icon {
-		background: #4f46e5;
+		background: var(--contact-email);
 	}
 
 	.issues-icon {
-		background: #f97316;
+		background: var(--contact-issues);
 	}
 
 	.twitter-icon {
-		background: #1da1f2;
+		background: var(--contact-twitter);
 	}
 
 	.twitter-icon svg {

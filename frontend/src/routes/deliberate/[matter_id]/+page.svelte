@@ -128,7 +128,7 @@
 	}
 
 	.matter-title {
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.5rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -139,7 +139,7 @@
 	.matter-file {
 		display: inline-block;
 		padding: 0.25rem 0.75rem;
-		background: linear-gradient(135deg, var(--badge-matter-bg-start) 0%, var(--badge-matter-bg-end) 100%);
+		background: var(--badge-matter-bg);
 		color: var(--badge-matter-text);
 		border: 1.5px solid var(--badge-matter-border);
 		border-radius: 12px;
@@ -169,7 +169,7 @@
 	}
 
 	.empty-state h2 {
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -177,7 +177,7 @@
 	}
 
 	.empty-state p {
-		font-family: Georgia, 'Times New Roman', serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1rem;
 		color: var(--text-secondary);
 		margin: 0 0 1.5rem 0;
@@ -185,7 +185,7 @@
 
 	.start-btn {
 		padding: 0.875rem 2rem;
-		background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+		background: var(--action-deliberate);
 		color: white;
 		border: none;
 		border-radius: 8px;
@@ -193,15 +193,13 @@
 		font-size: 0.9rem;
 		font-weight: 700;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-fast);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
 	}
 
 	.start-btn:hover:not(:disabled) {
-		background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+		background: var(--action-deliberate-hover);
 		transform: translateY(-1px);
 	}
 

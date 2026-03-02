@@ -242,8 +242,8 @@
 				{#if item.attachments && item.attachments.length > 0}
 					<span class="attachment-badge">{item.attachments.length}</span>
 				{/if}
-				<button class="expand-icon" aria-label={isExpanded ? 'Collapse item' : 'Expand item'}>
-					{isExpanded ? '−' : '+'}
+				<button class="expand-icon" class:expanded={isExpanded} aria-label={isExpanded ? 'Collapse item' : 'Expand item'}>
+					<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg>
 				</button>
 			</div>
 		</div>
@@ -266,7 +266,8 @@
 						}}
 						aria-label={flyerGenerating ? 'Generating support flyer' : 'Generate flyer expressing support for this item'}
 					>
-						{flyerGenerating ? '⏳ Generating...' : '✓ Say Yes'}
+						<svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.25 4.75 6 12 2.75 8.75"/></svg>
+						{flyerGenerating ? 'Generating...' : 'Support'}
 					</button>
 					<button
 						class="flyer-btn flyer-btn-no"
@@ -277,7 +278,8 @@
 						}}
 						aria-label={flyerGenerating ? 'Generating opposition flyer' : 'Generate flyer expressing opposition to this item'}
 					>
-						{flyerGenerating ? '⏳ Generating...' : '✗ Say No'}
+						<svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 8 8M12 4 4 12"/></svg>
+						{flyerGenerating ? 'Generating...' : 'Oppose'}
 					</button>
 					<button
 						class="flyer-btn flyer-btn-share"
@@ -288,7 +290,8 @@
 						}}
 						aria-label={linkCopied ? 'Link copied to clipboard' : 'Copy shareable link to this agenda item'}
 					>
-						{linkCopied ? '✓ Copied!' : '🔗 Share Link'}
+						<svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3v10h10v-3"/><path d="M9 1h6v6"/><path d="M15 1 7 9"/></svg>
+						{linkCopied ? 'Copied' : 'Share'}
 					</button>
 					{#if item.matter_id}
 						<a
@@ -297,7 +300,8 @@
 							onclick={(e) => e.stopPropagation()}
 							aria-label="Join community discussion about this item"
 						>
-							Deliberate
+							<svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10c0 .55-.196 1.044-.586 1.414S12.55 12 12 12H6l-4 3V3c0-.55.196-1.044.586-1.414S3.45 1 4 1h8c.55 0 1.044.196 1.414.586S14 2.45 14 3v7Z"/></svg>
+							Discuss
 						</a>
 					{/if}
 				</div>
@@ -404,7 +408,7 @@
 	.matter-badge {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: linear-gradient(135deg, var(--badge-matter-bg-start) 0%, var(--badge-matter-bg-end) 100%);
+		background: var(--badge-matter-bg);
 		color: var(--badge-matter-text);
 		border: 1.5px solid var(--badge-matter-border);
 		border-radius: 12px;
@@ -412,8 +416,7 @@
 		font-weight: 700;
 		font-family: 'IBM Plex Mono', monospace;
 		letter-spacing: 0.5px;
-		box-shadow: 0 1px 3px var(--badge-matter-shadow);
-		transition: all 0.2s ease;
+		transition: border-color var(--transition-fast);
 		cursor: help;
 	}
 
@@ -424,10 +427,7 @@
 
 	.matter-badge:hover,
 	.matter-badge-link:hover {
-		background: linear-gradient(135deg, var(--badge-matter-bg-end) 0%, var(--item-summary-border) 100%);
 		border-color: var(--badge-matter-text);
-		transform: translateY(-1px);
-		box-shadow: 0 2px 6px var(--badge-matter-shadow);
 	}
 
 	.matter-type-badge {
@@ -447,7 +447,7 @@
 	.sponsors-badge {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: linear-gradient(135deg, var(--badge-sponsor-bg-start) 0%, var(--badge-sponsor-bg-end) 100%);
+		background: var(--badge-sponsor-bg);
 		color: var(--badge-sponsor-text);
 		border: 1.5px solid var(--badge-sponsor-border);
 		border-radius: 12px;
@@ -461,7 +461,7 @@
 	.sponsors-badge-link {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: linear-gradient(135deg, var(--badge-sponsor-bg-start) 0%, var(--badge-sponsor-bg-end) 100%);
+		background: var(--badge-sponsor-bg);
 		color: var(--badge-sponsor-text);
 		border: 1.5px solid var(--badge-sponsor-border);
 		border-radius: 12px;
@@ -471,18 +471,17 @@
 		letter-spacing: 0.3px;
 		text-decoration: none;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: border-color var(--transition-fast);
 	}
 
 	.sponsors-badge-link:hover {
 		border-color: var(--badge-sponsor-text);
-		filter: brightness(1.1);
 	}
 
 	.matter-timeline-badge {
 		display: inline-block;
 		padding: 0.2rem 0.6rem;
-		background: linear-gradient(135deg, var(--badge-timeline-bg-start) 0%, var(--badge-timeline-bg-end) 100%);
+		background: var(--badge-timeline-bg);
 		color: var(--badge-timeline-text);
 		border: 1.5px solid var(--badge-timeline-border);
 		border-radius: 12px;
@@ -492,15 +491,11 @@
 		letter-spacing: 0.3px;
 		text-decoration: none;
 		cursor: pointer;
-		transition: all 0.2s ease;
-		box-shadow: 0 1px 3px var(--badge-timeline-shadow);
+		transition: border-color var(--transition-fast);
 	}
 
 	.matter-timeline-badge:hover {
-		background: linear-gradient(135deg, var(--badge-timeline-bg-end) 0%, var(--badge-green-border) 100%);
 		border-color: var(--badge-timeline-text);
-		transform: translateY(-1px);
-		box-shadow: 0 2px 6px var(--badge-timeline-shadow);
 	}
 
 	.item-summary-preview {
@@ -509,7 +504,7 @@
 		background: var(--surface-secondary);
 		border-left: 2px solid var(--border-primary);
 		border-radius: 4px;
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		line-height: 1.6;
 		color: var(--text-secondary);
@@ -518,7 +513,7 @@
 
 	.item-number {
 		color: var(--civic-gray);
-		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.125rem;
 		font-weight: 500;
 		flex-shrink: 0;
@@ -562,10 +557,18 @@
 		border: 1.5px solid var(--border-primary);
 		border-radius: 6px;
 		color: var(--civic-gray);
-		font-size: 1.1rem;
-		font-weight: 400;
 		cursor: pointer;
 		transition: all 0.2s ease;
+	}
+
+	.expand-icon svg {
+		width: 14px;
+		height: 14px;
+		transition: transform 0.2s ease;
+	}
+
+	.expand-icon.expanded svg {
+		transform: rotate(180deg);
 	}
 
 	.expand-icon:hover {
@@ -575,7 +578,7 @@
 	}
 
 	.item-title {
-		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.125rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -596,16 +599,14 @@
 
 	.item-topic-tag-small {
 		display: inline-block;
-		padding: 0.25rem 0.65rem;
-		background: var(--topic-bg, var(--surface-secondary));
-		color: var(--topic-color, var(--text-secondary));
-		border: 1.5px solid var(--topic-border, var(--border-primary));
-		border-radius: 12px;
+		padding: 0.25rem 0.55rem;
+		background: var(--topic-tag-bg);
+		color: var(--topic-tag-text);
+		border: 1px solid var(--topic-tag-border);
+		border-radius: 4px;
 		font-size: 0.7rem;
-		font-weight: 600;
+		font-weight: 500;
 		font-family: 'IBM Plex Mono', monospace;
-		text-transform: uppercase;
-		letter-spacing: 0.3px;
 	}
 
 	.topic-more {
@@ -633,7 +634,7 @@
 	}
 
 	.item-summary {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		line-height: 1.7;
 		font-size: 1rem;
 		color: var(--text-primary);
@@ -728,86 +729,84 @@
 		flex-wrap: wrap;
 	}
 
+	.btn-icon {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+	}
+
 	.flyer-btn {
-		flex: 1;
-		min-width: 140px;
-		padding: 0.875rem 1.5rem;
-		border: none;
-		border-radius: 8px;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-		font-weight: 700;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-	}
-
-	.flyer-btn-yes {
-		background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-		color: white;
-		box-shadow: 0 2px 6px rgba(34, 197, 94, 0.3);
-	}
-
-	.flyer-btn-yes:hover {
-		background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-		box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
-		transform: translateY(-1px);
-	}
-
-	.flyer-btn-no {
-		background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-		color: white;
-		box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
-	}
-
-	.flyer-btn-no:hover {
-		background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-		box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-		transform: translateY(-1px);
-	}
-
-	.flyer-btn-share {
-		background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-		color: white;
-		box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
-	}
-
-	.flyer-btn-share:hover {
-		background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-		box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-		transform: translateY(-1px);
-	}
-
-	.flyer-btn-deliberate {
-		background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-		color: white;
-		box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);
-		text-decoration: none;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		gap: 0.4rem;
+		padding: 0.55rem 1rem;
+		border-radius: 6px;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		letter-spacing: 0.2px;
+		text-decoration: none;
+	}
+
+	.flyer-btn-yes {
+		background: transparent;
+		color: var(--action-yes);
+		border: 1.5px solid var(--action-yes);
+	}
+
+	.flyer-btn-yes:hover {
+		background: var(--action-yes);
+		color: white;
+	}
+
+	.flyer-btn-no {
+		background: transparent;
+		color: var(--action-no);
+		border: 1.5px solid var(--action-no);
+	}
+
+	.flyer-btn-no:hover {
+		background: var(--action-no);
+		color: white;
+	}
+
+	.flyer-btn-share {
+		background: transparent;
+		color: var(--action-share);
+		border: 1.5px solid var(--action-share);
+	}
+
+	.flyer-btn-share:hover {
+		background: var(--action-share);
+		color: white;
+	}
+
+	.flyer-btn-deliberate {
+		background: transparent;
+		color: var(--action-deliberate);
+		border: 1.5px solid var(--action-deliberate);
 	}
 
 	.flyer-btn-deliberate:hover {
-		background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-		transform: translateY(-1px);
+		background: var(--action-deliberate);
+		color: white;
 	}
 
 	.flyer-btn:active {
-		transform: translateY(0);
+		transform: scale(0.97);
 	}
 
 	.flyer-btn:disabled {
-		opacity: 0.6;
+		opacity: 0.5;
 		cursor: not-allowed;
-		transform: none;
 	}
 
 	.flyer-btn:disabled:hover {
-		transform: none;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+		background: transparent;
+		color: inherit;
 	}
 
 	@media (max-width: 640px) {
@@ -913,9 +912,8 @@
 		}
 
 		.flyer-btn {
-			font-size: 0.85rem;
-			padding: 0.75rem 1.25rem;
-			min-width: 100px;
+			font-size: 0.75rem;
+			padding: 0.5rem 0.85rem;
 		}
 	}
 </style>

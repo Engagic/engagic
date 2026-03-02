@@ -174,7 +174,8 @@
 
 	.highlight-section {
 		background: var(--surface-secondary);
-		border: 2px solid var(--civic-blue);
+		border: 1px solid var(--border-primary);
+		border-left: 4px solid var(--civic-blue);
 		border-radius: var(--radius-lg);
 		padding: var(--space-2xl);
 		gap: var(--space-xl);

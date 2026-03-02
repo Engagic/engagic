@@ -119,14 +119,14 @@
 	.icon-error {
 		width: 64px;
 		height: 64px;
-		background: #fee2e2;
-		border: 1px solid #ef4444;
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		font-size: 2rem;
-		color: #ef4444;
+		color: var(--civic-red);
 		font-weight: bold;
 	}
 
@@ -146,7 +146,7 @@
 	}
 
 	.error-message {
-		color: #ef4444;
+		color: var(--civic-red);
 		font-weight: 500;
 	}
 
@@ -164,7 +164,7 @@
 		border-radius: 8px;
 		cursor: pointer;
 		transition: all 0.2s;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		text-decoration: none;
 		display: inline-block;
 	}

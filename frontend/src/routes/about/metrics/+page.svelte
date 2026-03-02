@@ -393,7 +393,7 @@
 		gap: var(--space-md);
 		padding: var(--space-2xl) var(--space-xl);
 		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-md);
 		text-align: center;
 		min-height: 180px;
@@ -695,28 +695,28 @@
 	}
 
 	.coverage-matter {
-		background: rgba(34, 197, 94, 0.15);
-		color: rgb(22, 163, 74);
+		background: var(--coverage-matter-bg);
+		color: var(--coverage-matter-text);
 	}
 
 	.coverage-item {
-		background: rgba(59, 130, 246, 0.15);
-		color: rgb(37, 99, 235);
+		background: var(--coverage-item-bg);
+		color: var(--coverage-item-text);
 	}
 
 	.coverage-monolithic {
-		background: rgba(168, 162, 158, 0.15);
-		color: var(--text-secondary);
+		background: var(--coverage-monolithic-bg);
+		color: var(--coverage-monolithic-text);
 	}
 
 	.coverage-synced {
-		background: rgba(168, 85, 247, 0.15);
-		color: rgb(147, 51, 234);
+		background: var(--coverage-synced-bg);
+		color: var(--coverage-synced-text);
 	}
 
 	.coverage-pending {
-		background: rgba(251, 191, 36, 0.15);
-		color: rgb(217, 119, 6);
+		background: var(--coverage-pending-bg);
+		color: var(--coverage-pending-text);
 	}
 
 	@media (max-width: 768px) {

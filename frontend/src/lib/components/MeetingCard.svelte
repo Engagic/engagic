@@ -108,23 +108,28 @@
 		<div class="right-column">
 			{#if meeting.has_items}
 				<div class="meeting-status status-items">
-					<span class="status-icon">✓</span> AI Summary
+					<svg class="status-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.25 4.75 6 12 2.75 8.75"/></svg>
+					AI Summary
 				</div>
 			{:else if meeting.summary}
 				<div class="meeting-status {isPast ? 'status-ready' : 'status-summary'}">
-					<span class="status-icon">✓</span> AI Summary
+					<svg class="status-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.25 4.75 6 12 2.75 8.75"/></svg>
+					AI Summary
 				</div>
 			{:else if meeting.agenda_url}
 				<div class="meeting-status status-agenda">
-					<span class="status-icon">📄</span> Agenda Available
+					<svg class="status-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5H4a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 4 14.5h8A1.5 1.5 0 0 0 13.5 13V6L9 1.5Z"/><path d="M9 1.5V6h4.5"/></svg>
+					Agenda Available
 				</div>
 			{:else if meeting.packet_url}
 				<div class="meeting-status status-packet">
-					<span class="status-icon">📋</span> Meeting Packet
+					<svg class="status-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2H4a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5V5L10.5 2Z"/><path d="M5.5 8.5h5M5.5 11h3"/></svg>
+					Meeting Packet
 				</div>
 			{:else}
 				<div class="meeting-status status-none">
-					<span class="status-icon">⏳</span> {isPast ? 'No Documents' : 'Coming Soon'}
+					<svg class="status-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2.5 1.5"/></svg>
+					{isPast ? 'No Documents' : 'Coming Soon'}
 				</div>
 			{/if}
 
@@ -136,7 +141,8 @@
 
 			{#if hasParticipation() && !isPast}
 				<div class="participation-indicator">
-					<span class="status-icon">📢</span> How to Participate
+					<svg class="status-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a6 6 0 0 1 12 0"/><path d="M8 3v4M5.5 5.5 8 7l2.5-1.5"/></svg>
+					How to Participate
 				</div>
 			{/if}
 		</div>
@@ -144,8 +150,29 @@
 </a>
 
 <style>
+	.meeting-card {
+		display: block;
+		width: 100%;
+		box-sizing: border-box;
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: 12px;
+		padding: 1.5rem;
+		cursor: pointer;
+		transition: all var(--transition-normal);
+		box-shadow: 0 2px 8px var(--shadow-sm);
+		text-decoration: none;
+		color: inherit;
+	}
+
+	.meeting-card:hover {
+		border-color: var(--border-hover);
+		transform: translateY(-4px);
+		box-shadow: 0 8px 24px var(--shadow-lg);
+	}
+
 	.meeting-card.has-alert {
-		border-left: 4px solid #dc2626;
+		border-left: 4px solid var(--badge-cancelled-text);
 	}
 
 	.meeting-card.status-border-ai {
@@ -164,6 +191,41 @@
 		border-left: 4px solid var(--civic-border);
 	}
 
+	.meeting-card.past-meeting {
+		opacity: 0.8;
+	}
+
+	.meeting-card.past-meeting:hover {
+		opacity: 1;
+	}
+
+	.meeting-card-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 1rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.meeting-title {
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		line-height: 1.4;
+		letter-spacing: 0.026em;
+		flex: 1;
+		min-width: 0;
+		margin: 0;
+	}
+
+	.meeting-date-time {
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: var(--civic-orange);
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+
 	.meeting-card-body {
 		display: flex;
 		gap: 1rem;
@@ -179,14 +241,68 @@
 		text-align: right;
 	}
 
-	.status-icon {
-		display: inline-block;
-		margin-right: 0.25rem;
-		font-size: 0.9em;
+	.meeting-status {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--civic-gray);
+	}
+
+	.status-items {
+		color: var(--civic-accent);
+	}
+
+	.status-summary {
+		color: var(--civic-green);
+	}
+
+	.status-agenda {
+		color: var(--civic-yellow);
+	}
+
+	.status-packet {
+		color: var(--civic-orange);
+	}
+
+	.status-none {
+		color: var(--civic-gray);
+	}
+
+	.status-icon-svg {
+		width: 0.9em;
+		height: 0.9em;
+		vertical-align: -0.1em;
+		flex-shrink: 0;
+	}
+
+	.meeting-topics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
+	}
+
+	.topic-tag {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.7rem;
+		padding: 0.25rem 0.55rem;
+		background: var(--topic-tag-bg);
+		color: var(--topic-tag-text);
+		border: 1px solid var(--topic-tag-border);
+		border-radius: 4px;
+		font-weight: 500;
+		transition: background var(--transition-normal), border-color var(--transition-normal);
+	}
+
+	.topic-tag.topic-more {
+		background: var(--topic-tag-bg);
+		color: var(--civic-gray);
+		border-color: var(--topic-tag-border);
+		font-weight: 600;
 	}
 
 	.meeting-alert {
-		color: #ef4444;
+		color: var(--civic-red);
 		font-weight: 600;
 		font-size: 0.85rem;
 		margin-top: 0.25rem;
@@ -199,7 +315,7 @@
 		font-size: 0.8rem;
 		margin-top: 0.375rem;
 		padding: 0.25rem 0.5rem;
-		background: rgba(34, 197, 94, 0.1);
+		background: var(--participation-bg);
 		border-radius: 4px;
 		display: inline-block;
 	}

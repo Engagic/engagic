@@ -189,7 +189,7 @@
 	}
 
 	.page-title {
-		font-family: Georgia, 'Times New Roman', serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 2rem;
 		font-weight: 700;
 		color: var(--text-primary);

@@ -94,18 +94,9 @@
 
 	/* Danger: failed */
 	.danger {
-		--badge-red-bg: #fee2e2;
-		--badge-red-border: #fca5a5;
-		--badge-red-text: #991b1b;
-		background: var(--badge-red-bg);
-		border-color: var(--badge-red-border);
-		color: var(--badge-red-text);
-	}
-
-	:global(.dark) .danger {
-		--badge-red-bg: #7f1d1d;
-		--badge-red-border: #ef4444;
-		--badge-red-text: #fca5a5;
+		background: var(--badge-danger-bg);
+		border-color: var(--badge-danger-border);
+		color: var(--badge-danger-text);
 	}
 
 	/* Neutral: no outcome, tabled, etc */

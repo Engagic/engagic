@@ -591,7 +591,7 @@
 	}
 
 	.meeting-item-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		line-height: 1.4;
 		color: var(--text-primary);
@@ -975,7 +975,7 @@
 	}
 
 	.matter-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		line-height: 1.4;
 		color: var(--text-primary);
@@ -1090,7 +1090,7 @@
 	}
 
 	.intel-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		line-height: 1.4;
 		color: var(--text-primary);

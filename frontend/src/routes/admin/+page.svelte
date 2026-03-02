@@ -293,7 +293,7 @@
 <style>
 	.admin-container {
 		min-height: 100vh;
-		background: #fafafa;
+		background: var(--surface-secondary);
 		padding: 2rem;
 	}
 
@@ -303,7 +303,7 @@
 		background: var(--surface-primary);
 		padding: 2rem;
 		border-radius: 8px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 8px var(--shadow-md);
 	}
 
 	.auth-form h1 {
@@ -313,24 +313,26 @@
 
 	.auth-form p {
 		margin: 0 0 1.5rem 0;
-		color: #666;
+		color: var(--text-secondary);
 		font-size: 0.9rem;
 	}
 
 	.auth-form input {
 		width: 100%;
 		padding: 0.75rem;
-		border: 1px solid #ddd;
+		border: 1px solid var(--border-primary);
 		border-radius: 4px;
 		font-size: 1rem;
 		margin-bottom: 1rem;
 		box-sizing: border-box;
+		background: var(--surface-primary);
+		color: var(--text-primary);
 	}
 
 	.auth-form button {
 		width: 100%;
 		padding: 0.75rem;
-		background: #2563eb;
+		background: var(--civic-blue);
 		color: white;
 		border: none;
 		border-radius: 4px;
@@ -339,7 +341,7 @@
 	}
 
 	.auth-form button:hover {
-		background: #1d4ed8;
+		background: var(--civic-accent);
 	}
 
 	.dashboard {
@@ -361,7 +363,7 @@
 
 	.last-update {
 		margin: 0;
-		color: #666;
+		color: var(--text-secondary);
 		font-size: 0.9rem;
 	}
 
@@ -390,7 +392,7 @@
 	}
 
 	.logout-btn {
-		color: #dc2626 !important;
+		color: var(--civic-red) !important;
 	}
 
 	.metrics-section {
@@ -398,19 +400,19 @@
 		padding: 1.5rem;
 		border-radius: 8px;
 		margin-bottom: 1.5rem;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 1px 3px var(--shadow-sm);
 	}
 
 	.metrics-section h2 {
 		margin: 0 0 1rem 0;
 		font-size: 1.25rem;
-		color: #111;
+		color: var(--text-primary);
 	}
 
 	.metrics-section h3 {
 		margin: 1.5rem 0 0.75rem 0;
 		font-size: 1rem;
-		color: #666;
+		color: var(--text-secondary);
 	}
 
 	.metrics-grid {
@@ -420,30 +422,30 @@
 	}
 
 	.metric-card {
-		background: #f9fafb;
+		background: var(--surface-secondary);
 		padding: 1.5rem;
 		border-radius: 6px;
-		border-left: 4px solid #2563eb;
+		border-left: 4px solid var(--civic-blue);
 	}
 
 	.metric-card.success {
-		border-left-color: #16a34a;
+		border-left-color: var(--civic-green);
 	}
 
 	.metric-card.error {
-		border-left-color: #dc2626;
+		border-left-color: var(--civic-red);
 	}
 
 	.metric-value {
 		font-size: 2rem;
 		font-weight: 600;
 		margin-bottom: 0.25rem;
-		color: #111;
+		color: var(--text-primary);
 	}
 
 	.metric-label {
 		font-size: 0.875rem;
-		color: #666;
+		color: var(--text-secondary);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
@@ -459,17 +461,17 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.75rem;
-		background: #f9fafb;
+		background: var(--surface-secondary);
 		border-radius: 4px;
 	}
 
 	.breakdown-label {
-		color: #374151;
+		color: var(--text-primary);
 		font-size: 0.9rem;
 	}
 
 	.breakdown-label.mono {
-		font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.85rem;
 	}
 
@@ -479,15 +481,10 @@
 	}
 
 	.error {
-		background: #fee2e2;
-		color: #991b1b;
+		background: var(--error-bg);
+		color: var(--error-text);
 		padding: 1rem;
 		border-radius: 4px;
 		margin-top: 1rem;
-	}
-
-	:global(.dark) .error {
-		background: #450a0a;
-		color: #fca5a5;
 	}
 </style>

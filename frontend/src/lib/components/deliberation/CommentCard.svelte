@@ -122,7 +122,7 @@
 	}
 
 	.comment-card.high-consensus {
-		border-left-color: #22c55e;
+		border-left-color: var(--civic-green);
 		background: linear-gradient(to right, rgba(34, 197, 94, 0.05), transparent);
 	}
 
@@ -144,7 +144,7 @@
 	.consensus-badge {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.65rem;
-		background: #22c55e;
+		background: var(--civic-green);
 		color: white;
 		padding: 0.15rem 0.4rem;
 		border-radius: 3px;
@@ -193,27 +193,27 @@
 	}
 
 	.vote-btn.agree.active {
-		background: #dcfce7;
-		border-color: #22c55e;
-		color: #16a34a;
+		background: var(--deliberation-agree-bg);
+		border-color: var(--deliberation-agree-border);
+		color: var(--deliberation-agree-text);
 	}
 
 	.vote-btn.pass.active {
-		background: #fef9c3;
-		border-color: #eab308;
-		color: #ca8a04;
+		background: var(--deliberation-pass-bg);
+		border-color: var(--deliberation-pass-border);
+		color: var(--deliberation-pass-text);
 	}
 
 	.vote-btn.disagree.active {
-		background: #fee2e2;
-		border-color: #ef4444;
-		color: #dc2626;
+		background: var(--deliberation-disagree-bg);
+		border-color: var(--deliberation-disagree-border);
+		color: var(--deliberation-disagree-text);
 	}
 
 	.error {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
-		color: #ef4444;
+		color: var(--civic-red);
 		margin: 0.5rem 0 0 0;
 	}
 </style>

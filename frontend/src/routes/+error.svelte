@@ -96,7 +96,7 @@
 	}
 
 	.error-message {
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		color: var(--text-secondary);
 		margin: 1rem 0;

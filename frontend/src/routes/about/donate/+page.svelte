@@ -261,15 +261,15 @@
 	}
 
 	.alert-success {
-		background: #e8f5e9;
-		border: 2px solid var(--civic-green);
-		color: #2e7d32;
+		background: var(--success-bg);
+		border: 1.5px solid var(--success-border);
+		color: var(--success-text);
 	}
 
 	.alert-info {
-		background: var(--surface-secondary);
-		border: 2px solid var(--civic-blue);
-		color: var(--text-primary);
+		background: var(--info-bg);
+		border: 1.5px solid var(--info-border);
+		color: var(--info-text);
 	}
 
 	.what-it-funds {
@@ -295,7 +295,7 @@
 		gap: var(--space-lg);
 		padding: var(--space-2xl);
 		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
+		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-lg);
 		transition: all var(--transition-normal);
 	}
@@ -328,12 +328,12 @@
 	}
 
 	.toggle-button.active {
-		background: var(--civic-blue);
-		color: var(--civic-white);
+		background: var(--surface-primary);
+		color: var(--civic-blue);
+		box-shadow: 0 1px 3px var(--shadow-sm);
 	}
 
 	.toggle-button:not(.active):hover {
-		background: var(--surface-primary);
 		color: var(--text-primary);
 	}
 
@@ -423,10 +423,10 @@
 
 	.error {
 		padding: var(--space-sm) var(--space-md);
-		background: #fee;
-		border: 1px solid #fcc;
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
 		border-radius: var(--radius-sm);
-		color: #c33;
+		color: var(--error-text);
 		font-size: 0.9rem;
 		font-family: 'IBM Plex Mono', monospace;
 		text-align: center;

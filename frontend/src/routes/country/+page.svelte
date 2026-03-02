@@ -123,7 +123,7 @@
 	}
 
 	.footer-text {
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.875rem;
 		color: var(--text-secondary);
 		margin: 0;

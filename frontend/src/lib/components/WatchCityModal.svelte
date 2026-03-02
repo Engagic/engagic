@@ -563,7 +563,7 @@
 		width: 100%;
 		padding: 0.75rem 1rem;
 		font-size: 1rem;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		color: var(--text-primary);
 		background: var(--surface-primary);
 		border: 2px solid var(--civic-border);
@@ -592,10 +592,10 @@
 
 	.error-banner {
 		padding: 0.75rem;
-		background: #fef2f2;
-		border: 1px solid #ef4444;
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
 		border-radius: 8px;
-		color: #991b1b;
+		color: var(--error-text);
 		font-size: 0.875rem;
 		margin-bottom: 1.25rem;
 		font-weight: 500;
@@ -612,7 +612,7 @@
 		border-radius: 8px;
 		cursor: pointer;
 		transition: all 0.2s;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 	}
 
 	.btn-primary:hover:not(:disabled) {
@@ -638,7 +638,7 @@
 		border-radius: 8px;
 		cursor: pointer;
 		transition: all 0.2s;
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 	}
 
 	.btn-secondary:hover:not(:disabled) {
@@ -668,14 +668,14 @@
 		width: 64px;
 		height: 64px;
 		margin: 0 auto 1.5rem;
-		background: #d1fae5;
-		border: 1px solid #10b981;
+		background: var(--success-bg);
+		border: 1px solid var(--success-border);
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		font-size: 2rem;
-		color: #10b981;
+		color: var(--success-border);
 		font-weight: bold;
 	}
 

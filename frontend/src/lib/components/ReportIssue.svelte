@@ -287,19 +287,12 @@
 	}
 
 	.error-message {
-		--error-bg: #fee2e2;
-		--error-text: #ef4444;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		color: var(--error-text);
 		padding: 0.5rem 0.75rem;
 		background: var(--error-bg);
 		border-radius: 6px;
-	}
-
-	:global(.dark) .error-message {
-		--error-bg: #7f1d1d;
-		--error-text: #fca5a5;
 	}
 
 	.form-actions {
@@ -355,8 +348,6 @@
 	}
 
 	.success-icon {
-		--success-bg: #dcfce7;
-		--success-text: #16a34a;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -369,11 +360,6 @@
 		font-size: 0.8rem;
 		font-weight: 700;
 		margin-bottom: 1rem;
-	}
-
-	:global(.dark) .success-icon {
-		--success-bg: #14532d;
-		--success-text: #86efac;
 	}
 
 	.success-title {

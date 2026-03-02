@@ -335,8 +335,8 @@
 	}
 
 	.result-context :global(mark) {
-		background: #fef08a;
-		color: #713f12;
+		background: var(--highlight-bg);
+		color: var(--highlight-text);
 		padding: 2px 4px;
 		border-radius: 3px;
 		font-weight: 500;

@@ -280,7 +280,7 @@
 	}
 
 	.meeting-title {
-		font-family: Georgia, 'Times New Roman', Times, serif;
+		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1rem;
 		line-height: 1.4;
 		color: var(--text-primary);
