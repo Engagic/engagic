@@ -115,7 +115,7 @@
 <style>
 	.comment-card {
 		background: var(--bg-secondary, #f5f5f5);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 1rem;
 		margin-bottom: 0.75rem;
 		border-left: 3px solid var(--border-primary, #ddd);
@@ -147,7 +147,7 @@
 		background: var(--civic-green);
 		color: white;
 		padding: 0.15rem 0.4rem;
-		border-radius: 3px;
+		border-radius: var(--radius-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
@@ -169,13 +169,13 @@
 		gap: 0.35rem;
 		padding: 0.4rem 0.75rem;
 		border: 1px solid var(--border-primary, #ddd);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		background: var(--bg-primary, white);
 		color: var(--text-secondary, #6b7280);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.vote-btn:hover:not(:disabled) {

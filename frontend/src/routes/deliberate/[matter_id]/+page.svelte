@@ -142,7 +142,7 @@
 		background: var(--badge-matter-bg);
 		color: var(--badge-matter-text);
 		border: 1.5px solid var(--badge-matter-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		font-size: 0.75rem;
 		font-weight: 700;
 		font-family: 'IBM Plex Mono', monospace;
@@ -160,7 +160,7 @@
 	.no-deliberation {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 3rem 2rem;
 	}
 
@@ -188,7 +188,7 @@
 		background: var(--action-deliberate);
 		color: white;
 		border: none;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 700;

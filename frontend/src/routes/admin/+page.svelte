@@ -302,7 +302,7 @@
 		margin: 100px auto;
 		background: var(--surface-primary);
 		padding: 2rem;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		box-shadow: 0 2px 8px var(--shadow-md);
 	}
 
@@ -321,7 +321,7 @@
 		width: 100%;
 		padding: 0.75rem;
 		border: 1px solid var(--border-primary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 1rem;
 		margin-bottom: 1rem;
 		box-sizing: border-box;
@@ -335,7 +335,7 @@
 		background: var(--civic-blue);
 		color: white;
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-size: 1rem;
 		cursor: pointer;
 	}
@@ -345,7 +345,7 @@
 	}
 
 	.dashboard {
-		max-width: 1400px;
+		max-width: var(--width-state);
 		margin: 0 auto;
 	}
 
@@ -376,7 +376,7 @@
 		padding: 0.5rem 1rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--civic-border);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		cursor: pointer;
 		font-size: 0.9rem;
 		color: var(--text-primary);
@@ -398,7 +398,7 @@
 	.metrics-section {
 		background: var(--surface-primary);
 		padding: 1.5rem;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		margin-bottom: 1.5rem;
 		box-shadow: 0 1px 3px var(--shadow-sm);
 	}
@@ -424,7 +424,7 @@
 	.metric-card {
 		background: var(--surface-secondary);
 		padding: 1.5rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		border-left: 4px solid var(--civic-blue);
 	}
 
@@ -462,7 +462,7 @@
 		align-items: center;
 		padding: 0.75rem;
 		background: var(--surface-secondary);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 	}
 
 	.breakdown-label {
@@ -484,7 +484,24 @@
 		background: var(--error-bg);
 		color: var(--error-text);
 		padding: 1rem;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		margin-top: 1rem;
+	}
+
+	@media (max-width: 640px) {
+		.metrics-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.dashboard-header h1,
+		.auth-form h1 {
+			font-size: 1.25rem;
+		}
+
+		.auth-form {
+			max-width: 100%;
+			margin: 2rem 1rem;
+			padding: 1.25rem;
+		}
 	}
 </style>

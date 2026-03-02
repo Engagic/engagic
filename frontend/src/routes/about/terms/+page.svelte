@@ -311,7 +311,7 @@
 		color: var(--civic-blue);
 		text-decoration: none;
 		font-weight: 500;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 	}
 
 	.back-link:hover {
@@ -323,7 +323,7 @@
 	.toc {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 		margin-bottom: 3rem;
 		box-shadow: 0 2px 8px var(--shadow-sm);
@@ -350,12 +350,11 @@
 		background: none;
 		border: none;
 		color: var(--civic-blue);
-		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		padding: 0.5rem 0.75rem;
 		cursor: pointer;
-		border-radius: 6px;
-		transition: all 0.2s ease;
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-normal);
 	}
 
 	.toc-list button:hover {
@@ -390,7 +389,6 @@
 	}
 
 	.terms-section p {
-		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		line-height: 1.7;
 		color: var(--text-primary);
@@ -398,7 +396,6 @@
 	}
 
 	.terms-section ul {
-		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		line-height: 1.7;
 		color: var(--text-primary);
@@ -413,7 +410,7 @@
 	.terms-section a {
 		color: var(--text-link);
 		text-decoration: underline;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 	}
 
 	.terms-section a:hover {
@@ -430,9 +427,9 @@
 	.tier-card {
 		background: var(--surface-primary);
 		border: 2px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
-		transition: all 0.3s ease;
+		transition: all var(--transition-slow);
 	}
 
 	.tier-card:hover {
@@ -478,7 +475,7 @@
 		margin-bottom: 1rem;
 		padding: 1rem;
 		background: var(--surface-secondary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 	}
 
 	.limit-item {
@@ -506,7 +503,6 @@
 	}
 
 	.tier-use-case {
-		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.95rem;
 		line-height: 1.6;
 		color: var(--text-secondary);
@@ -540,7 +536,6 @@
 	}
 
 	.tier-requirement {
-		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 0.9rem;
 		color: var(--civic-gray);
 		font-style: italic;
@@ -554,9 +549,9 @@
 		text-decoration: none;
 		padding: 0.5rem 1rem;
 		background: var(--surface-secondary);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		margin-top: 0.75rem;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.tier-contact:hover {
@@ -568,7 +563,7 @@
 	.code-block {
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 1rem;
 		margin: 1rem 0;
 		font-family: 'IBM Plex Mono', monospace;
@@ -603,7 +598,7 @@
 	.rule-group {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 	}
 
@@ -633,7 +628,7 @@
 	.policy-prohibited {
 		background: var(--surface-primary);
 		border: 2px solid;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 	}
 
@@ -668,13 +663,13 @@
 		padding: 0.75rem 1.25rem;
 		background: var(--surface-primary);
 		border: 1.5px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		color: var(--civic-blue);
 		text-decoration: none;
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.95rem;
 		font-weight: 500;
-		transition: all 0.3s ease;
+		transition: all var(--transition-slow);
 	}
 
 	.contact-button:hover {
@@ -706,7 +701,7 @@
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--civic-blue);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 2rem;
 		margin-top: 4rem;
 		margin-bottom: 3rem;
@@ -736,18 +731,16 @@
 	}
 
 	.philosophy-grid p {
-		font-family: 'IBM Plex Sans', sans-serif;
 		font-size: 1.1rem;
 		line-height: 1.8;
 		color: var(--text-secondary);
 		padding: 1rem;
 		background: var(--surface-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		border-left: 4px solid var(--civic-blue);
 	}
 
 	.philosophy-footer {
-		font-family: 'IBM Plex Sans', sans-serif;
 		color: var(--text-secondary);
 		margin-top: 2rem;
 		padding-top: 1.5rem;
@@ -776,10 +769,10 @@
 		color: var(--civic-blue);
 		background: none;
 		border: 2px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 0.75rem 1.5rem;
 		cursor: pointer;
-		transition: all 0.3s ease;
+		transition: all var(--transition-slow);
 	}
 
 	.back-to-top button:hover {

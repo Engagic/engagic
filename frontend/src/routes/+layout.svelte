@@ -10,8 +10,13 @@
 
 	let { children }: { children: Snippet } = $props();
 
-	// Only show nav on homepage
-	const showNav = $derived($page.url.pathname === '/');
+	const isHomepage = $derived($page.url.pathname === '/');
+
+	// Pages that handle their own navigation (have back-link + compact-logo)
+	const selfNavPaths = $derived(
+		$page.url.pathname.startsWith('/about/') ||
+		$page.url.pathname === '/'
+	);
 
 	// Track page views on navigation
 	afterNavigate(({ from, to }) => {
@@ -40,10 +45,10 @@
 
 <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-{#if showNav}
+{#if isHomepage}
 	<nav class="main-nav">
 		<div class="nav-container">
-			<a href="/" class="nav-logo">Engagic</a>
+			<a href="/" class="nav-logo">engagic</a>
 			<div class="nav-links">
 				{#if authState.isAuthenticated}
 					<a href="/dashboard" class="nav-link">Dashboard</a>
@@ -53,6 +58,15 @@
 					<a href="/signup" class="nav-link-primary">Sign Up</a>
 					<ThemeToggle />
 				{/if}
+			</div>
+		</div>
+	</nav>
+{:else if !selfNavPaths}
+	<nav class="main-nav main-nav-minimal">
+		<div class="nav-container">
+			<a href="/" class="nav-logo">engagic</a>
+			<div class="nav-links">
+				<ThemeToggle />
 			</div>
 		</div>
 	</nav>
@@ -75,8 +89,12 @@
 		transition: background var(--transition-normal), border-color var(--transition-normal);
 	}
 
+	.main-nav-minimal {
+		padding: 0.5rem 0;
+	}
+
 	.nav-container {
-		max-width: 1200px;
+		max-width: var(--width-global);
 		margin: 0 auto;
 		padding: 0 2rem;
 		display: flex;
@@ -129,18 +147,18 @@
 		font-weight: 600;
 		border-radius: var(--radius-md);
 		transition: all var(--transition-fast);
-		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+		box-shadow: 0 2px 8px var(--shadow-lg);
 	}
 
 	.nav-link-primary:hover {
 		background: var(--civic-accent);
 		transform: translateY(-1px);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+		box-shadow: 0 4px 12px var(--shadow-lg);
 	}
 
 	.nav-link-primary:active {
 		transform: translateY(0);
-		box-shadow: 0 1px 4px rgba(79, 70, 229, 0.2);
+		box-shadow: 0 1px 4px var(--shadow-sm);
 	}
 
 	@media (max-width: 640px) {

@@ -159,7 +159,7 @@
 		padding: 1.5rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 16px;
+		border-radius: var(--radius-xl);
 		box-shadow: 0 2px 8px var(--shadow-sm);
 	}
 
@@ -195,8 +195,8 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--civic-green);
-		border-radius: 12px;
-		transition: all 0.2s ease;
+		border-radius: var(--radius-lg);
+		transition: all var(--transition-normal);
 	}
 
 	.happening-card:hover {
@@ -240,7 +240,7 @@
 		background: var(--badge-matter-bg);
 		border: 1px solid var(--badge-matter-border);
 		padding: 0.25rem 0.5rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.meeting-badge {
@@ -250,7 +250,7 @@
 		color: var(--civic-gray);
 		background: var(--surface-secondary);
 		padding: 0.25rem 0.5rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.item-title {
@@ -264,7 +264,7 @@
 	.item-link {
 		color: var(--text-primary);
 		text-decoration: none;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
 	}
 
 	.item-link:hover {
@@ -287,7 +287,7 @@
 		border-left: 3px solid var(--civic-green);
 		padding: 0.75rem;
 		margin: 0 0 0.75rem 0;
-		border-radius: 0 6px 6px 0;
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 		line-height: 1.5;
 	}
 
@@ -355,8 +355,8 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 		text-decoration: none;
-		border-radius: 6px;
-		transition: all 0.2s;
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-normal);
 	}
 
 	.email-btn {
@@ -401,7 +401,7 @@
 		font-weight: 500;
 		color: var(--civic-blue);
 		text-decoration: none;
-		transition: color 0.2s;
+		transition: color var(--transition-normal);
 	}
 
 	.view-link:hover,

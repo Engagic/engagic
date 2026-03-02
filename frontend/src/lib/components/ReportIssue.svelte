@@ -157,7 +157,7 @@
 		border: none;
 		color: var(--civic-gray);
 		cursor: pointer;
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 		padding: 0.5rem;
 		min-height: 44px;
 		display: inline-flex;
@@ -191,9 +191,9 @@
 	.modal-content {
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		width: 100%;
-		max-width: 480px;
+		max-width: var(--width-auth);
 		padding: 1.5rem;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 		animation: slideIn 0.2s ease;
@@ -233,7 +233,7 @@
 		padding: 0.25rem;
 		cursor: pointer;
 		color: var(--civic-gray);
-		transition: color 0.2s ease;
+		transition: color var(--transition-normal);
 	}
 
 	.close-button:hover {
@@ -266,9 +266,9 @@
 		padding: 0.75rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		color: var(--text-primary);
-		transition: border-color 0.2s ease;
+		transition: border-color var(--transition-normal);
 	}
 
 	.form-select:focus,
@@ -292,7 +292,7 @@
 		color: var(--error-text);
 		padding: 0.5rem 0.75rem;
 		background: var(--error-bg);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.form-actions {
@@ -308,9 +308,9 @@
 		font-size: 0.85rem;
 		font-weight: 600;
 		padding: 0.6rem 1.25rem;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.cancel-button {

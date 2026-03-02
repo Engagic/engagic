@@ -240,7 +240,7 @@
 	.deliberation-panel {
 		background: var(--bg-primary, white);
 		border: 1px solid var(--border-primary, #e5e7eb);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		overflow: hidden;
 	}
 
@@ -293,7 +293,7 @@
 		font-size: 0.8rem;
 		color: var(--text-secondary, #6b7280);
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.tab:hover {
@@ -319,7 +319,7 @@
 		min-height: 80px;
 		padding: 0.75rem;
 		border: 1px solid var(--border-primary, #e5e7eb);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-family: inherit;
 		font-size: 0.9rem;
 		resize: vertical;
@@ -354,11 +354,11 @@
 		background: var(--text-primary, #1f2937);
 		color: white;
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		cursor: pointer;
-		transition: opacity 0.15s ease;
+		transition: opacity var(--transition-fast);
 	}
 
 	.submit-btn:hover:not(:disabled) {
@@ -451,7 +451,7 @@
 		background: var(--deliberation-agree-bg);
 		color: var(--deliberation-agree-text);
 		padding: 0.15rem 0.4rem;
-		border-radius: 3px;
+		border-radius: var(--radius-xs);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.7rem;
 		margin-right: 0.5rem;

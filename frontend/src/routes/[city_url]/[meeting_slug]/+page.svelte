@@ -415,7 +415,7 @@
 		color: var(--civic-blue);
 		text-decoration: none;
 		font-weight: 500;
-		transition: all 0.2s;
+		transition: all var(--transition-normal);
 	}
 
 	.back-link:hover {
@@ -424,7 +424,7 @@
 	}
 
 	.compact-logo {
-		transition: transform 0.2s ease;
+		transition: transform var(--transition-normal);
 	}
 
 	.compact-logo:hover {
@@ -434,17 +434,17 @@
 	.logo-icon {
 		width: 48px;
 		height: 48px;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 
 	.meeting-detail {
 		padding: 2rem;
 		background: var(--surface-primary);
-		border-radius: 16px;
+		border-radius: var(--radius-xl);
 		border: 1px solid var(--border-primary);
 		box-shadow: 0 4px 16px var(--shadow-sm);
-		transition: background 0.3s ease, border-color 0.3s ease;
+		transition: background var(--transition-slow), border-color var(--transition-slow);
 	}
 
 	.meeting-header {
@@ -491,9 +491,9 @@
 		padding: 0.25rem 0.6rem;
 		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
 		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		margin-left: 0.75rem;
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.committee-link:hover {
@@ -527,7 +527,7 @@
 		padding: 0.35rem 0.75rem;
 		background: var(--info-bg);
 		border: 1px solid var(--info-border);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.helper-dot {
@@ -556,8 +556,8 @@
 		font-family: 'IBM Plex Mono', monospace;
 		font-weight: 600;
 		font-size: 0.8rem;
-		border-radius: 6px;
-		transition: all 0.2s ease;
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-normal);
 		box-shadow: 0 1px 3px rgba(79, 70, 229, 0.2);
 		flex-shrink: 0;
 		align-self: flex-start;
@@ -597,10 +597,10 @@
 		color: var(--civic-gray);
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 5px;
+		border-radius: var(--radius-sm);
 		padding: 0.25rem 0.75rem;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-normal);
 	}
 
 	.toggle-procedural-btn:hover {
@@ -620,7 +620,7 @@
 		padding: 1rem;
 		background: var(--surface-secondary);
 		border: 1.5px solid var(--civic-red);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-align: center;
 		margin: 1rem 0;
 	}
@@ -711,7 +711,7 @@
 		color: var(--text-primary);
 		overflow-x: auto;
 		line-height: 1.5;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.meeting-summary :global(pre code) {
@@ -748,7 +748,7 @@
 		text-align: center;
 		padding: 4rem 2rem;
 		background: var(--surface-secondary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		border: 2px solid var(--border-primary);
 		box-shadow: 0 2px 8px var(--shadow-sm);
 	}
@@ -786,7 +786,7 @@
 		padding: 1.2rem;
 		background: var(--warning-bg);
 		border: 1px solid var(--warning-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		margin-top: 1rem;
 		font-size: 0.95rem;
 		line-height: 1.6;
@@ -809,7 +809,7 @@
 		.logo-icon {
 			width: 40px;
 			height: 40px;
-			border-radius: 10px;
+			border-radius: var(--radius-md);
 		}
 
 		.toggle-procedural-btn {

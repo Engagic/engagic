@@ -35,7 +35,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		border: 1px solid;
 		display: inline-flex;
 		align-items: center;

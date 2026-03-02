@@ -83,15 +83,15 @@
 
 	.container {
 		width: 100%;
-		max-width: 480px;
+		max-width: var(--width-auth);
 	}
 
 	.card {
 		background: var(--civic-white);
 		border: 1px solid var(--civic-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 2.5rem;
-		box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 8px 16px var(--shadow-md);
 		text-align: center;
 	}
 
@@ -161,9 +161,9 @@
 		padding: 0.75rem 1.5rem;
 		font-size: 0.875rem;
 		font-weight: 600;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all var(--transition-normal);
 		font-family: 'IBM Plex Sans', sans-serif;
 		text-decoration: none;
 		display: inline-block;
@@ -178,7 +178,7 @@
 	.btn-primary:hover {
 		background: var(--civic-accent);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+		box-shadow: 0 4px 12px var(--shadow-lg);
 	}
 
 	.btn-secondary {
@@ -188,7 +188,7 @@
 	}
 
 	.btn-secondary:hover {
-		background: rgba(79, 70, 229, 0.1);
+		background: var(--shadow-sm);
 	}
 
 	@media (max-width: 640px) {

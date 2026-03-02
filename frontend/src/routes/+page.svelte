@@ -388,13 +388,11 @@
 		padding: 1.4rem;
 		font-size: 1.1rem;
 		border: 2px solid var(--border-primary);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		background: var(--surface-primary);
 		color: var(--text-primary);
-		transition: all 0.3s ease;
+		transition: all var(--transition-slow);
 		box-shadow: 0 2px 8px var(--shadow-sm);
-		resize: vertical;
-		min-height: 60px;
 	}
 
 	.search-input:focus {
@@ -452,7 +450,7 @@
 		font-family: 'IBM Plex Mono', monospace;
 		color: var(--civic-white);
 		border: none;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		cursor: pointer;
 		transition: all var(--transition-fast);
 	}
@@ -514,7 +512,7 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--item-summary-border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		padding: 1.25rem 1.5rem;
 		box-shadow: 0 2px 8px var(--shadow-sm);
 	}
@@ -558,7 +556,7 @@
 		font-size: 0.7rem;
 		font-weight: 700;
 		padding: 0.2rem 0.6rem;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		letter-spacing: 0.3px;
 	}
 
@@ -575,7 +573,7 @@
 		background: var(--topic-tag-bg);
 		color: var(--topic-tag-text);
 		border: 1px solid var(--topic-tag-border);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		font-weight: 500;
 	}
 
@@ -651,7 +649,7 @@
 		padding: 1.25rem;
 		background: var(--surface-secondary);
 		border-left: 3px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-align: left;
 	}
 
@@ -684,7 +682,7 @@
 		padding: 1.25rem;
 		background: var(--surface-secondary);
 		border-left: 3px solid var(--civic-blue);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		text-align: left;
 	}
 
@@ -706,13 +704,13 @@
 		padding: 0.5rem 1rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.9rem;
 		font-weight: 500;
 		color: var(--civic-blue);
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all var(--transition-fast);
 	}
 
 	.ambiguous-inline .city-option:hover {
@@ -735,7 +733,7 @@
 		padding: 0.75rem 1rem;
 		background: var(--alert-bg);
 		border-left: 3px solid var(--alert-icon);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		font-size: 0.9rem;
 		color: var(--alert-text);
 	}

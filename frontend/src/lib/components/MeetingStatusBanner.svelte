@@ -22,7 +22,7 @@
 	.meeting-alert-banner {
 		background: var(--alert-bg);
 		border: 1px solid var(--alert-border);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		padding: 0.75rem 1rem;
 		margin-bottom: 1.5rem;
 		display: flex;
@@ -33,7 +33,7 @@
 	.meeting-info-banner {
 		background: var(--info-bg);
 		border: 1px solid var(--info-border);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		padding: 0.75rem 1rem;
 		margin-bottom: 1.5rem;
 		display: flex;
