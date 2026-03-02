@@ -13,7 +13,7 @@
 set -e
 
 # Ensure claude CLI is in PATH (not sourced in cron environment)
-export PATH="/root/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"

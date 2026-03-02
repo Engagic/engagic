@@ -30,7 +30,7 @@ try:
     MEETINGS_DB_PATH = config.UNIFIED_DB_PATH
 except ImportError:
     # Fallback if config not available
-    MEETINGS_DB_PATH = "/root/engagic/data/engagic.db"
+    MEETINGS_DB_PATH = "/opt/engagic/data/engagic.db"
 
 logger = get_logger(__name__).bind(component="quality_checker")
 
