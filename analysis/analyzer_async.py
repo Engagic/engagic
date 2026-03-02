@@ -55,6 +55,12 @@ def _extract_pdf_in_subprocess(pdf_bytes, ocr_threshold, ocr_dpi,
     PyMuPDF is a C extension that can segfault on malformed PDFs.
     Running in a subprocess means a segfault kills only the child,
     not the main process.
+
+    IMPORTANT: We must drain the result queue BEFORE calling proc.join().
+    The queue uses a pipe (64KB buffer on Linux). If the result exceeds
+    the buffer, put() blocks waiting for the parent to read. But if the
+    parent is blocked on join() waiting for the child to exit, both sides
+    deadlock until the timeout.
     """
     result_queue = _forkserver_ctx.Queue()
     proc = _forkserver_ctx.Process(
@@ -63,23 +69,28 @@ def _extract_pdf_in_subprocess(pdf_bytes, ocr_threshold, ocr_dpi,
               detect_legislative_formatting, max_ocr_workers),
     )
     proc.start()
-    proc.join(timeout=600)
 
+    # Drain queue BEFORE join -- prevents deadlock when result > 64KB pipe buffer
+    try:
+        result_msg = result_queue.get(timeout=600)
+    except Exception:
+        # Timeout or empty queue -- child is stuck or crashed
+        if proc.is_alive():
+            proc.kill()
+        proc.join(timeout=10)
+        raise ExtractionError("PDF extraction subprocess timed out after 600s")
+
+    proc.join(timeout=30)
     if proc.is_alive():
         proc.kill()
         proc.join()
-        raise ExtractionError("PDF extraction subprocess timed out after 600s")
 
-    if proc.exitcode != 0:
+    if proc.exitcode != 0 and proc.exitcode is not None:
         raise ExtractionError(
             f"PDF extraction subprocess crashed (exit code {proc.exitcode}, likely segfault on malformed PDF)"
         )
 
-    try:
-        status, *data = result_queue.get_nowait()
-    except Exception:
-        raise ExtractionError("PDF extraction subprocess produced no result")
-
+    status, *data = result_msg
     if status == "error":
         raise ExtractionError(f"PDF extraction failed: {data[0]} ({data[1]})")
 

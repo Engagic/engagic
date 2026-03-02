@@ -86,6 +86,11 @@ class Config:
         # Gemini has built-in retry, so parallel processing within limits is safe
         self.LLM_CONCURRENCY = int(os.getenv("ENGAGIC_LLM_CONCURRENCY", "3"))
 
+        # Queue job concurrency: how many jobs process in parallel (default 2)
+        # Most job time is network I/O (PDF downloads, LLM API calls),
+        # so overlapping jobs helps even on single-core machines
+        self.JOB_CONCURRENCY = int(os.getenv("ENGAGIC_JOB_CONCURRENCY", "2"))
+
         # Payment processing
         self.STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
         self.STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
