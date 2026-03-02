@@ -210,3 +210,17 @@ __pycache__/
 #  These are local tooling configs and should not be committed
 .mcp.json
 prometheus/
+
+# Home directory dotfiles (repo root = engagic user $HOME)
+.bash_history
+.bashrc
+.profile
+.zshrc
+.ssh/
+.config/
+.local/
+.npm/
+.rustup/
+.bun/
+.zcompdump*
+.zsh_history

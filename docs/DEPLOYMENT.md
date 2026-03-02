@@ -1,17 +1,54 @@
 # Engagic Deployment Guide
 
-**Last Updated:** 2025-11-01 (Post-Server Refactor)
+**Last Updated:** 2026-03-02 (Post-Migration to Hetzner)
 
-Operational guide for deploying and managing Engagic on a VPS.
+Operational guide for deploying and managing Engagic on the production VPS.
+
+---
+
+## Server Details
+
+| Property | Value |
+|---|---|
+| Provider | Hetzner CPX21 |
+| IP | 5.78.189.81 |
+| OS | Ubuntu 24.04.4 LTS |
+| Kernel | 6.8.0-101-generic |
+| CPU | 3 vCPU |
+| RAM | 3.8 GB |
+| Disk | 75 GB (13% used) |
+| Python | 3.14.3 (system), 3.14.3 (venvs) |
+| PostgreSQL | 17.9 + PostGIS 3.6 |
+| nginx | 1.24.0 |
+| uv | 0.10.7 |
+
+### User Setup
+
+All application code runs under the `engagic` system user (UID 999), home at `/opt/engagic`. This user has passwordless sudo and two SSH keys configured (id_ed25519 for Engagic repos, id_bientou for smokepac).
+
+Root SSH is disabled. Password auth is disabled. Connect via:
+
+```bash
+ssh engagic@5.78.189.81
+```
+
+### Repos
+
+| Repo | Path | Port | Purpose |
+|---|---|---|---|
+| engagic | /opt/engagic | 8000 (API), 8003 (MCP) | Main platform |
+| smokepac | /opt/smokepac | 8002 | Smokepac API |
+| motioncount | /opt/motioncount | 8001 | Motioncount API |
 
 ---
 
 ## Prerequisites
 
-- VPS with 2GB+ RAM (4GB recommended for stability)
-- Ubuntu 22.04+ or Debian 11+
+- Ubuntu 24.04+
 - Python 3.13+
+- PostgreSQL 17+ with PostGIS
 - Root or sudo access
+- uv (Python package manager)
 
 ---
 
@@ -20,221 +57,156 @@ Operational guide for deploying and managing Engagic on a VPS.
 ### 1. Install System Dependencies
 
 ```bash
-# Update system
 apt update && apt upgrade -y
-
-# Install required packages
 apt install -y git python3-pip python3-venv curl
 ```
 
 ### 2. Clone Repository
 
 ```bash
-cd /root
-git clone https://github.com/yourusername/engagic.git
+cd /opt
+git clone git@github.com:yourorg/engagic.git
 cd engagic
 ```
 
-### 3. Install uv (Python Package Manager)
+### 3. Install uv
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.cargo/env
+# PATH is configured in ~/.bashrc and ~/.profile
 ```
 
 ### 4. Install Dependencies
 
 ```bash
-cd /root/engagic
+cd /opt/engagic
 uv sync
 ```
 
-### 5. Create Data Directory
+### 5. Configure Environment
+
+Two files provide environment variables:
+
+- `/opt/engagic/.env` — app config, DB connection, ports, rate limits
+- `/opt/engagic/.llm_secrets` — API keys (Gemini, etc.)
+
+---
+
+## Database
+
+PostgreSQL 17.9 with PostGIS 3.6. Two databases:
+
+| Database | Size | Purpose |
+|---|---|---|
+| engagic | ~236 MB | Main platform (cities, meetings, items, queue, city_matters) |
+| smokepac | ~17 MB | Smokepac data |
+
+Connect:
 
 ```bash
-mkdir -p /root/engagic/data
+psql -U engagic -h localhost engagic
 ```
 
-### 6. Configure Environment Variables
+### Key Table Counts (as of migration)
 
-```bash
-nano /root/engagic/.env
-```
-
-Add the following:
-
-```bash
-# Required
-GEMINI_API_KEY=your-gemini-api-key-here
-ENGAGIC_ADMIN_TOKEN=your-secure-admin-token-here
-
-# Database
-ENGAGIC_DB_DIR=/root/engagic/data
-ENGAGIC_UNIFIED_DB=/root/engagic/data/engagic.db
-
-# API Server
-ENGAGIC_HOST=0.0.0.0
-ENGAGIC_PORT=8000
-ENGAGIC_DEBUG=false
-
-# Rate Limiting
-ENGAGIC_RATE_LIMIT_REQUESTS=30
-ENGAGIC_RATE_LIMIT_WINDOW=60
-
-# Background Processing
-ENGAGIC_SYNC_INTERVAL_HOURS=24
-ENGAGIC_PROCESSING_INTERVAL_HOURS=2
-
-# Logging
-ENGAGIC_LOG_LEVEL=INFO
-ENGAGIC_LOG_PATH=/root/engagic/engagic.log
-```
+| Table | Count |
+|---|---|
+| cities | 840 |
+| meetings | 9,145 |
+| items | 88,487 |
+| queue | 34,575 |
+| city_matters | 35,005 |
 
 ---
 
 ## Systemd Services
 
-### API Server Service
+Seven units, all enabled on boot:
 
-Create `/etc/systemd/system/engagic-api.service`:
+| Unit | Type | Description |
+|---|---|---|
+| engagic-api.service | simple | Uvicorn API on :8000 |
+| engagic-fetcher.service | simple | Auto city sync (pipeline.conductor fetcher) |
+| engagic-processor.service | simple | Queue worker (pipeline.conductor processor), 3GB memory limit |
+| engagic-mcp.service | simple | MCP server on :8003 |
+| engagic-digest.timer | timer | Weekly digest (Sundays 14:00 UTC) |
+| engagic-digest.service | oneshot | Runs weekly_digest (triggered by timer) |
+| motioncount-api.service | simple | Motioncount API on :8001 |
 
-```ini
-[Unit]
-Description=Engagic API Server
-After=network.target
+All engagic services run as `engagic:engagic` user. motioncount-api currently runs as root.
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root/engagic
-EnvironmentFile=/root/engagic/.env
-ExecStart=/root/engagic/.venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### Background Daemon Service
-
-Create `/etc/systemd/system/engagic-daemon.service`:
-
-```ini
-[Unit]
-Description=Engagic Background Daemon
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root/engagic
-EnvironmentFile=/root/engagic/.env
-ExecStart=/root/engagic/.venv/bin/uv run engagic-daemon --daemon
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### Enable and Start Services
+### Common Commands
 
 ```bash
-# Reload systemd
+# Check all statuses
+systemctl list-units 'engagic-*' 'motioncount-*' --all
+
+# Start/stop/restart
+systemctl start engagic-fetcher
+systemctl restart engagic-api
+systemctl stop engagic-processor
+
+# View logs
+journalctl -u engagic-api -f
+journalctl -u engagic-processor -n 100
+
+# After editing unit files
 systemctl daemon-reload
-
-# Enable services (start on boot)
-systemctl enable engagic-api engagic-daemon
-
-# Start services
-systemctl start engagic-api engagic-daemon
-
-# Check status
-systemctl status engagic-api
-systemctl status engagic-daemon
 ```
 
 ---
 
 ## Nginx Reverse Proxy
 
-### Cloudflare Real IP Configuration (Required)
+Three site configs in `/etc/nginx/sites-enabled/`:
 
-All traffic goes through Cloudflare. nginx must validate the origin and extract real user IPs.
+- `engagic-api` — api.engagic.org → :8000 (API) and /mcp/ → :8003
+- `api.motioncount.com` — api.motioncount.com → :8001
+- `smokepac-api` — api.smokepac.com → :8002
 
-**Install Cloudflare IP validation:**
+### Cloudflare Integration
 
-```bash
-# Copy config from repo
-cp /opt/engagic/deploy/nginx/cloudflare-realip.conf /etc/nginx/conf.d/
+All traffic goes through Cloudflare. nginx is configured with:
 
-# Or use auto-updater (recommended)
-cp /opt/engagic/deploy/nginx/cloudflare-ip-update.sh /opt/engagic/
-chmod +x /opt/engagic/cloudflare-ip-update.sh
-/opt/engagic/cloudflare-ip-update.sh
+- **Cloudflare IP validation** — rejects direct (non-Cloudflare) requests with 403
+- **Real IP extraction** — sets `$real_client_ip` from CF-Connecting-IP header
+- **Rate limiting** — per-zone limits (api_general, api_matters)
+- **IP blocking** — blocked IPs from `/opt/engagic/data/blocked_ips_nginx.conf`
 
-# Add to cron (updates weekly)
-crontab -e
-# Add: 0 4 * * 0 /opt/engagic/cloudflare-ip-update.sh
-```
+Cloudflare IP ranges auto-update weekly via cron.
 
-**What this does:**
-- Validates requests came from Cloudflare IP ranges
-- Extracts real user IP from `CF-Connecting-IP` header
-- Sets `$remote_addr` to the real user IP
-- Non-Cloudflare requests (direct/spoofed) use socket IP
+### SSL/TLS
 
-### API Server Config
-
-```nginx
-server {
-    listen 80;
-    server_name api.engagic.org;
-
-    location / {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Note: After Cloudflare realip config, `$remote_addr` is the real user IP (not Cloudflare's edge IP).
-
-### Rate Limit IP Blocking
-
-The API auto-generates `/opt/engagic/data/blocked_ips_nginx.conf` with banned IPs. To enable nginx-level blocking:
-
-```bash
-# Create wrapper config
-cat > /etc/nginx/conf.d/engagic-blocked-ips.conf << 'EOF'
-geo $is_blocked_ip {
-    default 0;
-    include /opt/engagic/data/blocked_ips_nginx.conf;
-}
-EOF
-
-# Test and reload
-nginx -t && systemctl reload nginx
-```
-
-Then add to your server block:
-
-```nginx
-if ($is_blocked_ip) {
-    return 429 "Rate limited";
-}
-```
-
-### SSL with Certbot
+Currently HTTP-only. After DNS cutover, run:
 
 ```bash
 apt install -y certbot python3-certbot-nginx
 certbot --nginx -d api.engagic.org
+certbot --nginx -d api.motioncount.com
+certbot --nginx -d api.smokepac.com
 ```
+
+Or use Cloudflare origin certificates (Full Strict mode).
+
+---
+
+## Cron Jobs
+
+Root crontab (`sudo crontab -l`) has 11 active jobs:
+
+| Schedule | Job |
+|---|---|
+| Daily 3 AM | pg_dump engagic (gzipped) |
+| Sundays 2 AM | Full pg_dump engagic (.dump format) |
+| Daily 4 AM | Cleanup daily backups > 14 days |
+| Sundays 4 AM | Cleanup weekly backups > 28 days |
+| Daily 4:30 AM | Session events cleanup (7-day retention) |
+| Sundays 4 AM | Cloudflare IP range update (engagic) |
+| Sundays 3 AM | Cloudflare IP range update (motioncount) |
+| Daily 9 AM UTC | Motioncount daily alerts |
+| Daily 1 PM UTC | Happening Today analysis (8am EST) |
+| Daily 2 PM UTC | Happening Today email (9am EST) |
+| Sundays 2 AM UTC | Watchlist sync |
 
 ---
 
@@ -243,7 +215,7 @@ certbot --nginx -d api.engagic.org
 ### Health Checks
 
 ```bash
-# API health
+# Engagic API
 curl http://localhost:8000/api/health
 
 # System metrics
@@ -251,300 +223,155 @@ curl http://localhost:8000/api/metrics
 
 # Queue stats
 curl http://localhost:8000/api/queue-stats
-
-# Cache stats
-curl http://localhost:8000/api/stats
 ```
 
 ### Log Monitoring
 
 ```bash
-# Follow API logs
 journalctl -u engagic-api -f
+journalctl -u engagic-fetcher -f
+journalctl -u engagic-processor -f
+journalctl -u engagic-mcp -f
 
-# Follow daemon logs
-journalctl -u engagic-daemon -f
-
-# Last 50 lines of API logs
-journalctl -u engagic-api -n 50
-
-# Check log file directly
-tail -f /root/engagic/engagic.log
+# All engagic services at once
+journalctl -u 'engagic-*' --since "10 minutes ago"
 ```
 
 ### Memory Monitoring
 
 ```bash
-# Watch memory usage
-watch -n 5 'free -m'
-
-# Check process memory
-ps aux --sort=-%mem | head -10
-
-# Detailed process view
-htop
-```
-
----
-
-## Memory Management
-
-### Expected Usage (2GB RAM VPS)
-- Base system: ~200MB
-- Uvicorn API: ~100MB
-- Daemon (idle): ~200MB
-- Daemon (processing): ~400-600MB peak
-- **Total stable usage:** 400-600MB
-
-### If Memory Issues Occur
-
-```bash
-# Check for OOM kills
-dmesg | grep -i "out of memory"
-
-# Check swap usage
 free -m
-
-# Restart daemon to clear memory
-systemctl restart engagic-daemon
-
-# Monitor memory during processing
-watch -n 2 'ps aux | grep python | grep -v grep'
+ps aux --sort=-%mem | head -10
 ```
 
-### Memory Fixes Applied
-- Adapter session cleanup (close HTTP sessions after city sync)
-- PDF text cleanup (explicit `del` and `gc.collect()` after processing)
-- Forced garbage collection every 10 cities
-- BeautifulSoup object cleanup
+### Expected Memory Usage (4GB RAM)
+
+- Base system: ~200 MB
+- engagic-api: ~200 MB
+- engagic-processor: up to 3 GB (hard-limited via MemoryMax)
+- engagic-fetcher: ~200 MB
+- engagic-mcp: ~100 MB
+- Total stable: ~1.5-2 GB
 
 ---
 
 ## Updating Code
 
-### Standard Update
-
 ```bash
-# SSH to VPS
-ssh root@your-vps
+ssh engagic@5.78.189.81
 
-# Pull latest changes
-cd /root/engagic
+cd /opt/engagic
 git pull
-
-# Install new dependencies
 uv sync
 
-# Restart services
-systemctl restart engagic-api engagic-daemon
+# Restart affected services
+systemctl restart engagic-api
+systemctl restart engagic-fetcher engagic-processor
 
 # Verify
 systemctl status engagic-api
-systemctl status engagic-daemon
-```
-
-### Database Migrations
-
-If schema changes are required:
-
-```bash
-cd /root/engagic
-python scripts/migrate_database.py
-
-# Restart services
-systemctl restart engagic-api engagic-daemon
+curl http://localhost:8000/api/health
 ```
 
 ---
 
 ## Backup Strategy
 
-### Automated Daily Backups
+### Automated (via root crontab)
 
-```bash
-# Create backup directory
-mkdir -p /root/engagic/data/backups
-
-# Add to crontab
-crontab -e
-```
-
-Add these lines:
-
-```cron
-# Backup database daily at 3 AM
-0 3 * * * cp /root/engagic/data/engagic.db /root/engagic/data/backups/engagic.db.$(date +\%Y\%m\%d)
-
-# Keep only last 7 days
-0 4 * * * find /root/engagic/data/backups -name "engagic.db.*" -mtime +7 -delete
-```
+- **Daily 3 AM**: `pg_dump engagic | gzip` → `/opt/engagic/data/backups/`
+- **Weekly Sunday 2 AM**: Full custom-format dump
+- **Retention**: 14 days daily, 28 days weekly
 
 ### Manual Backup
 
 ```bash
-# Backup database
-cp /root/engagic/data/engagic.db /root/engagic/data/engagic.db.backup
-
-# Restore from backup
-cp /root/engagic/data/engagic.db.backup /root/engagic/data/engagic.db
-systemctl restart engagic-api engagic-daemon
+PGPASSWORD=... pg_dump -U engagic -h localhost engagic | gzip > /tmp/engagic_manual_$(date +%Y%m%d).sql.gz
 ```
+
+### Restore
+
+```bash
+systemctl stop engagic-api engagic-fetcher engagic-processor
+gunzip -c /opt/engagic/data/backups/engagic_YYYYMMDD.sql.gz | psql -U engagic -h localhost engagic
+systemctl start engagic-api engagic-fetcher engagic-processor
+```
+
+---
+
+## Security
+
+- [x] UFW firewall (22, 80, 443 only)
+- [x] fail2ban on sshd
+- [x] Root SSH disabled
+- [x] Password auth disabled
+- [x] Cloudflare-only nginx (direct access blocked)
+- [x] Rate limiting active
+- [x] IP auto-blocking for repeat offenders
+- [x] Automated DB backups
+- [ ] SSL/TLS (pending DNS cutover)
 
 ---
 
 ## Troubleshooting
 
-### API Won't Start
+### Service Won't Start
 
 ```bash
-# Check logs
-journalctl -u engagic-api -n 50
+journalctl -u <service-name> -n 50
 
 # Common issues:
-# 1. Missing GEMINI_API_KEY in .env
-# 2. Port 8000 already in use (check: lsof -i :8000)
-# 3. Database permissions (check: ls -l /root/engagic/data/)
-# 4. Missing dependencies (run: uv sync)
+# 1. Missing env vars in .env or .llm_secrets
+# 2. Port already in use (lsof -i :8000)
+# 3. Database connection refused (systemctl status postgresql)
+# 4. Missing dependencies (uv sync)
 ```
 
-### Daemon Crashes
+### High Memory
 
 ```bash
-# Check logs
-journalctl -u engagic-daemon -n 50
+# Check for OOM kills
+dmesg | grep -i "out of memory"
 
-# Common issues:
-# 1. Memory exhaustion (check: free -m)
-# 2. Database locked (another process accessing?)
-# 3. Network issues (check: curl https://google.com)
-# 4. Invalid vendor responses
+# Processor has a 3GB MemoryMax limit — if it hits it, systemd kills it and restarts
+journalctl -u engagic-processor | grep -i "memory\|kill\|oom"
 ```
 
-### High CPU Usage
+### Database Issues
 
 ```bash
-# Check what's consuming CPU
-top
+# Check PostgreSQL is running
+systemctl status postgresql
 
-# Check queue activity
-curl http://localhost:8000/api/queue-stats
+# Check connections
+psql -U engagic -h localhost -c "SELECT count(*) FROM pg_stat_activity;"
 
-# If processing many meetings, high CPU is normal
-# Each meeting takes 10-30s of Gemini API time
-```
-
-### Database Corruption
-
-```bash
-# Check database integrity
-sqlite3 /root/engagic/data/engagic.db "PRAGMA integrity_check;"
-
-# If corrupted, restore from backup
-systemctl stop engagic-api engagic-daemon
-cp /root/engagic/data/backups/engagic.db.YYYYMMDD /root/engagic/data/engagic.db
-systemctl start engagic-api engagic-daemon
+# Vacuum if needed
+psql -U engagic -h localhost -c "VACUUM ANALYZE;"
 ```
 
 ---
 
-## Security Checklist
+## Migration History
 
-- [ ] SSL/TLS configured (certbot + nginx)
-- [ ] Firewall configured (ufw allow 22,80,443)
-- [ ] Strong ENGAGIC_ADMIN_TOKEN set
-- [ ] Rate limiting active (30 req/min per IP)
-- [ ] SSH key-only authentication
-- [ ] Automated backups running
-- [ ] Log rotation configured (logrotate)
-- [ ] Monitoring/alerting (optional: UptimeRobot)
+### 2026-03-02: Old VPS → Hetzner CPX21
 
-### Firewall Setup
+Migrated from previous VPS to Hetzner CPX21 (5.78.189.81). Key changes:
 
-```bash
-# Enable firewall
-ufw enable
+- **User model**: Moved from running everything as root (`/root/engagic`) to dedicated `engagic` system user (`/opt/engagic`)
+- **Database**: SQLite → PostgreSQL 17 + PostGIS (migrated during an earlier refactor, restored from pg_dump)
+- **Python**: 3.13 → 3.14.3
+- **Services**: Monolithic daemon split into separate fetcher/processor/mcp services
+- **Security**: Added UFW, fail2ban, disabled root SSH, Cloudflare-only nginx
 
-# Allow SSH, HTTP, HTTPS
-ufw allow 22/tcp
-ufw allow 80/tcp
-ufw allow 443/tcp
+### Still TODO after migration
 
-# Check status
-ufw status
-```
+See `/opt/engagic/.claude/projects/-opt-engagic/memory/migration-todo.md` for the full checklist. Key items:
 
----
-
-## Performance Profile
-
-### Expected Performance Metrics
-
-- **API response**: <100ms (cache hit)
-- **PDF extraction**: 2-5s per document (PyMuPDF)
-- **Item processing**: 10-30s per item (Gemini LLM)
-- **Batch processing**: 50% cost savings over individual API calls
-- **Background sync**: ~2 hours for 500 cities
-- **Memory usage**:
-  - API server: ~200MB
-  - Background daemon: ~500MB peak
-- **Capacity**: 500 cities, ~10K meetings, ~1000 concurrent requests
-
----
-
-## Performance Tuning
-
-### If API is slow
-
-```bash
-# Check cache stats
-curl http://localhost:8000/api/stats
-
-# Most queries should be cache hits
-# If cache miss rate is high, check daemon sync status
-curl http://localhost:8000/api/queue-stats
-```
-
-### If Background Sync is slow
-
-```bash
-# Check vendor rate limiting in logs
-journalctl -u engagic-daemon | grep "Rate limiting"
-
-# Adjust delays in vendors/rate_limiter.py if needed
-# Current: 3-5s between vendor requests (respectful)
-```
-
----
-
-## Useful Commands
-
-```bash
-# View all engagic processes
-ps aux | grep engagic
-
-# Check disk usage
-df -h /root/engagic/data
-
-# Database size
-ls -lh /root/engagic/data/engagic.db
-
-# Count meetings in database
-sqlite3 /root/engagic/data/engagic.db "SELECT COUNT(*) FROM meetings;"
-
-# Count cities
-sqlite3 /root/engagic/data/engagic.db "SELECT COUNT(*) FROM cities;"
-
-# Recent logs from both services
-journalctl -u engagic-api -u engagic-daemon --since "10 minutes ago"
-```
-
----
-
-## Support
-
-For issues:
-1. Check logs: `journalctl -u engagic-api -n 100`
-2. Check health: `curl http://localhost:8000/api/health`
-3. Check memory: `free -m`
-4. Check disk: `df -h`
-5. Create GitHub issue with logs and error details
+1. Start remaining services (fetcher, processor, mcp, motioncount-api, smokepac-api)
+2. Create smokepac-api.service (wasn't included in initial migration)
+3. SSL certs via certbot (after DNS cutover)
+4. DNS cutover — point Cloudflare A records to 5.78.189.81
+5. Install zsh + bun for root user (quality of life)
+6. Commit uv.lock changes back to repo
+7. Monitor for Python 3.14 compat issues

@@ -22,7 +22,7 @@ from config import config, get_logger
 logger = get_logger(__name__).bind(component="population_import")
 
 # Source data
-CITIES_JSON = Path("/root/cities.json")
+CITIES_JSON = Path("/opt/engagic/data/cities.json")
 
 # NYC consolidated population (Census 2020 + estimates)
 # The JSON has boroughs split incorrectly, so we use the official figure
