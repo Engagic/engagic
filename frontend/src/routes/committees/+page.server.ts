@@ -1,9 +1,9 @@
 import type { PageServerLoad } from './$types';
-import { configureApiForRequest, apiClient } from '$lib/api/server';
+import { createServerApiClient } from '$lib/api/server';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ locals, setHeaders }) => {
-	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 
 	try {
 		const data = await apiClient.getCivicInfrastructure();

@@ -1,12 +1,12 @@
 import type { PageServerLoad } from './$types';
-import { searchMeetings, type SearchResult } from '$lib/api/index';
-import { configureApiForRequest } from '$lib/api/server';
+import type { SearchResult } from '$lib/api/index';
+import { createServerApiClient } from '$lib/api/server';
 import { parseCityUrl } from '$lib/utils/utils';
 import { processMeetingDates } from '$lib/utils/meetings';
 import { error, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, setHeaders, locals }) => {
-	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 	const { city_url } = params;
 
 	if (city_url === 'about') {
@@ -19,7 +19,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals }) => {
 	}
 
 	const searchQuery = `${parsed.cityName}, ${parsed.state}`;
-	const result = await searchMeetings(searchQuery);
+	const result = await apiClient.searchMeetings(searchQuery);
 
 	if (!result.success) {
 		throw error(404, result.message || 'City not found');

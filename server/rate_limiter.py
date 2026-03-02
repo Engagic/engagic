@@ -382,11 +382,11 @@ class SQLiteRateLimiter:
 
             logger.info("exported blocked IPs", count=len(valid_ips), file=nginx_conf_file)
 
-            # Reload nginx to apply changes
+            # Reload nginx to apply changes (engagic user has passwordless sudo for these)
             import subprocess
             try:
-                subprocess.run(["nginx", "-t"], check=True, capture_output=True)
-                subprocess.run(["systemctl", "reload", "nginx"], check=True)
+                subprocess.run(["sudo", "nginx", "-t"], check=True, capture_output=True)
+                subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True)
                 logger.info("nginx reloaded with updated blocklist")
             except subprocess.CalledProcessError as e:
                 logger.error("failed to reload nginx", error=str(e))
