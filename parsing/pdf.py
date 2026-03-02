@@ -247,13 +247,13 @@ def _extract_text_with_formatting(page: fitz.Page, page_num: int) -> str:
 class PdfExtractor:
     """PDF extractor using PyMuPDF with OCR fallback"""
 
-    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 150, detect_legislative_formatting: bool = True, max_ocr_workers: int | None = None):
+    def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 200, detect_legislative_formatting: bool = True, max_ocr_workers: int | None = None):
         """Initialize PDF extractor
 
         Args:
             ocr_threshold: Minimum characters per page before triggering OCR fallback
             ocr_dpi: DPI for image rendering when using OCR (higher = better quality, slower)
-                    Default 150 (reduced from 300) to prevent memory issues on VPS
+                    Default 200 - balances quality vs memory on multi-core VPS
             detect_legislative_formatting: If True, detect strikethrough (deletions) and underline (additions)
                     in legislative documents with formatting legends and tag them as [DELETED: ...] and [ADDED: ...]
                     Only activates if document contains legislative formatting legend. Default: True (safe for all PDFs)

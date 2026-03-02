@@ -2,7 +2,7 @@
 #
 # Installation:
 #   1. Download Prometheus binary:
-#      cd /root/engagic
+#      cd /opt/engagic
 #      wget https://github.com/prometheus/prometheus/releases/download/v2.48.0/prometheus-2.48.0.linux-amd64.tar.gz
 #      tar xvfz prometheus-2.48.0.linux-amd64.tar.gz
 #      mv prometheus-2.48.0.linux-amd64 prometheus
@@ -29,12 +29,12 @@ User=root
 Group=root
 
 # Prometheus binary and config paths
-ExecStart=/root/engagic/prometheus/prometheus \
-  --config.file=/root/engagic/prometheus.yml \
-  --storage.tsdb.path=/root/engagic/data/prometheus \
+ExecStart=/opt/engagic/prometheus/prometheus \
+  --config.file=/opt/engagic/prometheus.yml \
+  --storage.tsdb.path=/opt/engagic/data/prometheus \
   --storage.tsdb.retention.time=30d \
-  --web.console.templates=/root/engagic/prometheus/consoles \
-  --web.console.libraries=/root/engagic/prometheus/console_libraries \
+  --web.console.templates=/opt/engagic/prometheus/consoles \
+  --web.console.libraries=/opt/engagic/prometheus/console_libraries \
   --web.listen-address=127.0.0.1:9090 \
   --web.enable-lifecycle
 
@@ -47,7 +47,7 @@ LimitNOFILE=65536
 LimitNPROC=4096
 
 # Working directory
-WorkingDirectory=/root/engagic
+WorkingDirectory=/opt/engagic
 
 # Logging
 StandardOutput=journal
