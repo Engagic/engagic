@@ -2,8 +2,8 @@
 # engagic deployment script - API and fetcher management
 set -e
 
-APP_DIR="/root/engagic"
-VENV_DIR="/root/engagic/.venv"
+APP_DIR="/opt/engagic"
+VENV_DIR="/opt/engagic/.venv"
 API_SERVICE="engagic-api"
 API_SERVICE_FILE="/etc/systemd/system/${API_SERVICE}.service"
 FETCHER_SERVICE="engagic-fetcher"
@@ -90,10 +90,10 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=root
-Group=root
+User=engagic
+Group=engagic
 WorkingDirectory=$APP_DIR
-ExecStart=$VENV_DIR/bin/uvicorn server.main:app --host 0.0.0.0 --port 8000
+ExecStart=$VENV_DIR/bin/uvicorn server.main:app --host 127.0.0.1 --port 8000 --no-access-log
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -102,7 +102,7 @@ StandardError=journal
 # Environment
 Environment=PYTHONPATH=$APP_DIR
 EnvironmentFile=-$APP_DIR/.env
-EnvironmentFile=-/root/.llm_secrets
+EnvironmentFile=-/opt/engagic/.llm_secrets
 
 # Resource limits
 LimitNOFILE=65536
@@ -130,10 +130,10 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=root
-Group=root
+User=engagic
+Group=engagic
 WorkingDirectory=$APP_DIR
-ExecStart=$VENV_DIR/bin/engagic-conductor fetcher
+ExecStart=$VENV_DIR/bin/uv run python -m pipeline.conductor fetcher
 Restart=always
 RestartSec=60
 StandardOutput=journal
@@ -266,7 +266,7 @@ kill_background_processes() {
     # - engagic-daemon, engagic-conductor, engagic-*
     # - pipeline.conductor, pipeline.processor, pipeline.fetcher, pipeline.analyzer
     # - Any python running from /root/engagic
-    local PATTERN="engagic-|pipeline\.|/root/engagic.*python"
+    local PATTERN="engagic-|pipeline\.|/opt/engagic.*python"
 
     # Check for ANY running processes
     if pgrep -f "$PATTERN" > /dev/null; then
@@ -897,10 +897,10 @@ case "$COMMAND" in
         ;;
     logs)
         log "Showing all engagic logs (Ctrl+C to exit)..."
-        if [ -f "/root/engagic/engagic.log" ]; then
-            tail -n 200 -f /root/engagic/engagic.log
+        if [ -f "/opt/engagic/engagic.log" ]; then
+            tail -n 200 -f /opt/engagic/engagic.log
         else
-            warn "No log file found at /root/engagic/engagic.log"
+            warn "No log file found at /opt/engagic/engagic.log"
         fi
         ;;
     
