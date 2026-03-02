@@ -225,8 +225,7 @@
 
 <div class="container">
 	<header class="header">
-		<a href="/" class="logo">engagic</a>
-		<p class="tagline">AI summaries of local government meetings and civic participation information.</p>
+		<p class="tagline">Know what your city council is deciding — before they decide it.</p>
 	</header>
 
 		<div class="search-section">
@@ -253,8 +252,8 @@
 			<div class="not-found-inline">
 				<p class="not-found-message">{searchResults.message}</p>
 				<p class="not-found-cta">
-					<a href="/dashboard">Create an account</a> to request this city.
-					Cities with active watchers get priority.
+					We don't cover this city yet — but we're growing.
+					<a href="/signup">Create an account</a> and request it, and we'll prioritize cities with active watchers.
 				</p>
 			</div>
 		{/if}
@@ -351,21 +350,6 @@
 	.header {
 		text-align: center;
 		margin-bottom: 2rem;
-	}
-
-	.logo {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 2rem;
-		font-weight: 500;
-		color: var(--civic-blue);
-		text-decoration: none;
-		margin-bottom: 0.5rem;
-		display: inline-block;
-		transition: color var(--transition-normal);
-	}
-
-	.logo:hover {
-		color: var(--civic-accent);
 	}
 
 	.tagline {
@@ -615,7 +599,9 @@
 	/* Bottom links */
 	.bottom-links {
 		text-align: center;
-		padding: 1rem 0 2rem;
+		padding: 1.5rem 0 2rem;
+		margin-top: 1rem;
+		border-top: 1px solid var(--border-primary);
 	}
 
 	.bottom-links-row {
@@ -741,10 +727,6 @@
 	@media (max-width: 640px) {
 		.header {
 			margin-bottom: 1.5rem;
-		}
-
-		.logo {
-			font-size: 1.8rem;
 		}
 
 		.tagline {

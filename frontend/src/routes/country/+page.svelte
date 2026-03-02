@@ -35,6 +35,8 @@
 		<p class="footer-text">
 			Click any highlighted city to explore its meetings.
 			<a href="/about/general" class="footer-link">Learn more</a> about how engagic works.
+			<span class="footer-separator">·</span>
+			<a href="/about/terms" class="footer-link">Terms</a>
 		</p>
 	</footer>
 </div>
@@ -140,6 +142,12 @@
 		color: var(--civic-accent);
 	}
 
+	.footer-separator {
+		margin: 0 0.35rem;
+		color: var(--civic-gray);
+		opacity: 0.5;
+	}
+
 	@media (max-width: 640px) {
 		.page-header {
 			padding: var(--space-sm) var(--space-md);
@@ -150,7 +158,8 @@
 		}
 
 		.request-cta {
-			display: none;
+			font-size: 0.7rem;
+			padding: var(--space-xs) var(--space-xs);
 		}
 
 		.map-section {

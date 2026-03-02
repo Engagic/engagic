@@ -265,23 +265,10 @@
 				</button>
 				</div>
 			</div>
-			<div class="source-row">
-				{#if searchResults.source_url && searchResults.vendor_display_name}
-					<div class="source-attribution">
-						<span class="attribution-text">Data sourced from</span>
-						<a
-							href={searchResults.source_url}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="source-link"
-						>
-							{searchResults.vendor_display_name}
-						</a>
-					</div>
-				{/if}
-				<button class="priority-hint" onclick={() => showWatchModal = true}>
-					Follow this city to guarantee it stays up to date.
-				</button>
+		{/if}
+		{#if isWatching && authState.isAuthenticated}
+			<div class="dashboard-bridge">
+				<a href="/dashboard" class="dashboard-link">View your matches →</a>
 			</div>
 		{/if}
 	</div>
@@ -337,6 +324,20 @@
 				{/if}
 			</div>
 		</div>
+
+		{#if searchResults && 'city_name' in searchResults && searchResults.source_url && searchResults.vendor_display_name}
+			<div class="source-footnote">
+				<span class="attribution-text">Data sourced from</span>
+				<a
+					href={searchResults.source_url}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="source-link"
+				>
+					{searchResults.vendor_display_name}
+				</a>
+			</div>
+		{/if}
 
 		{#if viewMode === 'meetings'}
 			{#if searchLoading}
@@ -673,22 +674,15 @@
 		background: var(--action-yes-hover);
 	}
 
-	.source-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 1rem;
-		margin-top: 0.5rem;
-		flex-wrap: wrap;
-	}
-
-	.source-attribution {
+	.source-footnote {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
+		font-size: 0.8rem;
 		color: var(--civic-gray);
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
+		margin-bottom: 1.5rem;
+		opacity: 0.7;
 	}
 
 	.attribution-text {
@@ -706,6 +700,24 @@
 	.source-link:hover {
 		color: var(--civic-accent);
 		border-bottom-color: var(--civic-accent);
+	}
+
+	.dashboard-bridge {
+		margin-top: 0.5rem;
+	}
+
+	.dashboard-link {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 500;
+		transition: color var(--transition-fast);
+	}
+
+	.dashboard-link:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
 	}
 
 	.view-toggle {
@@ -814,22 +826,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
-	}
-
-	.priority-hint {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-blue);
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 0;
-		opacity: 0.8;
-		transition: all var(--transition-normal);
-	}
-
-	.priority-hint:hover {
-		opacity: 1;
 	}
 
 	.loading-matters {
@@ -1068,28 +1064,18 @@
 
 		.city-title {
 			font-size: 1.5rem;
-			order: 1;
 		}
 
-		.city-header {
-			display: grid;
-			grid-template-columns: 1fr;
-			gap: 0.5rem;
-		}
-
-		.back-link {
-			order: 0;
-		}
-
-		.city-title-row,
-		.source-row {
-			display: contents;
+		.city-title-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.75rem;
 		}
 
 		.city-actions {
-			order: 2;
 			display: flex;
 			gap: 0.5rem;
+			flex-wrap: wrap;
 		}
 
 		.council-link {
@@ -1097,19 +1083,9 @@
 			font-size: 0.85rem;
 		}
 
-		.source-attribution {
-			order: 3;
-		}
-
 		.watch-city-btn {
-			order: 2;
 			padding: 0.5rem 1rem;
 			font-size: 0.85rem;
-		}
-
-		.priority-hint {
-			order: 4;
-			justify-self: start;
 		}
 
 		.controls-row {

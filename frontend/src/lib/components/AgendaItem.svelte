@@ -212,7 +212,7 @@
 						<VoteBadge tally={voteInfo.tally} outcome={voteInfo.outcome} size="small" />
 					{/if}
 					{#if !hasSummary}
-						<span class="procedural-badge">Unprocessed</span>
+						<span class="procedural-badge">No summary</span>
 					{/if}
 					{#if item.topics && item.topics.length > 0}
 						{#each item.topics.slice(0, 2) as topic (topic)}

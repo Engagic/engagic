@@ -15,6 +15,7 @@
 	import { apiClient } from '$lib/api/api-client';
 	import { ApiError, isSearchSuccess, isSearchAmbiguous, type CityOption } from '$lib/api/types';
 	import { generateMeetingSlug } from '$lib/utils/utils';
+	import { toastStore } from '$lib/stores/toast.svelte';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -232,8 +233,7 @@
 			await requestCity(authState.accessToken!, banana);
 			citySearchError = null;
 			cancelCityEdit();
-			// Show success feedback
-			alert('Request submitted. We will notify you when coverage is added.');
+			toastStore.success('City requested — we\'ll notify you when coverage is added.');
 		} catch (err) {
 			citySearchError = err instanceof Error ? err.message : 'Failed to request city';
 		} finally {
@@ -268,7 +268,6 @@
 	<div class="container">
 		<header class="header">
 			<div class="header-content">
-				<a href="/" class="logo">engagic</a>
 				<h1>Dashboard</h1>
 				<div class="header-actions">
 					<span class="user-email">{authState.user?.email}</span>
@@ -375,7 +374,7 @@
 														onclick={() => handleRemoveCity(digest.id, city)}
 														disabled={cityLoading[digest.id]}
 														aria-label="Remove {city}"
-													>x</button>
+													><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
 												</span>
 											{/each}
 											<button onclick={() => startCityEdit(digest.id)} class="btn-change">
@@ -406,7 +405,7 @@
 															onclick={() => handleRemoveKeyword(digest.id, keyword)}
 															disabled={keywordLoading[digest.id]}
 															aria-label="Remove {keyword}"
-														>x</button>
+														><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
 													</span>
 												{/each}
 											</div>
@@ -532,19 +531,6 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 1rem;
-	}
-
-	.logo {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.25rem;
-		font-weight: 500;
-		color: var(--civic-blue);
-		text-decoration: none;
-		transition: color var(--transition-fast);
-	}
-
-	.logo:hover {
-		color: var(--civic-accent);
 	}
 
 	h1 {
@@ -823,11 +809,13 @@
 		background: none;
 		border: none;
 		color: inherit;
-		font-size: 0.875rem;
 		cursor: pointer;
-		padding: 0 0.25rem;
+		padding: 0 0.15rem;
 		opacity: 0.6;
 		transition: opacity var(--transition-fast);
+		display: inline-flex;
+		align-items: center;
+		line-height: 1;
 	}
 
 	.remove-btn:hover {

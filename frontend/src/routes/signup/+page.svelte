@@ -70,6 +70,7 @@
 
 <div class="page">
 	<div class="container">
+		<a href="/" class="home-link">← engagic</a>
 		{#if success}
 			<div class="card success-state">
 				<div class="icon-wrapper">
@@ -168,6 +169,21 @@
 	.container {
 		width: 100%;
 		max-width: var(--width-auth);
+	}
+
+	.home-link {
+		display: inline-block;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--civic-blue);
+		text-decoration: none;
+		margin-bottom: 1.5rem;
+		transition: color var(--transition-fast);
+	}
+
+	.home-link:hover {
+		color: var(--civic-accent);
 	}
 
 	.card {

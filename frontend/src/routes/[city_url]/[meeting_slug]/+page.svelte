@@ -283,12 +283,6 @@
 			<div class="meeting-header">
 				<div class="meeting-header-row">
 					<h1 class="meeting-title">{selectedMeeting.title}</h1>
-					{#if selectedMeeting.has_items && selectedMeeting.items && selectedMeeting.items.length > 0}
-						<div class="meeting-helper">
-							<span class="helper-dot"></span>
-							<span class="helper-text-inline">Blue = summary | Green = how to participate</span>
-						</div>
-					{/if}
 				</div>
 
 				<div class="meeting-meta-row">
@@ -348,7 +342,7 @@
 								aria-label={showProceduralItems ? `Hide ${proceduralItems.length} procedural items` : `Show ${proceduralItems.length} procedural items`}
 								aria-expanded={showProceduralItems}
 							>
-								{showProceduralItems ? 'Hide' : 'Show'} {proceduralItems.length} Procedural
+								{showProceduralItems ? 'Hide' : 'Show'} {proceduralItems.length} without summaries
 							</button>
 						{/if}
 					</div>
@@ -411,10 +405,10 @@
 
 	.back-link {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
+		font-size: 0.95rem;
 		color: var(--civic-blue);
 		text-decoration: none;
-		font-weight: 500;
+		font-weight: 600;
 		transition: all var(--transition-normal);
 	}
 
@@ -518,31 +512,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-	}
-
-	.meeting-helper {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.75rem;
-		background: var(--info-bg);
-		border: 1px solid var(--info-border);
-		border-radius: var(--radius-sm);
-	}
-
-	.helper-dot {
-		width: 8px;
-		height: 8px;
-		background: var(--info-icon);
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-
-	.helper-text-inline {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		color: var(--info-text);
-		font-weight: 500;
 	}
 
 	.document-link {
@@ -828,7 +797,7 @@
 		}
 
 		.back-link {
-			font-size: 0.75rem;
+			font-size: 0.85rem;
 		}
 
 		.top-nav {
@@ -870,19 +839,6 @@
 			width: auto;
 			padding: 0.4rem 0.7rem;
 			font-size: 0.75rem;
-		}
-
-		.meeting-helper {
-			padding: 0.3rem 0.6rem;
-		}
-
-		.helper-dot {
-			width: 6px;
-			height: 6px;
-		}
-
-		.helper-text-inline {
-			font-size: 0.7rem;
 		}
 
 		.meeting-summary {

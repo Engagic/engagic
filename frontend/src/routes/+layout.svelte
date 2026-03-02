@@ -15,7 +15,8 @@
 	// Pages that handle their own navigation (have back-link + compact-logo)
 	const selfNavPaths = $derived(
 		$page.url.pathname.startsWith('/about/') ||
-		$page.url.pathname === '/'
+		$page.url.pathname === '/' ||
+		$page.url.pathname === '/country'
 	);
 
 	// Track page views on navigation
@@ -66,6 +67,9 @@
 		<div class="nav-container">
 			<a href="/" class="nav-logo">engagic</a>
 			<div class="nav-links">
+				{#if authState.isAuthenticated}
+					<a href="/dashboard" class="nav-link">Dashboard</a>
+				{/if}
 				<ThemeToggle />
 			</div>
 		</div>
