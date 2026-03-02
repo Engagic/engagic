@@ -1,14 +1,13 @@
-import { getAnalytics, getPlatformMetrics, getCityCoverage } from '$lib/api/index';
-import { configureApiForRequest } from '$lib/api/server';
+import { createServerApiClient } from '$lib/api/server';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 	try {
 		const [analytics, platformMetrics, cityCoverage] = await Promise.all([
-			getAnalytics(),
-			getPlatformMetrics(),
-			getCityCoverage()
+			apiClient.getAnalytics(),
+			apiClient.getPlatformMetrics(),
+			apiClient.getCityCoverage()
 		]);
 		return { analytics, platformMetrics, cityCoverage };
 	} catch (error) {

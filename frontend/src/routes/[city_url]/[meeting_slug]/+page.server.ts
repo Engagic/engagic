@@ -1,5 +1,4 @@
-import { getMeeting, searchMeetings } from '$lib/api/index';
-import { configureApiForRequest } from '$lib/api/server';
+import { createServerApiClient } from '$lib/api/server';
 import { extractMeetingIdFromSlug, parseCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 import { findItemByAnchor } from '$lib/utils/anchor';
 import type { PageServerLoad } from './$types';
@@ -19,7 +18,7 @@ function getHighlightedItem(meeting: Meeting, itemParam: string | null): { title
 }
 
 export const load: PageServerLoad = async ({ params, locals, setHeaders, url }) => {
-	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 	const { city_url, meeting_slug } = params;
 	const itemParam = url.searchParams.get('item');
 
@@ -27,7 +26,7 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders, url }) 
 		const meetingId = extractMeetingIdFromSlug(meeting_slug);
 
 		if (meetingId) {
-			const result = await getMeeting(meetingId);
+			const result = await apiClient.getMeeting(meetingId);
 
 			if (result.success && result.meeting) {
 				setHeaders({
@@ -62,7 +61,7 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders, url }) 
 		}
 
 		const searchQuery = `${parsed.cityName}, ${parsed.state}`;
-		const searchResults = await searchMeetings(searchQuery);
+		const searchResults = await apiClient.searchMeetings(searchQuery);
 
 		if (searchResults.success && searchResults.meetings) {
 			const meeting = searchResults.meetings.find((m: Meeting) => {

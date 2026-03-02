@@ -604,6 +604,25 @@ export function createServerApiClient(clientIp: string | null, ssrAuthSecret?: s
 			url.searchParams.set('limit', limit.toString());
 			const response = await serverFetch(url.toString());
 			return response.json();
+		},
+
+		async getMatterVotes(matterId: string): Promise<MatterVotesResponse> {
+			const response = await serverFetch(`${config.apiBaseUrl}/api/matters/${matterId}/votes`);
+			return response.json();
+		},
+
+		async getDeliberationForMatter(matterId: string): Promise<{ deliberation: any | null }> {
+			const response = await serverFetch(
+				`${config.apiBaseUrl}/api/v1/deliberations/matter/${matterId}`
+			);
+			return response.json();
+		},
+
+		async getDeliberation(deliberationId: string): Promise<any> {
+			const response = await serverFetch(
+				`${config.apiBaseUrl}/api/v1/deliberations/${deliberationId}`
+			);
+			return response.json();
 		}
 	};
 }

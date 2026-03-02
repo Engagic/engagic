@@ -1,12 +1,10 @@
 import type { PageServerLoad } from './$types';
-import { configureApiForRequest, apiClient } from '$lib/api/server';
+import { createServerApiClient } from '$lib/api/server';
 import { error } from '@sveltejs/kit';
-import {
-	getDeliberationForMatter,
-	getDeliberation,
-	type Deliberation,
-	type DeliberationComment,
-	type DeliberationStats
+import type {
+	Deliberation,
+	DeliberationComment,
+	DeliberationStats
 } from '$lib/api/deliberation';
 
 interface DeliberationData {
@@ -15,32 +13,14 @@ interface DeliberationData {
 	stats: DeliberationStats | null;
 }
 
-async function fetchDeliberationForMatter(matterId: string): Promise<DeliberationData> {
-	try {
-		const { deliberation } = await getDeliberationForMatter(matterId);
-		if (!deliberation) {
-			return { deliberation: null, comments: [], stats: null };
-		}
-
-		const data = await getDeliberation(deliberation.id);
-		return {
-			deliberation: data.deliberation,
-			comments: data.comments || [],
-			stats: data.stats || null
-		};
-	} catch {
-		return { deliberation: null, comments: [], stats: null };
-	}
-}
-
 export const load: PageServerLoad = async ({ params, locals }) => {
-	configureApiForRequest(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 	const matterId = params.matter_id;
 
 	try {
 		const [timeline, deliberationData] = await Promise.all([
 			apiClient.getMatterTimeline(matterId),
-			fetchDeliberationForMatter(matterId)
+			fetchDeliberationForMatter(apiClient, matterId)
 		]);
 
 		if (!timeline || !timeline.matter) {
@@ -57,3 +37,24 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(500, 'Failed to load matter data');
 	}
 };
+
+async function fetchDeliberationForMatter(
+	apiClient: ReturnType<typeof createServerApiClient>,
+	matterId: string
+): Promise<DeliberationData> {
+	try {
+		const { deliberation } = await apiClient.getDeliberationForMatter(matterId);
+		if (!deliberation) {
+			return { deliberation: null, comments: [], stats: null };
+		}
+
+		const data = await apiClient.getDeliberation(deliberation.id);
+		return {
+			deliberation: data.deliberation,
+			comments: data.comments || [],
+			stats: data.stats || null
+		};
+	} catch {
+		return { deliberation: null, comments: [], stats: null };
+	}
+}
