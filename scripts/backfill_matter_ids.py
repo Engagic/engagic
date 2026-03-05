@@ -11,7 +11,6 @@ Usage:
 
 import asyncio
 import argparse
-from datetime import datetime
 from collections import defaultdict
 
 from config import get_logger

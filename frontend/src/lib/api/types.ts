@@ -389,6 +389,14 @@ export interface StateMatterSummary {
 	state: string;
 }
 
+export interface TopCityStats {
+	name: string;
+	banana: string;
+	matter_count: number;
+	meeting_count: number;
+	summarized_items: number;
+}
+
 export interface GetStateMattersResponse {
 	success: boolean;
 	state: string;
@@ -402,6 +410,7 @@ export interface GetStateMattersResponse {
 	total_matters: number;
 	topic_distribution: Record<string, number>;
 	filtered_by_topic?: string;
+	top_cities: TopCityStats[];
 	meeting_stats: {
 		total_meetings: number;
 		with_agendas: number;

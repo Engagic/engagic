@@ -177,6 +177,11 @@ class Processor:
             logger.error("queue job failed", queue_id=queue_id, error=str(e))
             return True
 
+        except Exception as e:
+            await self.db.queue.mark_processing_failed(queue_id, str(e))
+            logger.error("unexpected queue job failure", queue_id=queue_id, error=str(e), error_type=type(e).__name__)
+            return True
+
     async def _wait_with_shutdown_check(self, seconds: float) -> bool:
         """Wait for specified seconds, but return early if shutdown is signaled.
 

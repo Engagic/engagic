@@ -418,6 +418,27 @@ async def get_state_matters(
                 state_code
             )
 
+            # Most active cities: total matters, meetings, and summarized items
+            top_cities = await conn.fetch(
+                """
+                SELECT
+                    c.name,
+                    c.banana,
+                    COUNT(DISTINCT cm.id) as matter_count,
+                    (SELECT COUNT(*) FROM meetings m2 WHERE m2.banana = c.banana) as meeting_count,
+                    (SELECT COUNT(DISTINCT i2.id) FROM items i2
+                     JOIN meetings m3 ON i2.meeting_id = m3.id
+                     WHERE m3.banana = c.banana AND i2.summary IS NOT NULL AND i2.summary <> '') as summarized_items
+                FROM city_matters cm
+                JOIN cities c ON cm.banana = c.banana
+                WHERE c.state = $1
+                GROUP BY c.name, c.banana
+                ORDER BY matter_count DESC
+                LIMIT 10
+                """,
+                state_code
+            )
+
         # Group by topic for aggregation
         topic_aggregation = {}
         matters_list = []
@@ -455,6 +476,17 @@ async def get_state_matters(
             for city in cities
         ]
 
+        top_cities_list = [
+            {
+                "name": row["name"],
+                "banana": row["banana"],
+                "matter_count": row["matter_count"],
+                "meeting_count": row["meeting_count"],
+                "summarized_items": row["summarized_items"],
+            }
+            for row in top_cities
+        ]
+
         return {
             "success": True,
             "state": state_code,
@@ -464,6 +496,7 @@ async def get_state_matters(
             "total_matters": total_recurring_count or 0,
             "topic_distribution": topic_aggregation,
             "filtered_by_topic": topic,
+            "top_cities": top_cities_list,
             "meeting_stats": {
                 "total_meetings": meeting_stats["total_meetings"],
                 "with_agendas": meeting_stats["with_agendas"],
