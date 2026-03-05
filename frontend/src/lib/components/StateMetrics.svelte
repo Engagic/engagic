@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getStateMatters, getStateMeetings } from '$lib/api/index';
-	import type { GetStateMattersResponse, GetStateMeetingsResponse, StateMatterSummary, StateMeeting } from '$lib/api/types';
+	import type { GetStateMattersResponse, GetStateMeetingsResponse, StateMatterSummary, StateMeeting, TopCityStats } from '$lib/api/types';
 	import { generateMeetingSlug } from '$lib/utils/utils';
 	import { onMount } from 'svelte';
 
@@ -95,17 +95,8 @@
 	});
 
 	const mostActiveCities = $derived.by(() => {
-		if (!metrics?.matters) return [];
-		const cityCounts: Record<string, { name: string; banana: string; count: number }> = {};
-		metrics.matters.forEach((m: StateMatterSummary) => {
-			if (!cityCounts[m.city_name]) {
-				cityCounts[m.city_name] = { name: m.city_name, banana: m.banana, count: 0 };
-			}
-			cityCounts[m.city_name].count++;
-		});
-		return Object.values(cityCounts)
-			.sort((a, b) => b.count - a.count)
-			.slice(0, 5);
+		if (!metrics?.top_cities) return [];
+		return metrics.top_cities.slice(0, 5);
 	});
 
 	const matterTypeBreakdown = $derived.by(() => {
@@ -355,7 +346,13 @@
 								<div class="rank-number">{index + 1}</div>
 								<div class="rank-content">
 									<div class="rank-city">{city.name}</div>
-									<div class="rank-count">{city.count} matters</div>
+									<div class="rank-stats">
+										<span class="rank-count">{city.matter_count} matters</span>
+										<span class="rank-detail">{city.meeting_count} meetings</span>
+										{#if city.summarized_items > 0}
+											<span class="rank-detail">{city.summarized_items} summaries</span>
+										{/if}
+									</div>
 								</div>
 							</a>
 						{/each}
@@ -1154,9 +1151,23 @@
 		color: var(--text-primary);
 	}
 
+	.rank-stats {
+		display: flex;
+		gap: 0.75rem;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
 	.rank-count {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	.rank-detail {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.7rem;
 		color: var(--civic-gray);
 	}
 

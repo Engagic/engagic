@@ -55,6 +55,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "scikit-learn>=1.6.0",
     "mcp>=1.26.0",
+    "ruff>=0.15.4",
 ]
 
 [project.scripts]
