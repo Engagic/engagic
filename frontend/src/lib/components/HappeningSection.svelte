@@ -1,10 +1,8 @@
 <script lang="ts">
-	import { marked } from 'marked';
 	import type { HappeningItem } from '$lib/api/types';
 	import { formatMeetingDate, extractTime } from '$lib/utils/date-utils';
 	import { generateAnchorId } from '$lib/utils/anchor';
 	import { generateMeetingSlug } from '$lib/utils/utils';
-	import { sanitizeHtml } from '$lib/utils/sanitize';
 
 	interface Props {
 		items: HappeningItem[];
@@ -12,6 +10,16 @@
 	}
 
 	let { items, cityUrl }: Props = $props();
+	let showAll = $state(false);
+
+	const visibleItems = $derived(showAll ? items : items.slice(0, 1));
+	const hiddenCount = $derived(items.length - 1);
+
+	function truncateTitle(title: string | null, maxLen: number = 120): string {
+		if (!title) return 'Agenda Item';
+		if (title.length <= maxLen) return title;
+		return title.substring(0, maxLen).trim() + '…';
+	}
 
 	function getItemLink(item: HappeningItem): string {
 		const slug = generateMeetingSlug({
@@ -28,11 +36,6 @@
 		return `/${cityUrl}/${slug}?item=${anchor}`;
 	}
 
-	function renderSummary(summary: string | null): string {
-		if (!summary) return '';
-		return sanitizeHtml(marked(summary) as string);
-	}
-
 	function getMeetingDateTime(item: HappeningItem): string {
 		if (!item.meeting_date) return 'Date TBD';
 		const dateStr = formatMeetingDate(item.meeting_date);
@@ -40,40 +43,6 @@
 		return timeStr ? `${dateStr} at ${timeStr}` : dateStr;
 	}
 
-	function generateIcsUrl(item: HappeningItem): string {
-		if (!item.meeting_date) return '';
-
-		const date = new Date(item.meeting_date);
-		const endDate = new Date(date.getTime() + 2 * 60 * 60 * 1000); // +2 hours
-
-		const formatIcsDate = (d: Date) => {
-			return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-		};
-
-		const title = encodeURIComponent(item.meeting_title || 'City Meeting');
-		const description = encodeURIComponent(
-			`${item.item_title || ''}\n\n${item.reason || ''}`
-		);
-		const location = encodeURIComponent(
-			item.participation?.virtual_url || item.participation?.physical_location || ''
-		);
-
-		const icsContent = [
-			'BEGIN:VCALENDAR',
-			'VERSION:2.0',
-			'PRODID:-//engagic//EN',
-			'BEGIN:VEVENT',
-			`DTSTART:${formatIcsDate(date)}`,
-			`DTEND:${formatIcsDate(endDate)}`,
-			`SUMMARY:${title}`,
-			`DESCRIPTION:${description}`,
-			`LOCATION:${location}`,
-			'END:VEVENT',
-			'END:VCALENDAR'
-		].join('\n');
-
-		return `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
-	}
 </script>
 
 {#if items.length > 0}
@@ -84,7 +53,7 @@
 		</div>
 
 		<div class="happening-list">
-			{#each items as item (item.item_id)}
+			{#each visibleItems as item (item.item_id)}
 				<article class="happening-card">
 					<div class="rank-badge">#{item.rank}</div>
 
@@ -98,7 +67,7 @@
 
 						<h3 class="item-title">
 							<a href={getItemLink(item)} class="item-link">
-								{item.item_title || 'Agenda Item'}
+								{truncateTitle(item.item_title)}
 							</a>
 						</h3>
 
@@ -107,12 +76,6 @@
 						</div>
 
 						<p class="reason">{item.reason}</p>
-
-						{#if item.item_summary}
-							<div class="summary">
-								{@html renderSummary(item.item_summary)}
-							</div>
-						{/if}
 
 						<div class="card-actions">
 							{#if item.participation}
@@ -139,17 +102,18 @@
 							{/if}
 							<div class="secondary-actions">
 								<a href={getItemLink(item)} class="view-link">View Details</a>
-								{#if item.meeting_date}
-									<a href={generateIcsUrl(item)} download="meeting.ics" class="calendar-link">
-										Add to Calendar
-									</a>
-								{/if}
 							</div>
 						</div>
 					</div>
 				</article>
 			{/each}
 		</div>
+
+		{#if hiddenCount > 0}
+			<button class="show-more-btn" onclick={() => showAll = !showAll}>
+				{showAll ? 'Show less' : `${hiddenCount} more important item${hiddenCount === 1 ? '' : 's'} this week`}
+			</button>
+		{/if}
 	</section>
 {/if}
 
@@ -291,43 +255,6 @@
 		line-height: 1.5;
 	}
 
-	.summary {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 0.9rem;
-		line-height: 1.6;
-		color: var(--text-secondary);
-		margin: 0 0 1rem 0;
-	}
-
-	.summary :global(p) {
-		margin: 0.5rem 0;
-	}
-
-	.summary :global(p:first-child) {
-		margin-top: 0;
-	}
-
-	.summary :global(ul),
-	.summary :global(ol) {
-		margin: 0.5rem 0;
-		padding-left: 1.5rem;
-	}
-
-	.summary :global(li) {
-		margin: 0.25rem 0;
-	}
-
-	.summary :global(h1),
-	.summary :global(h2),
-	.summary :global(h3),
-	.summary :global(h4) {
-		font-family: 'IBM Plex Mono', monospace;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0.75rem 0 0.5rem 0;
-		font-size: 0.95rem;
-	}
-
 	.card-actions {
 		display: flex;
 		flex-direction: column;
@@ -394,8 +321,7 @@
 		gap: 1rem;
 	}
 
-	.view-link,
-	.calendar-link {
+	.view-link {
 		font-family: 'IBM Plex Mono', monospace;
 		font-size: 0.8rem;
 		font-weight: 500;
@@ -404,10 +330,31 @@
 		transition: color var(--transition-normal);
 	}
 
-	.view-link:hover,
-	.calendar-link:hover {
+	.view-link:hover {
 		color: var(--civic-accent);
 		text-decoration: underline;
+	}
+
+	.show-more-btn {
+		display: block;
+		width: 100%;
+		margin-top: 1rem;
+		padding: 0.6rem 1rem;
+		background: var(--surface-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-md);
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--civic-blue);
+		cursor: pointer;
+		transition: all var(--transition-normal);
+		text-align: center;
+	}
+
+	.show-more-btn:hover {
+		background: var(--surface-secondary);
+		border-color: var(--civic-blue);
 	}
 
 	@media (max-width: 640px) {
