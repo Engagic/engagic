@@ -323,7 +323,7 @@
 }
 
 :root.dark {
-	--civic-blue: #2dd4bf;
+	--civic-blue: #14b8a6;
 	--civic-green: #34d399;
 	--civic-gray: #94a3b8;
 	--civic-dark: #f8fafc;
@@ -331,7 +331,7 @@
 	--civic-white: #0f172a;
 	--civic-border: #334155;
 	--civic-red: #f87171;
-	--civic-accent: #5eead4;
+	--civic-accent: #2dd4bf;
 	--civic-yellow: #fbbf24;
 	--civic-orange: #fb923c;
 	--civic-magenta: #f472b6;

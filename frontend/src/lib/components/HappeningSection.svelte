@@ -54,58 +54,20 @@
 
 		<div class="happening-list">
 			{#each visibleItems as item (item.item_id)}
-				<article class="happening-card">
+				<a href={getItemLink(item)} class="happening-card">
 					<div class="rank-badge">#{item.rank}</div>
-
 					<div class="card-content">
-						<div class="card-header">
+						<div class="card-meta">
 							{#if item.matter_file}
 								<span class="matter-badge">{item.matter_file}</span>
 							{/if}
 							<span class="meeting-badge">{item.meeting_title || 'Meeting'}</span>
+							<span class="meeting-datetime">{getMeetingDateTime(item)}</span>
 						</div>
-
-						<h3 class="item-title">
-							<a href={getItemLink(item)} class="item-link">
-								{truncateTitle(item.item_title)}
-							</a>
-						</h3>
-
-						<div class="meeting-datetime">
-							{getMeetingDateTime(item)}
-						</div>
-
-						<p class="reason">{item.reason}</p>
-
-						<div class="card-actions">
-							{#if item.participation}
-								<div class="participation-links">
-									{#if item.participation.email}
-										<a href="mailto:{item.participation.email}" class="action-btn email-btn">
-											<svg class="action-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="m1.5 4.5 6.5 5 6.5-5"/></svg>
-											Email
-										</a>
-									{/if}
-									{#if item.participation.virtual_url}
-										<a href={item.participation.virtual_url} target="_blank" rel="noopener noreferrer" class="action-btn virtual-btn">
-											<svg class="action-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="14" height="9" rx="1.5"/><path d="M5 14.5h6"/><path d="M8 12v2.5"/></svg>
-											Join Virtual
-										</a>
-									{/if}
-									{#if item.participation.phone}
-										<a href="tel:{item.participation.phone}" class="action-btn phone-btn">
-											<svg class="action-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 11.2v1.8a1.2 1.2 0 0 1-1.31 1.2 11.88 11.88 0 0 1-5.18-1.84 11.7 11.7 0 0 1-3.6-3.6A11.88 11.88 0 0 1 2.57 3.57 1.2 1.2 0 0 1 3.76 2.3h1.8a1.2 1.2 0 0 1 1.2 1.03c.08.57.22 1.13.42 1.67a1.2 1.2 0 0 1-.27 1.27l-.76.76a9.6 9.6 0 0 0 3.6 3.6l.76-.76a1.2 1.2 0 0 1 1.27-.27c.54.2 1.1.34 1.67.42a1.2 1.2 0 0 1 1.03 1.18Z"/></svg>
-											Call In
-										</a>
-									{/if}
-								</div>
-							{/if}
-							<div class="secondary-actions">
-								<a href={getItemLink(item)} class="view-link">View Details</a>
-							</div>
-						</div>
+						<div class="item-title">{truncateTitle(item.item_title)}</div>
 					</div>
-				</article>
+					<span class="view-arrow">→</span>
+				</a>
 			{/each}
 		</div>
 
@@ -119,67 +81,71 @@
 
 <style>
 	.happening-section {
-		margin-bottom: 3rem;
-		padding: 1.5rem;
+		margin-bottom: 2rem;
+		padding: 1rem 1.25rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-xl);
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		border-radius: var(--radius-lg);
 	}
 
 	.happening-header {
-		margin-bottom: 1.5rem;
-		text-align: center;
+		margin-bottom: 0.75rem;
+		display: flex;
+		align-items: baseline;
+		gap: 0.75rem;
+		flex-wrap: wrap;
 	}
 
 	.happening-title {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.5rem;
+		font-size: 1rem;
 		font-weight: 700;
 		color: var(--civic-blue);
-		margin: 0 0 0.5rem 0;
+		margin: 0;
 	}
 
 	.happening-subtitle {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
+		font-size: 0.75rem;
 		color: var(--civic-gray);
 	}
 
 	.happening-list {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
+		gap: 0.5rem;
 	}
 
 	.happening-card {
 		display: flex;
-		gap: 1rem;
-		padding: 1.25rem;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.65rem 0.75rem;
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-left: 4px solid var(--civic-green);
-		border-radius: var(--radius-lg);
+		border-left: 3px solid var(--civic-green);
+		border-radius: var(--radius-md);
 		transition: all var(--transition-normal);
+		text-decoration: none;
+		color: inherit;
 	}
 
 	.happening-card:hover {
 		border-left-color: var(--civic-accent);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
-		transform: translateY(-2px);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 	}
 
 	.rank-badge {
 		flex-shrink: 0;
-		width: 2.5rem;
-		height: 2.5rem;
+		width: 1.75rem;
+		height: 1.75rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		background: var(--civic-blue);
 		color: white;
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		border-radius: 50%;
 	}
@@ -189,205 +155,126 @@
 		min-width: 0;
 	}
 
-	.card-header {
+	.card-meta {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-bottom: 0.75rem;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 0.25rem;
 	}
 
 	.matter-badge {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		font-weight: 700;
 		color: var(--badge-matter-text);
 		background: var(--badge-matter-bg);
 		border: 1px solid var(--badge-matter-border);
-		padding: 0.25rem 0.5rem;
-		border-radius: var(--radius-sm);
+		padding: 0.1rem 0.35rem;
+		border-radius: var(--radius-xs);
 	}
 
 	.meeting-badge {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		font-weight: 500;
 		color: var(--civic-gray);
-		background: var(--surface-secondary);
-		padding: 0.25rem 0.5rem;
-		border-radius: var(--radius-sm);
-	}
-
-	.item-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 1.1rem;
-		font-weight: 600;
-		line-height: 1.4;
-		margin: 0 0 0.5rem 0;
-	}
-
-	.item-link {
-		color: var(--text-primary);
-		text-decoration: none;
-		transition: color var(--transition-normal);
-	}
-
-	.item-link:hover {
-		color: var(--civic-blue);
 	}
 
 	.meeting-datetime {
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
+		font-size: 0.7rem;
 		color: var(--civic-gray);
-		margin-bottom: 0.75rem;
+		opacity: 0.8;
 	}
 
-	.reason {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
+	.meeting-badge::before {
+		content: '·';
+		margin-right: 0.4rem;
+		color: var(--civic-gray);
+		opacity: 0.5;
+	}
+
+	.meeting-datetime::before {
+		content: '·';
+		margin-right: 0.4rem;
+		color: var(--civic-gray);
+		opacity: 0.5;
+	}
+
+	.item-title {
+		font-family: 'IBM Plex Sans', sans-serif;
+		font-size: 0.85rem;
 		font-weight: 500;
-		color: var(--reason-text);
-		background: var(--reason-bg);
-		border-left: 3px solid var(--civic-green);
-		padding: 0.75rem;
-		margin: 0 0 0.75rem 0;
-		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-		line-height: 1.5;
+		line-height: 1.35;
+		color: var(--text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
-	.card-actions {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.participation-links {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
-
-	.action-icon {
-		width: 14px;
-		height: 14px;
+	.view-arrow {
 		flex-shrink: 0;
+		color: var(--civic-gray);
+		font-size: 1rem;
+		opacity: 0.5;
+		transition: opacity var(--transition-normal);
 	}
 
-	.action-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.5rem 1rem;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		font-weight: 600;
-		text-decoration: none;
-		border-radius: var(--radius-sm);
-		transition: all var(--transition-normal);
-	}
-
-	.email-btn {
-		background: var(--civic-green);
-		color: white;
-	}
-
-	.email-btn:hover {
-		filter: brightness(1.1);
-		transform: translateY(-1px);
-	}
-
-	.virtual-btn {
-		background: var(--civic-blue);
-		color: white;
-	}
-
-	.virtual-btn:hover {
-		filter: brightness(1.1);
-		transform: translateY(-1px);
-	}
-
-	.phone-btn {
-		background: var(--civic-orange);
-		color: white;
-	}
-
-	.phone-btn:hover {
-		filter: brightness(1.1);
-		transform: translateY(-1px);
-	}
-
-	.secondary-actions {
-		display: flex;
-		gap: 1rem;
-	}
-
-	.view-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		font-weight: 500;
+	.happening-card:hover .view-arrow {
+		opacity: 1;
 		color: var(--civic-blue);
-		text-decoration: none;
-		transition: color var(--transition-normal);
-	}
-
-	.view-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
 	}
 
 	.show-more-btn {
 		display: block;
 		width: 100%;
-		margin-top: 1rem;
-		padding: 0.6rem 1rem;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
+		margin-top: 0.5rem;
+		padding: 0.4rem 0.75rem;
+		background: transparent;
+		border: 1px dashed var(--border-primary);
 		border-radius: var(--radius-md);
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
+		font-size: 0.8rem;
 		font-weight: 500;
-		color: var(--civic-blue);
+		color: var(--civic-gray);
 		cursor: pointer;
 		transition: all var(--transition-normal);
 		text-align: center;
 	}
 
 	.show-more-btn:hover {
-		background: var(--surface-secondary);
+		color: var(--civic-blue);
 		border-color: var(--civic-blue);
 	}
 
 	@media (max-width: 640px) {
 		.happening-section {
-			padding: 1rem;
-			margin-bottom: 2rem;
+			padding: 0.75rem;
 		}
 
-		.happening-title {
-			font-size: 1.25rem;
-		}
-
-		.happening-card {
+		.happening-header {
 			flex-direction: column;
-			padding: 1rem;
-		}
-
-		.rank-badge {
-			width: 2rem;
-			height: 2rem;
-			font-size: 0.8rem;
+			gap: 0.25rem;
 		}
 
 		.item-title {
-			font-size: 1rem;
+			white-space: normal;
+			display: -webkit-box;
+			-webkit-line-clamp: 2;
+			-webkit-box-orient: vertical;
 		}
 
-		.participation-links {
-			flex-direction: column;
+		.card-meta {
+			flex-wrap: wrap;
 		}
 
-		.action-btn {
-			justify-content: center;
+		.meeting-datetime {
+			width: 100%;
+		}
+
+		.meeting-datetime::before {
+			display: none;
 		}
 	}
 </style>
