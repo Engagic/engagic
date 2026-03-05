@@ -1145,16 +1145,14 @@ class GeminiSummarizer:
             data = json.loads(response_text)
 
             # Validate JSON structure
-            required_fields = ["summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
+            required_fields = ["summary_markdown", "topics"]
             missing_fields = [f for f in required_fields if f not in data]
             if missing_fields:
                 logger.error("json missing required fields", missing_fields=missing_fields)
                 raise ValueError(f"Invalid JSON response: missing {missing_fields}")
 
-            # Build comprehensive summary with all components
+            # Build summary
             summary_md = data.get("summary_markdown", "")
-            impact_md = data.get("citizen_impact_markdown", "")
-            confidence = data.get("confidence", "unknown")
 
             # Validate and normalize topics
             raw_topics = data.get("topics", [])
@@ -1192,19 +1190,7 @@ class GeminiSummarizer:
 
             topics = validated_topics
 
-            # Combine into single markdown document
-            summary_parts = []
-
-            if summary_md:
-                summary_parts.append(f"## Summary\n\n{summary_md}\n")
-
-            if impact_md:
-                summary_parts.append(f"## Citizen Impact\n\n{impact_md}\n")
-
-            if confidence:
-                summary_parts.append(f"## Confidence\n\n{confidence}")
-
-            summary = "\n".join(summary_parts)
+            summary = summary_md
 
             return summary, topics
 
@@ -1253,19 +1239,7 @@ class GeminiSummarizer:
             # Unescape JSON string escapes
             summary_md = summary_md.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
             if summary_md.strip():
-                summary_parts.append(f"## Summary\n\n{summary_md}\n")
-
-        # Try to extract citizen_impact_markdown
-        impact_match = re.search(
-            r'"citizen_impact_markdown"\s*:\s*"((?:[^"\\]|\\.)*)(?:"|$)',
-            response_text,
-            re.DOTALL
-        )
-        if impact_match:
-            impact_md = impact_match.group(1)
-            impact_md = impact_md.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
-            if impact_md.strip():
-                summary_parts.append(f"## Citizen Impact\n\n{impact_md}\n")
+                summary_parts.append(summary_md)
 
         # Try to extract topics array
         topics_match = re.search(
