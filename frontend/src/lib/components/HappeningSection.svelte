@@ -65,6 +65,9 @@
 							<span class="meeting-datetime">{getMeetingDateTime(item)}</span>
 						</div>
 						<div class="item-title">{truncateTitle(item.item_title)}</div>
+						{#if item.reason}
+							<div class="reason">{item.reason}</div>
+						{/if}
 					</div>
 					<span class="view-arrow">→</span>
 				</a>
@@ -208,6 +211,16 @@
 		font-weight: 500;
 		line-height: 1.35;
 		color: var(--text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.reason {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.75rem;
+		color: var(--civic-gray);
+		margin-top: 0.2rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
