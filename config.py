@@ -54,8 +54,8 @@ class Config:
         self.POSTGRES_DB = os.getenv("ENGAGIC_POSTGRES_DB", "engagic")
         self.POSTGRES_USER = os.getenv("ENGAGIC_POSTGRES_USER", "engagic")
         self.POSTGRES_PASSWORD = os.getenv("ENGAGIC_POSTGRES_PASSWORD", "")
-        self.POSTGRES_POOL_MIN_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MIN_SIZE", "5"))
-        self.POSTGRES_POOL_MAX_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MAX_SIZE", "20"))
+        self.POSTGRES_POOL_MIN_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MIN_SIZE", "2"))
+        self.POSTGRES_POOL_MAX_SIZE = int(os.getenv("ENGAGIC_POSTGRES_POOL_MAX_SIZE", "10"))
 
         # Userland authentication
         self.USERLAND_JWT_SECRET = os.getenv("USERLAND_JWT_SECRET")

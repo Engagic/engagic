@@ -46,10 +46,8 @@ class TierLimits:
 
 
 # Endpoint-specific rate limits (overrides tier defaults)
-# Events endpoint gets lighter limits since it's just analytics
-ENDPOINT_LIMITS: Dict[str, Dict[str, int]] = {
-    "/api/events": {"minute_limit": 120, "day_limit": 10000},
-}
+# Note: /api/events and /api/analytics are fully exempt in middleware
+ENDPOINT_LIMITS: Dict[str, Dict[str, int]] = {}
 
 
 class SQLiteRateLimiter:
@@ -255,15 +253,18 @@ class SQLiteRateLimiter:
             ban_duration = None
             ban_reason = None
 
-            if violations_24h >= 100:
+            # Progressive penalties -- thresholds assume analytics endpoints are
+            # already exempt from counting, so violations here mean sustained
+            # hammering of actual content endpoints after repeated 429s.
+            if violations_24h >= 200:
                 ban_duration = 604800  # 7 days
-                ban_reason = f"100+ violations in 24 hours (total: {violations_24h})"
-            elif violations_1h >= 50:
+                ban_reason = f"200+ violations in 24 hours (total: {violations_24h})"
+            elif violations_1h >= 75:
                 ban_duration = 86400  # 24 hours
-                ban_reason = f"50+ violations in 1 hour (total: {violations_1h})"
-            elif violations_1h >= 10:
+                ban_reason = f"75+ violations in 1 hour (total: {violations_1h})"
+            elif violations_1h >= 25:
                 ban_duration = 3600  # 1 hour
-                ban_reason = f"10+ violations in 1 hour (total: {violations_1h})"
+                ban_reason = f"25+ violations in 1 hour (total: {violations_1h})"
 
             if ban_duration:
                 ban_until = current_time + ban_duration
@@ -385,8 +386,8 @@ class SQLiteRateLimiter:
             # Reload nginx to apply changes (engagic user has passwordless sudo for these)
             import subprocess
             try:
-                subprocess.run(["sudo", "nginx", "-t"], check=True, capture_output=True)
-                subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True)
+                subprocess.run(["sudo", "/usr/sbin/nginx", "-t"], check=True, capture_output=True)
+                subprocess.run(["sudo", "/usr/bin/systemctl", "reload", "nginx"], check=True)
                 logger.info("nginx reloaded with updated blocklist")
             except subprocess.CalledProcessError as e:
                 logger.error("failed to reload nginx", error=str(e))
