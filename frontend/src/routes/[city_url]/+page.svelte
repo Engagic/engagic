@@ -70,6 +70,13 @@
 		happeningItems = [];
 	});
 
+	// Auto-show past meetings when city has no upcoming ones
+	$effect(() => {
+		if (upcomingMeetings.length === 0 && pastMeetings.length > 0) {
+			showPastMeetings = true;
+		}
+	});
+
 	// Fetch happening items for this city (with cache)
 	$effect(() => {
 		const banana = city_banana;
@@ -261,7 +268,7 @@
 					class:watching={isWatching}
 					onclick={() => showWatchModal = true}
 				>
-					{isWatching ? 'Watching' : 'Stay engaged'}
+					{isWatching ? 'Watching' : 'Follow city'}
 				</button>
 				</div>
 			</div>
@@ -378,8 +385,8 @@
 						{#if pastMeetings.length > 0 && upcomingMeetings.length === 0}
 							<h2 class="meetings-section-title">No Upcoming Meetings</h2>
 							<div class="no-upcoming-cta">
-								<p>Follow this city to guarantee it stays up to date.</p>
-								<button class="cta-button-inline" onclick={() => showWatchModal = true}>Watch this city</button>
+								<p>Follow to activate weekly AI meeting summaries.</p>
+								<button class="cta-button-inline" onclick={() => showWatchModal = true}>Follow city</button>
 							</div>
 						{/if}
 						{#if pastMeetings.length > 0}
@@ -427,9 +434,9 @@
 						<p class="empty-state-title">No meetings found</p>
 						<p class="empty-state-message">This city might not have any upcoming meetings scheduled yet. Check back soon!</p>
 						<div class="request-city-cta">
-							<p class="cta-text">Want this city prioritized?</p>
-							<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
-							<p class="cta-subtext">Cities with active watchers get synced more frequently.</p>
+							<p class="cta-text">Want AI summaries for this city?</p>
+							<button class="cta-button" onclick={() => showWatchModal = true}>Follow city</button>
+							<p class="cta-subtext">Followers activate weekly meeting processing and summaries.</p>
 						</div>
 					</div>
 				{/if}
@@ -438,9 +445,9 @@
 					<p class="empty-state-title">No meetings found</p>
 					<p class="empty-state-message">{'message' in searchResults ? searchResults.message : 'We could not find any meetings for this city. Agendas are typically posted 48 hours before meetings.'}</p>
 					<div class="request-city-cta">
-						<p class="cta-text">Want priority updates for this city?</p>
-						<button class="cta-button" onclick={() => showWatchModal = true}>Add to your watchlist</button>
-						<p class="cta-subtext">Cities with active watchers get synced more frequently.</p>
+						<p class="cta-text">Want AI summaries for this city?</p>
+						<button class="cta-button" onclick={() => showWatchModal = true}>Follow city</button>
+						<p class="cta-subtext">Followers activate weekly meeting processing and summaries.</p>
 					</div>
 				</div>
 			{/if}
