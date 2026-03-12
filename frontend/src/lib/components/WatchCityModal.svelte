@@ -293,13 +293,14 @@
 				<button class="close-btn" onclick={handleClose} aria-label="Close">&times;</button>
 
 				<div class="modal-header">
-					<h2>Stay engaged with {cityName}</h2>
-					<p class="subtitle">Every Sunday, we'll send you:</p>
+					<h2>Keep {cityName} up to date</h2>
+					<p class="subtitle">Your follow puts this city on our weekly sync. That means fresh agendas, AI summaries, and vote tracking — every week.</p>
 					<ul class="features">
-						<li>What's coming up this week</li>
+						<li>Agendas synced & summarized weekly</li>
 						<li>How to participate (phone, email, Zoom)</li>
 						<li>Items matching your interests (optional)</li>
 					</ul>
+					<p class="subtitle" style="margin-top: 0.75rem;">Every Sunday, you'll get a digest with what's coming up.</p>
 				</div>
 
 				<form onsubmit={(e) => {e.preventDefault(); handleSubmit();}}>
