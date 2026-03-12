@@ -1,9 +1,12 @@
 # Bay Area Cities
-# Last updated: 2026-01-23
+# Last updated: 2026-03-10
 
 # Peninsula / South Bay
 sanfranciscoCA
 southsanfranciscoCA
+dalycityCA
+sanbrunoCA
+sanmateoCA
 redwoodcityCA
 menloparkCA
 paloaltoCA
@@ -11,7 +14,9 @@ mountainviewCA
 sunnyvaleCA
 cupertinoCA
 santaclaraCA
+milpitasCA
 sanjoseCA
+gilroyCA
 
 # East Bay
 oaklandCA
@@ -19,3 +24,10 @@ berkeleyCA
 fremontCA
 haywardCA
 alamedaCA
+sanleandroCA
+dublinCA
+livermoreCA
+oakleyCA
+
+# North Bay
+santarosaCA
