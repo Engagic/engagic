@@ -325,19 +325,26 @@
 			</div>
 		</div>
 
-		{#if searchResults && 'city_name' in searchResults && searchResults.source_url && searchResults.vendor_display_name}
-			<div class="source-footnote">
-				<span class="attribution-text">Data sourced from</span>
-				<a
-					href={searchResults.source_url}
-					target="_blank"
-					rel="noopener noreferrer"
-					class="source-link"
-				>
-					{searchResults.vendor_display_name}
-				</a>
-			</div>
-		{/if}
+		<div class="source-row">
+			{#if searchResults && 'city_name' in searchResults && searchResults.source_url && searchResults.vendor_display_name}
+				<div class="source-footnote">
+					<span class="attribution-text">Data sourced from</span>
+					<a
+						href={searchResults.source_url}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="source-link"
+					>
+						{searchResults.vendor_display_name}
+					</a>
+				</div>
+			{/if}
+			{#if !isWatching}
+				<button class="follow-cta-link" onclick={() => showWatchModal = true}>
+					Follow to keep data fresh — synced weekly
+				</button>
+			{/if}
+		</div>
 
 		{#if viewMode === 'meetings'}
 			{#if searchLoading}
@@ -681,7 +688,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		margin-bottom: 1.5rem;
 		opacity: 0.7;
 	}
 
@@ -1045,6 +1051,35 @@
 		font-size: 0.85rem;
 		color: var(--text-tertiary);
 		margin: 0.75rem 0 0 0;
+	}
+
+	.source-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		gap: 1rem;
+	}
+
+	.follow-cta-link {
+		background: none;
+		border: none;
+		padding: 0;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: var(--civic-blue);
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all var(--transition-normal);
+		text-decoration: underline;
+		text-decoration-thickness: 2px;
+		text-underline-offset: 3px;
+	}
+
+	.follow-cta-link:hover {
+		color: var(--civic-accent);
+		text-decoration-color: var(--civic-accent);
 	}
 
 	@media (max-width: 640px) {
