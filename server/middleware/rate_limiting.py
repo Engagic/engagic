@@ -66,8 +66,15 @@ async def rate_limit_middleware(
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    # Whitelist health/metrics endpoints (no rate limiting)
-    if request.url.path in ["/health", "/metrics", "/api/health", "/api/metrics"]:
+    # Whitelist endpoints that bypass rate limiting entirely:
+    # - health/metrics: infrastructure probes
+    # - events: fire-and-forget analytics ingestion, no data returned
+    # - analytics: cached aggregate stats, same for everyone
+    # These are cheap and shouldn't consume the content rate limit budget.
+    if request.url.path in [
+        "/health", "/metrics", "/api/health", "/api/metrics",
+        "/api/events", "/api/analytics",
+    ]:
         return await call_next(request)
 
     # Check rate limit (endpoint-aware: /api/events gets lighter limits)
