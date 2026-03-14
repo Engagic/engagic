@@ -355,7 +355,7 @@
 
 	.participation-badge {
 		padding: 0.2rem 0.6rem;
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.75rem;
 		font-weight: 500;
 		font-family: var(--font-mono);

@@ -116,12 +116,13 @@
 	}
 
 	.primary-heading {
-		font-family: var(--font-mono);
-		font-size: 2rem;
-		font-weight: 600;
+		font-family: var(--font-display);
+		font-size: clamp(1.75rem, 4vw, 2.5rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
-		line-height: 1.2;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
 	}
 
 	.section-desc {
@@ -144,10 +145,10 @@
 	}
 
 	.summary-count {
-		font-family: var(--font-mono);
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.75rem;
+		font-weight: 400;
+		color: var(--text-primary);
 	}
 
 	.summary-label {

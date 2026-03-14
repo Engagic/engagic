@@ -25,9 +25,7 @@
   "dependencies": {
     "@fontsource/crimson-pro": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.0.0",
-    "@fontsource/ibm-plex-sans": "^5.2.8",
     "@fontsource/libre-franklin": "^5.2.8",
-    "@fontsource/source-serif-4": "^5.2.9",
     "date-fns": "^3.0.0",
     "maplibre-gl": "^4.7.1",
     "marked": "^16.4.1",

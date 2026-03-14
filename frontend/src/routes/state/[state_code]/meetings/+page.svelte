@@ -201,7 +201,7 @@
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--civic-blue);
+		color: var(--civic-gray);
 		margin-bottom: 0.5rem;
 	}
 

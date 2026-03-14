@@ -159,7 +159,7 @@
 <style>
 	.page {
 		min-height: 100vh;
-		background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+		background: var(--bg-gradient-start);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -189,9 +189,8 @@
 	.card {
 		background: var(--civic-white);
 		border: 1px solid var(--civic-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-md);
 		padding: 2.5rem;
-		box-shadow: 0 8px 16px var(--shadow-md);
 	}
 
 	.success-state {
@@ -234,10 +233,11 @@
 	}
 
 	h1 {
+		font-family: var(--font-display);
 		font-size: 1.875rem;
-		font-weight: bold;
+		font-weight: 400;
 		margin: 0 0 0.75rem 0;
-		color: var(--civic-dark);
+		color: var(--text-primary);
 		letter-spacing: -0.02em;
 	}
 
@@ -346,18 +346,11 @@
 
 	.btn-primary:hover:not(:disabled) {
 		background: var(--civic-accent);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 12px var(--shadow-lg);
-	}
-
-	.btn-primary:active:not(:disabled) {
-		transform: translateY(0);
 	}
 
 	.btn-primary:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		transform: none;
 	}
 
 	.footer-text {

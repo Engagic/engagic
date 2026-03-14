@@ -506,29 +506,30 @@
 
 	.attachments-section,
 	.sponsors-section {
-		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-md);
-		padding: 1.25rem;
-		margin-bottom: 1rem;
+		background: transparent;
+		border: none;
+		border-top: 1px solid var(--border-primary);
+		border-radius: 0;
+		padding: 1.25rem 0;
+		margin-bottom: 0;
 	}
 
 	.voting-section {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		padding: 1.5rem;
+		background: transparent;
+		border: none;
+		border-top: 2px solid var(--text-primary);
+		border-radius: 0;
+		padding: 1.5rem 0;
 		margin-bottom: 1.5rem;
-		box-shadow: 0 1px 3px var(--shadow-sm);
 	}
 
 	.timeline-section {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		padding: 1.5rem;
+		background: transparent;
+		border: none;
+		border-top: 2px solid var(--text-primary);
+		border-radius: 0;
+		padding: 1.5rem 0;
 		margin-bottom: 1.5rem;
-		box-shadow: 0 1px 3px var(--shadow-sm);
 	}
 
 	.deliberation-cta {
@@ -538,22 +539,21 @@
 	.deliberate-link {
 		display: block;
 		text-align: center;
-		padding: 1rem 1.5rem;
+		padding: 0.85rem 1.5rem;
 		background: var(--action-deliberate);
 		color: white;
-		border-radius: var(--radius-lg);
-		font-family: var(--font-mono);
-		font-size: 0.9rem;
-		font-weight: 700;
+		border-radius: var(--radius-md);
+		font-family: var(--font-body);
+		font-size: 0.85rem;
+		font-weight: 600;
 		text-decoration: none;
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		transition: all var(--transition-fast);
+		letter-spacing: 0.04em;
+		transition: background 0.2s ease;
 	}
 
 	.deliberate-link:hover {
 		background: var(--action-deliberate-hover);
-		transform: translateY(-1px);
 	}
 
 	.section-title {
@@ -617,12 +617,12 @@
 	.matter-summary :global(h2),
 	.matter-summary :global(h3),
 	.matter-summary :global(h4) {
-		font-family: var(--font-body);
+		font-family: var(--font-display);
 		color: var(--text-primary);
 		margin-top: 2.5rem;
 		margin-bottom: 1rem;
-		line-height: 1.3;
-		font-weight: 600;
+		line-height: 1.2;
+		font-weight: 400;
 	}
 
 	.matter-summary :global(h1) { font-size: 1.75rem; }
@@ -739,7 +739,6 @@
 		background: var(--civic-blue);
 		border-color: var(--civic-blue);
 		color: var(--civic-white);
-		transform: translateX(4px);
 	}
 
 	.attachment-icon {
@@ -795,9 +794,8 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 0.5rem 0.75rem;
-		background: var(--surface-secondary);
-		border-radius: var(--radius-sm);
+		padding: 0.5rem 0;
+		border-bottom: 1px solid var(--border-primary);
 	}
 
 	.voter-link {

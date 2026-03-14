@@ -54,7 +54,7 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: var(--space-md) var(--space-lg);
-		background: var(--surface-primary);
+		background: transparent;
 		border-bottom: 1px solid var(--border-primary);
 		flex-shrink: 0;
 	}
@@ -87,11 +87,12 @@
 	}
 
 	.page-title {
-		font-family: var(--font-mono);
-		font-size: 1.25rem;
-		font-weight: 600;
+		font-family: var(--font-display);
+		font-size: 1.4rem;
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
+		letter-spacing: -0.01em;
 	}
 
 	.request-cta {
@@ -119,7 +120,7 @@
 
 	.page-footer {
 		padding: var(--space-md) var(--space-lg);
-		background: var(--surface-primary);
+		background: transparent;
 		border-top: 1px solid var(--border-primary);
 		flex-shrink: 0;
 	}

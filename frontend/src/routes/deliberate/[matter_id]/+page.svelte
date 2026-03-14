@@ -102,11 +102,11 @@
 		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
-		background: var(--surface-secondary);
+		background: var(--bg-gradient-start);
 	}
 
 	.page-header {
-		background: var(--surface-primary);
+		background: transparent;
 		border-bottom: 1px solid var(--border-primary);
 		padding: 1.5rem 2rem;
 	}
@@ -128,21 +128,22 @@
 	}
 
 	.matter-title {
-		font-family: var(--font-body);
+		font-family: var(--font-display);
 		font-size: 1.5rem;
-		font-weight: 600;
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0 0 0.5rem 0;
-		line-height: 1.3;
+		line-height: 1.25;
+		letter-spacing: -0.01em;
 	}
 
 	.matter-file {
 		display: inline-block;
-		padding: 0.25rem 0.75rem;
+		padding: 2px 8px;
 		background: var(--badge-matter-bg);
 		color: var(--badge-matter-text);
 		border: 1.5px solid var(--badge-matter-border);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.75rem;
 		font-weight: 700;
 		font-family: var(--font-mono);
@@ -158,10 +159,11 @@
 	}
 
 	.no-deliberation {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		padding: 3rem 2rem;
+		background: transparent;
+		border: none;
+		border-top: 2px solid var(--text-primary);
+		border-radius: 0;
+		padding: 3rem 0;
 	}
 
 	.empty-state {
@@ -200,7 +202,6 @@
 
 	.start-btn:hover:not(:disabled) {
 		background: var(--action-deliberate-hover);
-		transform: translateY(-1px);
 	}
 
 	.start-btn:disabled {

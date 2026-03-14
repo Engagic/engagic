@@ -17,55 +17,36 @@
 
 <article class="community-content">
 	<section class="section">
-		<h1 class="section-heading">Connect With Us</h1>
-		<div class="contact-grid">
-			<a href={contacts.github} target="_blank" rel="noopener" class="contact-card">
-				<div class="contact-icon github-icon">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
-					</svg>
-				</div>
-				<h3 class="contact-title">GitHub</h3>
-				<p>View source code, fork the project, or contribute to development. All code is AGPL-3.0 licensed and open for collaboration.</p>
+		<h1 class="page-title">Connect With Us</h1>
+	</section>
+
+	<section class="section">
+		<div class="section-rule">Channels</div>
+		<div class="contact-list">
+			<a href={contacts.github} target="_blank" rel="noopener" class="contact-row">
+				<span class="contact-name">GitHub</span>
+				<span class="contact-desc">View source code, fork the project, or contribute to development. All code is AGPL-3.0 licensed.</span>
 			</a>
 
-			<a href={contacts.email} class="contact-card">
-				<div class="contact-icon email-icon">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<rect x="3" y="5" width="18" height="14" rx="2"/>
-						<path d="M3 7l9 6 9-6"/>
-					</svg>
-				</div>
-				<h3 class="contact-title">Email</h3>
-				<p>General inquiries, partnership requests, or media questions. We're humans and we respond. hello@engagic.org</p>
+			<a href={contacts.email} class="contact-row">
+				<span class="contact-name">Email</span>
+				<span class="contact-desc">General inquiries, partnership requests, or media questions. hello@engagic.org</span>
 			</a>
 
-			<a href={contacts.issues} target="_blank" rel="noopener" class="contact-card">
-				<div class="contact-icon issues-icon">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<circle cx="12" cy="12" r="10"/>
-						<line x1="12" y1="8" x2="12" y2="12"/>
-						<line x1="12" y1="16" x2="12.01" y2="16"/>
-					</svg>
-				</div>
-				<h3 class="contact-title">Report Issues</h3>
-				<p>Found a bug or have a feature request? Open an issue on GitHub. We track all development publicly.</p>
+			<a href={contacts.issues} target="_blank" rel="noopener" class="contact-row">
+				<span class="contact-name">Issues</span>
+				<span class="contact-desc">Found a bug or have a feature request? Open an issue on GitHub. We track all development publicly.</span>
 			</a>
 
-			<a href={contacts.twitter} target="_blank" rel="noopener" class="contact-card">
-				<div class="contact-icon twitter-icon">
-					<svg viewBox="0 0 24 24" fill="currentColor">
-						<path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"/>
-					</svg>
-				</div>
-				<h3 class="contact-title">Twitter</h3>
-				<p>Follow @engagicc for updates, civic tech commentary, and the occasional hot take on local government transparency.</p>
+			<a href={contacts.twitter} target="_blank" rel="noopener" class="contact-row">
+				<span class="contact-name">Twitter</span>
+				<span class="contact-desc">Follow @engagicc for updates, civic tech commentary, and the occasional hot take on local government transparency.</span>
 			</a>
 		</div>
 	</section>
 
 	<section class="section">
-		<h2 class="section-heading">Support Guidelines</h2>
+		<div class="section-rule">Support Guidelines</div>
 
 		<div class="guideline">
 			<h3 class="guideline-heading">Bug Reports</h3>
@@ -101,7 +82,7 @@
 	.community-content {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-xl);
+		gap: var(--space-2xl);
 		padding-bottom: var(--space-xl);
 		color: var(--text-primary);
 	}
@@ -112,125 +93,92 @@
 		gap: var(--space-md);
 	}
 
-	.section-heading {
-		font-family: var(--font-mono);
-		font-size: 2rem;
-		font-weight: 600;
+	.page-title {
+		font-family: var(--font-display);
+		font-size: clamp(2rem, 5vw, 3rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
-		line-height: 1.2;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
 	}
 
-	h1.section-heading {
-		font-size: 2.5rem;
+	.section-rule {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--text-primary);
+		margin: 0;
 	}
 
-	.contact-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-		gap: var(--space-lg);
-	}
-
-	.contact-card {
+	.contact-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
-		padding: var(--space-xl);
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-md);
-		text-decoration: none;
-		transition: all var(--transition-normal);
-		cursor: pointer;
 	}
 
-	.contact-card:hover {
-		border-color: var(--civic-blue);
-		box-shadow: 0 8px 24px var(--shadow-lg);
-		transform: translateY(-2px);
-	}
-
-	.contact-icon {
-		width: 56px;
-		height: 56px;
-		border-radius: var(--radius-md);
+	.contact-row {
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 1.25rem 0;
+		border-bottom: 1px solid var(--border-primary);
+		text-decoration: none;
+		color: inherit;
+		transition: padding-left 0.2s ease;
 	}
 
-	.contact-icon svg {
-		width: 28px;
-		height: 28px;
-		stroke: white;
+	.contact-row:hover {
+		padding-left: 8px;
 	}
 
-	.github-icon {
-		background: var(--contact-github);
-	}
-
-	.email-icon {
-		background: var(--contact-email);
-	}
-
-	.issues-icon {
-		background: var(--contact-issues);
-	}
-
-	.twitter-icon {
-		background: var(--contact-twitter);
-	}
-
-	.twitter-icon svg {
-		fill: white;
-		stroke: none;
-	}
-
-	.contact-title {
-		font-family: var(--font-mono);
-		font-size: 1.25rem;
-		font-weight: 600;
+	.contact-name {
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 400;
 		color: var(--text-primary);
-		margin: 0;
 	}
 
-	.contact-card p {
-		font-size: 1.1rem;
-		line-height: 1.7;
-		color: var(--text-primary);
-		margin: 0;
+	.contact-desc {
+		font-size: 0.95rem;
+		line-height: 1.6;
+		color: var(--text-secondary);
 	}
 
 	.guideline {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-sm);
-		padding: var(--space-lg);
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-md);
+		gap: var(--space-xs);
+		padding: var(--space-md) 0;
+		border-bottom: 1px solid var(--border-primary);
+	}
+
+	.guideline:last-of-type {
+		border-bottom: none;
 	}
 
 	.guideline-heading {
-		font-family: var(--font-mono);
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.1rem;
+		font-weight: 400;
+		color: var(--text-primary);
 		margin: 0;
 	}
 
 	.guideline p {
-		font-size: 1.1rem;
+		font-size: 1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text-secondary);
 		margin: 0;
 	}
 
 	.guideline ul {
-		font-size: 1.1rem;
+		font-size: 1rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text-secondary);
 		margin: 0;
 		padding-left: var(--space-lg);
 	}
@@ -240,13 +188,11 @@
 	}
 
 	.note {
-		font-size: 1.1rem;
+		font-size: 0.95rem;
 		line-height: 1.7;
-		color: var(--text-primary);
-		background: var(--surface-secondary);
-		border-left: 3px solid var(--civic-blue);
-		padding: var(--space-md);
-		border-radius: var(--radius-sm);
+		color: var(--text-secondary);
+		border-left: 2px solid var(--civic-blue);
+		padding-left: var(--space-md);
 		font-style: italic;
 		margin: 0;
 	}
@@ -256,24 +202,12 @@
 	}
 
 	@media (max-width: 768px) {
-		h1.section-heading {
+		.page-title {
 			font-size: 2rem;
 		}
 
-		.section-heading {
-			font-size: 1.5rem;
-		}
-
-		.contact-grid {
-			grid-template-columns: 1fr;
-		}
-
-		.contact-card {
-			padding: var(--space-lg);
-		}
-
-		.guideline {
-			padding: var(--space-md);
+		.contact-desc {
+			font-size: 0.9rem;
 		}
 	}
 </style>

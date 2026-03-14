@@ -424,9 +424,10 @@
 	}
 
 	h2 {
+		font-family: var(--font-display);
 		font-size: 1.5rem;
-		font-weight: bold;
-		color: var(--civic-dark);
+		font-weight: 400;
+		color: var(--text-primary);
 		margin: 0 0 0.75rem 0;
 	}
 
@@ -618,14 +619,11 @@
 
 	.btn-primary:hover:not(:disabled) {
 		background: var(--civic-accent);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 	}
 
 	.btn-primary:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		transform: none;
 	}
 
 	.btn-secondary {
