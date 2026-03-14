@@ -106,13 +106,15 @@
 
 <style>
 	.main-nav {
-		background: var(--surface-primary);
+		background: transparent;
 		border-bottom: 1px solid var(--border-primary);
 		padding: 1rem 0;
 		position: sticky;
 		top: 0;
 		z-index: 100;
-		transition: background var(--transition-normal), border-color var(--transition-normal);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		transition: border-color var(--transition-normal);
 	}
 
 	.main-nav-minimal {
@@ -129,11 +131,12 @@
 	}
 
 	.nav-logo {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.4rem;
+		font-weight: 400;
+		color: var(--text-primary);
 		text-decoration: none;
+		letter-spacing: -0.01em;
 		transition: color var(--transition-normal);
 	}
 

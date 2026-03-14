@@ -607,78 +607,72 @@
 	.city-title-row {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
+		align-items: baseline;
 		gap: 1rem;
-		flex-wrap: wrap;
 		margin-bottom: 0.75rem;
 	}
 
 	.city-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 2rem;
-		color: var(--civic-dark);
+		font-family: var(--font-display);
+		font-size: clamp(2rem, 5vw, 2.75rem);
+		color: var(--text-primary);
 		margin: 0;
-		font-weight: 600;
+		font-weight: 400;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
 	}
 
 	.city-actions {
 		display: flex;
-		align-items: center;
+		align-items: baseline;
 		gap: 0.75rem;
+		flex-shrink: 0;
 	}
 
 	.council-link {
-		padding: 0.75rem 1.5rem;
-		font-size: 0.9375rem;
+		padding: 0;
+		font-size: 0.8rem;
 		font-weight: 600;
-		background: var(--surface-secondary);
-		color: var(--civic-blue);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-md);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		background: none;
+		color: var(--civic-gray);
+		border: none;
 		text-decoration: none;
-		transition: all var(--transition-normal);
+		transition: color 0.2s ease;
 		white-space: nowrap;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-body);
 	}
 
 	.council-link:hover {
-		background: var(--civic-blue);
-		color: white;
-		border-color: var(--civic-blue);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+		color: var(--civic-blue);
 	}
 
 	.watch-city-btn {
-		padding: 0.75rem 1.5rem;
-		font-size: 0.9375rem;
-		font-weight: 600;
-		background: var(--civic-blue);
-		color: white;
+		padding: 0;
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		background: none;
+		color: var(--civic-blue);
 		border: none;
-		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all var(--transition-normal);
+		transition: color 0.2s ease;
 		white-space: nowrap;
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 	}
 
 	.watch-city-btn:hover {
-		background: var(--civic-accent);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
-	}
-
-	.watch-city-btn:active {
-		transform: translateY(0);
+		color: var(--civic-accent);
 	}
 
 	.watch-city-btn.watching {
-		background: var(--civic-green);
+		color: var(--civic-green);
 	}
 
 	.watch-city-btn.watching:hover {
-		background: var(--action-yes-hover);
+		color: var(--action-yes-hover);
 	}
 
 	.source-footnote {
@@ -751,13 +745,13 @@
 
 	.toggle-btn:hover {
 		color: var(--civic-blue);
-		background: rgba(79, 70, 229, 0.1);
+		background: rgba(181, 100, 42, 0.08);
 	}
 
 	.toggle-btn.active {
 		background: var(--civic-blue);
 		color: white;
-		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+		box-shadow: 0 2px 6px rgba(181, 100, 42, 0.2);
 	}
 
 	.controls-row {
@@ -794,7 +788,7 @@
 	.city-search:focus {
 		outline: none;
 		border-color: var(--civic-blue);
-		box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+		box-shadow: 0 0 0 3px rgba(181, 100, 42, 0.08);
 	}
 
 	.city-search::placeholder {
@@ -846,16 +840,18 @@
 	}
 
 	.matters-header {
-		margin-bottom: 2rem;
-		border-bottom: 2px solid var(--border-primary);
-		padding-bottom: 1rem;
+		margin-bottom: 1rem;
+		border-bottom: 2px solid var(--text-primary);
+		padding-bottom: 0.5rem;
 	}
 
 	.matters-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--text-primary);
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
 		margin: 0 0 0.5rem 0;
 	}
 
@@ -868,7 +864,6 @@
 	.matters-list {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
 	}
 
 	.matter-card-link {
@@ -878,19 +873,16 @@
 	}
 
 	.matter-card {
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: var(--radius-lg);
-		padding: 1.5rem;
-		transition: all var(--transition-normal);
+		background: transparent;
+		border: none;
+		border-bottom: 1px solid var(--border-primary);
+		padding: 1.5rem 0;
+		transition: padding-left 0.2s ease;
 		cursor: pointer;
 	}
 
 	.matter-card-link:hover .matter-card {
-		border-left-color: var(--civic-accent);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
-		transform: translateY(-2px);
+		padding-left: 8px;
 	}
 
 	.matter-card-header {
@@ -935,12 +927,13 @@
 	}
 
 	.matter-card-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 1rem;
-		font-weight: 600;
+		font-family: var(--font-display);
+		font-size: 1.2rem;
+		font-weight: 400;
 		color: var(--text-primary);
-		line-height: 1.4;
-		margin: 0 0 1rem 0;
+		line-height: 1.3;
+		margin: 0 0 0.75rem 0;
+		letter-spacing: -0.01em;
 	}
 
 	.matter-card-topics {
@@ -1102,25 +1095,15 @@
 		}
 
 		.city-title-row {
-			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.75rem;
-		}
-
-		.city-actions {
-			display: flex;
-			gap: 0.5rem;
 			flex-wrap: wrap;
 		}
 
 		.council-link {
-			padding: 0.5rem 1rem;
-			font-size: 0.85rem;
+			font-size: 0.75rem;
 		}
 
 		.watch-city-btn {
-			padding: 0.5rem 1rem;
-			font-size: 0.85rem;
+			font-size: 0.75rem;
 		}
 
 		.controls-row {
@@ -1167,9 +1150,8 @@
 
 	/* Meeting list & filter styles (extracted from app.css) */
 	.meeting-list {
-		display: grid;
-		gap: 1rem;
-		grid-template-columns: 1fr;
+		display: flex;
+		flex-direction: column;
 		width: 100%;
 	}
 
@@ -1184,10 +1166,12 @@
 	}
 
 	.meetings-section-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.3rem;
-		font-weight: 600;
-		color: var(--text-primary);
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
 		margin: 0;
 	}
 
@@ -1209,11 +1193,14 @@
 	}
 
 	.past-meetings-divider {
-		margin: 2rem 0 1rem 0;
-		padding-bottom: 0.5rem;
-		border-bottom: 2px solid var(--border-primary);
-		color: var(--text-secondary);
-		font-size: 1.1rem;
-		font-weight: 500;
+		margin: 2rem 0 0 0;
+		padding-bottom: 0.75rem;
+		border-bottom: 2px solid var(--text-primary);
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
 	}
 </style>

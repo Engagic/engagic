@@ -433,12 +433,9 @@
 	}
 
 	.meeting-detail {
-		padding: 2rem;
-		background: var(--surface-primary);
-		border-radius: var(--radius-xl);
-		border: 1px solid var(--border-primary);
-		box-shadow: 0 4px 16px var(--shadow-sm);
-		transition: background var(--transition-slow), border-color var(--transition-slow);
+		padding: 0;
+		background: transparent;
+		border: none;
 	}
 
 	.meeting-header {
@@ -454,25 +451,22 @@
 	}
 
 	.meeting-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 2rem;
+		font-family: var(--font-display);
+		font-size: clamp(1.5rem, 4vw, 2.25rem);
 		color: var(--text-primary);
 		margin: 0;
-		font-weight: 700;
-		line-height: 1.3;
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
+		font-weight: 400;
+		line-height: 1.15;
+		letter-spacing: -0.02em;
 		flex: 1;
 		min-width: 0;
 	}
 
 	.meeting-date {
-		font-family: 'IBM Plex Mono', monospace;
-		color: var(--civic-blue);
-		font-size: 1.05rem;
-		font-weight: 600;
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
+		font-family: var(--font-body);
+		color: var(--civic-gray);
+		font-size: 0.9rem;
+		font-weight: 400;
 	}
 
 	.committee-link {
@@ -527,14 +521,14 @@
 		font-size: 0.8rem;
 		border-radius: var(--radius-sm);
 		transition: all var(--transition-normal);
-		box-shadow: 0 1px 3px rgba(79, 70, 229, 0.2);
+		box-shadow: 0 1px 3px rgba(181, 100, 42, 0.2);
 		flex-shrink: 0;
 		align-self: flex-start;
 	}
 
 	.document-link:hover {
 		background: var(--civic-accent);
-		box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+		box-shadow: 0 2px 6px rgba(181, 100, 42, 0.25);
 	}
 
 	.document-link:active {
@@ -622,12 +616,12 @@
 	.meeting-summary :global(h4),
 	.meeting-summary :global(h5),
 	.meeting-summary :global(h6) {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-display);
 		color: var(--text-primary);
 		margin-top: 2.5rem;
 		margin-bottom: 1rem;
-		line-height: 1.3;
-		font-weight: 600;
+		line-height: 1.2;
+		font-weight: 400;
 	}
 
 	.meeting-summary :global(h1) { font-size: 1.75rem; }

@@ -19,24 +19,24 @@
 	// Theme color palettes - MapLibre requires actual hex values, not CSS vars
 	const themes = {
 		light: {
-			background: '#f8fafc',
-			inactive: '#e2e8f0',
-			inactiveOutline: '#475569',
-			active: '#0f766e',
-			summarized: '#10b981',
-			hover: '#0d9488',
-			stateBorder: '#cbd5e1',
-			countryFill: '#f1f5f9'
+			background: '#faf9f5',
+			inactive: '#e4e2da',
+			inactiveOutline: '#8a897e',
+			active: '#b5642a',
+			summarized: '#3d8b55',
+			hover: '#c87a3f',
+			stateBorder: '#d5d0c6',
+			countryFill: '#f3f1ea'
 		},
 		dark: {
-			background: '#1e293b',
-			inactive: '#334155',
-			inactiveOutline: '#64748b',
-			active: '#0f766e',
-			summarized: '#10b981',
-			hover: '#0d9488',
-			stateBorder: '#475569',
-			countryFill: '#0f172a'
+			background: '#1a1918',
+			inactive: '#302e2b',
+			inactiveOutline: '#6b6860',
+			active: '#d4874d',
+			summarized: '#6aad5e',
+			hover: '#e09258',
+			stateBorder: '#3d3a36',
+			countryFill: '#141312'
 		}
 	};
 
