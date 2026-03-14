@@ -360,16 +360,17 @@
 	}
 
 	.primary-heading {
-		font-family: var(--font-mono);
-		font-size: 2rem;
-		font-weight: 600;
+		font-family: var(--font-display);
+		font-size: clamp(1.75rem, 4vw, 2.5rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
-		line-height: 1.2;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
 	}
 
 	h1.primary-heading {
-		font-size: 2.5rem;
+		font-size: clamp(2rem, 5vw, 3rem);
 	}
 
 	.cards-grid {
@@ -402,13 +403,10 @@
 
 	.stats-card:hover {
 		border-color: var(--civic-blue);
-		box-shadow: 0 8px 24px var(--shadow-lg);
-		transform: translateY(-2px);
 	}
 
 	.stats-card.highlight-card {
 		border-color: var(--civic-blue);
-		background: linear-gradient(135deg, var(--surface-primary) 0%, rgba(var(--civic-blue-rgb, 59, 130, 246), 0.05) 100%);
 	}
 
 	.stats-card.highlight-card .number-primary {
@@ -422,7 +420,7 @@
 	}
 
 	.stats-card-link:hover {
-		transform: translateY(-4px);
+		opacity: 0.9;
 	}
 
 	.card-arrow {
@@ -446,10 +444,10 @@
 	}
 
 	.number-primary {
-		font-family: var(--font-mono);
+		font-family: var(--font-display);
 		font-size: 3rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-weight: 400;
+		color: var(--text-primary);
 		line-height: 1;
 	}
 

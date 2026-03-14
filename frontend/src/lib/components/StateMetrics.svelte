@@ -503,7 +503,7 @@
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--civic-blue);
+		color: var(--civic-gray);
 		margin-bottom: 0.5rem;
 	}
 
@@ -635,8 +635,8 @@
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 		color: var(--pill-color);
-		background: color-mix(in srgb, var(--pill-color) 6%, transparent);
-		border: 1.5px solid color-mix(in srgb, var(--pill-color) 20%, transparent);
+		background: var(--topic-tag-bg);
+		border: 1.5px solid var(--topic-tag-border);
 		border-radius: var(--radius-xs);
 		cursor: pointer;
 		transition: all var(--transition-normal);
@@ -644,7 +644,7 @@
 	}
 
 	.topic-pill:hover {
-		border-color: var(--pill-color);
+		border-color: var(--border-hover);
 	}
 
 	.topic-pill.active {

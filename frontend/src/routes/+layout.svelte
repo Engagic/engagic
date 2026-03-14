@@ -176,18 +176,10 @@
 		font-weight: 600;
 		border-radius: var(--radius-md);
 		transition: all var(--transition-fast);
-		box-shadow: 0 2px 8px var(--shadow-lg);
 	}
 
 	.nav-link-primary:hover {
 		background: var(--civic-accent);
-		transform: translateY(-1px);
-		box-shadow: 0 4px 12px var(--shadow-lg);
-	}
-
-	.nav-link-primary:active {
-		transform: translateY(0);
-		box-shadow: 0 1px 4px var(--shadow-sm);
 	}
 
 	@media (max-width: 640px) {

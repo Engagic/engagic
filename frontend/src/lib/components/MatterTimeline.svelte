@@ -244,9 +244,7 @@
 	}
 
 	.step-card:hover {
-		transform: translateX(4px);
-		border-left-width: 6px;
-		box-shadow: 0 4px 12px var(--shadow-lg);
+		padding-left: 1.5rem;
 	}
 
 	.step-card.committee {
@@ -262,12 +260,11 @@
 	}
 
 	.step-card.has-summary {
-		background: linear-gradient(135deg, var(--surface-secondary) 0%, rgba(16, 185, 129, 0.05) 100%);
+		background: var(--surface-secondary);
 	}
 
 	.flow-step.selected .step-card {
 		border-left-width: 6px;
-		box-shadow: 0 6px 16px var(--shadow-lg);
 	}
 
 	.step-number {

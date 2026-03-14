@@ -292,11 +292,13 @@
 	}
 
 	.committee-name {
-		font-family: var(--font-body);
-		font-size: 2rem;
-		font-weight: 700;
+		font-family: var(--font-display);
+		font-size: clamp(1.5rem, 4vw, 2.25rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0 0 0.5rem;
+		letter-spacing: -0.02em;
+		line-height: 1.15;
 	}
 
 	.committee-meta {
@@ -313,13 +315,15 @@
 	}
 
 	.status-badge.inactive {
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
-		padding: 0.2rem 0.6rem;
+		font-family: var(--font-body);
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		padding: 2px 6px;
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
+		border: none;
+		border-radius: 2px;
 		text-transform: uppercase;
 	}
 
@@ -347,18 +351,18 @@
 
 	.stat-value {
 		display: block;
-		font-family: var(--font-mono);
-		font-size: 1.5rem;
-		font-weight: 700;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.75rem;
+		font-weight: 400;
+		color: var(--text-primary);
 	}
 
 	.stat-label {
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
+		font-family: var(--font-body);
+		font-size: 0.65rem;
 		color: var(--civic-gray);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.06em;
 	}
 
 	.section-title {
@@ -395,9 +399,7 @@
 	}
 
 	.member-card:hover {
-		border-left-color: var(--civic-accent);
-		transform: translateX(4px);
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		padding-left: 1.5rem;
 	}
 
 	.member-card.chair {
@@ -463,9 +465,7 @@
 	}
 
 	.vote-card:hover {
-		border-left-color: var(--civic-accent);
-		transform: translateX(4px);
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		padding-left: 1.25rem;
 	}
 
 	.vote-info {

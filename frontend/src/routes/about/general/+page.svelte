@@ -10,13 +10,13 @@
 
 <article class="about-content">
 	<section class="section">
-		<h1 class="section-heading">Our Mission</h1>
-		<p>Help you stay informed and make your voice heard in local government.</p>
+		<h1 class="page-title">Our Mission</h1>
+		<p class="lead">Help you stay informed and make your voice heard in local government.</p>
 		<p>We track city council meetings across the US, summarize what's being decided, and show you exactly how to weigh in - call, email, or Zoom.</p>
 	</section>
 
 	<section class="section">
-		<h2 class="section-heading">How It Works</h2>
+		<div class="section-rule">How It Works</div>
 		<div class="feature-list">
 			<div class="feature-item">
 				<h3 class="feature-heading">Find What Matters</h3>
@@ -35,8 +35,8 @@
 	</section>
 
 	<section class="section">
-		<h2 class="section-heading">Our Principles</h2>
-		<div class="principles-grid">
+		<div class="section-rule">Our Principles</div>
+		<div class="principles-list">
 			<div class="principle">
 				<h3 class="principle-heading">Open Source</h3>
 				<p>All our code is publicly available and auditable (AGPL-3.0). Democracy should be transparent, and so should the tools that support it.</p>
@@ -59,15 +59,15 @@
 		</div>
 	</section>
 
-	<section class="section highlight-section">
-		<h2 class="section-heading">The Philosophy</h2>
+	<section class="section">
+		<div class="section-rule">The Philosophy</div>
 		<p class="philosophy-lead">Civic data should be open. Infrastructure costs money. We're balancing both.</p>
 
 		<div class="use-case-list">
-			<p>Individual checking your city's meetings → <strong>use it freely</strong></p>
-			<p>Nonprofit fighting for housing justice → <strong>let's partner</strong></p>
-			<p>Journalist covering local government → <strong>we're here to help</strong></p>
-			<p>Researcher studying civic engagement → <strong>the data is yours</strong></p>
+			<p>Individual checking your city's meetings &mdash; <strong>use it freely</strong></p>
+			<p>Nonprofit fighting for housing justice &mdash; <strong>let's partner</strong></p>
+			<p>Journalist covering local government &mdash; <strong>we're here to help</strong></p>
+			<p>Researcher studying civic engagement &mdash; <strong>the data is yours</strong></p>
 		</div>
 
 		<p class="contact-footer">
@@ -80,7 +80,7 @@
 	.about-content {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-xl);
+		gap: var(--space-2xl);
 		padding-bottom: var(--space-xl);
 		color: var(--text-primary);
 	}
@@ -91,23 +91,40 @@
 		gap: var(--space-md);
 	}
 
-	.section-heading {
-		font-family: var(--font-mono);
-		font-size: 2rem;
-		font-weight: 600;
+	.page-title {
+		font-family: var(--font-display);
+		font-size: clamp(2rem, 5vw, 3rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
-		line-height: 1.2;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
 	}
 
-	h1.section-heading {
-		font-size: 2.5rem;
+	.section-rule {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--text-primary);
+		margin: 0;
+	}
+
+	.lead {
+		font-family: var(--font-display);
+		font-size: 1.35rem;
+		line-height: 1.4;
+		color: var(--text-primary);
+		margin: 0;
 	}
 
 	.about-content p {
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text-secondary);
 		margin: 0;
 	}
 
@@ -126,94 +143,86 @@
 	}
 
 	.feature-heading {
-		font-family: var(--font-mono);
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.2rem;
+		font-weight: 400;
+		color: var(--text-primary);
 		margin: 0;
 	}
 
 	.feature-item p {
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		line-height: 1.7;
 	}
 
-	.principles-grid {
-		display: grid;
-		gap: var(--space-lg);
+	.principles-list {
+		display: flex;
+		flex-direction: column;
 	}
 
 	.principle {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-sm);
-		padding: var(--space-lg);
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-md);
-		transition: all var(--transition-normal);
+		gap: var(--space-xs);
+		padding: var(--space-lg) 0;
+		border-bottom: 1px solid var(--border-primary);
 	}
 
-	.principle:hover {
-		border-color: var(--civic-blue);
-		box-shadow: 0 4px 16px var(--shadow-md);
+	.principle:last-child {
+		border-bottom: none;
 	}
 
 	.principle-heading {
-		font-family: var(--font-mono);
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 400;
+		color: var(--text-primary);
 		margin: 0;
 	}
 
 	.principle p {
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		line-height: 1.7;
-	}
-
-	.highlight-section {
-		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: var(--radius-lg);
-		padding: var(--space-2xl);
-		gap: var(--space-xl);
+		color: var(--text-secondary);
 	}
 
 	.philosophy-lead {
-		font-family: var(--font-mono);
-		font-size: 1.25rem;
-		font-weight: 500;
+		font-family: var(--font-display);
+		font-size: 1.3rem;
+		font-weight: 400;
 		color: var(--text-primary);
-		line-height: 1.6;
+		line-height: 1.5;
+		font-style: italic;
 	}
 
 	.use-case-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
 	}
 
 	.use-case-list p {
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		line-height: 1.7;
-		padding: var(--space-md);
-		background: var(--surface-primary);
-		border-radius: var(--radius-sm);
-		border-left: 3px solid var(--civic-blue);
+		padding: var(--space-sm) 0;
+		border-bottom: 1px solid var(--border-primary);
+		color: var(--text-secondary);
+	}
+
+	.use-case-list p:last-child {
+		border-bottom: none;
 	}
 
 	.use-case-list strong {
-		color: var(--text-primary);
+		color: var(--civic-blue);
 		font-weight: 600;
 	}
 
 	.contact-footer {
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		line-height: 1.7;
 		padding-top: var(--space-lg);
 		border-top: 1px solid var(--border-primary);
+		color: var(--text-secondary);
 	}
 
 	.contact-footer a {
@@ -229,24 +238,16 @@
 	}
 
 	@media (max-width: 768px) {
-		h1.section-heading {
+		.page-title {
 			font-size: 2rem;
 		}
 
-		.section-heading {
-			font-size: 1.5rem;
+		.lead {
+			font-size: 1.15rem;
 		}
 
 		.about-content p {
-			font-size: 1.05rem;
-		}
-
-		.highlight-section {
-			padding: var(--space-lg);
-		}
-
-		.principles-grid {
-			grid-template-columns: 1fr;
+			font-size: 1rem;
 		}
 	}
 </style>

@@ -328,7 +328,7 @@
 <style>
 	.agenda-item {
 		background: var(--surface-primary);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		border: 1px solid var(--border-primary);
 		border-left: 4px solid var(--border-primary);
 		box-shadow: 0 1px 3px var(--shadow-sm);
@@ -411,7 +411,7 @@
 		background: var(--badge-matter-bg);
 		color: var(--badge-matter-text);
 		border: 1.5px solid var(--badge-matter-border);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.7rem;
 		font-weight: 700;
 		font-family: var(--font-mono);
@@ -436,7 +436,7 @@
 		background: var(--item-type-bg);
 		color: var(--item-type-text);
 		border: 1px solid var(--item-type-border);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: var(--font-mono);
@@ -450,7 +450,7 @@
 		background: var(--badge-sponsor-bg);
 		color: var(--badge-sponsor-text);
 		border: 1.5px solid var(--badge-sponsor-border);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: var(--font-mono);
@@ -464,7 +464,7 @@
 		background: var(--badge-sponsor-bg);
 		color: var(--badge-sponsor-text);
 		border: 1.5px solid var(--badge-sponsor-border);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: var(--font-mono);
@@ -484,7 +484,7 @@
 		background: var(--badge-timeline-bg);
 		color: var(--badge-timeline-text);
 		border: 1.5px solid var(--badge-timeline-border);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.65rem;
 		font-weight: 700;
 		font-family: var(--font-mono);
@@ -540,7 +540,7 @@
 		padding: 0 0.35rem;
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 600;
