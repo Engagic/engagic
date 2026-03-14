@@ -92,7 +92,7 @@
 	}
 
 	.section-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -126,7 +126,7 @@
 	}
 
 	.feature-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -160,7 +160,7 @@
 	}
 
 	.principle-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.125rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -182,7 +182,7 @@
 	}
 
 	.philosophy-lead {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.25rem;
 		font-weight: 500;
 		color: var(--text-primary);

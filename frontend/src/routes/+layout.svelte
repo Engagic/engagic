@@ -151,7 +151,7 @@
 	}
 
 	.nav-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-secondary);
 		text-decoration: none;
 		font-size: 0.9rem;
@@ -167,7 +167,7 @@
 	}
 
 	.nav-link-primary {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		padding: 0.6rem 1.25rem;
 		background: var(--civic-blue);
 		color: var(--civic-white);

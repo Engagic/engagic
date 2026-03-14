@@ -113,7 +113,7 @@
 
 	.back-link {
 		display: inline-block;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -128,7 +128,7 @@
 	}
 
 	.matter-title {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1.5rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -145,7 +145,7 @@
 		border-radius: var(--radius-lg);
 		font-size: 0.75rem;
 		font-weight: 700;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		letter-spacing: 0.5px;
 	}
 
@@ -169,7 +169,7 @@
 	}
 
 	.empty-state h2 {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -177,7 +177,7 @@
 	}
 
 	.empty-state p {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1rem;
 		color: var(--text-secondary);
 		margin: 0 0 1.5rem 0;
@@ -189,7 +189,7 @@
 		color: white;
 		border: none;
 		border-radius: var(--radius-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -209,7 +209,7 @@
 	}
 
 	.auth-prompt {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 	}
 
@@ -220,7 +220,7 @@
 
 	.error-message {
 		color: var(--civic-red);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		margin-top: 1rem;
 	}

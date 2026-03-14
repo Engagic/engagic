@@ -149,7 +149,7 @@
 		justify-content: center;
 		background: var(--civic-blue);
 		color: white;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		font-weight: 700;
 		border-radius: 50%;
@@ -169,7 +169,7 @@
 	}
 
 	.matter-badge {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 700;
 		color: var(--badge-matter-text);
@@ -180,14 +180,14 @@
 	}
 
 	.meeting-badge {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 500;
 		color: var(--civic-gray);
 	}
 
 	.meeting-datetime {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--civic-gray);
 		opacity: 0.8;
@@ -219,7 +219,7 @@
 	}
 
 	.reason {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--civic-gray);
 		margin-top: 0.2rem;
@@ -249,7 +249,7 @@
 		background: transparent;
 		border: 1px dashed var(--border-primary);
 		border-radius: var(--radius-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 500;
 		color: var(--civic-gray);

@@ -134,7 +134,7 @@
 	}
 
 	.participant {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--civic-gray, #6b7280);
 		text-transform: uppercase;
@@ -142,7 +142,7 @@
 	}
 
 	.consensus-badge {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		background: var(--civic-green);
 		color: white;
@@ -172,7 +172,7 @@
 		border-radius: var(--radius-xs);
 		background: var(--bg-primary, white);
 		color: var(--text-secondary, #6b7280);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		cursor: pointer;
 		transition: all var(--transition-fast);
@@ -211,7 +211,7 @@
 	}
 
 	.error {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--civic-red);
 		margin: 0.5rem 0 0 0;

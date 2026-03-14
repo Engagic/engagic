@@ -109,7 +109,7 @@
 		position: absolute;
 		top: 0;
 		right: 1rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 700;
 		color: var(--civic-blue);
@@ -129,7 +129,7 @@
 	}
 
 	.error-code {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 6rem;
 		font-weight: 700;
 		color: var(--civic-blue);
@@ -138,7 +138,7 @@
 	}
 
 	.error-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.75rem;
 		font-weight: 600;
 		color: var(--civic-dark);
@@ -146,7 +146,7 @@
 	}
 
 	.error-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1.1rem;
 		color: var(--text-secondary);
 		margin: 1rem 0;
@@ -154,7 +154,7 @@
 	}
 
 	.error-hint {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.95rem;
 		color: var(--text-tertiary);
 		margin: 1.5rem 0;
@@ -170,7 +170,7 @@
 	}
 
 	.cta-text {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 600;
 		color: var(--civic-dark);
@@ -180,7 +180,7 @@
 	.cta-link {
 		display: inline-block;
 		color: var(--civic-blue);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		font-weight: 500;
 		text-decoration: underline;
@@ -198,7 +198,7 @@
 		color: white;
 		border: none;
 		border-radius: 0.5rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -216,7 +216,7 @@
 
 	.cta-success {
 		color: var(--civic-green);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		font-weight: 500;
 		margin: 0.5rem 0;
@@ -224,13 +224,13 @@
 
 	.cta-error {
 		color: var(--civic-red);
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.85rem;
 		margin: 0.5rem 0 0 0;
 	}
 
 	.cta-subtext {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.85rem;
 		color: var(--text-tertiary);
 		margin: 0.75rem 0 0 0;
@@ -247,7 +247,7 @@
 		color: white;
 		text-decoration: none;
 		border-radius: 0.5rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 500;
 		transition: opacity 0.2s;
 	}

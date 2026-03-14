@@ -170,7 +170,7 @@
 	}
 
 	.rating-info {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -199,7 +199,7 @@
 	}
 
 	.error-msg {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--civic-red);
 		margin-left: 0.5rem;

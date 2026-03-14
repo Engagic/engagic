@@ -289,7 +289,7 @@
 	}
 
 	.page-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2.5rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -298,7 +298,7 @@
 	}
 
 	.last-updated {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		color: var(--civic-gray);
 		margin: 0;
@@ -330,7 +330,7 @@
 	}
 
 	.toc-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -372,7 +372,7 @@
 
 
 	.terms-section h2 {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.8rem;
 		font-weight: 600;
 		color: var(--civic-dark);
@@ -381,7 +381,7 @@
 	}
 
 	.terms-section h3 {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.3rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -450,7 +450,7 @@
 	}
 
 	.tier-name {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.2rem;
 		font-weight: 600;
 		margin-bottom: 1rem;
@@ -485,14 +485,14 @@
 	}
 
 	.limit-value {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.5rem;
 		font-weight: 600;
 		color: var(--civic-blue);
 	}
 
 	.limit-unit {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--civic-gray);
 	}
@@ -514,7 +514,7 @@
 	}
 
 	.tier-requirement-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -527,7 +527,7 @@
 	}
 
 	.tier-cost {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -543,7 +543,7 @@
 
 	.tier-contact {
 		display: inline-block;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		color: var(--civic-blue);
 		text-decoration: none;
@@ -566,7 +566,7 @@
 		border-radius: var(--radius-md);
 		padding: 1rem;
 		margin: 1rem 0;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.code-label {
@@ -603,7 +603,7 @@
 	}
 
 	.rule-group h3 {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -666,7 +666,7 @@
 		border-radius: var(--radius-md);
 		color: var(--civic-blue);
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		font-weight: 500;
 		transition: all var(--transition-slow);
@@ -708,7 +708,7 @@
 	}
 
 	.philosophy-section h2 {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -717,7 +717,7 @@
 	}
 
 	.philosophy-lead {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.2rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -764,7 +764,7 @@
 	}
 
 	.back-to-top button {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		color: var(--civic-blue);
 		background: none;

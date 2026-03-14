@@ -75,7 +75,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.875rem;
 		color: var(--text-secondary);
 		text-decoration: none;
@@ -87,7 +87,7 @@
 	}
 
 	.page-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -95,7 +95,7 @@
 	}
 
 	.request-cta {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 500;
 		color: var(--civic-blue);
@@ -125,7 +125,7 @@
 	}
 
 	.footer-text {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.875rem;
 		color: var(--text-secondary);
 		margin: 0;

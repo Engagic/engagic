@@ -245,7 +245,7 @@
 	}
 
 	.back-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--civic-blue);
 		text-decoration: none;
@@ -283,13 +283,13 @@
 	}
 
 	.loading-state {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--civic-gray);
 	}
 
 	.error-state p,
 	.empty-state p {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-primary);
 		margin: 0 0 1rem;
 	}
@@ -302,7 +302,7 @@
 		color: white;
 		border-radius: var(--radius-sm);
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 	}
 
@@ -322,7 +322,7 @@
 	}
 
 	.member-name {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 2rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -338,20 +338,20 @@
 	}
 
 	.member-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		color: var(--civic-blue);
 		font-weight: 600;
 	}
 
 	.member-district {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--civic-gray);
 	}
 
 	.status-badge.former {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		padding: 0.2rem 0.6rem;
 		background: var(--surface-secondary);
@@ -362,7 +362,7 @@
 	}
 
 	.member-tenure {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 	}
@@ -383,14 +383,14 @@
 
 	.stat-value {
 		display: block;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.5rem;
 		font-weight: 700;
 		color: var(--civic-blue);
 	}
 
 	.stat-label {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--civic-gray);
 		text-transform: uppercase;
@@ -399,7 +399,7 @@
 
 	/* Voting Breakdown */
 	.section-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -429,7 +429,7 @@
 	}
 
 	.vote-type {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 600;
 		width: 60px;
@@ -461,7 +461,7 @@
 	.bar-fill.absent { background: var(--vote-absent-text); }
 
 	.vote-count {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 		width: 80px;
@@ -505,14 +505,14 @@
 	}
 
 	.committee-chip .committee-name {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		font-weight: 600;
 		color: var(--text-primary);
 	}
 
 	.committee-chip .committee-role {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		padding: 0.1rem 0.4rem;
 		background: var(--civic-blue);
@@ -565,14 +565,14 @@
 	}
 
 	.matter-file {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--civic-blue);
 	}
 
 	.matter-type {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		padding: 0.1rem 0.4rem;
 		background: var(--surface-secondary);
@@ -583,7 +583,7 @@
 
 	.vote-title {
 		display: block;
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.9rem;
 		color: var(--text-primary);
 		line-height: 1.4;
@@ -593,14 +593,14 @@
 	}
 
 	.vote-date {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--text-secondary);
 	}
 
 	.vote-value {
 		flex-shrink: 0;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 700;
 		padding: 0.3rem 0.75rem;

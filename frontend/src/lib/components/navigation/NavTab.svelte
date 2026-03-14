@@ -100,7 +100,7 @@
 	}
 
 	.tab-title-text {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		font-weight: 500;
 		color: var(--civic-dark);

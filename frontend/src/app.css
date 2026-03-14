@@ -1,51 +1,83 @@
 /* Preloaded fonts for LCP optimization - latin subset only */
 @font-face {
-	font-family: 'Source Serif 4';
+	font-family: 'Crimson Pro';
 	font-style: normal;
 	font-display: swap;
-	font-weight: 400;
-	src: url('/fonts/source-serif-4-latin-400-normal.woff2') format('woff2');
+	font-weight: 300;
+	src: url('/fonts/crimson-pro-latin-300-normal.woff2') format('woff2');
 	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-	font-family: 'Source Serif 4';
+	font-family: 'Crimson Pro';
 	font-style: normal;
 	font-display: swap;
-	font-weight: 700;
-	src: url('/fonts/source-serif-4-latin-700-normal.woff2') format('woff2');
+	font-weight: 400;
+	src: url('/fonts/crimson-pro-latin-400-normal.woff2') format('woff2');
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+	font-family: 'Crimson Pro';
+	font-style: italic;
+	font-display: swap;
+	font-weight: 400;
+	src: url('/fonts/crimson-pro-latin-400-italic.woff2') format('woff2');
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+	font-family: 'Crimson Pro';
+	font-style: normal;
+	font-display: swap;
+	font-weight: 500;
+	src: url('/fonts/crimson-pro-latin-500-normal.woff2') format('woff2');
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+	font-family: 'Crimson Pro';
+	font-style: normal;
+	font-display: swap;
+	font-weight: 600;
+	src: url('/fonts/crimson-pro-latin-600-normal.woff2') format('woff2');
 	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 
 @font-face {
-	font-family: 'IBM Plex Sans';
+	font-family: 'Libre Franklin';
+	font-style: normal;
+	font-display: swap;
+	font-weight: 300;
+	src: url('/fonts/libre-franklin-latin-300-normal.woff2') format('woff2');
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+	font-family: 'Libre Franklin';
 	font-style: normal;
 	font-display: swap;
 	font-weight: 400;
-	src: url('/fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
+	src: url('/fonts/libre-franklin-latin-400-normal.woff2') format('woff2');
 	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-	font-family: 'IBM Plex Sans';
+	font-family: 'Libre Franklin';
 	font-style: normal;
 	font-display: swap;
 	font-weight: 500;
-	src: url('/fonts/ibm-plex-sans-latin-500-normal.woff2') format('woff2');
+	src: url('/fonts/libre-franklin-latin-500-normal.woff2') format('woff2');
 	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-	font-family: 'IBM Plex Sans';
+	font-family: 'Libre Franklin';
 	font-style: normal;
 	font-display: swap;
 	font-weight: 600;
-	src: url('/fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
+	src: url('/fonts/libre-franklin-latin-600-normal.woff2') format('woff2');
 	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-	font-family: 'IBM Plex Sans';
+	font-family: 'Libre Franklin';
 	font-style: normal;
 	font-display: swap;
 	font-weight: 700;
-	src: url('/fonts/ibm-plex-sans-latin-700-normal.woff2') format('woff2');
+	src: url('/fonts/libre-franklin-latin-700-normal.woff2') format('woff2');
 	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
@@ -74,10 +106,10 @@
 }
 
 /* Fallback for non-latin character sets */
-@import '@fontsource/ibm-plex-sans/400.css';
-@import '@fontsource/ibm-plex-sans/500.css';
-@import '@fontsource/ibm-plex-sans/600.css';
-@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/libre-franklin/400.css';
+@import '@fontsource/libre-franklin/500.css';
+@import '@fontsource/libre-franklin/600.css';
+@import '@fontsource/libre-franklin/700.css';
 @import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/ibm-plex-mono/500.css';
 @import '@fontsource/ibm-plex-mono/600.css';
@@ -89,7 +121,7 @@
 	--width-dashboard: 900px;
 	--width-detail: 1000px;
 	--width-global: 1200px;
-	--width-state: 1400px;
+	--width-state: 960px;
 	--width-auth: 480px;
 
 	/* Spacing scale */
@@ -110,8 +142,8 @@
 	--radius-pill: 999px; /* Pill shapes */
 
 	/* Font stacks */
-	--font-display: 'Source Serif 4', Georgia, serif;
-	--font-body: 'IBM Plex Sans', sans-serif;
+	--font-display: 'Crimson Pro', Georgia, serif;
+	--font-body: 'Libre Franklin', sans-serif;
 	--font-mono: 'IBM Plex Mono', monospace;
 
 	/* Transitions */
@@ -139,6 +171,7 @@
 	--bg-gradient-end: #faf9f5;
 	--text-primary: #1a1a18;
 	--text-secondary: #3d3d38;
+	--text-tertiary: #8a897e;
 	--text-link: #b5642a;
 	--surface-primary: #faf9f5;
 	--surface-secondary: #f3f1ea;
@@ -318,6 +351,29 @@
 	--random-policy-bg: #8B5A2B;
 	--random-policy-hover: #a06b35;
 
+	/* Topic colors */
+	--topic-housing: #C45B28;
+	--topic-transportation: #2E7D6F;
+	--topic-public-safety: #8B3A62;
+	--topic-budget: #4A6741;
+	--topic-environment: #3B7EA1;
+	--topic-zoning: #9C6B30;
+	--topic-education: #5B4A8A;
+	--topic-infrastructure: #6B5B4A;
+	--topic-health: #A13B5B;
+	--topic-business: #3A6B8A;
+	--topic-parks: #5A8A3A;
+	--topic-utilities: #7A5A3A;
+	--topic-labor: #8A4A3A;
+	--topic-technology: #4A5A7A;
+	--topic-culture: #7A3A6A;
+	--topic-governance: #5A6A5A;
+	--topic-default: #666;
+
+	/* Positive/negative for trends */
+	--positive: #4A6741;
+	--negative: #8B3A3A;
+
 	/* Background texture */
 	--dot-color: rgba(0, 0, 0, 0.015);
 }
@@ -341,6 +397,7 @@
 	--bg-gradient-end: #1a1918;
 	--text-primary: #f5f2eb;
 	--text-secondary: #b8b3a7;
+	--text-tertiary: #6b6660;
 	--text-link: #d4874d;
 	--surface-primary: #252422;
 	--surface-secondary: #302e2b;
@@ -520,6 +577,29 @@
 	--random-policy-bg: #8B5A2B;
 	--random-policy-hover: #a06b35;
 
+	/* Topic colors (lightened for dark backgrounds) */
+	--topic-housing: #E07040;
+	--topic-transportation: #4AAA96;
+	--topic-public-safety: #C05888;
+	--topic-budget: #6A9A60;
+	--topic-environment: #5BA8C8;
+	--topic-zoning: #C89048;
+	--topic-education: #8A78B8;
+	--topic-infrastructure: #9A8870;
+	--topic-health: #C85878;
+	--topic-business: #5A98B8;
+	--topic-parks: #7AB85A;
+	--topic-utilities: #A88058;
+	--topic-labor: #B07050;
+	--topic-technology: #7088A8;
+	--topic-culture: #A85890;
+	--topic-governance: #7A9878;
+	--topic-default: #999;
+
+	/* Positive/negative for trends */
+	--positive: #6aad5e;
+	--negative: #f87171;
+
 	/* Background texture */
 	--dot-color: rgba(255, 255, 255, 0.015);
 }
@@ -536,7 +616,7 @@ html {
 }
 
 body {
-	font-family: 'IBM Plex Sans', sans-serif;
+	font-family: 'Libre Franklin', sans-serif;
 	background: var(--bg-gradient-start);
 	background-color: var(--bg-gradient-start);
 	color: var(--text-primary);
