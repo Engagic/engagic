@@ -360,7 +360,7 @@
 	}
 
 	.primary-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -426,7 +426,7 @@
 	}
 
 	.card-arrow {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		font-weight: 500;
 		color: var(--civic-blue);
@@ -446,7 +446,7 @@
 	}
 
 	.number-primary {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 3rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -454,20 +454,20 @@
 	}
 
 	.number-separator {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2rem;
 		color: var(--text-secondary);
 	}
 
 	.number-secondary {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2rem;
 		font-weight: 500;
 		color: var(--text-secondary);
 	}
 
 	.stat-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -490,7 +490,7 @@
 		align-items: center;
 		justify-content: center;
 		padding: var(--space-3xl);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-secondary);
 	}
 
@@ -557,7 +557,7 @@
 	}
 
 	.toggle-btn {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 500;
 		padding: var(--space-sm) var(--space-lg);
@@ -602,7 +602,7 @@
 	}
 
 	.summary-count {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.5rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -636,7 +636,7 @@
 	}
 
 	.city-table th {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 600;
 		text-align: left;
 		padding: var(--space-md) var(--space-lg);
@@ -668,7 +668,7 @@
 	.col-count {
 		min-width: 90px;
 		text-align: right;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.city-table th.col-count {
@@ -678,7 +678,7 @@
 	.col-pop {
 		min-width: 100px;
 		text-align: right;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.city-table th.col-pop {

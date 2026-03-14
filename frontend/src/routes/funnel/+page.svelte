@@ -275,7 +275,7 @@
 		max-width: var(--width-detail);
 		margin: 0 auto;
 		padding: 2rem;
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 	}
 
 	.auth-container {
@@ -430,7 +430,7 @@
 	}
 
 	.user-hash {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		background: var(--border-primary);
 		padding: 0.2rem 0.5rem;
@@ -509,7 +509,7 @@
 
 	.pattern-path {
 		flex: 1;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--text-primary);
 	}

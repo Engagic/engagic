@@ -113,7 +113,7 @@
 	}
 
 	.section-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -188,7 +188,7 @@
 	}
 
 	.contact-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -213,7 +213,7 @@
 	}
 
 	.guideline-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.125rem;
 		font-weight: 600;
 		color: var(--civic-blue);

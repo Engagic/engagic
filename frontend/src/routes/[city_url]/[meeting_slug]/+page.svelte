@@ -404,7 +404,7 @@
 	}
 
 	.back-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		color: var(--civic-blue);
 		text-decoration: none;
@@ -471,14 +471,14 @@
 
 	.committee-link {
 		display: inline-block;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 600;
-		color: var(--badge-purple-text, #7c3aed);
+		color: var(--civic-purple);
 		text-decoration: none;
 		padding: 0.25rem 0.6rem;
-		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
-		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
+		background: rgba(91, 58, 138, 0.1);
+		border: 1px solid rgba(91, 58, 138, 0.25);
 		border-radius: var(--radius-sm);
 		margin-left: 0.75rem;
 		transition: all var(--transition-fast);
@@ -486,7 +486,7 @@
 
 	.committee-link:hover {
 		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.2));
-		border-color: var(--badge-purple-text, #7c3aed);
+		border-color: var(--civic-purple);
 		text-decoration: underline;
 	}
 
@@ -516,7 +516,7 @@
 		background: var(--civic-blue);
 		color: white;
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 600;
 		font-size: 0.8rem;
 		border-radius: var(--radius-sm);
@@ -554,7 +554,7 @@
 	}
 
 	.toggle-procedural-btn {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		font-weight: 500;
 		color: var(--civic-gray);
@@ -590,7 +590,7 @@
 
 	.agenda-item-error p {
 		margin: 0.25rem 0;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--text-primary);
 	}
@@ -601,7 +601,7 @@
 	}
 
 	.meeting-summary {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		line-height: 1.8;
 		font-size: 1.05rem;
 		color: var(--text-primary);
@@ -659,7 +659,7 @@
 	}
 
 	.meeting-summary :global(code) {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9em;
 		background: var(--surface-secondary);
 		color: var(--text-primary);
@@ -717,7 +717,7 @@
 	}
 
 	.processing-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.3rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -725,7 +725,7 @@
 	}
 
 	.processing-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1.05rem;
 		line-height: 1.7;
 		color: var(--text-primary);
@@ -734,7 +734,7 @@
 	}
 
 	.processing-hint {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		line-height: 1.6;
 		color: var(--civic-gray);
@@ -744,7 +744,7 @@
 	}
 
 	.error-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		color: var(--warning-text);
 		padding: 1.2rem;
 		background: var(--warning-bg);

@@ -59,7 +59,7 @@
 		position: absolute;
 		top: 1rem;
 		right: 1rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 700;
 		color: var(--civic-blue);
@@ -79,7 +79,7 @@
 	}
 
 	.error-code {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 6rem;
 		font-weight: 700;
 		color: var(--civic-blue);
@@ -88,7 +88,7 @@
 	}
 
 	.error-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.75rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -96,7 +96,7 @@
 	}
 
 	.error-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1.1rem;
 		color: var(--text-secondary);
 		margin: 1rem 0;
@@ -114,7 +114,7 @@
 		color: white;
 		text-decoration: none;
 		border-radius: var(--radius-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 500;
 		transition: opacity var(--transition-fast);
 	}

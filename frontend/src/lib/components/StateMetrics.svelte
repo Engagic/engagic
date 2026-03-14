@@ -1,17 +1,41 @@
 <script lang="ts">
 	import { getStateMatters, getStateMeetings } from '$lib/api/index';
-	import type { GetStateMattersResponse, GetStateMeetingsResponse, StateMatterSummary, StateMeeting, TopCityStats } from '$lib/api/types';
+	import type { GetStateMattersResponse, GetStateMeetingsResponse, StateMatterSummary, StateMeeting, TopCityStats, GlobalHappeningItem, GlobalHappeningResponse } from '$lib/api/types';
 	import { generateMeetingSlug } from '$lib/utils/utils';
 	import { onMount } from 'svelte';
+
+	const TOPIC_COLORS: Record<string, string> = {
+		'Housing': 'var(--topic-housing)',
+		'Transportation': 'var(--topic-transportation)',
+		'Public Safety': 'var(--topic-public-safety)',
+		'Budget': 'var(--topic-budget)',
+		'Environment': 'var(--topic-environment)',
+		'Zoning': 'var(--topic-zoning)',
+		'Education': 'var(--topic-education)',
+		'Infrastructure': 'var(--topic-infrastructure)',
+		'Health': 'var(--topic-health)',
+		'Business': 'var(--topic-business)',
+		'Parks': 'var(--topic-parks)',
+		'Utilities': 'var(--topic-utilities)',
+		'Labor': 'var(--topic-labor)',
+		'Technology': 'var(--topic-technology)',
+		'Culture': 'var(--topic-culture)',
+		'Governance': 'var(--topic-governance)',
+	};
+
+	function topicColor(topic: string): string {
+		return TOPIC_COLORS[topic] || 'var(--topic-default)';
+	}
 
 	interface Props {
 		stateCode: string;
 		stateName?: string;
 		initialMetrics?: GetStateMattersResponse;
 		initialMeetings?: GetStateMeetingsResponse;
+		initialHappening?: GlobalHappeningResponse | null;
 	}
 
-	let { stateCode, stateName, initialMetrics, initialMeetings }: Props = $props();
+	let { stateCode, stateName, initialMetrics, initialMeetings, initialHappening }: Props = $props();
 
 	let metrics = $state<GetStateMattersResponse | null>(initialMetrics || null);
 	let meetings = $state<GetStateMeetingsResponse | null>(initialMeetings || null);
@@ -19,7 +43,8 @@
 	let meetingsLoading = $state(!initialMeetings);
 	let error = $state('');
 	let selectedTopic = $state<string | null>(null);
-	let citiesExpanded = $state(false);
+	let showAllMatters = $state(false);
+	let showAllCities = $state(false);
 
 	onMount(async () => {
 		const promises: Promise<void>[] = [];
@@ -46,7 +71,6 @@
 						const result = await getStateMeetings(stateCode);
 						meetings = result;
 					} catch (err) {
-						// Meetings are non-critical, just log
 						console.error('Failed to load state meetings:', err);
 					} finally {
 						meetingsLoading = false;
@@ -71,19 +95,39 @@
 		}
 	}
 
+	// Derived: city bananas for this state (for filtering happening items)
+	const stateCityBananas = $derived.by(() => {
+		if (!metrics?.cities) return new Set<string>();
+		return new Set(metrics.cities.map(c => c.banana));
+	});
+
+	// Derived: city name lookup by banana
+	const cityNameByBanana = $derived.by(() => {
+		if (!metrics?.cities) return new Map<string, string>();
+		const map = new Map<string, string>();
+		metrics.cities.forEach(c => map.set(c.banana, c.name));
+		return map;
+	});
+
+	// Derived: happening items filtered to this state's cities
+	const happeningItems = $derived.by(() => {
+		if (!initialHappening?.items || stateCityBananas.size === 0) return [];
+		return initialHappening.items
+			.filter(item => stateCityBananas.has(item.banana))
+			.slice(0, 6);
+	});
+
 	const topTopics = $derived.by(() => {
 		if (!metrics?.topic_distribution) return [];
 		return Object.entries(metrics.topic_distribution)
 			.sort(([, a], [, b]) => (b as number) - (a as number))
-			.slice(0, 8);
+			.slice(0, 12);
 	});
 
-	const recentMatters = $derived.by(() => {
-		if (!metrics?.matters) return [];
-		return metrics.matters
-			.filter((m: StateMatterSummary) => m.last_seen)
-			.sort((a: StateMatterSummary, b: StateMatterSummary) => new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime())
-			.slice(0, 5);
+	const topTopicsForFilter = $derived(topTopics.slice(0, 10));
+
+	const totalTopicCount = $derived.by(() => {
+		return topTopics.reduce((sum, [, count]) => sum + (count as number), 0);
 	});
 
 	const longestTrackedMatters = $derived.by(() => {
@@ -91,30 +135,29 @@
 		return metrics.matters
 			.filter((m: StateMatterSummary) => m.appearance_count > 1)
 			.sort((a: StateMatterSummary, b: StateMatterSummary) => b.appearance_count - a.appearance_count)
-			.slice(0, 5);
+			.slice(0, 6);
 	});
 
 	const mostActiveCities = $derived.by(() => {
 		if (!metrics?.top_cities) return [];
-		return metrics.top_cities.slice(0, 5);
+		return metrics.top_cities.slice(0, 8);
 	});
 
-	const matterTypeBreakdown = $derived.by(() => {
-		if (!metrics?.matters) return [];
-		const typeCounts: Record<string, number> = {};
-		metrics.matters.forEach((m: StateMatterSummary) => {
-			const type = m.matter_type || 'Unknown';
-			typeCounts[type] = (typeCounts[type] || 0) + 1;
-		});
-		return Object.entries(typeCounts)
-			.sort(([, a], [, b]) => b - a)
-			.slice(0, 6);
+	const displayedMatters = $derived(showAllMatters ? longestTrackedMatters : longestTrackedMatters.slice(0, 4));
+	const displayedCities = $derived(showAllCities ? mostActiveCities : mostActiveCities.slice(0, 8));
+
+	// Filtered meetings by topic
+	const filteredMeetings = $derived.by(() => {
+		if (!meetings?.meetings) return [];
+		if (!selectedTopic) return meetings.meetings;
+		return meetings.meetings.filter(m => m.topics?.includes(selectedTopic!));
 	});
 
-	const avgAppearances = $derived.by(() => {
-		if (!metrics?.matters || metrics.matters.length === 0) return 0;
-		const total = metrics.matters.reduce((sum: number, m: StateMatterSummary) => sum + (m.appearance_count || 0), 0);
-		return (total / metrics.matters.length).toFixed(1);
+	// Filtered happening items by topic
+	const filteredHappening = $derived.by(() => {
+		if (!selectedTopic) return happeningItems;
+		// Happening items don't have topics directly, so show all when there's a topic filter
+		return happeningItems;
 	});
 
 	function formatDate(dateStr: string): string {
@@ -133,14 +176,13 @@
 		if (!dateStr) return 'TBD';
 		const date = new Date(dateStr);
 		const now = new Date();
-		const diffDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const meetingDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+		const diffDays = Math.floor((meetingDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
 		if (diffDays === 0) return 'Today';
 		if (diffDays === 1) return 'Tomorrow';
-		if (diffDays < 7 && diffDays > 0) {
-			return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-		}
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+		return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 	}
 
 	function formatMeetingTime(dateStr: string | null): string {
@@ -151,621 +193,849 @@
 		if (hours === 0 && minutes === 0) return '';
 		return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 	}
+
+	function getWeekLabel(): string {
+		const now = new Date();
+		return `Week of ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+	}
+
+	function coveragePct(n: number, total: number): string {
+		if (!total) return '0%';
+		return Math.round((n / total) * 100) + '% coverage';
+	}
 </script>
 
 {#if loading}
-	<div class="state-metrics loading">
+	<div class="state-metrics state-loading">
 		<div class="loading-text">Loading state-wide activity...</div>
 	</div>
 {:else if error}
-	<div class="state-metrics error">
+	<div class="state-metrics state-error">
 		<div class="error-text">{error}</div>
 	</div>
 {:else if metrics}
 	<div class="state-metrics">
-		<div class="dashboard-header">
-			<h3 class="dashboard-title">
-				{stateName || metrics.state} Legislative Intelligence
-			</h3>
-			<div class="dashboard-subtitle">
-				State-wide matter tracking and analysis
-			</div>
-		</div>
+		<!-- Header -->
+		<header class="briefing-header">
+			<div class="briefing-label">State Briefing</div>
+			<h1 class="briefing-title">{stateName || metrics.state}</h1>
+			<p class="briefing-subtitle">
+				{metrics.cities_count} cities tracked. {getWeekLabel()}.
+			</p>
+		</header>
 
-		<!-- Upcoming Meetings Section -->
-		{#if meetings && meetings.meetings.length > 0}
-			<div class="upcoming-meetings-section">
-				<h4 class="section-title">Upcoming Meetings Across {stateName || metrics.state} ({meetings.total})</h4>
-				<div class="meetings-list">
-					{#each meetings.meetings.slice(0, 8) as meeting (meeting.id)}
-						{@const meetingSlug = generateMeetingSlug(meeting)}
-						<a href="/{meeting.city_banana}/{meetingSlug}" class="meeting-item">
-							<div class="meeting-item-header">
-								<span class="city-badge">{meeting.city_name}</span>
-								<span class="meeting-date-badge">
-									{formatMeetingDate(meeting.date)}
-									{#if formatMeetingTime(meeting.date)}
-										<span class="meeting-time">• {formatMeetingTime(meeting.date)}</span>
-									{/if}
-								</span>
-							</div>
-							<div class="meeting-item-title">{meeting.title}</div>
-							<div class="meeting-item-footer">
-								{#if meeting.has_items || meeting.summary}
-									<span class="status-badge status-ai">AI Summary</span>
-								{:else if meeting.agenda_url}
-									<span class="status-badge status-agenda">Agenda</span>
-								{:else if meeting.packet_url}
-									<span class="status-badge status-packet">Packet</span>
-								{/if}
-								{#if meeting.topics && meeting.topics.length > 0}
-									<div class="meeting-topics-mini">
-										{#each meeting.topics.slice(0, 2) as topic}
-											<span class="mini-topic">{topic}</span>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						</a>
-					{/each}
-				</div>
-				{#if meetings.total > 8}
-					<div class="more-meetings-footer">
-						<span class="more-meetings-note">and {meetings.total - 8} more upcoming meetings</span>
-						<a href="/state/{stateCode.toLowerCase()}/meetings" class="view-all-link">View All Meetings →</a>
-					</div>
-				{/if}
-			</div>
-		{:else if meetingsLoading}
-			<div class="upcoming-meetings-section loading-section">
-				<div class="loading-text">Loading upcoming meetings...</div>
-			</div>
-		{:else if meetings}
-			<div class="upcoming-meetings-section empty-section">
-				<div class="empty-meetings-text">No upcoming meetings scheduled across {stateName || metrics.state}</div>
-				<div class="empty-meetings-subtext">Check back soon for new meeting announcements</div>
-			</div>
-		{/if}
-
-		<!-- Metrics Grid -->
+		<!-- Coverage Strip -->
 		{#if metrics.meeting_stats}
-			<div class="metrics-grid">
-				<div class="metric-card">
-					<div class="metric-label">Total Meetings</div>
-					<div class="metric-value">{metrics.meeting_stats.total_meetings}</div>
-					<div class="metric-change">tracked in database</div>
+			<div class="coverage-strip">
+				<div class="coverage-cell">
+					<div class="coverage-value">{metrics.meeting_stats.total_meetings.toLocaleString()}</div>
+					<div class="coverage-label">Meetings</div>
+					<div class="coverage-sub">since tracking began</div>
 				</div>
-
-				<div class="metric-card">
-					<div class="metric-label">With Agendas</div>
-					<div class="metric-value">{metrics.meeting_stats.with_agendas}</div>
-					<div class="metric-change">packets available</div>
+				<div class="coverage-cell">
+					<div class="coverage-value">{metrics.meeting_stats.with_agendas.toLocaleString()}</div>
+					<div class="coverage-label">With Agendas</div>
+					<div class="coverage-sub">{coveragePct(metrics.meeting_stats.with_agendas, metrics.meeting_stats.total_meetings)}</div>
 				</div>
-
-				<div class="metric-card">
-					<div class="metric-label">With Summaries</div>
-					<div class="metric-value">{metrics.meeting_stats.with_summaries}</div>
-					<div class="metric-change">AI analyzed</div>
+				<div class="coverage-cell">
+					<div class="coverage-value">{metrics.meeting_stats.with_summaries.toLocaleString()}</div>
+					<div class="coverage-label">Summarized</div>
+					<div class="coverage-sub">AI-analyzed</div>
 				</div>
-
-				<div class="metric-card">
-					<div class="metric-label">Recurring Matters</div>
-					<div class="metric-value">{metrics.total_matters}</div>
-					<div class="metric-change">tracked across meetings</div>
+				<div class="coverage-cell">
+					<div class="coverage-value">{metrics.total_matters.toLocaleString()}</div>
+					<div class="coverage-label">Matters</div>
+					<div class="coverage-sub">tracked across meetings</div>
 				</div>
 			</div>
 		{/if}
 
-		<!-- Cities List (Collapsible) -->
-		{#if metrics.cities && metrics.cities.length > 0}
-			<div class="cities-section">
-				<button class="cities-header" onclick={() => citiesExpanded = !citiesExpanded}>
-					<h4 class="section-title">Cities in {stateName || metrics.state} ({metrics.cities_count})</h4>
-					<span class="expand-icon" class:expanded={citiesExpanded}>
-						<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-							<path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-						</svg>
-					</span>
-				</button>
-				{#if citiesExpanded}
-					<div class="cities-grid-container">
-						<div class="cities-grid">
-							{#each metrics.cities as city (city.banana)}
-								<a href="/{city.banana}" class="city-card">
-									<div class="city-name">{city.name}</div>
-									<div class="city-vendor">{city.vendor}</div>
-								</a>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
-		{/if}
-
-		{#if metrics.total_matters === 0}
-			<div class="no-matters-message">
-				<p>No recurring legislative matters found for this state.</p>
-				<p class="explanation">We only track matters that appear in multiple meetings (2+ appearances).</p>
-			</div>
-		{:else}
-
-		{#if topTopics.length > 0}
-			<div class="topics-section">
-				<h4 class="section-title">Hot Topics Across State</h4>
+		<!-- Topic Filter Strip -->
+		{#if topTopicsForFilter.length > 0}
+			<div class="filter-section">
+				<div class="section-rule">
+					<span>Filter by Topic</span>
+					{#if selectedTopic}
+						<button class="clear-filter-link" onclick={() => selectedTopic && filterByTopic(selectedTopic)}>
+							Clear filter
+						</button>
+					{/if}
+				</div>
 				<div class="topic-pills">
-					{#each topTopics as [topic, count]}
+					{#each topTopicsForFilter as [topic, count]}
 						<button
 							class="topic-pill"
-							class:selected={selectedTopic === topic}
+							class:active={selectedTopic === topic}
+							style="--pill-color: {topicColor(topic)}"
 							onclick={() => filterByTopic(topic)}
 						>
-							<span class="pill-label">{topic}</span>
+							{topic}
 							<span class="pill-count">{count}</span>
 						</button>
 					{/each}
 				</div>
-				{#if selectedTopic}
-					<div class="filter-indicator">
-						Showing {metrics.total_matters} matters about <strong>{selectedTopic}</strong>
-						<button class="clear-filter" onclick={() => selectedTopic && filterByTopic(selectedTopic)}>Clear</button>
-					</div>
-				{/if}
 			</div>
 		{/if}
 
-		<!-- Intelligence Panels Grid -->
-		<div class="intelligence-grid">
-			<!-- Longest Tracked Matters -->
-			{#if longestTrackedMatters.length > 0}
-				<div class="intel-panel">
-					<h4 class="panel-title">Longest Tracked</h4>
-					<div class="intel-list">
-						{#each longestTrackedMatters as matter}
-							<a href="/matter/{matter.id}" class="intel-item">
-								<div class="intel-item-header">
-									{#if matter.matter_file}
-										<span class="intel-badge">{matter.matter_file}</span>
-									{/if}
-									<span class="intel-appearances">{matter.appearance_count}x</span>
-								</div>
-								<div class="intel-title">{matter.title}</div>
-								<div class="intel-meta">{matter.city_name}</div>
-							</a>
-						{/each}
-					</div>
+		<!-- Happening This Week -->
+		{#if filteredHappening.length > 0}
+			<section class="happening-section">
+				<div class="section-rule">
+					Happening This Week
+					{#if selectedTopic}
+						<span class="section-rule-accent" style="color: {topicColor(selectedTopic)}">{selectedTopic}</span>
+					{/if}
 				</div>
-			{/if}
 
-			<!-- Most Active Cities -->
-			{#if mostActiveCities.length > 0}
-				<div class="intel-panel">
-					<h4 class="panel-title">Most Active Cities</h4>
-					<div class="city-ranking">
-						{#each mostActiveCities as city, index}
-							<a href="/{city.banana}" class="city-rank-item">
-								<div class="rank-number">{index + 1}</div>
-								<div class="rank-content">
-									<div class="rank-city">{city.name}</div>
-									<div class="rank-stats">
-										<span class="rank-count">{city.matter_count} matters</span>
-										<span class="rank-detail">{city.meeting_count} meetings</span>
-										{#if city.summarized_items > 0}
-											<span class="rank-detail">{city.summarized_items} summaries</span>
-										{/if}
-									</div>
-								</div>
-							</a>
-						{/each}
-					</div>
-				</div>
-			{/if}
-
-			<!-- Matter Type Breakdown -->
-			{#if matterTypeBreakdown.length > 0}
-				<div class="intel-panel">
-					<h4 class="panel-title">Matter Types</h4>
-					<div class="type-breakdown">
-						{#each matterTypeBreakdown as [type, count]}
-							<div class="type-item">
-								<div class="type-label">{type}</div>
-								<div class="type-bar-container">
-									<div class="type-bar" style="width: {(count / metrics.total_matters) * 100}%"></div>
-								</div>
-								<div class="type-count">{count}</div>
+				{#each filteredHappening as item}
+					{@const cityName = cityNameByBanana.get(item.banana) || item.banana}
+					<a href="/{item.banana}" class="happening-item hover-indent">
+						<div class="happening-meta">
+							<div class="happening-meta-left">
+								<span class="happening-city">{cityName}</span>
+								<span class="happening-body">{item.meeting_title || 'Meeting'}</span>
 							</div>
-						{/each}
-					</div>
-				</div>
-			{/if}
+							<span class="happening-date">{formatMeetingDate(item.meeting_date)}</span>
+						</div>
+						<h3 class="happening-headline">{item.item_title || 'Agenda Item'}</h3>
+						{#if item.reason}
+							<p class="happening-reason">{item.reason}</p>
+						{/if}
+					</a>
+				{/each}
+			</section>
+		{/if}
 
-			<!-- Recent Activity -->
-			{#if recentMatters.length > 0}
-				<div class="intel-panel activity-panel">
-					<h4 class="panel-title">Recent Activity</h4>
-					<div class="recent-matters">
-						{#each recentMatters as matter}
-							<a href="/matter/{matter.id}" class="recent-matter">
-								<div class="matter-header">
-									<div class="matter-meta">
-										{#if matter.matter_file}
-											<span class="matter-badge">{matter.matter_file}</span>
-										{/if}
-										<span class="matter-city">{matter.city_name}</span>
-										<span class="matter-date">{formatDate(matter.last_seen)}</span>
-									</div>
-									{#if matter.appearance_count > 1}
-										<span class="appearance-badge">{matter.appearance_count}x</span>
-									{/if}
-								</div>
-								<div class="matter-title">{matter.title}</div>
-								{#if matter.canonical_topics && matter.canonical_topics.length > 0}
-									<div class="matter-topics">
-										{#each matter.canonical_topics.slice(0, 3) as topic}
-											<span class="mini-topic">{topic}</span>
+		<!-- Upcoming Meetings (compact list) -->
+		{#if filteredMeetings.length > 0}
+			<section class="meetings-section">
+				<div class="section-rule">
+					<span>
+						Upcoming Meetings
+						{#if selectedTopic}
+							<span class="section-rule-accent" style="color: {topicColor(selectedTopic)}">{selectedTopic}</span>
+						{/if}
+					</span>
+					<span class="section-rule-count">{filteredMeetings.length} of {meetings?.total || filteredMeetings.length}</span>
+				</div>
+
+				<div class="meetings-compact-list">
+					{#each filteredMeetings.slice(0, 12) as meeting (meeting.id)}
+						{@const meetingSlug = generateMeetingSlug(meeting)}
+						<a href="/{meeting.city_banana}/{meetingSlug}" class="meeting-row hover-indent">
+							<div class="meeting-row-left">
+								<span class="meeting-row-city">{meeting.city_name}</span>
+								<span class="meeting-row-body">{meeting.title}</span>
+								{#if meeting.topics && meeting.topics.length > 0}
+									<span class="meeting-row-topics">
+										{#each meeting.topics.slice(0, 2) as topic}
+											<span class="meeting-row-topic" style="color: {topicColor(topic)}">{topic}</span>
 										{/each}
-									</div>
+									</span>
 								{/if}
+							</div>
+							<div class="meeting-row-right">
+								{#if meeting.participation?.email || meeting.participation?.virtual_url}
+									<span class="meeting-row-comment">Comment</span>
+								{/if}
+								<span class="meeting-row-date">{formatMeetingDate(meeting.date)}</span>
+							</div>
+						</a>
+					{/each}
+				</div>
+
+				{#if meetings && (meetings.total > 12 || filteredMeetings.length < meetings.total)}
+					<div class="meetings-footer-text">
+						{#if selectedTopic}
+							Showing {Math.min(filteredMeetings.length, 12)} meetings tagged {selectedTopic}.
+						{:else}
+							Showing {Math.min(filteredMeetings.length, 12)} of {meetings.total}.
+						{/if}
+						<a href="/state/{stateCode.toLowerCase()}/meetings" class="view-all-link">View all meetings</a>
+					</div>
+				{/if}
+			</section>
+		{:else if meetingsLoading}
+			<div class="loading-text">Loading upcoming meetings...</div>
+		{:else if meetings}
+			<section class="meetings-section">
+				<div class="section-rule">Upcoming Meetings</div>
+				<p class="empty-text">No upcoming meetings scheduled across {stateName || metrics.state}</p>
+			</section>
+		{/if}
+
+		{#if metrics.total_matters > 0}
+			<!-- Two-Column: Recurring Matters + Topic Distribution -->
+			<div class="two-col">
+				<!-- Recurring Matters -->
+				<section class="matters-col">
+					<div class="section-rule">
+						Recurring Matters
+						<span class="section-rule-sub">Items appearing across multiple meetings</span>
+					</div>
+
+					{#if displayedMatters.length === 0}
+						<p class="empty-text">No recurring matters for this topic filter.</p>
+					{/if}
+
+					{#each displayedMatters as matter}
+						<a href="/matter/{matter.id}" class="matter-item hover-indent">
+							<div class="matter-item-meta">
+								<div class="matter-item-meta-left">
+									<span class="matter-item-city">{matter.city_name}</span>
+									<span class="matter-item-count">{matter.appearance_count}x</span>
+								</div>
+								<span class="matter-item-date">Last seen {formatDate(matter.last_seen)}</span>
+							</div>
+							<h4 class="matter-item-title">{matter.title}</h4>
+							{#if matter.canonical_summary}
+								<p class="matter-item-summary">
+									{matter.canonical_summary.substring(0, 180)}{matter.canonical_summary.length > 180 ? '...' : ''}
+								</p>
+							{/if}
+							<div class="matter-item-footer">
+								{#if matter.canonical_topics}
+									{@const topics = typeof matter.canonical_topics === 'string' ? matter.canonical_topics.split(',').map((t: string) => t.trim()) : matter.canonical_topics}
+									{#each (topics as string[]).slice(0, 2) as topic}
+										<span class="matter-item-topic" style="color: {topicColor(topic)}">{topic}</span>
+									{/each}
+								{/if}
+							</div>
+						</a>
+					{/each}
+
+					{#if longestTrackedMatters.length > 4}
+						<button class="show-more-link" onclick={() => showAllMatters = !showAllMatters}>
+							{showAllMatters ? 'Show fewer' : `Show all ${longestTrackedMatters.length} matters`}
+						</button>
+					{/if}
+				</section>
+
+				<!-- Topic Distribution -->
+				<section class="topics-col">
+					<div class="section-rule">Topics</div>
+					{#each topTopics as [topic, count]}
+						{@const dimmed = selectedTopic && selectedTopic !== topic}
+						<button
+							class="topic-bar-row"
+							class:dimmed
+							onclick={() => filterByTopic(topic as string)}
+						>
+							<div class="topic-bar-header">
+								<span class="topic-bar-name" style="color: {topicColor(topic as string)}">{topic}</span>
+								<span class="topic-bar-count">{count}</span>
+							</div>
+							<div class="topic-bar-track">
+								<div
+									class="topic-bar-fill"
+									style="width: {totalTopicCount ? ((count as number) / totalTopicCount) * 100 * 5 : 0}%; background: {topicColor(topic as string)}"
+								></div>
+							</div>
+						</button>
+					{/each}
+				</section>
+			</div>
+
+			<!-- City Grid -->
+			{#if displayedCities.length > 0}
+				<section class="cities-section">
+					<div class="section-rule">Cities</div>
+					<div class="cities-grid">
+						{#each displayedCities as city}
+							<a href="/{city.banana}" class="city-cell">
+								<div class="city-cell-name">{city.name}</div>
+								<div class="city-cell-stats">{city.matter_count} matters · {city.meeting_count} meetings</div>
 							</a>
 						{/each}
 					</div>
-				</div>
+					{#if mostActiveCities.length > 8}
+						<button class="show-more-link" onclick={() => showAllCities = !showAllCities}>
+							{showAllCities ? 'Show fewer' : `Show all ${mostActiveCities.length} cities`}
+						</button>
+					{/if}
+				</section>
 			{/if}
-		</div>
-
+		{:else}
+			<div class="no-matters-message">
+				<p>No recurring legislative matters found for this state.</p>
+				<p class="explanation">We only track matters that appear in multiple meetings (2+ appearances).</p>
+			</div>
 		{/if}
 	</div>
 {/if}
 
 <style>
 	.state-metrics {
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
-		border-radius: var(--radius-xl);
-		padding: 2rem;
-		margin: 2rem 0;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+		background: transparent;
+		border: none;
+		padding: 0;
+		margin: 0;
 	}
 
-	.state-metrics.loading,
-	.state-metrics.error {
+	.state-loading,
+	.state-error {
 		text-align: center;
 		padding: 3rem;
 	}
 
-	.loading-text,
-	.error-text {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
+	.loading-text {
+		font-family: var(--font-mono);
+		font-size: 0.85rem;
 		color: var(--civic-gray);
+		text-align: center;
+		padding: 1rem 0;
 	}
 
 	.error-text {
+		font-family: var(--font-mono);
+		font-size: 0.9rem;
 		color: var(--civic-red);
 	}
 
-	/* Dashboard Header */
-	.dashboard-header {
-		margin-bottom: 2rem;
-		padding-bottom: 1.5rem;
-		border-bottom: 1px solid var(--border-primary);
+	/* Header */
+	.briefing-header {
+		margin-bottom: 2.5rem;
 	}
 
-	.dashboard-title {
-		font-family: var(--font-display);
-		font-size: clamp(1.75rem, 4vw, 2.5rem);
-		font-weight: 400;
-		color: var(--text-primary);
-		margin: 0 0 0.5rem 0;
-		letter-spacing: -0.02em;
-		line-height: 1.1;
-	}
-
-	.dashboard-subtitle {
+	.briefing-label {
 		font-family: var(--font-body);
 		font-size: 0.7rem;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--civic-gray);
 		font-weight: 700;
-	}
-
-	/* Metrics Grid (4 cards) */
-	.metrics-grid {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 1.25rem;
-		margin-bottom: 2rem;
-	}
-
-	.metric-card {
-		background: transparent;
-		border: none;
-		border-bottom: 1px solid var(--border-primary);
-		padding: 1.25rem 0;
-		transition: padding-left 0.2s ease;
-	}
-
-	.metric-card:hover {
-		padding-left: 4px;
-	}
-
-	.metric-label {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--civic-gray);
-		font-weight: 600;
-		margin-bottom: 0.75rem;
+		color: var(--civic-blue);
+		margin-bottom: 0.5rem;
 	}
 
-	.metric-value {
+	.briefing-title {
 		font-family: var(--font-display);
-		font-size: 2.5rem;
+		font-size: clamp(2.25rem, 5vw, 3.25rem);
 		font-weight: 400;
 		color: var(--text-primary);
-		margin-bottom: 0.25rem;
+		line-height: 1.05;
+		margin: 0;
+		letter-spacing: -0.02em;
+	}
+
+	.briefing-subtitle {
+		font-family: var(--font-body);
+		font-size: 0.875rem;
+		color: var(--civic-gray);
+		margin-top: 0.625rem;
+		line-height: 1.5;
+	}
+
+	/* Coverage Strip */
+	.coverage-strip {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 1px;
+		background: var(--border-primary);
+		margin-bottom: 3.5rem;
+	}
+
+	.coverage-cell {
+		background: var(--surface-primary);
+		padding: 1.25rem 1rem;
+	}
+
+	.coverage-value {
+		font-family: var(--font-display);
+		font-size: 1.75rem;
+		color: var(--text-primary);
 		line-height: 1;
 	}
 
-	.metric-change {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+	.coverage-label {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--text-secondary);
+		margin-top: 0.375rem;
+	}
+
+	.coverage-sub {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
 		color: var(--civic-gray);
+		margin-top: 0.125rem;
 	}
 
-	/* Upcoming Meetings Section */
-	.upcoming-meetings-section {
-		margin: 2rem 0;
-		padding: 0;
-		background: transparent;
-		border: none;
-	}
-
-	.upcoming-meetings-section.loading-section {
-		text-align: center;
-		padding: 2rem;
-	}
-
-	.meetings-list {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: 1rem;
-		margin-top: 1rem;
-	}
-
-	.meeting-item {
-		display: block;
-		background: transparent;
-		border: none;
-		border-bottom: 1px solid var(--border-primary);
-		padding: 1rem 0;
-		text-decoration: none;
-		transition: padding-left 0.2s ease;
-		cursor: pointer;
-	}
-
-	.meeting-item:hover {
-		padding-left: 6px;
-	}
-
-	.meeting-item-header {
+	/* Section Rule — matches city page .section-title / .matters-title pattern */
+	.section-rule {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--text-primary);
+		margin-bottom: 1rem;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 0.75rem;
-		margin-bottom: 0.5rem;
-		flex-wrap: wrap;
 	}
 
-	.city-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 700;
-		color: var(--badge-purple-text, var(--civic-blue));
-		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
-		padding: 0.25rem 0.6rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
+	.section-rule-accent {
+		font-weight: 400;
+		margin-left: 0.5rem;
 	}
 
-	.meeting-date-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+	.section-rule-count {
+		font-weight: 400;
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+	}
+
+	.section-rule-sub {
+		font-weight: 400;
+		font-size: 0.625rem;
+		color: var(--civic-gray);
+		margin-left: 0.375rem;
+	}
+
+	.clear-filter-link {
+		background: none;
+		border: none;
+		font-family: var(--font-body);
+		font-size: 0.7rem;
 		font-weight: 600;
-		color: var(--civic-gray);
+		color: var(--civic-blue);
+		cursor: pointer;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 
-	.meeting-time {
-		color: var(--civic-gray);
+	.clear-filter-link:hover {
+		color: var(--civic-accent);
+	}
+
+	/* Topic Pills */
+	.filter-section {
+		margin-bottom: 3rem;
+	}
+
+	.topic-pills {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+	}
+
+	.topic-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.3rem 0.75rem;
+		font-size: 0.7rem;
+		font-family: var(--font-body);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--pill-color);
+		background: color-mix(in srgb, var(--pill-color) 6%, transparent);
+		border: 1.5px solid color-mix(in srgb, var(--pill-color) 20%, transparent);
+		border-radius: var(--radius-xs);
+		cursor: pointer;
+		transition: all var(--transition-normal);
+		white-space: nowrap;
+	}
+
+	.topic-pill:hover {
+		border-color: var(--pill-color);
+	}
+
+	.topic-pill.active {
+		color: var(--surface-primary);
+		background: var(--pill-color);
+		border-color: var(--pill-color);
+	}
+
+	.pill-count {
+		font-size: 0.625rem;
+		opacity: 0.6;
+		font-weight: 400;
+	}
+
+	.topic-pill.active .pill-count {
 		opacity: 0.8;
 	}
 
-	.meeting-item-title {
-		font-family: var(--font-display);
-		font-size: 1.05rem;
-		font-weight: 400;
-		line-height: 1.3;
-		color: var(--text-primary);
-		margin-bottom: 0.5rem;
+	/* Hover indent — matches HappeningSection / city page meeting-item pattern */
+	.hover-indent {
+		transition: padding-left 0.2s ease;
 	}
 
-	.meeting-item-footer {
+	.hover-indent:hover {
+		padding-left: 6px;
+	}
+
+	/* Happening Section */
+	.happening-section {
+		margin-bottom: 4rem;
+	}
+
+	.happening-item {
+		display: block;
+		padding: 1.25rem 0;
+		border-bottom: 1px solid var(--border-primary);
+		cursor: pointer;
+		text-decoration: none;
+		color: inherit;
+	}
+
+	.happening-meta {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		margin-bottom: 0.25rem;
+	}
+
+	.happening-meta-left {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		flex-wrap: wrap;
+		gap: 0.625rem;
 	}
 
-	.status-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.65rem;
-		font-weight: 600;
-		padding: 0.2rem 0.5rem;
-		border-radius: var(--radius-xs);
-		text-transform: uppercase;
+	.happening-city {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--civic-blue);
+	}
+
+	.happening-body {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--civic-gray);
 		letter-spacing: 0.03em;
 	}
 
-	.status-badge.status-ai {
-		background: var(--badge-green-bg);
-		color: var(--badge-green-text);
-		border: 1px solid var(--badge-green-border);
-	}
-
-	.status-badge.status-agenda {
-		background: var(--badge-yellow-bg, rgba(234, 179, 8, 0.1));
-		color: var(--badge-yellow-text, #a16207);
-		border: 1px solid var(--badge-yellow-border, rgba(234, 179, 8, 0.3));
-	}
-
-	.status-badge.status-packet {
-		background: var(--badge-orange-bg, rgba(249, 115, 22, 0.1));
-		color: var(--badge-orange-text, #c2410c);
-		border: 1px solid var(--badge-orange-border, rgba(249, 115, 22, 0.3));
-	}
-
-	.meeting-topics-mini {
-		display: flex;
-		gap: 0.3rem;
-		flex-wrap: wrap;
-	}
-
-	.more-meetings-footer {
-		margin-top: 1rem;
-		padding-top: 1rem;
-		border-top: 1px solid var(--border-primary);
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-	}
-
-	.more-meetings-note {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
+	.happening-date {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
 		color: var(--civic-gray);
+		white-space: nowrap;
+		margin-left: 1rem;
 	}
 
-	.view-all-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: var(--civic-blue);
-		text-decoration: none;
-		transition: color var(--transition-normal);
-	}
-
-	.view-all-link:hover {
-		color: var(--civic-accent);
-		text-decoration: underline;
-	}
-
-	.empty-section {
-		text-align: center;
-		padding: 2rem;
-	}
-
-	.empty-meetings-text {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
+	.happening-headline {
+		font-family: var(--font-display);
+		font-size: 1.3rem;
+		font-weight: 400;
 		color: var(--text-primary);
-		margin-bottom: 0.5rem;
+		margin: 0.375rem 0 0.5rem;
+		line-height: 1.25;
 	}
 
-	.empty-meetings-subtext {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		color: var(--civic-gray);
-	}
-
-	/* Cities Section (Collapsible) */
-	.cities-section {
-		margin: 2rem 0;
-		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		overflow: hidden;
-	}
-
-	.cities-header {
-		width: 100%;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 1.25rem 1.5rem;
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		transition: background var(--transition-normal);
-	}
-
-	.cities-header:hover {
-		background: var(--surface-hover);
-	}
-
-	.cities-header .section-title {
+	.happening-reason {
+		font-family: var(--font-body);
+		font-size: 0.85rem;
+		line-height: 1.6;
+		color: var(--text-secondary);
 		margin: 0;
 	}
 
-	.expand-icon {
-		color: var(--civic-gray);
-		transition: transform var(--transition-normal);
+	/* Meetings Compact List */
+	.meetings-section {
+		margin-bottom: 4rem;
+	}
+
+	.meetings-compact-list {
+		display: grid;
+		gap: 0;
+	}
+
+	.meeting-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.75rem 0;
+		border-bottom: 1px solid var(--border-primary);
+		cursor: pointer;
+		text-decoration: none;
+		color: inherit;
+	}
+
+	.meeting-row-left {
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		gap: 0.75rem;
+		flex: 1;
+		min-width: 0;
 	}
 
-	.expand-icon.expanded {
-		transform: rotate(180deg);
+	.meeting-row-city {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--civic-blue);
+		width: 6.25rem;
+		flex-shrink: 0;
 	}
 
-	.cities-grid-container {
-		max-height: 400px;
-		overflow-y: auto;
-		padding: 0 1.5rem 1.5rem 1.5rem;
-		border-top: 1px solid var(--border-primary);
+	.meeting-row-body {
+		font-family: var(--font-body);
+		font-size: 0.8rem;
+		color: var(--text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.meeting-row-topics {
+		display: flex;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.meeting-row-topic {
+		font-size: 0.55rem;
+		font-family: var(--font-body);
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.meeting-row-right {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-shrink: 0;
+		margin-left: 0.75rem;
+	}
+
+	.meeting-row-comment {
+		font-size: 0.55rem;
+		font-family: var(--font-body);
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--civic-blue);
+	}
+
+	.meeting-row-date {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+		white-space: nowrap;
+	}
+
+	.meetings-footer-text {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		color: var(--civic-gray);
+		padding: 0.875rem 0;
+	}
+
+	.view-all-link {
+		color: var(--civic-blue);
+		cursor: pointer;
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.view-all-link:hover {
+		text-decoration: underline;
+	}
+
+	/* Two Column Layout */
+	.two-col {
+		display: grid;
+		grid-template-columns: 1.3fr 0.7fr;
+		gap: 3rem;
+		margin-bottom: 4rem;
+	}
+
+	/* Recurring Matters */
+	.matter-item {
+		display: block;
+		padding: 1rem 0;
+		border-bottom: 1px solid var(--border-primary);
+		cursor: pointer;
+		text-decoration: none;
+		color: inherit;
+	}
+
+	.matter-item-meta {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		margin-bottom: 0.25rem;
+	}
+
+	.matter-item-meta-left {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.matter-item-city {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		font-weight: 700;
+		color: var(--civic-blue);
+	}
+
+	.matter-item-count {
+		font-family: var(--font-mono);
+		font-size: 0.625rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		color: var(--civic-gray);
+		background: var(--surface-secondary);
+		padding: 0.0625rem 0.375rem;
+		border-radius: var(--radius-xs);
+	}
+
+	.matter-item-date {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+	}
+
+	.matter-item-title {
+		font-family: var(--font-display);
+		font-size: 1.05rem;
+		font-weight: 400;
+		color: var(--text-primary);
+		margin: 0.25rem 0 0.375rem;
+		line-height: 1.3;
+	}
+
+	.matter-item-summary {
+		font-family: var(--font-body);
+		font-size: 0.8rem;
+		line-height: 1.55;
+		color: var(--text-secondary);
+		margin: 0;
+	}
+
+	.matter-item-footer {
+		margin-top: 0.375rem;
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.matter-item-topic {
+		font-size: 0.625rem;
+		font-family: var(--font-body);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.show-more-link {
+		background: none;
+		border: none;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--civic-blue);
+		cursor: pointer;
+		padding: 0.875rem 0;
+		letter-spacing: 0.03em;
+	}
+
+	.show-more-link:hover {
+		color: var(--civic-accent);
+	}
+
+	/* Topic Distribution Sidebar */
+	.topic-bar-row {
+		display: block;
+		width: 100%;
+		padding: 0.375rem 0;
+		cursor: pointer;
+		transition: opacity 0.2s;
+		background: none;
+		border: none;
+		text-align: left;
+	}
+
+	.topic-bar-row.dimmed {
+		opacity: 0.35;
+	}
+
+	.topic-bar-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+	}
+
+	.topic-bar-name {
+		font-family: var(--font-body);
+		font-size: 0.75rem;
+		font-weight: 600;
+	}
+
+	.topic-bar-count {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+	}
+
+	.topic-bar-track {
+		height: 3px;
+		background: var(--border-primary);
+		border-radius: var(--radius-xs);
+		overflow: hidden;
+		margin-top: 0.25rem;
+	}
+
+	.topic-bar-fill {
+		height: 100%;
+		border-radius: var(--radius-xs);
+		transition: width 0.6s ease;
+	}
+
+	/* City Grid */
+	.cities-section {
+		margin-bottom: 4rem;
 	}
 
 	.cities-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-		gap: 1rem;
-		margin-top: 1rem;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 1px;
+		background: var(--border-primary);
 	}
 
-	.city-card {
-		display: block;
-		padding: 1rem;
+	.city-cell {
 		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-md);
-		text-decoration: none;
-		transition: all var(--transition-normal);
+		padding: 1.125rem 1rem;
 		cursor: pointer;
+		transition: background var(--transition-fast);
+		text-decoration: none;
+		color: inherit;
 	}
 
-	.city-card:hover {
-		border-color: var(--civic-blue);
-		box-shadow: 0 2px 8px rgba(181, 100, 42, 0.15);
-		transform: translateY(-2px);
+	.city-cell:hover {
+		background: var(--surface-secondary);
 	}
 
-	.city-name {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-		font-weight: 600;
+	.city-cell-name {
+		font-family: var(--font-display);
+		font-size: 1.125rem;
 		color: var(--text-primary);
-		margin-bottom: 0.25rem;
+		margin-bottom: 0.375rem;
 	}
 
-	.city-vendor {
-		font-family: 'IBM Plex Mono', monospace;
+	.city-cell-stats {
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--civic-gray);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+	}
+
+	/* Empty/no-matters states — matches city page empty-state pattern */
+	.empty-text {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		color: var(--civic-gray);
+		padding: 0.75rem 0;
 	}
 
 	.no-matters-message {
@@ -779,7 +1049,7 @@
 
 	.no-matters-message p {
 		margin: 0 0 0.5rem 0;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		color: var(--text-primary);
 	}
@@ -789,518 +1059,70 @@
 		color: var(--civic-gray);
 	}
 
-	.topics-section {
-		margin-top: 2rem;
-	}
-
-	.section-title {
-		font-family: var(--font-body);
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: var(--civic-gray);
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		margin: 0 0 1rem 0;
-		padding-bottom: 0.5rem;
-		border-bottom: 2px solid var(--text-primary);
-	}
-
-	.topic-pills {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-	}
-
-	.topic-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 1rem;
-		background: var(--surface-primary);
-		border: 2px solid var(--border-primary);
-		border-radius: var(--radius-pill);
-		cursor: pointer;
-		transition: all var(--transition-normal);
-		font-family: 'IBM Plex Mono', monospace;
-	}
-
-	.topic-pill:hover {
-		border-color: var(--civic-blue);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(181, 100, 42, 0.2);
-	}
-
-	.topic-pill.selected {
-		background: var(--civic-blue);
-		border-color: var(--civic-blue);
-	}
-
-	.pill-label {
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.topic-pill.selected .pill-label {
-		color: var(--civic-white);
-	}
-
-	.pill-count {
-		font-size: 0.75rem;
-		font-weight: 700;
-		color: var(--civic-blue);
-		background: var(--surface-hover);
-		padding: 0.15rem 0.5rem;
-		border-radius: var(--radius-lg);
-		min-width: 24px;
-		text-align: center;
-	}
-
-	.topic-pill.selected .pill-count {
-		color: var(--civic-blue);
-		background: var(--surface-primary);
-	}
-
-	.filter-indicator {
-		margin-top: 1rem;
-		padding: 0.75rem 1rem;
-		background: var(--badge-info-bg);
-		border: 1px solid var(--badge-info-border);
-		border-radius: var(--radius-md);
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--badge-info-text);
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.clear-filter {
-		padding: 0.25rem 0.75rem;
-		background: var(--civic-blue);
-		color: var(--civic-white);
-		border: none;
-		border-radius: var(--radius-sm);
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all var(--transition-normal);
-	}
-
-	.clear-filter:hover {
-		background: var(--civic-accent);
-	}
-
-	.recent-matters {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.recent-matter {
-		display: block;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: var(--radius-md);
-		padding: 1rem 1.25rem;
-		transition: all var(--transition-normal);
-		text-decoration: none;
-		cursor: pointer;
-	}
-
-	.recent-matter:hover {
-		border-left-color: var(--civic-accent);
-		box-shadow: 0 2px 8px var(--shadow-md);
-		transform: translateX(2px);
-	}
-
-	.matter-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 1rem;
-		margin-bottom: 0.5rem;
-		flex-wrap: wrap;
-	}
-
-	.matter-meta {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-	}
-
-	.matter-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 700;
-		color: var(--badge-blue-text);
-		background: var(--badge-blue-bg);
-		padding: 0.25rem 0.6rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--badge-blue-border);
-	}
-
-	.matter-city {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: var(--civic-gray);
-	}
-
-	.matter-date {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		color: var(--civic-gray);
-	}
-
-	.appearance-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: var(--badge-green-text);
-		background: var(--badge-green-bg);
-		padding: 0.25rem 0.5rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--badge-green-border);
-	}
-
-	.matter-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 0.95rem;
-		line-height: 1.4;
-		color: var(--text-primary);
-		margin-bottom: 0.5rem;
-	}
-
-	.matter-topics {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-	}
-
-	.mini-topic {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.65rem;
-		padding: 0.2rem 0.5rem;
-		background: var(--surface-secondary);
-		color: var(--civic-gray);
-		border-radius: var(--radius-xs);
-		font-weight: 500;
-	}
-
-	/* Intelligence Grid */
-	.intelligence-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 1rem;
-		margin-top: 1.5rem;
-	}
-
-	.intel-panel {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		padding: 1.25rem;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-		transition: all var(--transition-normal);
-	}
-
-	.intel-panel:hover {
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-	}
-
-	.activity-panel {
-		grid-column: 1 / -1;
-	}
-
-	.panel-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--civic-gray);
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		margin: 0 0 1.25rem 0;
-	}
-
-	/* Intelligence List Items */
-	.intel-list {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.intel-item {
-		display: block;
-		padding-bottom: 1rem;
-		border-bottom: 1px solid var(--border-primary);
-		text-decoration: none;
-		cursor: pointer;
-		transition: all var(--transition-normal);
-	}
-
-	.intel-item:hover {
-		background: var(--surface-hover);
-		padding-left: 0.5rem;
-		margin-left: -0.5rem;
-		border-radius: var(--radius-xs);
-	}
-
-	.intel-item:last-child {
-		border-bottom: none;
-		padding-bottom: 0;
-	}
-
-	.intel-item-header {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.intel-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: var(--badge-blue-text);
-		background: var(--badge-blue-bg);
-		padding: 0.2rem 0.5rem;
-		border-radius: var(--radius-xs);
-		border: 1px solid var(--badge-blue-border);
-	}
-
-	.intel-appearances {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: var(--badge-green-text);
-		background: var(--badge-green-bg);
-		padding: 0.2rem 0.5rem;
-		border-radius: var(--radius-xs);
-	}
-
-	.intel-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 0.9rem;
-		line-height: 1.4;
-		color: var(--text-primary);
-		margin-bottom: 0.25rem;
-	}
-
-	.intel-meta {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		color: var(--civic-gray);
-	}
-
-	/* City Ranking */
-	.city-ranking {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.city-rank-item {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		padding: 0.75rem;
-		background: var(--surface-secondary);
-		border-radius: var(--radius-md);
-		transition: all var(--transition-normal);
-		text-decoration: none;
-		cursor: pointer;
-	}
-
-	.city-rank-item:hover {
-		background: var(--surface-hover);
-		box-shadow: 0 2px 6px var(--shadow-md);
-		transform: translateY(-1px);
-	}
-
-	.rank-number {
-		flex-shrink: 0;
-		width: 32px;
-		height: 32px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--civic-blue);
-		color: var(--civic-white);
-		font-family: 'IBM Plex Mono', monospace;
-		font-weight: 700;
-		font-size: 0.9rem;
-		border-radius: 50%;
-	}
-
-	.rank-content {
-		flex: 1;
-	}
-
-	.rank-city {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.rank-stats {
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
-		flex-wrap: wrap;
-	}
-
-	.rank-count {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.rank-detail {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		color: var(--civic-gray);
-	}
-
-	/* Type Breakdown */
-	.type-breakdown {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.type-item {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.type-label {
-		flex-shrink: 0;
-		width: 120px;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.type-bar-container {
-		flex: 1;
-		height: 24px;
-		background: var(--surface-secondary);
-		border-radius: var(--radius-xs);
-		overflow: hidden;
-	}
-
-	.type-bar {
-		height: 100%;
-		background: linear-gradient(90deg, var(--civic-blue) 0%, var(--civic-accent) 100%);
-		transition: width var(--transition-slow);
-		border-radius: var(--radius-xs);
-	}
-
-	.type-count {
-		flex-shrink: 0;
-		width: 40px;
-		text-align: right;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 700;
-		color: var(--text-primary);
-	}
-
-	@media (max-width: 1024px) {
-		.metrics-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-
-		.intelligence-grid {
+	/* Responsive */
+	@media (max-width: 800px) {
+		.two-col {
 			grid-template-columns: 1fr;
-		}
-	}
-
-	@media (max-width: 768px) {
-		.metrics-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-
-	@media (max-width: 640px) {
-		.state-metrics {
-			padding: 1.5rem;
-			margin: 1rem 0;
-		}
-
-		.dashboard-title {
-			font-size: 1.3rem;
-		}
-
-		.upcoming-meetings-section {
-			padding: 1rem;
-		}
-
-		.meetings-list {
-			grid-template-columns: 1fr;
-		}
-
-		.meeting-item {
-			padding: 0.875rem 1rem;
-		}
-
-		.meeting-item-header {
-			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.5rem;
-		}
-
-		.cities-header {
-			padding: 1rem 1.25rem;
-		}
-
-		.cities-grid-container {
-			padding: 0 1.25rem 1.25rem 1.25rem;
-			max-height: 300px;
 		}
 
 		.cities-grid {
 			grid-template-columns: 1fr;
 		}
+	}
 
-		.metrics-grid {
-			grid-template-columns: 1fr;
-			gap: 1rem;
+	@media (min-width: 801px) and (max-width: 1000px) {
+		.cities-grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.coverage-strip {
+			grid-template-columns: repeat(2, 1fr);
 		}
 
-		.metric-value {
-			font-size: 2rem;
+		.briefing-title {
+			font-size: clamp(1.75rem, 8vw, 2.25rem);
 		}
 
-		.topic-pill {
-			padding: 0.4rem 0.8rem;
+		.happening-headline {
+			font-size: 1.125rem;
 		}
 
-		.intel-panel {
-			padding: 1rem;
+		.happening-meta {
+			flex-direction: column;
+			gap: 0.25rem;
 		}
 
-		.recent-matter {
-			padding: 0.75rem 1rem;
+		.happening-date {
+			margin-left: 0;
 		}
 
-		.matter-header {
+		.meeting-row {
 			flex-direction: column;
 			align-items: flex-start;
+			gap: 0.375rem;
 		}
 
-		.type-label {
-			width: 80px;
-			font-size: 0.7rem;
+		.meeting-row-left {
+			flex-wrap: wrap;
+		}
+
+		.meeting-row-city {
+			width: auto;
+		}
+
+		.meeting-row-right {
+			margin-left: 0;
+		}
+
+		.meeting-row-topics {
+			display: none;
+		}
+
+		.matter-item-meta {
+			flex-direction: column;
+			gap: 0.25rem;
 		}
 	}
 </style>

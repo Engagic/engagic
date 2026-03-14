@@ -173,7 +173,7 @@
 
 	.home-link {
 		display: inline-block;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -295,7 +295,7 @@
 		width: 100%;
 		padding: 0.75rem 1rem;
 		font-size: 1rem;
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		color: var(--text-primary);
 		background: var(--surface-primary);
 		border: 2px solid var(--civic-border);
@@ -341,7 +341,7 @@
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		transition: all var(--transition-normal);
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 	}
 
 	.btn-primary:hover:not(:disabled) {

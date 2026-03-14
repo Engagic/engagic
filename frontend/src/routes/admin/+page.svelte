@@ -471,7 +471,7 @@
 	}
 
 	.breakdown-label.mono {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 	}
 

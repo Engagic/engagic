@@ -534,7 +534,7 @@
 	}
 
 	h1 {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.5rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -548,14 +548,14 @@
 	}
 
 	.user-email {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.875rem;
 		color: var(--text-secondary);
 	}
 
 	.btn-logout {
 		padding: 0.5rem 1rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.875rem;
 		font-weight: 500;
 		color: var(--text-secondary);
@@ -619,7 +619,7 @@
 	}
 
 	.stat-value {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2.5rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -627,7 +627,7 @@
 	}
 
 	.stat-label {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--text-secondary);
 		text-transform: uppercase;
@@ -639,7 +639,7 @@
 	}
 
 	h2 {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -663,7 +663,7 @@
 	}
 
 	h3 {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -671,7 +671,7 @@
 	}
 
 	.digest-frequency {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		padding: 0.25rem 0.75rem;
 		background: var(--surface-secondary);
@@ -692,7 +692,7 @@
 	}
 
 	.digest-section strong {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-primary);
 		margin-right: 0.5rem;
 	}
@@ -763,7 +763,7 @@
 		color: var(--badge-blue-text);
 		border: 1px solid var(--badge-blue-border);
 		border-radius: var(--radius-lg);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8125rem;
 	}
 
@@ -801,7 +801,7 @@
 		color: var(--badge-blue-text);
 		border: 1px solid var(--badge-blue-border);
 		border-radius: var(--radius-lg);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8125rem;
 	}
 
@@ -846,7 +846,7 @@
 	.btn-add-keyword,
 	.btn-search {
 		padding: 0.375rem 0.75rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8125rem;
 		font-weight: 500;
 		background: var(--civic-blue);
@@ -870,7 +870,7 @@
 
 	.btn-cancel {
 		padding: 0.375rem 0.75rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8125rem;
 		background: transparent;
 		color: var(--text-secondary);
@@ -887,7 +887,7 @@
 	.btn-change,
 	.btn-add {
 		padding: 0.25rem 0.5rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--text-link);
 		background: transparent;
@@ -988,7 +988,7 @@
 	}
 
 	.match-time {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--civic-gray);
 	}
@@ -1012,7 +1012,7 @@
 	}
 
 	.match-type {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		padding: 0.25rem 0.75rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
@@ -1024,7 +1024,7 @@
 	}
 
 	.matched-keyword {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		padding: 0.25rem 0.75rem;
 		background: var(--badge-blue-bg);
 		border: 1px solid var(--badge-blue-border);

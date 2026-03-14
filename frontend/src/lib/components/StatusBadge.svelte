@@ -31,7 +31,7 @@
 
 <style>
 	.status-badge {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;

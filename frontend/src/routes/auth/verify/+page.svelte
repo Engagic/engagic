@@ -164,7 +164,7 @@
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		transition: all var(--transition-normal);
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		text-decoration: none;
 		display: inline-block;
 	}

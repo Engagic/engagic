@@ -539,14 +539,14 @@
 	}
 
 	.not-found-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1rem;
 		color: var(--text-primary);
 		margin: 0 0 0.5rem 0;
 	}
 
 	.not-found-cta {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.95rem;
 		color: var(--text-secondary);
 		margin: 0;
@@ -572,7 +572,7 @@
 	}
 
 	.ambiguous-inline .ambiguous-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1rem;
 		color: var(--text-primary);
 		margin: 0 0 1rem 0;
@@ -590,7 +590,7 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-sm);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 500;
 		color: var(--civic-blue);
@@ -607,7 +607,7 @@
 	.loading-inline {
 		margin-top: 1rem;
 		padding: 0.75rem 1rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		color: var(--text-secondary);
 		text-align: center;

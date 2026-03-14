@@ -233,7 +233,7 @@
 	}
 
 	.section-heading {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 2rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -278,7 +278,7 @@
 		flex-wrap: wrap;
 		font-size: 0.9rem;
 		color: var(--civic-gray);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		padding-top: var(--space-xs);
 	}
 
@@ -316,7 +316,7 @@
 
 	.toggle-button {
 		padding: var(--space-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 600;
 		border-radius: var(--radius-sm);
@@ -353,7 +353,7 @@
 
 	.amount-button {
 		padding: var(--space-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 600;
 		border-radius: var(--radius-md);
@@ -394,7 +394,7 @@
 		left: var(--space-md);
 		top: 50%;
 		transform: translateY(-50%);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-primary);
 		pointer-events: none;
 	}
@@ -402,7 +402,7 @@
 	.custom-amount input {
 		width: 100%;
 		padding: var(--space-md) var(--space-md) var(--space-md) var(--space-xl);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		border: 2px solid var(--border-primary);
 		border-radius: var(--radius-md);
@@ -428,7 +428,7 @@
 		border-radius: var(--radius-sm);
 		color: var(--error-text);
 		font-size: 0.9rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		text-align: center;
 		margin-top: -var(--space-sm);
 	}
@@ -436,7 +436,7 @@
 	.donate-button {
 		width: 100%;
 		padding: var(--space-lg);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 600;
 		border-radius: var(--radius-md);

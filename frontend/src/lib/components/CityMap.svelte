@@ -380,14 +380,14 @@
 	}
 
 	.tooltip-city {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.875rem;
 		font-weight: 600;
 		color: var(--text-primary);
 	}
 
 	.tooltip-stats {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--text-secondary);
 		margin-top: 0.25rem;
@@ -406,7 +406,7 @@
 	}
 
 	.legend-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -419,7 +419,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-xs);
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 		margin-top: 0.25rem;
