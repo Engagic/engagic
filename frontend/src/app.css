@@ -102,11 +102,11 @@
 	--space-3xl: 4rem;    /* 64px */
 
 	/* Border radius */
-	--radius-xs: 4px;    /* Inline badges, topic tags */
-	--radius-sm: 6px;    /* Small elements (tags, buttons) */
-	--radius-md: 8px;    /* Standard (cards, inputs) */
-	--radius-lg: 12px;   /* Large containers, cards */
-	--radius-xl: 16px;   /* Hero sections */
+	--radius-xs: 2px;    /* Inline badges, topic tags */
+	--radius-sm: 3px;    /* Small elements (tags, buttons) */
+	--radius-md: 4px;    /* Standard (inputs, small containers) */
+	--radius-lg: 6px;    /* Large containers */
+	--radius-xl: 8px;    /* Hero sections */
 	--radius-pill: 999px; /* Pill shapes */
 
 	/* Font stacks */
@@ -121,44 +121,44 @@
 }
 
 :root.light {
-	--civic-blue: #0f766e;
-	--civic-green: #10b981;
-	--civic-gray: #475569;
-	--civic-dark: #0f172a;
-	--civic-light: #f8fafc;
+	--civic-blue: #b5642a;
+	--civic-green: #3d8b55;
+	--civic-gray: #8a897e;
+	--civic-dark: #1a1a18;
+	--civic-light: #faf9f5;
 	--civic-white: #ffffff;
-	--civic-border: #e2e8f0;
-	--civic-red: #ef4444;
-	--civic-accent: #0d9488;
-	--civic-yellow: #eab308;
-	--civic-orange: #f97316;
-	--civic-magenta: #ec4899;
-	--civic-purple: #7c3aed;
+	--civic-border: #e4e2da;
+	--civic-red: #c0392b;
+	--civic-accent: #c87a3f;
+	--civic-yellow: #c4960a;
+	--civic-orange: #d4874d;
+	--civic-magenta: #b5436e;
+	--civic-purple: #5B3A8A;
 
-	--bg-gradient-start: #f8fafc;
-	--bg-gradient-end: #e2e8f0;
-	--text-primary: #0f172a;
-	--text-secondary: #475569;
-	--text-link: #0f766e;
-	--surface-primary: #ffffff;
-	--surface-secondary: #f8fafc;
-	--surface-hover: #f0fdfa;
-	--border-primary: #e2e8f0;
-	--border-hover: #0f766e;
-	--shadow-sm: rgba(0, 0, 0, 0.04);
-	--shadow-md: rgba(0, 0, 0, 0.1);
-	--shadow-lg: rgba(15, 118, 110, 0.12);
+	--bg-gradient-start: #faf9f5;
+	--bg-gradient-end: #faf9f5;
+	--text-primary: #1a1a18;
+	--text-secondary: #3d3d38;
+	--text-link: #b5642a;
+	--surface-primary: #faf9f5;
+	--surface-secondary: #f3f1ea;
+	--surface-hover: #edebd4;
+	--border-primary: #e4e2da;
+	--border-hover: #b5642a;
+	--shadow-sm: rgba(0, 0, 0, 0.02);
+	--shadow-md: rgba(0, 0, 0, 0.05);
+	--shadow-lg: rgba(181, 100, 42, 0.08);
 
 	/* Badge colors */
-	--badge-blue-bg: #ccfbf1;
-	--badge-blue-border: #99f6e4;
-	--badge-blue-text: #115e59;
-	--badge-green-bg: #d1fae5;
-	--badge-green-border: #86efac;
-	--badge-green-text: #065f46;
-	--badge-info-bg: #f0fdfa;
-	--badge-info-border: #99f6e4;
-	--badge-info-text: #115e59;
+	--badge-blue-bg: #fce8d5;
+	--badge-blue-border: #f0c9a3;
+	--badge-blue-text: #8B4513;
+	--badge-green-bg: #e8f5e0;
+	--badge-green-border: #a3d98e;
+	--badge-green-text: #2d5a1e;
+	--badge-info-bg: #fef6ee;
+	--badge-info-border: #f0c9a3;
+	--badge-info-text: #8B4513;
 
 	/* Matter badge (flat) */
 	--badge-matter-bg: #dbeafe;
@@ -188,10 +188,10 @@
 	--badge-cancelled-border: #fecaca;
 	--badge-cancelled-text: #dc2626;
 
-	/* Committee type colors */
-	--committee-color: #8b5cf6;
-	--council-color: #10b981;
-	--board-color: #f59e0b;
+	/* Committee type colors — purple from logo flower, green from logo leaves */
+	--committee-color: #5B3A8A;
+	--council-color: #3d8b55;
+	--board-color: #c4960a;
 
 	/* Action button colors */
 	--action-yes: #22c55e;
@@ -202,12 +202,6 @@
 	--action-share-hover: #2563eb;
 	--action-deliberate: #8b5cf6;
 	--action-deliberate-hover: #7c3aed;
-
-	/* Discovery button colors */
-	--random-meeting-bg: #0a7d55;
-	--random-meeting-hover: #0c9666;
-	--random-policy-bg: #b45309;
-	--random-policy-hover: #d97706;
 
 	/* Semantic feedback colors */
 	--alert-bg: #fef2f2;
@@ -246,9 +240,9 @@
 	--reason-text: var(--civic-green);
 
 	/* Unified topic tags */
-	--topic-tag-bg: var(--surface-secondary);
-	--topic-tag-text: var(--civic-blue);
-	--topic-tag-border: var(--border-primary);
+	--topic-tag-bg: rgba(181, 100, 42, 0.06);
+	--topic-tag-text: #8a6e3e;
+	--topic-tag-border: rgba(181, 100, 42, 0.12);
 
 	/* Success/error feedback */
 	--success-bg: #dcfce7;
@@ -272,7 +266,7 @@
 
 	/* Contact icon backgrounds */
 	--contact-github: #8842cd;
-	--contact-email: #0f766e;
+	--contact-email: #b5642a;
 	--contact-issues: #f97316;
 	--contact-twitter: #1da1f2;
 
@@ -318,49 +312,55 @@
 	--badge-virtual-text: #1e40af;
 	--badge-virtual-border: #60a5fa;
 
+	/* Discovery buttons */
+	--random-meeting-bg: #4A6741;
+	--random-meeting-hover: #5a7d51;
+	--random-policy-bg: #8B5A2B;
+	--random-policy-hover: #a06b35;
+
 	/* Background texture */
-	--dot-color: rgba(0, 0, 0, 0.04);
+	--dot-color: rgba(0, 0, 0, 0.015);
 }
 
 :root.dark {
-	--civic-blue: #14b8a6;
-	--civic-green: #34d399;
-	--civic-gray: #94a3b8;
-	--civic-dark: #f8fafc;
-	--civic-light: #1e293b;
-	--civic-white: #0f172a;
-	--civic-border: #334155;
+	--civic-blue: #d4874d;
+	--civic-green: #6aad5e;
+	--civic-gray: #9c9788;
+	--civic-dark: #f5f2eb;
+	--civic-light: #1a1918;
+	--civic-white: #1a1918;
+	--civic-border: #3d3a36;
 	--civic-red: #f87171;
-	--civic-accent: #2dd4bf;
+	--civic-accent: #e09258;
 	--civic-yellow: #fbbf24;
 	--civic-orange: #fb923c;
 	--civic-magenta: #f472b6;
 	--civic-purple: #a78bfa;
 
-	--bg-gradient-start: #0f172a;
-	--bg-gradient-end: #1e293b;
-	--text-primary: #f8fafc;
-	--text-secondary: #cbd5e1;
-	--text-link: #fb923c;
-	--surface-primary: #1e293b;
-	--surface-secondary: #334155;
-	--surface-hover: #042f2e;
-	--border-primary: #334155;
-	--border-hover: #fb923c;
-	--shadow-sm: rgba(0, 0, 0, 0.3);
-	--shadow-md: rgba(0, 0, 0, 0.5);
-	--shadow-lg: rgba(94, 234, 212, 0.2);
+	--bg-gradient-start: #1a1918;
+	--bg-gradient-end: #1a1918;
+	--text-primary: #f5f2eb;
+	--text-secondary: #b8b3a7;
+	--text-link: #d4874d;
+	--surface-primary: #252422;
+	--surface-secondary: #302e2b;
+	--surface-hover: #3a3733;
+	--border-primary: #3d3a36;
+	--border-hover: #d4874d;
+	--shadow-sm: rgba(0, 0, 0, 0.2);
+	--shadow-md: rgba(0, 0, 0, 0.35);
+	--shadow-lg: rgba(212, 135, 77, 0.15);
 
 	/* Badge colors */
-	--badge-blue-bg: #134e4a;
-	--badge-blue-border: #14b8a6;
-	--badge-blue-text: #99f6e4;
-	--badge-green-bg: #064e3b;
-	--badge-green-border: #10b981;
-	--badge-green-text: #6ee7b7;
-	--badge-info-bg: #134e4a;
-	--badge-info-border: #14b8a6;
-	--badge-info-text: #99f6e4;
+	--badge-blue-bg: #3d2e1a;
+	--badge-blue-border: #d4874d;
+	--badge-blue-text: #f0c9a3;
+	--badge-green-bg: #1e3a1a;
+	--badge-green-border: #6aad5e;
+	--badge-green-text: #a3d98e;
+	--badge-info-bg: #3d2e1a;
+	--badge-info-border: #d4874d;
+	--badge-info-text: #f0c9a3;
 
 	/* Matter badge (flat) */
 	--badge-matter-bg: #1e3a8a;
@@ -373,14 +373,14 @@
 	--badge-sponsor-border: #8b5cf6;
 
 	/* Timeline badge (flat) */
-	--badge-timeline-bg: #064e3b;
-	--badge-timeline-text: #6ee7b7;
-	--badge-timeline-border: #10b981;
+	--badge-timeline-bg: #1e3a1a;
+	--badge-timeline-text: #a3d98e;
+	--badge-timeline-border: #6aad5e;
 
 	/* Procedural badge */
-	--badge-procedural-bg: #334155;
-	--badge-procedural-text: #94a3b8;
-	--badge-procedural-border: #475569;
+	--badge-procedural-bg: #302e2b;
+	--badge-procedural-text: #9c9788;
+	--badge-procedural-border: #3d3a36;
 
 	/* Item summary indicator */
 	--item-summary-border: #3b82f6;
@@ -391,8 +391,8 @@
 	--badge-cancelled-text: #fca5a5;
 
 	/* Committee type colors */
-	--committee-color: #c4b5fd;
-	--council-color: #34d399;
+	--committee-color: #b8a3e0;
+	--council-color: #6aad5e;
 	--board-color: #fbbf24;
 
 	/* Action button colors */
@@ -404,12 +404,6 @@
 	--action-share-hover: #3b82f6;
 	--action-deliberate: #a78bfa;
 	--action-deliberate-hover: #8b5cf6;
-
-	/* Discovery button colors */
-	--random-meeting-bg: #0a7d55;
-	--random-meeting-hover: #0c9666;
-	--random-policy-bg: #b45309;
-	--random-policy-hover: #d97706;
 
 	/* Semantic feedback colors */
 	--alert-bg: #450a0a;
@@ -448,9 +442,9 @@
 	--reason-text: #86efac;
 
 	/* Unified topic tags */
-	--topic-tag-bg: var(--surface-secondary);
-	--topic-tag-text: var(--civic-blue);
-	--topic-tag-border: var(--border-primary);
+	--topic-tag-bg: rgba(212, 135, 77, 0.1);
+	--topic-tag-text: #c4a66e;
+	--topic-tag-border: rgba(212, 135, 77, 0.2);
 
 	/* Success/error feedback */
 	--success-bg: #064e3b;
@@ -479,18 +473,18 @@
 	--contact-twitter: #38bdf8;
 
 	/* Participation box */
-	--participation-box-bg: linear-gradient(135deg, #3b0764 0%, #581c87 100%);
-	--participation-box-border: #c084fc;
-	--participation-label: #e9d5ff;
-	--participation-link-color: #f5d0fe;
-	--participation-link-hover: #fae8ff;
+	--participation-box-bg: linear-gradient(135deg, #1e3a1a 0%, #2a4d24 100%);
+	--participation-box-border: #6aad5e;
+	--participation-label: #a3d98e;
+	--participation-link-color: #a3d98e;
+	--participation-link-hover: #c4e8b8;
 
 	/* Viewing/streaming box */
-	--viewing-box-bg: linear-gradient(135deg, #3b0764 0%, #581c87 100%);
-	--viewing-box-border: #c084fc;
-	--viewing-label-color: #e9d5ff;
-	--viewing-link-color: #f5d0fe;
-	--viewing-link-hover: #fae8ff;
+	--viewing-box-bg: linear-gradient(135deg, #2a2418 0%, #3d321e 100%);
+	--viewing-box-border: #d4874d;
+	--viewing-label-color: #f0c9a3;
+	--viewing-link-color: #f0c9a3;
+	--viewing-link-hover: #f8dfc5;
 
 	/* Star rating */
 	--star-filled: #fbbf24;
@@ -520,8 +514,14 @@
 	--badge-virtual-text: #93c5fd;
 	--badge-virtual-border: #3b82f6;
 
+	/* Discovery buttons */
+	--random-meeting-bg: #4A6741;
+	--random-meeting-hover: #5a7d51;
+	--random-policy-bg: #8B5A2B;
+	--random-policy-hover: #a06b35;
+
 	/* Background texture */
-	--dot-color: rgba(255, 255, 255, 0.03);
+	--dot-color: rgba(255, 255, 255, 0.015);
 }
 
 * {
@@ -537,10 +537,10 @@ html {
 
 body {
 	font-family: 'IBM Plex Sans', sans-serif;
-	background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+	background: var(--bg-gradient-start);
 	background-color: var(--bg-gradient-start);
 	color: var(--text-primary);
-	line-height: 1.7;
+	line-height: 1.6;
 	min-height: 100vh;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;

@@ -676,7 +676,7 @@
 		background: var(--civic-blue);
 		color: var(--civic-white);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+		box-shadow: 0 4px 12px rgba(181, 100, 42, 0.15);
 	}
 
 	.contact-icon-svg {

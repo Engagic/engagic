@@ -575,7 +575,7 @@
 	.input:focus {
 		outline: none;
 		border: 2px solid var(--civic-blue);
-		box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+		box-shadow: 0 0 0 3px rgba(181, 100, 42, 0.1);
 	}
 
 	.input:disabled {

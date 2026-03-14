@@ -451,21 +451,22 @@
 	}
 
 	.dashboard-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.75rem;
-		font-weight: 700;
+		font-family: var(--font-display);
+		font-size: clamp(1.75rem, 4vw, 2.5rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0 0 0.5rem 0;
-		letter-spacing: -0.5px;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
 	}
 
 	.dashboard-subtitle {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
+		font-family: var(--font-body);
+		font-size: 0.7rem;
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.08em;
 		color: var(--civic-gray);
-		font-weight: 500;
+		font-weight: 700;
 	}
 
 	/* Metrics Grid (4 cards) */
@@ -477,18 +478,15 @@
 	}
 
 	.metric-card {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		padding: 1.25rem;
-		transition: all var(--transition-normal);
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+		background: transparent;
+		border: none;
+		border-bottom: 1px solid var(--border-primary);
+		padding: 1.25rem 0;
+		transition: padding-left 0.2s ease;
 	}
 
 	.metric-card:hover {
-		border-color: var(--civic-blue);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
-		transform: translateY(-2px);
+		padding-left: 4px;
 	}
 
 	.metric-label {
@@ -502,9 +500,9 @@
 	}
 
 	.metric-value {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-display);
 		font-size: 2.5rem;
-		font-weight: 700;
+		font-weight: 400;
 		color: var(--text-primary);
 		margin-bottom: 0.25rem;
 		line-height: 1;
@@ -519,10 +517,9 @@
 	/* Upcoming Meetings Section */
 	.upcoming-meetings-section {
 		margin: 2rem 0;
-		padding: 1.5rem;
-		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
+		padding: 0;
+		background: transparent;
+		border: none;
 	}
 
 	.upcoming-meetings-section.loading-section {
@@ -539,20 +536,17 @@
 
 	.meeting-item {
 		display: block;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: var(--radius-md);
-		padding: 1rem 1.25rem;
+		background: transparent;
+		border: none;
+		border-bottom: 1px solid var(--border-primary);
+		padding: 1rem 0;
 		text-decoration: none;
-		transition: all var(--transition-normal);
+		transition: padding-left 0.2s ease;
 		cursor: pointer;
 	}
 
 	.meeting-item:hover {
-		border-left-color: var(--civic-accent);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-		transform: translateY(-2px);
+		padding-left: 6px;
 	}
 
 	.meeting-item-header {
@@ -588,9 +582,10 @@
 	}
 
 	.meeting-item-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 0.95rem;
-		line-height: 1.4;
+		font-family: var(--font-display);
+		font-size: 1.05rem;
+		font-weight: 400;
+		line-height: 1.3;
 		color: var(--text-primary);
 		margin-bottom: 0.5rem;
 	}
@@ -753,7 +748,7 @@
 
 	.city-card:hover {
 		border-color: var(--civic-blue);
-		box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+		box-shadow: 0 2px 8px rgba(181, 100, 42, 0.15);
 		transform: translateY(-2px);
 	}
 
@@ -799,13 +794,15 @@
 	}
 
 	.section-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		font-weight: 600;
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
 		color: var(--civic-gray);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.08em;
 		margin: 0 0 1rem 0;
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--text-primary);
 	}
 
 	.topic-pills {
@@ -830,7 +827,7 @@
 	.topic-pill:hover {
 		border-color: var(--civic-blue);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+		box-shadow: 0 4px 12px rgba(181, 100, 42, 0.2);
 	}
 
 	.topic-pill.selected {
