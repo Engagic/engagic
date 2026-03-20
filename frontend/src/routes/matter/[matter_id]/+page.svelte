@@ -224,7 +224,7 @@
 				{#if attachmentsExpanded}
 					<div class="attachments-list">
 						{#each attachments as attachment}
-							<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
+							<a href={attachment.portal_url || attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link">
 								<span class="attachment-name">{attachment.name}</span>
 							</a>
 						{/each}

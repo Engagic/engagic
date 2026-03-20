@@ -16,10 +16,12 @@ from database.models import (
 
 
 def deserialize_attachments(data: Any) -> List[AttachmentInfo]:
-    """Deserialize JSONB attachments array to typed AttachmentInfo list."""
+    """Deserialize JSONB attachments array to typed AttachmentInfo list.
+    Strips unknown fields to handle vendor-specific extras gracefully."""
     if not data:
         return []
-    return [AttachmentInfo(**a) for a in data]
+    known = AttachmentInfo.model_fields.keys()
+    return [AttachmentInfo(**{k: v for k, v in a.items() if k in known}) for a in data]
 
 
 def deserialize_metadata(data: Any) -> Optional[MatterMetadata]:

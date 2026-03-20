@@ -449,6 +449,10 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                         FROM items i
                         JOIN meetings m ON i.meeting_id = m.id
                         WHERE i.summary IS NOT NULL AND i.summary != ''
+                          AND (i.matter_id IS NULL OR i.matter_id NOT IN (
+                              SELECT id FROM city_matters
+                              WHERE canonical_summary IS NOT NULL AND canonical_summary != ''
+                          ))
                         GROUP BY m.banana
                     ),
                     meeting_counts AS (
@@ -476,7 +480,7 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                         ELSE 'pending'
                     END AS coverage_type,
                     CASE
-                        WHEN COALESCE(mc.cnt, 0) > 0 THEN mc.cnt
+                        WHEN COALESCE(mc.cnt, 0) > 0 THEN mc.cnt + COALESCE(ic.cnt, 0)
                         WHEN COALESCE(ic.cnt, 0) > 0 THEN ic.cnt
                         WHEN COALESCE(mtg.cnt, 0) > 0 THEN mtg.cnt
                         WHEN COALESCE(sc.cnt, 0) > 0 THEN sc.cnt

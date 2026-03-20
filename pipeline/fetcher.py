@@ -198,10 +198,10 @@ class Fetcher:
 
         try:
             adapter = get_async_adapter(city.vendor, city.slug, **kwargs)
-        except VendorError as e:
+        except (VendorError, ValueError) as e:
             result.status = SyncStatus.SKIPPED
             result.error_message = str(e)
-            logger.warning("vendor not supported", city=city.banana, vendor=city.vendor, error=str(e))
+            logger.warning("adapter init failed", city=city.banana, vendor=city.vendor, error=str(e))
             self.metrics.record_error("vendor", e)
             return result
 

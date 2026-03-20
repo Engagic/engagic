@@ -188,7 +188,7 @@
 					<div class="attachment-list">
 						{#each attachments as attachment (attachment.url)}
 							<a
-								href={attachment.url}
+								href={attachment.portal_url || attachment.url}
 								target="_blank"
 								rel="noopener noreferrer"
 								class="attachment-link"
