@@ -28,6 +28,7 @@ export interface AgendaItem {
 		name: string;
 		url: string;
 		type: string;
+		portal_url?: string;  // Stable viewer URL (CivicClerk portal)
 		history_id?: string;  // PrimeGov-specific
 	}>;
 	summary?: string;

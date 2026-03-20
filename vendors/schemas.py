@@ -17,6 +17,7 @@ class AttachmentSchema(BaseModel):
     name: str
     url: str
     type: str  # pdf, doc, spreadsheet, unknown
+    portal_url: Optional[str] = None  # Stable viewer URL (CivicClerk portal)
     history_id: Optional[str] = None  # PrimeGov-specific identifier for downloading
 
     @field_validator("url")

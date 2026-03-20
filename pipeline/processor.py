@@ -23,9 +23,6 @@ logger = get_logger(__name__).bind(component="processor")
 QUEUE_POLL_INTERVAL = 5
 QUEUE_FATAL_ERROR_BACKOFF = 10
 
-PUBLIC_COMMENT_PAGE_THRESHOLD = 1000
-PUBLIC_COMMENT_LARGE_DOC_THRESHOLD = 50
-PUBLIC_COMMENT_OCR_THRESHOLD = 0.3
 PUBLIC_COMMENT_SIGNATURE_THRESHOLD = 20
 
 MEETING_SPECIFIC_PARTICIPATION_KEYS = (
@@ -50,20 +47,14 @@ def is_likely_public_comment_compilation(
     extraction_result: Dict[str, Any],
     url_path: str
 ) -> bool:
-    """Detect public comment compilations via page count, OCR ratio, and signature patterns."""
-    page_count = extraction_result.get("page_count", 0)
-    ocr_pages = extraction_result.get("ocr_pages", 0)
+    """Detect public comment compilations via signature patterns.
+
+    Pre-extraction filtering by attachment name is handled by is_public_comment_attachment().
+    This is a post-extraction fallback for documents that slipped past the name filter.
+    Page count and OCR ratio are not reliable signals -- legitimate contracts and bid
+    documents routinely have hundreds of pages and scanned attachments.
+    """
     text = extraction_result.get("text", "")
-
-    if page_count > PUBLIC_COMMENT_PAGE_THRESHOLD:
-        logger.info("skipping likely compilation - excessive page count", url_path=url_path, page_count=page_count)
-        return True
-
-    if page_count > PUBLIC_COMMENT_LARGE_DOC_THRESHOLD and ocr_pages > 0:
-        ocr_ratio = ocr_pages / page_count
-        if ocr_ratio > PUBLIC_COMMENT_OCR_THRESHOLD:
-            logger.info("skipping likely scanned compilation - high OCR ratio", url_path=url_path, ocr_ratio=round(ocr_ratio, 2))
-            return True
 
     if len(text) > 5000:
         sincerely_count = text.lower().count("sincerely,")

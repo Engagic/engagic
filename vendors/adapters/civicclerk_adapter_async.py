@@ -144,7 +144,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
         # Try to fetch structured items if agenda exists
         items = []
         if has_agenda and agenda_id:
-            items = await self._fetch_meeting_items(agenda_id)
+            items = await self._fetch_meeting_items(agenda_id, event_id)
 
         if items:
             result["items"] = items
@@ -177,7 +177,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
 
         return result
 
-    async def _fetch_meeting_items(self, agenda_id: int) -> List[Dict[str, Any]]:
+    async def _fetch_meeting_items(self, agenda_id: int, event_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Fetch structured agenda items from /v1/Meetings/{agenda_id}."""
         try:
             url = f"{self.base_url}/v1/Meetings/{agenda_id}"
@@ -192,7 +192,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
             raw_items = data.get("items", [])
 
             # Flatten hierarchy and process items
-            items = self._flatten_items(raw_items)
+            items = self._flatten_items(raw_items, event_id)
 
             logger.debug(
                 "extracted items from meeting",
@@ -215,7 +215,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
             )
             return []
 
-    def _flatten_items(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _flatten_items(self, items: List[Dict[str, Any]], event_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Recursively extract leaf items (isSection=0), skipping section containers."""
         result = []
 
@@ -226,20 +226,20 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
             if is_section == 1:
                 # Section - recurse into children
                 if child_items:
-                    result.extend(self._flatten_items(child_items))
+                    result.extend(self._flatten_items(child_items, event_id))
             else:
                 # Leaf item - process it
-                processed = self._process_item(item)
+                processed = self._process_item(item, event_id)
                 if processed:
                     result.append(processed)
 
                 # Also process any children (items can have nested items)
                 if child_items:
-                    result.extend(self._flatten_items(child_items))
+                    result.extend(self._flatten_items(child_items, event_id))
 
         return result
 
-    def _process_item(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _process_item(self, item: Dict[str, Any], event_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Convert CivicClerk item to our schema."""
         item_id = item.get("id")
         if not item_id:
@@ -282,11 +282,21 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
                     else:
                         file_type = "unknown"
 
-                    attachments.append({
+                    att_id = att.get("id")
+                    portal_url = (
+                        f"https://{self.slug}.portal.civicclerk.com/event/{event_id}/files/attachment/{att_id}"
+                        if att_id and event_id else None
+                    )
+
+                    attachment_entry = {
                         "name": name,
                         "url": url,
                         "type": file_type,
-                    })
+                    }
+                    if portal_url:
+                        attachment_entry["portal_url"] = portal_url
+
+                    attachments.append(attachment_entry)
 
         result = {
             "vendor_item_id": str(item_id),

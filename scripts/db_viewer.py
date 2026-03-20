@@ -40,12 +40,20 @@ def lookup_zipcodes(city_name: str, state: str) -> list[str]:
     """Look up zipcodes for a city using uszipcode.
 
     Returns list of zipcode strings.
+    # TODO: Replace with spatial ZCTA lookup (Census TIGER boundaries) -- uszipcode
+    # is unreliable for cities that share zip codes with larger neighbors and crashes
+    # on cities not in USPS preferred name list (e.g. Sunrise FL -> "Sanibel" error).
     """
-    se = SearchEngine(
-        simple_or_comprehensive=SearchEngine.SimpleOrComprehensiveArgEnum.comprehensive
-    )
-    results = se.query(city=city_name, state=state, returns=200)
-    return [z.zipcode for z in results if z.zipcode]
+    try:
+        se = SearchEngine(
+            simple_or_comprehensive=SearchEngine.SimpleOrComprehensiveArgEnum.comprehensive
+        )
+        results = se.query(city=city_name, state=state, returns=200)
+        return [z.zipcode for z in results if z.zipcode]
+    except Exception as e:
+        print(f"   uszipcode lookup failed: {e}")
+        print("   You can enter zipcodes manually below.")
+        return []
 
 
 async def lookup_census_population(db: Database, city_name: str, state: str) -> Optional[int]:

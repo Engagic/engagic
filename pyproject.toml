@@ -46,6 +46,7 @@ dependencies = [
     "stripe>=11.3.0",
     "structlog>=24.1.0",
     "uszipcode>=1.0.1",
+    "sqlalchemy-mate<2",
     "uvicorn>=0.35.0",
     "pyright>=1.1.407",
     "maturin",

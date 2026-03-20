@@ -90,7 +90,9 @@ class AttachmentInfo(BaseModel):
     name: str
     url: str
     type: str  # pdf, doc, spreadsheet, unknown
+    portal_url: Optional[str] = None  # Stable viewer URL (CivicClerk portal)
     history_id: Optional[str] = None  # PrimeGov-specific
+    meta_id: Optional[str] = None  # Granicus-specific
 
 
 # --- Domain Dataclasses (with runtime validation) ---

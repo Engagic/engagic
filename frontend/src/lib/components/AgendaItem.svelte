@@ -313,7 +313,7 @@
 					<div class="item-attachments">
 						{#each item.attachments as attachment (attachment.url || attachment.name)}
 							{#if attachment.url}
-								<a href={attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link" onclick={(e) => e.stopPropagation()}>
+								<a href={attachment.portal_url || attachment.url} target="_blank" rel="noopener noreferrer" class="attachment-link" onclick={(e) => e.stopPropagation()}>
 									{attachment.name || 'View Packet'}
 								</a>
 							{/if}
