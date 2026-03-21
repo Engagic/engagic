@@ -29,6 +29,7 @@ from vendors.adapters.parsers.granicus_parser import (
     parse_viewpublisher_listing,
     parse_agendaonline_html,
     parse_agendaviewer_html,
+    parse_generated_agendaviewer_html,
     parse_granicus_s3_html,
 )
 from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
@@ -198,6 +199,51 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         try:
             response = await self._get(agenda_viewer_url)
             final_url = str(response.url)
+            content_type = response.headers.get("Content-Type", "")
+
+            # DocumentViewer.php redirects serve raw PDF — run chunker directly
+            if "application/pdf" in content_type:
+                logger.info(
+                    "pdf redirect detected",
+                    vendor="granicus",
+                    slug=self.slug,
+                    event_id=event_id,
+                    final_url=final_url[:120],
+                )
+                pdf_items = await self._parse_pdf_response(response, event_id)
+                meeting = {
+                    "vendor_id": event_id,
+                    "title": meeting_data.get("title", ""),
+                    "start": meeting_data.get("start", ""),
+                }
+                if pdf_items:
+                    meeting["items"] = pdf_items
+                    meeting["packet_url"] = final_url
+                else:
+                    meeting["packet_url"] = final_url
+                return meeting
+
+            # Google Docs viewer wraps PDF in HTML — extract real URL and download
+            if "docs.google.com/gview" in final_url:
+                real_pdf_url = parse_qs(urlparse(final_url).query).get("url", [None])[0]
+                if real_pdf_url:
+                    logger.info(
+                        "google viewer redirect, fetching actual pdf",
+                        vendor="granicus",
+                        slug=self.slug,
+                        event_id=event_id,
+                    )
+                    pdf_items = await self._parse_packet_pdf(real_pdf_url, event_id)
+                    meeting = {
+                        "vendor_id": event_id,
+                        "title": meeting_data.get("title", ""),
+                        "start": meeting_data.get("start", ""),
+                    }
+                    if pdf_items:
+                        meeting["items"] = pdf_items
+                    meeting["packet_url"] = real_pdf_url
+                    return meeting
+
             html = await self._read_text(response)
 
             # AgendaOnline ViewMeeting loads items via JS - use accessible view instead
@@ -214,6 +260,8 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 parsed = await asyncio.to_thread(parse_agendaonline_html, html, final_url)
             elif "s3.amazonaws.com" in final_url or "cloudfront.net" in final_url:
                 parsed = await asyncio.to_thread(parse_granicus_s3_html, html)
+            elif "GeneratedAgendaViewer" in final_url:
+                parsed = await asyncio.to_thread(parse_generated_agendaviewer_html, html)
             else:
                 # Legacy format first; fall back to S3 format if no items found
                 parsed = await asyncio.to_thread(parse_agendaviewer_html, html)
@@ -258,6 +306,14 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             else:
                 # No HTML items — try PDF path: agenda PDF first, then packet PDF
                 agenda_pdf_url, packet_url = self._find_agenda_and_packet_urls(html, final_url)
+                logger.info(
+                    "no html items, trying pdf path",
+                    vendor="granicus",
+                    slug=self.slug,
+                    event_id=event_id,
+                    has_agenda_pdf=bool(agenda_pdf_url),
+                    has_packet_pdf=bool(packet_url),
+                )
 
                 pdf_items = None
                 used_url = None
@@ -310,18 +366,18 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     # Neither PDF gave usable items — keep packet_url for
                     # monolithic packet-level processing by the processor
                     meeting["packet_url"] = packet_url
-                    logger.debug(
+                    logger.info(
                         "no items from pdfs, using packet fallback",
                         vendor="granicus",
                         slug=self.slug,
-                        event_id=event_id
+                        event_id=event_id,
                     )
                 else:
-                    logger.debug(
+                    logger.info(
                         "no items or packet found",
                         vendor="granicus",
                         slug=self.slug,
-                        event_id=event_id
+                        event_id=event_id,
                     )
 
             return meeting
@@ -496,6 +552,67 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                         if text:
                             parts.append(text)
         return " ".join(parts) if parts else ""
+
+    async def _parse_pdf_response(
+        self, response, event_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Parse a PDF from an already-fetched response (e.g. DocumentViewer redirect).
+
+        Returns list of item dicts matching pipeline format, or empty list on failure.
+        """
+        tmp_path = None
+        try:
+            pdf_bytes = await response.read()
+
+            if len(pdf_bytes) < 500:
+                logger.debug("pdf too small", vendor="granicus", slug=self.slug, event_id=event_id, size=len(pdf_bytes))
+                return []
+
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+                tmp.write(pdf_bytes)
+                tmp_path = tmp.name
+
+            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+            items = parsed.get("items", [])
+
+            if items:
+                attachment_count = sum(len(item.get("attachments", [])) for item in items)
+                logger.info(
+                    "chunker extracted items from pdf redirect",
+                    vendor="granicus",
+                    slug=self.slug,
+                    event_id=event_id,
+                    item_count=len(items),
+                    attachment_count=attachment_count,
+                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
+                )
+            else:
+                logger.info(
+                    "chunker found no items in pdf redirect",
+                    vendor="granicus",
+                    slug=self.slug,
+                    event_id=event_id,
+                    page_count=parsed.get("metadata", {}).get("page_count", 0),
+                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
+                )
+
+            return items
+
+        except Exception as e:
+            logger.warning(
+                "pdf redirect parse failed",
+                vendor="granicus",
+                slug=self.slug,
+                event_id=event_id,
+                error=str(e),
+            )
+            return []
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     async def _parse_packet_pdf(self, packet_url: str, event_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Download agenda packet PDF and parse it for structured items.
