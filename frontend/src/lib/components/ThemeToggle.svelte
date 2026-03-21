@@ -54,7 +54,7 @@
 		border: 2px solid var(--border-primary);
 		border-radius: var(--radius-pill);
 		cursor: pointer;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 500;
 		color: var(--text-primary);

@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import StateMetrics from '$lib/components/StateMetrics.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import SeoHead from '$lib/components/SeoHead.svelte';
@@ -50,9 +48,10 @@
 
 		<StateMetrics
 			stateCode={data.stateCode}
-			stateName={stateName}
+			{stateName}
 			initialMetrics={data.metrics}
 			initialMeetings={data.meetings ?? undefined}
+			initialHappening={data.happening ?? undefined}
 		/>
 	</div>
 
@@ -65,7 +64,7 @@
 		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
-		padding: 2rem 1rem;
+		padding: 40px 24px 100px;
 	}
 
 	.state-container {
@@ -75,16 +74,16 @@
 	}
 
 	.breadcrumb {
-		margin-bottom: 1.5rem;
+		margin-bottom: 2rem;
 	}
 
 	.breadcrumb-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
+		font-weight: 500;
 		color: var(--text-link);
 		text-decoration: none;
 		transition: color var(--transition-normal);
-		font-weight: 500;
 	}
 
 	.breadcrumb-link:hover {
@@ -94,7 +93,7 @@
 
 	@media (max-width: 768px) {
 		.state-page {
-			padding: 1rem 0.5rem;
+			padding: 1rem 0.75rem 3rem;
 		}
 	}
 </style>

@@ -54,7 +54,7 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: var(--space-md) var(--space-lg);
-		background: var(--surface-primary);
+		background: transparent;
 		border-bottom: 1px solid var(--border-primary);
 		flex-shrink: 0;
 	}
@@ -75,7 +75,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.875rem;
 		color: var(--text-secondary);
 		text-decoration: none;
@@ -87,15 +87,16 @@
 	}
 
 	.page-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.25rem;
-		font-weight: 600;
+		font-family: var(--font-display);
+		font-size: 1.4rem;
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
+		letter-spacing: -0.01em;
 	}
 
 	.request-cta {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 500;
 		color: var(--civic-blue);
@@ -119,13 +120,13 @@
 
 	.page-footer {
 		padding: var(--space-md) var(--space-lg);
-		background: var(--surface-primary);
+		background: transparent;
 		border-top: 1px solid var(--border-primary);
 		flex-shrink: 0;
 	}
 
 	.footer-text {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.875rem;
 		color: var(--text-secondary);
 		margin: 0;

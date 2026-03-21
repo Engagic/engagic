@@ -233,22 +233,23 @@
 	}
 
 	.section-heading {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 2rem;
-		font-weight: 600;
+		font-family: var(--font-display);
+		font-size: clamp(1.75rem, 4vw, 2.5rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
-		line-height: 1.2;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
 	}
 
 	h1.section-heading {
-		font-size: 2.5rem;
+		font-size: clamp(2rem, 5vw, 3rem);
 	}
 
 	.about-content p {
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 		line-height: 1.7;
-		color: var(--text-primary);
+		color: var(--text-secondary);
 		margin: 0;
 	}
 
@@ -278,7 +279,7 @@
 		flex-wrap: wrap;
 		font-size: 0.9rem;
 		color: var(--civic-gray);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		padding-top: var(--space-xs);
 	}
 
@@ -296,13 +297,7 @@
 		padding: var(--space-2xl);
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		transition: all var(--transition-normal);
-	}
-
-	.donation-card:hover {
-		border-color: var(--civic-blue);
-		box-shadow: 0 4px 16px var(--shadow-md);
+		border-radius: var(--radius-md);
 	}
 
 	.toggle-container {
@@ -316,7 +311,7 @@
 
 	.toggle-button {
 		padding: var(--space-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 600;
 		border-radius: var(--radius-sm);
@@ -353,7 +348,7 @@
 
 	.amount-button {
 		padding: var(--space-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 600;
 		border-radius: var(--radius-md);
@@ -394,7 +389,7 @@
 		left: var(--space-md);
 		top: 50%;
 		transform: translateY(-50%);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-primary);
 		pointer-events: none;
 	}
@@ -402,7 +397,7 @@
 	.custom-amount input {
 		width: 100%;
 		padding: var(--space-md) var(--space-md) var(--space-md) var(--space-xl);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		border: 2px solid var(--border-primary);
 		border-radius: var(--radius-md);
@@ -428,7 +423,7 @@
 		border-radius: var(--radius-sm);
 		color: var(--error-text);
 		font-size: 0.9rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		text-align: center;
 		margin-top: -var(--space-sm);
 	}
@@ -436,7 +431,7 @@
 	.donate-button {
 		width: 100%;
 		padding: var(--space-lg);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 600;
 		border-radius: var(--radius-md);
@@ -449,14 +444,11 @@
 
 	.donate-button:hover:not(:disabled) {
 		background: var(--civic-accent);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 12px var(--shadow-md);
 	}
 
 	.donate-button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		transform: none;
 	}
 
 	.contact-footer {

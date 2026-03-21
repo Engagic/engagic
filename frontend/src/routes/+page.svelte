@@ -323,17 +323,6 @@
 		</section>
 	{/if}
 
-	<section class="bottom-links">
-		<div class="bottom-links-row">
-			<a href="/about/general" class="bottom-link">How it works</a>
-			<span class="link-separator">|</span>
-			<a href="/country" class="bottom-link">Coverage map</a>
-			<span class="link-separator">|</span>
-			<a href="/about/donate" class="bottom-link">Support Engagic</a>
-		</div>
-		<p class="bottom-note">Open-source and community-driven</p>
-	</section>
-
 	<Footer analytics={data.analytics} />
 </div>
 
@@ -351,9 +340,10 @@
 	.tagline {
 		font-family: var(--font-display);
 		color: var(--text-primary);
-		font-size: 1.6rem;
+		font-size: clamp(1.4rem, 4vw, 1.8rem);
 		font-weight: 400;
-		line-height: 1.4;
+		line-height: 1.3;
+		letter-spacing: -0.01em;
 		margin-bottom: 1rem;
 		max-width: 440px;
 		margin-left: auto;
@@ -366,54 +356,49 @@
 
 	.search-input {
 		width: 100%;
-		padding: 1.4rem;
-		font-size: 1.1rem;
+		padding: 1rem 1.25rem;
+		font-size: 1.05rem;
+		font-family: var(--font-body);
 		border: 2px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		background: var(--surface-primary);
+		border-radius: var(--radius-md);
+		background: transparent;
 		color: var(--text-primary);
-		transition: all var(--transition-slow);
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		transition: border-color 0.2s ease;
 	}
 
 	.search-input:focus {
 		outline: none;
 		border-color: var(--civic-blue);
-		box-shadow: 0 4px 16px var(--shadow-lg);
-		transform: translateY(-1px);
 	}
 
 	.search-button {
 		margin-top: 1rem;
 		width: 100%;
-		padding: 1rem;
-		font-size: 1rem;
-		font-family: 'IBM Plex Mono', monospace;
+		padding: 0.85rem;
+		font-size: 0.9rem;
+		font-family: var(--font-body);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 		background: var(--civic-blue);
 		color: var(--civic-white);
 		border: none;
 		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
-		box-shadow: 0 4px 12px var(--shadow-lg);
+		transition: background 0.2s ease;
 	}
 
 	.search-button:hover {
 		background: var(--civic-accent);
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px var(--shadow-lg);
 	}
 
 	.search-button:active {
-		transform: translateY(0);
-		box-shadow: inset 0 2px 4px var(--shadow-md);
+		opacity: 0.9;
 	}
 
 	.search-button:disabled {
 		background: var(--civic-gray);
 		cursor: not-allowed;
-		transform: none;
-		box-shadow: 0 2px 8px var(--shadow-sm);
 		opacity: 0.6;
 	}
 
@@ -426,49 +411,38 @@
 
 	.random-button {
 		flex: 1;
-		padding: 1rem;
-		font-size: 1rem;
-		font-family: 'IBM Plex Mono', monospace;
+		padding: 0.75rem;
+		font-size: 0.85rem;
+		font-family: var(--font-body);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 		color: var(--civic-white);
 		border: none;
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
+		transition: background 0.2s ease;
 	}
 
 	.random-meeting {
 		background: var(--random-meeting-bg);
-		box-shadow: 0 4px 12px var(--shadow-sm);
 	}
 
 	.random-meeting:hover {
 		background: var(--random-meeting-hover);
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px var(--shadow-md);
 	}
 
 	.random-policy {
 		background: var(--random-policy-bg);
-		box-shadow: 0 4px 12px var(--shadow-sm);
 	}
 
 	.random-policy:hover {
 		background: var(--random-policy-hover);
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px var(--shadow-md);
 	}
 
 	.random-button:disabled {
 		opacity: 0.7;
 		cursor: not-allowed;
-		transform: none;
-		box-shadow: 0 2px 8px var(--shadow-sm);
-	}
-
-	.link-separator {
-		color: var(--civic-gray);
-		font-size: 0.85rem;
-		opacity: 0.5;
 	}
 
 	/* Happening section */
@@ -480,12 +454,16 @@
 	}
 
 	.happening-title {
-		font-family: var(--font-display);
-		font-size: 1.2rem;
+		font-family: var(--font-body);
+		font-size: 0.7rem;
 		font-weight: 700;
-		color: var(--text-primary);
-		text-align: center;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
+		text-align: left;
 		margin: 0 0 1rem 0;
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--text-primary);
 	}
 
 	.happening-list {
@@ -496,21 +474,17 @@
 
 	.happening-card {
 		display: block;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-left: 3px solid var(--civic-green);
-		border-radius: var(--radius-md);
-		padding: 1rem 1.25rem;
+		background: transparent;
+		border: none;
+		border-bottom: 1px solid var(--border-primary);
+		padding: 0.75rem 0;
 		text-decoration: none;
 		color: inherit;
-		transition: all var(--transition-normal);
+		transition: padding-left 0.2s ease;
 	}
 
 	.happening-card:hover {
-		border-color: var(--border-hover);
-		border-left-color: var(--civic-accent);
-		box-shadow: 0 4px 12px var(--shadow-lg);
-		transform: translateY(-2px);
+		padding-left: 6px;
 	}
 
 	.happening-card-header {
@@ -537,11 +511,11 @@
 
 	.happening-item-title {
 		font-family: var(--font-display);
-		font-size: 1rem;
-		font-weight: 700;
+		font-size: 1.05rem;
+		font-weight: 400;
 		color: var(--text-primary);
-		margin: 0 0 0.35rem 0;
-		line-height: 1.4;
+		margin: 0 0 0.25rem 0;
+		line-height: 1.3;
 	}
 
 	.happening-reason {
@@ -555,40 +529,6 @@
 		overflow: hidden;
 	}
 
-	/* Bottom links */
-	.bottom-links {
-		text-align: center;
-		padding: 1.5rem 0 2rem;
-		margin-top: 1rem;
-		border-top: 1px solid var(--border-primary);
-	}
-
-	.bottom-links-row {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.bottom-link {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.85rem;
-		color: var(--civic-blue);
-		text-decoration: none;
-	}
-
-	.bottom-link:hover {
-		text-decoration: underline;
-	}
-
-	.bottom-note {
-		font-size: 0.85rem;
-		color: var(--civic-gray);
-		margin: 0;
-		opacity: 0.7;
-	}
-
 	.not-found-inline {
 		margin-top: 1.25rem;
 		padding: 1.25rem;
@@ -599,14 +539,14 @@
 	}
 
 	.not-found-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1rem;
 		color: var(--text-primary);
 		margin: 0 0 0.5rem 0;
 	}
 
 	.not-found-cta {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.95rem;
 		color: var(--text-secondary);
 		margin: 0;
@@ -632,7 +572,7 @@
 	}
 
 	.ambiguous-inline .ambiguous-message {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1rem;
 		color: var(--text-primary);
 		margin: 0 0 1rem 0;
@@ -650,7 +590,7 @@
 		background: var(--surface-primary);
 		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-sm);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 500;
 		color: var(--civic-blue);
@@ -667,7 +607,7 @@
 	.loading-inline {
 		margin-top: 1rem;
 		padding: 0.75rem 1rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		color: var(--text-secondary);
 		text-align: center;

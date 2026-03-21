@@ -151,7 +151,7 @@
 
 <style>
 	.report-trigger {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 500;
 		background: none;
 		border: none;
@@ -220,7 +220,7 @@
 	}
 
 	.modal-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -253,7 +253,7 @@
 	}
 
 	.form-label {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -261,7 +261,7 @@
 
 	.form-select,
 	.form-textarea {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		padding: 0.75rem;
 		background: var(--surface-secondary);
@@ -287,7 +287,7 @@
 	}
 
 	.error-message {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		color: var(--error-text);
 		padding: 0.5rem 0.75rem;
@@ -304,7 +304,7 @@
 
 	.cancel-button,
 	.submit-button {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		font-weight: 600;
 		padding: 0.6rem 1.25rem;
@@ -356,14 +356,14 @@
 		background: var(--success-bg);
 		color: var(--success-text);
 		border-radius: 50%;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 700;
 		margin-bottom: 1rem;
 	}
 
 	.success-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -371,7 +371,7 @@
 	}
 
 	.success-message {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--civic-gray);
 		margin: 0;

@@ -290,7 +290,7 @@
 		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 600;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.agenda-number {
@@ -301,7 +301,7 @@
 		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 500;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.matter-badge {
@@ -313,7 +313,7 @@
 		border-radius: var(--radius-xs);
 		font-size: 0.75rem;
 		font-weight: 600;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.attachment-count {
@@ -485,7 +485,7 @@
 	.full-summary :global(h4),
 	.full-summary :global(h5),
 	.full-summary :global(h6) {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 600;
 		color: var(--text-primary);
 		margin: 1rem 0 0.5rem 0;
@@ -508,7 +508,7 @@
 	}
 
 	.full-summary :global(code) {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85em;
 		background: var(--surface-secondary);
 		padding: 0.15rem 0.35rem;

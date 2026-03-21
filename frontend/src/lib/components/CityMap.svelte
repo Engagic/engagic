@@ -19,24 +19,24 @@
 	// Theme color palettes - MapLibre requires actual hex values, not CSS vars
 	const themes = {
 		light: {
-			background: '#f8fafc',
-			inactive: '#e2e8f0',
-			inactiveOutline: '#475569',
-			active: '#0f766e',
-			summarized: '#10b981',
-			hover: '#0d9488',
-			stateBorder: '#cbd5e1',
-			countryFill: '#f1f5f9'
+			background: '#faf9f5',
+			inactive: '#e4e2da',
+			inactiveOutline: '#8a897e',
+			active: '#b5642a',
+			summarized: '#3d8b55',
+			hover: '#c87a3f',
+			stateBorder: '#d5d0c6',
+			countryFill: '#f3f1ea'
 		},
 		dark: {
-			background: '#1e293b',
-			inactive: '#334155',
-			inactiveOutline: '#64748b',
-			active: '#0f766e',
-			summarized: '#10b981',
-			hover: '#0d9488',
-			stateBorder: '#475569',
-			countryFill: '#0f172a'
+			background: '#1a1918',
+			inactive: '#302e2b',
+			inactiveOutline: '#6b6860',
+			active: '#d4874d',
+			summarized: '#6aad5e',
+			hover: '#e09258',
+			stateBorder: '#3d3a36',
+			countryFill: '#141312'
 		}
 	};
 
@@ -380,14 +380,14 @@
 	}
 
 	.tooltip-city {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.875rem;
 		font-weight: 600;
 		color: var(--text-primary);
 	}
 
 	.tooltip-stats {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		color: var(--text-secondary);
 		margin-top: 0.25rem;
@@ -406,7 +406,7 @@
 	}
 
 	.legend-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -419,7 +419,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-xs);
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 		margin-top: 0.25rem;

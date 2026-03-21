@@ -216,7 +216,7 @@
 	}
 
 	.back-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--civic-blue);
 		text-decoration: none;
@@ -254,13 +254,13 @@
 	}
 
 	.loading-state {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--civic-gray);
 	}
 
 	.error-state p,
 	.empty-section p {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-primary);
 		margin: 0;
 	}
@@ -273,7 +273,7 @@
 		color: white;
 		border-radius: var(--radius-sm);
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 	}
 
@@ -292,11 +292,13 @@
 	}
 
 	.committee-name {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 2rem;
-		font-weight: 700;
+		font-family: var(--font-display);
+		font-size: clamp(1.5rem, 4vw, 2.25rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0 0 0.5rem;
+		letter-spacing: -0.02em;
+		line-height: 1.15;
 	}
 
 	.committee-meta {
@@ -307,24 +309,26 @@
 	}
 
 	.city-name {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		color: var(--civic-gray);
 	}
 
 	.status-badge.inactive {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
-		padding: 0.2rem 0.6rem;
+		font-family: var(--font-body);
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		padding: 2px 6px;
 		background: var(--surface-secondary);
 		color: var(--civic-gray);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
+		border: none;
+		border-radius: 2px;
 		text-transform: uppercase;
 	}
 
 	.committee-description {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.95rem;
 		color: var(--text-secondary);
 		line-height: 1.5;
@@ -347,22 +351,22 @@
 
 	.stat-value {
 		display: block;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.5rem;
-		font-weight: 700;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.75rem;
+		font-weight: 400;
+		color: var(--text-primary);
 	}
 
 	.stat-label {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.7rem;
+		font-family: var(--font-body);
+		font-size: 0.65rem;
 		color: var(--civic-gray);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.06em;
 	}
 
 	.section-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -395,9 +399,7 @@
 	}
 
 	.member-card:hover {
-		border-left-color: var(--civic-accent);
-		transform: translateX(4px);
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		padding-left: 1.5rem;
 	}
 
 	.member-card.chair {
@@ -416,14 +418,14 @@
 	}
 
 	.member-name {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.95rem;
 		font-weight: 600;
 		color: var(--text-primary);
 	}
 
 	.member-role {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		padding: 0.15rem 0.5rem;
 		background: var(--surface-secondary);
@@ -433,7 +435,7 @@
 	}
 
 	.member-position {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		color: var(--civic-gray);
 	}
@@ -463,9 +465,7 @@
 	}
 
 	.vote-card:hover {
-		border-left-color: var(--civic-accent);
-		transform: translateX(4px);
-		box-shadow: 0 2px 8px var(--shadow-sm);
+		padding-left: 1.25rem;
 	}
 
 	.vote-info {
@@ -481,21 +481,21 @@
 	}
 
 	.matter-file {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--civic-blue);
 	}
 
 	.vote-date {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--text-secondary);
 	}
 
 	.vote-title {
 		display: block;
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 0.9rem;
 		color: var(--text-primary);
 		line-height: 1.4;

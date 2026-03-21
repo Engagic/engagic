@@ -102,18 +102,18 @@
 		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
-		background: var(--surface-secondary);
+		background: var(--bg-gradient-start);
 	}
 
 	.page-header {
-		background: var(--surface-primary);
+		background: transparent;
 		border-bottom: 1px solid var(--border-primary);
 		padding: 1.5rem 2rem;
 	}
 
 	.back-link {
 		display: inline-block;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -128,24 +128,25 @@
 	}
 
 	.matter-title {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-display);
 		font-size: 1.5rem;
-		font-weight: 600;
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0 0 0.5rem 0;
-		line-height: 1.3;
+		line-height: 1.25;
+		letter-spacing: -0.01em;
 	}
 
 	.matter-file {
 		display: inline-block;
-		padding: 0.25rem 0.75rem;
+		padding: 2px 8px;
 		background: var(--badge-matter-bg);
 		color: var(--badge-matter-text);
 		border: 1.5px solid var(--badge-matter-border);
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.75rem;
 		font-weight: 700;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		letter-spacing: 0.5px;
 	}
 
@@ -158,10 +159,11 @@
 	}
 
 	.no-deliberation {
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
-		padding: 3rem 2rem;
+		background: transparent;
+		border: none;
+		border-top: 2px solid var(--text-primary);
+		border-radius: 0;
+		padding: 3rem 0;
 	}
 
 	.empty-state {
@@ -169,7 +171,7 @@
 	}
 
 	.empty-state h2 {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -177,7 +179,7 @@
 	}
 
 	.empty-state p {
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		font-size: 1rem;
 		color: var(--text-secondary);
 		margin: 0 0 1.5rem 0;
@@ -189,7 +191,7 @@
 		color: white;
 		border: none;
 		border-radius: var(--radius-md);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -200,7 +202,6 @@
 
 	.start-btn:hover:not(:disabled) {
 		background: var(--action-deliberate-hover);
-		transform: translateY(-1px);
 	}
 
 	.start-btn:disabled {
@@ -209,7 +210,7 @@
 	}
 
 	.auth-prompt {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 	}
 
@@ -220,7 +221,7 @@
 
 	.error-message {
 		color: var(--civic-red);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		margin-top: 1rem;
 	}

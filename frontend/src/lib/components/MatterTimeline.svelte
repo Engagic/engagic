@@ -146,7 +146,7 @@
 		text-align: center;
 		padding: 2rem;
 		color: var(--civic-gray);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 	}
 
@@ -177,7 +177,7 @@
 	}
 
 	.matter-id {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 700;
 		color: var(--badge-blue-text);
@@ -188,14 +188,14 @@
 	}
 
 	.appearance-count {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--civic-gray);
 		font-weight: 500;
 	}
 
 	.timeline-subtitle {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
@@ -239,14 +239,12 @@
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		transition: all var(--transition-normal);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		text-align: left;
 	}
 
 	.step-card:hover {
-		transform: translateX(4px);
-		border-left-width: 6px;
-		box-shadow: 0 4px 12px var(--shadow-lg);
+		padding-left: 1.5rem;
 	}
 
 	.step-card.committee {
@@ -262,12 +260,11 @@
 	}
 
 	.step-card.has-summary {
-		background: linear-gradient(135deg, var(--surface-secondary) 0%, rgba(16, 185, 129, 0.05) 100%);
+		background: var(--surface-secondary);
 	}
 
 	.flow-step.selected .step-card {
 		border-left-width: 6px;
-		box-shadow: 0 6px 16px var(--shadow-lg);
 	}
 
 	.step-number {
@@ -312,7 +309,7 @@
 		font-weight: 700;
 		font-size: 0.9rem;
 		color: var(--text-primary);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		line-height: 1.3;
 	}
 
@@ -362,9 +359,9 @@
 	.step-committee {
 		font-size: 0.7rem;
 		padding: 0.15rem 0.5rem;
-		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
-		color: var(--badge-purple-text, #7c3aed);
-		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
+		background: rgba(91, 58, 138, 0.1);
+		color: var(--civic-purple);
+		border: 1px solid rgba(91, 58, 138, 0.25);
 		border-radius: var(--radius-xs);
 		font-weight: 600;
 	}
@@ -373,9 +370,9 @@
 		font-family: inherit;
 		font-size: 0.7rem;
 		padding: 0.15rem 0.5rem;
-		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
-		color: var(--badge-purple-text, #7c3aed);
-		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
+		background: rgba(91, 58, 138, 0.1);
+		color: var(--civic-purple);
+		border: 1px solid rgba(91, 58, 138, 0.25);
 		border-radius: var(--radius-xs);
 		font-weight: 600;
 		cursor: pointer;
@@ -384,7 +381,7 @@
 
 	.step-committee-link:hover {
 		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.2));
-		border-color: var(--badge-purple-text, #7c3aed);
+		border-color: var(--civic-purple);
 	}
 
 	.step-agenda {

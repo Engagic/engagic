@@ -197,7 +197,7 @@
 	}
 
 	.viewing-label {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 600;
 		color: var(--viewing-label-color);
 		font-size: 0.75rem;
@@ -221,7 +221,7 @@
 	.viewing-link {
 		color: var(--viewing-link-color);
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 500;
 		transition: color var(--transition-normal);
@@ -234,7 +234,7 @@
 
 	.viewing-text {
 		color: var(--viewing-link-color);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		font-weight: 500;
 		transition: color var(--transition-slow);
@@ -287,7 +287,7 @@
 	}
 
 	.participation-label {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 600;
 		color: var(--participation-label);
 		font-size: 0.85rem;
@@ -334,7 +334,7 @@
 	}
 
 	.streaming-label-mobile {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 600;
 		color: var(--participation-label);
 		font-size: 0.75rem;
@@ -355,10 +355,10 @@
 
 	.participation-badge {
 		padding: 0.2rem 0.6rem;
-		border-radius: var(--radius-lg);
+		border-radius: 2px;
 		font-size: 0.75rem;
 		font-weight: 500;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.badge-hybrid {
@@ -394,7 +394,7 @@
 	.participation-link {
 		color: var(--participation-link-color);
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 500;
 		transition: color var(--transition-normal);
@@ -408,14 +408,14 @@
 	.meeting-id {
 		color: var(--text-secondary);
 		font-size: 0.8rem;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		margin-left: 0.5rem;
 		transition: color var(--transition-slow);
 	}
 
 	.participation-text {
 		color: var(--participation-link-color);
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 500;
 		transition: color var(--transition-slow);

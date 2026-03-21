@@ -106,13 +106,15 @@
 
 <style>
 	.main-nav {
-		background: var(--surface-primary);
+		background: transparent;
 		border-bottom: 1px solid var(--border-primary);
 		padding: 1rem 0;
 		position: sticky;
 		top: 0;
 		z-index: 100;
-		transition: background var(--transition-normal), border-color var(--transition-normal);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		transition: border-color var(--transition-normal);
 	}
 
 	.main-nav-minimal {
@@ -129,11 +131,12 @@
 	}
 
 	.nav-logo {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.4rem;
+		font-weight: 400;
+		color: var(--text-primary);
 		text-decoration: none;
+		letter-spacing: -0.01em;
 		transition: color var(--transition-normal);
 	}
 
@@ -148,7 +151,7 @@
 	}
 
 	.nav-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-secondary);
 		text-decoration: none;
 		font-size: 0.9rem;
@@ -164,7 +167,7 @@
 	}
 
 	.nav-link-primary {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		padding: 0.6rem 1.25rem;
 		background: var(--civic-blue);
 		color: var(--civic-white);
@@ -173,18 +176,10 @@
 		font-weight: 600;
 		border-radius: var(--radius-md);
 		transition: all var(--transition-fast);
-		box-shadow: 0 2px 8px var(--shadow-lg);
 	}
 
 	.nav-link-primary:hover {
 		background: var(--civic-accent);
-		transform: translateY(-1px);
-		box-shadow: 0 4px 12px var(--shadow-lg);
-	}
-
-	.nav-link-primary:active {
-		transform: translateY(0);
-		box-shadow: 0 1px 4px var(--shadow-sm);
 	}
 
 	@media (max-width: 640px) {

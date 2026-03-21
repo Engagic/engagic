@@ -52,7 +52,7 @@
 
 <style>
 	.vote-badge {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-weight: 600;
 		border-radius: var(--radius-sm);
 		border: 1px solid;

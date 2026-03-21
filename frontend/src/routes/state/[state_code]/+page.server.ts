@@ -11,12 +11,15 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 	}
 
 	try {
-		// Fetch metrics and meetings in parallel
-		const [metrics, meetings] = await Promise.all([
+		// Fetch metrics, meetings, and happening items in parallel
+		const [metrics, meetings, happening] = await Promise.all([
 			apiClient.getStateMatters(stateCode, undefined, 100),
 			apiClient.getStateMeetings(stateCode, 50).catch(err => {
-				// Meetings are non-critical, log and continue
 				console.error('Failed to load state meetings:', err);
+				return null;
+			}),
+			apiClient.getGlobalHappening(30).catch(err => {
+				console.error('Failed to load happening items:', err);
 				return null;
 			})
 		]);
@@ -28,7 +31,8 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 		return {
 			stateCode,
 			metrics,
-			meetings
+			meetings,
+			happening
 		};
 	} catch (err) {
 		console.error('Failed to load state metrics:', err);

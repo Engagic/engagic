@@ -29,11 +29,15 @@
 	<div class="footer-brand">engagic is open-source (AGPL-3.0)</div>
 
 	<nav class="footer-links" aria-label="Footer navigation">
-		<a href="https://github.com/engagic" class="footer-link" target="_blank" rel="noopener noreferrer">GitHub</a>
+		<a href="/about/general" class="footer-link">How it works</a>
+		<span class="footer-sep" aria-hidden="true">&bull;</span>
+		<a href="/country" class="footer-link">Coverage map</a>
 		<span class="footer-sep" aria-hidden="true">&bull;</span>
 		<a href="/about/community" class="footer-link">Community</a>
 		<span class="footer-sep" aria-hidden="true">&bull;</span>
 		<a href="/about/donate" class="footer-link">Donate</a>
+		<span class="footer-sep" aria-hidden="true">&bull;</span>
+		<a href="https://github.com/engagic" class="footer-link" target="_blank" rel="noopener noreferrer">GitHub</a>
 		<span class="footer-sep" aria-hidden="true">&bull;</span>
 		<a href="/about/terms" class="footer-link">Terms</a>
 	</nav>
