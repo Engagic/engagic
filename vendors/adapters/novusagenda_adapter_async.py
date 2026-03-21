@@ -16,38 +16,86 @@ from bs4 import BeautifulSoup
 
 
 class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
-    """Async adapter for cities using NovusAgenda platform."""
+    """Async adapter for cities using NovusAgenda platform.
+
+    NovusAgenda portals use Telerik RadGrid with varying column layouts.
+    Some have a leading checkbox/empty cell, some don't. We detect the date
+    cell by content rather than assuming a fixed position.
+    """
+
+    _DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}$")
+    _TIME_RE = re.compile(r"^\d{1,2}:\d{2}")
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="novusagenda", metrics=metrics)
         self.base_url = f"https://{self.slug}.novusagenda.com"
 
+    def _detect_row_layout(self, cells) -> Optional[Dict[str, int]]:
+        """Identify cell indices by content, not position.
+
+        Returns mapping of field names to cell indices, or None if the row
+        doesn't contain a recognizable date cell. Handles layouts with or
+        without a leading empty/checkbox column.
+        """
+        for i, cell in enumerate(cells):
+            text = cell.get_text(strip=True)
+            if self._DATE_RE.match(text):
+                layout = {"date": i, "type": i + 1}
+                # Scan remaining cells for a time-like value
+                for j in range(i + 2, len(cells)):
+                    candidate = cells[j].get_text(strip=True)
+                    if self._TIME_RE.match(candidate):
+                        layout["time"] = j
+                        break
+                return layout
+        return None
+
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Scrape meetings from NovusAgenda /agendapublic page."""
-        # Fetch agendapublic page
         response = await self._get(f"{self.base_url}/agendapublic")
         html = await response.text()
         soup = BeautifulSoup(html, 'html.parser')
 
-        # Date range filter
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        # Find meeting rows (rgRow and rgAltRow classes)
         meeting_rows = soup.find_all("tr", class_=["rgRow", "rgAltRow"])
         logger.info("found meeting rows", vendor="novusagenda", slug=self.slug, count=len(meeting_rows))
 
         meetings = []
+        detected_layout = None
 
         for row in meeting_rows:
             cells = row.find_all("td")
-            if len(cells) < 5:
+            if len(cells) < 3:
                 continue
 
-            # Extract meeting data
-            date_str = cells[0].get_text(strip=True)
-            meeting_type = cells[1].get_text(strip=True)
+            layout = self._detect_row_layout(cells)
+            if layout is None:
+                # Log once per slug to avoid spam
+                logger.warning(
+                    "no date cell found in row",
+                    vendor="novusagenda",
+                    slug=self.slug,
+                    cell_texts=[c.get_text(strip=True)[:30] for c in cells[:6]]
+                )
+                continue
+
+            # Log layout detection once per fetch
+            if detected_layout is None:
+                detected_layout = layout
+                logger.info(
+                    "detected row layout",
+                    vendor="novusagenda",
+                    slug=self.slug,
+                    date_col=layout["date"],
+                    type_col=layout["type"],
+                    time_col=layout.get("time"),
+                )
+
+            date_str = cells[layout["date"]].get_text(strip=True)
+            meeting_type = cells[layout["type"]].get_text(strip=True) if layout["type"] < len(cells) else ""
 
             try:
                 meeting_date = datetime.strptime(date_str, "%m/%d/%y")
@@ -58,7 +106,8 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                 logger.warning("could not parse date", vendor="novusagenda", slug=self.slug, date=date_str, meeting_type=meeting_type)
                 continue
 
-            time_field = cells[3].get_text(strip=True) if len(cells) > 3 else ""
+            time_idx = layout.get("time")
+            time_field = cells[time_idx].get_text(strip=True) if time_idx and time_idx < len(cells) else ""
             meeting_status = self._parse_meeting_status(meeting_type, time_field)
 
             # Find PDF link and HTML agenda link

@@ -14,11 +14,24 @@ from vendors.adapters.parsers.primegov_parser import parse_html_agenda
 from pipeline.protocols import MetricsCollector
 
 
-# Priority order for agenda types: regular > continuation > special
+# Priority order for agenda types when matching by exact name.
+# Fallback uses content-based detection for portals with non-standard
+# template names (e.g. "HTM Agenda" at Worcester, "HTML Packet" at Temple).
 AGENDA_TYPES = [
     ("HTML Agenda", "agenda"),
     ("HTML Continuation Agenda", "continuation"),
     ("HTML Special Agenda", "special"),
+    ("HTML Packet", "packet"),
+]
+
+# Content-based classification: template names containing "HTM" paired
+# with one of these keywords map to an agenda_type. Checked in order;
+# first keyword match wins.
+_AGENDA_KEYWORD_PRIORITY = [
+    ("continuation", "continuation"),
+    ("special", "special"),
+    ("agenda", "agenda"),
+    ("packet", "packet"),
 ]
 
 
@@ -40,13 +53,45 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         return f"{self.base_url}/Public/CompiledDocument?{query}"
 
     def _find_agenda_docs(self, document_list: List[Dict[str, Any]]) -> List[tuple]:
-        """Find all HTML agenda documents in priority order (regular > continuation > special)."""
+        """Find all HTML agenda documents in priority order.
+
+        Tries exact name matches first (AGENDA_TYPES), then falls back to
+        content-based detection for non-standard template names like
+        'HTM Agenda' or 'HTML Packet'.
+        """
         found = []
+        matched_ids = set()
+
+        # Pass 1: exact matches (most reliable)
         for template_name, agenda_type in AGENDA_TYPES:
             for doc in document_list:
                 if doc.get("templateName") == template_name:
                     found.append((doc, agenda_type))
+                    matched_ids.add(doc.get("templateId"))
                     break
+
+        # Pass 2: content-based fallback for non-standard names
+        for doc in document_list:
+            if doc.get("templateId") in matched_ids:
+                continue
+            name = (doc.get("templateName") or "").lower()
+            if "htm" not in name:
+                continue
+            for keyword, agenda_type in _AGENDA_KEYWORD_PRIORITY:
+                if keyword in name:
+                    # Skip if we already have this agenda_type from exact match
+                    if any(t == agenda_type for _, t in found):
+                        break
+                    logger.info(
+                        "matched non-standard agenda template",
+                        vendor="primegov",
+                        slug=self.slug,
+                        template_name=doc.get("templateName"),
+                        agenda_type=agenda_type,
+                    )
+                    found.append((doc, agenda_type))
+                    break
+
         return found
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
@@ -183,7 +228,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
             return result
 
         # Build agenda_sources and fetch tasks in single pass
-        label_map = {"agenda": "Agenda", "continuation": "Continuation", "special": "Special"}
+        label_map = {"agenda": "Agenda", "continuation": "Continuation", "special": "Special", "packet": "Packet"}
         agenda_sources = []
         fetch_tasks = []
         for doc, agenda_type in agenda_docs:
