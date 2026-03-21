@@ -52,8 +52,9 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
         elif not href.startswith('http'):
             href = urljoin(base_url, href)
 
-        event_id_match = re.search(r'event_id=(\d+)', href)
-        event_id = event_id_match.group(1) if event_id_match else None
+        # Granicus uses event_id or clip_id depending on the site
+        id_match = re.search(r'(?:event_id|clip_id)=(\d+)', href)
+        event_id = id_match.group(1) if id_match else None
 
         if not event_id:
             continue
@@ -474,8 +475,21 @@ def parse_granicus_s3_html(html: str) -> Dict[str, Any]:
 
             # Second span: title link + staff name
             content_span = spans[1] if len(spans) > 1 else None
+
+            # Ames variant: single float span in h3 (number only),
+            # title/link lives in a sibling div with float:left
             if not content_span:
-                continue
+                content_div = None
+                for sibling in inner.find_all('div', recursive=False):
+                    if sibling.find('h3') or sibling.find('h2'):
+                        continue
+                    style = sibling.get('style', '')
+                    if 'float' in style and sibling.find('a', href=True):
+                        content_div = sibling
+                        break
+                if not content_div:
+                    continue
+                content_span = content_div
 
             link = content_span.find('a', href=True)
             if link:
@@ -572,6 +586,176 @@ def parse_granicus_s3_html(html: str) -> Dict[str, Any]:
         'participation': participation,
         'items': items,
     }
+
+
+def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
+    """Parse GeneratedAgendaViewer.php HTML — table-based layout with MetaViewer attachments.
+
+    Structure: each item is a <table> with <td width=40> (number) + <td> (title).
+    MetaViewer attachment links follow in sibling <blockquote> elements.
+    Section headers (PUBLIC HEARINGS, LEASES/CONTRACTS) have sub-items (a, b, c)
+    nested inside their blockquote.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    items = []
+    sequence_counter = 0
+
+    # Procedural items to skip
+    procedural = {
+        'call meeting to order', 'call to order', 'call roll', 'roll call',
+        'pledge of allegiance', 'adjourn', 'adjournment', 'other business',
+    }
+
+    def _extract_attachments(blockquote) -> List[Dict[str, Any]]:
+        """Extract MetaViewer attachment links from a blockquote element."""
+        attachments = []
+        if not blockquote:
+            return attachments
+        for link in blockquote.find_all('a', href=lambda x: x and 'MetaViewer' in x if x else False):
+            href = link['href']
+            name = link.get_text(strip=True) or 'Supporting Document'
+            meta_id_match = re.search(r'meta_id=(\d+)', href)
+            attachments.append({
+                'name': name,
+                'url': href,
+                'type': 'pdf',
+                'meta_id': meta_id_match.group(1) if meta_id_match else None,
+            })
+        return attachments
+
+    def _process_item_table(table, parent_section: str = "") -> Optional[Dict[str, Any]]:
+        """Extract item number and title from a table with <td width=40>."""
+        row = table.find('tr')
+        if not row:
+            return None
+        cells = row.find_all('td')
+        if len(cells) < 2:
+            return None
+
+        number_text = cells[0].get_text(strip=True).rstrip('.')
+        if not number_text:
+            return None
+
+        # Get full content text (may span multiple rows for ACTION lines)
+        content_parts = []
+        for r in table.find_all('tr'):
+            tds = r.find_all('td')
+            if len(tds) >= 2:
+                content_parts.append(tds[1].get_text(strip=True))
+            elif len(tds) == 1 and tds[0].get('colspan'):
+                # ACTION row
+                action_text = tds[0].get_text(strip=True)
+                if action_text and action_text != 'ACTION:':
+                    content_parts.append(action_text)
+
+        title_full = content_parts[0] if content_parts else ""
+
+        # Strip [CA] prefix
+        title_clean = re.sub(r'^\[CA\]\s*', '', title_full).strip()
+
+        # Split title from ACTION text
+        if 'ACTION:' in title_clean:
+            title_clean = title_clean.split('ACTION:')[0].strip()
+
+        return {
+            'number': number_text,
+            'title': title_clean,
+            'section': parent_section,
+        }
+
+    # Walk body-level elements: <div> (contains table) followed by <blockquote> (attachments)
+    body = soup.find('body') or soup
+    current_section = ""
+
+    # Collect all top-level item tables and their blockquotes
+    for div in body.find_all('div', recursive=False):
+        table = div.find('table', recursive=False)
+        if not table:
+            continue
+
+        item_data = _process_item_table(table)
+        if not item_data:
+            continue
+
+        number = item_data['number']
+        title = item_data['title']
+
+        # Section headers: end with colon, are empty, or are known section names
+        title_stripped = re.sub(r'\s*\(.*\)\s*$', '', title).rstrip('.:').strip().upper()
+        section_keywords = {
+            'CONSENT AGENDA', 'PUBLIC HEARINGS', 'LEASES/CONTRACTS/LEGAL',
+            'CONTRACT MODIFICATIONS', 'CONSIDERATION OF BIDS/PURCHASES/REQUESTS FOR PROPOSALS',
+            'ANNOUNCEMENTS/REPORTS/MOTIONS', 'OTHER BUSINESS', 'OLD BUSINESS',
+            'NEW BUSINESS', 'UNFINISHED BUSINESS',
+        }
+        is_section = (
+            title.rstrip('.').endswith(':')
+            or not title
+            or title_stripped in section_keywords
+        )
+
+        # Find the blockquote that follows this div
+        next_bq = div.find_next_sibling('blockquote')
+
+        if is_section:
+            # Use cleaned name without boilerplate parentheticals
+            section_name = re.sub(r'\s*\(.*\)\s*$', '', title).rstrip('.:').strip()
+            current_section = section_name
+
+            # Sub-items are in the blockquote
+            if next_bq:
+                for sub_table in next_bq.find_all('table', recursive=True):
+                    sub_data = _process_item_table(sub_table, parent_section=section_name)
+                    if not sub_data or not sub_data['title']:
+                        continue
+
+                    sub_number = f"{number}.{sub_data['number']}"
+
+                    # Find attachment blockquote for this sub-item
+                    sub_bq = sub_table.find_parent('div')
+                    sub_attachments = []
+                    if sub_bq:
+                        att_bq = sub_bq.find_next_sibling('blockquote')
+                        sub_attachments = _extract_attachments(att_bq)
+
+                    sequence_counter += 1
+                    items.append({
+                        'vendor_item_id': sub_number,
+                        'title': sub_data['title'],
+                        'sequence': sequence_counter,
+                        'agenda_number': sub_number,
+                        'attachments': sub_attachments,
+                        'metadata': {'section': section_name} if section_name else {},
+                    })
+            continue
+
+        # Skip procedural items
+        if title.rstrip('.').lower() in procedural:
+            continue
+
+        # Regular item
+        attachments = _extract_attachments(next_bq)
+
+        sequence_counter += 1
+        item_dict = {
+            'vendor_item_id': number,
+            'title': title,
+            'sequence': sequence_counter,
+            'agenda_number': number,
+            'attachments': attachments,
+        }
+        if current_section:
+            item_dict['metadata'] = {'section': current_section}
+
+        items.append(item_dict)
+
+    logger.debug(
+        "parsed generated agendaviewer html",
+        vendor="granicus",
+        item_count=len(items),
+    )
+
+    return {'participation': {}, 'items': items}
 
 
 # Alias for backward compatibility

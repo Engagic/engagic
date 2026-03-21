@@ -106,7 +106,14 @@ def parse_civicplus_html(html: str, base_url: str) -> Dict[str, Any]:
     section_stack: List[str] = []  # [level1_section, level2_subsection]
     sequence = 0
 
-    for item_div in items_container.find_all('div', class_='item', recursive=False if items_container.name == 'div' else True):
+    all_item_divs = items_container.find_all('div', class_='item', recursive=False if items_container.name == 'div' else True)
+
+    # Detect flat layout: all items are level1, no level2+.
+    # In flat layouts, level1 items ARE the substantive items (Dothan, etc.).
+    levels_present = {_get_item_level(d) for d in all_item_divs}
+    is_flat_layout = levels_present == {1}
+
+    for item_div in all_item_divs:
         level = _get_item_level(item_div)
 
         # Extract components
@@ -135,10 +142,12 @@ def parse_civicplus_html(html: str, base_url: str) -> Dict[str, Any]:
         # Determine if this is a section header or a substantive item
         is_section_header = False
 
-        # Level 1 items are always section headers in CivicPlus.
-        # Substantive agenda items are always level 2+ (sub-items).
-        # Level 1 desc text is just explanatory boilerplate (consent rules, OMA text, etc.)
-        if level == 1:
+        if is_flat_layout:
+            # Flat layout: all level1. Skip only procedural items.
+            if raw_title.lower().rstrip(':') in PROCEDURAL_TITLES:
+                continue
+        elif level == 1:
+            # Hierarchical layout: level1 items are section headers.
             is_section_header = True
         # Level 2 items without desc or attachments are sub-section headers
         # (e.g., "RESOLUTION(S)", "AGREEMENT(S)", "PURCHASE(S)")

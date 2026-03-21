@@ -97,7 +97,9 @@ class _ParsedAgenda:
 ITEM_NUM_RE = re.compile(
     r'^[\s]*'
     r'('
-    r'\d{1,2}(?:\.\d{1,2}){1,3}'   # 4.3, 6.1.2, 1.2.3.4
+    r'\d{4}-\d{1,4}'                # 2026-68 (resolution/ordinance numbers)
+    r'|\d{1,2}(?:\.\d{1,2}){1,3}'   # 4.3, 6.1.2, 1.2.3.4
+    r'|\d{1,2}\.[a-z]'              # 2.a, 3.b (Legistar sub-items)
     r'|\d{1,2}\.'                    # 1. 2.
     r'|[A-Z]\.'                      # A. B. C.
     r'|[a-z]\.'                      # a. b. c.
@@ -120,7 +122,8 @@ SECTION_PATTERNS = [
     r'PUBLIC\s+INPUT',
     r'CONSENT\s+(?:CALENDAR|AGENDA)',
     r'PUBLIC\s+HEARING[S]?',
-    r'(?:REGULAR\s+)?DISCUSSION(?:\s+ITEMS?)?',
+    r'PUBLIC\s+PARTICIPATION',
+    r'(?:REGULAR\s+)?DISCUSSION(?:[/\s]+(?:VOTES?|ACTION|ITEMS?))?',
     r'(?:REGULAR\s+)?ACTION(?:\s+ITEMS?)?',
     r'(?:REGULAR\s+)?BUSINESS(?:\s+ITEMS?)?',
     r'NEW\s+BUSINESS',
@@ -146,10 +149,16 @@ SECTION_PATTERNS = [
     r'APPROVAL\s+OF\s+MINUTES',
     r'RULES\s+FOR\s+CONDUCTING',
     r'REGULAR\s+AGENDA',
+    r'AGENDA\s+ITEMS?',
+    r'TABLED\s+ITEMS?',
     r'COMMUNICATIONS?$',
     r'DIRECTOR.{0,5}S?\s+COMMENTS?',
     r'COMMISSIONERS?.{0,5}\s+COMMENTS?',
     r'ADJOURN$',
+    r'RESOLUTIONS?$',
+    r'AGREEMENTS?$',
+    r'AUDITS?$',
+    r'ORDINANCES?$',
 ]
 
 SECTION_RE = re.compile(
@@ -313,9 +322,23 @@ def _is_likely_item_header(line, lines_context=None):
     if num is None:
         return False, None, None, 0
 
-    # Sub-items (4.1, 6.1) are almost always agenda items
+    # Sub-items (4.1, 6.1, 2.a) are almost always agenda items
     if '.' in num:
-        return True, num, remainder, 0
+        if remainder:
+            return True, num, remainder, 0
+        # Standalone sub-item number (e.g. "2.a" on its own line) — look ahead for title
+        if lines_context is not None:
+            line_idx, all_lines, _ = lines_context
+            for j in range(line_idx + 1, min(line_idx + 3, len(all_lines))):
+                next_text = all_lines[j]["text"].strip()
+                if not next_text:
+                    continue
+                if _match_item_number(next_text)[0] is not None:
+                    break
+                if _is_section_header(next_text):
+                    break
+                return True, num, next_text, j - line_idx
+        return False, None, None, 0
 
     if remainder:
         alpha_chars = [c for c in remainder if c.isalpha()]
@@ -346,7 +369,8 @@ def _is_likely_item_header(line, lines_context=None):
             'OLD BUSINESS', 'UNFINISHED BUSINESS', 'SPECIAL PRESENTATIONS',
             'THESE ITEMS WILL REQUIRE APPROVAL BY COUNCIL',
             'THESE ITEMS REQUIRE ONLY PLANNING COMMISSION APPROVAL',
-            'APPROVAL OF MINUTES',
+            'APPROVAL OF MINUTES', 'AGENDA ITEMS', 'TABLED ITEMS',
+            'RESOLUTIONS', 'AGREEMENTS', 'AUDITS', 'ORDINANCES',
         }
         in_agenda_section = any(
             s in (current_section or '').upper() for s in agenda_sections
@@ -592,8 +616,12 @@ def _detect_toc_pattern(toc):
             break
     cluster_max = max(cluster_pages)
 
-    # Hierarchical: L2 entries exist and point beyond the L1 cluster
-    deep_l2 = [p for p in l2_pages if p > cluster_max]
+    # Hierarchical: L2 entries exist and point well beyond the L1 cluster.
+    # Require at least 2 pages of separation — a single page beyond the
+    # cluster is typically still agenda, not an embedded memo section.
+    # Legistar-generated agendas have navigation TOCs on agenda pages that
+    # look hierarchical but aren't (all entries on pages 1-2).
+    deep_l2 = [p for p in l2_pages if p > cluster_max + 1]
     if deep_l2 and distinct_l1_pages <= max(5, len(l1_pages) * 0.3):
         return "hierarchical"
 
@@ -997,7 +1025,7 @@ def _parse_agenda_items(all_lines, all_links, result):
 
         # Try item detection first for numbered lines to prevent
         # section regex from eating items like "4. PUBLIC HEARING"
-        has_num = bool(re.match(r'^\s*(?:\d{1,2}\.|[A-Z]\.)', text))
+        has_num = bool(re.match(r'^\s*(?:\d{4}-\d{1,4}|\d{1,2}\.[a-z]|\d{1,2}\.|[A-Z]\.)', text))
 
         if has_num:
             is_item, num, title_text, lines_consumed = _is_likely_item_header(
@@ -1152,7 +1180,14 @@ def _find_owning_item_strict(link, item_boundaries):
 # ---------------------------------------------------------------------------
 
 def _parse_agenda_internal(pdf_path: str, force_method: Optional[str] = None) -> _ParsedAgenda:
-    """Parse a PDF using TOC-first dispatch, falling back to URL-based."""
+    """Parse a PDF, dispatching by content signals.
+
+    Priority: attachment URLs > TOC structure > text extraction.
+    Hyperlinked attachment URLs (Legistar S3, CivicPlus, etc.) are the strongest
+    signal — when present, the links ARE the data and any TOC is just navigation
+    bookmarks. When no links exist but a deep TOC is present, the embedded memos
+    are the data. These two patterns don't co-exist in practice.
+    """
     doc = fitz.open(pdf_path)
     result = _ParsedAgenda()
 
@@ -1163,6 +1198,8 @@ def _parse_agenda_internal(pdf_path: str, force_method: Optional[str] = None) ->
     if force_method == "toc":
         _parse_toc_based(doc, result)
     elif force_method == "url":
+        _parse_url_based(doc, result)
+    elif _has_attachment_links(doc):
         _parse_url_based(doc, result)
     elif _has_meaningful_toc(doc):
         _parse_toc_based(doc, result)
