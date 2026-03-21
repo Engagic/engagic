@@ -293,17 +293,17 @@
 <style>
 	.admin-container {
 		min-height: 100vh;
-		background: var(--surface-secondary);
+		background: var(--bg-gradient-start);
 		padding: 2rem;
 	}
 
 	.auth-form {
 		max-width: 400px;
 		margin: 100px auto;
-		background: var(--surface-primary);
+		background: var(--civic-white);
 		padding: 2rem;
 		border-radius: var(--radius-md);
-		box-shadow: 0 2px 8px var(--shadow-md);
+		border: 1px solid var(--border-primary);
 	}
 
 	.auth-form h1 {
@@ -396,17 +396,21 @@
 	}
 
 	.metrics-section {
-		background: var(--surface-primary);
-		padding: 1.5rem;
-		border-radius: var(--radius-md);
-		margin-bottom: 1.5rem;
-		box-shadow: 0 1px 3px var(--shadow-sm);
+		background: transparent;
+		padding: 0;
+		margin-bottom: 2rem;
 	}
 
 	.metrics-section h2 {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
 		margin: 0 0 1rem 0;
-		font-size: 1.25rem;
-		color: var(--text-primary);
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--text-primary);
 	}
 
 	.metrics-section h3 {
@@ -422,32 +426,34 @@
 	}
 
 	.metric-card {
-		background: var(--surface-secondary);
-		padding: 1.5rem;
-		border-radius: var(--radius-sm);
-		border-left: 4px solid var(--civic-blue);
+		background: transparent;
+		padding: 1.25rem 0;
+		border: none;
+		border-bottom: 1px solid var(--border-primary);
 	}
 
-	.metric-card.success {
-		border-left-color: var(--civic-green);
+	.metric-card.success .metric-value {
+		color: var(--civic-green);
 	}
 
-	.metric-card.error {
-		border-left-color: var(--civic-red);
+	.metric-card.error .metric-value {
+		color: var(--civic-red);
 	}
 
 	.metric-value {
+		font-family: var(--font-display);
 		font-size: 2rem;
-		font-weight: 600;
+		font-weight: 400;
 		margin-bottom: 0.25rem;
 		color: var(--text-primary);
 	}
 
 	.metric-label {
-		font-size: 0.875rem;
-		color: var(--text-secondary);
+		font-family: var(--font-body);
+		font-size: 0.65rem;
+		color: var(--civic-gray);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 	}
 
 	.breakdown-list {
@@ -471,7 +477,7 @@
 	}
 
 	.breakdown-label.mono {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 	}
 

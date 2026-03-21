@@ -424,9 +424,10 @@
 	}
 
 	h2 {
+		font-family: var(--font-display);
 		font-size: 1.5rem;
-		font-weight: bold;
-		color: var(--civic-dark);
+		font-weight: 400;
+		color: var(--text-primary);
 		margin: 0 0 0.75rem 0;
 	}
 
@@ -564,7 +565,7 @@
 		width: 100%;
 		padding: 0.75rem 1rem;
 		font-size: 1rem;
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 		color: var(--text-primary);
 		background: var(--surface-primary);
 		border: 2px solid var(--civic-border);
@@ -575,7 +576,7 @@
 	.input:focus {
 		outline: none;
 		border: 2px solid var(--civic-blue);
-		box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+		box-shadow: 0 0 0 3px rgba(181, 100, 42, 0.1);
 	}
 
 	.input:disabled {
@@ -613,19 +614,16 @@
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		transition: all var(--transition-normal);
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 	}
 
 	.btn-primary:hover:not(:disabled) {
 		background: var(--civic-accent);
-		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 	}
 
 	.btn-primary:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		transform: none;
 	}
 
 	.btn-secondary {
@@ -639,7 +637,7 @@
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		transition: all var(--transition-normal);
-		font-family: 'IBM Plex Sans', sans-serif;
+		font-family: var(--font-body);
 	}
 
 	.btn-secondary:hover:not(:disabled) {

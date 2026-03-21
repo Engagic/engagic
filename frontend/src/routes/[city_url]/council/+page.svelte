@@ -165,7 +165,7 @@
 	}
 
 	.back-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--civic-blue);
 		text-decoration: none;
@@ -197,16 +197,18 @@
 	}
 
 	.page-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 2rem;
-		font-weight: 700;
+		font-family: var(--font-display);
+		font-size: clamp(1.75rem, 4vw, 2.5rem);
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
 	}
 
 	.page-subtitle {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1rem;
+		font-family: var(--font-body);
+		font-size: 0.9rem;
 		color: var(--civic-gray);
 		margin: 0.5rem 0 0;
 	}
@@ -222,13 +224,13 @@
 	}
 
 	.loading-state {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--civic-gray);
 	}
 
 	.error-state p,
 	.empty-state p {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		color: var(--text-primary);
 		margin: 0 0 1rem;
 	}
@@ -246,19 +248,19 @@
 		color: white;
 		border-radius: var(--radius-sm);
 		text-decoration: none;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85rem;
 	}
 
 	.stats-bar {
 		display: flex;
 		gap: 2rem;
-		padding: 1.25rem;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
+		padding: 1rem 0;
+		background: transparent;
+		border: none;
+		border-bottom: 1px solid var(--border-primary);
 		margin-bottom: 1.5rem;
-		justify-content: center;
+		justify-content: flex-start;
 	}
 
 	.stat {
@@ -267,18 +269,18 @@
 
 	.stat-value {
 		display: block;
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1.5rem;
-		font-weight: 700;
-		color: var(--civic-blue);
+		font-family: var(--font-display);
+		font-size: 1.75rem;
+		font-weight: 400;
+		color: var(--text-primary);
 	}
 
 	.stat-label {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+		font-family: var(--font-body);
+		font-size: 0.65rem;
 		color: var(--civic-gray);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.06em;
 	}
 
 	.council-roster {
@@ -291,23 +293,19 @@
 		display: flex;
 		align-items: center;
 		gap: 1rem;
-		padding: 1rem 1.25rem;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-left: 4px solid var(--civic-blue);
-		border-radius: var(--radius-md);
+		padding: 1.25rem 0;
+		background: transparent;
+		border: none;
+		border-bottom: 1px solid var(--border-primary);
 		text-decoration: none;
-		transition: all var(--transition-normal);
+		transition: padding-left 0.2s ease;
 	}
 
 	.council-member-card:hover {
-		border-left-color: var(--civic-accent);
-		transform: translateX(4px);
-		box-shadow: 0 4px 12px var(--shadow-sm);
+		padding-left: 8px;
 	}
 
 	.council-member-card.inactive {
-		border-left-color: var(--civic-gray);
 		opacity: 0.7;
 	}
 
@@ -324,14 +322,14 @@
 	}
 
 	.member-name {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 1rem;
-		font-weight: 600;
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 400;
 		color: var(--text-primary);
 	}
 
 	.status-badge.former {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		padding: 0.15rem 0.5rem;
 		background: var(--surface-secondary);
@@ -342,13 +340,13 @@
 	}
 
 	.member-role {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
 		color: var(--civic-gray);
 	}
 
 	.member-activity {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--text-secondary);
 		margin-top: 0.25rem;
@@ -365,14 +363,14 @@
 
 	.stat-num {
 		display: block;
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.1rem;
 		font-weight: 700;
 		color: var(--text-primary);
 	}
 
 	.stat-name {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		color: var(--civic-gray);
 		text-transform: uppercase;

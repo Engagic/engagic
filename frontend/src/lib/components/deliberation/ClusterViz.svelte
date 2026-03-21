@@ -144,13 +144,13 @@
 	}
 
 	.legend-label {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--text-secondary, #6b7280);
 	}
 
 	.viz-caption {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--civic-gray, #9ca3af);
 		margin: 0;

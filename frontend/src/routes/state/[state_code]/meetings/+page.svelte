@@ -19,18 +19,30 @@
 		VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming'
 	};
 
-	const stateName = $derived(STATE_NAMES[data.stateCode] || data.stateCode);
+	const TOPIC_COLORS: Record<string, string> = {
+		'Housing': 'var(--topic-housing)',
+		'Transportation': 'var(--topic-transportation)',
+		'Public Safety': 'var(--topic-public-safety)',
+		'Budget': 'var(--topic-budget)',
+		'Environment': 'var(--topic-environment)',
+		'Zoning': 'var(--topic-zoning)',
+		'Education': 'var(--topic-education)',
+		'Infrastructure': 'var(--topic-infrastructure)',
+		'Health': 'var(--topic-health)',
+		'Business': 'var(--topic-business)',
+		'Parks': 'var(--topic-parks)',
+		'Utilities': 'var(--topic-utilities)',
+		'Labor': 'var(--topic-labor)',
+		'Technology': 'var(--topic-technology)',
+		'Culture': 'var(--topic-culture)',
+		'Governance': 'var(--topic-governance)',
+	};
 
-	function formatMeetingDate(dateStr: string | null): string {
-		if (!dateStr) return 'TBD';
-		const date = new Date(dateStr);
-		const now = new Date();
-		const diffDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-		if (diffDays === 0) return 'Today';
-		if (diffDays === 1) return 'Tomorrow';
-		return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+	function topicColor(topic: string): string {
+		return TOPIC_COLORS[topic] || 'var(--topic-default)';
 	}
+
+	const stateName = $derived(STATE_NAMES[data.stateCode] || data.stateCode);
 
 	function formatMeetingTime(dateStr: string | null): string {
 		if (!dateStr) return '';
@@ -41,7 +53,7 @@
 		return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 	}
 
-	// Group meetings by date for better organization
+	// Group meetings by date
 	const meetingsByDate = $derived.by(() => {
 		if (!data.meetings?.meetings) return new Map();
 
@@ -74,28 +86,32 @@
 			<a href="/state/{data.stateCode.toLowerCase()}" class="breadcrumb-link">← Back to {stateName}</a>
 		</div>
 
-		<div class="page-header">
-			<h1 class="page-title">Upcoming Meetings in {stateName}</h1>
+		<header class="page-header">
+			<div class="header-label">All Meetings</div>
+			<h1 class="page-title">{stateName}</h1>
 			<p class="page-subtitle">
 				{data.meetings?.total || 0} upcoming meetings across all cities
 			</p>
-		</div>
+		</header>
 
 		{#if data.meetings && data.meetings.meetings.length > 0}
 			<div class="meetings-timeline">
 				{#each [...meetingsByDate.entries()] as [dateLabel, meetings] (dateLabel)}
 					<div class="date-group">
-						<div class="date-header">
-							<span class="date-label">{dateLabel}</span>
-							<span class="meeting-count">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
+						<div class="section-rule">
+							<span>{dateLabel}</span>
+							<span class="section-rule-count">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
 						</div>
 						<div class="meetings-list">
 							{#each meetings as meeting (meeting.id)}
 								{@const meetingSlug = generateMeetingSlug(meeting)}
-								<a href="/{meeting.city_banana}/{meetingSlug}" class="meeting-card">
-									<div class="meeting-card-header">
-										<span class="city-badge">{meeting.city_name}</span>
-										<span class="meeting-time-badge">
+								<a href="/{meeting.city_banana}/{meetingSlug}" class="meeting-item hover-indent">
+									<div class="meeting-item-meta">
+										<div class="meeting-item-meta-left">
+											<span class="meeting-item-city">{meeting.city_name}</span>
+											<span class="meeting-item-body">{meeting.title}</span>
+										</div>
+										<span class="meeting-item-time">
 											{#if formatMeetingTime(meeting.date)}
 												{formatMeetingTime(meeting.date)}
 											{:else}
@@ -103,8 +119,7 @@
 											{/if}
 										</span>
 									</div>
-									<div class="meeting-title">{meeting.title}</div>
-									<div class="meeting-footer">
+									<div class="meeting-item-footer">
 										{#if meeting.has_items || meeting.summary}
 											<span class="status-badge status-ai">AI Summary</span>
 										{:else if meeting.agenda_url}
@@ -117,9 +132,12 @@
 										{#if meeting.topics && meeting.topics.length > 0}
 											<div class="meeting-topics">
 												{#each meeting.topics.slice(0, 3) as topic}
-													<span class="topic-tag">{topic}</span>
+													<span class="topic-label" style="color: {topicColor(topic)}">{topic}</span>
 												{/each}
 											</div>
+										{/if}
+										{#if meeting.participation?.email || meeting.participation?.virtual_url}
+											<span class="comment-badge">Public comment</span>
 										{/if}
 									</div>
 								</a>
@@ -130,8 +148,8 @@
 			</div>
 		{:else}
 			<div class="empty-state">
-				<div class="empty-title">No upcoming meetings</div>
-				<div class="empty-subtitle">There are no scheduled meetings across {stateName} at this time.</div>
+				<p class="empty-title">No upcoming meetings</p>
+				<p class="empty-subtitle">There are no scheduled meetings across {stateName} at this time.</p>
 				<a href="/state/{data.stateCode.toLowerCase()}" class="back-link">← Back to {stateName} overview</a>
 			</div>
 		{/if}
@@ -146,26 +164,26 @@
 		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
-		padding: 2rem 1rem;
+		padding: 40px 24px 100px;
 	}
 
 	.meetings-container {
 		width: 100%;
-		max-width: var(--width-dashboard);
+		max-width: var(--width-state);
 		margin: 0 auto;
 	}
 
 	.breadcrumb {
-		margin-bottom: 1.5rem;
+		margin-bottom: 2rem;
 	}
 
 	.breadcrumb-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
+		font-weight: 500;
 		color: var(--text-link);
 		text-decoration: none;
 		transition: color var(--transition-normal);
-		font-weight: 500;
 	}
 
 	.breadcrumb-link:hover {
@@ -174,174 +192,186 @@
 	}
 
 	.page-header {
-		margin-bottom: 2rem;
-		padding-bottom: 1.5rem;
-		border-bottom: 2px solid var(--border-primary);
+		margin-bottom: 2.5rem;
+	}
+
+	.header-label {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
+		margin-bottom: 0.5rem;
 	}
 
 	.page-title {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 2rem;
-		font-weight: 700;
+		font-family: var(--font-display);
+		font-size: clamp(2rem, 5vw, 2.75rem);
+		font-weight: 400;
 		color: var(--text-primary);
-		margin: 0 0 0.5rem 0;
+		margin: 0;
+		letter-spacing: -0.02em;
+		line-height: 1.05;
 	}
 
 	.page-subtitle {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.9rem;
+		font-family: var(--font-body);
+		font-size: 0.875rem;
 		color: var(--civic-gray);
-		margin: 0;
+		margin-top: 0.625rem;
 	}
 
 	.meetings-timeline {
 		display: flex;
 		flex-direction: column;
-		gap: 2rem;
+		gap: 2.5rem;
 	}
 
-	.date-group {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.date-header {
+	.section-rule {
+		font-family: var(--font-body);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--civic-gray);
+		padding-bottom: 0.5rem;
+		border-bottom: 2px solid var(--text-primary);
+		margin-bottom: 0;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 0.75rem 1rem;
-		background: var(--surface-secondary);
-		border-radius: var(--radius-md);
-		border-left: 4px solid var(--civic-blue);
 	}
 
-	.date-label {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.95rem;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.meeting-count {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.8rem;
-		color: var(--civic-gray);
+	.section-rule-count {
+		font-weight: 400;
 	}
 
 	.meetings-list {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
-		padding-left: 1rem;
 	}
 
-	.meeting-card {
+	.hover-indent {
+		transition: padding-left 0.15s ease;
+	}
+
+	.hover-indent:hover {
+		padding-left: 6px;
+	}
+
+	.meeting-item {
 		display: block;
-		background: var(--surface-primary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-md);
-		padding: 1rem 1.25rem;
+		padding: 1rem 0;
+		border-bottom: 1px solid var(--border-primary);
 		text-decoration: none;
-		transition: all var(--transition-normal);
+		color: inherit;
+		cursor: pointer;
 	}
 
-	.meeting-card:hover {
-		border-color: var(--civic-blue);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-		transform: translateX(4px);
-	}
-
-	.meeting-card-header {
+	.meeting-item-meta {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: 0.5rem;
 		gap: 0.75rem;
-		flex-wrap: wrap;
 	}
 
-	.city-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 700;
-		color: var(--badge-purple-text, var(--civic-blue));
-		background: var(--badge-purple-bg, rgba(139, 92, 246, 0.1));
-		padding: 0.25rem 0.6rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--badge-purple-border, rgba(139, 92, 246, 0.3));
-	}
-
-	.meeting-time-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--civic-gray);
-	}
-
-	.meeting-title {
-		font-family: 'IBM Plex Sans', sans-serif;
-		font-size: 1rem;
-		line-height: 1.4;
-		color: var(--text-primary);
-		margin-bottom: 0.75rem;
-	}
-
-	.meeting-footer {
+	.meeting-item-meta-left {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		gap: 0.625rem;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.meeting-item-city {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--civic-blue);
+		flex-shrink: 0;
+	}
+
+	.meeting-item-body {
+		font-family: var(--font-display);
+		font-size: 1.05rem;
+		font-weight: 400;
+		color: var(--text-primary);
+		line-height: 1.3;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.meeting-item-time {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+
+	.meeting-item-footer {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
 		flex-wrap: wrap;
 	}
 
 	.status-badge {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.65rem;
-		font-weight: 600;
-		padding: 0.2rem 0.5rem;
+		font-family: var(--font-mono);
+		font-size: 0.55rem;
+		font-weight: 700;
+		padding: 0.125rem 0.375rem;
 		border-radius: var(--radius-xs);
 		text-transform: uppercase;
-		letter-spacing: 0.03em;
+		letter-spacing: 0.04em;
 	}
 
-	.status-badge.status-ai {
+	.status-ai {
 		background: var(--badge-green-bg);
 		color: var(--badge-green-text);
 		border: 1px solid var(--badge-green-border);
 	}
 
-	.status-badge.status-agenda {
+	.status-agenda {
 		background: var(--badge-yellow-bg, rgba(234, 179, 8, 0.1));
 		color: var(--badge-yellow-text, #a16207);
 		border: 1px solid var(--badge-yellow-border, rgba(234, 179, 8, 0.3));
 	}
 
-	.status-badge.status-packet {
+	.status-packet {
 		background: var(--badge-orange-bg, rgba(249, 115, 22, 0.1));
 		color: var(--badge-orange-text, #c2410c);
 		border: 1px solid var(--badge-orange-border, rgba(249, 115, 22, 0.3));
 	}
 
-	.status-badge.status-pending {
+	.status-pending {
 		background: var(--surface-secondary);
-		color: var(--civic-gray);
+		color: var(--text-tertiary, var(--civic-gray));
 		border: 1px solid var(--border-primary);
 	}
 
 	.meeting-topics {
 		display: flex;
-		gap: 0.3rem;
+		gap: 0.375rem;
 		flex-wrap: wrap;
 	}
 
-	.topic-tag {
-		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.65rem;
-		padding: 0.2rem 0.5rem;
-		background: var(--surface-secondary);
-		color: var(--civic-gray);
-		border-radius: var(--radius-xs);
-		font-weight: 500;
+	.topic-label {
+		font-size: 0.55rem;
+		font-family: var(--font-body);
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.comment-badge {
+		font-size: 0.625rem;
+		font-family: var(--font-mono);
+		font-weight: 600;
+		color: var(--civic-blue);
 	}
 
 	.empty-state {
@@ -349,11 +379,11 @@
 		padding: 4rem 2rem;
 		background: var(--surface-secondary);
 		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-md);
 	}
 
 	.empty-title {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: var(--text-primary);
@@ -361,14 +391,14 @@
 	}
 
 	.empty-subtitle {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		color: var(--civic-gray);
 		margin-bottom: 1.5rem;
 	}
 
 	.back-link {
-		font-family: 'IBM Plex Mono', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 		font-weight: 600;
 		color: var(--civic-blue);
@@ -381,31 +411,22 @@
 
 	@media (max-width: 640px) {
 		.meetings-page {
-			padding: 1rem 0.5rem;
+			padding: 1rem 0.75rem 3rem;
 		}
 
 		.page-title {
-			font-size: 1.5rem;
+			font-size: clamp(1.5rem, 7vw, 2rem);
 		}
 
-		.meetings-list {
-			padding-left: 0;
-		}
-
-		.meeting-card {
-			padding: 0.875rem 1rem;
-		}
-
-		.meeting-card-header {
-			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.5rem;
-		}
-
-		.date-header {
+		.meeting-item-meta {
 			flex-direction: column;
 			align-items: flex-start;
 			gap: 0.25rem;
+		}
+
+		.meeting-item-body {
+			white-space: normal;
+			font-size: 0.95rem;
 		}
 	}
 </style>
