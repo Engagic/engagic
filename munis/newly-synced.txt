@@ -1,0 +1,29 @@
+# Cities newly synced from queued-no-summaries batch 2026-03-20
+# Produced items after adapter fixes (novusagenda, primegov) (27 cities)
+amarilloTX
+bakersfieldCA
+beaumontCA
+chulavistaCA
+coronaCA
+davieFL
+detroitMI
+gainesvilleFL
+kalamazooMI
+knoxvilleTN
+lakeforestCA
+laytonUT
+limaOH
+mcallenTX
+missoulaMT
+monroeNY
+nacogdochesTX
+newarkNJ
+newberlinWI
+ranchocucamongaCA
+ranchopalosverdesCA
+sanbernardinoCA
+sandyspringsGA
+smithtownNY
+templeTX
+torranceCA
+westminsterMD
