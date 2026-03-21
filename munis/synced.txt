@@ -1,2 +1,15 @@
 # Cities synced with items, pending processing
-# Updated 2026-03-21 (0 cities)
+# Updated 2026-03-21 (14 cities)
+bedfordTX
+citrusheightsCA
+coltonCA
+dunnellonFL
+gainesvilleFL
+janesvilleWI
+lahabraCA
+marlboroughMA
+monroeLA
+norwichCT
+oakleyCA
+queencreekAZ
+westlandMI

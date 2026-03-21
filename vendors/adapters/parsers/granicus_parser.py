@@ -575,6 +575,70 @@ def parse_granicus_s3_html(html: str) -> Dict[str, Any]:
 
             items.append(item_dict)
 
+    # Fallback: flat-div variant (Yakima style) — no h2/h3, items are plain
+    # grid-column divs with text like "A.Title" and embedded CloudFront links
+    if not items:
+        sequence_counter = 0
+        current_section = None
+        procedural = {'roll call', 'pledge of allegiance', 'adjournment', 'adjourn',
+                      'interpreter services', 'council reports'}
+
+        for grid_cell in container.find_all('div', style=lambda x: x and 'grid-column-start' in x if x else False, recursive=False):
+            text = grid_cell.get_text(strip=True)
+            if not text:
+                continue
+
+            # Detect numbered section headers: "1.Roll Call", "7.Consent Agenda..."
+            num_match = re.match(r'^(\d+)\.\s*(.+)', text)
+            # Detect lettered items: "A.Approval of minutes..."
+            letter_match = re.match(r'^([A-Z])\.\s*(.+)', text)
+
+            if num_match:
+                section_title = num_match.group(2).split('\n')[0].strip()
+                # Check if procedural
+                if section_title.lower().rstrip(':') in procedural:
+                    continue
+                current_section = section_title
+                # Numbered items with links are substantive too
+                link = grid_cell.find('a', href=True)
+                if link:
+                    href = link.get('href', '')
+                    sequence_counter += 1
+                    items.append({
+                        'vendor_item_id': num_match.group(1),
+                        'title': section_title,
+                        'sequence': sequence_counter,
+                        'agenda_number': num_match.group(1),
+                        'attachments': [{
+                            'name': section_title[:60],
+                            'url': href,
+                            'type': 'pdf' if '.pdf' in href.lower() else 'unknown',
+                        }] if href else [],
+                    })
+            elif letter_match:
+                title = letter_match.group(2).split('\n')[0].strip()
+                link = grid_cell.find('a', href=True)
+                href = link.get('href', '') if link else ''
+
+                sequence_counter += 1
+                item_dict = {
+                    'vendor_item_id': letter_match.group(1),
+                    'title': title,
+                    'sequence': sequence_counter,
+                    'agenda_number': letter_match.group(1),
+                    'attachments': [{
+                        'name': title[:60],
+                        'url': href,
+                        'type': 'pdf' if '.pdf' in href.lower() else 'unknown',
+                    }] if href else [],
+                }
+                if current_section:
+                    item_dict['metadata'] = {'section': current_section}
+                items.append(item_dict)
+
+        if items:
+            logger.debug("parsed granicus s3 flat-div html", vendor="granicus", item_count=len(items))
+
     logger.debug(
         "parsed granicus s3 html",
         vendor="granicus",
