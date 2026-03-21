@@ -172,13 +172,18 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             return True
 
     def _dedupe_by_date(self, meetings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Dedupe meetings by date, keeping the last one (packet uploaded after agenda)."""
-        by_date: Dict[str, Dict[str, Any]] = {}
+        """Dedupe meetings by date + title, keeping the last one per group.
+
+        Multiple committees can meet on the same date — those are distinct meetings.
+        Same committee may appear twice (agenda link + packet link) — keep the later entry.
+        """
+        by_key: Dict[str, Dict[str, Any]] = {}
         for meeting in meetings:
-            date_key = meeting.get("start", "unknown")
-            # Later entries overwrite earlier ones (packet overwrites agenda)
-            by_date[date_key] = meeting
-        return list(by_date.values())
+            date = meeting.get("start", "unknown")
+            title = meeting.get("title", "unknown")
+            key = f"{date}|{title}"
+            by_key[key] = meeting
+        return list(by_key.values())
 
     def _extract_meeting_links(
         self, soup: BeautifulSoup, base_url: str
@@ -453,7 +458,13 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                 meeting["items"] = items
                 return
 
-        # Step 2: Fall back to PDF parsing
+        # Step 2: Fall back to PDF parsing (non-ViewFile URL or no HTML agenda)
+        logger.info(
+            "trying pdf chunker",
+            vendor="civicplus",
+            slug=self.slug,
+            vendor_id=vendor_id,
+        )
         await self._try_pdf_agenda(meeting, packet_url, vendor_id)
 
     _PACKET_PATTERNS = re.compile(

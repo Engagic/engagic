@@ -1,0 +1,20 @@
+# Cities that legitimately only publish monolithic agenda packets
+# No item-level data to extract -- this is their ceiling
+# Updated 2026-03-21 (17 cities)
+beverlyMA
+cathedralcityCA
+cherryhillNJ
+dothanAL
+everettWA
+fairfaxVA
+miamisburgOH
+morristownNJ
+mountairyNC
+oakharborWA
+palmettoFL
+parkridgeIL
+sanbenitoTX
+spokaneWA
+trentonNJ
+valparaisoIN
+whiteplainsNY

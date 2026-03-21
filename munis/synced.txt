@@ -1,16 +1,15 @@
-# Cities confirmed synced and producing items
-# From synced-never-queued batch 2026-03-20 (14 cities)
-burlingameCA
-cantonMI
-clintontownshipMI
-edenprairieMN
-fontanaCA
-goletaCA
-jonesboroGA
-lauderhillFL
-mesquiteTX
-miramarFL
-portstlucieFL
-prescottvalleyAZ
-salinasCA
-sunriseFL
+# Cities synced with items, pending processing
+# Updated 2026-03-21 (14 cities)
+bedfordTX
+citrusheightsCA
+coltonCA
+dunnellonFL
+gainesvilleFL
+janesvilleWI
+lahabraCA
+marlboroughMA
+monroeLA
+norwichCT
+oakleyCA
+queencreekAZ
+westlandMI
