@@ -183,7 +183,7 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
 - **Participation:** Extracted from agenda HTML (contact info, zoom links)
 - **City examples:** Palo Alto CA, Mountain View CA, Sunnyvale CA
 
-**3. Granicus (541 lines)**
+**3. Granicus (600 lines)**
 - **HTML scraping:** Two-step process - ViewPublisher.php listing → AgendaViewer/AgendaOnline detail
 - **Config dependency:** Requires `data/granicus_view_ids.json` mapping base URLs to view IDs
 - **Parser:** `granicus_parser.py` handles four HTML formats:
@@ -191,7 +191,8 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
   - AgendaOnline table-based (older format)
   - Original AgendaViewer with File IDs and MetaViewer attachments
   - S3/CloudFront grid HTML — native Granicus sites (e.g. Bozeman MT, Carson City NV) where AgendaViewer.php redirects to an S3-hosted HTML page with CSS grid layout, h2/h3 sections, and CloudFront PDF links
-- **Extraction flow:** HTML parsing (try all 4 formats) → PDF chunking fallback (`agenda_chunker.py`) → monolithic fallback
+- **Extraction flow:** HTML parsing (try all 4 formats) → PDF fallback with agenda/packet escalation → monolithic fallback
+- **PDF fallback (two-step):** When HTML parsing yields no items, `_find_agenda_and_packet_urls` locates both the agenda PDF and the packet PDF from the HTML page. Tries the agenda PDF first (may have hyperlinked attachment URLs via URL-based chunking). If the agenda PDF yields hollow items (no attachments, no body_text), escalates to the packet PDF for TOC-based chunking with embedded memo body_text. Falls back to monolithic `packet_url` if neither produces usable items.
 - **Attachments:** Three strategies depending on format:
   - AgendaOnline: fetched from item detail pages, DownloadFile→ViewDocument URL translation
   - S3 grid HTML: each item's staff report PDF is downloaded and parsed with PyMuPDF to extract embedded Legistar S3 attachment links
@@ -266,18 +267,19 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
 - **Multi-URL strategy:** Tries `Documents/ViewAgenda` and `Meetings/ViewMeetingAgenda`, keeps best result
 - **City examples:** San Diego CA, Tucson AZ, Tampa FL, Durham NC
 
-**11. CivicPlus (440 lines)**
+**11. CivicPlus (580 lines)**
 - **Domain discovery:** Tries `{slug}.civicplus.com`, `{slug}.gov`, `{slug}.org` variants
 - **HTML scraping:** AgendaCenter pages → ViewFile/Agenda links or meeting detail pages
-- **Three-tier item extraction** (HTML → PDF → monolithic):
+- **Four-tier item extraction** (HTML → monolithic packet detection → PDF → monolithic):
   1. **HTML agenda:** Fetches `?html=true` version of ViewFile URLs, parses structured `div.item.level{1,2,3}` hierarchy via `civicplus_parser.py`. Level 1 = section headers, level 2+ = substantive items. Generic titles ("Consent A") replaced with description text.
-  2. **PDF fallback:** Downloads agenda PDF and extracts items via `agenda_chunker.py` (section detection, numbering heuristics, CivicPlus-specific patterns)
-  3. **Monolithic fallback:** Keeps `packet_url` if both parsing paths fail
+  2. **Monolithic packet detection:** After HTML parsing, checks if items are mostly attachment-less and one "item" is actually a full "Agenda Packet" PDF. If detected (≥70% of substantive items lack attachments), extracts the packet PDF URL and runs the agenda chunker on it for TOC-based body_text from embedded memos. Falls back to HTML items if chunking doesn't produce body_text.
+  3. **PDF fallback:** Downloads agenda PDF and extracts items via `agenda_chunker.py` (section detection, numbering heuristics, CivicPlus-specific patterns)
+  4. **Monolithic fallback:** Keeps `packet_url` if all parsing paths fail
 - **Parser:** `civicplus_parser.py` extracts items with nested section tracking (e.g., "REGULAR BUSINESS > RESOLUTION(S)")
 - **Meeting ID:** Extracts from URL `id=` param or generates MD5 hash of normalized URL
 - **Date extraction:** From URL pattern (`_MMDDYYYY-ID`) or page text
 - **Deduplication:** By date (keeps last uploaded, typically packet over agenda)
-- **City examples:** Ardmore OK, various mid-size cities
+- **City examples:** Ardmore OK, Citrus Heights CA, various mid-size cities
 
 **12. Berkeley (295 lines) - Custom**
 - **Custom Drupal CMS** at `berkeleyca.gov`
@@ -317,7 +319,7 @@ These adapters fetch **PDF packet URLs only** (no structured items). Meetings ar
 | `municode_parser.py` | Municode | `agenda-section` → `agenda-items` → `agenda_item_attachments` |
 | `novusagenda_parser.py` | NovusAgenda | CoverSheet.aspx links, exploratory multi-pattern detection |
 | `civicplus_parser.py` | CivicPlus | `div.item.level{1,2,3}` hierarchy from `?html=true` agendas; section/sub-section nesting; generic title replacement |
-| `agenda_chunker.py` | Granicus, CivicPlus | PDF agenda parsing via PyMuPDF: 4-pass extraction (metadata → sections/items → body text → link assignment). Handles varied numbering schemes, bold/caps headers, case/docket numbers, standalone number lines |
+| `agenda_chunker.py` | Granicus, CivicPlus | Two-path PDF agenda parser via PyMuPDF. **TOC path** (first): detects PDF bookmark/outline tree; hierarchical mode assigns L2 entries as embedded memos, flat mode fuzzy-matches memos to items by title similarity. Extracts `body_text` from memo full_text for direct summarization without URL downloads. **URL path** (fallback): 4-pass extraction (metadata → sections/items → body text → link assignment) with hyperlinked attachment URLs. Handles varied numbering schemes, bold/caps headers, case/docket numbers, standalone number lines |
 
 **Adapters without dedicated parsers** (inline parsing): IQM2, eScribe, CivicClerk, Berkeley, Chicago, Menlo Park.
 
@@ -583,4 +585,4 @@ python -m pipeline.conductor sync-city examplecityCA --force
 - [pipeline/README.md](../pipeline/README.md) - How adapters integrate with processing pipeline
 - [database/README.md](../database/README.md) - How meeting data is stored
 
-**Last Updated:** 2026-03-20 (Added agenda_chunker.py PDF parser, civicplus_parser.py HTML parser; CivicPlus promoted to item-level; Granicus PDF fallback)
+**Last Updated:** 2026-03-20 (Agenda chunker: TOC-based chunking with embedded memo body_text extraction, two-path dispatch; Granicus: agenda/packet PDF escalation; CivicPlus: monolithic packet detection for cities with HTML items but no per-item attachments)

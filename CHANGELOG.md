@@ -6,6 +6,34 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-03-20] Agenda Chunker TOC Path + Adapter PDF Escalation
+
+### Agenda Chunker: TOC-Based Chunking
+
+When a PDF has no hyperlinked attachment URLs but does have a bookmark/outline tree (TOC) with embedded staff memos, the old URL-only chunker returned hollow items. The chunker now dispatches TOC-first.
+
+- **vendors/adapters/parsers/agenda_chunker.py**: Unified two-path parser. First checks for meaningful TOC (`_has_meaningful_toc`). If found, detects hierarchical vs flat pattern (`_detect_toc_pattern`):
+  - **Hierarchical:** L1 TOC entries = agenda items on agenda pages, L2 = embedded attachments on content pages. Extracts `_MemoContent` (subject, summary, fiscal_info, recommended_action, submitted_by, full_text) from each page range.
+  - **Flat:** L1 entries beyond the agenda page point to individual memos. Fuzzy-matches memos to items by title/body text similarity (SequenceMatcher + keyword overlap).
+- **Pipeline integration:** For TOC items, memo `full_text` is emitted as `body_text` in the pipeline-compatible output. The processor already handles `body_text` as a fallback path (processor.py line 766) — items with body_text go straight to summarization without URL downloads. URL-based attachments with empty URLs are filtered out to avoid `AttachmentSchema` validation failures.
+- **URL path preserved:** When no TOC exists, falls back to the existing 4-pass URL-based extraction (metadata → sections/items → body text → link assignment).
+- **New output fields:** `parse_method` in metadata (toc_hierarchical / toc_flat / url), `memo_count` and `memo_pages` per item, `orphan_memos` at top level.
+- **CLI:** Added `--force-toc` and `--force-url` flags for debugging.
+
+### Granicus: Agenda/Packet PDF Escalation
+
+Some Granicus cities have both an agenda PDF and a packet PDF on their meeting page. The agenda PDF may be hyperlinked (URL-based chunking works) or flat (needs the packet PDF for TOC-based chunking). Previously only one PDF was tried.
+
+- **vendors/adapters/granicus_adapter_async.py**: `_find_agenda_and_packet_urls` replaces `_find_packet_url` — finds both agenda PDF (links with "agenda" in text/href) and packet PDF (MetaViewer links or "packet" keyword) from the HTML page. When HTML parsing yields no items, tries the agenda PDF first (URL-based chunking for hyperlinked attachments). If hollow items result, escalates to the packet PDF (TOC-based chunking with body_text from embedded memos). Falls back to monolithic `packet_url` if neither produces usable items.
+
+### CivicPlus: Monolithic Packet Detection
+
+Some CivicPlus cities (e.g. Citrus Heights CA) have structured HTML agendas with good item titles and descriptions, but no per-item attachment PDFs. Instead, a single monolithic "Agenda Packet" PDF is listed as one of the items, bundling all staff memos. Previously, the HTML items were accepted as-is (hollow, unsummarizable).
+
+- **vendors/adapters/civicplus_adapter_async.py**: After HTML parsing, `_detect_monolithic_packet` checks if ≥70% of substantive items lack attachments and one item's title/attachment name matches agenda packet patterns. If detected, extracts the packet PDF URL, strips the fake packet "item", and runs the agenda chunker on the packet for TOC-based body_text extraction. If the chunker produces items with body_text, uses those; otherwise keeps the HTML items as-is.
+
+---
+
 ## [2026-03-20] Granicus S3 Grid HTML Parser + PDF Agenda Chunker + CivicPlus Item Extraction
 
 ### Granicus S3 Grid HTML

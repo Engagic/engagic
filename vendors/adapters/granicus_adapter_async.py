@@ -256,28 +256,66 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     attachment_count=attachment_count
                 )
             else:
-                packet_url = self._find_packet_url(html, final_url)
-                if packet_url:
-                    # Try to extract items from the packet PDF
-                    pdf_items = await self._parse_packet_pdf(packet_url, event_id)
-                    if pdf_items:
-                        meeting["items"] = pdf_items
-                        meeting["packet_url"] = packet_url
-                        logger.info(
-                            "parsed items from packet pdf",
+                # No HTML items — try PDF path: agenda PDF first, then packet PDF
+                agenda_pdf_url, packet_url = self._find_agenda_and_packet_urls(html, final_url)
+
+                pdf_items = None
+                used_url = None
+
+                # Try agenda PDF first (may have hyperlinked attachment URLs)
+                if agenda_pdf_url:
+                    pdf_items = await self._parse_packet_pdf(agenda_pdf_url, event_id)
+                    items_have_content = pdf_items and any(
+                        item.get("body_text") or item.get("attachments")
+                        for item in pdf_items
+                    )
+                    if items_have_content:
+                        used_url = agenda_pdf_url
+                    else:
+                        logger.debug(
+                            "agenda pdf yielded hollow items, trying packet",
                             vendor="granicus",
                             slug=self.slug,
                             event_id=event_id,
-                            item_count=len(pdf_items),
+                            agenda_item_count=len(pdf_items) if pdf_items else 0,
                         )
+                        pdf_items = None  # Reset — try packet next
+
+                # Try packet PDF if agenda didn't work (TOC-based with body_text)
+                if not pdf_items and packet_url and packet_url != agenda_pdf_url:
+                    pdf_items = await self._parse_packet_pdf(packet_url, event_id)
+                    items_have_content = pdf_items and any(
+                        item.get("body_text") or item.get("attachments")
+                        for item in pdf_items
+                    )
+                    if items_have_content:
+                        used_url = packet_url
                     else:
-                        meeting["packet_url"] = packet_url
-                        logger.debug(
-                            "no items from pdf, using packet fallback",
-                            vendor="granicus",
-                            slug=self.slug,
-                            event_id=event_id
-                        )
+                        pdf_items = None
+
+                if pdf_items and used_url:
+                    meeting["items"] = pdf_items
+                    meeting["packet_url"] = used_url
+                    parse_method = pdf_items[0].get("metadata", {}).get("parse_method", "")
+                    logger.info(
+                        "parsed items from pdf",
+                        vendor="granicus",
+                        slug=self.slug,
+                        event_id=event_id,
+                        item_count=len(pdf_items),
+                        parse_method=parse_method,
+                        source="agenda_pdf" if used_url == agenda_pdf_url else "packet_pdf",
+                    )
+                elif packet_url:
+                    # Neither PDF gave usable items — keep packet_url for
+                    # monolithic packet-level processing by the processor
+                    meeting["packet_url"] = packet_url
+                    logger.debug(
+                        "no items from pdfs, using packet fallback",
+                        vendor="granicus",
+                        slug=self.slug,
+                        event_id=event_id
+                    )
                 else:
                     logger.debug(
                         "no items or packet found",
@@ -511,31 +549,59 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 except OSError:
                     pass
 
-    def _find_packet_url(self, html: str, base_url: str) -> Optional[str]:
-        """Find agenda packet PDF URL: MetaViewer > agenda/packet PDF > any PDF."""
-        soup = BeautifulSoup(html, 'html.parser')
+    def _find_agenda_and_packet_urls(self, html: str, base_url: str) -> tuple[Optional[str], Optional[str]]:
+        """Find agenda PDF and packet PDF URLs from the HTML page.
 
+        Returns (agenda_pdf_url, packet_pdf_url). Either or both may be None.
+        The agenda PDF is the item listing (possibly hyperlinked).
+        The packet PDF is the full bundled document (may have TOC with embedded memos).
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        agenda_url = None
+        packet_url = None
+
+        # MetaViewer links are typically the full packet
         meta_link = soup.find('a', href=lambda x: x and 'MetaViewer' in x if x else False)
         if meta_link:
-            href = meta_link['href']
+            href = str(meta_link['href'])
             if href.startswith('//'):
-                return 'https:' + href
-            return urljoin(base_url, href)
+                href = 'https:' + href
+            else:
+                href = urljoin(base_url, href)
+            packet_url = href
 
+        # Scan all PDF links for agenda vs packet distinction
         for link in soup.find_all('a', href=True):
-            href = link['href'].lower()
+            link_href = str(link['href']).lower()
             text = link.get_text(strip=True).lower()
-            if '.pdf' in href and ('agenda' in text or 'packet' in text or 'agenda' in href):
-                full_href = link['href']
-                if full_href.startswith('//'):
-                    return 'https:' + full_href
-                return urljoin(base_url, full_href)
+            if '.pdf' not in link_href:
+                continue
 
-        pdf_link = soup.find('a', href=lambda x: x and '.pdf' in x.lower() if x else False)
-        if pdf_link:
-            href = pdf_link['href']
-            if href.startswith('//'):
-                return 'https:' + href
-            return urljoin(base_url, href)
+            full_href = str(link['href'])
+            if full_href.startswith('//'):
+                full_href = 'https:' + full_href
+            else:
+                full_href = urljoin(base_url, full_href)
 
-        return None
+            # Skip if it's the same as MetaViewer we already found
+            if full_href == packet_url:
+                continue
+
+            if 'packet' in text or 'packet' in link_href:
+                if not packet_url:
+                    packet_url = full_href
+            elif 'agenda' in text or 'agenda' in link_href:
+                if not agenda_url:
+                    agenda_url = full_href
+
+        # If we only found one PDF and couldn't distinguish, use it as the agenda
+        if not agenda_url and not packet_url:
+            pdf_link = soup.find('a', href=lambda x: x and '.pdf' in x.lower() if x else False)
+            if pdf_link:
+                href = str(pdf_link['href'])
+                if href.startswith('//'):
+                    agenda_url = 'https:' + href
+                else:
+                    agenda_url = urljoin(base_url, href)
+
+        return agenda_url, packet_url
