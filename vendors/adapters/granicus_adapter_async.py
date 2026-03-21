@@ -8,14 +8,16 @@ Two-step fetching:
 Supports multiple HTML formats:
 - AgendaOnline (meetings.{city}.org) - parsed with parse_agendaonline_html
 - Original Granicus format - parsed with parse_agendaviewer_html
+- S3/CloudFront-hosted grid HTML (e.g. Bozeman) - parsed with parse_granicus_s3_html
 
-Cities using Granicus: Cambridge MA, Santa Monica CA, Redwood City CA, and many others
+Cities using Granicus: Cambridge MA, Santa Monica CA, Redwood City CA, Bozeman MT, and many others
 """
 
 import json
 import os
 import re
 import asyncio
+import tempfile
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin, urlparse, unquote, parse_qs
@@ -27,7 +29,9 @@ from vendors.adapters.parsers.granicus_parser import (
     parse_viewpublisher_listing,
     parse_agendaonline_html,
     parse_agendaviewer_html,
+    parse_granicus_s3_html,
 )
+from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 
 
@@ -208,8 +212,13 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
             if "AgendaOnline" in final_url or "ViewAgenda" in final_url:
                 parsed = await asyncio.to_thread(parse_agendaonline_html, html, final_url)
+            elif "s3.amazonaws.com" in final_url or "cloudfront.net" in final_url:
+                parsed = await asyncio.to_thread(parse_granicus_s3_html, html)
             else:
+                # Legacy format first; fall back to S3 format if no items found
                 parsed = await asyncio.to_thread(parse_agendaviewer_html, html)
+                if not parsed.get("items"):
+                    parsed = await asyncio.to_thread(parse_granicus_s3_html, html)
 
             items = parsed.get("items", [])
 
@@ -223,6 +232,10 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     items = await self._fetch_agendaonline_attachments(
                         items, agendaonline_meeting_id, base_host
                     )
+
+            # Fetch attachments from S3 staff report PDFs (Bozeman/Carson City style)
+            if items and ("s3.amazonaws.com" in final_url or "cloudfront.net" in final_url):
+                items = await self._fetch_s3_pdf_attachments(items, event_id)
 
             meeting = {
                 "vendor_id": event_id,
@@ -245,13 +258,26 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             else:
                 packet_url = self._find_packet_url(html, final_url)
                 if packet_url:
-                    meeting["packet_url"] = packet_url
-                    logger.debug(
-                        "no items, using packet fallback",
-                        vendor="granicus",
-                        slug=self.slug,
-                        event_id=event_id
-                    )
+                    # Try to extract items from the packet PDF
+                    pdf_items = await self._parse_packet_pdf(packet_url, event_id)
+                    if pdf_items:
+                        meeting["items"] = pdf_items
+                        meeting["packet_url"] = packet_url
+                        logger.info(
+                            "parsed items from packet pdf",
+                            vendor="granicus",
+                            slug=self.slug,
+                            event_id=event_id,
+                            item_count=len(pdf_items),
+                        )
+                    else:
+                        meeting["packet_url"] = packet_url
+                        logger.debug(
+                            "no items from pdf, using packet fallback",
+                            vendor="granicus",
+                            slug=self.slug,
+                            event_id=event_id
+                        )
                 else:
                     logger.debug(
                         "no items or packet found",
@@ -312,6 +338,178 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 "type": "pdf" if ".pdf" in href.lower() else "unknown",
             })
         return attachments
+
+    async def _fetch_s3_pdf_attachments(
+        self, items: List[Dict[str, Any]], event_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Fetch staff report PDFs from S3 items and extract embedded attachment links.
+
+        Each item from the S3 HTML parser may have a CloudFront PDF (the staff report).
+        That PDF contains hyperlinked Legistar S3 attachment URLs. We download each
+        staff report, extract links with PyMuPDF, and add them as item attachments.
+        The staff report itself is kept as the first attachment.
+        """
+        import fitz
+
+        async def extract_from_pdf(item: Dict[str, Any]) -> Dict[str, Any]:
+            # Find the staff report PDF among existing attachments
+            pdf_attachments = [
+                a for a in item.get("attachments", [])
+                if a.get("type") == "pdf" and a.get("url")
+            ]
+            if not pdf_attachments:
+                return item
+
+            staff_report_url = pdf_attachments[0]["url"]
+            tmp_path = None
+            try:
+                response = await self._get(staff_report_url)
+                pdf_bytes = await response.read()
+
+                if len(pdf_bytes) < 500:
+                    return item
+
+                with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+                    tmp.write(pdf_bytes)
+                    tmp_path = tmp.name
+
+                def _extract_links():
+                    doc = fitz.open(tmp_path)
+                    links = []
+                    seen_urls = set()
+                    for page in doc:
+                        for link in page.get_links():
+                            if link.get("kind") != 2:
+                                continue
+                            uri = link.get("uri", "")
+                            if not uri or uri in seen_urls:
+                                continue
+                            # Only keep attachment-like URLs (S3, PDFs, etc.)
+                            if not any(pat in uri.lower() for pat in [
+                                "s3.amazonaws.com", ".pdf", "/uploads/attachment",
+                                "/attachments/", "cloudfront.net",
+                            ]):
+                                continue
+                            # Skip if it's the staff report URL itself
+                            if uri == staff_report_url:
+                                continue
+                            seen_urls.add(uri)
+                            # Extract display text for the link
+                            bbox = link.get("from", fitz.Rect())
+                            name = self._get_pdf_link_text(page, fitz.Rect(bbox))
+                            links.append({
+                                "name": name or "Attachment",
+                                "url": uri,
+                                "type": "pdf" if ".pdf" in uri.lower() else "unknown",
+                            })
+                    doc.close()
+                    return links
+
+                embedded_attachments = await asyncio.to_thread(_extract_links)
+
+                if embedded_attachments:
+                    # Staff report stays as first attachment, embedded links added after
+                    item["attachments"] = item["attachments"] + embedded_attachments
+                    logger.debug(
+                        "extracted attachments from staff report pdf",
+                        vendor="granicus",
+                        slug=self.slug,
+                        item=item.get("agenda_number"),
+                        embedded_count=len(embedded_attachments),
+                    )
+
+            except Exception as e:
+                logger.debug(
+                    "failed to extract pdf attachments",
+                    vendor="granicus",
+                    slug=self.slug,
+                    item=item.get("agenda_number"),
+                    error=str(e),
+                )
+            finally:
+                if tmp_path:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+
+            return item
+
+        return list(await asyncio.gather(*[extract_from_pdf(item) for item in items]))
+
+    @staticmethod
+    def _get_pdf_link_text(page, link_rect) -> str:
+        """Extract display text for a hyperlink by intersecting span bboxes."""
+        import fitz
+        td = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        parts = []
+        for block in td.get("blocks", []):
+            if block["type"] != 0:
+                continue
+            for line in block["lines"]:
+                for span in line["spans"]:
+                    span_rect = fitz.Rect(span["bbox"])
+                    intersection = span_rect & link_rect
+                    if intersection.is_empty or intersection.width < 1:
+                        continue
+                    span_y_center = (span_rect.y0 + span_rect.y1) / 2
+                    if link_rect.y0 <= span_y_center <= link_rect.y1:
+                        text = span["text"].strip()
+                        if text:
+                            parts.append(text)
+        return " ".join(parts) if parts else ""
+
+    async def _parse_packet_pdf(self, packet_url: str, event_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Download agenda packet PDF and parse it for structured items.
+
+        Returns list of item dicts matching pipeline format, or empty list on failure.
+        Falls back gracefully — any error just means we keep the monolithic packet_url.
+        """
+        tmp_path = None
+        try:
+            response = await self._get(packet_url)
+            pdf_bytes = await response.read()
+
+            if len(pdf_bytes) < 500:
+                logger.debug("pdf too small, skipping parse", vendor="granicus", slug=self.slug, event_id=event_id, size=len(pdf_bytes))
+                return []
+
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+                tmp.write(pdf_bytes)
+                tmp_path = tmp.name
+
+            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+            items = parsed.get("items", [])
+
+            if items:
+                attachment_count = sum(len(item.get("attachments", [])) for item in items)
+                logger.debug(
+                    "agenda chunker extracted items",
+                    vendor="granicus",
+                    slug=self.slug,
+                    event_id=event_id,
+                    item_count=len(items),
+                    attachment_count=attachment_count,
+                    page_count=parsed.get("metadata", {}).get("page_count", 0),
+                )
+
+            return items
+
+        except Exception as e:
+            logger.debug(
+                "packet pdf parse failed",
+                vendor="granicus",
+                slug=self.slug,
+                event_id=event_id,
+                error=str(e),
+            )
+            return []
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def _find_packet_url(self, html: str, base_url: str) -> Optional[str]:
         """Find agenda packet PDF URL: MetaViewer > agenda/packet PDF > any PDF."""

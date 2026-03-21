@@ -15,9 +15,11 @@ This adapter auto-discovers the working domain by trying candidates in order:
 Use clean slugs (e.g., "cityofithacany" not "www.cityofithacany.gov").
 """
 
+import os
 import re
 import asyncio
 import hashlib
+import tempfile
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, urljoin, parse_qs
@@ -26,6 +28,8 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
+from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
+from vendors.adapters.parsers.civicplus_parser import parse_civicplus_html
 from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError
 
@@ -127,12 +131,22 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             # Dedupe by date - keep the last one (packet is typically uploaded after agenda)
             deduped = self._dedupe_by_date(results)
 
+            # Try to parse packet PDFs for structured items
+            pdf_tasks = [
+                self._try_parse_packet_items(meeting)
+                for meeting in deduped
+                if meeting.get("packet_url") and not meeting.get("items")
+            ]
+            if pdf_tasks:
+                await asyncio.gather(*pdf_tasks, return_exceptions=True)
+
             logger.info(
                 "filtered meetings in date range",
                 vendor="civicplus",
                 slug=self.slug,
                 count=len(deduped),
                 before_dedupe=len(results),
+                with_items=sum(1 for m in deduped if m.get("items")),
                 start_date=str(start_date.date()),
                 end_date=str(end_date.date())
             )
@@ -367,3 +381,130 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             canonical += "?" + "&".join(f"{k}={v[0]}" for k, v in sorted_params)
 
         return f"civic_{hashlib.md5(canonical.encode()).hexdigest()[:8]}"
+
+    async def _try_parse_packet_items(self, meeting: Dict[str, Any]) -> None:
+        """Try to extract structured items from a meeting via HTML → PDF → monolithic.
+
+        Mutates the meeting dict in-place: adds 'items' if extraction succeeds.
+        Falls back gracefully — any error just leaves the meeting as monolithic.
+
+        Priority:
+        1. HTML agenda (?html=true) — structured, best quality
+        2. PDF agenda chunker — extracts items from PDF
+        3. Monolithic packet_url — no items, just the PDF reference
+        """
+        packet_url = meeting.get("packet_url")
+        if not packet_url:
+            return
+
+        vendor_id = meeting.get("vendor_id")
+
+        # Step 1: Try HTML agenda if this is a ViewFile URL
+        if '/ViewFile/Agenda/' in packet_url:
+            items = await self._try_html_agenda(packet_url, vendor_id)
+            if items:
+                meeting["items"] = items
+                return
+
+        # Step 2: Fall back to PDF parsing
+        await self._try_pdf_agenda(meeting, packet_url, vendor_id)
+
+    async def _try_html_agenda(self, viewfile_url: str, vendor_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fetch and parse the HTML version of a CivicPlus agenda.
+
+        Constructs ?html=true URL from the ViewFile base and parses the structured HTML.
+        Returns list of item dicts, or empty list on failure.
+        """
+        try:
+            # Strip existing query params and add ?html=true
+            base_viewfile = viewfile_url.split('?')[0]
+            html_url = base_viewfile + '?html=true'
+
+            response = await self._get(html_url)
+            html = await response.text()
+
+            # Verify we got an HTML agenda (not an error page or redirect)
+            if '<div id="divItems"' not in html and 'class="item level' not in html:
+                logger.debug("html agenda not found", vendor="civicplus", slug=self.slug, vendor_id=vendor_id)
+                return []
+
+            parsed = await asyncio.to_thread(parse_civicplus_html, html, self.base_url or "")
+            items = parsed.get("items", [])
+
+            if items:
+                attachment_count = sum(len(item.get("attachments", [])) for item in items)
+                logger.info(
+                    "parsed items from html agenda",
+                    vendor="civicplus",
+                    slug=self.slug,
+                    vendor_id=vendor_id,
+                    item_count=len(items),
+                    attachment_count=attachment_count,
+                )
+
+            return items
+
+        except Exception as e:
+            logger.debug(
+                "html agenda parse failed",
+                vendor="civicplus",
+                slug=self.slug,
+                vendor_id=vendor_id,
+                error=str(e),
+            )
+            return []
+
+    async def _try_pdf_agenda(self, meeting: Dict[str, Any], packet_url: str, vendor_id: Optional[str] = None) -> None:
+        """Download and parse a PDF agenda for structured items.
+
+        Mutates meeting dict in-place if items are found.
+        """
+        tmp_path = None
+        try:
+            # For ViewFile URLs, use the bare URL (no query params) for the PDF
+            if '/ViewFile/Agenda/' in packet_url:
+                pdf_url = packet_url.split('?')[0]
+            else:
+                pdf_url = packet_url
+
+            response = await self._get(pdf_url)
+            pdf_bytes = await response.read()
+
+            if len(pdf_bytes) < 500:
+                logger.debug("pdf too small, skipping parse", vendor="civicplus", slug=self.slug, vendor_id=vendor_id, size=len(pdf_bytes))
+                return
+
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+                tmp.write(pdf_bytes)
+                tmp_path = tmp.name
+
+            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+            items = parsed.get("items", [])
+
+            if items:
+                meeting["items"] = items
+                attachment_count = sum(len(item.get("attachments", [])) for item in items)
+                logger.info(
+                    "parsed items from packet pdf",
+                    vendor="civicplus",
+                    slug=self.slug,
+                    vendor_id=vendor_id,
+                    item_count=len(items),
+                    attachment_count=attachment_count,
+                    page_count=parsed.get("metadata", {}).get("page_count", 0),
+                )
+
+        except Exception as e:
+            logger.debug(
+                "packet pdf parse failed",
+                vendor="civicplus",
+                slug=self.slug,
+                vendor_id=vendor_id,
+                error=str(e),
+            )
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass

@@ -44,6 +44,9 @@ def _load_municode_config() -> Dict[str, Any]:
         return json.load(f)
 
 
+_BLOB_GUID_RE = re.compile(r'MEET-(?:Agenda|Packet|Minutes)-([a-f0-9-]{32,36})\.pdf', re.IGNORECASE)
+
+
 class AsyncMunicodeAdapter(AsyncBaseAdapter):
     """Async adapter for cities using Municode platform."""
 
@@ -118,6 +121,17 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         if blob_match:
             return blob_match.group(1).upper()
 
+        return None
+
+    @staticmethod
+    def _extract_guid_from_blob_url(*urls: Optional[str]) -> Optional[str]:
+        """Extract 32-char hex GUID from Municode blob PDF URLs."""
+        for url in urls:
+            if not url:
+                continue
+            m = _BLOB_GUID_RE.search(url)
+            if m:
+                return m.group(1).replace("-", "")
         return None
 
     def _try_discover_city_code(self, data: Any) -> None:
@@ -195,7 +209,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         return processed
 
     async def _fetch_publish_page_meetings(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
-        """Fetch meetings from PublishPage HTML table (Cedar Park style)."""
+        """Fetch meetings from PublishPage HTML table, then enrich with HTML agenda items."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
@@ -227,6 +241,36 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                 total=len(meetings),
                 in_range=len(filtered)
             )
+
+            # Enrich meetings with HTML agenda items using extracted GUIDs
+            semaphore = asyncio.Semaphore(5)
+
+            async def enrich_meeting(meeting: Dict[str, Any]) -> None:
+                guid = meeting.get("_meeting_guid")
+                if not guid:
+                    return
+                async with semaphore:
+                    html_url = self._build_html_packet_url(guid)
+                    items_data = await self._fetch_html_agenda_items(html_url)
+                    if items_data and items_data.get("items"):
+                        meeting["items"] = items_data["items"]
+                        if items_data.get("participation"):
+                            meeting["participation"] = items_data["participation"]
+                        meeting["agenda_url"] = html_url
+                        logger.info(
+                            "found agenda items",
+                            vendor="municode",
+                            slug=self.slug,
+                            title=meeting.get("title", "")[:50],
+                            count=len(items_data["items"]),
+                        )
+
+            await asyncio.gather(*[enrich_meeting(m) for m in filtered])
+
+            # Clean up internal fields
+            for meeting in filtered:
+                meeting.pop("_parsed_date", None)
+                meeting.pop("_meeting_guid", None)
 
             return filtered
 
@@ -274,6 +318,10 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
 
                 agenda_url = urljoin(self.base_url, agenda_link["href"]) if agenda_link else None
                 packet_url = urljoin(self.base_url, packet_link["href"]) if packet_link else None
+                minutes_url = urljoin(self.base_url, minutes_link["href"]) if minutes_link else None
+
+                # Extract GUID from any blob URL for HTML agenda fetch
+                meeting_guid = self._extract_guid_from_blob_url(agenda_url, packet_url, minutes_url)
 
                 # Build vendor_id from date + meeting type
                 vendor_id = f"{date_str.replace('/', '-')}_{meeting_type[:20]}".replace(" ", "_")
@@ -284,7 +332,8 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                     "vendor_id": vendor_id,
                     "title": title,
                     "start": parsed_date.isoformat() if parsed_date else None,
-                    "_parsed_date": parsed_date,  # For filtering, removed later
+                    "_parsed_date": parsed_date,  # For filtering, removed by caller
+                    "_meeting_guid": meeting_guid,  # For HTML agenda fetch, removed by caller
                 }
 
                 if agenda_url:
@@ -304,10 +353,6 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
             except (IndexError, AttributeError) as e:
                 logger.debug("failed to parse PublishPage row", vendor="municode", slug=self.slug, error=str(e))
                 continue
-
-        # Remove internal _parsed_date field
-        for meeting in meetings:
-            meeting.pop("_parsed_date", None)
 
         return meetings
 
