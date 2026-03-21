@@ -1,1 +1,1 @@
-# Parsers package - vendor-specific HTML parsing modules
+# Parsers package - vendor-specific HTML/PDF parsing modules

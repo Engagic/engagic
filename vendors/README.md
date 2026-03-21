@@ -2,7 +2,7 @@
 
 **Fetch meeting data from 13 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
 
-**Last Updated:** February 2026
+**Last Updated:** March 2026
 
 ---
 
@@ -18,7 +18,7 @@ vendors/
 │   ├── base_adapter_async.py          # Async base (262 lines)
 │   ├── legistar_adapter_async.py      # Legistar async (1212 lines)
 │   ├── primegov_adapter_async.py      # PrimeGov async (320 lines)
-│   ├── granicus_adapter_async.py      # Granicus async (347 lines)
+│   ├── granicus_adapter_async.py      # Granicus async (541 lines)
 │   ├── iqm2_adapter_async.py          # IQM2 async (576 lines)
 │   ├── novusagenda_adapter_async.py   # NovusAgenda async (199 lines)
 │   ├── escribe_adapter_async.py       # eScribe async (420 lines)
@@ -30,12 +30,14 @@ vendors/
 │   │   ├── berkeley_adapter_async.py  # Berkeley async (295 lines)
 │   │   ├── chicago_adapter_async.py   # Chicago async (796 lines)
 │   │   └── menlopark_adapter_async.py # Menlo Park async (182 lines)
-│   └── parsers/        # 5 vendor-specific HTML parsers
+│   └── parsers/        # 7 vendor-specific parsers (HTML + PDF)
 │       ├── legistar_parser.py         # Legistar HTML tables (373 lines)
 │       ├── primegov_parser.py         # PrimeGov HTML items (315 lines)
-│       ├── granicus_parser.py         # Granicus HTML formats (414 lines)
+│       ├── granicus_parser.py         # Granicus HTML formats (578 lines)
 │       ├── municode_parser.py         # Municode HTML sections (213 lines)
-│       └── novusagenda_parser.py      # NovusAgenda HTML items (116 lines)
+│       ├── novusagenda_parser.py      # NovusAgenda HTML items (116 lines)
+│       ├── civicplus_parser.py        # CivicPlus HTML agendas (170 lines)
+│       └── agenda_chunker.py          # PDF agenda chunker - Granicus/CivicPlus (720 lines)
 ├── extractors/         # Data extraction utilities
 │   └── council_member_extractor.py    # Sponsor extraction (281 lines)
 ├── utils/              # Shared utilities
@@ -154,7 +156,7 @@ See `database/README.md` for ID generation details.
 
 ## Vendor Adapters
 
-### Item-Level Adapters (11 adapters)
+### Item-Level Adapters (12 adapters)
 
 These adapters extract **structured agenda items** from HTML agendas, APIs, or PDFs. Items are stored separately with `matter_id`, `matter_file`, titles, and PDF links.
 
@@ -181,18 +183,23 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
 - **Participation:** Extracted from agenda HTML (contact info, zoom links)
 - **City examples:** Palo Alto CA, Mountain View CA, Sunnyvale CA
 
-**3. Granicus (347 lines)**
+**3. Granicus (541 lines)**
 - **HTML scraping:** Two-step process - ViewPublisher.php listing → AgendaViewer/AgendaOnline detail
 - **Config dependency:** Requires `data/granicus_view_ids.json` mapping base URLs to view IDs
-- **Parser:** `granicus_parser.py` handles three HTML formats:
+- **Parser:** `granicus_parser.py` handles four HTML formats:
   - AgendaOnline accessible view (`ViewMeetingAgenda`)
   - AgendaOnline table-based (older format)
   - Original AgendaViewer with File IDs and MetaViewer attachments
-- **Attachments:** Fetched from AgendaOnline item detail pages, DownloadFile→ViewDocument URL translation
+  - S3/CloudFront grid HTML — native Granicus sites (e.g. Bozeman MT, Carson City NV) where AgendaViewer.php redirects to an S3-hosted HTML page with CSS grid layout, h2/h3 sections, and CloudFront PDF links
+- **Extraction flow:** HTML parsing (try all 4 formats) → PDF chunking fallback (`agenda_chunker.py`) → monolithic fallback
+- **Attachments:** Three strategies depending on format:
+  - AgendaOnline: fetched from item detail pages, DownloadFile→ViewDocument URL translation
+  - S3 grid HTML: each item's staff report PDF is downloaded and parsed with PyMuPDF to extract embedded Legistar S3 attachment links
+  - Legacy AgendaViewer: MetaViewer links from blockquote elements
 - **Encoding:** UTF-8 with latin-1 fallback (Granicus often misreports encoding)
 - **SSL:** Disabled for Granicus domains (cert issues on S3 redirects)
-- **Participation:** Council member extraction from blue-styled header spans
-- **City examples:** Cambridge MA, Santa Monica CA, Redwood City CA
+- **Participation:** Council member extraction from blue-styled header spans; participation info from page text
+- **City examples:** Santa Monica CA, Redwood City CA, Bozeman MT, Carson City NV
 
 **4. IQM2 (576 lines)**
 - **HTML scraping:** Calendar page → Detail_Meeting.aspx → MeetingDetail table
@@ -259,7 +266,20 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
 - **Multi-URL strategy:** Tries `Documents/ViewAgenda` and `Meetings/ViewMeetingAgenda`, keeps best result
 - **City examples:** San Diego CA, Tucson AZ, Tampa FL, Durham NC
 
-**11. Berkeley (295 lines) - Custom**
+**11. CivicPlus (440 lines)**
+- **Domain discovery:** Tries `{slug}.civicplus.com`, `{slug}.gov`, `{slug}.org` variants
+- **HTML scraping:** AgendaCenter pages → ViewFile/Agenda links or meeting detail pages
+- **Three-tier item extraction** (HTML → PDF → monolithic):
+  1. **HTML agenda:** Fetches `?html=true` version of ViewFile URLs, parses structured `div.item.level{1,2,3}` hierarchy via `civicplus_parser.py`. Level 1 = section headers, level 2+ = substantive items. Generic titles ("Consent A") replaced with description text.
+  2. **PDF fallback:** Downloads agenda PDF and extracts items via `agenda_chunker.py` (section detection, numbering heuristics, CivicPlus-specific patterns)
+  3. **Monolithic fallback:** Keeps `packet_url` if both parsing paths fail
+- **Parser:** `civicplus_parser.py` extracts items with nested section tracking (e.g., "REGULAR BUSINESS > RESOLUTION(S)")
+- **Meeting ID:** Extracts from URL `id=` param or generates MD5 hash of normalized URL
+- **Date extraction:** From URL pattern (`_MMDDYYYY-ID`) or page text
+- **Deduplication:** By date (keeps last uploaded, typically packet over agenda)
+- **City examples:** Ardmore OK, various mid-size cities
+
+**12. Berkeley (295 lines) - Custom**
 - **Custom Drupal CMS** at `berkeleyca.gov`
 - **HTML scraping:** Table rows with `<time>` tags for dates
 - **Item extraction:** `<strong>1.</strong><a href="...pdf">Title</a>` pattern
@@ -270,18 +290,9 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
 
 ---
 
-### Monolithic Adapters (2 adapters)
+### Monolithic Adapters (1 adapter)
 
 These adapters fetch **PDF packet URLs only** (no structured items). Meetings are processed with comprehensive LLM summarization.
-
-**12. CivicPlus (369 lines)**
-- **Domain discovery:** Tries `{slug}.civicplus.com`, `{slug}.gov`, `{slug}.org` variants
-- **HTML scraping:** AgendaCenter pages → ViewFile/Agenda links or meeting detail pages
-- **No item extraction:** Fetches packet PDFs only
-- **Meeting ID:** Extracts from URL `id=` param or generates MD5 hash of normalized URL
-- **Date extraction:** From URL pattern (`_MMDDYYYY-ID`) or page text
-- **Deduplication:** By date (keeps last uploaded, typically packet over agenda)
-- **City examples:** Various mid-size cities
 
 **13. Menlo Park (182 lines) - Custom**
 - **Custom scraper** for Menlo Park CA's table-based website
@@ -302,16 +313,18 @@ These adapters fetch **PDF packet URLs only** (no structured items). Meetings ar
 |--------|---------|-----------------|
 | `legistar_parser.py` | Legistar | `rgMasterTable` RadGrid with column mapping; `LegislationDetail.aspx` attachments |
 | `primegov_parser.py` | PrimeGov | LA pattern (meeting-item + forcepopulate), Palo Alto (agenda-item), Boulder (table data-itemid) |
-| `granicus_parser.py` | Granicus, OnBase | ViewPublisher listing, AgendaOnline accessible/table views, AgendaViewer with MetaViewer |
+| `granicus_parser.py` | Granicus, OnBase | ViewPublisher listing, AgendaOnline accessible/table views, AgendaViewer with MetaViewer, S3 grid HTML (Bozeman/Carson City style) |
 | `municode_parser.py` | Municode | `agenda-section` → `agenda-items` → `agenda_item_attachments` |
 | `novusagenda_parser.py` | NovusAgenda | CoverSheet.aspx links, exploratory multi-pattern detection |
+| `civicplus_parser.py` | CivicPlus | `div.item.level{1,2,3}` hierarchy from `?html=true` agendas; section/sub-section nesting; generic title replacement |
+| `agenda_chunker.py` | Granicus, CivicPlus | PDF agenda parsing via PyMuPDF: 4-pass extraction (metadata → sections/items → body text → link assignment). Handles varied numbering schemes, bold/caps headers, case/docket numbers, standalone number lines |
 
-**Adapters without dedicated parsers** (inline parsing): IQM2, eScribe, CivicClerk, CivicPlus, Berkeley, Chicago, Menlo Park.
+**Adapters without dedicated parsers** (inline parsing): IQM2, eScribe, CivicClerk, Berkeley, Chicago, Menlo Park.
 
 **Why separate parsers?**
 - **Vendor updates:** HTML changes → update parser only, adapter unchanged
 - **Testing:** Can test parsing logic independently
-- **Reusability:** Granicus parser is reused by OnBase adapter
+- **Reusability:** Granicus parser reused by OnBase; agenda_chunker shared by Granicus and CivicPlus
 - **Clarity:** Adapter focuses on HTTP/retry, parser focuses on DOM traversal
 
 ---
@@ -570,4 +583,4 @@ python -m pipeline.conductor sync-city examplecityCA --force
 - [pipeline/README.md](../pipeline/README.md) - How adapters integrate with processing pipeline
 - [database/README.md](../database/README.md) - How meeting data is stored
 
-**Last Updated:** 2026-02-10 (Full code audit: line counts, adapter capabilities, patterns, config deps)
+**Last Updated:** 2026-03-20 (Added agenda_chunker.py PDF parser, civicplus_parser.py HTML parser; CivicPlus promoted to item-level; Granicus PDF fallback)

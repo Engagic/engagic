@@ -6,6 +6,35 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-03-20] Granicus S3 Grid HTML Parser + PDF Agenda Chunker + CivicPlus Item Extraction
+
+### Granicus S3 Grid HTML
+
+Native Granicus sites (e.g. Bozeman MT, Carson City NV) redirect AgendaViewer.php to S3/CloudFront-hosted HTML pages with a CSS grid layout. These were falling through to monolithic fallback with 0 items because the existing parsers didn't recognize the format.
+
+- **vendors/adapters/parsers/granicus_parser.py**: Added `parse_granicus_s3_html` — fourth HTML format parser for Granicus. Handles h2 section headers (letter or numeric), h3 agenda items with CloudFront PDF links, staff names in parens (Bozeman style), matter file extraction (Carson City `LU-2026-0023` style), and attachment links in sibling divs.
+- **vendors/adapters/granicus_adapter_async.py**: Three-way URL routing: AgendaOnline → S3/CloudFront → legacy (with S3 fallback). Added `_fetch_s3_pdf_attachments` — downloads each item's staff report PDF and extracts embedded Legistar S3 attachment links via PyMuPDF, same link extraction approach as `agenda_chunker.py`.
+
+**Result:** Bozeman's March 24 agenda: previously 4 meetings / 0 items. Now extracts ~25 items with staff names, sections, motion text, staff report PDFs, and embedded attachments.
+
+### PDF Agenda Chunker
+
+When Granicus or CivicPlus HTML parsing yields no items, the adapter now downloads the monolithic packet PDF and attempts to extract structured items from it.
+
+- **vendors/adapters/parsers/agenda_chunker.py** (new): Generalized PDF agenda parser using PyMuPDF. 4-pass extraction: (1) meeting metadata from first page, (2) section headers and item boundaries via numbering patterns + bold/caps heuristics, (3) body text and recommended actions between item boundaries, (4) PDF hyperlink assignment to owning items by page/y-position. Handles varied numbering schemes (1., 1.1, A., I.), standalone number lines (CivicPlus style where "2." is on its own line), case/docket numbers (CUP, ZA, SUP, etc.), and consent-prefix patterns. Returns pipeline-compatible dicts matching AgendaItemSchema/AttachmentSchema.
+- **vendors/adapters/granicus_adapter_async.py**: When HTML parsers return 0 items, `_parse_packet_pdf` downloads the packet PDF to a temp file, runs `parse_agenda_pdf` via `asyncio.to_thread`, and adds extracted items to the meeting. Falls back to monolithic `packet_url` if chunking fails.
+
+### CivicPlus Item Extraction
+
+CivicPlus was previously monolithic-only (packet PDF URL, no items). Now has three-tier extraction: HTML → PDF → monolithic.
+
+- **vendors/adapters/parsers/civicplus_parser.py** (new): Parses CivicPlus `?html=true` HTML agendas. Structured `div.item.level{1,2,3}` hierarchy — level 1 always treated as section headers, level 2+ as substantive items. Nested section tracking (e.g. "REGULAR BUSINESS > RESOLUTION(S)"). Generic titles like "Consent A" or "Resolution 1" replaced with actual description text. Extracts attachments from `.documents a.file` links.
+- **vendors/adapters/civicplus_adapter_async.py**: After collecting meetings, concurrent `_try_parse_packet_items` for each meeting: (1) for ViewFile URLs, fetches `?html=true` and parses via `civicplus_parser.py`, (2) falls back to PDF parsing via `agenda_chunker.py`, (3) keeps monolithic `packet_url` if both fail.
+
+**Result:** Ardmore OK March 16 agenda: previously 0 items (monolithic PDF). Now extracts 21 items with 15 attachments, proper section nesting, and substantive titles.
+
+---
+
 ## [2026-02-28] Subprocess Isolation for PDF Extraction
 
 PyMuPDF segfaults on certain malformed municipal PDFs, killing the entire process-cities run with no traceback or log. Two segfaults confirmed in dmesg (`SIGSEGV` in python3.13 and libc.so.6). No Python exception handler can catch a C-level segfault.
