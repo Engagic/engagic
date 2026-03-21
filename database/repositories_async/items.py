@@ -18,6 +18,13 @@ from config import get_logger
 logger = get_logger(__name__).bind(component="item_repository")
 
 
+def _strip_null_bytes(value):
+    """Strip null bytes from strings. PostgreSQL text columns reject 0x00."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    return value
+
+
 class ItemRepository(BaseRepository):
     """Repository for agenda item operations."""
 
@@ -96,19 +103,19 @@ class ItemRepository(BaseRepository):
                 (
                     item.id,
                     item.meeting_id,
-                    item.title,
+                    _strip_null_bytes(item.title),
                     item.sequence,
                     item.attachments,
                     item.attachment_hash,
-                    item.body_text,
+                    _strip_null_bytes(item.body_text),
                     item.matter_id,
                     item.matter_file,
                     item.matter_type,
-                    item.agenda_number,
-                    item.sponsors,
-                    item.summary,
+                    _strip_null_bytes(item.agenda_number),
+                    _strip_null_bytes(item.sponsors),
+                    _strip_null_bytes(item.summary),
                     item.topics,
-                    item.filter_reason,
+                    _strip_null_bytes(item.filter_reason),
                 )
                 for item in items
             ]
