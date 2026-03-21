@@ -4,16 +4,22 @@ Async CivicEngage Archive Center Adapter
 CivicEngage Archive Center is a CivicPlus product used by cities on custom .gov domains.
 It's a document archive system (not a meeting calendar like CivicPlus AgendaCenter).
 
-URL patterns:
-- Listing:  https://{domain}/Archive.aspx?ysnExecuteSearch=1&lngArchiveMasterID=30&dtiStartDate=...&dtiEndDate=...
-- Item PDF: https://{domain}/Archive.aspx?ADID=8497  (resolves directly to PDF)
+Two listing modes (auto-detected with fallback):
 
-ADID links on the listing page serve double duty: the link text contains the title
-and date, while the URL itself resolves to the PDF document. No detail page scraping
-is needed — everything is extracted from the listing page.
+  Search mode (lngArchiveMasterID):
+    https://{domain}/Archive.aspx?ysnExecuteSearch=1&lngArchiveMasterID=30&dtiStartDate=...&dtiEndDate=...
+    Server-side date filtering. Used by most CivicEngage sites.
 
-Slug format: clean city identifier (e.g., "newarkde"). The adapter discovers the
-working domain by trying candidates in order ({slug}.gov, www.{slug}.gov, etc.).
+  AMID mode:
+    https://{domain}/Archive.aspx?AMID=100
+    No server-side date filtering — returns all documents in category.
+    Used by sites like Wichita where lngArchiveMasterID doesn't match AMID.
+    Client-side date filtering applied after fetch.
+
+Both modes produce pages with ADID links:
+  https://{domain}/Archive.aspx?ADID=8497  (resolves directly to PDF)
+
+The adapter tries search mode first, falls back to AMID if no results.
 """
 
 import re
@@ -38,8 +44,11 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="civicengage", metrics=metrics)
-        self.base_url: Optional[str] = None  # Discovered during fetch
-        self.category_id = self._get_category_id()
+        self._site_config = self._load_site_config()
+        self.category_id = self._site_config.get("category_id", DEFAULT_CATEGORY_ID)
+        # Allow domain override for cities on civicplus.com with state prefixes etc.
+        domain_override = self._site_config.get("domain")
+        self.base_url: Optional[str] = f"https://{domain_override}" if domain_override else None
 
     def _get_candidate_base_urls(self) -> List[str]:
         """Return candidate base URLs to try, in priority order."""
@@ -49,6 +58,7 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
             f"https://www.{slug}.gov",
             f"https://{slug}.org",
             f"https://www.{slug}.org",
+            f"https://{slug}.civicplus.com",
         ]
         # If slug already has a dot, it's a full domain — try it directly first
         if "." in slug:
@@ -80,28 +90,25 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
         )
         return None
 
-    def _get_category_id(self) -> int:
-        """Load category ID from config file, fall back to default."""
+    def _load_site_config(self) -> Dict[str, Any]:
+        """Load site-specific config (category_id, domain override, etc)."""
         config_file = os.path.join(config.DB_DIR, "civicengage_sites.json")
         if os.path.exists(config_file):
             try:
                 with open(config_file) as f:
                     sites = json.load(f)
-                    site_config = sites.get(self.slug, {})
-                    if "category_id" in site_config:
-                        return site_config["category_id"]
+                    return sites.get(self.slug, {})
             except Exception:
                 pass
-        return DEFAULT_CATEGORY_ID
+        return {}
 
     async def _fetch_meetings_impl(
         self, days_back: int = 7, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         """Fetch agendas from CivicEngage Archive Center.
 
-        Strategy: single listing request with server-side date filtering.
-        ADID links resolve directly to PDFs, so no detail page scraping needed.
-        Title, date, and packet URL are all extracted from the listing page.
+        Tries search mode (lngArchiveMasterID with date filtering) first.
+        Falls back to AMID mode if search returns no results.
         """
         if not self.base_url:
             self.base_url = await self._discover_base_url()
@@ -117,8 +124,40 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        listing_html = await self._fetch_listing(start_date, end_date)
+        # Try search mode first (server-side date filtering)
+        listing_html = await self._fetch_listing_search(start_date, end_date)
         meetings = self._parse_listing_html(listing_html)
+
+        if not meetings:
+            # Fall back to AMID mode (no server-side date filtering)
+            logger.info(
+                "search mode returned no results, trying AMID mode",
+                vendor="civicengage",
+                slug=self.slug,
+                category_id=self.category_id,
+            )
+            listing_html = await self._fetch_listing_amid()
+            all_meetings = self._parse_listing_html(listing_html)
+
+            # Client-side date filtering
+            for m in all_meetings:
+                if m.get("start"):
+                    try:
+                        meeting_date = datetime.fromisoformat(m["start"])
+                        if start_date <= meeting_date <= end_date:
+                            meetings.append(m)
+                    except ValueError:
+                        meetings.append(m)
+                else:
+                    meetings.append(m)
+
+            logger.info(
+                "AMID mode results",
+                vendor="civicengage",
+                slug=self.slug,
+                total=len(all_meetings),
+                in_range=len(meetings),
+            )
 
         logger.info(
             "parsed meetings from listing",
@@ -129,10 +168,10 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
 
         return meetings
 
-    async def _fetch_listing(
+    async def _fetch_listing_search(
         self, start_date: datetime, end_date: datetime
     ) -> str:
-        """Fetch Archive.aspx listing with server-side date filter."""
+        """Fetch Archive.aspx listing with lngArchiveMasterID search (server-side date filter)."""
         url = (
             f"{self.base_url}/Archive.aspx"
             f"?ysnExecuteSearch=1"
@@ -143,6 +182,12 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
             f"&dtiEndDate={end_date.strftime('%m/%d/%Y')}"
         )
 
+        response = await self._get(url)
+        return await response.text()
+
+    async def _fetch_listing_amid(self) -> str:
+        """Fetch Archive.aspx listing with AMID parameter (all documents in category)."""
+        url = f"{self.base_url}/Archive.aspx?AMID={self.category_id}"
         response = await self._get(url)
         return await response.text()
 
@@ -198,7 +243,13 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
         return results
 
     def _extract_date_from_title(self, title: str) -> Optional[str]:
-        """Extract date from titles like 'City Council Agenda - February 24, 2026'."""
+        """Extract date from titles like 'City Council Agenda - February 24, 2026'.
+
+        Supports formats:
+        - Full month: "February 24, 2026"
+        - Slash numeric: "02/24/2026"
+        - Dash numeric: "03-24-2026" (Wichita style)
+        """
         # Full month name: "February 24, 2026"
         month_match = re.search(
             r"\b(?:January|February|March|April|May|June|July|August|"
@@ -209,9 +260,15 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
         if month_match:
             return month_match.group(0)
 
-        # Numeric: "02/24/2026"
-        numeric_match = re.search(r"\b\d{1,2}/\d{1,2}/\d{4}\b", title)
-        if numeric_match:
-            return numeric_match.group(0)
+        # Slash numeric: "02/24/2026"
+        slash_match = re.search(r"\b\d{1,2}/\d{1,2}/\d{4}\b", title)
+        if slash_match:
+            return slash_match.group(0)
+
+        # Dash numeric: "03-24-2026" (e.g., Wichita)
+        dash_match = re.search(r"\b(\d{1,2})-(\d{1,2})-(\d{4})\b", title)
+        if dash_match:
+            # Normalize to slash format for _parse_date
+            return f"{dash_match.group(1)}/{dash_match.group(2)}/{dash_match.group(3)}"
 
         return None

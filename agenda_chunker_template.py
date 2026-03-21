@@ -1,11 +1,12 @@
 """
+agenda_chunker.py
+
 Unified chunker for municipal agenda PDFs across vendors
 (Granicus, Legistar, CivicPlus, CivicClerk, etc.)
 
 Two extraction paths:
   1. TOC-based: When PDF has a bookmark/outline tree with embedded memos
      as subsequent pages. Chunks by page ranges, extracts memo content.
-     Items get body_text from embedded memo full_text.
   2. URL-based: When agenda items have hyperlinked attachment URLs.
      Extracts items and assigns attachment links by position.
 
@@ -14,25 +15,18 @@ Otherwise use URL path. Both paths share the same item detection logic.
 
 Dependencies: PyMuPDF (fitz)
 
-Returns pipeline-compatible dicts matching AgendaItemSchema / AttachmentSchema.
-
 Usage:
-    from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
-    result = parse_agenda_pdf("path/to/agenda.pdf")
-    items = result["items"]  # List[dict] ready for pipeline
+    from agenda_chunker import parse_agenda
+    result = parse_agenda("path/to/agenda.pdf")
+    print(result.to_json())
 """
 
 import fitz
 import re
 import json
-from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+from typing import Optional
 from difflib import SequenceMatcher
-from typing import Dict, Any, List, Optional
-
-from config import get_logger
-
-logger = get_logger(__name__).bind(component="vendor")
 
 
 # ---------------------------------------------------------------------------
@@ -40,15 +34,15 @@ logger = get_logger(__name__).bind(component="vendor")
 # ---------------------------------------------------------------------------
 
 @dataclass
-class _Attachment:
+class Attachment:
     label: str
-    url: str             # URL for link-based; empty for embedded
-    page_start: int      # 1-indexed
-    page_end: int        # 1-indexed
+    url: str            # URL for link-based; empty for embedded
+    page_start: int     # 1-indexed; for embedded attachments
+    page_end: int       # 1-indexed; for embedded attachments
     bbox: list = field(default_factory=list)
 
 @dataclass
-class _MemoContent:
+class MemoContent:
     """Extracted content from an embedded staff memo page range."""
     subject: str = ""
     summary: str = ""
@@ -56,38 +50,44 @@ class _MemoContent:
     recommended_action: str = ""
     submitted_by: str = ""
     full_text: str = ""
-    page_start: int = 0   # 1-indexed
-    page_end: int = 0     # 1-indexed
-
-@dataclass
-class _AgendaItem:
-    number: str                             # "4.3", "6.1", "1", "A", "D.4", etc.
-    title: str
-    section: str                            # Parent section: "CONSENT CALENDAR", etc.
-    body: str                               # Coversheet/agenda text
-    recommended_action: str
-    attachments: list = field(default_factory=list)   # List[_Attachment]
-    memos: list = field(default_factory=list)          # List[_MemoContent]
-    page_start: int = 0                     # 1-indexed
+    page_start: int = 0
     page_end: int = 0
 
 @dataclass
-class _AgendaMetadata:
+class AgendaItem:
+    number: str
+    title: str
+    section: str
+    body: str
+    recommended_action: str
+    attachments: list = field(default_factory=list)   # List[Attachment]
+    memos: list = field(default_factory=list)          # List[MemoContent]
+    page_start: int = 0
+    page_end: int = 0
+
+@dataclass
+class AgendaMetadata:
     title: str = ""
-    body_name: str = ""                     # "City Council", "Planning Commission"
+    body_name: str = ""
     meeting_date: str = ""
-    meeting_type: str = ""                  # "Regular Meeting", "Special Meeting"
+    meeting_type: str = ""
     page_count: int = 0
-    parse_method: str = ""                  # "toc_hierarchical", "toc_flat", "url"
+    parse_method: str = ""   # "toc" or "url"
     pdf_metadata: dict = field(default_factory=dict)
 
 @dataclass
-class _ParsedAgenda:
-    metadata: _AgendaMetadata = field(default_factory=_AgendaMetadata)
+class ParsedAgenda:
+    metadata: AgendaMetadata = field(default_factory=AgendaMetadata)
     sections: list = field(default_factory=list)
-    items: list = field(default_factory=list)           # List[_AgendaItem]
-    orphan_links: list = field(default_factory=list)    # List[_Attachment]
-    orphan_memos: list = field(default_factory=list)    # List[_MemoContent]
+    items: list = field(default_factory=list)
+    orphan_links: list = field(default_factory=list)
+    orphan_memos: list = field(default_factory=list)
+
+    def to_dict(self):
+        return asdict(self)
+
+    def to_json(self, indent=2):
+        return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -97,11 +97,11 @@ class _ParsedAgenda:
 ITEM_NUM_RE = re.compile(
     r'^[\s]*'
     r'('
-    r'\d{1,2}(?:\.\d{1,2}){1,3}'   # 4.3, 6.1.2, 1.2.3.4
-    r'|\d{1,2}\.'                    # 1. 2.
-    r'|[A-Z]\.'                      # A. B. C.
-    r'|[a-z]\.'                      # a. b. c.
-    r'|[IVXLC]+\.'                   # I. II. IV.
+    r'\d{1,2}(?:\.\d{1,2}){1,3}'
+    r'|\d{1,2}\.'
+    r'|[A-Z]\.'
+    r'|[a-z]\.'
+    r'|[IVXLC]+\.'
     r')'
     r'\s*'
 )
@@ -140,7 +140,7 @@ SECTION_PATTERNS = [
     r'INFORMAL\s+COMMUNICATIONS?\s+FROM\s+THE\s+FLOOR',
     r'REPORTS?$',
     r'FINANCE\s+ITEMS?',
-    # CivicPlus / Planning Commission patterns
+    # CivicPlus / Planning Commission
     r'THESE\s+ITEMS\s+(?:WILL\s+)?REQUIRE',
     r'CONSENT\s*[-\u2013\u2014]\s*ITEMS\s+FOR\s+\w+',
     r'APPROVAL\s+OF\s+MINUTES',
@@ -186,24 +186,12 @@ ATTACHMENT_URL_PATTERNS = [
 ]
 ATTACHMENT_URL_RE = re.compile('|'.join(ATTACHMENT_URL_PATTERNS), re.IGNORECASE)
 
-# Matter file patterns: "2024-001", "BL2025-1005", "RS2024-12"
-MATTER_FILE_RE = re.compile(
-    r'(?:File\s+(?:ID|No\.?|Number|#)\s*:?\s*)'
-    r'([A-Z]{0,3}\d{4}-\d{2,6})'
-)
-
-MATTER_FILE_STANDALONE_RE = re.compile(
-    r'\b([A-Z]{1,3}\d{4}-\d{2,6})\b'
-    r'|\bFile\s+ID:\s*(\S+)'
-)
-
 
 # ---------------------------------------------------------------------------
 # Shared text extraction
 # ---------------------------------------------------------------------------
 
 def _extract_page_text_with_positions(page):
-    """Extract text as line-level entries with font metadata."""
     lines = []
     td = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
     for block in td.get("blocks", []):
@@ -234,7 +222,6 @@ def _extract_page_text_with_positions(page):
 
 
 def _extract_links(page):
-    """Extract all URI links from a page."""
     links = []
     for link in page.get_links():
         if link.get("kind") != 2:
@@ -255,7 +242,6 @@ def _extract_links(page):
 
 
 def _get_link_display_text(page, link_rect):
-    """Extract display text for a link by intersecting span bboxes."""
     td = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
     parts = []
     for block in td.get("blocks", []):
@@ -303,17 +289,11 @@ def _match_item_number(text):
 
 
 def _is_likely_item_header(line, lines_context=None):
-    """
-    Heuristic: a line is an item header if it has an item number AND
-    the remainder looks like an agenda item title (not procedural text).
-
-    Returns (is_item, number, title_text, lines_consumed).
-    """
+    """Returns (is_item, number, title_text, lines_consumed)."""
     num, remainder = _match_item_number(line["text"])
     if num is None:
         return False, None, None, 0
 
-    # Sub-items (4.1, 6.1) are almost always agenda items
     if '.' in num:
         return True, num, remainder, 0
 
@@ -321,23 +301,18 @@ def _is_likely_item_header(line, lines_context=None):
         alpha_chars = [c for c in remainder if c.isalpha()]
         if not alpha_chars:
             return False, None, None, 0
-
         if CASE_NUM_RE.search(remainder):
             return True, num, remainder, 0
-
         if CONSENT_PREFIX_RE.match(remainder):
             return True, num, remainder, 0
-
         upper_ratio = sum(1 for c in alpha_chars if c.isupper()) / len(alpha_chars)
         if upper_ratio > 0.7 or line["is_bold"]:
             return True, num, remainder, 0
-
         if remainder[0].islower() or len(remainder) > 100:
             return False, None, None, 0
-
         return False, None, None, 0
 
-    # Standalone number line — look ahead for title
+    # Standalone number line
     if lines_context is not None:
         line_idx, all_lines, current_section = lines_context
         agenda_sections = {
@@ -351,7 +326,6 @@ def _is_likely_item_header(line, lines_context=None):
         in_agenda_section = any(
             s in (current_section or '').upper() for s in agenda_sections
         ) or (current_section or '').upper() in agenda_sections
-
         if not in_agenda_section:
             return False, None, None, 0
 
@@ -373,7 +347,6 @@ def _is_likely_item_header(line, lines_context=None):
                 break
             if len(title_parts) >= 2:
                 break
-
         if title_parts:
             return True, num, " ".join(title_parts), consumed
 
@@ -397,53 +370,15 @@ def _is_attachment_url(url):
     return False
 
 
-def _attachment_type(url: str) -> str:
-    """Classify attachment type from URL for AttachmentSchema."""
-    url_lower = url.lower()
-    if '.pdf' in url_lower:
-        return 'pdf'
-    if any(ext in url_lower for ext in ['.doc', '.docx']):
-        return 'doc'
-    if any(ext in url_lower for ext in ['.xls', '.xlsx']):
-        return 'spreadsheet'
-    return 'unknown'
-
-
-def _extract_matter_file(title: str, body: str) -> Optional[str]:
-    """Try to extract a matter file number from title or body text."""
-    for text in [title, body[:500] if body else ""]:
-        m = MATTER_FILE_RE.search(text)
-        if m:
-            return m.group(1)
-    m = MATTER_FILE_STANDALONE_RE.search(title)
-    if m:
-        return m.group(1) or m.group(2)
-    return None
-
-
-def _text_similarity(a, b):
-    if not a or not b:
-        return 0.0
-    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
-
-# ---------------------------------------------------------------------------
-# Metadata extraction
-# ---------------------------------------------------------------------------
-
 def _extract_meeting_metadata(lines, meta):
-    """Extract meeting metadata from the first ~30 lines."""
     first_lines = [l["text"] for l in lines[:30]]
     joined = "\n".join(first_lines)
 
     body_patterns = [
-        r'(CITY\s+COUNCIL)',
-        r'(CITY\s+COMMISSION)',
+        r'(CITY\s+COUNCIL)', r'(CITY\s+COMMISSION)',
         r'(PLANNING\s+(?:AND\s+ZONING\s+)?COMMISSION)',
-        r'(BOARD\s+OF\s+SUPERVISORS)',
-        r'(TOWN\s+COUNCIL)',
-        r'(VILLAGE\s+BOARD)',
-        r'(BOARD\s+OF\s+(?:DIRECTORS|TRUSTEES))',
+        r'(BOARD\s+OF\s+SUPERVISORS)', r'(TOWN\s+COUNCIL)',
+        r'(VILLAGE\s+BOARD)', r'(BOARD\s+OF\s+(?:DIRECTORS|TRUSTEES))',
     ]
     for pat in body_patterns:
         m = re.search(pat, joined, re.IGNORECASE)
@@ -455,7 +390,6 @@ def _extract_meeting_metadata(lines, meta):
         (r'REGULAR\s+MEETING', "Regular Meeting"),
         (r'SPECIAL\s+MEETING', "Special Meeting"),
         (r'ADJOURNED\s+(?:REGULAR\s+)?MEETING', "Adjourned Meeting"),
-        (r'EMERGENCY\s+MEETING', "Emergency Meeting"),
         (r'STUDY\s+SESSION', "Study Session"),
         (r'WORKSHOP', "Workshop"),
     ]
@@ -483,25 +417,392 @@ def _extract_meeting_metadata(lines, meta):
         meta.title = "Agenda"
 
 
-def _infer_section(item_number):
+def _infer_section(num):
     return "GENERAL"
 
 
-def _infer_section_from_prefix(item_num):
-    """Infer section from letter prefix (e.g. D.4 -> CONSENT AGENDA)."""
-    letter = item_num[0].upper() if item_num else ""
-    section_map = {
-        'A': 'CALL TO ORDER', 'B': 'EXECUTIVE SESSION',
-        'C': 'PRESENTATIONS', 'D': 'CONSENT AGENDA',
-        'E': 'PUBLIC HEARINGS', 'F': 'RESOLUTIONS',
-        'G': 'ORDINANCES', 'H': 'DISCUSSION/ACTION',
-    }
-    return section_map.get(letter, "GENERAL")
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+
+def _has_meaningful_toc(doc):
+    toc = doc.get_toc()
+    if len(toc) < 2:
+        return False
+    pages_referenced = set(entry[2] for entry in toc)
+    # Meaningful = entries point to pages beyond page 1
+    return len(pages_referenced) >= 2 and max(pages_referenced) > 1
+
+
+def _has_attachment_links(doc):
+    for page in doc:
+        for link in page.get_links():
+            if link.get("kind") == 2 and _is_attachment_url(link.get("uri", "")):
+                return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# TOC-based parsing
+# ---------------------------------------------------------------------------
+
+def _extract_memo_content(doc, page_start, page_end):
+    """Extract structured content from embedded memo pages (0-indexed)."""
+    memo = MemoContent(page_start=page_start + 1, page_end=page_end + 1)
+
+    parts = []
+    for pi in range(page_start, page_end + 1):
+        parts.append(doc[pi].get_text("text"))
+    full_text = "\n".join(parts)
+    memo.full_text = full_text
+
+    m = re.search(r'SUBJECT:\s*(.+?)(?=\n\s*(?:SUMMARY|$))', full_text, re.DOTALL)
+    if m:
+        memo.subject = re.sub(r'\s+', ' ', m.group(1)).strip()
+
+    m = re.search(
+        r'SUMMARY\s+EXPLANATION\s*(?:&|AND)\s*BACKGROUND:\s*(.+?)(?=\n\s*FISCAL\s+INFORMATION)',
+        full_text, re.DOTALL | re.IGNORECASE
+    )
+    if m:
+        memo.summary = re.sub(r'\s+', ' ', m.group(1)).strip()
+
+    m = re.search(r'FISCAL\s+INFORMATION:\s*(.+?)(?=\n\s*RECOMMENDED\s+ACTION)', full_text, re.DOTALL | re.IGNORECASE)
+    if m:
+        memo.fiscal_info = re.sub(r'\s+', ' ', m.group(1)).strip()
+
+    m = re.search(r'RECOMMENDED\s+ACTION:\s*(.+?)(?=\n\s*Initiated\s+by|$)', full_text, re.DOTALL | re.IGNORECASE)
+    if m:
+        memo.recommended_action = re.sub(r'\s+', ' ', m.group(1)).strip()
+
+    m = re.search(r'Submitted\s+by:\s*(.+?)(?=\n)', full_text, re.IGNORECASE)
+    if m:
+        memo.submitted_by = m.group(1).strip()
+
+    return memo
+
+
+def _text_similarity(a, b):
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+
+def _find_agenda_page_range(doc, toc):
+    """Determine which pages are the agenda (vs. attachments). Returns 0-indexed (start, end)."""
+    l1_pages = [entry[2] - 1 for entry in toc if entry[0] == 1]
+    if not l1_pages:
+        return 0, 0
+
+    # For flat TOC: agenda = first L1 page; memos start at the second distinct L1 page
+    distinct_sorted = sorted(set(l1_pages))
+
+    if len(distinct_sorted) >= 2:
+        # Agenda is the first page, memos start at second distinct page
+        return 0, distinct_sorted[1] - 1
+
+    return 0, distinct_sorted[0]
+
+
+def _detect_toc_pattern(toc):
+    """
+    Detect whether TOC is hierarchical (L1=items on agenda pages, L2=attachments)
+    or flat (L1 entries point to distinct memo pages).
+    Returns "hierarchical" or "flat".
+    """
+    if not toc:
+        return "flat"
+
+    # Filter out synthetic entries (Top, Bottom, etc.)
+    skip = {'top', 'bottom'}
+    l1_pages = [entry[2] for entry in toc if entry[0] == 1 and entry[1].strip().lower() not in skip]
+    l2_pages = [entry[2] for entry in toc if entry[0] == 2]
+
+    if not l1_pages:
+        return "flat"
+
+    from collections import Counter
+    page_counts = Counter(l1_pages)
+    distinct_l1_pages = len(page_counts)
+
+    # Find the "agenda page cluster": pages where most L1 entries point.
+    # Use the most common pages that account for >70% of L1 entries.
+    sorted_pages = page_counts.most_common()
+    cluster_pages = set()
+    running = 0
+    for page, count in sorted_pages:
+        cluster_pages.add(page)
+        running += count
+        if running >= len(l1_pages) * 0.7:
+            break
+    cluster_max = max(cluster_pages)
+
+    # Hierarchical requires:
+    # 1. L2 entries exist
+    # 2. L1 entries cluster on a few pages
+    # 3. L2 entries point BEYOND the L1 cluster (to deep content)
+    deep_l2 = [p for p in l2_pages if p > cluster_max]
+
+    if deep_l2 and distinct_l1_pages <= max(5, len(l1_pages) * 0.3):
+        return "hierarchical"
+
+    if distinct_l1_pages > len(l1_pages) * 0.5:
+        return "flat"
+
+    return "flat"
+
+
+def _parse_toc_based(doc, result):
+    result.metadata.parse_method = "toc"
+    toc = doc.get_toc()
+    pattern = _detect_toc_pattern(toc)
+
+    if pattern == "hierarchical":
+        _parse_toc_hierarchical(doc, toc, result)
+    else:
+        _parse_toc_flat(doc, toc, result)
+
+
+def _parse_toc_hierarchical(doc, toc, result):
+    """
+    Hierarchical TOC: L1 = agenda items on agenda pages,
+    L2 = embedded attachments on content pages.
+    """
+    result.metadata.parse_method = "toc_hierarchical"
+
+    l2_pages = [entry[2] - 1 for entry in toc if entry[0] == 2]
+    agenda_end = min(l2_pages) - 1 if l2_pages else 0
+
+    all_lines = []
+    for pi in range(0, agenda_end + 1):
+        all_lines.extend(_extract_page_text_with_positions(doc[pi]))
+    _extract_meeting_metadata(all_lines, result.metadata)
+
+    skip_titles = {'top', 'bottom'}
+    all_l2_starts = sorted(set(entry[2] - 1 for entry in toc if entry[0] == 2))
+
+    # Find "Bottom" page for end-of-doc boundary
+    bottom_page = doc.page_count - 1
+    for entry in toc:
+        if entry[1].strip().lower() == 'bottom':
+            bottom_page = entry[2] - 2
+
+    for i, (level, title, page_num) in enumerate(toc):
+        if level != 1:
+            continue
+        if title.strip().lower() in skip_titles:
+            continue
+
+        item_num, item_title = _parse_toc_item_title(title)
+        if not item_num:
+            continue
+
+        section = _infer_section_from_prefix(item_num)
+
+        item = AgendaItem(
+            number=item_num,
+            title=item_title,
+            section=section,
+            body="",
+            recommended_action="",
+            page_start=page_num,
+            page_end=page_num,
+        )
+
+        # Collect L2 children
+        for j in range(i + 1, len(toc)):
+            if toc[j][0] <= 1:
+                break
+            if toc[j][0] == 2:
+                att_title = toc[j][1].strip()
+                att_page_start = toc[j][2] - 1  # 0-indexed
+
+                # Determine end page from next L2 entry in global sorted list
+                try:
+                    idx = all_l2_starts.index(att_page_start)
+                    att_page_end = all_l2_starts[idx + 1] - 1 if idx + 1 < len(all_l2_starts) else bottom_page
+                except ValueError:
+                    att_page_end = bottom_page
+
+                memo = _extract_memo_content(doc, att_page_start, att_page_end)
+                memo.subject = memo.subject or att_title
+
+                item.memos.append(memo)
+                item.attachments.append(Attachment(
+                    label=att_title, url="",
+                    page_start=att_page_start + 1,
+                    page_end=att_page_end + 1,
+                ))
+
+                if memo.recommended_action and not item.recommended_action:
+                    item.recommended_action = memo.recommended_action
+
+        item.body = _extract_item_body_from_agenda(doc, item_num, 0, agenda_end)
+
+        result.items.append(item)
+        if section and section not in result.sections:
+            result.sections.append(section)
+
+
+def _parse_toc_flat(doc, toc, result):
+    """Flat TOC: L1 entries point to distinct pages (agenda + memos/items)."""
+    result.metadata.parse_method = "toc_flat"
+
+    agenda_start, agenda_end = _find_agenda_page_range(doc, toc)
+
+    all_lines = []
+    all_links = []
+    for pi in range(agenda_start, agenda_end + 1):
+        page = doc[pi]
+        all_lines.extend(_extract_page_text_with_positions(page))
+        all_links.extend(_extract_links(page))
+
+    _extract_meeting_metadata(all_lines, result.metadata)
+    items, item_boundaries = _parse_agenda_items(all_lines, all_links, result)
+
+    # Collect TOC entries beyond agenda pages
+    skip_titles = {'top', 'bottom'}
+    toc_entries_beyond = []
+    for i, (level, title, page_num) in enumerate(toc):
+        page_0 = page_num - 1
+        if page_0 < 0 or page_0 <= agenda_end:
+            continue
+        if title.strip().lower() in skip_titles:
+            continue
+        toc_entries_beyond.append((i, level, title, page_num))
+
+    if items:
+        # Text parsing succeeded: match TOC entries as memos
+        memos = []
+        for (idx, level, title, page_num) in toc_entries_beyond:
+            page_0 = page_num - 1
+            # Find end page
+            if idx + 1 < len(toc):
+                next_p = toc[idx + 1][2] - 2
+            else:
+                next_p = doc.page_count - 1
+            end_page = max(page_0, next_p)
+
+            memo = _extract_memo_content(doc, page_0, end_page)
+            memo._toc_title = title
+            memos.append(memo)
+
+        # Match memos to items by text similarity
+        for memo in memos:
+            best_score = 0.0
+            best_item = None
+            for item in items:
+                item_text = (item.title + " " + item.body).lower()
+                score = _text_similarity(memo.subject, item.title)
+                body_score = _text_similarity(memo.subject, item.body[:300])
+                score = max(score, body_score)
+                subject_words = set(w for w in re.findall(r'[a-z]{4,}', memo.subject.lower()))
+                stopwords = {'with', 'from', 'that', 'this', 'will', 'have', 'been', 'their',
+                             'they', 'city', 'shall', 'agreement', 'would', 'upon', 'which', 'between'}
+                subject_words -= stopwords
+                if subject_words:
+                    overlap = sum(1 for w in subject_words if w in item_text) / len(subject_words)
+                    score = max(score, overlap)
+                if score > best_score:
+                    best_score = score
+                    best_item = item
+            if best_item and best_score > 0.25:
+                best_item.memos.append(memo)
+                if memo.recommended_action and not best_item.recommended_action:
+                    best_item.recommended_action = memo.recommended_action
+            else:
+                result.orphan_memos.append(memo)
+
+        _assign_links_to_items(all_links, items, item_boundaries, all_lines, result)
+        result.items = items
+    else:
+        # Text parsing failed: build items directly from TOC L1 entries
+        _build_items_from_toc_entries(doc, toc, toc_entries_beyond, agenda_end, result)
+
+
+def _build_items_from_toc_entries(doc, toc, toc_entries_beyond, agenda_end, result):
+    """
+    Build items directly from TOC entries when text parsing yields nothing.
+    Each L1 entry beyond the agenda becomes an item.
+    Sub-entries (L2+) become attachments within their parent item.
+    """
+    # Collect all valid page starts for range calculation (skip page -1 and agenda pages)
+    all_content_starts = sorted(set(
+        entry[2] - 1 for entry in toc
+        if entry[2] - 1 > agenda_end and entry[2] > 0
+    ))
+
+    # Build L1 items with sub-entry attachments
+    for (idx, level, title, page_num) in toc_entries_beyond:
+        if level != 1:
+            continue
+
+        page_0 = page_num - 1
+        item_num, item_title = _parse_flat_toc_title(title)
+        if item_num is None:
+            item_num = ""
+            item_title = title.strip()
+
+        # Find this item's page range: from its page to the next L1's page - 1
+        next_l1_page = None
+        for j in range(idx + 1, len(toc)):
+            if toc[j][0] == 1 and toc[j][2] - 1 > page_0:
+                next_l1_page = toc[j][2] - 1
+                break
+        if next_l1_page:
+            item_end_page = next_l1_page - 1
+        else:
+            item_end_page = doc.page_count - 1
+
+        # Extract memo content from the item's full page range
+        memo = _extract_memo_content(doc, page_0, item_end_page)
+        memo.subject = memo.subject or item_title
+
+        item = AgendaItem(
+            number=item_num,
+            title=item_title,
+            section=_infer_section_from_toc_number(item_num),
+            body=memo.summary or "",
+            recommended_action=memo.recommended_action,
+            page_start=page_num,
+            page_end=item_end_page + 1,
+        )
+        item.memos.append(memo)
+
+        # Collect sub-entries (L2, L3, L4) as additional attachments
+        for j in range(idx + 1, len(toc)):
+            if toc[j][0] <= 1:
+                break
+            sub_title = toc[j][1].strip()
+            sub_page = toc[j][2] - 1
+            if sub_page < 0 or sub_page <= agenda_end:
+                continue  # bogus page reference
+
+            # Compute sub-entry end page
+            try:
+                si = all_content_starts.index(sub_page)
+                sub_end = all_content_starts[si + 1] - 1 if si + 1 < len(all_content_starts) else item_end_page
+            except ValueError:
+                sub_end = item_end_page
+
+            sub_end = min(sub_end, item_end_page)
+
+            item.attachments.append(Attachment(
+                label=sub_title, url="",
+                page_start=sub_page + 1,
+                page_end=sub_end + 1,
+            ))
+
+        result.items.append(item)
+
+        section = item.section
+        if section and section not in result.sections:
+            result.sections.append(section)
 
 
 def _parse_flat_toc_title(title):
-    """Parse item number and title from flat TOC entries.
-
+    """
+    Parse item number and title from flat TOC entries.
     Handles: "01a Claims and Payroll", "03 AB Cross Connection Control",
     "00 AB SeeClickFix", "99 Agenda Forecast", etc.
     Returns (item_number, clean_title) or (None, None).
@@ -543,120 +844,8 @@ def _infer_section_from_toc_number(item_num):
         return "GENERAL"
 
 
-# ---------------------------------------------------------------------------
-# TOC dispatch and detection
-# ---------------------------------------------------------------------------
-
-def _has_meaningful_toc(doc):
-    toc = doc.get_toc()
-    if len(toc) < 2:
-        return False
-    pages_referenced = set(entry[2] for entry in toc)
-    return len(pages_referenced) >= 2 and max(pages_referenced) > 1
-
-
-def _has_attachment_links(doc):
-    for page in doc:
-        for link in page.get_links():
-            if link.get("kind") == 2 and _is_attachment_url(link.get("uri", "")):
-                return True
-    return False
-
-
-def _detect_toc_pattern(toc):
-    """
-    Detect whether TOC is hierarchical (L1=items on agenda pages, L2=attachments)
-    or flat (L1 entries point to distinct memo pages).
-    """
-    if not toc:
-        return "flat"
-
-    skip = {'top', 'bottom'}
-    l1_pages = [entry[2] for entry in toc if entry[0] == 1 and entry[1].strip().lower() not in skip]
-    l2_pages = [entry[2] for entry in toc if entry[0] == 2]
-
-    if not l1_pages:
-        return "flat"
-
-    page_counts = Counter(l1_pages)
-    distinct_l1_pages = len(page_counts)
-
-    # Find the "agenda page cluster": pages where most L1 entries point.
-    sorted_pages = page_counts.most_common()
-    cluster_pages = set()
-    running = 0
-    for page, count in sorted_pages:
-        cluster_pages.add(page)
-        running += count
-        if running >= len(l1_pages) * 0.7:
-            break
-    cluster_max = max(cluster_pages)
-
-    # Hierarchical: L2 entries exist and point beyond the L1 cluster
-    deep_l2 = [p for p in l2_pages if p > cluster_max]
-    if deep_l2 and distinct_l1_pages <= max(5, len(l1_pages) * 0.3):
-        return "hierarchical"
-
-    if distinct_l1_pages > len(l1_pages) * 0.5:
-        return "flat"
-
-    return "flat"
-
-
-def _find_agenda_page_range(doc, toc):
-    """Determine which pages are the agenda (vs. attachments). Returns 0-indexed (start, end)."""
-    l1_pages = [entry[2] - 1 for entry in toc if entry[0] == 1]
-    if not l1_pages:
-        return 0, 0
-
-    distinct_sorted = sorted(set(l1_pages))
-    if len(distinct_sorted) >= 2:
-        return 0, distinct_sorted[1] - 1
-    return 0, distinct_sorted[0]
-
-
-# ---------------------------------------------------------------------------
-# TOC-based parsing
-# ---------------------------------------------------------------------------
-
-def _extract_memo_content(doc, page_start, page_end):
-    """Extract structured content from embedded memo pages (0-indexed input)."""
-    memo = _MemoContent(page_start=page_start + 1, page_end=page_end + 1)
-
-    parts = []
-    for pi in range(page_start, page_end + 1):
-        parts.append(doc[pi].get_text("text"))
-    full_text = "\n".join(parts)
-    memo.full_text = full_text
-
-    m = re.search(r'SUBJECT:\s*(.+?)(?=\n\s*(?:SUMMARY|$))', full_text, re.DOTALL)
-    if m:
-        memo.subject = re.sub(r'\s+', ' ', m.group(1)).strip()
-
-    m = re.search(
-        r'SUMMARY\s+EXPLANATION\s*(?:&|AND)\s*BACKGROUND:\s*(.+?)(?=\n\s*FISCAL\s+INFORMATION)',
-        full_text, re.DOTALL | re.IGNORECASE
-    )
-    if m:
-        memo.summary = re.sub(r'\s+', ' ', m.group(1)).strip()
-
-    m = re.search(r'FISCAL\s+INFORMATION:\s*(.+?)(?=\n\s*RECOMMENDED\s+ACTION)', full_text, re.DOTALL | re.IGNORECASE)
-    if m:
-        memo.fiscal_info = re.sub(r'\s+', ' ', m.group(1)).strip()
-
-    m = re.search(r'RECOMMENDED\s+ACTION:\s*(.+?)(?=\n\s*Initiated\s+by|$)', full_text, re.DOTALL | re.IGNORECASE)
-    if m:
-        memo.recommended_action = re.sub(r'\s+', ' ', m.group(1)).strip()
-
-    m = re.search(r'Submitted\s+by:\s*(.+?)(?=\n)', full_text, re.IGNORECASE)
-    if m:
-        memo.submitted_by = m.group(1).strip()
-
-    return memo
-
-
 def _parse_toc_item_title(toc_title):
-    """Parse item number and title from TOC entry like 'D.4\\t03-26-2026 Type B...'"""
+    """Parse item number and title from TOC entry like 'D.4\t03-26-2026 Type B...'"""
     parts = toc_title.split('\t', 1)
     if len(parts) == 2:
         num_part = parts[0].strip()
@@ -677,6 +866,18 @@ def _parse_toc_item_title(toc_title):
     title_part = re.sub(r'^[\d]{2}/[\d]{2}/[\d]{2,4}\s*[-\u2013\u2014]+\s*', '', title_part)
 
     return num_part, title_part.strip() if title_part.strip() else toc_title.strip()
+
+
+def _infer_section_from_prefix(item_num):
+    """Infer section from letter prefix."""
+    letter = item_num[0].upper() if item_num else ""
+    section_map = {
+        'A': 'CALL TO ORDER', 'B': 'EXECUTIVE SESSION',
+        'C': 'PRESENTATIONS', 'D': 'CONSENT AGENDA',
+        'E': 'PUBLIC HEARINGS', 'F': 'RESOLUTIONS',
+        'G': 'ORDINANCES', 'H': 'DISCUSSION/ACTION',
+    }
+    return section_map.get(letter, "GENERAL")
 
 
 def _extract_item_body_from_agenda(doc, item_num, agenda_start, agenda_end):
@@ -706,260 +907,6 @@ def _extract_item_body_from_agenda(doc, item_num, agenda_start, agenda_end):
     return ""
 
 
-def _parse_toc_based(doc, result):
-    toc = doc.get_toc()
-    pattern = _detect_toc_pattern(toc)
-
-    if pattern == "hierarchical":
-        _parse_toc_hierarchical(doc, toc, result)
-    else:
-        _parse_toc_flat(doc, toc, result)
-
-
-def _parse_toc_hierarchical(doc, toc, result):
-    """
-    Hierarchical TOC: L1 = agenda items on agenda pages,
-    L2 = embedded attachments on content pages.
-    """
-    result.metadata.parse_method = "toc_hierarchical"
-
-    l2_pages = [entry[2] - 1 for entry in toc if entry[0] == 2]
-    agenda_end = min(l2_pages) - 1 if l2_pages else 0
-
-    all_lines = []
-    for pi in range(0, agenda_end + 1):
-        all_lines.extend(_extract_page_text_with_positions(doc[pi]))
-    _extract_meeting_metadata(all_lines, result.metadata)
-
-    skip_titles = {'top', 'bottom'}
-    all_l2_starts = sorted(set(entry[2] - 1 for entry in toc if entry[0] == 2))
-
-    # Find "Bottom" page for end-of-doc boundary
-    bottom_page = doc.page_count - 1
-    for entry in toc:
-        if entry[1].strip().lower() == 'bottom':
-            bottom_page = entry[2] - 2
-
-    for i, (level, title, page_num) in enumerate(toc):
-        if level != 1:
-            continue
-        if title.strip().lower() in skip_titles:
-            continue
-
-        item_num, item_title = _parse_toc_item_title(title)
-        if not item_num or not item_title:
-            continue
-
-        section = _infer_section_from_prefix(item_num)
-
-        item = _AgendaItem(
-            number=item_num,
-            title=item_title,
-            section=section,
-            body="",
-            recommended_action="",
-            page_start=page_num,
-            page_end=page_num,
-        )
-
-        # Collect L2 children (embedded memos)
-        for j in range(i + 1, len(toc)):
-            if toc[j][0] <= 1:
-                break
-            if toc[j][0] == 2:
-                att_title = toc[j][1].strip()
-                att_page_start = toc[j][2] - 1  # 0-indexed
-
-                try:
-                    idx = all_l2_starts.index(att_page_start)
-                    att_page_end = all_l2_starts[idx + 1] - 1 if idx + 1 < len(all_l2_starts) else bottom_page
-                except ValueError:
-                    att_page_end = bottom_page
-
-                memo = _extract_memo_content(doc, att_page_start, att_page_end)
-                memo.subject = memo.subject or att_title
-
-                item.memos.append(memo)
-                item.attachments.append(_Attachment(
-                    label=att_title, url="",
-                    page_start=att_page_start + 1,
-                    page_end=att_page_end + 1,
-                ))
-
-                if memo.recommended_action and not item.recommended_action:
-                    item.recommended_action = memo.recommended_action
-
-        item.body = _extract_item_body_from_agenda(doc, item_num, 0, agenda_end)
-
-        result.items.append(item)
-        if section and section not in result.sections:
-            result.sections.append(section)
-
-    logger.debug("parsed toc hierarchical",
-                 item_count=len(result.items),
-                 total_memos=sum(len(it.memos) for it in result.items))
-
-
-def _parse_toc_flat(doc, toc, result):
-    """Flat TOC: L1 entries point to distinct pages (agenda + memos/items)."""
-    result.metadata.parse_method = "toc_flat"
-
-    agenda_start, agenda_end = _find_agenda_page_range(doc, toc)
-
-    all_lines = []
-    all_links = []
-    for pi in range(agenda_start, agenda_end + 1):
-        page = doc[pi]
-        all_lines.extend(_extract_page_text_with_positions(page))
-        all_links.extend(_extract_links(page))
-
-    _extract_meeting_metadata(all_lines, result.metadata)
-    items, item_boundaries = _parse_agenda_items(all_lines, all_links, result)
-
-    # Collect TOC entries beyond agenda pages
-    skip_titles = {'top', 'bottom'}
-    toc_entries_beyond = []
-    for i, (level, title, page_num) in enumerate(toc):
-        page_0 = page_num - 1
-        if page_0 < 0 or page_0 <= agenda_end:
-            continue
-        if title.strip().lower() in skip_titles:
-            continue
-        toc_entries_beyond.append((i, level, title, page_num))
-
-    if items:
-        # Text parsing succeeded: match TOC entries as memos
-        memos = []
-        for (idx, _level, title, page_num) in toc_entries_beyond:
-            page_0 = page_num - 1
-            if idx + 1 < len(toc):
-                next_p = toc[idx + 1][2] - 2
-            else:
-                next_p = doc.page_count - 1
-            end_page = max(page_0, next_p)
-
-            memo = _extract_memo_content(doc, page_0, end_page)
-            memo.subject = memo.subject or title.strip()
-            memos.append(memo)
-
-        # Fuzzy-match memos to items
-        for memo in memos:
-            best_score = 0.0
-            best_item = None
-            for item in items:
-                item_text = (item.title + " " + item.body).lower()
-                score = _text_similarity(memo.subject, item.title)
-                body_score = _text_similarity(memo.subject, item.body[:300])
-                score = max(score, body_score)
-                subject_words = set(w for w in re.findall(r'[a-z]{4,}', memo.subject.lower()))
-                stopwords = {'with', 'from', 'that', 'this', 'will', 'have', 'been', 'their', 'they',
-                             'city', 'shall', 'agreement', 'would', 'upon', 'which', 'between'}
-                subject_words -= stopwords
-                if subject_words:
-                    overlap = sum(1 for w in subject_words if w in item_text) / len(subject_words)
-                    score = max(score, overlap)
-                if score > best_score:
-                    best_score = score
-                    best_item = item
-            if best_item and best_score > 0.25:
-                best_item.memos.append(memo)
-                if memo.recommended_action and not best_item.recommended_action:
-                    best_item.recommended_action = memo.recommended_action
-            else:
-                result.orphan_memos.append(memo)
-
-        _assign_links_to_items(all_links, items, item_boundaries, result)
-        result.items = items
-    else:
-        # Text parsing failed: build items directly from TOC L1 entries
-        _build_items_from_toc_entries(doc, toc, toc_entries_beyond, agenda_end, result)
-
-    logger.debug("parsed toc flat",
-                 item_count=len(result.items),
-                 matched_memos=sum(len(it.memos) for it in result.items),
-                 orphan_memos=len(result.orphan_memos))
-
-
-def _build_items_from_toc_entries(doc, toc, toc_entries_beyond, agenda_end, result):
-    """Build items directly from TOC entries when text parsing yields nothing.
-
-    Each L1 entry beyond the agenda becomes an item.
-    Sub-entries (L2+) become attachments within their parent item.
-    """
-    # Collect all valid page starts for range calculation
-    all_content_starts = sorted(set(
-        entry[2] - 1 for entry in toc
-        if entry[2] - 1 > agenda_end and entry[2] > 0
-    ))
-
-    for (idx, level, title, page_num) in toc_entries_beyond:
-        if level != 1:
-            continue
-
-        page_0 = page_num - 1
-        parsed_num, parsed_title = _parse_flat_toc_title(title)
-        item_num = parsed_num if parsed_num is not None else ""
-        item_title = parsed_title if parsed_title is not None else title.strip()
-
-        # Find this item's page range: from its page to the next L1's page - 1
-        next_l1_page = None
-        for j in range(idx + 1, len(toc)):
-            if toc[j][0] == 1 and toc[j][2] - 1 > page_0:
-                next_l1_page = toc[j][2] - 1
-                break
-        if next_l1_page:
-            item_end_page = next_l1_page - 1
-        else:
-            item_end_page = doc.page_count - 1
-
-        # Extract memo content from the item's full page range
-        memo = _extract_memo_content(doc, page_0, item_end_page)
-        memo.subject = memo.subject or item_title
-
-        item = _AgendaItem(
-            number=item_num,
-            title=item_title,
-            section=_infer_section_from_toc_number(item_num),
-            body=memo.summary or "",
-            recommended_action=memo.recommended_action,
-            page_start=page_num,
-            page_end=item_end_page + 1,
-        )
-        item.memos.append(memo)
-
-        # Collect sub-entries (L2, L3, L4) as additional attachments
-        for j in range(idx + 1, len(toc)):
-            if toc[j][0] <= 1:
-                break
-            sub_title = toc[j][1].strip()
-            sub_page = toc[j][2] - 1
-            if sub_page < 0 or sub_page <= agenda_end:
-                continue
-
-            # Compute sub-entry end page
-            try:
-                si = all_content_starts.index(sub_page)
-                sub_end = all_content_starts[si + 1] - 1 if si + 1 < len(all_content_starts) else item_end_page
-            except ValueError:
-                sub_end = item_end_page
-
-            sub_end = min(sub_end, item_end_page)
-
-            item.attachments.append(_Attachment(
-                label=sub_title, url="",
-                page_start=sub_page + 1,
-                page_end=sub_end + 1,
-            ))
-
-        result.items.append(item)
-
-        section = item.section
-        if section and section not in result.sections:
-            result.sections.append(section)
-
-    logger.debug("built items from toc entries",
-                 item_count=len(result.items))
-
 
 # ---------------------------------------------------------------------------
 # URL-based parsing
@@ -976,12 +923,12 @@ def _parse_url_based(doc, result):
 
     _extract_meeting_metadata(all_lines, result.metadata)
     items, item_boundaries = _parse_agenda_items(all_lines, all_links, result)
-    _assign_links_to_items(all_links, items, item_boundaries, result)
+    _assign_links_to_items(all_links, items, item_boundaries, all_lines, result)
     result.items = items
 
 
 # ---------------------------------------------------------------------------
-# Shared item parsing (used by both TOC-flat and URL paths)
+# Shared item parsing
 # ---------------------------------------------------------------------------
 
 def _parse_agenda_items(all_lines, all_links, result):
@@ -1029,7 +976,7 @@ def _parse_agenda_items(all_lines, all_links, result):
 
                 skip_until = title_end_index
                 section = current_section or _infer_section(num)
-                item = _AgendaItem(
+                item = AgendaItem(
                     number=num,
                     title=full_title.rstrip(':').strip(),
                     section=section,
@@ -1046,7 +993,7 @@ def _parse_agenda_items(all_lines, all_links, result):
                 })
                 continue
 
-        # Section header (only if not already matched as an item)
+        # Section header (only if not an item)
         if _is_section_header(text) and (line["is_bold"] or _is_mostly_upper(text)):
             section_name = _extract_section_name(text)
             current_section = section_name
@@ -1054,7 +1001,7 @@ def _parse_agenda_items(all_lines, all_links, result):
                 result.sections.append(section_name)
             continue
 
-    # Collect body text for each item
+    # Collect body text
     for bi in range(len(item_boundaries)):
         start_li = item_boundaries[bi]["line_index"] + 1
         end_li = item_boundaries[bi + 1]["line_index"] if bi + 1 < len(item_boundaries) else len(all_lines)
@@ -1090,23 +1037,19 @@ def _parse_agenda_items(all_lines, all_links, result):
     return items, item_boundaries
 
 
-# ---------------------------------------------------------------------------
-# Link-to-item assignment
-# ---------------------------------------------------------------------------
-
-def _assign_links_to_items(all_links, items, item_boundaries, result):
+def _assign_links_to_items(all_links, items, item_boundaries, all_lines, result):
     for link in all_links:
         if not _is_attachment_url(link["url"]):
             continue
         best = _find_owning_item(link, item_boundaries)
         if best is not None:
-            items[best].attachments.append(_Attachment(
+            items[best].attachments.append(Attachment(
                 label=link["label"], url=link["url"],
                 page_start=link["page"] + 1, page_end=link["page"] + 1,
                 bbox=link["bbox"],
             ))
         else:
-            result.orphan_links.append(_Attachment(
+            result.orphan_links.append(Attachment(
                 label=link["label"], url=link["url"],
                 page_start=link["page"] + 1, page_end=link["page"] + 1,
                 bbox=link["bbox"],
@@ -1114,7 +1057,6 @@ def _assign_links_to_items(all_links, items, item_boundaries, result):
 
 
 def _find_owning_item(link, item_boundaries):
-    """Assign a link to the nearest preceding item on the same or earlier page."""
     link_page = link["page"]
     link_y = link["y_center"]
     best = None
@@ -1134,7 +1076,6 @@ def _find_owning_item(link, item_boundaries):
 
 
 def _find_owning_item_strict(link, item_boundaries):
-    """Fallback: find which item range the link falls within."""
     lp = link["page"]
     ly = link["y_center"]
     for bi in range(len(item_boundaries)):
@@ -1148,13 +1089,12 @@ def _find_owning_item_strict(link, item_boundaries):
 
 
 # ---------------------------------------------------------------------------
-# Main internal parser
+# Main entry point
 # ---------------------------------------------------------------------------
 
-def _parse_agenda_internal(pdf_path: str, force_method: Optional[str] = None) -> _ParsedAgenda:
-    """Parse a PDF using TOC-first dispatch, falling back to URL-based."""
+def parse_agenda(pdf_path: str, force_method: str = None) -> ParsedAgenda:
     doc = fitz.open(pdf_path)
-    result = _ParsedAgenda()
+    result = ParsedAgenda()
 
     meta = doc.metadata or {}
     result.metadata.page_count = doc.page_count
@@ -1174,149 +1114,14 @@ def _parse_agenda_internal(pdf_path: str, force_method: Optional[str] = None) ->
 
 
 # ---------------------------------------------------------------------------
-# Public API - returns pipeline-compatible dicts
-# ---------------------------------------------------------------------------
-
-def parse_agenda_pdf(pdf_path: str, force_method: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Parse a municipal agenda PDF into pipeline-compatible item dicts.
-
-    Dispatches to TOC-based or URL-based parsing depending on PDF structure.
-
-    For TOC-based items with embedded memos, memo full_text is combined into
-    body_text so the processor can summarize directly without URL downloads.
-
-    Returns dict matching the format expected by the adapter/orchestrator:
-    {
-        "items": [
-            {
-                "vendor_item_id": "4.3",
-                "title": "...",
-                "sequence": 1,
-                "agenda_number": "4.3",
-                "body_text": "...",          # From memos (TOC) or coversheet
-                "attachments": [{"name": "...", "url": "...", "type": "pdf"}],
-                "matter_file": "2024-001" or None,
-                "metadata": {
-                    "section": "CONSENT CALENDAR",
-                    "parse_method": "toc_hierarchical",
-                    ...
-                },
-            },
-            ...
-        ],
-        "metadata": {"body_name": "...", "meeting_date": "...", "parse_method": "...", ...},
-    }
-    """
-    parsed = _parse_agenda_internal(pdf_path, force_method=force_method)
-
-    pipeline_items: List[Dict[str, Any]] = []
-    for idx, item in enumerate(parsed.items):
-        pipeline_item: Dict[str, Any] = {
-            "vendor_item_id": item.number,
-            "title": item.title,
-            "sequence": idx + 1,
-            "agenda_number": item.number,
-            "attachments": [
-                {
-                    "name": att.label or "Attachment",
-                    "url": att.url,
-                    "type": _attachment_type(att.url) if att.url else "embedded",
-                }
-                for att in item.attachments
-                if att.url  # Only emit URL-based attachments to pipeline
-            ],
-        }
-
-        # Build body_text: prefer memo content (richer), fall back to agenda body
-        body_text_parts = []
-        if item.memos:
-            for memo in item.memos:
-                if memo.full_text:
-                    body_text_parts.append(memo.full_text)
-        if item.body and not body_text_parts:
-            # Only use agenda body as fallback when no memo text available
-            body_text_parts.append(item.body)
-        elif item.body and body_text_parts:
-            # Prepend short agenda body as context when memos also present
-            body_text_parts.insert(0, item.body)
-
-        if body_text_parts:
-            pipeline_item["body_text"] = "\n\n".join(body_text_parts)
-
-        # Search both title and all available text for matter file
-        all_text = item.body
-        if item.memos:
-            all_text += " " + " ".join(m.subject for m in item.memos if m.subject)
-        matter_file = _extract_matter_file(item.title, all_text)
-        if matter_file:
-            pipeline_item["matter_file"] = matter_file
-
-        item_metadata: Dict[str, Any] = {}
-        if item.section:
-            item_metadata["section"] = item.section
-        if item.recommended_action:
-            item_metadata["recommended_action"] = item.recommended_action
-        if item.page_start:
-            item_metadata["page_start"] = item.page_start
-            item_metadata["page_end"] = item.page_end
-        if parsed.metadata.parse_method:
-            item_metadata["parse_method"] = parsed.metadata.parse_method
-        if item.memos:
-            item_metadata["memo_count"] = len(item.memos)
-            item_metadata["memo_pages"] = sum(
-                (m.page_end - m.page_start + 1) for m in item.memos
-            )
-        if item_metadata:
-            pipeline_item["metadata"] = item_metadata
-
-        pipeline_items.append(pipeline_item)
-
-    result = {
-        "items": pipeline_items,
-        "metadata": {
-            "body_name": parsed.metadata.body_name,
-            "meeting_date": parsed.metadata.meeting_date,
-            "meeting_type": parsed.metadata.meeting_type,
-            "page_count": parsed.metadata.page_count,
-            "parse_method": parsed.metadata.parse_method,
-        },
-    }
-
-    if parsed.orphan_links:
-        result["orphan_links"] = [
-            {"name": att.label, "url": att.url, "type": _attachment_type(att.url)}
-            for att in parsed.orphan_links
-        ]
-
-    if parsed.orphan_memos:
-        result["orphan_memos"] = [
-            {"subject": m.subject, "page_start": m.page_start, "page_end": m.page_end}
-            for m in parsed.orphan_memos
-        ]
-
-    logger.debug(
-        "parsed agenda pdf",
-        parse_method=parsed.metadata.parse_method,
-        item_count=len(pipeline_items),
-        section_count=len(parsed.sections),
-        orphan_links=len(parsed.orphan_links),
-        orphan_memos=len(parsed.orphan_memos),
-        page_count=parsed.metadata.page_count,
-    )
-
-    return result
-
-
-# ---------------------------------------------------------------------------
-# CLI entry point
+# CLI
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python -m vendors.adapters.parsers.agenda_chunker <path_to_pdf> [--json] [--items-only] [--force-toc] [--force-url]")
+        print("Usage: python agenda_chunker.py <pdf> [--json] [--items-only] [--force-toc] [--force-url]")
         sys.exit(1)
 
     pdf_path = sys.argv[1]
@@ -1328,61 +1133,59 @@ if __name__ == "__main__":
     elif "--force-url" in sys.argv:
         force = "url"
 
-    result = parse_agenda_pdf(pdf_path, force_method=force)
-    items = result["items"]
-    meta = result["metadata"]
+    result = parse_agenda(pdf_path, force_method=force)
 
     if as_json:
         if items_only:
-            print(json.dumps(items, indent=2, ensure_ascii=False))
+            print(json.dumps([asdict(item) for item in result.items], indent=2, ensure_ascii=False))
         else:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
+            print(result.to_json())
     else:
+        m = result.metadata
         print(f"{'=' * 60}")
-        print(f"{meta.get('body_name', '')} | {meta.get('meeting_type', '')} | {meta.get('meeting_date', '')}")
-        print(f"{meta.get('page_count', 0)} pages | {len(items)} items | method: {meta.get('parse_method', '?')}")
+        print(f"{m.title}")
+        print(f"{m.body_name} | {m.meeting_type} | {m.meeting_date}")
+        print(f"{m.page_count} pages | method: {m.parse_method}")
         print(f"{'=' * 60}")
+        print(f"\nSections: {', '.join(result.sections)}")
+        print(f"Items: {len(result.items)}")
+        print(f"Orphan links: {len(result.orphan_links)}")
+        print(f"Orphan memos: {len(result.orphan_memos)}")
 
-        for item in items:
-            print(f"\n{'─' * 60}")
-            section = (item.get("metadata") or {}).get("section", "")
-            method = (item.get("metadata") or {}).get("parse_method", "")
-            print(f"[{section}] {item.get('agenda_number', '')}  {item['title']}")
-            if item.get("matter_file"):
-                print(f"  Matter: {item['matter_file']}")
-            rec = (item.get("metadata") or {}).get("recommended_action", "")
-            if rec:
-                preview = rec[:120] + ("..." if len(rec) > 120 else "")
-                print(f"  Rec. Action: {preview}")
-            memo_count = (item.get("metadata") or {}).get("memo_count", 0)
-            if memo_count:
-                memo_pages = (item.get("metadata") or {}).get("memo_pages", 0)
-                print(f"  Embedded Memos: {memo_count} ({memo_pages} pages)")
-            body_text = item.get("body_text", "")
-            if body_text:
-                preview = body_text[:150].replace('\n', ' ')
-                if len(body_text) > 150:
-                    preview += "..."
-                print(f"  Body text: {len(body_text)} chars - {preview}")
-            atts = item.get("attachments", [])
-            if atts:
-                print(f"  Attachments ({len(atts)}):")
-                for att in atts:
-                    print(f"    - {att['name']}")
-                    print(f"      {att['url']}")
-            elif not memo_count:
+        for item in result.items:
+            print(f"\n{'=' * 60}")
+            print(f"[{item.section}] {item.number}  {item.title}")
+            print(f"  Pages: {item.page_start}-{item.page_end}")
+            if item.recommended_action:
+                ra = item.recommended_action[:120]
+                if len(item.recommended_action) > 120:
+                    ra += "..."
+                print(f"  Rec. Action: {ra}")
+            if item.attachments:
+                print(f"  Attachments ({len(item.attachments)}):")
+                for att in item.attachments:
+                    print(f"    - {att.label}")
+                    print(f"      {att.url}")
+            if item.memos:
+                print(f"  Embedded Memos ({len(item.memos)}):")
+                for memo in item.memos:
+                    subj = memo.subject[:80] if memo.subject else "(no subject)"
+                    print(f"    - p{memo.page_start}-{memo.page_end}: {subj}")
+                    if memo.submitted_by:
+                        print(f"      By: {memo.submitted_by}")
+                    if memo.recommended_action:
+                        print(f"      Rec: {memo.recommended_action[:100]}...")
+            if not item.attachments and not item.memos:
                 print(f"  Attachments: none")
 
-        orphans = result.get("orphan_links", [])
-        if orphans:
-            print(f"\n{'─' * 60}")
-            print(f"ORPHAN LINKS ({len(orphans)}):")
-            for att in orphans:
-                print(f"  {att['name']} -> {att['url']}")
+        if result.orphan_links:
+            print(f"\n{'=' * 60}")
+            print("ORPHAN LINKS:")
+            for att in result.orphan_links:
+                print(f"  p{att.page_start}: {att.label} -> {att.url}")
 
-        orphan_memos = result.get("orphan_memos", [])
-        if orphan_memos:
-            print(f"\n{'─' * 60}")
-            print(f"ORPHAN MEMOS ({len(orphan_memos)}):")
-            for m in orphan_memos:
-                print(f"  p{m['page_start']}-{m['page_end']}: {m['subject'][:80]}")
+        if result.orphan_memos:
+            print(f"\n{'=' * 60}")
+            print("ORPHAN MEMOS:")
+            for memo in result.orphan_memos:
+                print(f"  p{memo.page_start}-{memo.page_end}: {memo.subject[:80]}")

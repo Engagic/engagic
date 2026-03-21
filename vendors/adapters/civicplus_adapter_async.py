@@ -390,8 +390,11 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
         Priority:
         1. HTML agenda (?html=true) — structured, best quality
-        2. PDF agenda chunker — extracts items from PDF
-        3. Monolithic packet_url — no items, just the PDF reference
+        2. If HTML items exist but are mostly attachment-less with a monolithic
+           "agenda packet" PDF, run the chunker on that packet for TOC-based
+           body_text extraction
+        3. PDF agenda chunker — extracts items from PDF
+        4. Monolithic packet_url — no items, just the PDF reference
         """
         packet_url = meeting.get("packet_url")
         if not packet_url:
@@ -403,11 +406,114 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         if '/ViewFile/Agenda/' in packet_url:
             items = await self._try_html_agenda(packet_url, vendor_id)
             if items:
+                # Step 1b: Check for monolithic packet pattern — HTML items
+                # exist with good structure but no per-item attachments, and
+                # one "item" is actually the full agenda packet PDF.
+                monolithic_url = self._detect_monolithic_packet(items)
+                if monolithic_url:
+                    # Strip the fake packet item from the HTML items
+                    html_items = [
+                        item for item in items
+                        if not self._is_packet_item(item)
+                    ]
+                    # Run chunker on the packet PDF for TOC-based body_text
+                    packet_meeting: Dict[str, Any] = {}
+                    await self._try_pdf_agenda(packet_meeting, monolithic_url, vendor_id)
+                    pdf_items = packet_meeting.get("items")
+
+                    if pdf_items and any(
+                        item.get("body_text") for item in pdf_items
+                    ):
+                        # Packet chunker gave items with body_text — use them
+                        meeting["items"] = pdf_items
+                        meeting["packet_url"] = monolithic_url
+                        logger.info(
+                            "monolithic packet detected, using chunked items",
+                            vendor="civicplus",
+                            slug=self.slug,
+                            vendor_id=vendor_id,
+                            html_items=len(html_items),
+                            pdf_items=len(pdf_items),
+                        )
+                        return
+                    else:
+                        # Packet chunker didn't produce body_text — keep
+                        # HTML items (they at least have titles/descriptions)
+                        meeting["items"] = html_items
+                        meeting["packet_url"] = monolithic_url
+                        logger.debug(
+                            "monolithic packet detected but chunker gave no body_text, keeping html items",
+                            vendor="civicplus",
+                            slug=self.slug,
+                            vendor_id=vendor_id,
+                            html_items=len(html_items),
+                        )
+                        return
+
                 meeting["items"] = items
                 return
 
         # Step 2: Fall back to PDF parsing
         await self._try_pdf_agenda(meeting, packet_url, vendor_id)
+
+    _PACKET_PATTERNS = re.compile(
+        r'agenda\s+packet|council\s+agenda\s+packet|meeting\s+packet'
+        r'|board\s+agenda\s+packet|commission\s+agenda\s+packet',
+        re.IGNORECASE,
+    )
+
+    def _is_packet_item(self, item: Dict[str, Any]) -> bool:
+        """Check if an item is a monolithic agenda packet reference."""
+        title = item.get("title", "")
+        if self._PACKET_PATTERNS.search(title):
+            return True
+        for att in item.get("attachments", []):
+            if self._PACKET_PATTERNS.search(att.get("name", "")):
+                return True
+        return False
+
+    def _detect_monolithic_packet(self, items: List[Dict[str, Any]]) -> Optional[str]:
+        """Detect if HTML items contain a monolithic agenda packet instead of per-item attachments.
+
+        Returns the packet PDF URL if the pattern matches, None otherwise.
+
+        Pattern: most substantive items have no attachments, but one item is
+        a full "Agenda Packet" PDF covering the entire meeting.
+        """
+        packet_url = None
+        items_with_own_attachments = 0
+        substantive_items = 0
+
+        for item in items:
+            if self._is_packet_item(item):
+                # This is the monolithic packet — extract its PDF URL
+                for att in item.get("attachments", []):
+                    if att.get("url"):
+                        packet_url = att["url"]
+                        break
+                continue
+
+            # Count substantive items (skip section headers / procedural)
+            substantive_items += 1
+            if item.get("attachments"):
+                items_with_own_attachments += 1
+
+        if not packet_url:
+            return None
+
+        # Trigger if most substantive items lack their own attachments
+        if substantive_items > 0 and items_with_own_attachments <= substantive_items * 0.3:
+            logger.debug(
+                "monolithic packet pattern detected",
+                vendor="civicplus",
+                slug=self.slug,
+                substantive_items=substantive_items,
+                items_with_attachments=items_with_own_attachments,
+                packet_url=packet_url[:100],
+            )
+            return packet_url
+
+        return None
 
     async def _try_html_agenda(self, viewfile_url: str, vendor_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Fetch and parse the HTML version of a CivicPlus agenda.
