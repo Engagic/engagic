@@ -266,9 +266,16 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             counter_elem = container.find("div", class_="AgendaItemCounter")
             item_number = counter_elem.get_text(strip=True) if counter_elem else str(item_counter)
 
-            # Skip section headers (A., B., C., etc.) - organizational, not substantive
-            # They aggregate sub-item attachments causing shared attachment issues
+            # Skip section headers - organizational containers, not substantive items.
+            # They aggregate all sub-item attachments via nesting, which poisons the
+            # processor's shared-URL detection (all child URLs become "shared",
+            # stripping PDF text from sub-items). Detect by: (1) A-G letter headers,
+            # (2) any container with nested AgendaItemContainer children (confidence: 9/10)
             if item_number and re.match(r'^[A-G]\.$', item_number):
+                continue
+
+            has_child_items = container.find("div", class_="AgendaItemContainer") is not None
+            if has_child_items:
                 continue
 
             title = self._extract_item_title(container)
@@ -380,12 +387,23 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
         return None
 
     def _extract_item_attachments(self, container: Tag, base_url: str) -> List[Dict[str, Any]]:
-        """Extract attachments for a specific agenda item."""
+        """Extract attachments for a specific agenda item.
+
+        Only includes attachments directly in this container, not in nested
+        child AgendaItemContainer divs (which are separate sub-items).
+        """
         attachments = []
 
-        for link in container.find_all("a", href=re.compile(r"FileStream\.ashx\?DocumentId=")):
+        # Collect child container elements to exclude their attachment links
+        child_containers = set(container.find_all("div", class_="AgendaItemContainer"))
+
+        for link in container.find_all("a", href=re.compile(r"FileStream\.ashx\?DocumentId=", re.IGNORECASE)):
             href = link.get("href", "")
             if not href:
+                continue
+
+            # Skip links inside nested child items
+            if child_containers and any(link in c.descendants for c in child_containers):
                 continue
 
             attachment_url = urljoin(base_url, href) if not href.startswith("http") else href
