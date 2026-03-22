@@ -17,6 +17,7 @@ import asyncio
 import os
 import re
 import sys
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
@@ -353,12 +354,24 @@ def _meeting_url(app_url: str, banana: str, meeting_id: str, meeting_date: str) 
     return f"{app_url}/{banana}/{slug}"
 
 
+def _build_day_summary(meetings: List[Dict[str, Any]]) -> str:
+    """Group meetings by day of week, return compact summary like '11 Monday, 8 Tuesday'."""
+    by_day: OrderedDict[str, int] = OrderedDict()
+    for m in sorted(meetings, key=lambda x: x['date']):
+        date_obj = datetime.fromisoformat(m['date'])
+        day_label = date_obj.strftime("%A")
+        by_day[day_label] = by_day.get(day_label, 0) + 1
+    return ", ".join(f"{count} {day}" for day, count in by_day.items())
+
+
 def build_digest_email(
     city_name: str,
     city_banana: str,
     keywords: List[str],
     headline_groups: List[Dict[str, Any]],
     meeting_count: int,
+    upcoming_meetings: List[Dict[str, Any]],
+    substantive_item_count: int,
     app_url: str,
     unsubscribe_token: str,
     is_donor: bool = False,
@@ -499,19 +512,23 @@ def build_digest_email(
 """
 
     else:
+        day_summary = _build_day_summary(upcoming_meetings)
         html += f"""
     <tr><td style="padding: 0 0 16px 0;">
-        <p style="margin: 0; font-size: 16px; color: {dark}; font-family: {font}; line-height: 1.55;">
-            {meeting_count} meeting{'s' if meeting_count != 1 else ''} scheduled in {city_name} this week.
+        <p style="margin: 0; font-size: 17px; color: {dark}; font-family: {font}; line-height: 1.55;">
+            {meeting_count} meeting{'s' if meeting_count != 1 else ''} coming up: {day_summary}
         </p>
-    </td></tr>
-    <tr><td style="padding: 0 0 8px 0;">
+    </td></tr>"""
+        if substantive_item_count > 0:
+            html += f"""
+    <tr><td style="padding: 0 0 16px 0;">
         <p style="margin: 0; font-size: 14px; color: {gray}; font-family: {font}; line-height: 1.55;">
-            Set up keyword alerts to receive personalized headlines about topics that matter to you.
+            Comprising {substantive_item_count} substantive agenda item{'s' if substantive_item_count != 1 else ''}.
         </p>
-    </td></tr>
+    </td></tr>"""
+        html += f"""
     <tr><td style="padding: 0 0 24px 0;">
-        <a href="{app_url}/dashboard" style="color: {indigo}; text-decoration: none; font-size: 14px; font-weight: 600; font-family: {font};">Configure keywords &#8594;</a>
+        <a href="{city_url}" style="color: {indigo}; text-decoration: none; font-size: 14px; font-weight: 600; font-family: {font};">Browse agendas &#8594;</a>
     </td></tr>
     <tr><td style="padding: 0 0 24px 0;">
         <div style="border-bottom: 1px solid #e5e7eb;"></div>
@@ -524,11 +541,17 @@ def build_digest_email(
         donation_line = f"""
         <br>Free and open-source. <a href="https://engagic.org/about/donate" style="color: {indigo}; text-decoration: none;">Support the project</a>."""
 
+    keywords_link = ""
+    if not keywords:
+        keywords_link = f"""
+            &nbsp;&middot;&nbsp;
+            <a href="{app_url}/dashboard" style="color: #9ca3af; text-decoration: underline;">Add keywords</a>"""
+
     html += f"""
     <tr><td style="padding: 0 0 8px 0;">
         <p style="margin: 0; font-size: 12px; color: #9ca3af; font-family: {font}; line-height: 1.7;">
             Watching {city_name}.{donation_line}
-            <br><a href="{app_url}/dashboard" style="color: #9ca3af; text-decoration: underline;">Manage</a>
+            <br><a href="{app_url}/dashboard" style="color: #9ca3af; text-decoration: underline;">Manage</a>{keywords_link}
             &nbsp;&middot;&nbsp;
             <a href="{unsubscribe_url}" style="color: #9ca3af; text-decoration: underline;">Unsubscribe</a>
         </p>
@@ -600,6 +623,17 @@ async def send_weekly_digest():
                 )
 
             upcoming = await get_upcoming_meetings(db, banana, days_ahead=10)
+            meeting_ids = [m['id'] for m in upcoming]
+
+            # Count substantive items (filter_reason IS NULL) across upcoming meetings
+            substantive_count = 0
+            if meeting_ids:
+                async with db.pool.acquire() as conn:
+                    row = await conn.fetchval("""
+                        SELECT COUNT(*) FROM items
+                        WHERE meeting_id = ANY($1) AND filter_reason IS NULL
+                    """, meeting_ids)
+                    substantive_count = row or 0
 
             headline_cache: Dict[tuple, str] = {}
             if all_matches:
@@ -614,6 +648,8 @@ async def send_weekly_digest():
                 'all_matches': all_matches,
                 'headline_cache': headline_cache,
                 'meeting_count': len(upcoming),
+                'upcoming_meetings': upcoming,
+                'substantive_item_count': substantive_count,
             }
 
         # Phase 3: Build and send per-user emails
@@ -647,6 +683,8 @@ async def send_weekly_digest():
                         keywords=keywords,
                         headline_groups=headline_groups,
                         meeting_count=data['meeting_count'],
+                        upcoming_meetings=data['upcoming_meetings'],
+                        substantive_item_count=data['substantive_item_count'],
                         app_url=app_url,
                         unsubscribe_token=unsubscribe_token,
                         is_donor=user.is_donor,
