@@ -5,6 +5,7 @@ Real-time dashboard data for authenticated users.
 Simplified UX: Watch 1 city, track 1-3 keywords, get weekly digest.
 """
 
+from datetime import datetime, timedelta
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -80,9 +81,55 @@ async def get_dashboard(
         match_dict["alert_name"] = alert_map.get(match.alert_id, "Unknown")
         recent_matches.append(match_dict)
 
+    # City activity: happening items + upcoming meetings for watched cities
+    city_activity = []
+    now = datetime.now()
+    end = now + timedelta(days=14)
+
+    for banana in list(all_cities)[:5]:
+        # Curated happening items (Claude-analyzed, ranked by importance)
+        try:
+            happening = await db.happening.get_happening_items(banana, limit=3)
+        except Exception:
+            happening = []
+        happening_meeting_ids = {h.meeting_id for h in happening}
+
+        for item in happening:
+            city_activity.append({
+                "type": "happening",
+                "banana": banana,
+                "meeting_id": item.meeting_id,
+                "meeting_title": item.meeting_title,
+                "meeting_date": item.meeting_date.isoformat() if item.meeting_date else None,
+                "item_title": item.item_title,
+                "reason": item.reason,
+            })
+
+        # Plain upcoming meetings (deduplicated against happening items)
+        try:
+            upcoming = await db.meetings.get_upcoming_meetings(banana, now, end, limit=3)
+        except Exception:
+            upcoming = []
+        for meeting in upcoming:
+            if meeting.id not in happening_meeting_ids:
+                city_activity.append({
+                    "type": "meeting",
+                    "banana": banana,
+                    "meeting_id": meeting.id,
+                    "meeting_title": meeting.title,
+                    "meeting_date": meeting.date.isoformat() if meeting.date else None,
+                })
+
+    city_activity.sort(key=lambda x: x.get("meeting_date") or "9999")
+
     logger.info("dashboard loaded", user_id=user.id, alerts=len(active_alerts))
 
-    return {"stats": stats, "digests": alert_configs, "recent_matches": recent_matches}
+    return {
+        "stats": stats,
+        "digests": alert_configs,
+        "recent_matches": recent_matches,
+        "city_activity": city_activity,
+    }
 
 
 @router.get("/stats")

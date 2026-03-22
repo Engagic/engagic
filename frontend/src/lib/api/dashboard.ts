@@ -50,10 +50,21 @@ export interface DashboardStats {
 	cities_tracked: number;
 }
 
+export interface CityActivityItem {
+	type: 'happening' | 'meeting';
+	banana: string;
+	meeting_id: string;
+	meeting_title: string;
+	meeting_date: string | null;
+	item_title?: string;
+	reason?: string;
+}
+
 export interface DashboardData {
 	stats: DashboardStats;
 	digests: Digest[];
 	recent_matches: DigestMatch[];
+	city_activity: CityActivityItem[];
 }
 
 async function fetchDashboard(

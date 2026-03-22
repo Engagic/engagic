@@ -10,12 +10,14 @@
 		removeCityFromDigest,
 		requestCity,
 		type Digest,
-		type DigestMatch
+		type DigestMatch,
+		type CityActivityItem
 	} from '$lib/api/dashboard';
 	import { apiClient } from '$lib/api/api-client';
 	import { ApiError, isSearchSuccess, isSearchAmbiguous, type CityOption } from '$lib/api/types';
 	import { generateMeetingSlug } from '$lib/utils/utils';
 	import { toastStore } from '$lib/stores/toast.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -29,6 +31,7 @@
 
 	let digests = $state<Digest[]>([]);
 	let recentMatches = $state<DigestMatch[]>([]);
+	let cityActivity = $state<CityActivityItem[]>([]);
 
 	// Per-digest editing state
 	let editingCityForDigest = $state<string | null>(null);
@@ -57,6 +60,7 @@
 			stats = data.stats;
 			digests = data.digests;
 			recentMatches = data.recent_matches;
+			cityActivity = data.city_activity || [];
 		} catch (err) {
 			if (err instanceof ApiError && (err.statusCode === 401 || err.statusCode === 403)) {
 				await authState.logout();
@@ -258,68 +262,116 @@
 			cancelCityEdit();
 		}
 	}
+
+	// Unified card state
+	let expandedDigest = $state<string | null>(null);
+
+	function getMatchesForDigest(digestId: string): DigestMatch[] {
+		return recentMatches.filter((m) => m.alert_id === digestId);
+	}
+
+	function isDigestExpanded(digest: Digest): boolean {
+		if (expandedDigest === digest.id) return true;
+		if (digest.cities.length === 0 || digest.criteria.keywords.length === 0) return true;
+		return false;
+	}
+
+	function toggleDigestEdit(digestId: string) {
+		if (expandedDigest === digestId) {
+			expandedDigest = null;
+			if (editingCityForDigest === digestId) cancelCityEdit();
+		} else {
+			expandedDigest = digestId;
+		}
+	}
+
+	// City activity: happening items + upcoming meetings, deduplicated against keyword matches
+	function getCityActivityForDigest(digest: Digest): CityActivityItem[] {
+		const matchMeetingIds = new Set(
+			getMatchesForDigest(digest.id).map((m) => m.meeting_id)
+		);
+		return cityActivity
+			.filter((item) => digest.cities.includes(item.banana))
+			.filter((item) => !matchMeetingIds.has(item.meeting_id));
+	}
+
+	function formatUpcomingDate(dateStr: string | null): string {
+		if (!dateStr) return '';
+		const date = new Date(dateStr);
+		return date.toLocaleDateString('en-US', {
+			weekday: 'short',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
 </script>
 
 <svelte:head>
 	<title>Dashboard - Engagic</title>
 </svelte:head>
 
-<div class="page">
-	<div class="container">
-		<header class="header">
-			<div class="header-content">
-				<h1>Dashboard</h1>
-				<div class="header-actions">
-					<span class="user-email">{authState.user?.email}</span>
-					<button onclick={handleLogout} class="btn-logout">Log Out</button>
-				</div>
-			</div>
+<div class="dashboard">
+	{#if loading}
+		<div class="loading">
+			<div class="spinner"></div>
+			<p>Loading your dashboard...</p>
+		</div>
+	{:else if error}
+		<div class="error-banner" role="alert">
+			<p>{error}</p>
+		</div>
+	{:else}
+		<div class="account-meta anim-entry" style="animation-delay: 0ms;">
+			<span class="user-email">{authState.user?.email}</span>
+			<span class="meta-sep" aria-hidden="true">&middot;</span>
+			<button onclick={handleLogout} class="btn-logout">Log Out</button>
+		</div>
+
+		<header class="header anim-entry" style="animation-delay: 60ms;">
+			<h1>Your Civic Pulse</h1>
+			{#if stats.total_matches > 0}
+				<p class="stats-line">{stats.matches_this_week} matches this week</p>
+			{/if}
 		</header>
 
-		{#if loading}
-			<div class="loading">
-				<div class="spinner"></div>
-				<p>Loading dashboard...</p>
-			</div>
-		{:else if error}
-			<div class="error-banner" role="alert">
-				<p>{error}</p>
-			</div>
-		{:else}
-			<!-- Stats -->
-			<div class="stats-grid">
-				<div class="stat-card">
-					<div class="stat-value">{stats.active_digests}</div>
-					<div class="stat-label">Active Digests</div>
-				</div>
-				<div class="stat-card">
-					<div class="stat-value">{stats.matches_this_week}</div>
-					<div class="stat-label">Matches This Week</div>
-				</div>
-				<div class="stat-card">
-					<div class="stat-value">{stats.cities_tracked}</div>
-					<div class="stat-label">Cities Tracked</div>
-				</div>
-				<div class="stat-card">
-					<div class="stat-value">{stats.total_matches}</div>
-					<div class="stat-label">Total Matches</div>
-				</div>
-			</div>
+		{#if digests.length > 0}
+			<div class="digest-list anim-entry" style="animation-delay: 140ms;">
+				{#each digests as digest (digest.id)}
+					{@const matches = getMatchesForDigest(digest.id)}
+					{@const expanded = isDigestExpanded(digest)}
+					{@const activity = getCityActivityForDigest(digest)}
 
-			<!-- Digests Configuration -->
-			<section class="section">
-				<h2>Your Digests</h2>
-				{#if digests.length > 0}
-					{#each digests as digest (digest.id)}
-						<div class="digest-card">
-							<div class="digest-header">
-								<h3>{digest.name}</h3>
-								<span class="digest-frequency">{digest.frequency}</span>
+					<div class="digest-card">
+						<!-- Summary: name + frequency -->
+						<div class="digest-summary">
+							<h2 class="digest-name">{digest.name}</h2>
+							<span class="digest-freq">{digest.frequency}</span>
+						</div>
+
+						{#if !expanded}
+							<!-- Collapsed: cities · keywords · edit -->
+							<div class="digest-watching">
+								{#each digest.cities as city, i}
+									{#if i > 0}<span class="watching-sep">,</span>{/if}
+									<a href="/{city}" class="watching-city">{city}</a>
+								{/each}
+								{#if digest.cities.length > 0 && digest.criteria.keywords.length > 0}
+									<span class="watching-sep">&middot;</span>
+								{/if}
+								{#each digest.criteria.keywords as keyword, i}
+									{#if i > 0}<span class="watching-sep">,</span>{/if}
+									<span class="watching-keyword">{keyword}</span>
+								{/each}
+								<button class="btn-edit" onclick={() => toggleDigestEdit(digest.id)}>edit</button>
 							</div>
-							<div class="digest-details">
-								<!-- Cities Section -->
-								<div class="digest-section">
-									<strong>City:</strong>
+						{/if}
+
+						{#if expanded}
+							<!-- Expanded: full editing controls -->
+							<div class="digest-edit">
+								<!-- City editing -->
+								<div class="edit-field">
+									<span class="edit-label">City</span>
 									{#if editingCityForDigest === digest.id}
 										<div class="city-edit">
 											<div class="city-search-row">
@@ -328,17 +380,17 @@
 													bind:value={citySearchQuery}
 													onkeydown={handleCitySearchKeydown}
 													placeholder="Search for a city..."
-													class="city-input"
+													class="field-input"
 													disabled={citySearchLoading}
 												/>
 												<button
 													onclick={handleCitySearch}
-													class="btn-search"
+													class="btn-action"
 													disabled={citySearchLoading || !citySearchQuery.trim()}
 												>
 													{citySearchLoading ? '...' : 'Search'}
 												</button>
-												<button onclick={cancelCityEdit} class="btn-cancel">Cancel</button>
+												<button onclick={cancelCityEdit} class="btn-secondary">Cancel</button>
 											</div>
 											{#if citySearchResults.length > 0}
 												<div class="city-results">
@@ -365,24 +417,24 @@
 											{/if}
 										</div>
 									{:else if digest.cities.length > 0}
-										<span class="city-display">
+										<span class="tag-row">
 											{#each digest.cities as city}
-												<span class="city-tag">
-													<a href="/{city}" class="city-link">{city}</a>
+												<span class="tag">
+													<a href="/{city}" class="tag-link">{city}</a>
 													<button
-														class="remove-btn"
+														class="tag-remove"
 														onclick={() => handleRemoveCity(digest.id, city)}
 														disabled={cityLoading[digest.id]}
 														aria-label="Remove {city}"
 													><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
 												</span>
 											{/each}
-											<button onclick={() => startCityEdit(digest.id)} class="btn-change">
+											<button onclick={() => startCityEdit(digest.id)} class="btn-inline">
 												Change
 											</button>
 										</span>
 									{:else}
-										<button onclick={() => startCityEdit(digest.id)} class="btn-add">
+										<button onclick={() => startCityEdit(digest.id)} class="btn-inline">
 											+ Add a city
 										</button>
 									{/if}
@@ -391,17 +443,17 @@
 									{/if}
 								</div>
 
-								<!-- Keywords Section -->
-								<div class="digest-section">
-									<strong>Keywords:</strong>
+								<!-- Keyword editing -->
+								<div class="edit-field">
+									<span class="edit-label">Keywords</span>
 									<div class="keywords-container">
 										{#if digest.criteria.keywords.length > 0}
-											<div class="keywords">
+											<div class="tag-row">
 												{#each digest.criteria.keywords as keyword}
-													<span class="keyword-tag">
+													<span class="tag">
 														{keyword}
 														<button
-															class="remove-btn"
+															class="tag-remove"
 															onclick={() => handleRemoveKeyword(digest.id, keyword)}
 															disabled={keywordLoading[digest.id]}
 															aria-label="Remove {keyword}"
@@ -416,352 +468,360 @@
 													type="text"
 													bind:value={newKeywords[digest.id]}
 													onkeydown={(e) => handleKeywordKeydown(e, digest.id)}
-													placeholder="Add keyword"
+													placeholder="e.g. housing, zoning, budget"
 													maxlength="50"
-													class="keyword-input"
+													class="field-input field-input-sm"
 													disabled={keywordLoading[digest.id]}
 												/>
 												<button
 													onclick={() => handleAddKeyword(digest.id)}
-													class="btn-add-keyword"
+													class="btn-action"
 													disabled={keywordLoading[digest.id] || !newKeywords[digest.id]?.trim()}
 												>
 													{keywordLoading[digest.id] ? '...' : 'Add'}
 												</button>
 											</div>
 										{:else}
-											<span class="limit-note">Max 3 keywords</span>
+											<span class="limit-note">3 of 3 keywords</span>
 										{/if}
 										{#if keywordError[digest.id]}
 											<span class="field-error">{keywordError[digest.id]}</span>
 										{/if}
 									</div>
 								</div>
-							</div>
-						</div>
-					{/each}
-				{:else}
-					<div class="empty-state">
-						<p>No digests configured yet.</p>
-						<p class="empty-hint">
-							Visit a <a href="/">city page</a> and click "Watch this city" to create your first digest.
-						</p>
-					</div>
-				{/if}
-			</section>
 
-			<!-- Recent Activity -->
-			<section class="section">
-				<h2>Recent Matches</h2>
-				{#if recentMatches.length > 0}
-					<div class="activity-feed">
-						{#each recentMatches as match (match.id)}
-							{@const link = getMatchLink(match)}
-							{#if link}
-								<a href={link} class="match-card match-card-link">
-									<div class="match-header">
-										<h3>{match.city_name || match.city_banana}</h3>
-										<span class="match-time">{formatTime(match.created_at)}</span>
+								{#if expandedDigest === digest.id}
+									<div class="edit-done">
+										<button class="btn-edit" onclick={() => toggleDigestEdit(digest.id)}>done</button>
 									</div>
-									<p class="match-meeting">{match.meeting_title}</p>
-									{#if match.item_title}
-										<p class="match-item">{match.item_title}</p>
+								{/if}
+							</div>
+						{/if}
+
+						<!-- Keyword matches -->
+						{#if matches.length > 0}
+							<div class="digest-matches">
+								{#each matches as match (match.id)}
+									{@const link = getMatchLink(match)}
+									{#if link}
+										<a href={link} class="match-card">
+											<div class="match-head">
+												<span class="match-city">{match.city_name || match.city_banana}</span>
+												<span class="match-time">{formatTime(match.created_at)}</span>
+											</div>
+											<h3 class="match-title">{match.meeting_title}</h3>
+											{#if match.item_title}
+												<p class="match-detail">{match.item_title}</p>
+											{/if}
+											<div class="match-meta">
+												{#if match.matched_criteria.keyword}
+													<span class="matched-keyword">"{match.matched_criteria.keyword}"</span>
+												{/if}
+											</div>
+										</a>
+									{:else}
+										<div class="match-card match-card-static">
+											<div class="match-head">
+												<span class="match-city">{match.city_name || match.city_banana}</span>
+												<span class="match-time">{formatTime(match.created_at)}</span>
+											</div>
+											<h3 class="match-title">{match.meeting_title}</h3>
+											{#if match.item_title}
+												<p class="match-detail">{match.item_title}</p>
+											{/if}
+											<div class="match-meta">
+												{#if match.matched_criteria.keyword}
+													<span class="matched-keyword">"{match.matched_criteria.keyword}"</span>
+												{/if}
+											</div>
+										</div>
 									{/if}
-									<div class="match-meta">
-										<span class="match-type">{match.match_type}</span>
-										{#if match.matched_criteria.keyword}
-											<span class="matched-keyword">"{match.matched_criteria.keyword}"</span>
+								{/each}
+							</div>
+						{/if}
+
+						<!-- City activity: happening items + upcoming meetings -->
+						{#if matches.length > 0 && activity.length > 0}
+							<div class="activity-divider">coming up</div>
+						{/if}
+
+						{#if activity.length > 0}
+							<div class="digest-activity">
+								{#each activity as item (item.meeting_id + (item.item_title || ''))}
+									<a href="/{item.banana}/{generateMeetingSlug({id: item.meeting_id, title: item.meeting_title, date: item.meeting_date || ''} as any)}" class="activity-card">
+										<div class="activity-head">
+											<span class="activity-city">{item.banana}</span>
+											<span class="activity-date">{formatUpcomingDate(item.meeting_date)}</span>
+										</div>
+										<h3 class="activity-title">{item.meeting_title}</h3>
+										{#if item.item_title}
+											<p class="activity-item">{item.item_title}</p>
 										{/if}
-									</div>
-								</a>
-							{:else}
-								<div class="match-card">
-									<div class="match-header">
-										<h3>{match.city_name || match.city_banana}</h3>
-										<span class="match-time">{formatTime(match.created_at)}</span>
-									</div>
-									<p class="match-meeting">{match.meeting_title}</p>
-									{#if match.item_title}
-										<p class="match-item">{match.item_title}</p>
-									{/if}
-									<div class="match-meta">
-										<span class="match-type">{match.match_type}</span>
-										{#if match.matched_criteria.keyword}
-											<span class="matched-keyword">"{match.matched_criteria.keyword}"</span>
+										{#if item.reason}
+											<p class="activity-reason">{item.reason}</p>
 										{/if}
-									</div>
-								</div>
-							{/if}
-						{/each}
+									</a>
+								{/each}
+							</div>
+						{:else if matches.length === 0}
+							<p class="no-activity">No upcoming activity yet.</p>
+						{/if}
 					</div>
-				{:else}
-					<div class="empty-state">
-						<p>No matches yet.</p>
-						<p class="empty-hint">
-							Add keywords to your digest above. When meeting agendas mention your keywords, they will appear here.
-						</p>
-					</div>
-				{/if}
-			</section>
+				{/each}
+			</div>
+		{:else}
+			<div class="empty-state anim-entry" style="animation-delay: 140ms;">
+				<p class="empty-lead">You're not watching anything yet.</p>
+				<p class="empty-body">
+					Search for your <a href="/">city</a>, click <strong>Watch this city</strong>, and we'll track what matters to you.
+				</p>
+			</div>
 		{/if}
-	</div>
+	{/if}
+
+	<Footer />
 </div>
 
 <style>
-	.page {
+	.dashboard {
+		max-width: 720px;
+		padding: 4rem 1rem;
 		min-height: 100vh;
-		background: var(--bg-gradient-start);
-		padding: 2rem;
-	}
-
-	.container {
-		max-width: var(--width-dashboard);
+		display: flex;
+		flex-direction: column;
 		margin: 0 auto;
 	}
 
-	.header {
-		margin-bottom: 2rem;
-		padding-bottom: 0.75rem;
-		border-bottom: 2px solid var(--text-primary);
+	.anim-entry {
+		animation: fadeSlideUp 0.5s ease-out both;
 	}
 
-	.header-content {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 1rem;
-	}
+	/* ── Account meta ── */
 
-	h1 {
-		font-family: var(--font-display);
-		font-size: 1.75rem;
-		font-weight: 400;
-		color: var(--text-primary);
-		margin: 0;
-		letter-spacing: -0.01em;
-	}
-
-	.header-actions {
+	.account-meta {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		margin-bottom: var(--space-sm);
 	}
 
 	.user-email {
 		font-family: var(--font-mono);
-		font-size: 0.875rem;
-		color: var(--text-secondary);
-	}
-
-	.btn-logout {
-		padding: 0.5rem 1rem;
-		font-family: var(--font-mono);
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-secondary);
-		background: transparent;
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		transition: all var(--transition-fast);
-	}
-
-	.btn-logout:hover {
-		background: var(--surface-secondary);
-		border-color: var(--civic-gray);
-	}
-
-	.loading {
-		text-align: center;
-		padding: 3rem;
+		font-size: 0.75rem;
 		color: var(--civic-gray);
 	}
 
+	.meta-sep {
+		color: var(--civic-gray);
+		font-size: 0.65rem;
+		opacity: 0.4;
+	}
+
+	.btn-logout {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		color: var(--civic-blue);
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		transition: color var(--transition-fast);
+	}
+
+	.btn-logout:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
+	/* ── Header ── */
+
+	.header {
+		margin-bottom: var(--space-2xl);
+	}
+
+	h1 {
+		font-family: var(--font-display);
+		font-size: clamp(1.5rem, 4vw, 2rem);
+		font-weight: 400;
+		color: var(--text-primary);
+		margin: 0;
+		letter-spacing: -0.02em;
+		line-height: 1.2;
+	}
+
+	.stats-line {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		color: var(--civic-gray);
+		margin: var(--space-xs) 0 0 0;
+	}
+
+	/* ── Loading / Error ── */
+
+	.loading {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 4rem 1rem;
+		animation: fadeSlideUp 0.5s ease-out both;
+	}
+
+	.loading p {
+		font-family: var(--font-display);
+		font-size: 1.1rem;
+		font-style: italic;
+		color: var(--text-secondary);
+		margin: 0;
+	}
+
 	.spinner {
-		width: 48px;
-		height: 48px;
-		margin: 0 auto 1rem;
-		border: 4px solid var(--border-primary);
+		width: 28px;
+		height: 28px;
+		margin-bottom: 1rem;
+		border: 2px solid var(--border-primary);
 		border-top-color: var(--civic-blue);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}
 
 	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
+		to { transform: rotate(360deg); }
 	}
 
 	.error-banner {
-		background: var(--error-bg);
-		border: 1px solid var(--error-border);
-		border-radius: var(--radius-md);
-		padding: 1rem;
-		color: var(--error-text);
-		text-align: center;
+		background: var(--alert-bg);
+		border-left: 3px solid var(--alert-icon);
+		border-radius: var(--radius-sm);
+		padding: 1.25rem;
+		color: var(--alert-text);
 	}
 
-	.stats-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: 1rem;
-		margin-bottom: 2rem;
-	}
+	.error-banner p { margin: 0; }
 
-	.stat-card {
-		background: transparent;
-		border: none;
-		border-bottom: 1px solid var(--border-primary);
-		border-radius: 0;
-		padding: 1.25rem 0;
-		text-align: left;
-	}
-
-	.stat-value {
-		font-family: var(--font-display);
-		font-size: 2.25rem;
-		font-weight: 400;
-		color: var(--text-primary);
-		margin-bottom: 0.25rem;
-	}
-
-	.stat-label {
-		font-family: var(--font-body);
-		font-size: 0.65rem;
-		color: var(--civic-gray);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-
-	.section {
-		margin-bottom: 2rem;
-	}
-
-	h2 {
-		font-family: var(--font-body);
-		font-size: 0.7rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--civic-gray);
-		margin: 0 0 1rem 0;
-		padding-bottom: 0.5rem;
-		border-bottom: 2px solid var(--text-primary);
-	}
+	/* ── Digest cards ── */
 
 	.digest-card {
-		background: transparent;
-		border: none;
+		padding: var(--space-lg) 0;
 		border-bottom: 1px solid var(--border-primary);
-		border-radius: 0;
-		padding: 1.5rem 0;
-		margin-bottom: 0;
 	}
 
-	.digest-header {
+	.digest-card:first-child {
+		padding-top: 0;
+	}
+
+	.digest-summary {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1rem;
+		align-items: baseline;
 	}
 
-	h3 {
-		font-family: var(--font-mono);
-		font-size: 1rem;
-		font-weight: 600;
+	.digest-name {
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 400;
 		color: var(--text-primary);
 		margin: 0;
 	}
 
-	.digest-frequency {
-		font-family: var(--font-body);
-		font-size: 0.65rem;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		padding: 2px 8px;
-		background: var(--surface-secondary);
-		border: none;
-		border-radius: 2px;
+	.digest-freq {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
 		color: var(--civic-gray);
 	}
 
-	.digest-details {
+	/* ── Collapsed: watching line ── */
+
+	.digest-watching {
 		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.digest-section {
-		font-size: 0.875rem;
-	}
-
-	.digest-section strong {
-		font-family: var(--font-mono);
-		color: var(--text-primary);
-		margin-right: 0.5rem;
-	}
-
-	/* City editing */
-	.city-edit {
-		margin-top: 0.5rem;
-	}
-
-	.city-search-row {
-		display: flex;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.city-input {
-		flex: 1;
-		padding: 0.5rem 0.75rem;
-		font-size: 0.875rem;
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-sm);
-		background: var(--surface-primary);
-		color: var(--text-primary);
-	}
-
-	.city-input:focus {
-		outline: none;
-		border-color: var(--civic-blue);
-	}
-
-	.city-results {
-		display: flex;
-		flex-direction: column;
+		align-items: center;
 		gap: 0.25rem;
-		margin-bottom: 0.5rem;
+		margin-top: 0.25rem;
+		flex-wrap: wrap;
+		font-family: var(--font-mono);
+		font-size: 0.8125rem;
 	}
 
-	.city-result {
-		text-align: left;
-		padding: 0.5rem 0.75rem;
-		background: var(--surface-secondary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-sm);
-		color: var(--text-link);
+	.watching-city {
+		color: var(--civic-blue);
+		text-decoration: none;
+		transition: color var(--transition-fast);
+	}
+
+	.watching-city:hover {
+		text-decoration: underline;
+	}
+
+	.watching-keyword {
+		color: var(--text-secondary);
+	}
+
+	.watching-sep {
+		color: var(--civic-gray);
+		opacity: 0.5;
+	}
+
+	.btn-edit {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		color: var(--civic-blue);
+		background: none;
+		border: none;
 		cursor: pointer;
+		padding: 0;
+		margin-left: auto;
+		transition: color var(--transition-fast);
+	}
+
+	.btn-edit:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
+	/* ── Expanded: editing controls ── */
+
+	.digest-edit {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+		margin-top: var(--space-sm);
+		padding-left: var(--space-md);
+		border-left: 2px solid var(--border-primary);
+	}
+
+	.edit-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
 		font-size: 0.875rem;
-		transition: all var(--transition-fast);
 	}
 
-	.city-result:hover {
-		background: var(--surface-hover);
-		border-color: var(--civic-blue);
+	.edit-label {
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		font-weight: 600;
+		color: var(--civic-gray);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 
-	.city-display {
+	.edit-done {
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	/* ── Tags ── */
+
+	.tag-row {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
 		flex-wrap: wrap;
 	}
 
-	.city-tag {
+	.tag {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -774,87 +834,98 @@
 		font-size: 0.8125rem;
 	}
 
-	.city-link {
+	.tag-link {
 		color: inherit;
 		text-decoration: none;
 		transition: color var(--transition-fast);
 	}
 
-	.city-link:hover {
+	.tag-link:hover {
 		color: var(--civic-blue);
 		text-decoration: underline;
 	}
 
-	/* Keywords */
-	.keywords-container {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		margin-top: 0.25rem;
-	}
-
-	.keywords {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
-
-	.keyword-tag {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.25rem 0.5rem;
-		background: var(--badge-blue-bg);
-		color: var(--badge-blue-text);
-		border: 1px solid var(--badge-blue-border);
-		border-radius: 2px;
-		font-family: var(--font-mono);
-		font-size: 0.8125rem;
-	}
-
-	.remove-btn {
+	.tag-remove {
 		background: none;
 		border: none;
 		color: inherit;
 		cursor: pointer;
-		padding: 0 0.15rem;
-		opacity: 0.6;
+		padding: 0 0.1rem;
+		opacity: 0.45;
 		transition: opacity var(--transition-fast);
 		display: inline-flex;
 		align-items: center;
 		line-height: 1;
 	}
 
-	.remove-btn:hover {
-		opacity: 1;
-	}
+	.tag-remove:hover { opacity: 1; }
 
+	/* ── Form controls ── */
+
+	.city-edit { margin-top: 0.25rem; }
+
+	.city-search-row,
 	.keyword-input-row {
 		display: flex;
 		gap: 0.5rem;
 	}
 
-	.keyword-input {
-		flex: 1;
-		max-width: 200px;
-		padding: 0.375rem 0.5rem;
-		font-size: 0.875rem;
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-sm);
-		background: var(--surface-primary);
-		color: var(--text-primary);
+	.city-results {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		margin: 0.5rem 0;
 	}
 
-	.keyword-input:focus {
+	.city-result {
+		text-align: left;
+		padding: 0.5rem 0.75rem;
+		background: transparent;
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-sm);
+		color: var(--text-link);
+		cursor: pointer;
+		font-size: 0.875rem;
+		font-family: var(--font-body);
+		transition: all var(--transition-fast);
+	}
+
+	.city-result:hover {
+		background: var(--surface-secondary);
+		border-color: var(--civic-blue);
+	}
+
+	.field-input {
+		flex: 1;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.875rem;
+		font-family: var(--font-body);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-primary);
+		transition: border-color var(--transition-fast);
+	}
+
+	.field-input-sm {
+		max-width: 220px;
+		padding: 0.375rem 0.5rem;
+	}
+
+	.field-input:focus {
 		outline: none;
 		border-color: var(--civic-blue);
 	}
 
-	.btn-add-keyword,
-	.btn-search {
+	.field-input::placeholder {
+		color: var(--civic-gray);
+		font-style: italic;
+	}
+
+	.btn-action {
 		padding: 0.375rem 0.75rem;
 		font-family: var(--font-mono);
-		font-size: 0.8125rem;
+		font-size: 0.75rem;
 		font-weight: 500;
 		background: var(--civic-blue);
 		color: white;
@@ -862,50 +933,47 @@
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		transition: background var(--transition-fast);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 
-	.btn-add-keyword:hover:not(:disabled),
-	.btn-search:hover:not(:disabled) {
-		background: var(--civic-accent);
-	}
+	.btn-action:hover:not(:disabled) { background: var(--civic-accent); }
+	.btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
-	.btn-add-keyword:disabled,
-	.btn-search:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.btn-cancel {
+	.btn-secondary {
 		padding: 0.375rem 0.75rem;
 		font-family: var(--font-mono);
-		font-size: 0.8125rem;
-		background: transparent;
-		color: var(--text-secondary);
-		border: 1px solid var(--border-primary);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		transition: all var(--transition-fast);
-	}
-
-	.btn-cancel:hover {
-		background: var(--surface-secondary);
-	}
-
-	.btn-change,
-	.btn-add {
-		padding: 0.25rem 0.5rem;
-		font-family: var(--font-mono);
 		font-size: 0.75rem;
-		color: var(--text-link);
 		background: transparent;
+		color: var(--civic-gray);
 		border: 1px solid var(--border-primary);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		transition: all var(--transition-fast);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 
-	.btn-change:hover,
-	.btn-add:hover {
+	.btn-secondary:hover {
+		background: var(--surface-secondary);
+		color: var(--text-primary);
+	}
+
+	.btn-inline {
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		color: var(--civic-blue);
+		background: transparent;
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-sm);
+		padding: 0.25rem 0.5rem;
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.btn-inline:hover {
 		background: var(--surface-secondary);
 		border-color: var(--civic-blue);
 	}
@@ -913,22 +981,28 @@
 	.btn-link {
 		background: none;
 		border: none;
-		color: var(--text-link);
+		color: var(--civic-blue);
 		text-decoration: underline;
+		text-underline-offset: 2px;
 		cursor: pointer;
 		font-size: inherit;
 		padding: 0;
 		margin-left: 0.5rem;
+		transition: color var(--transition-fast);
 	}
 
-	.btn-link:hover {
-		color: var(--civic-accent);
+	.btn-link:hover { color: var(--civic-accent); }
+
+	.keywords-container {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 	}
 
 	.limit-note {
-		font-size: 0.75rem;
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
 		color: var(--civic-gray);
-		font-style: italic;
 	}
 
 	.field-error {
@@ -938,130 +1012,237 @@
 		color: var(--civic-red);
 	}
 
-	.empty-state {
-		text-align: center;
-		padding: 2rem 0;
-		background: transparent;
-		border: none;
-	}
+	/* ── Inline matches (happening-card pattern) ── */
 
-	.empty-state p {
-		margin: 0;
-		color: var(--civic-gray);
-	}
-
-	.empty-hint {
-		margin-top: 0.5rem !important;
-		font-size: 0.875rem;
-	}
-
-	.empty-hint a {
-		color: var(--text-link);
-	}
-
-	.activity-feed {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
+	.digest-matches {
+		margin-top: var(--space-md);
 	}
 
 	.match-card {
-		background: transparent;
-		border: none;
-		border-bottom: 1px solid var(--border-primary);
-		border-radius: 0;
-		padding: 1.25rem 0;
-	}
-
-	.match-card-link {
 		display: block;
+		padding: 0.75rem 0;
+		border-bottom: 1px solid var(--border-primary);
 		text-decoration: none;
 		color: inherit;
 		transition: padding-left 0.2s ease;
 	}
 
-	.match-card-link:hover {
-		padding-left: 6px;
-	}
+	.match-card:hover { padding-left: 6px; }
 
-	.match-header {
+	.match-card-static { cursor: default; }
+	.match-card-static:hover { padding-left: 0; }
+
+	.match-head {
 		display: flex;
 		justify-content: space-between;
-		align-items: baseline;
-		margin-bottom: 0.5rem;
+		align-items: center;
+		margin-bottom: 0.4rem;
+	}
+
+	.match-city {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--civic-blue);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
 	}
 
 	.match-time {
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		color: var(--civic-gray);
 	}
 
-	.match-meeting {
-		font-size: 0.9375rem;
+	.match-title {
+		font-family: var(--font-display);
+		font-size: 1.05rem;
+		font-weight: 400;
+		color: var(--text-primary);
+		margin: 0 0 0.25rem 0;
+		line-height: 1.3;
+	}
+
+	.match-detail {
+		font-size: 0.85rem;
 		color: var(--text-secondary);
-		margin: 0.5rem 0;
-	}
-
-	.match-item {
-		font-size: 0.875rem;
-		color: var(--civic-gray);
-		margin: 0.25rem 0;
+		margin: 0;
+		line-height: 1.5;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 
 	.match-meta {
 		display: flex;
-		gap: 0.75rem;
-		margin-top: 0.75rem;
-	}
-
-	.match-type {
-		font-family: var(--font-body);
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		padding: 2px 8px;
-		background: var(--surface-secondary);
-		border: none;
-		border-radius: 2px;
-		font-size: 0.6875rem;
-		color: var(--civic-gray);
-		text-transform: uppercase;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
 	}
 
 	.matched-keyword {
 		font-family: var(--font-mono);
 		padding: 2px 8px;
 		background: var(--badge-blue-bg);
-		border: none;
 		border-radius: 2px;
-		font-size: 0.6875rem;
+		font-size: 0.625rem;
 		color: var(--badge-blue-text);
 		font-weight: 500;
 	}
 
-	@media (max-width: 768px) {
-		.page {
-			padding: 1rem;
+	/* ── City activity (happening + upcoming meetings) ── */
+
+	.activity-divider {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--civic-gray);
+		opacity: 0.5;
+		margin: var(--space-md) 0 var(--space-xs) 0;
+	}
+
+	.digest-activity {
+		margin-top: var(--space-sm);
+	}
+
+	.activity-card {
+		display: block;
+		padding: 0.75rem 0;
+		border-bottom: 1px solid var(--border-primary);
+		text-decoration: none;
+		color: inherit;
+		transition: padding-left 0.2s ease;
+	}
+
+	.activity-card:hover { padding-left: 6px; }
+	.activity-card:last-child { border-bottom: none; }
+
+	.activity-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.4rem;
+	}
+
+	.activity-city {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--civic-blue);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.activity-date {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--civic-gray);
+	}
+
+	.activity-title {
+		font-family: var(--font-display);
+		font-size: 1.05rem;
+		font-weight: 400;
+		color: var(--text-primary);
+		margin: 0 0 0.25rem 0;
+		line-height: 1.3;
+	}
+
+	.activity-item {
+		font-size: 0.875rem;
+		color: var(--text-primary);
+		margin: 0 0 0.25rem 0;
+		line-height: 1.4;
+	}
+
+	.activity-reason {
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+		margin: 0;
+		line-height: 1.5;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	/* ── No activity ── */
+
+	.no-activity {
+		font-family: var(--font-body);
+		font-size: 0.9rem;
+		color: var(--civic-gray);
+		margin: var(--space-md) 0 0 0;
+		font-style: italic;
+		line-height: 1.5;
+	}
+
+	/* ── Empty state (no digests) ── */
+
+	.empty-state {
+		padding: var(--space-lg) var(--space-md);
+		border-left: 2px solid var(--border-primary);
+	}
+
+	.empty-lead {
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		color: var(--text-primary);
+		margin: 0 0 0.5rem 0;
+		line-height: 1.4;
+	}
+
+	.empty-body {
+		font-size: 1rem;
+		color: var(--text-secondary);
+		margin: 0;
+		line-height: 1.7;
+	}
+
+	.empty-body a {
+		color: var(--civic-blue);
+		text-decoration: none;
+		font-weight: 600;
+		transition: color var(--transition-fast);
+	}
+
+	.empty-body a:hover {
+		color: var(--civic-accent);
+		text-decoration: underline;
+	}
+
+	.empty-body strong {
+		color: var(--text-primary);
+	}
+
+	/* ── Responsive ── */
+
+	@media (max-width: 640px) {
+		.dashboard {
+			padding: 2rem 1rem;
 		}
 
-		.stats-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-
-		.digest-header {
+		.digest-summary {
 			flex-direction: column;
-			align-items: flex-start;
-			gap: 0.5rem;
+			gap: 0.25rem;
+		}
+
+		.digest-edit {
+			padding-left: var(--space-sm);
 		}
 
 		.city-search-row {
 			flex-wrap: wrap;
 		}
 
-		.city-input {
+		.field-input {
 			width: 100%;
 			flex: none;
 		}
-	}
 
+		.field-input-sm {
+			max-width: none;
+		}
+	}
 </style>
