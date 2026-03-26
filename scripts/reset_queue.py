@@ -33,7 +33,7 @@ async def get_queue_stats_async(db: Database) -> Dict[str, Any]:
                 q.status,
                 COUNT(*) as count
             FROM queue q
-            JOIN cities c ON q.banana = c.banana
+            JOIN jurisdictions c ON q.banana = c.banana
             GROUP BY c.name, q.status
             ORDER BY c.name, q.status
         """)

@@ -10,7 +10,7 @@ from difflib import get_close_matches
 from database.db_postgres import Database
 from server.services.meeting import get_meetings_for_listing
 from server.utils.geo import parse_city_state_input, get_state_abbreviation, get_state_full_name
-from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_name
+from server.utils.vendor_urls import get_vendor_source_url, get_vendor_display_name, get_vendor_source_urls
 
 from config import get_logger
 
@@ -89,6 +89,7 @@ class SearchSuccessResponse(TypedDict):
     vendor: str
     vendor_display_name: str
     source_url: Optional[str]
+    source_urls: List[Dict[str, str]]  # Multi-body sources: [{"url": ..., "body": ...}]
     participation: Optional[Dict[str, Any]]
     meetings: List[Dict[str, Any]]
     cached: bool
@@ -156,6 +157,7 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
             "vendor": city.vendor,
             "vendor_display_name": get_vendor_display_name(city.vendor),
             "source_url": get_vendor_source_url(city.vendor, city.slug),
+            "source_urls": get_vendor_source_urls(city.vendor, city.slug),
             "participation": city.participation,
             "meetings": meetings_with_items,
             "cached": True,
@@ -218,6 +220,7 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
             "vendor": city.vendor,
             "vendor_display_name": get_vendor_display_name(city.vendor),
             "source_url": get_vendor_source_url(city.vendor, city.slug),
+            "source_urls": get_vendor_source_urls(city.vendor, city.slug),
             "participation": city.participation,
             "meetings": meetings_with_items,
             "cached": True,
@@ -407,6 +410,7 @@ async def _handle_single_city_match(
             "vendor": city.vendor,
             "vendor_display_name": get_vendor_display_name(city.vendor),
             "source_url": get_vendor_source_url(city.vendor, city.slug),
+            "source_urls": get_vendor_source_urls(city.vendor, city.slug),
             "participation": city.participation,
             "meetings": meetings_with_items,
             "cached": True,

@@ -135,7 +135,7 @@ async def send_happening_email():
                 FROM happening_items h
                 JOIN items i ON h.item_id = i.id
                 JOIN meetings m ON h.meeting_id = m.id
-                JOIN cities c ON h.banana = c.banana
+                JOIN jurisdictions c ON h.banana = c.banana
                 WHERE h.meeting_date::date = CURRENT_DATE
                 ORDER BY c.name, h.rank
             """)

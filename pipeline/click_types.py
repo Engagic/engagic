@@ -9,17 +9,18 @@ import click
 
 
 class BananaType(click.ParamType):
-    """Validates city_banana format: lowercase alphanumeric + uppercase state
+    """Validates banana format: lowercase alphanumeric (with optional hyphens) + uppercase state
 
     Valid examples:
-    - paloaltoCA
-    - newyorkNY
-    - stlouisMO
+    - paloaltoCA          (city)
+    - newyorkNY           (city)
+    - alamedacountyCA     (county)
+    - bartCA              (transit authority)
+    - ebmudCA             (utility)
 
     Invalid examples:
-    - PaloAltoCA (uppercase letters in city)
+    - PaloAltoCA (uppercase letters in name)
     - paloaltoca (lowercase state)
-    - palo-alto-CA (special characters)
     """
 
     name = "banana"
@@ -41,12 +42,12 @@ class BananaType(click.ParamType):
         if not value:
             self.fail("banana cannot be empty", param, ctx)
 
-        # Pattern: lowercase alphanumeric + exactly 2 uppercase letters (state code)
-        # Examples: paloaltoCA, newyorkNY, stlouisMO
-        if not re.match(r'^[a-z0-9]+[A-Z]{2}$', value):
+        # Pattern: lowercase alphanumeric (with optional hyphens) + exactly 2 uppercase letters (state code)
+        # Covers cities (paloaltoCA), counties (alamedacountyCA), utilities (ebmudCA)
+        if not re.match(r'^[a-z0-9-]+[A-Z]{2}$', value):
             self.fail(
-                f'{value!r} is not a valid city_banana. '
-                f'Format: lowercasealphanumericSTATE (e.g., paloaltoCA, newyorkNY)',
+                f'{value!r} is not a valid banana. '
+                f'Format: lowercasenameSTATE (e.g., paloaltoCA, alamedacountyCA)',
                 param,
                 ctx
             )

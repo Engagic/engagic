@@ -2,6 +2,8 @@
 
 import asyncio
 import hashlib
+import os
+import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
@@ -12,6 +14,7 @@ import aiohttp
 
 from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
+from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from vendors.session_manager_async import AsyncSessionManager
 from exceptions import VendorHTTPError
 
@@ -146,10 +149,16 @@ class AsyncBaseAdapter:
         response = await self._get(url, **kwargs)
         try:
             return await response.json()
-        except aiohttp.ContentTypeError as e:
+        except aiohttp.ContentTypeError:
+            # Some vendors serve JSON with wrong content-type (e.g. text/html)
+            # Try parsing the body directly before giving up
+            import json as _json
             text = await response.text()
-            logger.error("vendor json parse failed", vendor=self.vendor, slug=self.slug, url=url[:100], content_type=response.headers.get('content-type', 'unknown'), body_preview=text[:200] if text else None)
-            raise VendorHTTPError(f"Expected JSON but got {response.headers.get('content-type', 'unknown')}", vendor=self.vendor, url=url, city_slug=self.slug) from e
+            try:
+                return _json.loads(text)
+            except (ValueError, TypeError):
+                logger.error("vendor json parse failed", vendor=self.vendor, slug=self.slug, url=url[:100], content_type=response.headers.get('content-type', 'unknown'), body_preview=text[:200] if text else None)
+                raise VendorHTTPError(f"Expected JSON but got {response.headers.get('content-type', 'unknown')}", vendor=self.vendor, url=url, city_slug=self.slug)
         except ValueError as e:
             try:
                 text = await response.text()
@@ -237,6 +246,86 @@ class AsyncBaseAdapter:
             logger.warning("meeting missing required fields", vendor=self.vendor, slug=self.slug, missing=list(missing), title=str(meeting.get("title", "unknown"))[:50])
             return False
         return True
+
+    # ------------------------------------------------------------------
+    # PDF chunking: agenda (url) -> packet (toc) fallback chain
+    # ------------------------------------------------------------------
+
+    async def _chunk_agenda_then_packet(
+        self,
+        agenda_url: Optional[str] = None,
+        packet_url: Optional[str] = None,
+        vendor_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Two-step PDF chunking: try URL parsing on the agenda, then TOC on the packet.
+
+        Agenda PDFs are short documents with hyperlinks to staff reports -- URL
+        parsing extracts those links as attachments.  Packet PDFs are compiled
+        documents with bookmark trees -- TOC parsing splits by page ranges and
+        extracts embedded memo content.
+        """
+        if agenda_url:
+            items = await self._download_and_chunk(agenda_url, vendor_id, force_method="url")
+            if items:
+                return items
+
+        if packet_url:
+            items = await self._download_and_chunk(packet_url, vendor_id, force_method="toc")
+            if items:
+                return items
+
+        return []
+
+    async def _download_and_chunk(
+        self,
+        pdf_url: str,
+        vendor_id: Optional[str] = None,
+        force_method: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Download a PDF and run the chunker. Returns items or empty list."""
+        tmp_path = None
+        try:
+            response = await self._get(pdf_url)
+            pdf_bytes = await response.read()
+
+            if len(pdf_bytes) < 500:
+                return []
+
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(pdf_bytes)
+                tmp_path = tmp.name
+
+            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path, force_method=force_method)
+            items = parsed.get("items", [])
+
+            if items:
+                logger.info(
+                    "chunker extracted items from pdf",
+                    vendor=self.vendor,
+                    slug=self.slug,
+                    vendor_id=vendor_id,
+                    item_count=len(items),
+                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
+                    force_method=force_method or "auto",
+                )
+
+            return items
+
+        except Exception as e:
+            logger.debug(
+                "pdf parse failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                vendor_id=vendor_id,
+                error=str(e),
+            )
+            return []
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> FetchResult:
         """Fetch meetings, validate, return FetchResult.

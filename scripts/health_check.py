@@ -30,7 +30,7 @@ async def get_city_stats(db: Database) -> Dict:
                 COUNT(DISTINCT vendor) as total_vendors,
                 COUNT(CASE WHEN status = 'active' THEN 1 END) as active_cities,
                 COUNT(CASE WHEN status != 'active' THEN 1 END) as inactive_cities
-            FROM cities
+            FROM jurisdictions
         """)
 
     return {
@@ -49,7 +49,7 @@ async def get_vendor_breakdown(db: Database) -> List[Tuple[str, int, int]]:
                 c.vendor,
                 COUNT(DISTINCT c.banana) as city_count,
                 COUNT(m.id) as meeting_count
-            FROM cities c
+            FROM jurisdictions c
             LEFT JOIN meetings m ON c.banana = m.banana
             GROUP BY c.vendor
             ORDER BY city_count DESC
@@ -62,7 +62,7 @@ async def get_cities_with_no_meetings(db: Database) -> List[Tuple[str, str, str,
     async with db.pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT c.banana, c.name, c.state, c.vendor
-            FROM cities c
+            FROM jurisdictions c
             LEFT JOIN meetings m ON c.banana = m.banana
             WHERE c.status = 'active'
             GROUP BY c.banana, c.name, c.state, c.vendor
@@ -78,7 +78,7 @@ async def get_cities_with_most_meetings(db: Database, limit=10) -> List[Tuple[st
         rows = await conn.fetch(
             """
             SELECT c.banana, c.name, c.state, COUNT(m.id) as meeting_count
-            FROM cities c
+            FROM jurisdictions c
             INNER JOIN meetings m ON c.banana = m.banana
             GROUP BY c.banana, c.name, c.state
             ORDER BY meeting_count DESC
@@ -94,7 +94,7 @@ async def get_recent_activity(db: Database) -> List[Tuple[str, str, int]]:
     async with db.pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT c.name, c.state, COUNT(m.id) as meetings
-            FROM cities c
+            FROM jurisdictions c
             INNER JOIN meetings m ON c.banana = m.banana
             WHERE m.created_at > NOW() - INTERVAL '7 days'
             GROUP BY c.banana, c.name, c.state
@@ -134,7 +134,7 @@ async def detect_potential_corruption(db: Database) -> List[Dict]:
         # Check for meetings with packet URLs from wrong vendor domains
         rows = await conn.fetch("""
             SELECT c.banana, c.name, c.vendor, c.slug, m.packet_url
-            FROM cities c
+            FROM jurisdictions c
             INNER JOIN meetings m ON c.banana = m.banana
             WHERE m.packet_url IS NOT NULL
             LIMIT 100

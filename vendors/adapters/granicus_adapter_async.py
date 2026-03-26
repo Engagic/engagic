@@ -72,7 +72,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         self.base_url = f"https://{self.slug}.granicus.com"
         self.view_ids_file = "data/granicus_view_ids.json"
 
-        # Load view_id from static configuration (fail-fast if not configured)
+        # Load view_id(s) from static configuration (fail-fast if not configured)
         mappings = self._load_static_view_id_config()
         if self.base_url not in mappings:
             raise ValueError(
@@ -80,12 +80,30 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 f"Add mapping to {self.view_ids_file}"
             )
 
-        self.view_id: int = mappings[self.base_url]
+        raw = mappings[self.base_url]
+
+        # Support both formats:
+        #   int:  33  (single view, backward compatible)
+        #   list: [{"view_id": 33, "body": "Board of Supervisors"}, ...]
+        if isinstance(raw, int):
+            self.views: List[Dict[str, Any]] = [{"view_id": raw}]
+        elif isinstance(raw, list):
+            self.views = raw
+        else:
+            raise ValueError(f"Invalid view_id config for {self.base_url}: expected int or list")
+
+        # Keep self.view_id for backward compat (first/primary view)
+        self.view_id: int = self.views[0]["view_id"]
         self.list_url: str = f"{self.base_url}/ViewPublisher.php?view_id={self.view_id}"
 
-        logger.info("adapter initialized", vendor="granicus", slug=self.slug, view_id=self.view_id)
+        logger.info(
+            "adapter initialized",
+            vendor="granicus",
+            slug=self.slug,
+            view_ids=[v["view_id"] for v in self.views],
+        )
 
-    def _load_static_view_id_config(self) -> Dict[str, int]:
+    def _load_static_view_id_config(self) -> Dict[str, Any]:
         """Load view_id mappings from data/granicus_view_ids.json."""
         if not os.path.exists(self.view_ids_file):
             raise FileNotFoundError(
@@ -111,42 +129,46 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             return data.decode("latin-1")
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Fetch meetings via two-step process: listing -> detail pages."""
-        response = await self._get(self.list_url)
-        html = await self._read_text(response)
-        listing = await asyncio.to_thread(parse_viewpublisher_listing, html, self.base_url)
-
-        if not listing:
-            logger.warning("no meetings found in listing", vendor="granicus", slug=self.slug)
-            return []
-
+        """Fetch meetings from all configured view_ids, then fetch detail pages."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        meetings_in_range = []
-        for meeting_data in listing:
-            date_str = meeting_data.get("start", "")
-            if not date_str:
-                # No date - include anyway (might be upcoming with no time set)
-                meetings_in_range.append(meeting_data)
-                continue
+        # Fetch listings from all views concurrently
+        listing_tasks = [self._fetch_view_listing(v) for v in self.views]
+        listing_results = await asyncio.gather(*listing_tasks, return_exceptions=True)
 
-            try:
-                meeting_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                meeting_date = meeting_date.replace(tzinfo=None)
-                if start_date <= meeting_date <= end_date:
-                    meetings_in_range.append(meeting_data)
-            except (ValueError, AttributeError):
-                # Can't parse date - include anyway
-                meetings_in_range.append(meeting_data)
+        meetings_in_range = []
+        for idx, result in enumerate(listing_results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    "view listing failed",
+                    vendor="granicus",
+                    slug=self.slug,
+                    view_id=self.views[idx].get("view_id"),
+                    error=str(result),
+                )
+                continue
+            if not isinstance(result, list) or not result:
+                continue
+            for meeting_data in result:
+                date_str = meeting_data.get("start", "")
+                if not date_str:
+                    continue
+                try:
+                    meeting_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                    meeting_date = meeting_date.replace(tzinfo=None)
+                    if start_date <= meeting_date <= end_date:
+                        meetings_in_range.append(meeting_data)
+                except (ValueError, AttributeError):
+                    logger.debug("skipping meeting with unparseable date", slug=self.slug, date=date_str)
 
         logger.debug(
             "filtered meetings by date",
             vendor="granicus",
             slug=self.slug,
-            total=len(listing),
-            in_range=len(meetings_in_range)
+            views=len(self.views),
+            in_range=len(meetings_in_range),
         )
 
         if not meetings_in_range:
@@ -170,6 +192,10 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     error=str(result)
                 )
             elif result is not None:
+                # Propagate metadata from listing (body name from multi-view config)
+                listing_meta = meetings_in_range[i].get("metadata", {})
+                if listing_meta:
+                    result.setdefault("metadata", {}).update(listing_meta)
                 meetings.append(result)
 
         logger.info(
@@ -181,6 +207,28 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         )
 
         return meetings
+
+    async def _fetch_view_listing(self, view_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Fetch and parse a single ViewPublisher page. Injects body name into metadata."""
+        view_id = view_config["view_id"]
+        body = view_config.get("body")
+        url = f"{self.base_url}/ViewPublisher.php?view_id={view_id}"
+
+        response = await self._get(url)
+        html = await self._read_text(response)
+        listing = await asyncio.to_thread(parse_viewpublisher_listing, html, self.base_url)
+
+        if not listing:
+            logger.warning("no meetings found in listing", vendor="granicus", slug=self.slug, view_id=view_id)
+            return []
+
+        # Tag each meeting with body name from config
+        if body:
+            for meeting_data in listing:
+                meta = meeting_data.setdefault("metadata", {})
+                meta["body"] = body
+
+        return listing
 
     async def _fetch_meeting_detail(self, meeting_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Fetch and parse individual meeting agenda, choosing parser based on redirect destination."""

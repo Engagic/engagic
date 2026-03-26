@@ -60,10 +60,58 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 slug=self.slug
             )
             meetings = await self._fetch_meetings_html(days_back, days_forward)
+        elif self._api_items_are_garbage(meetings):
+            logger.warning(
+                "legistar API returned garbage items, falling back to HTML",
+                slug=self.slug,
+                api_meeting_count=len(meetings),
+            )
+            meetings = await self._fetch_meetings_html(days_back, days_forward)
         else:
             logger.info("legistar API success", slug=self.slug, count=len(meetings))
 
         return meetings
+
+    def _api_items_are_garbage(self, meetings: List[Dict[str, Any]]) -> bool:
+        """Detect misconfigured Legistar APIs that return text fragments as items.
+
+        Signals: items with no agenda numbers, no matter IDs, and junk titles
+        like "page break".  When the majority of items across all meetings
+        lack both agenda_number and matter_id, the API is not providing
+        structured data and we should fall back to HTML scraping.
+        """
+        total_items = 0
+        useless_items = 0
+        has_page_break = False
+
+        for meeting in meetings:
+            for item in meeting.get("items", []):
+                total_items += 1
+                has_number = bool(item.get("agenda_number"))
+                has_matter = bool(item.get("matter_id") or item.get("matter_file"))
+                if not has_number and not has_matter:
+                    useless_items += 1
+                title = (item.get("title") or "").strip().lower()
+                if title == "page break":
+                    has_page_break = True
+
+        if total_items == 0:
+            return False
+
+        useless_ratio = useless_items / total_items
+        # If >80% of items have neither agenda number nor matter ID,
+        # or we see literal "page break" items, the API is garbage.
+        if has_page_break or useless_ratio > 0.8:
+            logger.debug(
+                "garbage detection triggered",
+                slug=self.slug,
+                total_items=total_items,
+                useless_items=useless_items,
+                useless_ratio=round(useless_ratio, 2),
+                has_page_break=has_page_break,
+            )
+            return True
+        return False
 
     async def _fetch_meetings_api(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from Legistar Web API."""

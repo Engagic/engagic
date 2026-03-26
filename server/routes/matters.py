@@ -50,7 +50,7 @@ async def get_matter_timeline(matter_id: str, db: Database = Depends(get_db)):
                     cm.name as committee_name
                 FROM items i
                 JOIN meetings m ON i.meeting_id = m.id
-                JOIN cities c ON m.banana = c.banana
+                JOIN jurisdictions c ON m.banana = c.banana
                 LEFT JOIN matter_appearances ma ON ma.item_id = i.id AND ma.matter_id = i.matter_id
                 LEFT JOIN committees cm ON ma.committee_id = cm.id
                 WHERE i.matter_id = $1
@@ -340,7 +340,7 @@ async def get_state_matters(
                         c.banana,
                         COUNT(i.id) as appearance_count
                     FROM city_matters m
-                    JOIN cities c ON m.banana = c.banana
+                    JOIN jurisdictions c ON m.banana = c.banana
                     LEFT JOIN items i ON i.matter_id = m.id
                     WHERE c.state = $1
                     AND m.canonical_topics::text LIKE $2
@@ -360,7 +360,7 @@ async def get_state_matters(
                         c.banana,
                         COUNT(i.id) as appearance_count
                     FROM city_matters m
-                    JOIN cities c ON m.banana = c.banana
+                    JOIN jurisdictions c ON m.banana = c.banana
                     LEFT JOIN items i ON i.matter_id = m.id
                     WHERE c.state = $1
                     GROUP BY m.id, c.name, c.banana
@@ -375,7 +375,7 @@ async def get_state_matters(
             cities = await conn.fetch(
                 """
                 SELECT banana, name, vendor
-                FROM cities
+                FROM jurisdictions
                 WHERE state = $1
                 ORDER BY name ASC
                 """,
@@ -393,10 +393,10 @@ async def get_state_matters(
                     (SELECT COUNT(DISTINCT i.meeting_id)
                      FROM items i
                      JOIN meetings m2 ON i.meeting_id = m2.id
-                     JOIN cities c2 ON m2.banana = c2.banana
+                     JOIN jurisdictions c2 ON m2.banana = c2.banana
                      WHERE c2.state = $1 AND i.summary IS NOT NULL) as with_summaries
                 FROM meetings m
-                JOIN cities c ON m.banana = c.banana
+                JOIN jurisdictions c ON m.banana = c.banana
                 WHERE c.state = $1
                 """,
                 state_code
@@ -408,7 +408,7 @@ async def get_state_matters(
                 SELECT COUNT(*) FROM (
                     SELECT m.id
                     FROM city_matters m
-                    JOIN cities c ON m.banana = c.banana
+                    JOIN jurisdictions c ON m.banana = c.banana
                     LEFT JOIN items i ON i.matter_id = m.id
                     WHERE c.state = $1
                     GROUP BY m.id
@@ -430,7 +430,7 @@ async def get_state_matters(
                      JOIN meetings m3 ON i2.meeting_id = m3.id
                      WHERE m3.banana = c.banana AND i2.summary IS NOT NULL AND i2.summary <> '') as summarized_items
                 FROM city_matters cm
-                JOIN cities c ON cm.banana = c.banana
+                JOIN jurisdictions c ON cm.banana = c.banana
                 WHERE c.state = $1
                 GROUP BY c.name, c.banana
                 ORDER BY matter_count DESC
@@ -543,7 +543,7 @@ async def get_state_meetings(
                         c.name as city_name,
                         c.banana as city_banana
                     FROM meetings m
-                    JOIN cities c ON m.banana = c.banana
+                    JOIN jurisdictions c ON m.banana = c.banana
                     WHERE c.state = $1
                     ORDER BY m.date DESC
                     LIMIT $2
@@ -559,7 +559,7 @@ async def get_state_meetings(
                         c.name as city_name,
                         c.banana as city_banana
                     FROM meetings m
-                    JOIN cities c ON m.banana = c.banana
+                    JOIN jurisdictions c ON m.banana = c.banana
                     WHERE c.state = $1
                     AND m.date >= NOW() - INTERVAL '6 hours'
                     ORDER BY m.date ASC
@@ -573,7 +573,7 @@ async def get_state_meetings(
                 """
                 SELECT COUNT(*) as count
                 FROM meetings m
-                JOIN cities c ON m.banana = c.banana
+                JOIN jurisdictions c ON m.banana = c.banana
                 WHERE c.state = $1
                 AND m.date >= NOW() - INTERVAL '6 hours'
                 """,
@@ -639,7 +639,7 @@ async def get_random_matter(db: Database = Depends(get_db)):
                     c.state,
                     COUNT(i.id) as appearance_count
                 FROM city_matters m
-                JOIN cities c ON m.banana = c.banana
+                JOIN jurisdictions c ON m.banana = c.banana
                 LEFT JOIN items i ON i.matter_id = m.id
                 WHERE m.canonical_summary IS NOT NULL AND m.canonical_summary != ''
                 GROUP BY m.id, c.name, c.state

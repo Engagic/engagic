@@ -54,7 +54,7 @@ async def export_geojson() -> None:
         meeting_stats = {row["banana"]: dict(row) for row in stats_rows}
 
         # Count cities with geometry
-        count = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE geom IS NOT NULL")
+        count = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions WHERE geom IS NOT NULL")
         logger.info("exporting cities via ogr2ogr", count=count)
 
     finally:
@@ -73,7 +73,7 @@ async def export_geojson() -> None:
             vendor,
             population,
             geom
-        FROM cities
+        FROM jurisdictions
         WHERE geom IS NOT NULL
         ORDER BY state, name
     """

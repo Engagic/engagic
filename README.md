@@ -11,7 +11,7 @@ Live at **[engagic.org](https://engagic.org)**
 Engagic fetches city council meeting agendas from civic tech platforms (Legistar, PrimeGov, Granicus, etc.), extracts structured data, and uses LLMs to generate summaries that civilians can understand.
 
 **Key capabilities:**
-- **Item-level processing:** 86% of cities get structured agenda items (not just PDF blobs)
+- **Item-level processing:** 97% of cities get structured agenda items (not just PDF blobs)
 - **Matters-first architecture:** Legislative items tracked across meetings with deduplication
 - **Council member profiles:** Elected officials tracked with normalized names, sponsorship history
 - **Committee tracking:** Legislative bodies with rosters and member assignments
@@ -59,8 +59,8 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 │  │  │  Sync Loop (24h)        │    │  Processing Loop (continuous)      │ │ │
 │  │  │  ┌─────────────────┐    │    │  ┌──────────────────────────────┐  │ │ │
 │  │  │  │ Fetcher         │    │    │  │ Processor                    │  │ │ │
-│  │  │  │ - rate limiting │    │    │  │ - item-level path (86%)      │  │ │ │
-│  │  │  │ - vendor routing│    │    │  │ - monolithic fallback (14%)  │  │ │ │
+│  │  │  │ - rate limiting │    │    │  │ - item-level path (97%)      │  │ │ │
+│  │  │  │ - vendor routing│    │    │  │ - monolithic fallback (3%)  │  │ │ │
 │  │  │  │ - matter track  │    │    │  │ - matters-first dedup        │  │ │ │
 │  │  │  └────────┬────────┘    │    │  └──────────────┬───────────────┘  │ │ │
 │  │  └───────────┼─────────────┘    └─────────────────┼──────────────────┘ │ │
@@ -162,7 +162,7 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 │           ┌─────────────────────────┴─────────────────────────┐             │
 │           ▼                                                   ▼             │
 │    ┌──────────────────────────┐               ┌──────────────────────────┐  │
-│    │  ITEM-LEVEL PATH (86%)   │               │  MONOLITHIC PATH (14%)   │  │
+│    │  ITEM-LEVEL PATH (97%)   │               │  MONOLITHIC PATH (3%)   │  │
 │    │  Meeting has agenda_url  │               │  Meeting has packet_url  │  │
 │    └────────────┬─────────────┘               └────────────┬─────────────┘  │
 │                 │                                          │                │
@@ -188,8 +188,8 @@ Engagic fetches city council meeting agendas from civic tech platforms (Legistar
 ```
 
 **Two Processing Paths:**
-- **Item-level (86%):** HTML agendas parsed into structured items. Each item gets focused 1-5 sentence summary. Topics aggregated to meeting. Document cache prevents re-extracting shared PDFs.
-- **Monolithic (14%):** PDF-only meetings. Single comprehensive 5-10 sentence summary. Falls back when vendor doesn't expose structured agenda.
+- **Item-level (97%):** HTML agendas parsed into structured items. Each item gets focused 1-5 sentence summary. Topics aggregated to meeting. Document cache prevents re-extracting shared PDFs.
+- **Monolithic (3%):** PDF-only meetings. Single comprehensive 5-10 sentence summary. Falls back when vendor doesn't expose structured agenda.
 
 ---
 

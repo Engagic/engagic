@@ -269,7 +269,7 @@ async def main():
     # Get never-synced cities ordered by population
     rows = await conn.fetch("""
         SELECT c.banana, c.name, c.state, c.vendor, c.population
-        FROM cities c
+        FROM jurisdictions c
         WHERE c.status = 'active'
           AND NOT EXISTS (SELECT 1 FROM meetings m WHERE m.banana = c.banana)
           AND c.population IS NOT NULL
@@ -321,7 +321,7 @@ async def main():
         print(f"\n--- SQL updates ---")
         for h in hits:
             print(
-                f"UPDATE cities SET vendor = '{h['detected_vendor']}', "
+                f"UPDATE jurisdictions SET vendor = '{h['detected_vendor']}', "
                 f"slug = '{h['detected_slug']}' "
                 f"WHERE banana = '{h['banana']}';"
             )

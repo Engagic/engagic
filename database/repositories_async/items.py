@@ -464,7 +464,7 @@ class ItemRepository(BaseRepository):
                        c.name as city_name, c.state
                 FROM items i
                 JOIN meetings m ON i.meeting_id = m.id
-                JOIN cities c ON m.banana = c.banana
+                JOIN jurisdictions c ON m.banana = c.banana
                 WHERE m.banana = $1
                   AND m.date >= $2
                   {status_filter}

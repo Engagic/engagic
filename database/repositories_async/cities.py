@@ -1,8 +1,8 @@
-"""Async CityRepository for city operations
+"""Async JurisdictionRepository for jurisdiction operations
 
-Handles CRUD operations for cities:
-- Store/retrieve cities with zipcodes
-- Filter cities by state, vendor, name
+Handles CRUD operations for jurisdictions (cities, counties, utility boards, etc.):
+- Store/retrieve jurisdictions with zipcodes
+- Filter by state, vendor, name, type
 - Get meeting frequency statistics
 - Get last sync timestamp
 """
@@ -12,58 +12,60 @@ from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
 from database.repositories_async.helpers import deserialize_city_participation
-from database.models import City
+from database.models import Jurisdiction
 from config import get_logger
 
-logger = get_logger(__name__).bind(component="city_repository")
+logger = get_logger(__name__).bind(component="jurisdiction_repository")
 
 
-def _build_city(row, zipcodes: List[str]) -> City:
-    """Factory to construct City from database row + zipcodes"""
-    return City(
+def _build_jurisdiction(row, zipcodes: List[str]) -> Jurisdiction:
+    """Factory to construct Jurisdiction from database row + zipcodes"""
+    return Jurisdiction(
         banana=row["banana"],
         name=row["name"],
         state=row["state"],
         vendor=row["vendor"],
         slug=row["slug"],
-        county=row["county"],
+        type=row["type"],
+        county_banana=row["county_banana"],
         status=row["status"],
         participation=deserialize_city_participation(row["participation"]),
         zipcodes=zipcodes,
     )
 
 
-class CityRepository(BaseRepository):
-    """Repository for city operations
+class JurisdictionRepository(BaseRepository):
+    """Repository for jurisdiction operations
 
     Provides:
-    - Add cities with zipcode handling
-    - Retrieve cities with filtering
+    - Add jurisdictions with zipcode handling
+    - Retrieve jurisdictions with filtering
     - Meeting frequency statistics
     - Last sync timestamp queries
     """
 
-    async def add_city(self, city: City) -> None:
-        """Add a city to the database
+    async def add_city(self, city: Jurisdiction) -> None:
+        """Add a jurisdiction to the database
 
         Args:
-            city: City object with banana, name, state, vendor, slug
+            city: Jurisdiction object with banana, name, state, vendor, slug
 
         Raises:
-            asyncpg.UniqueViolationError: If city already exists
+            asyncpg.UniqueViolationError: If jurisdiction already exists
         """
         async with self.transaction() as conn:
             await conn.execute(
                 """
-                INSERT INTO cities (banana, name, state, vendor, slug, county, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO jurisdictions (banana, name, state, vendor, slug, type, county_banana, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
                 city.banana,
                 city.name,
                 city.state,
                 city.vendor,
                 city.slug,
-                city.county,
+                city.type,
+                city.county_banana,
                 city.status or "active",
             )
 
@@ -79,34 +81,36 @@ class CityRepository(BaseRepository):
                     zipcode_records,
                 )
 
-        logger.info("city added", banana=city.banana, name=city.name)
+        logger.info("jurisdiction added", banana=city.banana, name=city.name, type=city.type)
 
-    async def upsert_city(self, city: City) -> None:
-        """Insert or update a city in the database
+    async def upsert_city(self, city: Jurisdiction) -> None:
+        """Insert or update a jurisdiction in the database
 
         Args:
-            city: City object with banana, name, state, vendor, slug
+            city: Jurisdiction object with banana, name, state, vendor, slug
         """
         async with self.transaction() as conn:
             await conn.execute(
                 """
-                INSERT INTO cities (banana, name, state, vendor, slug, county, status, population)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                INSERT INTO jurisdictions (banana, name, state, vendor, slug, type, county_banana, status, population)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (banana) DO UPDATE SET
                     name = EXCLUDED.name,
                     state = EXCLUDED.state,
                     vendor = EXCLUDED.vendor,
                     slug = EXCLUDED.slug,
-                    county = COALESCE(EXCLUDED.county, cities.county),
-                    status = COALESCE(EXCLUDED.status, cities.status),
-                    population = COALESCE(EXCLUDED.population, cities.population)
+                    type = COALESCE(EXCLUDED.type, jurisdictions.type),
+                    county_banana = COALESCE(EXCLUDED.county_banana, jurisdictions.county_banana),
+                    status = COALESCE(EXCLUDED.status, jurisdictions.status),
+                    population = COALESCE(EXCLUDED.population, jurisdictions.population)
                 """,
                 city.banana,
                 city.name,
                 city.state,
                 city.vendor,
                 city.slug,
-                city.county,
+                city.type,
+                city.county_banana,
                 city.status or "active",
                 city.population,
             )
@@ -123,22 +127,22 @@ class CityRepository(BaseRepository):
                     zipcode_records,
                 )
 
-        logger.info("city upserted", banana=city.banana, name=city.name)
+        logger.info("jurisdiction upserted", banana=city.banana, name=city.name)
 
-    async def get_city(self, banana: str) -> Optional[City]:
-        """Get a city by banana
+    async def get_city(self, banana: str) -> Optional[Jurisdiction]:
+        """Get a jurisdiction by banana
 
         Args:
-            banana: City banana (e.g., "paloaltoCA")
+            banana: Jurisdiction banana (e.g., "paloaltoCA")
 
         Returns:
-            City object with zipcodes, or None if not found
+            Jurisdiction object with zipcodes, or None if not found
         """
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT banana, name, state, vendor, slug, county, status, participation
-                FROM cities
+                SELECT banana, name, state, vendor, slug, type, county_banana, status, participation
+                FROM jurisdictions
                 WHERE banana = $1
                 """,
                 banana,
@@ -158,22 +162,22 @@ class CityRepository(BaseRepository):
             )
             zipcodes = [str(r["zipcode"]) for r in zipcodes_rows]
 
-            return _build_city(row, zipcodes)
+            return _build_jurisdiction(row, zipcodes)
 
-    async def get_city_by_zipcode(self, zipcode: str) -> Optional[City]:
-        """Get city by zipcode lookup
+    async def get_city_by_zipcode(self, zipcode: str) -> Optional[Jurisdiction]:
+        """Get jurisdiction by zipcode lookup
 
         Args:
             zipcode: ZIP code to search for
 
         Returns:
-            City object or None
+            Jurisdiction object or None
         """
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT c.banana, c.name, c.state, c.vendor, c.slug, c.county, c.status, c.participation
-                FROM cities c
+                SELECT c.banana, c.name, c.state, c.vendor, c.slug, c.type, c.county_banana, c.status, c.participation
+                FROM jurisdictions c
                 INNER JOIN zipcodes z ON c.banana = z.banana
                 WHERE z.zipcode = $1
                 LIMIT 1
@@ -184,33 +188,33 @@ class CityRepository(BaseRepository):
             if not row:
                 return None
 
-            # Fetch all zipcodes for this city
+            # Fetch all zipcodes for this jurisdiction
             zip_rows = await conn.fetch(
                 "SELECT zipcode FROM zipcodes WHERE banana = $1",
                 row["banana"]
             )
             zipcodes = [str(r["zipcode"]) for r in zip_rows]
 
-            return _build_city(row, zipcodes)
+            return _build_jurisdiction(row, zipcodes)
 
     async def get_all_cities(
         self, status: str = "active", include_zipcodes: bool = False
-    ) -> List[City]:
-        """Get all cities with given status
+    ) -> List[Jurisdiction]:
+        """Get all jurisdictions with given status
 
         Args:
-            status: City status filter (default: "active")
-            include_zipcodes: If True, batch fetch zipcodes for all cities.
+            status: Jurisdiction status filter (default: "active")
+            include_zipcodes: If True, batch fetch zipcodes for all jurisdictions.
                              Default False for performance in search contexts.
 
         Returns:
-            List of City objects (zipcodes empty unless include_zipcodes=True)
+            List of Jurisdiction objects (zipcodes empty unless include_zipcodes=True)
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT banana, name, state, vendor, slug, county, status, participation
-                FROM cities
+                SELECT banana, name, state, vendor, slug, type, county_banana, status, participation
+                FROM jurisdictions
                 WHERE status = $1
                 ORDER BY name
                 """,
@@ -227,7 +231,7 @@ class CityRepository(BaseRepository):
                 for zrow in zipcodes_rows:
                     zipcodes_map.setdefault(zrow["banana"], []).append(str(zrow["zipcode"]))
 
-            return [_build_city(row, zipcodes_map.get(row["banana"], [])) for row in rows]
+            return [_build_jurisdiction(row, zipcodes_map.get(row["banana"], [])) for row in rows]
 
     async def get_cities(
         self,
@@ -237,8 +241,8 @@ class CityRepository(BaseRepository):
         status: str = "active",
         limit: Optional[int] = None,
         include_zipcodes: bool = False,
-    ) -> List[City]:
-        """Batch city lookup with filters
+    ) -> List[Jurisdiction]:
+        """Batch jurisdiction lookup with filters
 
         Args:
             state: Filter by state (e.g., "CA")
@@ -246,11 +250,11 @@ class CityRepository(BaseRepository):
             name: Filter by exact name match
             status: Filter by status (default: "active")
             limit: Maximum number of results
-            include_zipcodes: If True, batch fetch zipcodes for all cities.
+            include_zipcodes: If True, batch fetch zipcodes for all jurisdictions.
                              Default False for performance in search contexts.
 
         Returns:
-            List of City objects matching filters (zipcodes empty unless include_zipcodes=True)
+            List of Jurisdiction objects matching filters (zipcodes empty unless include_zipcodes=True)
         """
         conditions = ["status = $1"]
         params: List[Any] = [status]
@@ -277,8 +281,8 @@ class CityRepository(BaseRepository):
             params.append(limit)
 
         query = f"""
-            SELECT banana, name, state, vendor, slug, county, status, participation
-            FROM cities
+            SELECT banana, name, state, vendor, slug, type, county_banana, status, participation
+            FROM jurisdictions
             WHERE {where_clause}
             ORDER BY state, name
             {limit_clause}
@@ -297,31 +301,31 @@ class CityRepository(BaseRepository):
                 for zrow in zipcodes_rows:
                     zipcodes_map.setdefault(zrow["banana"], []).append(str(zrow["zipcode"]))
 
-            return [_build_city(row, zipcodes_map.get(row["banana"], [])) for row in rows]
+            return [_build_jurisdiction(row, zipcodes_map.get(row["banana"], [])) for row in rows]
 
     async def get_city_names(self, status: str = "active") -> List[str]:
-        """Get just city names for fuzzy matching (no N+1)
+        """Get just jurisdiction names for fuzzy matching (no N+1)
 
-        Lightweight query that returns only names, avoiding the full City
+        Lightweight query that returns only names, avoiding the full Jurisdiction
         object construction and zipcode queries. Used for fuzzy search.
 
         Args:
-            status: City status filter (default: "active")
+            status: Jurisdiction status filter (default: "active")
 
         Returns:
-            List of city names
+            List of jurisdiction names
         """
         rows = await self._fetch(
-            "SELECT DISTINCT name FROM cities WHERE status = $1 ORDER BY name",
+            "SELECT DISTINCT name FROM jurisdictions WHERE status = $1 ORDER BY name",
             status,
         )
         return [row["name"] for row in rows]
 
     async def get_city_meeting_frequency(self, banana: str, days: int = 30) -> int:
-        """Get count of meetings for a city in the last N days
+        """Get count of meetings for a jurisdiction in the last N days
 
         Args:
-            banana: City banana identifier
+            banana: Jurisdiction banana identifier
             days: Number of days to look back (default: 30)
 
         Returns:
@@ -340,12 +344,12 @@ class CityRepository(BaseRepository):
         return row["count"] if row else 0
 
     async def get_city_last_sync(self, banana: str) -> Optional[datetime]:
-        """Get timestamp of most recent meeting for a city
+        """Get timestamp of most recent meeting for a jurisdiction
 
-        Used by fetcher to determine if city needs syncing.
+        Used by fetcher to determine if jurisdiction needs syncing.
 
         Args:
-            banana: City banana
+            banana: Jurisdiction banana
 
         Returns:
             Datetime of most recent meeting, or None
