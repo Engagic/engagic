@@ -365,8 +365,8 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
                 return []
 
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(pdf_bytes)
                 tmp_path = tmp.name
+                tmp.write(pdf_bytes)
 
             parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
             items = parsed.get("items", [])

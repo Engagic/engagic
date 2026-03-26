@@ -320,10 +320,13 @@ async def main():
     if hits:
         print(f"\n--- SQL updates ---")
         for h in hits:
+            vendor = h['detected_vendor'].replace("'", "''")
+            slug = h['detected_slug'].replace("'", "''")
+            ban = h['banana'].replace("'", "''")
             print(
-                f"UPDATE jurisdictions SET vendor = '{h['detected_vendor']}', "
-                f"slug = '{h['detected_slug']}' "
-                f"WHERE banana = '{h['banana']}';"
+                f"UPDATE jurisdictions SET vendor = '{vendor}', "
+                f"slug = '{slug}' "
+                f"WHERE banana = '{ban}';"
             )
 
 

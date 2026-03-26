@@ -447,6 +447,10 @@ def main():
 
     banana = sys.argv[1]
 
+    if not re.match(r'^[a-zA-Z0-9-]+$', banana):
+        print(f"Invalid banana identifier: must be alphanumeric/hyphens only")
+        sys.exit(1)
+
     pdf_dir = None
     if '--dir' in sys.argv:
         idx = sys.argv.index('--dir')

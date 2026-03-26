@@ -77,8 +77,14 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
             end_date=str(end_date.date()),
         )
 
-        # Fetch packet PDF URL for each meeting (concurrent)
-        tasks = [self._enrich_meeting(m) for m in meetings]
+        # Fetch packet PDF URL for each meeting (concurrent, bounded)
+        enrich_semaphore = asyncio.Semaphore(5)
+
+        async def bounded_enrich(m: Dict[str, Any]) -> Dict[str, Any]:
+            async with enrich_semaphore:
+                return await self._enrich_meeting(m)
+
+        tasks = [bounded_enrich(m) for m in meetings]
         enriched = await asyncio.gather(*tasks, return_exceptions=True)
 
         results = []
@@ -269,8 +275,8 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
                 return []
 
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(pdf_bytes)
                 tmp_path = tmp.name
+                tmp.write(pdf_bytes)
 
             parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
             items = parsed.get("items", [])

@@ -439,6 +439,7 @@ class DatabaseViewer:
                 state=state,
                 vendor=vendor,
                 slug=slug,
+                type="city",
                 county_banana=county_banana,
                 status='active',
                 population=population

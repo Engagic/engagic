@@ -17,6 +17,7 @@ from database.repositories_async.search import SearchRepository
 __all__ = [
     "BaseRepository",
     "CityRepository",
+    "JurisdictionRepository",
     "CommitteeRepository",
     "CouncilMemberRepository",
     "EngagementRepository",

@@ -92,6 +92,12 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         else:
             raise ValueError(f"Invalid view_id config for {self.base_url}: expected int or list")
 
+        if not self.views:
+            raise ValueError(
+                f"Empty views list for {self.base_url}. "
+                f"Config in {self.view_ids_file} must contain at least one view_id."
+            )
+
         # Keep self.view_id for backward compat (first/primary view)
         self.view_id: int = self.views[0]["view_id"]
         self.list_url: str = f"{self.base_url}/ViewPublisher.php?view_id={self.view_id}"
@@ -512,8 +518,8 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     return item
 
                 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
-                    tmp.write(pdf_bytes)
                     tmp_path = tmp.name
+                    tmp.write(pdf_bytes)
 
                 def _extract_links():
                     doc = fitz.open(tmp_path)
@@ -617,8 +623,8 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 return []
 
             with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
-                tmp.write(pdf_bytes)
                 tmp_path = tmp.name
+                tmp.write(pdf_bytes)
 
             parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
             items = parsed.get("items", [])
@@ -678,8 +684,8 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 return []
 
             with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
-                tmp.write(pdf_bytes)
                 tmp_path = tmp.name
+                tmp.write(pdf_bytes)
 
             parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
             items = parsed.get("items", [])
