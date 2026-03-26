@@ -564,14 +564,8 @@ class AsyncProudCityAdapter(AsyncBaseAdapter):
                 meeting["packet_url"] = docs["agenda-packet"]
             return meeting
 
-        if items:
-            # Bare items from HTML (Colma) -- titles for structure,
-            # packet PDF for TOC chunk to get the actual content.
-            if docs.get("agenda-packet"):
-                meeting["packet_url"] = docs["agenda-packet"]
-            return meeting
-
-        # No HTML items. Try agenda (url parse) then packet (toc parse).
+        # Bare items from HTML (Colma) or no items at all --
+        # fall through to agenda URL parse, then packet TOC parse.
         agenda_pdf = docs.get("agenda")
         packet_pdf = docs.get("agenda-packet")
         chunked = await self._chunk_agenda_then_packet(
@@ -580,7 +574,12 @@ class AsyncProudCityAdapter(AsyncBaseAdapter):
             vendor_id=meeting.get("vendor_id"),
         )
         if chunked:
+            # Chunker produced items with actual content -- use those
             meeting["items"] = chunked
+        elif items:
+            # Chunker failed but we have bare HTML titles -- keep them
+            # so the processor can at least attempt packet-level processing
+            pass
 
         if agenda_pdf:
             meeting["agenda_url"] = agenda_pdf
