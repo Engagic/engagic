@@ -1,4 +1,11 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
+
+export const handleError: HandleServerError = async ({ error, event }) => {
+	console.error('SSR error:', event.url.pathname, error);
+	return {
+		message: 'Internal Error'
+	};
+};
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// Capture real client IP from Cloudflare for forwarding to API
