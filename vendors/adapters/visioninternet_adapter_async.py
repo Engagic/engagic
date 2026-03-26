@@ -122,9 +122,24 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
             elif isinstance(result, list):
                 all_meetings.extend(result)
 
-        # Enrich meetings that have packet PDFs (concurrent)
-        enrich_tasks = [self._enrich_meeting_from_pdf(m) for m in all_meetings]
-        await asyncio.gather(*enrich_tasks, return_exceptions=True)
+        # Enrich meetings that have packet PDFs (concurrent, bounded)
+        semaphore = asyncio.Semaphore(5)
+
+        async def enrich(meeting: Dict[str, Any]) -> None:
+            async with semaphore:
+                await self._enrich_meeting_from_pdf(meeting)
+
+        enrich_tasks = [enrich(m) for m in all_meetings]
+        enrich_results = await asyncio.gather(*enrich_tasks, return_exceptions=True)
+        for idx, result in enumerate(enrich_results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    "meeting enrichment failed",
+                    vendor="visioninternet",
+                    slug=self.slug,
+                    vendor_id=all_meetings[idx].get("vendor_id", "unknown"),
+                    error=str(result),
+                )
 
         logger.info(
             "visioninternet meetings scraped",
@@ -348,8 +363,8 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
                 return []
 
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(pdf_bytes)
                 tmp_path = tmp.name
+                tmp.write(pdf_bytes)
 
             parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
             items = parsed.get("items", [])

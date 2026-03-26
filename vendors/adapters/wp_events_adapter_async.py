@@ -194,6 +194,7 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
         all_events: List[Dict[str, Any]] = []
         page = 1
         per_page = 100
+        max_pages = 20  # Safety cap to prevent unbounded pagination
         # Same publication-date cutoff strategy as ProudCity
         cutoff_pub_date = datetime.now() - timedelta(days=90)
         api_url = f"{self.base_url}/wp-json/wp/v2"
@@ -234,8 +235,21 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
             if last_post_date and last_post_date < cutoff_pub_date:
                 break
 
-            total_pages = int(response.headers.get("X-WP-TotalPages", "1"))
+            try:
+                total_pages = int(response.headers.get("X-WP-TotalPages", "1"))
+            except (ValueError, TypeError):
+                total_pages = 1
             if page >= total_pages:
+                break
+
+            if page >= max_pages:
+                logger.warning(
+                    "pagination cap reached",
+                    vendor="wp_events",
+                    slug=self.slug,
+                    max_pages=max_pages,
+                    events_so_far=len(all_events),
+                )
                 break
 
             page += 1
@@ -330,6 +344,7 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
         """Fetch all media items parented to an event post."""
         all_media: List[Dict[str, Any]] = []
         page = 1
+        max_pages = 20  # Safety cap to prevent unbounded pagination
         api_url = f"{self.base_url}/wp-json/wp/v2"
 
         while True:
@@ -362,8 +377,22 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
 
             all_media.extend(data)
 
-            total_pages = int(response.headers.get("X-WP-TotalPages", "1"))
+            try:
+                total_pages = int(response.headers.get("X-WP-TotalPages", "1"))
+            except (ValueError, TypeError):
+                total_pages = 1
             if page >= total_pages:
+                break
+
+            if page >= max_pages:
+                logger.warning(
+                    "media pagination cap reached",
+                    vendor="wp_events",
+                    slug=self.slug,
+                    event_id=event_id,
+                    max_pages=max_pages,
+                    media_so_far=len(all_media),
+                )
                 break
 
             page += 1

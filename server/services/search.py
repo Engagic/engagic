@@ -111,6 +111,7 @@ class SearchNotFoundResponse(TypedDict):
     vendor: NotRequired[str]
     vendor_display_name: NotRequired[str]
     source_url: NotRequired[Optional[str]]
+    source_urls: NotRequired[List[Dict[str, str]]]
     participation: NotRequired[Optional[Dict[str, Any]]]
     cached: NotRequired[bool]
 
@@ -173,6 +174,7 @@ async def handle_zipcode_search(zipcode: str, db: Database) -> SearchResponse:
         "vendor": city.vendor,
         "vendor_display_name": get_vendor_display_name(city.vendor),
         "source_url": get_vendor_source_url(city.vendor, city.slug),
+        "source_urls": get_vendor_source_urls(city.vendor, city.slug),
         "participation": city.participation,
         "meetings": [],
         "cached": False,
@@ -236,6 +238,7 @@ async def handle_city_search(city_input: str, db: Database) -> SearchResponse:
         "vendor": city.vendor,
         "vendor_display_name": get_vendor_display_name(city.vendor),
         "source_url": get_vendor_source_url(city.vendor, city.slug),
+        "source_urls": get_vendor_source_urls(city.vendor, city.slug),
         "participation": city.participation,
         "meetings": [],
         "cached": False,
@@ -457,6 +460,7 @@ async def _handle_single_city_match(
         "vendor": city.vendor,
         "vendor_display_name": get_vendor_display_name(city.vendor),
         "source_url": get_vendor_source_url(city.vendor, city.slug),
+        "source_urls": get_vendor_source_urls(city.vendor, city.slug),
         "participation": city.participation,
         "meetings": [],
         "cached": True,

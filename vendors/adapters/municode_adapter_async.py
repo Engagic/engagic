@@ -180,14 +180,21 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         slug_clean = self.slug.replace('-', '')
         return f"https://mccmeetings.blob.core.usgovcloudapi.net/{slug_clean}-pubu/MEET-Packet-{meeting_guid}.pdf"
 
-    def _parse_calendar_date(self, calendar_date) -> Optional[datetime]:
+    def _parse_calendar_date(self, calendar_date: list[Any]) -> Optional[datetime]:
         """Parse CalendarDate which varies by city.
 
         Two known formats:
         - List of ints: [year, month, day, hour?, minute?, second?, ms?]
         - List of dicts: [{"FromDate": "2026-03-18 16:00:00", ...}]
         """
-        if not calendar_date:
+        if not isinstance(calendar_date, list) or not calendar_date:
+            if calendar_date is not None:
+                logger.warning(
+                    "CalendarDate is not a list",
+                    vendor="municode",
+                    slug=self.slug,
+                    calendar_date_type=type(calendar_date).__name__,
+                )
             return None
 
         first = calendar_date[0]

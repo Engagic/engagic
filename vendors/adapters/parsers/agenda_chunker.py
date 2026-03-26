@@ -968,7 +968,6 @@ def _parse_toc_document_bundle(doc, toc, result):
     # Require a minimum score to avoid false matches (e.g. minutes that
     # reference a different meeting entirely).
     MATCH_THRESHOLD = 0.25  # confidence 6/10 — may need tuning
-    matched = set()
 
     for doc_idx, (doc_title, ps, pe, memo) in enumerate(l2_docs):
         best_score = 0.0
@@ -981,8 +980,7 @@ def _parse_toc_document_bundle(doc, toc, result):
                 best_score = score
                 best_item = item
 
-        if best_item and best_score >= MATCH_THRESHOLD and id(best_item) not in matched:
-            matched.add(id(best_item))
+        if best_item and best_score >= MATCH_THRESHOLD:
             best_item.memos.append(memo)
             best_item.attachments.append(_Attachment(
                 label=doc_title, url="",
@@ -995,10 +993,11 @@ def _parse_toc_document_bundle(doc, toc, result):
 
     result.items = items
 
+    matched_count = sum(len(item.memos) for item in items)
     logger.debug("parsed toc document bundle",
                  item_count=len(result.items),
                  attachment_docs=len(l2_docs),
-                 matched=len(matched),
+                 matched=matched_count,
                  orphan_memos=len(result.orphan_memos))
 
 
@@ -1520,15 +1519,13 @@ def _parse_agenda_internal(pdf_path: str, force_method: Optional[str] = None) ->
     elif _has_attachment_links(doc):
         _parse_url_based(doc, result)
     elif _has_meaningful_toc(doc):
-        # Small documents (<=10 pages) are thin agendas where the TOC is
-        # typically navigation bookmarks, not structural data.  Try url
-        # first — it picks up sub-items (4.1, 8.2) that TOC parsers miss.
-        # Fall back to TOC if url finds nothing.
-        if doc.page_count <= 10:
-            _parse_url_based(doc, result)
-            if not result.items:
-                _parse_toc_based(doc, result)
-        else:
+        # Reaching here means page_count <= 10 (large TOC docs handled above).
+        # Small documents are thin agendas where the TOC is typically navigation
+        # bookmarks, not structural data.  Try url first -- it picks up
+        # sub-items (4.1, 8.2) that TOC parsers miss.  Fall back to TOC
+        # if url finds nothing.
+        _parse_url_based(doc, result)
+        if not result.items:
             _parse_toc_based(doc, result)
     else:
         _parse_url_based(doc, result)

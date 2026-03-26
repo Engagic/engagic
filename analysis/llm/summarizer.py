@@ -1054,6 +1054,17 @@ class GeminiSummarizer:
         result = template
         for key, value in variables.items():
             result = result.replace("{" + key + "}", str(value))
+
+        # Validate all template variables were substituted
+        remaining = re.findall(r"\{(\w+)\}", result)
+        if remaining:
+            logger.warning(
+                "unsubstituted template variables remain after prompt formatting",
+                category=category,
+                prompt_type=prompt_type,
+                missing_variables=remaining,
+            )
+
         return result
 
     def _get_thinking_config(

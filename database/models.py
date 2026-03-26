@@ -107,7 +107,7 @@ class Jurisdiction:
     state: str  # CA
     vendor: str  # primegov, legistar, granicus, etc.
     slug: str  # cityofpaloalto (vendor-specific)
-    type: str = "city"  # city, county, utility, transit, water_district, school_board, etc.
+    type: Optional[str] = None  # city, county, utility, transit, water_district, school_board, etc.
     county_banana: Optional[str] = None  # FK to parent county jurisdiction
     status: str = "active"
     population: Optional[int] = None  # Census population

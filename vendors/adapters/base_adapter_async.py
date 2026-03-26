@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 import os
 import tempfile
 import time
@@ -149,16 +150,15 @@ class AsyncBaseAdapter:
         response = await self._get(url, **kwargs)
         try:
             return await response.json()
-        except aiohttp.ContentTypeError:
+        except aiohttp.ContentTypeError as e:
             # Some vendors serve JSON with wrong content-type (e.g. text/html)
             # Try parsing the body directly before giving up
-            import json as _json
             text = await response.text()
             try:
-                return _json.loads(text)
+                return json.loads(text)
             except (ValueError, TypeError):
                 logger.error("vendor json parse failed", vendor=self.vendor, slug=self.slug, url=url[:100], content_type=response.headers.get('content-type', 'unknown'), body_preview=text[:200] if text else None)
-                raise VendorHTTPError(f"Expected JSON but got {response.headers.get('content-type', 'unknown')}", vendor=self.vendor, url=url, city_slug=self.slug)
+                raise VendorHTTPError(f"Expected JSON but got {response.headers.get('content-type', 'unknown')}", vendor=self.vendor, url=url, city_slug=self.slug) from e
         except ValueError as e:
             try:
                 text = await response.text()
@@ -292,8 +292,8 @@ class AsyncBaseAdapter:
                 return []
 
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(pdf_bytes)
                 tmp_path = tmp.name
+                tmp.write(pdf_bytes)
 
             parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path, force_method=force_method)
             items = parsed.get("items", [])
