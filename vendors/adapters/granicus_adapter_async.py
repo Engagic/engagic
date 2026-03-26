@@ -146,7 +146,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
         meetings_in_range = []
         for idx, result in enumerate(listing_results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning(
                     "view listing failed",
                     vendor="granicus",
@@ -189,7 +189,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
         meetings = []
         for i, result in enumerate(results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning(
                     "failed to fetch meeting detail",
                     vendor="granicus",
