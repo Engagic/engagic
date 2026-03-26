@@ -485,7 +485,7 @@ class MatterRepository(BaseRepository):
                        cm.appearance_count,
                        c.name as city_name, c.state
                 FROM city_matters cm
-                JOIN cities c ON cm.banana = c.banana
+                JOIN jurisdictions c ON cm.banana = c.banana
                 WHERE cm.banana = ANY($1::text[])
                   AND cm.last_seen >= $2
                   AND cm.canonical_summary LIKE $3

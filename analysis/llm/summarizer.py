@@ -64,15 +64,15 @@ class GeminiSummarizer:
         self.client = genai.Client(api_key=self.api_key)
 
         # Model names
-        self.flash_model_name = "gemini-2.5-flash"
+        self.flash_model_name = "gemini-3.1-flash-lite-preview"
         self.flash_lite_model_name = "gemini-2.5-flash-lite"
 
-        # Load prompts from JSON (v2 only)
-        self.prompts_version = "v2"
+        # Load prompts from JSON
+        self.prompts_version = "v3"
 
         if prompts_path is None:
             # Load from package resources (works in installed packages)
-            prompts_text = files("analysis.llm").joinpath("prompts_v2.json").read_text()
+            prompts_text = files("analysis.llm").joinpath("prompts_v3.json").read_text()
             self.prompts = json.loads(prompts_text)
         else:
             with open(prompts_path, "r") as f:
@@ -220,18 +220,15 @@ class GeminiSummarizer:
 
         logger.info("summarizing meeting", page_count=page_count, text_size=text_size, model=model_display)
 
-        # Prompt selection based on document size
-        if page_count <= 30:
-            prompt = self._get_prompt("meeting", "short_agenda", text=text)
-        else:
-            prompt = self._get_prompt("meeting", "comprehensive", text=text)
+        # Single fallback prompt for meeting-level summarization (v3)
+        prompt = self._get_prompt("meeting", "fallback", text=text)
 
         # Thinking configuration based on complexity
         config = self._get_thinking_config(page_count, text_size, model_name)
 
         # Track API call duration
         start_time = time.time()
-        prompt_type = "meeting_short" if page_count <= 30 else "meeting_comprehensive"
+        prompt_type = "meeting_fallback"
 
         try:
             response = self._call_with_retry(model_name, prompt, config)
@@ -1054,12 +1051,10 @@ class GeminiSummarizer:
         except KeyError as e:
             raise ValueError(f"Prompt not found: {category}.{prompt_type}") from e
 
-        try:
-            return template.format(**variables)
-        except KeyError as e:
-            raise ValueError(
-                f"Missing variable for prompt {category}.{prompt_type}: {e}"
-            ) from e
+        result = template
+        for key, value in variables.items():
+            result = result.replace("{" + key + "}", str(value))
+        return result
 
     def _get_thinking_config(
         self, page_count: int, text_size: int, model_name: str

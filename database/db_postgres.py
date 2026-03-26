@@ -11,8 +11,9 @@ from datetime import datetime
 from pathlib import Path
 
 from config import get_logger, config
-from database.models import City, Meeting, AgendaItem
+from database.models import Jurisdiction, City, Meeting, AgendaItem
 from database.repositories_async import (
+    JurisdictionRepository,
     CityRepository,
     CommitteeRepository,
     CouncilMemberRepository,
@@ -51,7 +52,7 @@ class Database:
     pool: asyncpg.Pool
 
     # Repository attributes
-    cities: CityRepository
+    cities: JurisdictionRepository
     council_members: CouncilMemberRepository
     meetings: MeetingRepository
     items: ItemRepository
@@ -64,7 +65,7 @@ class Database:
 
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
-        self.cities = CityRepository(pool)
+        self.cities = JurisdictionRepository(pool)
         self.committees = CommitteeRepository(pool)
         self.council_members = CouncilMemberRepository(pool)
         self.happening = HappeningRepository(pool)
@@ -140,7 +141,7 @@ class Database:
         async with self.pool.acquire() as conn:
             result = await conn.fetchrow("""
                 SELECT
-                    (SELECT COUNT(*) FROM cities WHERE status = 'active') as active_cities,
+                    (SELECT COUNT(*) FROM jurisdictions WHERE status = 'active') as active_cities,
                     (SELECT COUNT(*) FROM meetings) as total_meetings,
                     (SELECT COUNT(*) FROM meetings WHERE summary IS NOT NULL) as summarized_meetings,
                     (SELECT COUNT(*) FROM meetings WHERE processing_status = 'pending') as pending_meetings
@@ -158,7 +159,7 @@ class Database:
             result = await conn.fetchrow("""
                 SELECT
                     -- Core content
-                    (SELECT COUNT(*) FROM cities) as total_cities,
+                    (SELECT COUNT(*) FROM jurisdictions) as total_cities,
                     (SELECT COUNT(DISTINCT banana) FROM meetings) as active_cities,
                     (SELECT COUNT(*) FROM meetings) as meetings,
                     (SELECT COUNT(*) FROM items) as agenda_items,

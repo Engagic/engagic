@@ -10,11 +10,14 @@ Item-level adapter that extracts structured agenda items with:
 """
 
 import asyncio
+import os
 import re
+import tempfile
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
+from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 
 
@@ -146,6 +149,19 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
         if has_agenda and agenda_id:
             items = await self._fetch_meeting_items(agenda_id, event_id)
 
+        # Detect placeholder items (CivicClerk sometimes returns a single
+        # section like "Select MEETING FILES to view meeting materials"
+        # instead of real agenda content)
+        if items and self._items_are_placeholder(items):
+            logger.debug(
+                "placeholder items detected, discarding",
+                vendor="civicclerk",
+                slug=self.slug,
+                event_name=event_name,
+                item_count=len(items),
+            )
+            items = []
+
         if items:
             result["items"] = items
             # Also include agenda URL for reference
@@ -157,23 +173,64 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
             if agenda_doc:
                 result["agenda_url"] = self._build_packet_url(agenda_doc)
         else:
-            # Fallback to packet URL (monolithic approach)
-            packet = next(
-                (doc for doc in event.get("publishedFiles", [])
-                 if doc.get("type") in ["Agenda Packet", "Agenda"]),
-                None
+            # No usable structured items — try chunking published PDFs.
+            # Strategy: agenda PDF first (for hyperlinked attachments),
+            # then the full packet (for TOC-based body text extraction).
+            published = event.get("publishedFiles", [])
+            agenda_doc = next(
+                (d for d in published if d.get("type") == "Agenda"), None
             )
-            if packet:
-                result["packet_url"] = self._build_packet_url(packet)
-            else:
-                file_types = [doc.get("type") for doc in event.get("publishedFiles", [])]
-                logger.debug(
-                    "no packet for meeting",
-                    vendor="civicclerk",
-                    slug=self.slug,
-                    event_name=event_name,
-                    available_files=file_types
+            packet_doc = next(
+                (d for d in published if d.get("type") == "Agenda Packet"), None
+            )
+
+            chunked_items = []
+
+            # Pass 1: thin agenda PDF — may have hyperlinked attachment URLs
+            if agenda_doc:
+                agenda_url = self._build_packet_url(agenda_doc)
+                chunked_items = await self._parse_packet_pdf(
+                    agenda_url, str(event_id)
                 )
+                has_attachments = any(
+                    item.get("attachments") for item in chunked_items
+                )
+                # If the agenda gave us items with real attachments, use them
+                if chunked_items and has_attachments:
+                    result["items"] = chunked_items
+                    result["agenda_url"] = agenda_url
+
+            # Pass 2: full packet PDF — TOC-based extraction with body text
+            if not result.get("items") and packet_doc:
+                packet_url = self._build_packet_url(packet_doc)
+                packet_items = await self._parse_packet_pdf(
+                    packet_url, str(event_id)
+                )
+                if packet_items:
+                    chunked_items = packet_items
+                    result["items"] = packet_items
+                    result["agenda_url"] = packet_url
+
+            # Pass 3: if only thin-agenda items (no attachments), still use them
+            if not result.get("items") and chunked_items:
+                result["items"] = chunked_items
+                if agenda_doc:
+                    result["agenda_url"] = self._build_packet_url(agenda_doc)
+
+            # Nothing worked — store monolithic reference
+            if not result.get("items"):
+                fallback_doc = packet_doc or agenda_doc
+                if fallback_doc:
+                    result["packet_url"] = self._build_packet_url(fallback_doc)
+                else:
+                    file_types = [d.get("type") for d in published]
+                    logger.debug(
+                        "no packet for meeting",
+                        vendor="civicclerk",
+                        slug=self.slug,
+                        event_name=event_name,
+                        available_files=file_types,
+                    )
 
         return result
 
@@ -370,3 +427,76 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
                 return matter_file, matter_type
 
         return None, None
+
+    # ------------------------------------------------------------------
+    # Placeholder detection
+    # ------------------------------------------------------------------
+
+    def _items_are_placeholder(self, items: List[Dict[str, Any]]) -> bool:
+        """Detect CivicClerk placeholder agendas that contain no real content.
+
+        Some cities publish a single section like "Select MEETING FILES to
+        view meeting materials" instead of structured agenda items.  These
+        should be discarded so we fall through to the packet PDF chunker.
+        """
+        PLACEHOLDER_FRAGMENTS = [
+            "select meeting files",
+            "view meeting materials",
+        ]
+
+        for item in items:
+            title = item.get("title", "").lower()
+            if any(frag in title for frag in PLACEHOLDER_FRAGMENTS):
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    # PDF chunker
+    # ------------------------------------------------------------------
+
+    async def _parse_packet_pdf(
+        self, packet_url: str, vendor_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Download packet PDF and run agenda chunker. Returns items or []."""
+        tmp_path = None
+        try:
+            response = await self._get(packet_url)
+            pdf_bytes = await response.read()
+
+            if len(pdf_bytes) < 500:
+                return []
+
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(pdf_bytes)
+                tmp_path = tmp.name
+
+            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+            items = parsed.get("items", [])
+
+            if items:
+                logger.info(
+                    "chunker extracted items from packet pdf",
+                    vendor="civicclerk",
+                    slug=self.slug,
+                    vendor_id=vendor_id,
+                    item_count=len(items),
+                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
+                )
+
+            return items
+
+        except Exception as e:
+            logger.debug(
+                "pdf parse failed",
+                vendor="civicclerk",
+                slug=self.slug,
+                vendor_id=vendor_id,
+                error=str(e),
+            )
+            return []
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass

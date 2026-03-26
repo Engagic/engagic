@@ -4,11 +4,18 @@ Async Municode Adapter - API integration for Municode municipal meetings
 Cities using Municode: Columbus GA, Tomball TX, Los Gatos CA, Cedar Park TX, and many others
 Platform owned by CivicPlus, uses REST API + HTML agenda packets.
 
-URL patterns:
+Three integration modes:
+
   Subdomain API (columbus-ga, tomball-tx):
     - API base: https://{slug}.municodemeetings.com
     - HTML packet: https://meetings.municode.com/adaHtmlDocument/index?cc={CITY_CODE}&me={GUID}&ip=True
     - PDF packet: https://mccmeetings.blob.core.usgovcloudapi.net/{slug-no-hyphens}-pubu/MEET-Packet-{GUID}.pdf
+
+  Self-hosted API (LAKECTYFL -> lcfla.com):
+    - Same REST API as subdomain mode, but on the city's own domain (Drupal aha_restapi_server module)
+    - Configured via base_url in municode_sites.json
+    - API base: https://{city-domain} (e.g., https://www.lcfla.com)
+    - Same meeting list/details endpoints, same HTML agenda URLs
 
   PublishPage HTML (CPTX, etc.):
     - Listing: https://meetings.municode.com/PublishPage/index?cid={CODE}&ppid=0&p=-1
@@ -50,32 +57,37 @@ _BLOB_GUID_RE = re.compile(r'MEET-(?:Agenda|Packet|Minutes)-([a-f0-9-]{32,36})\.
 class AsyncMunicodeAdapter(AsyncBaseAdapter):
     """Async adapter for cities using Municode platform."""
 
-    # Known city codes as fallback (only used if auto-discovery fails)
-    CITY_CODE_FALLBACKS = {
-        "columbus-ga": "COLUMGA",  # Truncated: colum + ga
-        # Add more as discovered...
-    }
-
     def __init__(self, city_slug: str, city_code: Optional[str] = None, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="municode", metrics=metrics)
 
-        # Detect if slug is a city code (short, no hyphens, uppercase-ish like "CPTX")
-        # vs a subdomain slug (like "columbus-ga")
-        self._is_publish_page = self._detect_publish_page_mode(self.slug)
+        self._all_config = _load_municode_config()
+        self._discovered_city_code: Optional[str] = None
 
-        if self._is_publish_page:
+        # Check config for this slug (try slug directly, then uppercase variant)
+        slug_config = self._all_config.get(self.slug, self._all_config.get(self.slug.upper(), {}))
+
+        # Three modes, checked in priority order:
+        # 1. Self-hosted API: city runs Municode REST API on their own domain (base_url in config)
+        # 2. Subdomain API: slug has hyphens -> {slug}.municodemeetings.com
+        # 3. PublishPage: short city code slug -> meetings.municode.com/PublishPage/
+        if slug_config.get("base_url"):
+            # Self-hosted API mode: same REST API as subdomain, different domain
+            self._is_publish_page = False
+            self.base_url = slug_config["base_url"].rstrip("/")
+            self._city_code_override = city_code or slug_config.get("city_code") or self.slug.upper()
+        elif self._detect_publish_page_mode(self.slug):
             # PublishPage mode: slug IS the city code
+            self._is_publish_page = True
             self.base_url = "https://meetings.municode.com"
             self._city_code_override = self.slug.upper()
         else:
             # Subdomain API mode
+            self._is_publish_page = False
             self.base_url = f"https://{self.slug}.municodemeetings.com"
-            self._city_code_override = city_code
+            self._city_code_override = city_code or slug_config.get("city_code")
 
-        self._discovered_city_code: Optional[str] = None
-
-        # Load site-specific config (ppid overrides, etc)
-        self._site_config = _load_municode_config().get(self.city_code, {})
+        # Load site-specific config
+        self._site_config = slug_config
 
     def _detect_publish_page_mode(self, slug: str) -> bool:
         """Detect if slug is a city code for PublishPage vs subdomain slug.
@@ -93,13 +105,11 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
 
     @property
     def city_code(self) -> str:
-        """Get city code (override > discovered > fallback > derived)."""
+        """Get city code (override > discovered > derived)."""
         if self._city_code_override:
             return self._city_code_override
         if self._discovered_city_code:
             return self._discovered_city_code
-        if self.slug in self.CITY_CODE_FALLBACKS:
-            return self.CITY_CODE_FALLBACKS[self.slug]
         # Default derivation
         return self.slug.replace('-', '').upper()
 
@@ -170,13 +180,33 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         slug_clean = self.slug.replace('-', '')
         return f"https://mccmeetings.blob.core.usgovcloudapi.net/{slug_clean}-pubu/MEET-Packet-{meeting_guid}.pdf"
 
-    def _parse_calendar_date(self, calendar_date: List[int]) -> Optional[datetime]:
-        """Parse [year, month, day, hour?, minute?, second?, ms?] to datetime."""
-        if not calendar_date or len(calendar_date) < 3:
+    def _parse_calendar_date(self, calendar_date) -> Optional[datetime]:
+        """Parse CalendarDate which varies by city.
+
+        Two known formats:
+        - List of ints: [year, month, day, hour?, minute?, second?, ms?]
+        - List of dicts: [{"FromDate": "2026-03-18 16:00:00", ...}]
+        """
+        if not calendar_date:
             return None
 
+        first = calendar_date[0]
+
+        # Dict format: extract FromDate string
+        if isinstance(first, dict):
+            from_date = first.get("FromDate")
+            if not from_date:
+                return None
+            try:
+                return datetime.strptime(from_date, "%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError) as e:
+                logger.warning("failed to parse CalendarDate FromDate", vendor="municode", slug=self.slug, from_date=from_date, error=str(e))
+                return None
+
+        # Int list format: [year, month, day, ...]
+        if len(calendar_date) < 3:
+            return None
         try:
-            # Pad with zeros for optional time components
             padded = (calendar_date + [0, 0, 0])[:6]
             return datetime(*padded)
         except (ValueError, TypeError) as e:
@@ -214,13 +244,26 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        # PublishPage URL: cid=CITYCODE, ppid for page ID (0 default, some cities need specific UUID), p=-1 for all meetings
+        # PublishPage URL: cid=CITYCODE, ppid for page ID (0 default, some cities need specific UUID)
+        # p=-1 fetches all meetings, but some sites 500 on it — fall back to p=1
         ppid = self._site_config.get("ppid", "0")
-        url = f"{self.base_url}/PublishPage/index?cid={self.city_code}&ppid={ppid}&p=-1"
+        base_publish_url = f"{self.base_url}/PublishPage/index?cid={self.city_code}&ppid={ppid}"
 
         try:
-            response = await self._get(url)
-            html = await response.text()
+            html = None
+            for page_param in ["-1", "1"]:
+                url = f"{base_publish_url}&p={page_param}"
+                try:
+                    response = await self._get(url)
+                    html = await response.text()
+                    break
+                except Exception as e:
+                    logger.debug("publish page param failed, trying next", vendor="municode", slug=self.slug, p=page_param, error=str(e))
+
+            if not html:
+                logger.error("all publish page attempts failed", vendor="municode", slug=self.slug)
+                return []
+
             meetings = await asyncio.to_thread(self._parse_publish_page_html, html)
 
             # Filter by date range
@@ -396,8 +439,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         params = {"datefrom": start_date, "dateto": end_date}
 
         try:
-            response = await self._get(url, params=params)
-            data = await response.json()
+            data = await self._get_json(url, params=params)
             meetings = data.get("Meetings", [])
 
             # Try to discover city code from API response
@@ -414,8 +456,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         url = f"{self.base_url}/api/v1/public/meeting/{meeting_id}/details.json"
 
         try:
-            response = await self._get(url)
-            return await response.json()
+            return await self._get_json(url)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
             logger.debug("failed to fetch meeting details", vendor="municode", slug=self.slug, meeting_id=meeting_id, error=str(e))
             return None

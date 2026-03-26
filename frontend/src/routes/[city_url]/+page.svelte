@@ -336,14 +336,28 @@
 			{#if searchResults && 'city_name' in searchResults && searchResults.source_url && searchResults.vendor_display_name}
 				<div class="source-footnote">
 					<span class="attribution-text">Data sourced from</span>
-					<a
-						href={searchResults.source_url}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="source-link"
-					>
-						{searchResults.vendor_display_name}
-					</a>
+					{#if searchResults.source_urls && searchResults.source_urls.length > 0}
+						{#each searchResults.source_urls as source, i}
+							{#if i > 0}<span class="source-separator"> | </span>{/if}
+							<a
+								href={source.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="source-link"
+							>
+								{searchResults.vendor_display_name}{source.body ? ` - ${source.body}` : ''}
+							</a>
+						{/each}
+					{:else}
+						<a
+							href={searchResults.source_url}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="source-link"
+						>
+							{searchResults.vendor_display_name}
+						</a>
+					{/if}
 				</div>
 			{/if}
 			{#if !isWatching}

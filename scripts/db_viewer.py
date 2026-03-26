@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from uszipcode import SearchEngine
 
 from database.db_postgres import Database
-from database.models import City
+from database.models import Jurisdiction
 
 
 # State abbreviation to FIPS code mapping
@@ -70,6 +70,8 @@ async def lookup_census_population(db: Database, city_name: str, state: str) -> 
             """
             SELECT population FROM census_places
             WHERE UPPER(name) = UPPER($1) AND statefp = $2
+            AND population IS NOT NULL
+            ORDER BY population DESC
             LIMIT 1
             """,
             city_name, fips
@@ -148,8 +150,10 @@ class DatabaseViewer:
         self.db = None
 
     async def initialize(self):
-        """Initialize async database connection"""
-        self.db = await Database.create()
+        """Initialize async database connection.
+        Small pool with short idle timeout -- interactive tool sits at input() prompts.
+        """
+        self.db = await Database.create(min_size=1, max_size=5)
 
     async def close(self):
         """Close database connections"""
@@ -160,11 +164,11 @@ class DatabaseViewer:
         """Display cities table with zipcode counts"""
         cities = await self.db.cities.get_cities(status="active", limit=limit)
 
-        print(f"\n=== CITIES TABLE (showing {len(cities)}) ===")
+        print(f"\n=== JURISDICTIONS TABLE (showing {len(cities)}) ===")
         print(
-            f"{'Banana':<20} {'City':<20} {'State':<6} {'Slug':<20} {'Vendor':<12} {'Status':<8} {'ZIPs':<4}"
+            f"{'Banana':<20} {'Name':<20} {'State':<6} {'Type':<10} {'Slug':<20} {'Vendor':<12} {'Status':<8} {'ZIPs':<4}"
         )
-        print("-" * 115)
+        print("-" * 125)
 
         for city in cities:
             # Get zipcode count
@@ -176,7 +180,7 @@ class DatabaseViewer:
 
             print(
                 f"{city.banana:<20} {city.name[:19]:<20} {city.state:<6} "
-                f"{city.slug[:19]:<20} {city.vendor:<12} "
+                f"{city.type:<10} {city.slug[:19]:<20} {city.vendor:<12} "
                 f"{city.status:<8} {zipcode_count:<4}"
             )
 
@@ -187,7 +191,7 @@ class DatabaseViewer:
                 """
                 SELECT z.zipcode, z.banana, z.is_primary, c.name, c.state
                 FROM zipcodes z
-                JOIN cities c ON z.banana = c.banana
+                JOIN jurisdictions c ON z.banana = c.banana
                 ORDER BY z.zipcode
                 LIMIT $1
                 """,
@@ -399,7 +403,15 @@ class DatabaseViewer:
                 print("Vendor required")
                 return False
 
-            county = input("County (optional): ").strip() or None
+            county_banana = input("County banana (optional, e.g. alamedacountyCA): ").strip() or None
+
+            if county_banana:
+                parent = await self.db.cities.get_city(county_banana)
+                if not parent:
+                    print(f"   No jurisdiction found with banana '{county_banana}' -- skipping county link")
+                    county_banana = None
+                else:
+                    print(f"   Linking to: {parent.name}, {parent.state}")
 
             # Allow manual zipcode override
             zipcodes_input = input(
@@ -421,13 +433,13 @@ class DatabaseViewer:
             # Generate banana
             banana = re.sub(r"[^a-zA-Z0-9]", "", city_name).lower() + state.upper()
 
-            city = City(
+            city = Jurisdiction(
                 banana=banana,
                 name=city_name,
                 state=state,
                 vendor=vendor,
                 slug=slug,
-                county=county,
+                county_banana=county_banana,
                 status='active',
                 population=population
             )
@@ -452,7 +464,7 @@ class DatabaseViewer:
             if auto_geometry:
                 async with self.db.pool.acquire() as conn:
                     await conn.execute(
-                        "UPDATE cities SET geom = $1 WHERE banana = $2",
+                        "UPDATE jurisdictions SET geom = $1 WHERE banana = $2",
                         auto_geometry, banana
                     )
 
@@ -470,6 +482,95 @@ class DatabaseViewer:
             return False
         except Exception as e:
             print(f"Error adding city: {e}")
+            return False
+
+    async def add_county(self):
+        """Interactive county addition."""
+        print("\n=== ADD NEW COUNTY ===")
+
+        try:
+            county_name = input("County name (e.g. Alameda): ").strip()
+            if not county_name:
+                print("County name required")
+                return False
+
+            state = input("State (2-letter code): ").strip().upper()
+            if len(state) != 2:
+                print("State must be 2-letter code (e.g., CA)")
+                return False
+
+            slug = input("Slug (vendor-specific): ").strip()
+            if not slug:
+                print("Slug required")
+                return False
+
+            vendor = input("Vendor (granicus/primegov/legistar/iqm2/etc): ").strip()
+            if not vendor:
+                print("Vendor required")
+                return False
+
+            pop_input = input("Population (optional): ").strip()
+            population = int(pop_input) if pop_input else None
+
+            # Generate banana: alamedacountyCA
+            banana = re.sub(r"[^a-zA-Z0-9]", "", county_name).lower() + "county" + state.upper()
+
+            # Display name includes "County"
+            display_name = f"{county_name} County"
+
+            county = Jurisdiction(
+                banana=banana,
+                name=display_name,
+                state=state,
+                vendor=vendor,
+                slug=slug,
+                type="county",
+                status="active",
+                population=population,
+            )
+
+            await self.db.cities.upsert_city(county)
+
+            print(f"Added county '{display_name}, {state}' with banana {banana}")
+            if population:
+                print(f"   Population: {population:,}")
+
+            # Offer to link existing cities to this county
+            link = input(f"\nLink existing cities in {display_name} to this county? (y/N): ").strip().lower()
+            if link == 'y':
+                all_cities = await self.db.cities.get_cities(state=state)
+                state_cities = [c for c in all_cities if c.type == 'city']
+                if state_cities:
+                    print(f"\nCities in {state}:")
+                    for i, c in enumerate(state_cities):
+                        linked = f" -> {c.county_banana}" if c.county_banana else ""
+                        print(f"  {i+1}. {c.name} ({c.banana}){linked}")
+                    indices = input("\nEnter numbers to link (comma-separated, or 'all'): ").strip()
+                    if indices:
+                        if indices.lower() == 'all':
+                            to_link = state_cities
+                        else:
+                            to_link = []
+                            for idx in indices.split(','):
+                                idx = idx.strip()
+                                if idx.isdigit() and 1 <= int(idx) <= len(state_cities):
+                                    to_link.append(state_cities[int(idx) - 1])
+
+                        async with self.db.pool.acquire() as conn:
+                            for c in to_link:
+                                await conn.execute(
+                                    "UPDATE jurisdictions SET county_banana = $1 WHERE banana = $2",
+                                    banana, c.banana
+                                )
+                        print(f"Linked {len(to_link)} cities to {display_name}")
+
+            return True
+
+        except KeyboardInterrupt:
+            print("\n\nCancelled")
+            return False
+        except Exception as e:
+            print(f"Error adding county: {e}")
             return False
 
     async def update_city(self):
@@ -506,18 +607,19 @@ class DatabaseViewer:
                 print(f"  state:  {city.state}")
                 print(f"  vendor: {city.vendor}")
                 print(f"  slug:   {city.slug}")
-                print(f"  county: {city.county or 'None'}")
+                print(f"  type:           {city.type}")
+                print(f"  county_banana:  {city.county_banana or 'None'}")
                 print(f"  status: {(city.status or 'active')}")
 
                 field = input(
-                    "\nField to update (name/state/slug/vendor/status/county) or 'q' to quit: "
+                    "\nField to update (name/state/slug/vendor/status/type/county_banana) or 'q' to quit: "
                 ).strip()
 
                 if not field or field.lower() == 'q':
                     current_banana = None
                     continue
 
-                valid_fields = ['name', 'state', 'slug', 'vendor', 'status', 'county']
+                valid_fields = ['name', 'state', 'slug', 'vendor', 'status', 'type', 'county_banana']
                 if field not in valid_fields:
                     print(f"Invalid field. Valid: {', '.join(valid_fields)}")
                     continue
@@ -527,7 +629,7 @@ class DatabaseViewer:
                 if new_value.lower() == 'cancel':
                     continue
 
-                if not new_value and field != 'county':
+                if not new_value and field not in ('county_banana', 'type'):
                     print("Value cannot be empty (except county)")
                     continue
 
@@ -549,7 +651,7 @@ class DatabaseViewer:
                                 # Update city
                                 await conn.execute(
                                     """
-                                    UPDATE cities
+                                    UPDATE jurisdictions
                                     SET name = $1, state = $2, banana = $3, updated_at = NOW()
                                     WHERE banana = $4
                                     """,
@@ -623,7 +725,7 @@ class DatabaseViewer:
                 """
                 SELECT z.zipcode, z.banana, z.is_primary, c.name, c.state
                 FROM zipcodes z
-                JOIN cities c ON z.banana = c.banana
+                JOIN jurisdictions c ON z.banana = c.banana
                 WHERE z.zipcode LIKE $1
                 """,
                 f"%{query}%"
@@ -679,7 +781,7 @@ class DatabaseViewer:
         """Show database statistics"""
         # Get counts
         async with self.db.pool.acquire() as conn:
-            city_count = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE status = 'active'")
+            city_count = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions WHERE status = 'active'")
             meeting_count = await conn.fetchval("SELECT COUNT(*) FROM meetings")
             item_count = await conn.fetchval("SELECT COUNT(*) FROM agenda_items")
             matter_count = await conn.fetchval("SELECT COUNT(*) FROM city_matters")
@@ -695,7 +797,7 @@ class DatabaseViewer:
             vendor_breakdown = await conn.fetch(
                 """
                 SELECT vendor, COUNT(*) as count
-                FROM cities
+                FROM jurisdictions
                 WHERE vendor IS NOT NULL AND status = 'active'
                 GROUP BY vendor
                 ORDER BY count DESC
@@ -752,7 +854,7 @@ class DatabaseViewer:
                     SELECT m.id, m.banana, m.title, m.date, m.summary, m.agenda_url, m.packet_url,
                            c.name as city_name, c.state
                     FROM meetings m
-                    JOIN cities c ON m.banana = c.banana
+                    JOIN jurisdictions c ON m.banana = c.banana
                     WHERE m.summary ILIKE $1
                     ORDER BY m.date DESC
                     LIMIT 20
@@ -767,7 +869,7 @@ class DatabaseViewer:
                            c.name as city_name, c.state
                     FROM items i
                     JOIN meetings m ON i.meeting_id = m.id
-                    JOIN cities c ON m.banana = c.banana
+                    JOIN jurisdictions c ON m.banana = c.banana
                     WHERE i.summary ILIKE $1
                     ORDER BY m.date DESC
                     LIMIT 20
@@ -873,10 +975,11 @@ async def main_loop():
             print("  6. Statistics")
             print("\nEdit Data:")
             print("  7. Add city")
-            print("  8. Update city")
+            print("  8. Add county")
+            print("  9. Update jurisdiction")
             print("\nSearch & Analysis:")
-            print("  9. Search database (cities, zipcodes, meetings)")
-            print("  10. Search summaries (full-text summary search)")
+            print("  10. Search database (cities, zipcodes, meetings)")
+            print("  11. Search summaries (full-text summary search)")
             print("\nOther:")
             print("  0. Exit")
 
@@ -921,12 +1024,15 @@ async def main_loop():
                 await viewer.add_city()
 
             elif choice == "8":
-                await viewer.update_city()
+                await viewer.add_county()
 
             elif choice == "9":
-                await viewer.search_database()
+                await viewer.update_city()
 
             elif choice == "10":
+                await viewer.search_database()
+
+            elif choice == "11":
                 await viewer.search_meeting_summaries()
 
             elif choice == "0":
