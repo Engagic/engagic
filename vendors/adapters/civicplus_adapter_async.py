@@ -123,7 +123,8 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                         results.append(meeting)
                 else:
                     meeting = await self._scrape_meeting_page(
-                        link_data["url"], link_data["title"]
+                        link_data["url"], link_data["title"],
+                        body_name=link_data.get("body_name")
                     )
                     if meeting and self._is_meeting_in_range(meeting, start_date, end_date):
                         results.append(meeting)
@@ -172,33 +173,99 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             return True
 
     def _dedupe_by_date(self, meetings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Dedupe meetings by date + title, keeping the last one per group.
+        """Dedupe meetings, keeping one per logical meeting.
 
-        Multiple committees can meet on the same date — those are distinct meetings.
-        Same committee may appear twice (agenda link + packet link) — keep the later entry.
+        Dedup hierarchy:
+        1. vendor_id — same vendor_id means same meeting regardless of title
+        2. date + body_name — same committee on same date is one meeting
+        3. date + title — fallback for meetings without body_name
+
+        Multiple committees can meet on the same date — those are distinct.
         """
         by_key: Dict[str, Dict[str, Any]] = {}
         for meeting in meetings:
+            vendor_id = meeting.get("vendor_id")
             date = meeting.get("start", "unknown")
-            title = meeting.get("title", "unknown")
-            key = f"{date}|{title}"
-            by_key[key] = meeting
+            body_name = meeting.get("body_name")
+
+            if vendor_id:
+                key = f"vid|{vendor_id}"
+            elif body_name:
+                key = f"{date}|{body_name}"
+            else:
+                title = meeting.get("title", "unknown")
+                key = f"{date}|{title}"
+
+            existing = by_key.get(key)
+            if existing:
+                # Keep the entry with the longer title (more descriptive)
+                if len(meeting.get("title", "")) > len(existing.get("title", "")):
+                    by_key[key] = meeting
+            else:
+                by_key[key] = meeting
         return list(by_key.values())
 
     def _extract_meeting_links(
         self, soup: BeautifulSoup, base_url: str
     ) -> List[Dict[str, str]]:
-        """Extract meeting detail page links from agenda listing."""
-        links = []
+        """Extract meeting links from AgendaCenter, associating each with its committee section.
 
-        # Look for links that either:
-        # 1. Point to /ViewFile/Agenda/ (direct meeting links)
-        # 2. Have date patterns in text (e.g., "June 25, 2025" or "06/25/2025")
+        CivicPlus AgendaCenter pages use this structure:
+          div.listing#cat{N} > h2 (committee name) > table > tr.catAgendaRow
+        Each row has a primary meeting link in a <p> tag and duplicate links
+        inside download dropdowns (div.popoutContainer) that must be skipped.
+
+        Falls back to flat link scanning for non-standard CivicPlus layouts.
+        """
+        links = []
+        seen_urls = set()
+
+        # Strategy 1: Parse structured AgendaCenter sections (h2 + table rows)
+        category_divs = soup.find_all("div", class_="listing")
+        if category_divs:
+            for cat_div in category_divs:
+                h2 = cat_div.find("h2")
+                body_name = h2.get_text(strip=True) if h2 else None
+
+                for row in cat_div.find_all("tr", class_="catAgendaRow"):
+                    # Primary meeting link is in a <p> inside the first <td>
+                    td = row.find("td")
+                    if not td:
+                        continue
+                    p = td.find("p")
+                    link = p.find("a", href=True) if p else None
+                    if not link:
+                        continue
+
+                    href = link["href"]
+                    text = link.get_text(strip=True)
+                    if len(text) < 5:
+                        continue
+
+                    absolute_url = urljoin(base_url, href)
+                    if absolute_url in seen_urls:
+                        continue
+                    seen_urls.add(absolute_url)
+
+                    entry = {"url": absolute_url, "title": text}
+                    if body_name:
+                        entry["body_name"] = body_name
+                    links.append(entry)
+
+            if links:
+                return links
+
+        # Strategy 2: Flat link scan for non-standard layouts
         for link in soup.find_all("a", href=True):
+            # Skip links inside download dropdowns
+            if link.find_parent("div", class_="popoutContainer"):
+                continue
+            if link.find_parent("div", class_="popout"):
+                continue
+
             text = link.get_text(strip=True)
             href = link["href"]
 
-            # Skip navigation links and page headers
             skip_patterns = [
                 "<<<", "◄", "Back to", "back to",
                 "Agendas & Minutes", "agendas & minutes",
@@ -206,19 +273,18 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             ]
             if any(text.startswith(p) or text == p for p in skip_patterns):
                 continue
-            # Also skip if text is too short (likely a nav element)
             if len(text) < 5:
                 continue
 
-            # Check if it's a ViewFile link (direct meeting link)
             is_viewfile = "/ViewFile/Agenda/" in href or "/ViewFile/Item/" in href
-
-            # Check if text has date patterns
             has_date = bool(re.search(r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4}\b', text, re.I))
             has_numeric_date = bool(re.search(r'\b\d{1,2}/\d{1,2}/\d{4}\b', text))
 
             if is_viewfile or has_date or has_numeric_date:
                 absolute_url = urljoin(base_url, href)
+                if absolute_url in seen_urls:
+                    continue
+                seen_urls.add(absolute_url)
                 links.append({"url": absolute_url, "title": text})
 
         return links
@@ -264,9 +330,13 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         if meeting_status:
             result["meeting_status"] = meeting_status
 
+        body_name = link_data.get("body_name")
+        if body_name:
+            result["body_name"] = body_name
+
         return result
 
-    async def _scrape_meeting_page(self, url: str, title: str) -> Optional[Dict[str, Any]]:
+    async def _scrape_meeting_page(self, url: str, title: str, body_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Scrape individual meeting page for metadata and PDF links."""
         try:
             response = await self._get(url)
@@ -294,6 +364,9 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
             if meeting_status:
                 result["meeting_status"] = meeting_status
+
+            if body_name:
+                result["body_name"] = body_name
 
             return result
 

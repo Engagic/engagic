@@ -62,7 +62,6 @@ export function buildRequestHeaders(context?: RequestContext): Record<string, st
 	const headers: Record<string, string> = {};
 	if (context?.clientIp) {
 		headers['X-Forwarded-Client-IP'] = context.clientIp;
-		// Include auth secret if available (validates SSR origin)
 		if (context.ssrAuthSecret) {
 			headers['X-SSR-Auth'] = context.ssrAuthSecret;
 		}

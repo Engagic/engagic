@@ -37,12 +37,17 @@ async def rate_limit_middleware(
 
     client_ip = None
 
-    # 1. SSR auth takes priority (Cloudflare Pages forwards user IP)
+    # 1. SSR auth takes priority (Cloudflare Workers forwards user IP)
     if xff_ip and ssr_auth and config.SSR_AUTH_SECRET:
         if ssr_auth == config.SSR_AUTH_SECRET:
             client_ip = xff_ip
         else:
-            logger.warning("invalid SSR auth token")
+            logger.warning("invalid SSR auth token",
+                           cf_ip=cf_ip, endpoint=request.url.path)
+    elif xff_ip and not ssr_auth:
+        logger.error("SSR request without auth -- Worker env misconfigured or "
+                     "server-side code using unauthenticated apiClient",
+                     cf_ip=cf_ip, endpoint=request.url.path)
 
     # 2. Fall back to CF-Connecting-IP (direct browser requests)
     if not client_ip and cf_ip:

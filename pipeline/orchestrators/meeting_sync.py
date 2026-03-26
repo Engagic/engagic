@@ -225,9 +225,12 @@ class MeetingSyncOrchestrator:
     ) -> Optional[str]:
         """Find or create committee from meeting data.
 
-        Uses vendor_body_id if available (Legistar provides this).
-        Falls back to title parsing only for titles with clear committee prefixes.
-        Skips committee creation for generic titles.
+        Priority:
+        1. vendor_body_id — Legistar provides stable numeric body IDs
+        2. body_name — CivicPlus h2 section headers, ProudCity class lists
+        3. Title parsing — only for titles with clear " - " committee prefixes
+
+        Skips committee creation for generic/non-committee names.
         """
         # Prefer vendor-provided body/committee info
         vendor_body_id = meeting_dict.get("vendor_body_id")
@@ -241,16 +244,23 @@ class MeetingSyncOrchestrator:
             )
             return committee.id
 
-        # No vendor body ID - only parse if title has clear committee pattern
-        # Skip generic titles that don't indicate a committee
         skip_titles = {
             "meeting", "agenda", "view meeting agenda", "view agenda packet",
             "minutes", "packet", "regular meeting", "special meeting"
         }
+
+        # Use body_name from adapter when available (e.g. CivicPlus h2 headers)
+        body_name = meeting_dict.get("body_name")
+        if body_name:
+            if body_name.lower() not in skip_titles:
+                committee = await self.db.committees.find_or_create_committee(banana, body_name)
+                return committee.id
+            return None
+
+        # Fallback: parse title with " - " separator (e.g., "City Council - Regular Meeting")
         if not meeting_title or meeting_title.lower() in skip_titles:
             return None
 
-        # Only parse if title has " - " separator (e.g., "City Council - Regular Meeting")
         if " - " not in meeting_title:
             return None
 
