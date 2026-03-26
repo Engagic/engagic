@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import type { StateMeeting, StateMatterSummary } from '$lib/api/types';
-import { apiClient } from '$lib/api/api-client';
+import { createServerApiClient } from '$lib/api/server';
 import { generateCityUrl, generateMeetingSlug } from '$lib/utils/utils';
 
 const SITE = 'https://engagic.org';
@@ -39,7 +39,8 @@ function matterLastmod(matter: StateMatterSummary): string | undefined {
 	return d.toISOString().split('T')[0];
 }
 
-export const GET: RequestHandler = async ({ setHeaders }) => {
+export const GET: RequestHandler = async ({ setHeaders, locals }) => {
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 	const today = new Date().toISOString().split('T')[0];
 
 	// Fetch all cities from the coverage API
