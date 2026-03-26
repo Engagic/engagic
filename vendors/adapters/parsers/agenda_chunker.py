@@ -616,6 +616,22 @@ def _detect_toc_pattern(toc):
             break
     cluster_max = max(cluster_pages)
 
+    # Document bundle: L1=sections (Agenda/Attachments), L2=embedded document
+    # filenames with virtual pages (page <= 0), L3+=content within documents.
+    # CivicClerk packet pattern.  Must check before deep_hierarchical since
+    # both share few-L1 + many-L3 characteristics.
+    l2_entries = [e for e in toc if e[0] == 2]
+    l3_entries = [e for e in toc if e[0] == 3]
+    l4_entries = [e for e in toc if e[0] == 4]
+    l2_virtual = [e for e in l2_entries if e[2] <= 0]
+    if len(l1_pages) <= 3 and l2_virtual and len(l3_entries) >= 2:
+        return "document_bundle"
+
+    # Deep hierarchical: L1 is a root wrapper (1-2 entries), real items at L3+.
+    # Escribe packet pattern: L1=root, L2=sections, L3=items, L4=attachments.
+    if len(l1_pages) <= 2 and len(l3_entries) >= 3 and len(l4_entries) >= 1:
+        return "deep_hierarchical"
+
     # Hierarchical: L2 entries exist and point well beyond the L1 cluster.
     # Require at least 2 pages of separation — a single page beyond the
     # cluster is typically still agenda, not an embedded memo section.
@@ -738,7 +754,11 @@ def _parse_toc_based(doc, result):
     toc = doc.get_toc()
     pattern = _detect_toc_pattern(toc)
 
-    if pattern == "hierarchical":
+    if pattern == "document_bundle":
+        _parse_toc_document_bundle(doc, toc, result)
+    elif pattern == "deep_hierarchical":
+        _parse_toc_deep_hierarchical(doc, toc, result)
+    elif pattern == "hierarchical":
         _parse_toc_hierarchical(doc, toc, result)
     else:
         _parse_toc_flat(doc, toc, result)
@@ -826,6 +846,299 @@ def _parse_toc_hierarchical(doc, toc, result):
     logger.debug("parsed toc hierarchical",
                  item_count=len(result.items),
                  total_memos=sum(len(it.memos) for it in result.items))
+
+
+def _document_bundle_match_score(item_text, doc_title):
+    """Score how well an embedded document title matches an agenda item.
+
+    Returns a float 0-1.  Higher means better match.  Uses overlapping
+    content words and date fragments so it generalises across vendors
+    without hard-coding any particular naming convention.
+    """
+    # Normalise: lowercase, strip extensions, collapse whitespace
+    a = re.sub(r'\.\w{2,4}$', '', item_text.lower())
+    b = re.sub(r'\.\w{2,4}$', '', doc_title.lower())
+    a = re.sub(r'[^a-z0-9 ]', ' ', a)
+    b = re.sub(r'[^a-z0-9 ]', ' ', b)
+
+    stop = {'the', 'of', 'and', 'for', 'a', 'an', 'in', 'on', 'to',
+            'min', 'attachment', 'from', 'with', 'review', 'materials',
+            'discussion', 'presentation', 'presentations'}
+    a_words = {w for w in a.split() if w not in stop and len(w) > 1}
+    b_words = {w for w in b.split() if w not in stop and len(w) > 1}
+
+    if not a_words or not b_words:
+        return 0.0
+
+    overlap = a_words & b_words
+    # Jaccard-ish: reward overlap relative to the smaller set
+    return len(overlap) / min(len(a_words), len(b_words))
+
+
+def _parse_toc_document_bundle(doc, toc, result):
+    """Document bundle TOC: L1=sections, L2=embedded filenames, L3+=pages.
+
+    Packet PDFs where the TOC groups content by document rather than by
+    agenda item.  The first L1 entry covers the agenda text (typically
+    1-3 pages with numbered items).  Subsequent L1 entries mark sections
+    of embedded attachment documents whose L2 entries are virtual
+    (page <= 0) filename bookmarks with L3+ descendants spanning the
+    actual content pages.
+
+    Strategy:
+      1. Parse items from the agenda pages using the shared item parser.
+      2. Collect L2 attachment documents and extract body text from their
+         page ranges via _extract_memo_content.
+      3. Match attachments to items by content similarity.  Unmatched
+         documents are stored as orphan memos.
+    """
+    result.metadata.parse_method = "toc_document_bundle"
+
+    # ---- 1. Find agenda pages ------------------------------------------------
+    # Use only the first L1 section.  Later L1 sections (e.g. "Attachments")
+    # may contain loose documents (minutes, notices) with their own numbered
+    # items that would confuse the parser.
+    l1_entries = [(e[1], e[2] - 1) for e in toc if e[0] == 1 and e[2] > 0]
+    first_l1_page = l1_entries[0][1] if l1_entries else 0
+
+    if len(l1_entries) >= 2:
+        agenda_end = l1_entries[1][1] - 1
+    else:
+        # Single L1 — stop before the first L3+ page
+        l3_plus_pages = sorted(
+            e[2] - 1 for e in toc if e[0] >= 3 and e[2] > 0
+        )
+        agenda_end = (l3_plus_pages[0] - 1) if l3_plus_pages else first_l1_page
+
+    agenda_end = max(agenda_end, first_l1_page)
+
+    all_lines = []
+    all_links = []
+    for pi in range(first_l1_page, min(agenda_end + 1, doc.page_count)):
+        page = doc[pi]
+        all_lines.extend(_extract_page_text_with_positions(page))
+        all_links.extend(_extract_links(page))
+
+    _extract_meeting_metadata(all_lines, result.metadata)
+    items, _item_boundaries = _parse_agenda_items(all_lines, all_links, result)
+
+    # ---- 2. Collect embedded attachment documents ----------------------------
+    # Each L2 entry is an embedded file.  Its page range spans from its first
+    # child with a real page to the page before the next L2 entry's content
+    # (or end of document).
+    l2_docs = []
+    l2_indices = [i for i, e in enumerate(toc) if e[0] == 2]
+
+    for pos, toc_idx in enumerate(l2_indices):
+        doc_title = toc[toc_idx][1].strip()
+
+        # Collect real pages from all descendants until the next L2
+        child_pages = []
+        end_scan = l2_indices[pos + 1] if pos + 1 < len(l2_indices) else len(toc)
+        for j in range(toc_idx + 1, end_scan):
+            if toc[j][2] > 0:
+                child_pages.append(toc[j][2] - 1)  # 0-indexed
+
+        if not child_pages:
+            continue
+
+        page_start = min(child_pages)
+        # End boundary: page before the next L2 doc's first real page,
+        # or end of document for the last L2 entry.
+        if pos + 1 < len(l2_indices):
+            next_child_pages = []
+            next_end = (l2_indices[pos + 2]
+                        if pos + 2 < len(l2_indices) else len(toc))
+            for j in range(l2_indices[pos + 1] + 1, next_end):
+                if toc[j][2] > 0:
+                    next_child_pages.append(toc[j][2] - 1)
+            page_end = (min(next_child_pages) - 1
+                        if next_child_pages else doc.page_count - 1)
+        else:
+            page_end = doc.page_count - 1
+
+        page_end = max(page_end, page_start)
+
+        memo = _extract_memo_content(doc, page_start, page_end)
+        memo.subject = memo.subject or doc_title
+        l2_docs.append((doc_title, page_start, page_end, memo))
+
+    # ---- 3. Match attachments to items by content similarity -----------------
+    # For each embedded document, find the best-matching agenda item.
+    # Require a minimum score to avoid false matches (e.g. minutes that
+    # reference a different meeting entirely).
+    MATCH_THRESHOLD = 0.25  # confidence 6/10 — may need tuning
+
+    for doc_idx, (doc_title, ps, pe, memo) in enumerate(l2_docs):
+        best_score = 0.0
+        best_item = None
+        for item in items:
+            # Match against item title + body combined
+            item_text = item.title + " " + (item.body or "")
+            score = _document_bundle_match_score(item_text, doc_title)
+            if score > best_score:
+                best_score = score
+                best_item = item
+
+        if best_item and best_score >= MATCH_THRESHOLD:
+            best_item.memos.append(memo)
+            best_item.attachments.append(_Attachment(
+                label=doc_title, url="",
+                page_start=ps + 1, page_end=pe + 1,
+            ))
+            if memo.recommended_action and not best_item.recommended_action:
+                best_item.recommended_action = memo.recommended_action
+        else:
+            result.orphan_memos.append(memo)
+
+    result.items = items
+
+    matched_count = sum(len(item.memos) for item in items)
+    logger.debug("parsed toc document bundle",
+                 item_count=len(result.items),
+                 attachment_docs=len(l2_docs),
+                 matched=matched_count,
+                 orphan_memos=len(result.orphan_memos))
+
+
+def _parse_toc_deep_hierarchical(doc, toc, result):
+    """Deep hierarchical TOC: L1=root, L2=sections, L3=items, L4=attachments.
+
+    Found in Escribe-generated agenda packets. The agenda text lives on the
+    first few pages (where L2/L3 entries cluster), and L4 entries point to
+    attachment pages deeper in the document.
+    """
+    result.metadata.parse_method = "toc_deep_hierarchical"
+
+    # Find where the agenda TOC ends: stop at second L1 entry (e.g., "Appendix")
+    # which marks the start of the document-navigation TOC
+    agenda_toc_end = len(toc)
+    l1_count = 0
+    for idx, entry in enumerate(toc):
+        if entry[0] == 1:
+            l1_count += 1
+            if l1_count == 2:
+                agenda_toc_end = idx
+                break
+
+    # Only use entries from the agenda TOC section
+    agenda_toc = toc[:agenda_toc_end]
+
+    # Find agenda page range from first-section L2/L3 entries only
+    item_pages = sorted(set(
+        entry[2] - 1 for entry in agenda_toc
+        if entry[0] in (2, 3) and entry[2] > 0
+    ))
+    agenda_end = max(item_pages) if item_pages else 0
+
+    # Extract agenda text for body extraction
+    all_lines = []
+    for pi in range(0, min(agenda_end + 1, doc.page_count)):
+        all_lines.extend(_extract_page_text_with_positions(doc[pi]))
+    _extract_meeting_metadata(all_lines, result.metadata)
+
+    # Build sorted list of L4 page starts for attachment boundary detection
+    all_l4_starts = sorted(set(
+        entry[2] - 1 for entry in agenda_toc
+        if entry[0] == 4 and entry[2] > 0
+    ))
+
+    # Find bottom boundary: either the start of the appendix TOC or end of doc
+    bottom_page = doc.page_count - 1
+    if agenda_toc_end < len(toc):
+        # Second L1 entry page marks boundary
+        appendix_page = toc[agenda_toc_end][2] - 2
+        if appendix_page > 0:
+            bottom_page = appendix_page
+    for entry in agenda_toc:
+        if entry[1].strip().lower() == 'bottom':
+            bottom_page = entry[2] - 2
+
+    current_section = None
+
+    for i, (level, title, page_num) in enumerate(agenda_toc):
+        # L2 = section headers
+        if level == 2:
+            section_title = title.strip()
+            # Strip leading letter prefix: "A. CALL TO ORDER" -> "CALL TO ORDER"
+            section_clean = re.sub(r'^[A-Z]\.\s*', '', section_title)
+            if section_clean:
+                current_section = section_clean
+            continue
+
+        # L3 = agenda items
+        if level != 3:
+            continue
+
+        item_title = title.strip()
+        if not item_title:
+            continue
+
+        # Extract item number from title: "1. Roll Call" -> ("1", "Roll Call")
+        num_match = re.match(r'^(\d+)\.\s*(.*)', item_title)
+        if num_match:
+            item_num = num_match.group(1)
+            item_title_clean = num_match.group(2).strip()
+        else:
+            item_num = ""
+            item_title_clean = item_title
+
+        # Skip trivial procedural items
+        if item_title_clean.lower() in ('roll call', 'adjournment'):
+            continue
+
+        item = _AgendaItem(
+            number=item_num,
+            title=item_title_clean or item_title,
+            section=current_section,
+            body="",
+            recommended_action="",
+            page_start=page_num,
+            page_end=page_num,
+        )
+
+        # Collect L4 children as attachments
+        for j in range(i + 1, len(agenda_toc)):
+            child_level = agenda_toc[j][0]
+            if child_level <= 3:
+                break
+            if child_level == 4:
+                att_title = agenda_toc[j][1].strip()
+                att_page_start = agenda_toc[j][2] - 1  # 0-indexed
+
+                # Skip weblinks (page -1 or -2)
+                if att_page_start < 0:
+                    continue
+
+                # Determine attachment page range
+                try:
+                    idx = all_l4_starts.index(att_page_start)
+                    att_page_end = all_l4_starts[idx + 1] - 1 if idx + 1 < len(all_l4_starts) else bottom_page
+                except ValueError:
+                    att_page_end = bottom_page
+
+                # Extract memo content from attachment pages
+                memo = _extract_memo_content(doc, att_page_start, att_page_end)
+                memo.subject = memo.subject or att_title
+
+                item.memos.append(memo)
+                item.attachments.append(_Attachment(
+                    label=att_title, url="",
+                    page_start=att_page_start + 1,
+                    page_end=att_page_end + 1,
+                ))
+
+                if memo.recommended_action and not item.recommended_action:
+                    item.recommended_action = memo.recommended_action
+
+        result.items.append(item)
+        if current_section and current_section not in result.sections:
+            result.sections.append(current_section)
+
+    logger.debug("parsed toc deep hierarchical",
+                 item_count=len(result.items),
+                 section_count=len(result.sections),
+                 total_attachments=sum(len(it.attachments) for it in result.items))
 
 
 def _parse_toc_flat(doc, toc, result):
@@ -1199,10 +1512,21 @@ def _parse_agenda_internal(pdf_path: str, force_method: Optional[str] = None) ->
         _parse_toc_based(doc, result)
     elif force_method == "url":
         _parse_url_based(doc, result)
+    elif _has_meaningful_toc(doc) and doc.page_count > 10:
+        # Large PDFs with TOC are packet documents — TOC is the real
+        # structure. Any hyperlinks are incidental (budget tables, etc).
+        _parse_toc_based(doc, result)
     elif _has_attachment_links(doc):
         _parse_url_based(doc, result)
     elif _has_meaningful_toc(doc):
-        _parse_toc_based(doc, result)
+        # Reaching here means page_count <= 10 (large TOC docs handled above).
+        # Small documents are thin agendas where the TOC is typically navigation
+        # bookmarks, not structural data.  Try url first -- it picks up
+        # sub-items (4.1, 8.2) that TOC parsers miss.  Fall back to TOC
+        # if url finds nothing.
+        _parse_url_based(doc, result)
+        if not result.items:
+            _parse_toc_based(doc, result)
     else:
         _parse_url_based(doc, result)
 
@@ -1261,7 +1585,7 @@ def parse_agenda_pdf(pdf_path: str, force_method: Optional[str] = None) -> Dict[
                     "type": _attachment_type(att.url) if att.url else "embedded",
                 }
                 for att in item.attachments
-                if att.url  # Only emit URL-based attachments to pipeline
+                if att.url or att.label  # URL-based or embedded (labeled) attachments
             ],
         }
 

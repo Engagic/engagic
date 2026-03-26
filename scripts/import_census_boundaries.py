@@ -67,7 +67,7 @@ async def download_shapefiles(states: set[str] | None = None) -> None:
         dsn = config.get_postgres_dsn()
         conn = await asyncpg.connect(dsn)
         try:
-            rows = await conn.fetch("SELECT DISTINCT state FROM cities")
+            rows = await conn.fetch("SELECT DISTINCT state FROM jurisdictions")
             states = {row["state"] for row in rows}
         finally:
             await conn.close()
@@ -238,7 +238,7 @@ async def match_cities() -> None:
         # Get our cities without geometry
         cities = await conn.fetch("""
             SELECT banana, name, state
-            FROM cities
+            FROM jurisdictions
             WHERE geom IS NULL
             ORDER BY state, name
         """)
@@ -281,7 +281,7 @@ async def match_cities() -> None:
 
             if place:
                 await conn.execute("""
-                    UPDATE cities SET geom = $1 WHERE banana = $2
+                    UPDATE jurisdictions SET geom = $1 WHERE banana = $2
                 """, place["wkb_geometry"], banana)
                 matched += 1
                 logger.debug("matched", banana=banana, name=name)
@@ -309,9 +309,9 @@ async def report_status() -> None:
     conn = await asyncpg.connect(dsn)
 
     try:
-        total = await conn.fetchval("SELECT COUNT(*) FROM cities")
-        with_geom = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE geom IS NOT NULL")
-        without_geom = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE geom IS NULL")
+        total = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions")
+        with_geom = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions WHERE geom IS NOT NULL")
+        without_geom = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions WHERE geom IS NULL")
 
         print("\nGeometry Coverage:")
         print(f"  Total cities: {total}")
@@ -323,7 +323,7 @@ async def report_status() -> None:
         rows = await conn.fetch("""
             SELECT state, COUNT(*) as total,
                    COUNT(*) FILTER (WHERE geom IS NOT NULL) as with_geom
-            FROM cities
+            FROM jurisdictions
             GROUP BY state
             HAVING COUNT(*) FILTER (WHERE geom IS NULL) > 0
             ORDER BY COUNT(*) FILTER (WHERE geom IS NULL) DESC

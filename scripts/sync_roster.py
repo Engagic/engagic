@@ -272,7 +272,7 @@ async def main():
         elif args.all_legistar:
             # Get all Legistar cities
             rows = await db.pool.fetch("""
-                SELECT banana, slug FROM cities WHERE vendor = 'legistar' ORDER BY banana
+                SELECT banana, slug FROM jurisdictions WHERE vendor = 'legistar' ORDER BY banana
             """)
 
             print(f"Found {len(rows)} Legistar cities")

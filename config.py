@@ -146,8 +146,7 @@ class Config:
         self.LOG_FORMAT = os.getenv("ENGAGIC_LOG_FORMAT", "json").lower()
 
         # Model selection: use Flash-Lite for small docs (cost savings) or Flash for all (quality)
-        # Default: false (use Flash for everything for consistent quality)
-        self.USE_FLASH_LITE = os.getenv("ENGAGIC_USE_FLASH_LITE", "false").lower() == "true"
+        self.USE_FLASH_LITE = os.getenv("ENGAGIC_USE_FLASH_LITE", "true").lower() == "true"
 
         # Admin authentication
         self.ADMIN_TOKEN = os.getenv("ENGAGIC_ADMIN_TOKEN", "")

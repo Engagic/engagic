@@ -22,9 +22,11 @@ Both modes produce pages with ADID links:
 The adapter tries search mode first, falls back to AMID if no results.
 """
 
+import asyncio
 import re
 import json
 import os
+import tempfile
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin
@@ -32,11 +34,23 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
+from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 from config import config
 from exceptions import VendorHTTPError
 
 DEFAULT_CATEGORY_ID = 30  # City Council Agendas (common across CivicEngage sites)
+
+# Keywords that identify agenda categories (vs minutes, audio, video, budgets, etc.)
+AGENDA_CATEGORY_KEYWORDS = re.compile(
+    r'agenda|committee|commission|forum|subcommittee|board\b.*agenda|zoning administrator',
+    re.IGNORECASE,
+)
+# Categories to skip even if they match keywords above
+SKIP_CATEGORY_KEYWORDS = re.compile(
+    r'minutes|audio|video|budget|audit|scanned|general plan$',
+    re.IGNORECASE,
+)
 
 
 class AsyncCivicEngageAdapter(AsyncBaseAdapter):
@@ -45,7 +59,13 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="civicengage", metrics=metrics)
         self._site_config = self._load_site_config()
-        self.category_id = self._site_config.get("category_id", DEFAULT_CATEGORY_ID)
+        # category_ids populated at fetch time via auto-discovery, unless config overrides
+        if "category_ids" in self._site_config:
+            self.category_ids: List[int] = self._site_config["category_ids"]
+        elif "category_id" in self._site_config:
+            self.category_ids = [self._site_config["category_id"]]
+        else:
+            self.category_ids = []  # Will be discovered from Archive.aspx
         # Allow domain override for cities on civicplus.com with state prefixes etc.
         domain_override = self._site_config.get("domain")
         self.base_url: Optional[str] = f"https://{domain_override}" if domain_override else None
@@ -102,13 +122,53 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
                 pass
         return {}
 
+    async def _discover_category_ids(self, html: str) -> List[int]:
+        """Discover agenda-related category IDs from the Archive.aspx search form.
+
+        Parses the <select name="lngArchiveMasterID"> dropdown and filters
+        for categories whose labels suggest agendas (not minutes, audio, etc.).
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        select = soup.find("select", {"name": "lngArchiveMasterID"})
+        if not select:
+            return [DEFAULT_CATEGORY_ID]
+
+        discovered = []
+        for option in select.find_all("option"):
+            value = option.get("value", "")
+            label = option.get_text(strip=True)
+            if not value or not value.isdigit() or value == "0":
+                continue
+            # Filter: must look like an agenda category, not minutes/audio/video
+            if SKIP_CATEGORY_KEYWORDS.search(label):
+                continue
+            if AGENDA_CATEGORY_KEYWORDS.search(label):
+                discovered.append(int(value))
+
+        if discovered:
+            logger.info(
+                "discovered agenda categories",
+                vendor="civicengage",
+                slug=self.slug,
+                count=len(discovered),
+                category_ids=discovered,
+            )
+            return discovered
+
+        logger.warning(
+            "no agenda categories found, using default",
+            vendor="civicengage",
+            slug=self.slug,
+        )
+        return [DEFAULT_CATEGORY_ID]
+
     async def _fetch_meetings_impl(
         self, days_back: int = 7, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         """Fetch agendas from CivicEngage Archive Center.
 
-        Tries search mode (lngArchiveMasterID with date filtering) first.
-        Falls back to AMID mode if search returns no results.
+        Auto-discovers agenda category IDs from the archive page if not configured.
+        Iterates over categories, tries search mode first, falls back to AMID.
         """
         if not self.base_url:
             self.base_url = await self._discover_base_url()
@@ -120,63 +180,103 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
             )
             return []
 
+        # Auto-discover category IDs if not configured
+        if not self.category_ids:
+            archive_html = await (await self._get(f"{self.base_url}/Archive.aspx")).text()
+            self.category_ids = await self._discover_category_ids(archive_html)
+
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
 
-        # Try search mode first (server-side date filtering)
-        listing_html = await self._fetch_listing_search(start_date, end_date)
+        all_meetings = []
+        seen_adids = set()
+
+        for category_id in self.category_ids:
+            meetings = await self._fetch_category_meetings(
+                category_id, start_date, end_date
+            )
+            # Dedup across categories by vendor_id
+            for m in meetings:
+                vid = m.get("vendor_id", "")
+                if vid not in seen_adids:
+                    seen_adids.add(vid)
+                    all_meetings.append(m)
+
+        # Parse packet PDFs for structured items
+        semaphore = asyncio.Semaphore(3)
+
+        async def enrich(meeting: Dict[str, Any]) -> None:
+            async with semaphore:
+                await self._enrich_meeting_from_pdf(meeting)
+
+        await asyncio.gather(*[enrich(m) for m in all_meetings])
+
+        logger.info(
+            "parsed meetings from listing",
+            vendor="civicengage",
+            slug=self.slug,
+            count=len(all_meetings),
+            with_items=sum(1 for m in all_meetings if m.get("items")),
+            categories=len(self.category_ids),
+        )
+
+        return all_meetings
+
+    async def _fetch_category_meetings(
+        self,
+        category_id: int,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> List[Dict[str, Any]]:
+        """Fetch meetings for a single archive category.
+
+        Tries search mode (lngArchiveMasterID with date filtering) first.
+        Falls back to AMID mode if search returns no results.
+        """
+        listing_html = await self._fetch_listing_search(category_id, start_date, end_date)
         meetings = self._parse_listing_html(listing_html)
 
         if not meetings:
-            # Fall back to AMID mode (no server-side date filtering)
             logger.info(
                 "search mode returned no results, trying AMID mode",
                 vendor="civicengage",
                 slug=self.slug,
-                category_id=self.category_id,
+                category_id=category_id,
             )
-            listing_html = await self._fetch_listing_amid()
-            all_meetings = self._parse_listing_html(listing_html)
+            listing_html = await self._fetch_listing_amid(category_id)
+            all_in_category = self._parse_listing_html(listing_html)
 
-            # Client-side date filtering
-            for m in all_meetings:
+            # Client-side date filtering — skip items with no parseable date
+            for m in all_in_category:
                 if m.get("start"):
                     try:
                         meeting_date = datetime.fromisoformat(m["start"])
                         if start_date <= meeting_date <= end_date:
                             meetings.append(m)
                     except ValueError:
-                        meetings.append(m)
-                else:
-                    meetings.append(m)
+                        pass
 
             logger.info(
                 "AMID mode results",
                 vendor="civicengage",
                 slug=self.slug,
-                total=len(all_meetings),
+                category_id=category_id,
+                total=len(all_in_category),
                 in_range=len(meetings),
             )
-
-        logger.info(
-            "parsed meetings from listing",
-            vendor="civicengage",
-            slug=self.slug,
-            count=len(meetings),
-        )
 
         return meetings
 
     async def _fetch_listing_search(
-        self, start_date: datetime, end_date: datetime
+        self, category_id: int, start_date: datetime, end_date: datetime
     ) -> str:
         """Fetch Archive.aspx listing with lngArchiveMasterID search (server-side date filter)."""
         url = (
             f"{self.base_url}/Archive.aspx"
             f"?ysnExecuteSearch=1"
             f"&txtKeywords="
-            f"&lngArchiveMasterID={self.category_id}"
+            f"&lngArchiveMasterID={category_id}"
             f"&txtDateRange="
             f"&dtiStartDate={start_date.strftime('%m/%d/%Y')}"
             f"&dtiEndDate={end_date.strftime('%m/%d/%Y')}"
@@ -185,9 +285,9 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
         response = await self._get(url)
         return await response.text()
 
-    async def _fetch_listing_amid(self) -> str:
+    async def _fetch_listing_amid(self, category_id: int) -> str:
         """Fetch Archive.aspx listing with AMID parameter (all documents in category)."""
-        url = f"{self.base_url}/Archive.aspx?AMID={self.category_id}"
+        url = f"{self.base_url}/Archive.aspx?AMID={category_id}"
         response = await self._get(url)
         return await response.text()
 
@@ -241,6 +341,63 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
             results.append(meeting)
 
         return results
+
+    async def _enrich_meeting_from_pdf(self, meeting: Dict[str, Any]) -> None:
+        """Download packet PDF and parse for structured agenda items."""
+        packet_url = meeting.get("packet_url")
+        if not packet_url:
+            return
+
+        items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"))
+        if items:
+            meeting["items"] = items
+
+    async def _parse_packet_pdf(
+        self, packet_url: str, vendor_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Download agenda PDF and run chunker. Returns items or empty list."""
+        tmp_path = None
+        try:
+            response = await self._get(packet_url)
+            pdf_bytes = await response.read()
+
+            if len(pdf_bytes) < 500:
+                return []
+
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp_path = tmp.name
+                tmp.write(pdf_bytes)
+
+            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+            items = parsed.get("items", [])
+
+            if items:
+                logger.debug(
+                    "chunker extracted items from pdf",
+                    vendor="civicengage",
+                    slug=self.slug,
+                    vendor_id=vendor_id,
+                    item_count=len(items),
+                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
+                )
+
+            return items
+
+        except Exception as e:
+            logger.debug(
+                "pdf parse failed",
+                vendor="civicengage",
+                slug=self.slug,
+                vendor_id=vendor_id,
+                error=str(e),
+            )
+            return []
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def _extract_date_from_title(self, title: str) -> Optional[str]:
         """Extract date from titles like 'City Council Agenda - February 24, 2026'.

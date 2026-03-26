@@ -1,0 +1,76 @@
+# Bay Area Cities - Part 2 (smaller cities)
+# Last updated: 2026-03-26
+
+# Peninsula / South Bay
+athertonCA
+belmontCA
+brisbaneCA
+burlingameCA
+campbellCA
+colmaCA
+eastpaloaltoCA
+fostercityCA
+halfmoonbayCA
+hillsboroughCA
+losaltosCA
+losaltoshillsCA
+losgatosCA
+millbraeCA
+monteserenoCA
+morganhillCA
+pacificaCA
+portolavalleyCA
+sancarlosCA
+saratogaCA
+woodsideCA
+
+# East Bay
+albanyCA
+claytonCA
+elcerritoCA
+emeryvilleCA
+herculesCA
+lafayetteCA
+moragaCA
+orindaCA
+piedmontCA
+pinoleCA
+pleasanthillCA
+
+# North Bay
+americancanyonCA
+beniciaCA
+belvedereCA
+calistogaCA
+cloverdaleCA
+cortemaderaCA
+cotatiCA
+dixonCA
+fairfaxCA
+healdsburgCA
+larkspurCA
+millvalleyCA
+riovistaCA
+rohnertparkCA
+rossCA
+sananselmoCA
+sanrafaelCA
+sausalitoCA
+sebastopolCA
+sonomaCA
+sthelenaCA
+suisuncityCA
+tiburonCA
+windsorCA
+yountvilleCA
+
+# Counties
+alamedacountyCA
+contracostacountyCA
+marincountyCA
+napacountyCA
+sanfranciscocountyCA
+sanmateocountyCA
+santaclaracountyCA
+solanocountyCA
+sonomacountyCA

@@ -18,9 +18,14 @@ from vendors.adapters.civicplus_adapter_async import AsyncCivicPlusAdapter
 from vendors.adapters.civicengage_adapter_async import AsyncCivicEngageAdapter
 from vendors.adapters.escribe_adapter_async import AsyncEscribeAdapter
 from vendors.adapters.municode_adapter_async import AsyncMunicodeAdapter
+from vendors.adapters.civicweb_adapter_async import AsyncCivicWebAdapter
+from vendors.adapters.proudcity_adapter_async import AsyncProudCityAdapter
+from vendors.adapters.wp_events_adapter_async import AsyncWPEventsAdapter
 from vendors.adapters.custom.berkeley_adapter_async import AsyncBerkeleyAdapter
 from vendors.adapters.custom.chicago_adapter_async import AsyncChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter_async import AsyncMenloParkAdapter
+from vendors.adapters.custom.ross_adapter_async import AsyncRossAdapter
+from vendors.adapters.visioninternet_adapter_async import AsyncVisionInternetAdapter
 
 logger = get_logger(__name__).bind(component="vendor")
 
@@ -34,11 +39,16 @@ VENDOR_ADAPTERS = {
     "civicclerk": AsyncCivicClerkAdapter,
     "civicplus": AsyncCivicPlusAdapter,
     "civicengage": AsyncCivicEngageAdapter,
+    "civicweb": AsyncCivicWebAdapter,
     "escribe": AsyncEscribeAdapter,
     "municode": AsyncMunicodeAdapter,
+    "proudcity": AsyncProudCityAdapter,
+    "wp_events": AsyncWPEventsAdapter,
     "berkeley": AsyncBerkeleyAdapter,
     "chicago": AsyncChicagoAdapter,
     "menlopark": AsyncMenloParkAdapter,
+    "ross": AsyncRossAdapter,
+    "visioninternet": AsyncVisionInternetAdapter,
 }
 
 def get_async_adapter(

@@ -94,7 +94,7 @@ async def get_meetings_with_cities(conn: asyncpg.Connection) -> list:
     query = """
         SELECT m.id, m.banana, m.title, m.date, c.vendor
         FROM meetings m
-        JOIN cities c ON m.banana = c.banana
+        JOIN jurisdictions c ON m.banana = c.banana
         ORDER BY m.banana, m.date
     """
     return await conn.fetch(query)

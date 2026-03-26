@@ -387,7 +387,7 @@ class EdgeCaseTests:
             async with self.db.pool.acquire() as conn:
                 # Delete test data (cascades via foreign keys)
                 await conn.execute("DELETE FROM meetings WHERE id LIKE 'test_%'")
-                await conn.execute("DELETE FROM cities WHERE banana LIKE 'test%' OR banana LIKE 'city%'")
+                await conn.execute("DELETE FROM jurisdictions WHERE banana LIKE 'test%' OR banana LIKE 'city%'")
                 await conn.execute("DELETE FROM queue WHERE source_url LIKE 'https://test.com%'")
                 await conn.execute("DELETE FROM city_matters WHERE id LIKE 'test_%'")
             logger.info("cleaned up test data")

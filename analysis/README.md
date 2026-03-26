@@ -426,6 +426,7 @@ Seven worked examples are embedded in the prompt covering simple appointments th
 **Meeting prompts (fallback only):**
 - Plain markdown output (no JSON, no topics)
 - Used when item-level processing is unavailable (vendor limitations, parsing failures)
+- Currently 96.6% of summaries are item-level; meeting-level fallback accounts for 3.4%
 
 ---
 

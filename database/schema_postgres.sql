@@ -7,8 +7,8 @@
 -- - Full-text search via tsvector and GIN indexes
 -- - Connection pooling support (asyncpg)
 -- - Proper SERIAL for auto-increment
--- - Cross-city collision prevention via composite keys with city_banana
--- - PostGIS for city boundary polygons (map visualization)
+-- - Cross-jurisdiction collision prevention via composite keys with banana
+-- - PostGIS for jurisdiction boundary polygons (map visualization)
 
 -- =======================
 -- EXTENSIONS
@@ -16,20 +16,22 @@
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 
--- Cities table: Core city registry
-CREATE TABLE IF NOT EXISTS cities (
+-- Jurisdictions table: Core entity registry (cities, counties, utility boards, transit authorities, etc.)
+CREATE TABLE IF NOT EXISTS jurisdictions (
     banana TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     state TEXT NOT NULL,
     vendor TEXT NOT NULL,
     slug TEXT NOT NULL,
-    county TEXT,
+    type TEXT NOT NULL DEFAULT 'city',  -- city, county, utility, transit, water_district, school_board, etc.
+    county_banana TEXT,  -- FK to parent county jurisdiction (NULL for counties and non-county entities)
     status TEXT DEFAULT 'active',
-    participation JSONB,  -- City-level participation config: {testimony_url, testimony_email, process_url}
-    population INTEGER,  -- City population from Census data
-    geom geometry(MultiPolygon, 4326),  -- City boundary from Census TIGER/Line (WGS84)
+    participation JSONB,  -- Jurisdiction-level participation config: {testimony_url, testimony_email, process_url}
+    population INTEGER,  -- Population from Census data
+    geom geometry(MultiPolygon, 4326),  -- Boundary from Census TIGER/Line (WGS84)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (county_banana) REFERENCES jurisdictions(banana) ON DELETE SET NULL,
     UNIQUE(name, state)
 );
 
@@ -38,7 +40,7 @@ CREATE TABLE IF NOT EXISTS zipcodes (
     banana TEXT NOT NULL,
     zipcode TEXT NOT NULL,
     is_primary BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     PRIMARY KEY (banana, zipcode)
 );
 
@@ -61,7 +63,7 @@ CREATE TABLE IF NOT EXISTS meetings (
     committee_id TEXT,  -- FK to committees (a meeting is an occurrence of a committee)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE SET NULL
 );
 
@@ -99,7 +101,7 @@ CREATE TABLE IF NOT EXISTS city_matters (
     rating_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE
 );
 
 -- Matter topics: Normalized from city_matters.canonical_topics
@@ -194,7 +196,7 @@ CREATE TABLE IF NOT EXISTS queue (
     failed_at TIMESTAMP,
     error_message TEXT,
     processing_metadata JSONB,  -- Was TEXT, now JSONB
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
 );
 
@@ -213,7 +215,7 @@ CREATE TABLE IF NOT EXISTS tenant_coverage (
     banana TEXT NOT NULL,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     PRIMARY KEY (tenant_id, banana)
 );
 
@@ -240,7 +242,7 @@ CREATE TABLE IF NOT EXISTS tracked_items (
     status TEXT DEFAULT 'active',
     metadata JSONB,  -- Was TEXT, now JSONB
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     FOREIGN KEY (first_mentioned_meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
 );
 
@@ -277,7 +279,7 @@ CREATE TABLE IF NOT EXISTS council_members (
     metadata JSONB,  -- Vendor-specific fields (photo_url, party, etc.)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     UNIQUE(banana, normalized_name)
 );
 
@@ -325,7 +327,7 @@ CREATE TABLE IF NOT EXISTS committees (
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'unknown')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     UNIQUE(banana, normalized_name)
 );
 
@@ -412,7 +414,7 @@ CREATE TABLE IF NOT EXISTS deliberation_results (
 -- Populated by autonomous analysis, surfaced in "Happening This Week" section
 CREATE TABLE IF NOT EXISTS happening_items (
     id SERIAL PRIMARY KEY,
-    banana TEXT NOT NULL REFERENCES cities(banana) ON DELETE CASCADE,
+    banana TEXT NOT NULL REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
     meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
     meeting_date TIMESTAMP NOT NULL,
@@ -464,12 +466,13 @@ ALTER TABLE city_matters ADD COLUMN IF NOT EXISTS search_vector tsvector
 -- PERFORMANCE INDICES
 -- =======================
 
--- Cities
-CREATE INDEX IF NOT EXISTS idx_cities_vendor ON cities(vendor);
-CREATE INDEX IF NOT EXISTS idx_cities_state ON cities(state);
-CREATE INDEX IF NOT EXISTS idx_cities_status ON cities(status);
-CREATE INDEX IF NOT EXISTS idx_cities_population ON cities (population DESC NULLS LAST);
-CREATE INDEX IF NOT EXISTS idx_cities_geom ON cities USING GIST (geom);  -- Spatial index for map queries
+-- Jurisdictions
+CREATE INDEX IF NOT EXISTS idx_jurisdictions_type ON jurisdictions(type);
+CREATE INDEX IF NOT EXISTS idx_jurisdictions_vendor ON jurisdictions(vendor);
+CREATE INDEX IF NOT EXISTS idx_jurisdictions_state ON jurisdictions(state);
+CREATE INDEX IF NOT EXISTS idx_jurisdictions_status ON jurisdictions(status);
+CREATE INDEX IF NOT EXISTS idx_jurisdictions_population ON jurisdictions (population DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_jurisdictions_geom ON jurisdictions USING GIST (geom);  -- Spatial index for map queries
 
 -- Zipcodes
 CREATE INDEX IF NOT EXISTS idx_zipcodes_zipcode ON zipcodes(zipcode);
