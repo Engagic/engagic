@@ -26,6 +26,7 @@ Custom adapters are 1:1 with specific high-value cities that don't use standard 
 - Berkeley, CA (118k population) - Drupal CMS, item-level extraction
 - Chicago, IL (2.7M population) - REST API, concurrent matter fetches
 - Menlo Park, CA (35k population) - Simple table, monolithic processing
+- Ross, CA (2.5k population) - AHA FastTrack/Drupal 7, structured staff report items from detail pages
 
 **Potential Future:**
 - Honolulu, HI (350k) - City Council meetings at https://hnldoc.ehawaii.gov/hnldoc/videos. Has agendas (`/hnldoc/agenda/`), YouTube video links, and minutes (`/hnldoc/document-download/`). No API/RSS — would need HTML scraping. Year filter covers 2019-2027. Committees: Budget, Zoning & Planning, Energy, Infrastructure, etc.
@@ -194,7 +195,7 @@ Target: >90% success rate or deprecate adapter.
 
 ---
 
-**Last Updated**: 2025-11-26
-**Active Adapters**: 3 (Berkeley, Chicago, Menlo Park)
-**Total Cities Covered**: 3
+**Last Updated**: 2026-03-25
+**Active Adapters**: 4 (Berkeley, Chicago, Menlo Park, Ross)
+**Total Cities Covered**: 4
 **Architecture**: All async (migration complete Nov 2025)

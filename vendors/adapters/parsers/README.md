@@ -151,8 +151,14 @@ python -m vendors.adapters.parsers.agenda_chunker path/to/agenda.pdf --force-url
 
 - **Granicus adapter** (`granicus_adapter_async.py`): Falls back to `parse_agenda_pdf` when HTML parsing yields no items. Tries agenda PDF first (may have hyperlinked attachments), then packet PDF.
 - **CivicPlus adapter** (`civicplus_adapter_async.py`): Three-tier priority: (1) HTML agenda, (2) if HTML items lack attachments and a monolithic packet PDF is detected, runs the chunker on the packet, (3) PDF chunker as final fallback.
+- **CivicWeb adapter** (`civicweb_adapter_async.py`): Runs chunker on packet PDFs (which typically have TOC bookmarks) for structured item extraction.
+- **ProudCity adapter** (`proudcity_adapter_async.py`): Four-step fallback: (1) HTML agenda-packet tab, (2) HTML agenda tab, (3) chunker on agenda PDF (URL-based), (4) chunker on packet PDF (TOC-based).
+- **Vision Internet adapter** (`visioninternet_adapter_async.py`): Runs chunker on packet PDFs from calendar table cells.
+- **WP Events adapter** (`wp_events_adapter_async.py`): Falls back to chunker on agenda PDF when filename-based media classification yields no structured items.
+- **Ross adapter** (`custom/ross_adapter_async.py`): Falls back to chunker on agenda PDF when detail page yields no structured staff report items.
+- **Manual ingestion** (`scripts/ingest_manual_pdfs.py`): Runs chunker on manually-provided PDFs for cities behind bot protection.
 
-Both adapters download the PDF to a temp file and call `parse_agenda_pdf` via `asyncio.to_thread`.
+All callers download the PDF to a temp file and call `parse_agenda_pdf` via `asyncio.to_thread`.
 
 ## Template file
 
