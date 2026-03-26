@@ -1,6 +1,6 @@
 # Vendors Module - Civic Tech Platform Adapters
 
-**Fetch meeting data from 13 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
+**Fetch meeting data from 19 civic tech platforms.** Unified adapter architecture with vendor-specific parsers and shared utilities.
 
 **Last Updated:** March 2026
 
@@ -14,41 +14,47 @@ The vendors module provides adapters for fetching meeting data from civic techno
 
 ```
 vendors/
-├── adapters/           # 13 async adapters
-│   ├── base_adapter_async.py          # Async base (262 lines)
-│   ├── legistar_adapter_async.py      # Legistar async (1212 lines)
+├── adapters/           # 19 async adapters
+│   ├── base_adapter_async.py          # Async base (351 lines)
+│   ├── legistar_adapter_async.py      # Legistar async (1254 lines)
 │   ├── primegov_adapter_async.py      # PrimeGov async (320 lines)
-│   ├── granicus_adapter_async.py      # Granicus async (541 lines)
+│   ├── granicus_adapter_async.py      # Granicus async (778 lines)
 │   ├── iqm2_adapter_async.py          # IQM2 async (576 lines)
 │   ├── novusagenda_adapter_async.py   # NovusAgenda async (199 lines)
-│   ├── escribe_adapter_async.py       # eScribe async (420 lines)
-│   ├── civicclerk_adapter_async.py    # CivicClerk async (362 lines)
+│   ├── escribe_adapter_async.py       # eScribe async (502 lines)
+│   ├── civicclerk_adapter_async.py    # CivicClerk async (502 lines)
 │   ├── civicplus_adapter_async.py     # CivicPlus async (369 lines)
-│   ├── municode_adapter_async.py      # Municode async (503 lines)
+│   ├── civicengage_adapter_async.py   # CivicEngage async (431 lines)
+│   ├── civicweb_adapter_async.py      # CivicWeb async (360 lines)
+│   ├── municode_adapter_async.py      # Municode async (582 lines)
 │   ├── onbase_adapter_async.py        # OnBase async (464 lines)
+│   ├── proudcity_adapter_async.py     # ProudCity async (930 lines)
+│   ├── visioninternet_adapter_async.py # Vision Internet async (451 lines)
+│   ├── wp_events_adapter_async.py     # WP Events async (572 lines)
 │   ├── custom/
 │   │   ├── berkeley_adapter_async.py  # Berkeley async (295 lines)
 │   │   ├── chicago_adapter_async.py   # Chicago async (796 lines)
-│   │   └── menlopark_adapter_async.py # Menlo Park async (182 lines)
+│   │   ├── menlopark_adapter_async.py # Menlo Park async (182 lines)
+│   │   └── ross_adapter_async.py      # Ross async (420 lines)
 │   └── parsers/        # 7 vendor-specific parsers (HTML + PDF)
 │       ├── legistar_parser.py         # Legistar HTML tables (373 lines)
 │       ├── primegov_parser.py         # PrimeGov HTML items (315 lines)
-│       ├── granicus_parser.py         # Granicus HTML formats (578 lines)
+│       ├── granicus_parser.py         # Granicus HTML formats (865 lines)
 │       ├── municode_parser.py         # Municode HTML sections (213 lines)
 │       ├── novusagenda_parser.py      # NovusAgenda HTML items (116 lines)
 │       ├── civicplus_parser.py        # CivicPlus HTML agendas (170 lines)
-│       └── agenda_chunker.py          # PDF agenda chunker - Granicus/CivicPlus (720 lines)
+│       └── agenda_chunker.py          # PDF agenda chunker (1749 lines)
 ├── extractors/         # Data extraction utilities
 │   └── council_member_extractor.py    # Sponsor extraction (281 lines)
 ├── utils/              # Shared utilities
 │   └── attachments.py                 # Attachment version filtering (162 lines)
-├── factory.py          # Adapter dispatcher (62 lines)
+├── factory.py          # Adapter dispatcher (74 lines)
 ├── rate_limiter_async.py              # Async vendor rate limiting (53 lines)
 ├── session_manager_async.py           # Async HTTP pooling (143 lines)
 ├── validator.py        # Domain validation (270 lines)
 └── schemas.py          # Pydantic validation schemas (155 lines)
 
-Total: ~8,905 lines
+Total: ~15,328 lines
 ```
 
 ---
@@ -145,8 +151,14 @@ Adapters return `vendor_id` (the native vendor identifier), NOT canonical `meeti
 | Granicus | `event_id` from ViewPublisher listing | `"5678"` |
 | OnBase | Meeting ID from page JSON/HTML | `"9012"` |
 | Municode | `MeetingID` from API or date+type composite | `"3456"` |
+| CivicEngage | SHA256 hash of ADID or title+date | `"a1b2c3d4e5f6"` |
+| CivicWeb | Meeting `Id` from MeetingInformation URL | `"7890"` |
+| ProudCity | WP post `id` from REST API | `"1234"` |
+| Vision Internet | Event ID from calendar detail URL | `"5678"` |
+| WP Events | WP post `id` from REST API | `"9012"` |
 | Berkeley | SHA256 hash of URL path + date | `"a1b2c3d4e5f6"` |
 | Menlo Park | SHA256 hash of PDF URL + date | `"f6e5d4c3b2a1"` |
+| Ross | Node ID from PDF path or detail page slug | `"3456"` |
 
 **Database generates canonical ID:** `{banana}_{8-char-md5-hash}`
 
@@ -156,7 +168,7 @@ See `database/README.md` for ID generation details.
 
 ## Vendor Adapters
 
-### Item-Level Adapters (12 adapters)
+### Item-Level Adapters (18 adapters)
 
 These adapters extract **structured agenda items** from HTML agendas, APIs, or PDFs. Items are stored separately with `matter_id`, `matter_file`, titles, and PDF links.
 
@@ -281,7 +293,60 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
 - **Deduplication:** By date (keeps last uploaded, typically packet over agenda)
 - **City examples:** Ardmore OK, Citrus Heights CA, various mid-size cities
 
-**12. Berkeley (295 lines) - Custom**
+**12. CivicEngage (431 lines)**
+- **CivicPlus Archive Center:** Document archive system on custom `.gov` domains (not a meeting calendar)
+- **Two listing modes** (auto-detected with fallback):
+  - **Search mode** (`lngArchiveMasterID`): Server-side date filtering via `Archive.aspx?ysnExecuteSearch=1&lngArchiveMasterID=...`
+  - **AMID mode**: Returns all documents in category, client-side date filtering
+- **Document links:** ADID links (`Archive.aspx?ADID=8497`) resolve directly to PDFs
+- **PDF chunking:** Downloads agenda/packet PDFs and runs chunker for item extraction
+- **City examples:** Wichita KS, and other CivicPlus `.gov` domains
+
+**13. CivicWeb (360 lines)**
+- **Platform:** eSCRIBE's older CivicWeb Portal (Drupal-based, ASP.NET backend)
+- **HTML scraping:** `MeetingTypeList.aspx` lists all bodies and recent meetings in static HTML
+- **Meeting details:** `MeetingInformation.aspx?Id={mid}` with embedded packet PDF viewer
+- **PDF extraction:** Packet PDFs with TOC bookmarks are chunked for structured items
+- **Date formats:** Handles both "18 Mar 2026" (Sonoma) and "Mar 31 2026" (Calistoga)
+- **Concurrency:** Semaphore-bounded (5 meetings, 3 PDFs) for parallel enrichment
+- **City examples:** Sonoma CA, Calistoga CA
+
+**14. ProudCity (930 lines)**
+- **Platform:** WordPress-based white-label gov CMS (hundreds of small municipalities)
+- **WP REST API:** `/wp-json/wp/v2/meetings` custom post type with pagination
+- **HTML fallback:** Scrapes `/city-council-meetings/`, `/council-meetings/`, `/meetings/` when REST API unavailable
+- **Date caveat:** WP `date` field is publication date, not meeting date. Meeting date extracted from title (e.g. "City Council Meeting: April 13, 2026")
+- **Tab structure:** `#tab-agenda`, `#tab-agenda-packet`, `#tab-minutes`, `#tab-video` for document extraction
+- **Four-step item extraction:** HTML agenda-packet tab -> agenda tab -> chunker on agenda PDF -> chunker on packet PDF
+- **Body taxonomy:** Extracts committee name from WP taxonomy classes (`meeting-taxonomy-*`)
+- **Domain discovery:** Probes `{slug}.gov`, `www.{slug}.gov`, `{slug}.org`, etc.
+- **Config:** Optional `data/proudcity_sites.json` for domain overrides
+- **City examples:** Belvedere CA, Colma CA, Fairfax CA
+
+**15. Vision Internet (451 lines)**
+- **Platform:** Granicus govAccess CMS (formerly Vision Internet)
+- **HTML scraping:** Calendar widgets render meetings in HTML tables at configured page paths
+- **Multi-body:** Each body (Planning Commission, Town Council) has its own calendar page URL
+- **Table structure:** `.event_title`, `.event_datetime`, `.event_agenda`, `.event_minutes` cells
+- **Multiple agendas:** Main packet + supplementals stored as `supplemental_docs` metadata
+- **Pagination:** `/-npage-{n}` suffix, sorted newest-first
+- **PDF chunking:** Packet PDFs chunked for structured item extraction
+- **Config dependency:** `data/visioninternet_sites.json` for base URL and calendar paths
+- **City examples:** Portola Valley CA
+
+**16. WP Events (572 lines)**
+- **Platform:** Bespoke WordPress sites with custom `events` post type and media attachments
+- **WP REST API:** Paginated events CPT, media attachments parented to event post
+- **Filename-based classification:** Media filenames mapped to structured agenda items:
+  - `Agenda-Item-Number-{N}-{desc}.pdf` -> agenda item with sequence N
+  - `Resolution_Number_{N}_{year}_{desc}.pdf` -> resolution attachment
+  - `FINAL[_-].*Council[_-].*Agenda` -> main agenda PDF
+  - `(?:Approved|Draft)[_-].*Minutes` -> minutes PDF
+  - `Public[_-]Comment` / `_Redacted` -> public comment
+- **Config:** Optional `data/wp_events_sites.json` for domain and CPT slug overrides
+- **City examples:** Sebastopol CA
+
+**17. Berkeley (295 lines) - Custom**
 - **Custom Drupal CMS** at `berkeleyca.gov`
 - **HTML scraping:** Table rows with `<time>` tags for dates
 - **Item extraction:** `<strong>1.</strong><a href="...pdf">Title</a>` pattern
@@ -290,13 +355,21 @@ These adapters extract **structured agenda items** from HTML agendas, APIs, or P
 - **Participation:** Zoom URL, phone number, email from intro paragraphs
 - **Attachments:** PDF links from item anchors
 
+**18. Ross (420 lines) - Custom**
+- **Platform:** AHA Consulting's FastTrack platform (Drupal 7) for Town of Ross CA
+- **HTML scraping:** `/meetings` page with 8-column table (Date, Meeting, Agendas, Minutes, Staff Reports, Audio, Video, Details)
+- **Item extraction:** Detail pages (`/towncouncil/page/...`) have structured staff report attachments labeled "Item {N}. {title}"
+- **Body mapping:** URL prefix -> body name (`/towncouncil/` -> Town Council, `/advisorydesignreview/` -> Advisory Design Review Group, etc.)
+- **Fallback chain:** Structured items from detail page -> chunker on agenda PDF
+- **Agenda selection:** Prefers non-closed-session agenda when multiple available
+
 ---
 
 ### Monolithic Adapters (1 adapter)
 
 These adapters fetch **PDF packet URLs only** (no structured items). Meetings are processed with comprehensive LLM summarization.
 
-**13. Menlo Park (182 lines) - Custom**
+**19. Menlo Park (182 lines) - Custom**
 - **Custom scraper** for Menlo Park CA's table-based website
 - **PDF item extraction:** Downloads agenda PDF, extracts text via `PdfExtractor`, parses items via `parse_menlopark_pdf_agenda()`
 - **Item format:** Letter-based sections (H., I., J., K.) with numbered items (H1., J1.)
@@ -319,9 +392,9 @@ These adapters fetch **PDF packet URLs only** (no structured items). Meetings ar
 | `municode_parser.py` | Municode | `agenda-section` → `agenda-items` → `agenda_item_attachments` |
 | `novusagenda_parser.py` | NovusAgenda | CoverSheet.aspx links, exploratory multi-pattern detection |
 | `civicplus_parser.py` | CivicPlus | `div.item.level{1,2,3}` hierarchy from `?html=true` agendas; section/sub-section nesting; generic title replacement |
-| `agenda_chunker.py` | Granicus, CivicPlus | Two-path PDF agenda parser via PyMuPDF. **TOC path** (first): detects PDF bookmark/outline tree; hierarchical mode assigns L2 entries as embedded memos, flat mode fuzzy-matches memos to items by title similarity. Extracts `body_text` from memo full_text for direct summarization without URL downloads. **URL path** (fallback): 4-pass extraction (metadata → sections/items → body text → link assignment) with hyperlinked attachment URLs. Handles varied numbering schemes, bold/caps headers, case/docket numbers, standalone number lines |
+| `agenda_chunker.py` | Granicus, CivicPlus, CivicWeb, ProudCity, Vision Internet, WP Events, Ross | Two-path PDF agenda parser via PyMuPDF. **TOC path** (first): detects PDF bookmark/outline tree; hierarchical mode assigns L2 entries as embedded memos, flat mode fuzzy-matches memos to items by title similarity. Extracts `body_text` from memo full_text for direct summarization without URL downloads. **URL path** (fallback): 4-pass extraction (metadata → sections/items → body text → link assignment) with hyperlinked attachment URLs. Handles varied numbering schemes, bold/caps headers, case/docket numbers, standalone number lines |
 
-**Adapters without dedicated parsers** (inline parsing): IQM2, eScribe, CivicClerk, Berkeley, Chicago, Menlo Park.
+**Adapters without dedicated parsers** (inline parsing): IQM2, eScribe, CivicClerk, CivicEngage, Berkeley, Chicago, Menlo Park, Ross, ProudCity, Vision Internet, WP Events.
 
 **Why separate parsers?**
 - **Vendor updates:** HTML changes → update parser only, adapter unchanged
@@ -471,11 +544,17 @@ VENDOR_ADAPTERS = {
     "primegov": AsyncPrimeGovAdapter,
     "civicclerk": AsyncCivicClerkAdapter,
     "civicplus": AsyncCivicPlusAdapter,
+    "civicengage": AsyncCivicEngageAdapter,
+    "civicweb": AsyncCivicWebAdapter,
     "escribe": AsyncEscribeAdapter,
     "municode": AsyncMunicodeAdapter,
+    "proudcity": AsyncProudCityAdapter,
+    "wp_events": AsyncWPEventsAdapter,
+    "visioninternet": AsyncVisionInternetAdapter,
     "berkeley": AsyncBerkeleyAdapter,
     "chicago": AsyncChicagoAdapter,
     "menlopark": AsyncMenloParkAdapter,
+    "ross": AsyncRossAdapter,
 }
 
 def get_async_adapter(vendor: str, city_slug: str, metrics: Optional[MetricsCollector] = None, **kwargs):
@@ -494,7 +573,7 @@ def get_async_adapter(vendor: str, city_slug: str, metrics: Optional[MetricsColl
 - **Return actions:** `store` (valid), `warn` (suspicious but allowed), `reject` (domain mismatch)
 - **Note:** Currently used in tests only; not integrated into production pipeline
 
-Vendors with configured domains: primegov, granicus, legistar, civicclerk, novusagenda, civicplus, civicweb, iqm2, municode, escribe, menlopark, berkeley, chicago.
+Vendors with configured domains: primegov, granicus, legistar, civicclerk, novusagenda, civicplus, civicengage, civicweb, iqm2, municode, escribe, proudcity, visioninternet, wp_events, menlopark, berkeley, chicago, ross.
 
 ---
 
@@ -507,8 +586,11 @@ Several adapters require static configuration files:
 | Granicus | `data/granicus_view_ids.json` | Maps base URLs to `view_id` integers |
 | OnBase | `data/onbase_sites.json` | Maps banana to list of site URL paths |
 | Municode | `data/municode_sites.json` | Per-city overrides (ppid, etc.) |
+| Vision Internet | `data/visioninternet_sites.json` | Base URL + calendar paths per body |
+| ProudCity | `data/proudcity_sites.json` | Optional domain overrides |
+| WP Events | `data/wp_events_sites.json` | Optional domain + CPT slug overrides |
 
-Adapters fail fast in `__init__` if their config is missing or the city is not configured.
+Granicus, OnBase, Municode, and Vision Internet fail fast in `__init__` if their config is missing. ProudCity and WP Events configs are optional (domain auto-discovery is the default).
 
 ---
 
@@ -585,4 +667,4 @@ python -m pipeline.conductor sync-city examplecityCA --force
 - [pipeline/README.md](../pipeline/README.md) - How adapters integrate with processing pipeline
 - [database/README.md](../database/README.md) - How meeting data is stored
 
-**Last Updated:** 2026-03-20 (Agenda chunker: TOC-based chunking with embedded memo body_text extraction, two-path dispatch; Granicus: agenda/packet PDF escalation; CivicPlus: monolithic packet detection for cities with HTML items but no per-item attachments)
+**Last Updated:** 2026-03-25 (Added 6 new adapters: CivicEngage, CivicWeb, ProudCity, Vision Internet, WP Events, Ross. Expanded agenda chunker to 1749 lines. Updated existing adapters: CivicClerk, Granicus, eScribe, Municode, Legistar. Total: 19 vendors)

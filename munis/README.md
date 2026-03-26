@@ -40,7 +40,15 @@ These regional lists are designed for:
 
 ## Available Regions
 
-- `bay-area.txt` - San Francisco Peninsula + East Bay (12 cities)
+- `bay-area.txt` - San Francisco Peninsula + East Bay core cities
+- `bay-area-2.txt` - Bay Area smaller cities + counties (Peninsula, East Bay, North Bay, 9 counties)
+- `bay-area-all.txt` - Comprehensive Bay Area: all cities and counties across Peninsula/South Bay, East Bay, and North Bay (~120 entries)
+- `notable-unprocessed.txt` - Notable cities nationwide not yet onboarded (~63 cities across 25+ states, sorted alphabetically)
 - `test-small.txt` - Small test set for validation (2 cities)
 
-Add more regions as needed!
+### File Purposes
+
+- **bay-area.txt** - Original core set for daily sync
+- **bay-area-2.txt** - Expansion wave: smaller municipalities and county-level jurisdictions
+- **bay-area-all.txt** - Complete regional coverage including all entries from bay-area.txt and bay-area-2.txt
+- **notable-unprocessed.txt** - Backlog of high-value cities to onboard (includes Washington DC, Indianapolis IN, Memphis TN, etc.)

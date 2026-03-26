@@ -54,6 +54,7 @@ CREATE TABLE schema_migrations (
 | Version | Name | Description |
 |---------|------|-------------|
 | 001 | council_members | Council members + sponsorships tables |
+| 019 | jurisdictions | Rename `cities` -> `jurisdictions`, add `type` column (city/county/transit/utility/etc.), rename `county` -> `county_banana` with self-referencing FK for hierarchical jurisdiction relationships. Full rollback support. |
 
 ## Guidelines
 

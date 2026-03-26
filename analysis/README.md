@@ -11,7 +11,7 @@ The analysis module provides LLM-powered intelligence for civic meeting document
 **Core Capabilities:**
 - **Async orchestration:** Concurrent PDF downloads, semaphore-limited LLM calls
 - **Reactive rate limiting:** Respects Gemini's `retryDelay` on 429 errors with exponential backoff
-- **Unified adaptive prompting:** Single prompt lets the LLM scale output depth to document complexity (2-10 sentences)
+- **Unified adaptive prompting:** Single prompt with four classification levels lets the LLM scale output depth to consequence (2-20 sentences)
 - **Topic extraction:** 16 canonical civic topics (housing, zoning, transportation, etc.)
 - **Citizen impact assessment:** "Why should residents care?" analysis
 - **Batch processing:** 50% cost savings via Gemini Batch API (JSONL file method)
@@ -24,7 +24,8 @@ analysis/
 ├── analyzer_async.py       # 428 lines - Async orchestration
 ├── llm/
 │   ├── summarizer.py       # 1,309 lines - Gemini API + reactive rate limiting
-│   └── prompts_v2.json     # 82 lines - Unified prompt template
+│   ├── prompts_v2.json     # 82 lines - Legacy prompt template (retained for reference)
+│   └── prompts_v3.json     # 61 lines - Active prompt with 4 classification levels + 7 worked examples
 └── topics/
     ├── normalizer.py       # 230 lines - Topic normalization
     └── taxonomy.json       # 242 lines - 16 canonical topics
@@ -182,8 +183,8 @@ class GeminiSummarizer:
         self.flash_model_name = "gemini-2.5-flash"
         self.flash_lite_model_name = "gemini-2.5-flash-lite"
 
-        # Load prompts from JSON (v2 only, via importlib.resources)
-        self.prompts = json.loads(files("analysis.llm").joinpath("prompts_v2.json").read_text())
+        # Load prompts from JSON (v3, via importlib.resources)
+        self.prompts = json.loads(files("analysis.llm").joinpath("prompts_v3.json").read_text())
 ```
 
 **Reactive Rate Limiting:**
@@ -228,10 +229,11 @@ def _select_prompt_type(self) -> str:
     return "unified"  # Always unified - LLM scales output to complexity
 ```
 
-The unified prompt provides detailed guidance for output length:
-- **Simple items** (appointments, routine renewals): 2-3 sentences
-- **Moderate items** (budget amendments, permits): 4-5 sentences
-- **Complex items** (ordinances, developments, fiscal reports): 6-10 sentences with sections
+The unified prompt provides four classification levels controlling output depth:
+- **ROUTINE** (appointments, routine renewals, procedural filings): 2-3 sentences
+- **STANDARD** (budget amendments, permits, contract awards): 4-6 sentences
+- **CONSEQUENTIAL** (ordinances, developments, zoning changes): 7-12 sentences with sections
+- **MAJOR** (fiscal reports, multi-document council files, credit analyses): 12-20 sentences, narrative prose with sections
 
 **Adaptive Thinking Configuration:**
 
@@ -256,8 +258,7 @@ def summarize_item(item_title: str, text: str, page_count: Optional[int] = None)
     Summarize agenda item with unified prompt.
 
     Always uses max_output_tokens=8192 and response_mime_type="application/json".
-    Response is parsed into combined markdown (## Summary + ## Citizen Impact + ## Confidence)
-    and a validated topic list.
+    Response is parsed into summary markdown with a validated topic list.
 
     Returns: (summary_markdown, canonical_topics_list)
     """
@@ -330,15 +331,8 @@ def _parse_item_response(response_text: str) -> Tuple[str, List[str]]:
     """
     Parse JSON response into (summary, topics).
 
-    Output format:
-        ## Summary
-        {summary_markdown}
-
-        ## Citizen Impact
-        {citizen_impact_markdown}
-
-        ## Confidence
-        {confidence}
+    Output format: summary_markdown content directly (v3 removed citizen_impact
+    and confidence fields).
 
     Topics are validated against canonical taxonomy via TopicNormalizer.
     Invalid topics are rejected (logged); falls back to ["other"] if all invalid.
@@ -347,16 +341,16 @@ def _parse_item_response(response_text: str) -> Tuple[str, List[str]]:
 
 ---
 
-## Prompts Architecture (prompts_v2.json)
+## Prompts Architecture (prompts_v3.json)
 
-**JSON-structured prompts** with schema-validated responses.
+**JSON-structured prompts** with schema-validated responses. v3 replaces v2 with four classification levels and richer extraction rules.
 
 **Structure:**
 ```json
 {
   "item": {
     "unified": {
-      "description": "Unified prompt for all agenda items - LLM determines output length",
+      "description": "v3 unified prompt - editorial judgment over exhaustive extraction",
       "variables": ["title", "text"],
       "output_format": "json",
       "response_schema": { ... },
@@ -365,32 +359,23 @@ def _parse_item_response(response_text: str) -> Tuple[str, List[str]]:
     }
   },
   "meeting": {
-    "short_agenda": {
-      "description": "FALLBACK: For full meeting packets ≤30 pages",
+    "fallback": {
+      "description": "FALLBACK ONLY: Used when item-level processing unavailable (3.4% of meetings)",
       "variables": ["text"],
-      "template": "This is a city council meeting agenda..."
-    },
-    "comprehensive": {
-      "description": "FALLBACK: For large/complex agendas >30 pages",
-      "variables": ["text"],
-      "template": "Analyze this city council meeting agenda..."
+      "template": "This is a city council meeting agenda that could not be broken into individual items..."
     }
   }
 }
 ```
 
-**Response Schema (item.unified):**
+**Response Schema (item.unified - v3):**
 ```json
 {
   "type": "object",
   "properties": {
     "summary_markdown": {
       "type": "string",
-      "description": "Summary in markdown format (2-10 sentences depending on complexity)"
-    },
-    "citizen_impact_markdown": {
-      "type": "string",
-      "description": "1-3 sentences in markdown explaining how this affects residents"
+      "description": "Summary in markdown format. Length scales with consequence, not document length."
     },
     "topics": {
       "type": "array",
@@ -402,31 +387,43 @@ def _parse_item_response(response_text: str) -> Tuple[str, List[str]]:
                  "appointments", "other"]
       },
       "description": "1-3 canonical topics from the allowed list"
-    },
-    "confidence": {
-      "type": "string",
-      "enum": ["high", "medium", "low"]
     }
   },
-  "required": ["summary_markdown", "citizen_impact_markdown", "topics", "confidence"]
+  "required": ["summary_markdown", "topics"]
 }
 ```
 
+**v3 Changes from v2:**
+- Removed `citizen_impact_markdown` and `confidence` fields (simplified schema)
+- Added four classification levels controlling output depth:
+  - **ROUTINE** (2-3 sentences): Appointments, routine renewals, procedural filings
+  - **STANDARD** (4-6 sentences): Budget amendments, permits, contract awards
+  - **CONSEQUENTIAL** (7-12 sentences, with sections): Ordinances, development projects, zoning changes
+  - **MAJOR** (12-20 sentences, narrative prose): Fiscal reports, multi-document council files, credit analyses
+- Added editorial filter step: "What is actually changing?" vs. carried-forward provisions
+- Expanded extraction rules for enforcement mechanisms, procurement methods, upstream legislative references
+- 7 worked examples covering the full spectrum from triennial code adoptions to fiscal status reports
+- Meeting prompts consolidated to single `fallback` key (removed short_agenda/comprehensive split)
+
 **Unified Prompt Design:**
 
-The unified prompt includes detailed extraction rules for different document types:
-- **Legislative documents:** Dollar amounts, addresses, ordinance numbers, vote counts
-- **Data presentations:** Percentages, trends, before/after comparisons, frameworks
-- **Staff memos:** Recommendations, cost-benefit, stakeholder input
-- **Appeals/variances:** Backstory, timeline, stakeholders, procedural history
-- **Fiscal reports:** Credit ratings, structural risk factors, political contingencies
+The v3 prompt uses a four-step analysis pipeline:
+1. **Read and Classify** - Determine item category (ROUTINE/STANDARD/CONSEQUENTIAL/MAJOR)
+2. **Editorial Filter** - What is changing? What's the procedural arc? Who is accountable?
+3. **Extract Details** - Concrete details filtered by editorial judgment
+4. **Build Summary** - Write summary matching the depth category
 
-Seven worked examples are embedded in the prompt covering simple appointments through complex ordinances and fiscal health reports.
+Extraction rules cover:
+- **Legislative documents:** Each new/modified provision, penalties, enforcement mechanisms
+- **Data presentations:** Key metrics, before/after comparisons, trends, frameworks
+- **Staff memos:** Recommendations, alternatives, cost-benefit with numbers
+- **Appeals/variances:** Backstory, procedural history, conflict, outcome reasoning
+- **Fiscal reports:** Central fiscal tension, root causes (not just amounts), reserve status, services at risk
+- **Multi-document council files:** Decision arc, split votes with names, counter-proposals
 
 **Meeting prompts (fallback only):**
 - Plain markdown output (no JSON, no topics)
 - Used when item-level processing is unavailable (vendor limitations, parsing failures)
-- Currently 96.6% of summaries are item-level; meeting-level fallback accounts for 3.4%
 
 ---
 
@@ -562,7 +559,7 @@ async def extract_pdf_async(url: str) -> Dict[str, Any]:
 
 ### 2. Unified Prompt
 
-Single prompt with adaptive output guidance replaces separate standard/large prompts. The LLM scales output depth to content complexity, reducing over-generation on simple items.
+Single prompt with four classification levels (ROUTINE/STANDARD/CONSEQUENTIAL/MAJOR) replaces separate standard/large prompts. The LLM scales output depth to consequence, not document length, reducing over-generation on simple items.
 
 ### 3. Thinking Budget
 

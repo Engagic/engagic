@@ -571,8 +571,9 @@ def sync_city(banana: str):
 ```
 
 **Validation:**
-- Format: lowercase alphanumeric + uppercase 2-letter state code (`^[a-z0-9]+[A-Z]{2}$`)
-- Examples: `paloaltoCA`, `nashvilleTN`, `stlouisMO`
+- Format: lowercase alphanumeric (with optional hyphens) + uppercase 2-letter state code (`^[a-z0-9-]+[A-Z]{2}$`)
+- Covers all jurisdiction types: cities (`paloaltoCA`), counties (`alamedacountyCA`), transit authorities (`bartCA`), utilities (`ebmudCA`)
+- Examples: `paloaltoCA`, `nashvilleTN`, `alamedacountyCA`, `ebmudCA`
 - Invalid: `PaloAltoCA` (capital), `paloaltoca` (lowercase state), `paloalto` (missing state)
 
 ---

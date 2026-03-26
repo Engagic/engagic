@@ -3,7 +3,7 @@
 **Purpose:** Single source of truth for all Engagic data. PostgreSQL with async connection pooling.
 
 Manages:
-- Cities, zipcodes, and census data
+- Jurisdictions (cities, counties, transit authorities, utilities), zipcodes, and census data
 - Meetings and agenda items
 - Matters (legislative tracking across meetings)
 - Council members, sponsorships, and votes
@@ -30,7 +30,7 @@ Manages:
 └──────────┬──────────┘
            │
            ├──> repositories_async/base.py            (129 lines) - Base repository with connection pooling
-           ├──> repositories_async/cities.py          (362 lines) - City and zipcode operations
+           ├──> repositories_async/cities.py          (366 lines) - Jurisdiction and zipcode operations
            ├──> repositories_async/meetings.py        (290 lines) - Meeting storage and retrieval
            ├──> repositories_async/items.py           (500 lines) - Agenda item operations
            ├──> repositories_async/matters.py         (555 lines) - Matter operations (matters-first)
@@ -46,11 +46,11 @@ Manages:
            └──> repositories_async/happening.py       (125 lines) - "Happening This Week" curated items
 
 Supporting Modules:
-├── models.py          (475 lines) - Pydantic dataclasses + JSONB models
+├── models.py          (483 lines) - Pydantic dataclasses + JSONB models
 ├── id_generation.py   (721 lines) - Deterministic ID generation (meetings, items, matters, members, committees)
 ├── vote_utils.py      (47 lines)  - Vote tally computation and outcome determination
 ├── migrate.py         (271 lines) - Versioned SQL migration runner
-├── schema_postgres.sql - Main schema (cities, meetings, items, matters, queue, council_members, committees, votes, deliberations, happening_items, session_events, tenants)
+├── schema_postgres.sql - Main schema (jurisdictions, meetings, items, matters, queue, council_members, committees, votes, deliberations, happening_items, session_events, tenants)
 └── schema_userland.sql - Userland schema (users, alerts, alert_matches, refresh_tokens, city_requests, watches, ratings, issues, deliberation_trusted_users)
 ```
 
@@ -123,35 +123,41 @@ await db.close()
 
 ### Core Tables
 
-#### `cities` - City Registry
+#### `jurisdictions` - Jurisdiction Registry
 ```sql
-CREATE TABLE cities (
+CREATE TABLE jurisdictions (
     banana TEXT PRIMARY KEY,           -- paloaltoCA (vendor-agnostic)
     name TEXT NOT NULL,                -- Palo Alto
     state TEXT NOT NULL,               -- CA
     vendor TEXT NOT NULL,              -- primegov, legistar, granicus
     slug TEXT NOT NULL,                -- cityofpaloalto (vendor-specific)
-    county TEXT,                       -- Santa Clara
+    type TEXT DEFAULT 'city',          -- city, county, transit, utility, water, school
+    county_banana TEXT,                -- FK to parent jurisdiction (self-referencing)
     status TEXT DEFAULT 'active',      -- active, inactive
-    participation JSONB,               -- City-level participation config: {testimony_url, testimony_email, process_url}
-    population INTEGER,                -- Census 2020 city population
-    geom geometry(MultiPolygon, 4326), -- City boundary from Census TIGER/Line (PostGIS)
+    participation JSONB,               -- Jurisdiction-level participation config: {testimony_url, testimony_email, process_url}
+    population INTEGER,                -- Census 2020 population
+    geom geometry(MultiPolygon, 4326), -- Boundary from Census TIGER/Line (PostGIS)
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
-    UNIQUE(name, state)
+    UNIQUE(name, state),
+    FOREIGN KEY (county_banana) REFERENCES jurisdictions(banana)
 );
 ```
 
-**PostGIS:** City boundaries stored as MultiPolygon geometries for map visualization. Requires `postgis` extension.
+**Jurisdictions** (formerly `cities`): Supports any public entity publishing agendas - cities, counties, transit authorities, utility districts, water districts, school boards, etc. The `type` column enables filtering and different handling per jurisdiction type. The `county_banana` self-referencing FK allows hierarchical relationships (cities reference their parent county).
 
-#### `zipcodes` - City Zipcodes (Many-to-Many)
+**PostGIS:** Boundaries stored as MultiPolygon geometries for map visualization. Requires `postgis` extension.
+
+**Backward Compatibility:** `City` is an alias for `Jurisdiction` in `models.py`.
+
+#### `zipcodes` - Jurisdiction Zipcodes (Many-to-Many)
 ```sql
 CREATE TABLE zipcodes (
     banana TEXT NOT NULL,
     zipcode TEXT NOT NULL,
     is_primary BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (banana, zipcode),
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE
 );
 ```
 
@@ -175,7 +181,7 @@ CREATE TABLE meetings (
     search_vector tsvector GENERATED,  -- Stored FTS column
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     FOREIGN KEY (committee_id) REFERENCES committees(id) ON DELETE SET NULL
 );
 ```
@@ -235,7 +241,7 @@ CREATE TABLE city_matters (
     search_vector tsvector GENERATED,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE
 );
 ```
 
@@ -285,7 +291,7 @@ CREATE TABLE queue (
     failed_at TIMESTAMP,
     error_message TEXT,
     processing_metadata JSONB,
-    FOREIGN KEY (banana) REFERENCES cities(banana) ON DELETE CASCADE,
+    FOREIGN KEY (banana) REFERENCES jurisdictions(banana) ON DELETE CASCADE,
     FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
 );
 ```
@@ -629,7 +635,7 @@ Typed models for JSONB column deserialization:
 ```python
 from database.models import (
     ParticipationInfo,    # meetings.participation: {email, phone, virtual_url, streaming_urls, ...}
-    CityParticipation,    # cities.participation: {testimony_url, testimony_email, process_url}
+    CityParticipation,    # jurisdictions.participation: {testimony_url, testimony_email, process_url}
     AttachmentInfo,       # items/matters attachments: {name, url, type, history_id?}
     MatterMetadata,       # city_matters.metadata: {attachment_hash}
     EmailContext,         # Structured email: {address, purpose}
@@ -640,15 +646,17 @@ from database.models import (
 ### Domain Dataclasses
 
 ```python
-from database.models import City, Meeting, AgendaItem, Matter, CouncilMember, Vote, Committee, CommitteeMember
+from database.models import Jurisdiction, City, Meeting, AgendaItem, Matter, CouncilMember, Vote, Committee, CommitteeMember
 
-# City (12 fields)
-city = City(
+# Jurisdiction (13 fields) - City is a backward-compat alias for Jurisdiction
+jurisdiction = Jurisdiction(
     banana="paloaltoCA",
     name="Palo Alto",
     state="CA",
     vendor="primegov",
     slug="cityofpaloalto",
+    type="city",                # city, county, transit, utility, water, school
+    county_banana="santaclaracountyCA",  # FK to parent jurisdiction
     population=68572,
     participation=CityParticipation(testimony_url="https://...")
 )
@@ -743,7 +751,7 @@ from database.repositories_async.helpers import build_meeting, build_matter, bui
 
 ## Repository Guide
 
-### 1. CityRepository (362 lines)
+### 1. JurisdictionRepository (366 lines)
 
 **Methods:**
 
