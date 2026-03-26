@@ -57,9 +57,9 @@ class ParticipationInfo(BaseModel):
 
 class CityParticipation(BaseModel):
     """
-    Typed JSONB for cities.participation field.
+    Typed JSONB for jurisdictions.participation field.
 
-    City-level participation config for centralized testimony processes.
+    Jurisdiction-level participation config for centralized testimony processes.
     When set, replaces meeting-level participation for testimony/contact info.
     Cities like NYC have a single testimony portal for all committees.
     """
@@ -99,17 +99,18 @@ class AttachmentInfo(BaseModel):
 
 
 @dataclass
-class City:
-    """City entity - single source of truth"""
+class Jurisdiction:
+    """Jurisdiction entity - city, county, utility board, transit authority, etc."""
 
-    banana: str  # Primary key: paloaltoCA (derived)
-    name: str  # Palo Alto
+    banana: str  # Primary key: paloaltoCA, alameda-countyCA, bartCA
+    name: str  # Palo Alto, Alameda County, BART
     state: str  # CA
     vendor: str  # primegov, legistar, granicus, etc.
     slug: str  # cityofpaloalto (vendor-specific)
-    county: Optional[str] = None
+    type: Optional[str] = None  # city, county, utility, transit, water_district, school_board, etc.
+    county_banana: Optional[str] = None  # FK to parent county jurisdiction
     status: str = "active"
-    population: Optional[int] = None  # Census 2020 city population
+    population: Optional[int] = None  # Census population
     participation: Optional[CityParticipation] = None
     zipcodes: Optional[List[str]] = None  # Associated ZIP codes
     created_at: Optional[datetime] = None
@@ -125,6 +126,10 @@ class City:
         if self.participation:
             data["participation"] = self.participation.model_dump(exclude_none=True)
         return data
+
+
+# Backward compatibility alias
+City = Jurisdiction
 
 
 

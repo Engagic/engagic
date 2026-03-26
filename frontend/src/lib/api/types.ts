@@ -124,6 +124,7 @@ interface SearchSuccess {
 	vendor: string;
 	vendor_display_name: string;
 	source_url: string | null;
+	source_urls?: Array<{ url: string; body: string }>;  // Multi-body sources (e.g. Granicus with multiple view_ids)
 	participation?: CityParticipation;  // City-level testimony config (replaces meeting-level for NYC, etc.)
 	meetings: Meeting[];
 	cached: boolean;

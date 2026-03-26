@@ -354,7 +354,7 @@ async def get_analytics(db: Database = Depends(get_db)):
             # Single query for all basic counts (scalar subqueries execute in parallel)
             counts = await conn.fetchrow("""
                 SELECT
-                    (SELECT COUNT(*) FROM cities) as total_cities,
+                    (SELECT COUNT(*) FROM jurisdictions) as total_cities,
                     (SELECT COUNT(DISTINCT banana) FROM meetings) as active_cities,
                     (SELECT COUNT(*) FROM meetings) as meetings_count,
                     (SELECT COUNT(DISTINCT meeting_id) FROM items) as meetings_with_items,
@@ -380,7 +380,7 @@ async def get_analytics(db: Database = Depends(get_db)):
                     frequently_updated AS (
                         SELECT sm.banana, c.population as pop
                         FROM summarized_meetings sm
-                        JOIN cities c ON sm.banana = c.banana
+                        JOIN jurisdictions c ON sm.banana = c.banana
                         GROUP BY sm.banana, c.population
                         HAVING COUNT(*) >= 7
                     ),
@@ -393,9 +393,9 @@ async def get_analytics(db: Database = Depends(get_db)):
                 SELECT
                     (SELECT COUNT(*) FROM frequently_updated) as frequently_updated,
                     (SELECT COALESCE(SUM(pop), 0) FROM frequently_updated) as frequently_updated_pop,
-                    (SELECT COALESCE(SUM(population), 0) FROM cities WHERE geom IS NOT NULL) as total_pop,
-                    (SELECT COALESCE(SUM(c.population), 0) FROM cities c JOIN active_bananas ab ON c.banana = ab.banana) as pop_with_data,
-                    (SELECT COALESCE(SUM(c.population), 0) FROM cities c JOIN summarized_bananas sb ON c.banana = sb.banana) as pop_with_summaries
+                    (SELECT COALESCE(SUM(population), 0) FROM jurisdictions WHERE geom IS NOT NULL) as total_pop,
+                    (SELECT COALESCE(SUM(c.population), 0) FROM jurisdictions c JOIN active_bananas ab ON c.banana = ab.banana) as pop_with_data,
+                    (SELECT COALESCE(SUM(c.population), 0) FROM jurisdictions c JOIN summarized_bananas sb ON c.banana = sb.banana) as pop_with_summaries
             """)
 
         return {
@@ -486,7 +486,7 @@ async def get_city_coverage(db: Database = Depends(get_db)):
                         WHEN COALESCE(sc.cnt, 0) > 0 THEN sc.cnt
                         ELSE 0
                     END AS summary_count
-                FROM cities c
+                FROM jurisdictions c
                 JOIN synced_counts sc ON c.banana = sc.banana
                 LEFT JOIN matter_counts mc ON c.banana = mc.banana
                 LEFT JOIN item_counts ic ON c.banana = ic.banana
@@ -562,7 +562,7 @@ async def get_civic_infrastructure_by_city(db: Database = Depends(get_db)):
                     COALESCE(cc.vote_count, 0) AS vote_count,
                     COALESCE(cmt.committee_count, 0) AS committee_count,
                     COALESCE(ac.assignment_count, 0) AS assignment_count
-                FROM cities ci
+                FROM jurisdictions ci
                 LEFT JOIN council_counts cc ON ci.banana = cc.banana
                 LEFT JOIN committee_counts cmt ON ci.banana = cmt.banana
                 LEFT JOIN assignment_counts ac ON ci.banana = ac.banana

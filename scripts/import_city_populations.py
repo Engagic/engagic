@@ -84,7 +84,7 @@ async def get_db_cities(conn) -> list[dict]:
     """Get all cities from database."""
     rows = await conn.fetch("""
         SELECT banana, name, state, population
-        FROM cities
+        FROM jurisdictions
         ORDER BY state, name
     """)
     return [dict(row) for row in rows]
@@ -139,7 +139,7 @@ async def match_populations(conn, populations: dict, dry_run: bool = True) -> di
         print("\nApplying updates...")
         for banana, name, state, new_pop, _ in updates:
             await conn.execute(
-                "UPDATE cities SET population = $1 WHERE banana = $2",
+                "UPDATE jurisdictions SET population = $1 WHERE banana = $2",
                 new_pop, banana
             )
         logger.info("updates applied", count=len(updates))
@@ -153,9 +153,9 @@ async def match_populations(conn, populations: dict, dry_run: bool = True) -> di
 
 async def report_status(conn) -> None:
     """Report population coverage status."""
-    total = await conn.fetchval("SELECT COUNT(*) FROM cities")
-    with_pop = await conn.fetchval("SELECT COUNT(*) FROM cities WHERE population IS NOT NULL")
-    total_pop = await conn.fetchval("SELECT COALESCE(SUM(population), 0) FROM cities")
+    total = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions")
+    with_pop = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions WHERE population IS NOT NULL")
+    total_pop = await conn.fetchval("SELECT COALESCE(SUM(population), 0) FROM jurisdictions")
 
     print("\nPopulation Coverage:")
     print(f"  Total cities: {total}")
@@ -166,7 +166,7 @@ async def report_status(conn) -> None:
     print("\nTop 10 Cities by Population:")
     rows = await conn.fetch("""
         SELECT name, state, population
-        FROM cities
+        FROM jurisdictions
         WHERE population IS NOT NULL
         ORDER BY population DESC
         LIMIT 10
@@ -178,7 +178,7 @@ async def report_status(conn) -> None:
     print("\nPopulation with Meeting Data:")
     pop_with_data = await conn.fetchval("""
         SELECT COALESCE(SUM(c.population), 0)
-        FROM cities c
+        FROM jurisdictions c
         WHERE c.population IS NOT NULL
           AND EXISTS (SELECT 1 FROM meetings m WHERE m.banana = c.banana)
     """)

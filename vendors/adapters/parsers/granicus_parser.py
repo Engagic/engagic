@@ -42,6 +42,14 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
         date_text = date_cell.get_text(strip=True)
         start = _parse_granicus_date(date_text)
 
+        # Some Granicus sites (e.g. Oakley) have swapped columns:
+        # date in title cell, "Agenda" in date cell. Detect and correct.
+        if not start:
+            swapped = _parse_granicus_date(title)
+            if swapped:
+                start = swapped
+                title = date_text if date_text.lower() != "agenda" else ""
+
         agenda_link = row.find('a', href=lambda x: x and 'AgendaViewer' in x if x else False)
         if not agenda_link:
             continue
@@ -83,13 +91,19 @@ def _parse_granicus_date(date_text: str) -> Optional[str]:
     """
     date_text = date_text.replace('\xa0', ' ').strip()
 
-    # Extract Unix timestamp prefix if present (hidden span gets concatenated)
+    # Extract Unix timestamp prefix if present (hidden span gets concatenated).
+    # Timestamps are exactly 10 digits (2001-2286). Greedy \d{10,} would
+    # swallow the leading digits of the date string (e.g., "177489360003/30/26"
+    # -> captures 12 digits instead of 10, yielding year 7594).
     unix_timestamp = None
     if date_text and date_text[0].isdigit():
-        match = re.match(r'^(\d{10,})', date_text)
+        match = re.match(r'^(\d{10})', date_text)
         if match:
             unix_timestamp = int(match.group(1))
-            date_text = date_text[len(match.group(1)):].strip()
+            date_text = date_text[10:].strip()
+
+    # Collapse internal whitespace (date and time may be split across lines)
+    date_text = " ".join(date_text.split())
 
     formats = [
         "%B %d, %Y - %I:%M %p",  # December 22, 2025 - 06:00 PM
@@ -98,8 +112,12 @@ def _parse_granicus_date(date_text: str) -> Optional[str]:
         "%b %d, %Y - %I:%M %p",  # Dec 22, 2025 - 06:00 PM
         "%b %d, %Y %I:%M %p",    # Dec 22, 2025 06:00 PM
         "%b %d, %Y",             # Dec 22, 2025
+        "%m/%d/%Y - %I:%M %p",   # 12/22/2025 - 06:00 PM
         "%m/%d/%Y %I:%M %p",     # 12/22/2025 06:00 PM
         "%m/%d/%Y",              # 12/22/2025
+        "%m/%d/%y - %I:%M %p",   # 03/30/26 - 11:00 AM (2-digit year)
+        "%m/%d/%y %I:%M %p",     # 03/30/26 11:00 AM
+        "%m/%d/%y",              # 03/30/26
     ]
 
     for fmt in formats:
@@ -657,8 +675,12 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
 
     Structure: each item is a <table> with <td width=40> (number) + <td> (title).
     MetaViewer attachment links follow in sibling <blockquote> elements.
-    Section headers (PUBLIC HEARINGS, LEASES/CONTRACTS) have sub-items (a, b, c)
+    Section headers (PUBLIC HEARINGS, CONSENT CALENDAR, BUSINESS) have sub-items (a, b, c)
     nested inside their blockquote.
+
+    Supports two body-level layouts:
+    - Div-wrapped: item tables inside <div> elements (original format)
+    - Bare tables: item <table> elements directly at body level (e.g. Vacaville)
     """
     soup = BeautifulSoup(html, 'html.parser')
     items = []
@@ -697,7 +719,7 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
             return None
 
         number_text = cells[0].get_text(strip=True).rstrip('.')
-        if not number_text:
+        if not number_text or len(number_text) > 5:
             return None
 
         # Get full content text (may span multiple rows for ACTION lines)
@@ -727,13 +749,24 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
             'section': parent_section,
         }
 
-    # Walk body-level elements: <div> (contains table) followed by <blockquote> (attachments)
+    # Walk body-level elements: <div> or bare <table>, followed by <blockquote> (attachments)
+    # Two layouts exist:
+    # - Div-wrapped: each item <table> inside a <div> at body level
+    # - Bare: item <table> elements directly at body level (e.g. Vacaville)
     body = soup.find('body') or soup
     current_section = ""
 
-    # Collect all top-level item tables and their blockquotes
-    for div in body.find_all('div', recursive=False):
-        table = div.find('table', recursive=False)
+    for elem in body.children:
+        if not hasattr(elem, 'name') or not elem.name:
+            continue
+
+        # Get the item table - either the element itself or nested in a div
+        table = None
+        if elem.name == 'table':
+            table = elem
+        elif elem.name == 'div':
+            table = elem.find('table', recursive=False)
+
         if not table:
             continue
 
@@ -744,26 +777,30 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
         number = item_data['number']
         title = item_data['title']
 
-        # Section headers: end with colon, are empty, or are known section names
-        title_stripped = re.sub(r'\s*\(.*\)\s*$', '', title).rstrip('.:').strip().upper()
+        # Section headers: end with colon/dash, are empty, or are known section names
+        # Strip trailing punctuation and dashes (en dash, em dash, hyphen) for keyword match
+        title_stripped = re.sub(r'\s*\(.*\)\s*$', '', title).strip()
+        title_stripped = re.sub(r'[\s.:,\-\u2013\u2014]+$', '', title_stripped).strip()
+        title_upper = title_stripped.upper()
         section_keywords = {
-            'CONSENT AGENDA', 'PUBLIC HEARINGS', 'LEASES/CONTRACTS/LEGAL',
-            'CONTRACT MODIFICATIONS', 'CONSIDERATION OF BIDS/PURCHASES/REQUESTS FOR PROPOSALS',
+            'CONSENT AGENDA', 'CONSENT CALENDAR', 'PUBLIC HEARINGS',
+            'LEASES/CONTRACTS/LEGAL', 'CONTRACT MODIFICATIONS',
+            'CONSIDERATION OF BIDS/PURCHASES/REQUESTS FOR PROPOSALS',
             'ANNOUNCEMENTS/REPORTS/MOTIONS', 'OTHER BUSINESS', 'OLD BUSINESS',
-            'NEW BUSINESS', 'UNFINISHED BUSINESS',
+            'NEW BUSINESS', 'UNFINISHED BUSINESS', 'BUSINESS',
         }
         is_section = (
             title.rstrip('.').endswith(':')
+            or re.search(r'\s[\-\u2013\u2014]\s*$', title)
             or not title
-            or title_stripped in section_keywords
+            or title_upper in section_keywords
         )
 
-        # Find the blockquote that follows this div
-        next_bq = div.find_next_sibling('blockquote')
+        # Find the blockquote that follows this element at body level
+        next_bq = elem.find_next_sibling('blockquote')
 
         if is_section:
-            # Use cleaned name without boilerplate parentheticals
-            section_name = re.sub(r'\s*\(.*\)\s*$', '', title).rstrip('.:').strip()
+            section_name = title_stripped
             current_section = section_name
 
             # Sub-items are in the blockquote
@@ -775,12 +812,14 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
 
                     sub_number = f"{number}.{sub_data['number']}"
 
-                    # Find attachment blockquote for this sub-item
-                    sub_bq = sub_table.find_parent('div')
-                    sub_attachments = []
-                    if sub_bq:
-                        att_bq = sub_bq.find_next_sibling('blockquote')
-                        sub_attachments = _extract_attachments(att_bq)
+                    # Find attachment blockquote: try table's next sibling (bare layout),
+                    # then parent div's next sibling (div-wrapped layout)
+                    att_bq = sub_table.find_next_sibling('blockquote')
+                    if not att_bq:
+                        parent_div = sub_table.find_parent('div')
+                        if parent_div:
+                            att_bq = parent_div.find_next_sibling('blockquote')
+                    sub_attachments = _extract_attachments(att_bq)
 
                     sequence_counter += 1
                     items.append({

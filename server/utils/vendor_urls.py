@@ -16,29 +16,47 @@ def _get_granicus_url(slug: str) -> Optional[str]:
     """
     Get Granicus URL with city-specific view_id from cache.
 
-    Args:
-        slug: Granicus city slug
+    Returns a single URL for the primary view.  When multiple view_ids
+    exist (e.g. Board of Supervisors + Planning Commission), uses the
+    first entry.  For multi-body display, use _get_granicus_urls().
+    """
+    urls = _get_granicus_urls(slug)
+    return urls[0]["url"] if urls else f"https://{slug}.granicus.com/ViewPublisher.php"
 
-    Returns:
-        Full URL with view_id, or base URL if view_id not found
+
+def _get_granicus_urls(slug: str) -> list:
+    """
+    Get all Granicus calendar URLs for a city.
+
+    Returns list of {"url": ..., "body": ...} dicts.
+    Most cities have a single entry; some (e.g. Marin County) have
+    multiple view_ids for different governing bodies.
     """
     view_ids_file = os.path.join(config.DB_DIR, "granicus_view_ids.json")
     base_url = f"https://{slug}.granicus.com"
 
-    # Try to load cached view_ids
     if os.path.exists(view_ids_file):
         try:
             with open(view_ids_file, "r") as f:
                 mappings = json.load(f)
-                view_id = mappings.get(base_url)
-                if view_id:
-                    return f"{base_url}/ViewPublisher.php?view_id={view_id}"
+                entry = mappings.get(base_url)
+
+                if isinstance(entry, list):
+                    # Multi-body: [{"view_id": 33, "body": "Board of Supervisors"}, ...]
+                    return [
+                        {
+                            "url": f"{base_url}/ViewPublisher.php?view_id={e['view_id']}",
+                            "body": e.get("body", ""),
+                        }
+                        for e in entry
+                    ]
+                elif entry:
+                    # Single view_id (int)
+                    return [{"url": f"{base_url}/ViewPublisher.php?view_id={entry}", "body": ""}]
         except Exception:
             log.warning("failed to read granicus view_ids", file=view_ids_file, slug=slug)
 
-    # Fallback: return base URL without view_id
-    # (better than nothing, user can navigate from there)
-    return f"{base_url}/ViewPublisher.php"
+    return [{"url": f"{base_url}/ViewPublisher.php", "body": ""}]
 
 
 def _get_municode_url(slug: str) -> str:
@@ -115,9 +133,13 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
         "iqm2": f"https://{slug}.iqm2.com/Citizens/Calendar.aspx",
         "novusagenda": f"https://{slug}.novusagenda.com/agendapublic",
         "escribe": f"https://{slug}.escribemeetings.com",
-        "civicclerk": f"https://{slug}.api.civicclerk.com",
+        "civicclerk": f"https://{slug}.portal.civicclerk.com",
         "civicplus": f"https://{slug}.civicplus.com/AgendaCenter",
         "civicengage": f"https://{slug}.gov/Archive.aspx",
+        "civicweb": f"https://{slug}.civicweb.net/Portal",
+        "visioninternet": None,  # Varies per site, loaded from config
+        "proudcity": f"https://{slug}.gov/meetings",
+        "wp_events": None,  # WordPress-based, varies per site
         # Custom adapters
         "berkeley": "https://berkeleyca.gov/your-government/city-council/city-council-agendas",
         "chicago": "https://chicityclerkelms.chicago.gov/Meetings/",
@@ -125,6 +147,22 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
     }
 
     return vendor_patterns.get(vendor)
+
+
+def get_vendor_source_urls(vendor: str, slug: str) -> list:
+    """
+    Get all source URLs for a vendor, with optional body labels.
+
+    Returns list of {"url": ..., "body": ...} dicts.  Most vendors return
+    a single entry.  Granicus cities with multiple view_ids return one
+    entry per governing body.  Only populated when there are multiple
+    sources worth displaying.
+    """
+    if vendor.lower().strip() == "granicus":
+        urls = _get_granicus_urls(slug)
+        if len(urls) > 1:
+            return urls
+    return []
 
 
 def get_vendor_display_name(vendor: str) -> str:
@@ -149,12 +187,17 @@ def get_vendor_display_name(vendor: str) -> str:
         "civicclerk": "CivicClerk",
         "civicplus": "CivicPlus",
         "civicengage": "CivicEngage",
+        "civicweb": "CivicWeb",
+        "visioninternet": "Vision Internet",
+        "proudcity": "ProudCity",
+        "wp_events": "City Website",
         "onbase": "OnBase Agenda Online",
         "municode": "Municode",
         # Custom adapters
         "berkeley": "City of Berkeley",
         "chicago": "City of Chicago",
         "menlopark": "City of Menlo Park",
+        "ross": "Town of Ross",
     }
 
     return display_names.get(vendor, vendor.title())

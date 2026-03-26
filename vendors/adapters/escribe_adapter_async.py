@@ -13,7 +13,10 @@ Item-level extraction via Agenda=Merged view:
 Confidence: 8/10 - Tested against Raleigh NC, may need adjustments for other cities
 """
 
+import asyncio
+import os
 import re
+import tempfile
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
@@ -21,6 +24,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
+from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 
 
@@ -116,8 +120,23 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             if meeting_uuid and meeting_basic.get("has_agenda"):
                 meeting_data = await self._fetch_meeting_details(meeting_uuid, meeting_basic)
                 if meeting_data:
+                    # If HTML parsing yielded no items, try chunker on packet PDF
+                    if not meeting_data.get("items") and meeting_data.get("packet_url"):
+                        pdf_items = await self._parse_packet_pdf(
+                            meeting_data["packet_url"], meeting_data.get("vendor_id")
+                        )
+                        if pdf_items:
+                            meeting_data["items"] = pdf_items
                     results.append(meeting_data)
             else:
+                # No HTML agenda — try chunker on packet PDF
+                packet_url = meeting_basic.get("packet_url")
+                if packet_url:
+                    pdf_items = await self._parse_packet_pdf(
+                        packet_url, meeting_basic.get("vendor_id")
+                    )
+                    if pdf_items:
+                        meeting_basic["items"] = pdf_items
                 meeting_basic.pop("_uuid", None)
                 meeting_basic.pop("has_agenda", None)
                 results.append(meeting_basic)
@@ -126,7 +145,8 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             "collected meetings with items",
             vendor="escribe",
             slug=self.slug,
-            count=len(results)
+            count=len(results),
+            with_items=sum(1 for m in results if m.get("items")),
         )
 
         return results
@@ -422,6 +442,53 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
             attachments.append({"name": name, "url": attachment_url, "type": file_type})
 
         return attachments
+
+    async def _parse_packet_pdf(
+        self, packet_url: str, vendor_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Download packet PDF and run chunker. Returns items or empty list."""
+        tmp_path = None
+        try:
+            response = await self._get(packet_url)
+            pdf_bytes = await response.read()
+
+            if len(pdf_bytes) < 500:
+                return []
+
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp_path = tmp.name
+                tmp.write(pdf_bytes)
+
+            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+            items = parsed.get("items", [])
+
+            if items:
+                logger.info(
+                    "chunker extracted items from pdf",
+                    vendor="escribe",
+                    slug=self.slug,
+                    vendor_id=vendor_id,
+                    item_count=len(items),
+                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
+                )
+
+            return items
+
+        except Exception as e:
+            logger.debug(
+                "pdf parse failed",
+                vendor="escribe",
+                slug=self.slug,
+                vendor_id=vendor_id,
+                error=str(e),
+            )
+            return []
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def _detect_file_type(self, name: str, href: str) -> str:
         """Detect file type from name or URL. Defaults to pdf."""

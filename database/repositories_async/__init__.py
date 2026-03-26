@@ -1,7 +1,8 @@
 """Async PostgreSQL repositories using asyncpg connection pooling"""
 
 from database.repositories_async.base import BaseRepository
-from database.repositories_async.cities import CityRepository
+from database.repositories_async.cities import JurisdictionRepository
+CityRepository = JurisdictionRepository  # backward compat
 from database.repositories_async.committees import CommitteeRepository
 from database.repositories_async.council_members import CouncilMemberRepository
 from database.repositories_async.engagement import EngagementRepository
@@ -16,6 +17,7 @@ from database.repositories_async.search import SearchRepository
 __all__ = [
     "BaseRepository",
     "CityRepository",
+    "JurisdictionRepository",
     "CommitteeRepository",
     "CouncilMemberRepository",
     "EngagementRepository",

@@ -1,5 +1,5 @@
 # Bay Area Cities
-# Last updated: 2026-03-10
+# Last updated: 2026-03-24
 
 # Peninsula / South Bay
 sanfranciscoCA
@@ -17,6 +17,7 @@ santaclaraCA
 milpitasCA
 sanjoseCA
 gilroyCA
+santacruzCA
 
 # East Bay
 oaklandCA
@@ -28,6 +29,25 @@ sanleandroCA
 dublinCA
 livermoreCA
 oakleyCA
+concordCA
+richmondCA
+walnutcreekCA
+sanpabloCA
+pittsburgCA
+martinezCA
+danvilleCA
+unioncityCA
+newarkCA
+antiochCA
+pleasantonCA
+sanramonCA
+brentwoodCA
 
 # North Bay
 santarosaCA
+novatoCA
+petalumaCA
+napaCA
+vallejoCA
+fairfieldCA
+vacavilleCA

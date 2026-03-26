@@ -19,5 +19,6 @@ All custom adapters are async (migration complete Nov 2025).
 from vendors.adapters.custom.berkeley_adapter_async import AsyncBerkeleyAdapter
 from vendors.adapters.custom.chicago_adapter_async import AsyncChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter_async import AsyncMenloParkAdapter
+from vendors.adapters.custom.ross_adapter_async import AsyncRossAdapter
 
-__all__ = ["AsyncBerkeleyAdapter", "AsyncChicagoAdapter", "AsyncMenloParkAdapter"]
+__all__ = ["AsyncBerkeleyAdapter", "AsyncChicagoAdapter", "AsyncMenloParkAdapter", "AsyncRossAdapter"]
