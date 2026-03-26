@@ -32,12 +32,9 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals }) => {
 
 		return processMeetingsData(result);
 	} catch (err) {
-		// Re-throw SvelteKit errors (redirects, error responses)
 		if (err && typeof err === 'object' && 'status' in err) throw err;
-		const statusCode = err && typeof err === 'object' && 'statusCode' in err ? (err as any).statusCode : 'N/A';
-		const errName = err instanceof Error ? err.constructor.name : typeof err;
-		console.error('City page load error:', city_url, errName, statusCode, err);
-		throw error(500, `Load failed [${errName} ${statusCode}]: ${err instanceof Error ? err.message : String(err)}`);
+		console.error('City page load error:', city_url, err);
+		throw error(500, 'Unable to load city data. Please try again later.');
 	}
 };
 
