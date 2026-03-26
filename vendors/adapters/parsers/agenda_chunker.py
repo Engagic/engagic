@@ -100,6 +100,7 @@ ITEM_NUM_RE = re.compile(
     r'\d{4}-\d{1,4}'                # 2026-68 (resolution/ordinance numbers)
     r'|\d{1,2}(?:\.\d{1,2}){1,3}'   # 4.3, 6.1.2, 1.2.3.4
     r'|\d{1,2}\.[a-z]'              # 2.a, 3.b (Legistar sub-items)
+    r'|[A-Z]\.\d{1,2}'              # H.1, F.1 (CivicPlus letter-dot-digit sub-items)
     r'|\d{1,2}\.'                    # 1. 2.
     r'|[A-Z]\.'                      # A. B. C.
     r'|[a-z]\.'                      # a. b. c.
@@ -1338,7 +1339,7 @@ def _parse_agenda_items(all_lines, all_links, result):
 
         # Try item detection first for numbered lines to prevent
         # section regex from eating items like "4. PUBLIC HEARING"
-        has_num = bool(re.match(r'^\s*(?:\d{4}-\d{1,4}|\d{1,2}\.[a-z]|\d{1,2}\.|[A-Z]\.)', text))
+        has_num = bool(re.match(r'^\s*(?:\d{4}-\d{1,4}|\d{1,2}\.[a-z]|[A-Z]\.\d|\d{1,2}\.|[A-Z]\.)', text))
 
         if has_num:
             is_item, num, title_text, lines_consumed = _is_likely_item_header(
