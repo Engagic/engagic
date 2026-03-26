@@ -591,7 +591,7 @@ SELECT DISTINCT elem as requested_city, u.email, a.created_at::date as requested
 FROM userland.alerts a
 JOIN userland.users u ON a.user_id = u.id
 CROSS JOIN LATERAL jsonb_array_elements_text(a.cities) elem
-WHERE NOT EXISTS (SELECT 1 FROM cities c WHERE c.banana = elem)
+WHERE NOT EXISTS (SELECT 1 FROM jurisdictions j WHERE j.banana = elem)
 ORDER BY requested DESC, elem;
 "
     echo ""

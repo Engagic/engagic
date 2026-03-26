@@ -347,11 +347,6 @@ class Processor:
             logger.debug("no attachments or body text for item", title=item.title[:50])
             return None
 
-        # Check if entire item is public comments or parcel tables
-        if is_public_comment_attachment(item.title):
-            logger.info("skipping low-value item", title=item.title[:80], reason="public_comments_or_parcel_tables")
-            return None
-
         # Collect valid attachments to extract
         attachments_to_extract = []
         for att in item.attachments:
@@ -535,11 +530,18 @@ class Processor:
             agenda_items = await self.db.items.get_agenda_items(meeting.id)
 
             if agenda_items:
-                logger.info("found items for meeting", item_count=len(agenda_items), meeting_title=meeting.title)
-                if not self.analyzer:
-                    logger.warning("analyzer not available")
-                    return empty_stats
-                return await self._process_meeting_with_items(meeting, agenda_items)
+                # Check if any items have processable content (attachments or body text).
+                # Bare HTML titles without content cannot produce summaries -- fall through
+                # to packet processing instead.
+                has_content = any(item.attachments or item.body_text for item in agenda_items)
+                if has_content:
+                    logger.info("found items for meeting", item_count=len(agenda_items), meeting_title=meeting.title)
+                    if not self.analyzer:
+                        logger.warning("analyzer not available")
+                        return empty_stats
+                    return await self._process_meeting_with_items(meeting, agenda_items)
+                else:
+                    logger.info("items exist but lack content, falling through to packet", item_count=len(agenda_items), meeting_title=meeting.title)
 
             if meeting.packet_url:
                 logger.info("processing packet as monolithic unit - no items found", meeting_title=meeting.title)
@@ -737,10 +739,6 @@ class Processor:
 
         for item in need_processing:
             try:
-                if is_public_comment_attachment(item.title):
-                    logger.info("skipping entire item - low value content", title=item.title[:80])
-                    continue
-
                 item_specific_parts = []
                 total_page_count = 0
                 has_shared_attachments = False

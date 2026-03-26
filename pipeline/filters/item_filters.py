@@ -95,7 +95,7 @@ PARCEL_TABLE_PATTERNS = [
     r'tax parcel',
     r'property list',
     r'property table',
-    r'assessor',
+    r'assessor(?:.s)?\s+(?:parcel\s+)?(?:table|list|report|roll|data)',
     r'apn list',  # Assessor Parcel Number
     r'parcel number',
 ]
