@@ -134,6 +134,10 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
             return [DEFAULT_CATEGORY_ID]
 
         discovered = []
+        # Track agenda vs packet categories per body so we can prefer packets.
+        # "City Council Agendas" and "City Council Packets" share body "City Council".
+        body_categories: Dict[str, List[tuple]] = {}
+
         for option in select.find_all("option"):
             value = option.get("value", "")
             label = option.get_text(strip=True)
@@ -143,7 +147,26 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
             if SKIP_CATEGORY_KEYWORDS.search(label):
                 continue
             if AGENDA_CATEGORY_KEYWORDS.search(label):
-                discovered.append(int(value))
+                # Extract body name by stripping trailing type keywords
+                body = re.sub(
+                    r'\s*(packets?|agendas?|action agendas?)\s*:?\s*$',
+                    '', label, flags=re.IGNORECASE
+                ).strip()
+                is_packet = bool(re.search(r'packet', label, re.IGNORECASE))
+                if body not in body_categories:
+                    body_categories[body] = []
+                body_categories[body].append((int(value), is_packet, label))
+
+        # For each body, prefer packet categories over plain agendas
+        for body, entries in body_categories.items():
+            packets = [e for e in entries if e[1]]
+            agendas = [e for e in entries if not e[1]]
+            if packets:
+                for cat_id, _, _ in packets:
+                    discovered.append(cat_id)
+            else:
+                for cat_id, _, _ in agendas:
+                    discovered.append(cat_id)
 
         if discovered:
             logger.info(

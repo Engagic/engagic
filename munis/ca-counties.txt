@@ -1,0 +1,32 @@
+# California Counties
+# Last updated: 2026-03-27
+
+# Bay Area
+alamedacountyCA
+contracostacountyCA
+marincountyCA
+napacountyCA
+sanmateocountyCA
+santaclaracountyCA
+santacruzcountyCA
+solanocountyCA
+sonomacountyCA
+
+# Central Valley
+fresnocountyCA
+sanjoaquincountyCA
+tularecountyCA
+sacramentocountyCA
+
+# SoCal
+orangecountyCA
+riversidecountyCA
+sanbernardinocountyCA
+sandiegocountyCA
+santabarbaracountyCA
+venturacountyCA
+
+# Sierra / North
+eldoradocountyCA
+humboldtcountyCA
+montereycountyCA
