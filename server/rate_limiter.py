@@ -365,11 +365,44 @@ class SQLiteRateLimiter:
                 )
                 raw_ips = [row[0] for row in cursor.fetchall()]
 
-            # Validate IPs to prevent malformed entries from breaking nginx config
+            # Cloudflare IP ranges -- never block at nginx level.
+            # Our Worker shares these IPs; blocking them kills SSR for everyone.
+            # The API-level ban (403) still applies to the offending traffic.
+            CLOUDFLARE_RANGES = [
+                ipaddress.ip_network("173.245.48.0/20"),
+                ipaddress.ip_network("103.21.244.0/22"),
+                ipaddress.ip_network("103.22.200.0/22"),
+                ipaddress.ip_network("103.31.4.0/22"),
+                ipaddress.ip_network("141.101.64.0/18"),
+                ipaddress.ip_network("108.162.192.0/18"),
+                ipaddress.ip_network("190.93.240.0/20"),
+                ipaddress.ip_network("188.114.96.0/20"),
+                ipaddress.ip_network("197.234.240.0/22"),
+                ipaddress.ip_network("198.41.128.0/17"),
+                ipaddress.ip_network("162.158.0.0/15"),
+                ipaddress.ip_network("104.16.0.0/13"),
+                ipaddress.ip_network("104.24.0.0/14"),
+                ipaddress.ip_network("172.64.0.0/13"),
+                ipaddress.ip_network("131.0.72.0/22"),
+                ipaddress.ip_network("216.73.216.0/24"),
+                ipaddress.ip_network("2400:cb00::/32"),
+                ipaddress.ip_network("2606:4700::/32"),
+                ipaddress.ip_network("2803:f800::/32"),
+                ipaddress.ip_network("2405:b500::/32"),
+                ipaddress.ip_network("2405:8100::/32"),
+                ipaddress.ip_network("2a06:98c0::/29"),
+                ipaddress.ip_network("2c0f:f248::/32"),
+            ]
+
+            # Validate IPs and skip Cloudflare ranges
             valid_ips = []
             for ip in raw_ips:
                 try:
-                    ipaddress.ip_address(ip)
+                    addr = ipaddress.ip_address(ip)
+                    if any(addr in net for net in CLOUDFLARE_RANGES):
+                        logger.warning("skipping Cloudflare IP in nginx blocklist "
+                                       "(API-level ban still active)", ip=ip)
+                        continue
                     valid_ips.append(ip)
                 except ValueError:
                     logger.warning("skipping invalid IP in blocklist", ip=ip)

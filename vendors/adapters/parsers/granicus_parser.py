@@ -7,6 +7,8 @@ Supports multiple HTML formats:
 3. AgendaViewer.php - Original Granicus format (parse_agendaviewer_html)
 4. S3-hosted grid HTML - Native Granicus format (parse_granicus_s3_html)
    Used by sites like Bozeman where AgendaViewer redirects to S3/CloudFront HTML
+5. Questys HTML - Word-exported agenda from Questys DMS (parse_questys_html)
+   Used by Anaheim and others that redirect to external Questys servers
 """
 
 import re
@@ -678,9 +680,10 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
     Section headers (PUBLIC HEARINGS, CONSENT CALENDAR, BUSINESS) have sub-items (a, b, c)
     nested inside their blockquote.
 
-    Supports two body-level layouts:
+    Supports three body-level layouts:
     - Div-wrapped: item tables inside <div> elements (original format)
     - Bare tables: item <table> elements directly at body level (e.g. Vacaville)
+    - Section-div: <div> with <strong> section header, items in sibling <blockquote> (e.g. Irvine)
     """
     soup = BeautifulSoup(html, 'html.parser')
     items = []
@@ -768,6 +771,36 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
             table = elem.find('table', recursive=False)
 
         if not table:
+            # Section-div layout: <div> has no table, just a <strong> section
+            # header. Items live in the sibling <blockquote> that follows.
+            if elem.name == 'div':
+                strong = elem.find('strong')
+                if strong:
+                    header_text = strong.get_text(strip=True)
+                    if header_text and header_text.rstrip('.').lower() not in procedural:
+                        current_section = re.sub(r'\s*\(.*\)\s*$', '', header_text).strip()
+                        current_section = re.sub(r'[\s.:,\-\u2013\u2014]+$', '', current_section).strip()
+                        next_bq = elem.find_next_sibling('blockquote')
+                        if next_bq:
+                            for sub_table in next_bq.find_all('table', recursive=True):
+                                sub_data = _process_item_table(sub_table, parent_section=current_section)
+                                if not sub_data or not sub_data['title']:
+                                    continue
+                                att_bq = sub_table.find_next_sibling('blockquote')
+                                if not att_bq:
+                                    parent_div = sub_table.find_parent('div')
+                                    if parent_div:
+                                        att_bq = parent_div.find_next_sibling('blockquote')
+                                sub_attachments = _extract_attachments(att_bq)
+                                sequence_counter += 1
+                                items.append({
+                                    'vendor_item_id': sub_data['number'],
+                                    'title': sub_data['title'],
+                                    'sequence': sequence_counter,
+                                    'agenda_number': sub_data['number'],
+                                    'attachments': sub_attachments,
+                                    'metadata': {'section': current_section} if current_section else {},
+                                })
             continue
 
         item_data = _process_item_table(table)
@@ -854,6 +887,120 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
 
     logger.debug(
         "parsed generated agendaviewer html",
+        vendor="granicus",
+        item_count=len(items),
+    )
+
+    return {'participation': {}, 'items': items}
+
+
+# ---------------------------------------------------------------------------
+# Questys HTML (Word-exported agendas from Questys DMS)
+# ---------------------------------------------------------------------------
+
+# Item number at start of paragraph text: "9.", "10.", "22."
+_QUESTYS_ITEM_NUM_RE = re.compile(r'^(\d+)\.\s*')
+
+# Questys item anchor: <a name="AI{id}_NAME">
+_QUESTYS_AI_RE = re.compile(r'^AI(\d+)_NAME$')
+
+# Section header patterns in Questys agendas
+_QUESTYS_SECTION_KEYWORDS = {
+    'CONSENT CALENDAR', 'CONSENT AGENDA', 'BUSINESS CALENDAR',
+    'PUBLIC HEARINGS', 'PUBLIC HEARING', 'CLOSED SESSION',
+}
+
+
+def parse_questys_html(html: str, base_url: str) -> Dict[str, Any]:
+    """Parse Questys DMS Word-exported HTML agenda.
+
+    Structure: items are numbered <p> tags with hanging indent.  Each has an
+    <a name="AI{id}_NAME"> anchor and an <a href="...Documents.htm" target=fraDocuments>
+    link containing the item title and pointing to the attachments page.
+    Section headers are bold text ending with colon (CONSENT CALENDAR:).
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    items = []
+    sequence_counter = 0
+    current_section = ""
+
+    procedural = {
+        'call to order', 'roll call', 'pledge of allegiance',
+        'flag salute', 'invocation', 'adjournment', 'adjourn',
+        'recess', 'reconvene',
+    }
+
+    # Walk all paragraphs -- Questys uses <p class=MsoNormal> for everything
+    for p in soup.find_all('p', class_='MsoNormal'):
+        text = p.get_text(strip=True)
+        if not text:
+            continue
+
+        # Section headers: bold text ending with colon, no numbering
+        bold = p.find('b')
+        if bold:
+            bold_text = bold.get_text(strip=True).rstrip(':').strip()
+            bold_upper = bold_text.upper()
+            # Check if this is a section header (not a numbered item)
+            num_match = _QUESTYS_ITEM_NUM_RE.match(text)
+            if not num_match and any(kw in bold_upper for kw in _QUESTYS_SECTION_KEYWORDS):
+                current_section = bold_text
+                continue
+
+        # Numbered items: start with "9.", "10.", etc.
+        num_match = _QUESTYS_ITEM_NUM_RE.match(text)
+        if not num_match:
+            continue
+
+        item_number = num_match.group(1)
+
+        # Extract vendor item ID from AI anchor
+        vendor_item_id = item_number
+        for anchor in p.find_all('a', attrs={'name': True}):
+            ai_match = _QUESTYS_AI_RE.match(anchor.get('name', ''))
+            if ai_match:
+                vendor_item_id = ai_match.group(1)
+                break
+
+        # Get title from the Documents.htm link
+        doc_link = p.find('a', attrs={'target': 'fraDocuments'})
+        if not doc_link:
+            continue
+
+        title = doc_link.get_text(strip=True)
+        if not title:
+            continue
+
+        # Skip procedural
+        title_lower = title.lower()
+        if any(title_lower.startswith(proc) for proc in procedural):
+            continue
+
+        # Build attachment URL from relative Documents.htm path
+        href = doc_link.get('href', '')
+        attachments = []
+        if href:
+            doc_url = urljoin(base_url, href)
+            attachments.append({
+                'name': 'Staff Report',
+                'url': doc_url,
+                'type': 'html',
+            })
+
+        sequence_counter += 1
+        item_dict = {
+            'vendor_item_id': vendor_item_id,
+            'title': title,
+            'sequence': sequence_counter,
+            'agenda_number': item_number,
+            'attachments': attachments,
+        }
+        if current_section:
+            item_dict['metadata'] = {'section': current_section}
+        items.append(item_dict)
+
+    logger.debug(
+        "parsed questys html",
         vendor="granicus",
         item_count=len(items),
     )

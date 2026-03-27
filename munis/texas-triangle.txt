@@ -1,25 +1,98 @@
 # Texas Triangle Cities
-# Last updated: 2026-01-29
+# Last updated: 2026-03-26
 
 # Dallas-Fort Worth
-dallasTX
-fortworthTX
+allenTX
 arlingtonTX
-planoTX
+bedfordTX
+carrolltonTX
+cedarhillTX
+coppellTX
+dallascountyTX
+dallasTX
+dentonTX
+desotoTX
+fortworthTX
 friscoTX
+garlandTX
+grandprairieTX
+grapevineTX
+kellerTX
+lancasterTX
+lewisvilleTX
+mansfieldTX
 mckinneyTX
+mesquiteTX
+northrichlandhillsTX
+planoTX
+richardsonTX
+rockwallTX
+rowlettTX
+thecolonyTX
 
 # Houston
+dickinsonTX
+harriscountyTX
 houstonTX
-tomballTX
+katyTX
+leaguecityTX
+missouricityTX
+pasadenaTX
+pearlandTX
+richmondTX
+rosenbergTX
 sugarlandTX
+tomballTX
 
 # Austin
 austinTX
-roundrockTX
-georgetownTX
+budaTX
 cedarparkTX
+georgetownTX
+kyleTX
+pflugervilleTX
+roundrockTX
+sanmarcosTX
 
 # San Antonio
-sanantonioTX
+boerneTX
 newbraunfelsTX
+sanantonioTX
+seguinTX
+
+# Corpus Christi
+corpuschristiTX
+
+# El Paso
+elpasoTX
+
+# Other Texas
+amarilloTX
+beaumontTX
+brenhamTX
+bryanTX
+burlesonTX
+corsicanaTX
+edinburgTX
+galvestonTX
+granburyTX
+huntsvilleTX
+kerrvilleTX
+killeenTX
+laredoTX
+longviewTX
+lubbockTX
+mcallenTX
+midlandTX
+nacogdochesTX
+odessaTX
+orangeTX
+parisTX
+sanangeloTX
+sanbenitoTX
+templeTX
+texarkanaTX
+tylerTX
+wacoTX
+weatherfordTX
+wichitafallsTX

@@ -35,7 +35,7 @@ PROCEDURAL_PATTERNS = [
 
 # Ceremonial — searchable names, no policy substance
 CEREMONIAL_PATTERNS = [
-    r'\bproclamation\b',
+    r'\bproclamation\b(?!.{0,30}\b(emergency|disaster|local emergency|state of emergency))',
     r'\bcommendation\b',
     r'\brecognition\b',
     r'\bceremonial\b',
