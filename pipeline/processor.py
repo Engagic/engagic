@@ -361,8 +361,8 @@ class Processor:
 
             attachments_to_extract.append((att_url, att_name))
 
-        # Concurrent PDF extraction
-        pdf_concurrency = config.LLM_CONCURRENCY
+        # Concurrent PDF extraction (capped separately from LLM — each is a subprocess)
+        pdf_concurrency = min(config.LLM_CONCURRENCY, 6)
         semaphore = asyncio.Semaphore(pdf_concurrency)
 
         async def extract_attachment(att_url: str, att_name: Optional[str]) -> Optional[tuple[str, str, int]]:

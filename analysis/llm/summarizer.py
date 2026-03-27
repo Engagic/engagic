@@ -408,8 +408,8 @@ class GeminiSummarizer:
         This enables incremental saving to prevent data loss on crashes.
 
         Uses chunked processing to respect rate limits:
-        - 5 items per chunk (respects TPM quota)
-        - 120-second delays between chunks (allows quota refill)
+        - 30 items per chunk (Flash Lite: 4M TPM)
+        - 10-second delays between chunks
         - Exponential backoff on 429 errors
 
         Args:
@@ -483,8 +483,9 @@ class GeminiSummarizer:
 
         # Chunk items to respect TPM (tokens-per-minute) limits
         # Flash Lite models: 4M TPM limit - large PDFs can use 50K+ tokens each
-        # At 4M TPM, 15 items × 50K tokens = 750K tokens per chunk (well within limit)
-        chunk_size = 15
+        # At 4M TPM, 30 items × 50K tokens = 1.5M tokens (37% of limit, safe margin)
+        # Most items are well under 50K, so this covers nearly all meetings in one batch
+        chunk_size = 30
         chunks = [
             item_requests[i : i + chunk_size]
             for i in range(0, total_items, chunk_size)
@@ -531,7 +532,7 @@ class GeminiSummarizer:
 
                 # Delay between chunks (except after last chunk)
                 if chunk_idx < len(chunks) - 1:
-                    delay = 30  # 30s between chunks (Flash Lite: 4M TPM refills fast)
+                    delay = 10  # 10s between chunks (Flash Lite: 4M TPM, chunks use <40% of quota)
                     logger.info(
                         "waiting before next chunk for quota refill",
                         delay_seconds=delay
@@ -760,7 +761,7 @@ class GeminiSummarizer:
         self,
         batch_name: str,
         max_wait_time: int = 1800,
-        poll_interval: int = 10
+        poll_interval: int = 5
     ) -> None:
         """Poll batch job until completion
 
