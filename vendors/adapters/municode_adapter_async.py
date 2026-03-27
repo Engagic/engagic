@@ -301,7 +301,13 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                     return
                 async with semaphore:
                     html_url = self._build_html_packet_url(guid)
-                    items_data = await self._fetch_html_agenda_items(html_url)
+                    items_data = None
+                    try:
+                        items_data = await self._fetch_html_agenda_items(html_url)
+                    except Exception as e:
+                        logger.debug("HTML agenda fetch failed, trying PDF",
+                                     vendor="municode", slug=self.slug, error=str(e))
+
                     if items_data and items_data.get("items"):
                         meeting["items"] = items_data["items"]
                         if items_data.get("participation"):
@@ -314,6 +320,15 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                             title=meeting.get("title", "")[:50],
                             count=len(items_data["items"]),
                         )
+                    else:
+                        # HTML failed or empty -- try chunking the PDF packet
+                        pdf_url = self._build_pdf_packet_url(guid)
+                        chunked = await self._chunk_agenda_then_packet(
+                            packet_url=pdf_url, vendor_id=guid
+                        )
+                        if chunked:
+                            meeting["items"] = chunked
+                            meeting["packet_url"] = pdf_url
 
             await asyncio.gather(*[enrich_meeting(m) for m in filtered])
 
@@ -331,12 +346,13 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
     def _parse_publish_page_html(self, html: str) -> List[Dict[str, Any]]:
         """Parse PublishPage HTML table into meeting dicts.
 
-        Table columns: Meeting | Date | Time | Venue | Agenda | Packet | Minutes
+        Column order varies by city (Grand Prairie has venue before date,
+        Cedar Park has date before venue). Uses CSS classes on td elements
+        to find columns by name instead of hardcoding indices.
         """
         soup = BeautifulSoup(html, "html.parser")
         meetings = []
 
-        # Find the meeting table - look for table with expected headers
         table = soup.find("table")
         if not table:
             logger.warning("no table found in PublishPage", vendor="municode", slug=self.slug)
@@ -346,34 +362,55 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         if len(rows) < 2:
             return []
 
-        # Skip header row
         for row in rows[1:]:
             cells = row.find_all("td")
-            if len(cells) < 5:
+            if len(cells) < 4:
                 continue
 
             try:
-                meeting_type = cells[0].get_text(strip=True)
-                date_str = cells[1].get_text(strip=True)
-                time_str = cells[2].get_text(strip=True)
-                venue = cells[3].get_text(strip=True)
+                # Find columns by CSS class — order varies across cities
+                cell_map = {}
+                for cell in cells:
+                    classes = cell.get("class", [])
+                    for cls in classes:
+                        if cls in ("meeting", "date", "time", "venue", "agenda", "packet", "minutes"):
+                            cell_map[cls] = cell
+                            break
 
-                # Parse date
+                # Fall back to positional if no CSS classes found
+                if not cell_map:
+                    cell_map = {
+                        "meeting": cells[0],
+                        "date": cells[1],
+                        "time": cells[2],
+                        "venue": cells[3] if len(cells) > 3 else None,
+                        "agenda": cells[4] if len(cells) > 4 else None,
+                        "packet": cells[5] if len(cells) > 5 else None,
+                        "minutes": cells[6] if len(cells) > 6 else None,
+                    }
+
+                meeting_type = cell_map.get("meeting", cells[0]).get_text(strip=True)
+                date_str = cell_map["date"].get_text(strip=True) if "date" in cell_map else ""
+                time_str = cell_map["time"].get_text(strip=True) if "time" in cell_map else ""
+                venue_cell = cell_map.get("venue")
+                venue = venue_cell.get_text(strip=True) if venue_cell else ""
+
                 parsed_date = self._parse_publish_page_date(date_str, time_str)
 
-                # Extract PDF links
-                agenda_link = cells[4].find("a", href=True) if len(cells) > 4 else None
-                packet_link = cells[5].find("a", href=True) if len(cells) > 5 else None
-                minutes_link = cells[6].find("a", href=True) if len(cells) > 6 else None
+                agenda_cell = cell_map.get("agenda")
+                packet_cell = cell_map.get("packet")
+                minutes_cell = cell_map.get("minutes")
+
+                agenda_link = agenda_cell.find("a", href=True) if agenda_cell else None
+                packet_link = packet_cell.find("a", href=True) if packet_cell else None
+                minutes_link = minutes_cell.find("a", href=True) if minutes_cell else None
 
                 agenda_url = urljoin(self.base_url, agenda_link["href"]) if agenda_link else None
                 packet_url = urljoin(self.base_url, packet_link["href"]) if packet_link else None
                 minutes_url = urljoin(self.base_url, minutes_link["href"]) if minutes_link else None
 
-                # Extract GUID from any blob URL for HTML agenda fetch
                 meeting_guid = self._extract_guid_from_blob_url(agenda_url, packet_url, minutes_url)
 
-                # Build vendor_id from date + meeting type
                 vendor_id = f"{date_str.replace('/', '-')}_{meeting_type[:20]}".replace(" ", "_")
 
                 title = f"{meeting_type} - {date_str}" if meeting_type else date_str
@@ -382,8 +419,8 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                     "vendor_id": vendor_id,
                     "title": title,
                     "start": parsed_date.isoformat() if parsed_date else None,
-                    "_parsed_date": parsed_date,  # For filtering, removed by caller
-                    "_meeting_guid": meeting_guid,  # For HTML agenda fetch, removed by caller
+                    "_parsed_date": parsed_date,
+                    "_meeting_guid": meeting_guid,
                 }
 
                 if agenda_url:
@@ -393,14 +430,13 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                 if venue:
                     meeting["location"] = venue
 
-                # Check for meeting status in title
                 meeting_status = self._parse_meeting_status(meeting_type)
                 if meeting_status:
                     meeting["meeting_status"] = meeting_status
 
                 meetings.append(meeting)
 
-            except (IndexError, AttributeError) as e:
+            except (IndexError, AttributeError, KeyError) as e:
                 logger.debug("failed to parse PublishPage row", vendor="municode", slug=self.slug, error=str(e))
                 continue
 

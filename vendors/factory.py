@@ -26,6 +26,7 @@ from vendors.adapters.custom.chicago_adapter_async import AsyncChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter_async import AsyncMenloParkAdapter
 from vendors.adapters.custom.ross_adapter_async import AsyncRossAdapter
 from vendors.adapters.visioninternet_adapter_async import AsyncVisionInternetAdapter
+from vendors.adapters.agendaonline_adapter_async import AsyncAgendaOnlineAdapter
 
 logger = get_logger(__name__).bind(component="vendor")
 
@@ -49,6 +50,7 @@ VENDOR_ADAPTERS = {
     "menlopark": AsyncMenloParkAdapter,
     "ross": AsyncRossAdapter,
     "visioninternet": AsyncVisionInternetAdapter,
+    "agendaonline": AsyncAgendaOnlineAdapter,
 }
 
 def get_async_adapter(

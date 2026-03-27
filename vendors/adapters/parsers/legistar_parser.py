@@ -257,13 +257,20 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             column_map[header_text] = i
         logger.debug("column map created", parser="legistar", column_map=column_map)
     else:
-        # Fallback: assume standard layout if no header found
-        logger.warning("[HTMLParser:Legistar] No header row found, using default column positions")
-        column_map = {
-            'file #': 0, 'ver.': 1, 'agenda #': 2, 'name': 3,
-            'type': 4, 'status': 5, 'title': 6, 'action': 7,
-            'result': 8, 'action details': 9, 'video': 10
-        }
+        # Fallback: infer layout from column count in first data row
+        first_row = master_table.find('tr', class_=['rgRow', 'rgAltRow'])
+        cell_count = len(first_row.find_all('td')) if first_row else 0
+        if cell_count <= 5:
+            # Slim layout (e.g. Riverside): File #, Ver., Title, Video
+            logger.debug("using slim column layout", parser="legistar", cell_count=cell_count)
+            column_map = {'file #': 0, 'ver.': 1, 'title': 2}
+        else:
+            logger.warning("[HTMLParser:Legistar] No header row found, using default column positions")
+            column_map = {
+                'file #': 0, 'ver.': 1, 'agenda #': 2, 'name': 3,
+                'type': 4, 'status': 5, 'title': 6, 'action': 7,
+                'result': 8, 'action details': 9, 'video': 10
+            }
 
     # Find all agenda item rows (rgRow and rgAltRow)
     rows = master_table.find_all('tr', class_=['rgRow', 'rgAltRow'])
@@ -278,7 +285,7 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
         try:
             cells = row.find_all('td')
 
-            if len(cells) < 5:
+            if len(cells) < 3:
                 logger.debug("row has too few cells, skipping", parser="legistar", row=sequence, cell_count=len(cells))
                 continue
 

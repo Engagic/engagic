@@ -99,9 +99,11 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return False
 
         useless_ratio = useless_items / total_items
-        # If >80% of items have neither agenda number nor matter ID,
-        # or we see literal "page break" items, the API is garbage.
-        if has_page_break or useless_ratio > 0.8:
+        # If >60% of items have neither agenda number nor matter ID
+        # AND we see literal "page break" items, the API is garbage.
+        # Page breaks alone don't indicate garbage -- some cities (Riverside)
+        # use them as structural separators alongside real items.
+        if has_page_break and useless_ratio > 0.6:
             logger.debug(
                 "garbage detection triggered",
                 slug=self.slug,

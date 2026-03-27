@@ -580,6 +580,21 @@ def _has_meaningful_toc(doc):
     return len(pages_referenced) >= 2 and max(pages_referenced) > 1
 
 
+def _has_structural_toc(doc):
+    """Stricter TOC check for large documents.
+
+    A packet TOC has dense item-level bookmarks (Legistar, CivicClerk).
+    Thin agendas sometimes carry 2-3 navigation bookmarks that pass
+    _has_meaningful_toc but contain no structural information.  Require
+    at least 5 entries so we don't mistake navigation for structure.
+    """
+    toc = doc.get_toc()
+    if len(toc) < 5:
+        return False
+    pages_referenced = set(entry[2] for entry in toc)
+    return len(pages_referenced) >= 3 and max(pages_referenced) > 1
+
+
 def _has_attachment_links(doc):
     for page in doc:
         for link in page.get_links():
@@ -1513,9 +1528,10 @@ def _parse_agenda_internal(pdf_path: str, force_method: Optional[str] = None) ->
         _parse_toc_based(doc, result)
     elif force_method == "url":
         _parse_url_based(doc, result)
-    elif _has_meaningful_toc(doc) and doc.page_count > 10:
-        # Large PDFs with TOC are packet documents — TOC is the real
+    elif _has_structural_toc(doc) and doc.page_count > 10:
+        # Large PDFs with dense TOC are packet documents -- TOC is the real
         # structure. Any hyperlinks are incidental (budget tables, etc).
+        # Thin navigation TOCs (2-3 entries) fall through to attachment check.
         _parse_toc_based(doc, result)
     elif _has_attachment_links(doc):
         _parse_url_based(doc, result)

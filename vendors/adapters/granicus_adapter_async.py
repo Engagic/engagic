@@ -31,6 +31,7 @@ from vendors.adapters.parsers.granicus_parser import (
     parse_agendaviewer_html,
     parse_generated_agendaviewer_html,
     parse_granicus_s3_html,
+    parse_questys_html,
 )
 from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
@@ -316,6 +317,9 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 parsed = await asyncio.to_thread(parse_granicus_s3_html, html)
             elif "GeneratedAgendaViewer" in final_url:
                 parsed = await asyncio.to_thread(parse_generated_agendaviewer_html, html)
+            elif "questys" in final_url or "MsoNormal" in html[:2000]:
+                # Questys DMS redirect -- Word-exported HTML with mso-* styles
+                parsed = await asyncio.to_thread(parse_questys_html, html, final_url)
             else:
                 # Legacy format first; fall back to S3 format if no items found
                 parsed = await asyncio.to_thread(parse_agendaviewer_html, html)
@@ -338,6 +342,10 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             # Fetch attachments from S3 staff report PDFs (Bozeman/Carson City style)
             if items and ("s3.amazonaws.com" in final_url or "cloudfront.net" in final_url):
                 items = await self._fetch_s3_pdf_attachments(items, event_id)
+
+            # Fetch actual PDF attachments from Questys Documents.htm pages
+            if items and ("questys" in final_url or "MsoNormal" in html[:2000]):
+                items = await self._fetch_questys_attachments(items, event_id)
 
             meeting = {
                 "vendor_id": event_id,
@@ -584,6 +592,67 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             return item
 
         return list(await asyncio.gather(*[extract_from_pdf(item) for item in items]))
+
+    async def _fetch_questys_attachments(
+        self, items: List[Dict[str, Any]], event_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Fetch actual PDF links from Questys Documents.htm pages.
+
+        Each item has a placeholder attachment pointing at a Documents.htm page.
+        That page lists the real PDFs (Staff Report, Resolutions, Exhibits).
+        Replace the placeholder with the actual PDF attachments.
+        """
+        semaphore = asyncio.Semaphore(5)
+
+        async def resolve_item(item: Dict[str, Any]) -> Dict[str, Any]:
+            async with semaphore:
+                html_atts = [
+                    a for a in item.get("attachments", [])
+                    if a.get("type") == "html" and a.get("url", "").endswith("Documents.htm")
+                ]
+                if not html_atts:
+                    return item
+
+                docs_url = html_atts[0]["url"]
+                try:
+                    response = await self._get(docs_url)
+                    html = await self._read_text(response)
+                    soup = BeautifulSoup(html, "html.parser")
+
+                    pdf_attachments = []
+                    for link in soup.find_all("a", href=True):
+                        href = link.get("href", "")
+                        name = link.get_text(strip=True)
+                        if not href or not name:
+                            continue
+                        full_url = urljoin(docs_url, href)
+                        pdf_attachments.append({
+                            "name": name,
+                            "url": full_url,
+                            "type": "pdf" if href.lower().endswith(".pdf") else "unknown",
+                        })
+
+                    if pdf_attachments:
+                        item["attachments"] = pdf_attachments
+                        logger.debug(
+                            "resolved questys attachments",
+                            vendor="granicus",
+                            slug=self.slug,
+                            item=item.get("agenda_number"),
+                            count=len(pdf_attachments),
+                        )
+                except Exception as e:
+                    logger.debug(
+                        "failed to fetch questys documents page",
+                        vendor="granicus",
+                        slug=self.slug,
+                        item=item.get("agenda_number"),
+                        docs_url=docs_url,
+                        error=str(e),
+                    )
+                return item
+
+        return list(await asyncio.gather(*[resolve_item(item) for item in items]))
 
     @staticmethod
     def _get_pdf_link_text(page, link_rect) -> str:
