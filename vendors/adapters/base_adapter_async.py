@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -198,6 +199,44 @@ class AsyncBaseAdapter:
         logger.warning("failed to parse date", date_str=date_str, vendor=self.vendor)
         return None
 
+    @staticmethod
+    def _load_vendor_config(config_file: str, required: bool = False) -> Dict[str, Any]:
+        """Load a JSON vendor config file. Returns {} if optional and missing."""
+        if not os.path.exists(config_file):
+            if required:
+                raise FileNotFoundError(f"Vendor config not found: {config_file}")
+            return {}
+        try:
+            with open(config_file, "r") as f:
+                return json.load(f)
+        except Exception:
+            if required:
+                raise
+            return {}
+
+    @staticmethod
+    def _strip_html(text: str) -> str:
+        """Remove HTML tags, decode entities, normalize whitespace."""
+        if not text:
+            return ""
+        # Replace <br> variants with space
+        text = re.sub(r'<br\s*/?>', ' ', text, flags=re.IGNORECASE)
+        # Remove all other HTML tags
+        text = re.sub(r'<[^>]+>', '', text)
+        # Decode common HTML entities
+        for entity, char in (
+            ("&amp;", "&"), ("&#038;", "&"),
+            ("&lt;", "<"), ("&gt;", ">"),
+            ("&quot;", '"'), ("&#39;", "'"),
+            ("&nbsp;", " "),
+            ("&#8211;", "\u2013"), ("&#8212;", "\u2014"),
+            ("&#8217;", "\u2019"),
+        ):
+            text = text.replace(entity, char)
+        # Normalize whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
     def _find_pdf_in_html(self, html: str, base_url: str) -> Optional[str]:
         """Find first PDF link in HTML, return absolute URL or None."""
         soup = BeautifulSoup(html, 'html.parser')
@@ -248,6 +287,79 @@ class AsyncBaseAdapter:
         return True
 
     # ------------------------------------------------------------------
+    # Domain discovery
+    # ------------------------------------------------------------------
+
+    def _get_candidate_base_urls(self) -> List[str]:
+        """Return candidate base URLs to probe. Override to add vendor-specific domains."""
+        slug = self.slug
+        candidates = [
+            f"https://www.{slug}.gov",
+            f"https://www.{slug}.org",
+            f"https://{slug}.gov",
+            f"https://{slug}.org",
+        ]
+        if "." in slug:
+            candidates.insert(0, f"https://www.{slug}.gov")
+            candidates.insert(1, f"https://{slug}.gov")
+        return candidates
+
+    async def _discover_base_url(
+        self,
+        probe_path: str,
+        validate=None,
+    ) -> Optional[str]:
+        """Discover working base URL by probing candidates.
+
+        Args:
+            probe_path: path to append to each candidate (e.g. "/wp-json/wp/v2/meetings?per_page=1")
+            validate: async or sync callable(response) -> bool. Defaults to checking status 200.
+        """
+        for base_url in self._get_candidate_base_urls():
+            test_url = f"{base_url}{probe_path}"
+            try:
+                response = await self._get(test_url)
+                if validate:
+                    if asyncio.iscoroutinefunction(validate):
+                        ok = await validate(response)
+                    else:
+                        ok = validate(response)
+                    if not ok:
+                        continue
+                logger.info("discovered site", vendor=self.vendor, slug=self.slug, base_url=base_url)
+                return base_url
+            except Exception:
+                continue
+
+        logger.warning("could not discover domain", vendor=self.vendor, slug=self.slug)
+        return None
+
+    # ------------------------------------------------------------------
+    # Concurrency helper
+    # ------------------------------------------------------------------
+
+    async def _bounded_gather(
+        self,
+        coros,
+        max_concurrent: int = 5,
+        return_exceptions: bool = True,
+    ):
+        """Run coroutines concurrently with a semaphore bound.
+
+        Returns list of results (or exceptions if return_exceptions=True).
+        """
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def _limited(coro):
+            async with semaphore:
+                return await coro
+
+        return await asyncio.gather(
+            *[_limited(c) for c in coros],
+            return_exceptions=return_exceptions,
+        )
+
+    # ------------------------------------------------------------------
     # PDF chunking: agenda (url) -> packet (toc) fallback chain
     # ------------------------------------------------------------------
 
@@ -265,32 +377,29 @@ class AsyncBaseAdapter:
         extracts embedded memo content.
         """
         if agenda_url:
-            items = await self._download_and_chunk(agenda_url, vendor_id, force_method="url")
+            items = await self._parse_packet_pdf(agenda_url, vendor_id, force_method="url")
             if items:
                 return items
 
         if packet_url:
-            items = await self._download_and_chunk(packet_url, vendor_id, force_method="toc")
+            items = await self._parse_packet_pdf(packet_url, vendor_id, force_method="toc")
             if items:
                 return items
 
         return []
 
-    async def _download_and_chunk(
+    async def _parse_pdf_bytes(
         self,
-        pdf_url: str,
+        pdf_bytes: bytes,
         vendor_id: Optional[str] = None,
         force_method: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Download a PDF and run the chunker. Returns items or empty list."""
+        """Parse raw PDF bytes with the chunker. Returns items or empty list."""
+        if len(pdf_bytes) < 500:
+            return []
+
         tmp_path = None
         try:
-            response = await self._get(pdf_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                return []
-
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                 tmp_path = tmp.name
                 tmp.write(pdf_bytes)
@@ -326,6 +435,27 @@ class AsyncBaseAdapter:
                     os.unlink(tmp_path)
                 except OSError:
                     pass
+
+    async def _parse_packet_pdf(
+        self,
+        pdf_url: str,
+        vendor_id: Optional[str] = None,
+        force_method: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Download a PDF and run the chunker. Returns items or empty list."""
+        try:
+            response = await self._get(pdf_url)
+            pdf_bytes = await response.read()
+            return await self._parse_pdf_bytes(pdf_bytes, vendor_id, force_method)
+        except Exception as e:
+            logger.debug(
+                "pdf download failed",
+                vendor=self.vendor,
+                slug=self.slug,
+                vendor_id=vendor_id,
+                error=str(e),
+            )
+            return []
 
     async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> FetchResult:
         """Fetch meetings, validate, return FetchResult.

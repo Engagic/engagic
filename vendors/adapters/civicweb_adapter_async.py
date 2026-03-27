@@ -19,10 +19,7 @@ a PDF TOC (bookmarks). The chunker handles item extraction via TOC entries.
 Slug is the civicweb subdomain (e.g. 'sonomacity' for sonomacity.civicweb.net).
 """
 
-import asyncio
-import os
 import re
-import tempfile
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin
@@ -30,7 +27,6 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from exceptions import VendorHTTPError
 from pipeline.protocols import MetricsCollector
 
@@ -78,14 +74,10 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
         )
 
         # Fetch packet PDF URL for each meeting (concurrent, bounded)
-        enrich_semaphore = asyncio.Semaphore(5)
-
-        async def bounded_enrich(m: Dict[str, Any]) -> Dict[str, Any]:
-            async with enrich_semaphore:
-                return await self._enrich_meeting(m)
-
-        tasks = [bounded_enrich(m) for m in meetings]
-        enriched = await asyncio.gather(*tasks, return_exceptions=True)
+        enriched = await self._bounded_gather(
+            [self._enrich_meeting(m) for m in meetings],
+            max_concurrent=5,
+        )
 
         results = []
         for idx, meeting in enumerate(enriched):
@@ -101,18 +93,18 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
                 results.append(meeting)
 
         # Parse packet PDFs for structured items
-        semaphore = asyncio.Semaphore(3)
+        async def _parse_pdf(meeting: Dict[str, Any]) -> None:
+            packet_url = meeting.get("packet_url")
+            if not packet_url:
+                return
+            items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"))
+            if items:
+                meeting["items"] = items
 
-        async def parse_pdf(meeting: Dict[str, Any]) -> None:
-            async with semaphore:
-                packet_url = meeting.get("packet_url")
-                if not packet_url:
-                    return
-                items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"))
-                if items:
-                    meeting["items"] = items
-
-        await asyncio.gather(*[parse_pdf(m) for m in results])
+        await self._bounded_gather(
+            [_parse_pdf(m) for m in results],
+            max_concurrent=3,
+        )
 
         logger.info(
             "civicweb meetings with items",
@@ -261,53 +253,6 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
     # ------------------------------------------------------------------
     # PDF chunker
     # ------------------------------------------------------------------
-
-    async def _parse_packet_pdf(
-        self, packet_url: str, vendor_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Download packet PDF and run chunker. Returns items or empty list."""
-        tmp_path = None
-        try:
-            response = await self._get(packet_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                return []
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                logger.info(
-                    "chunker extracted items from pdf",
-                    vendor="civicweb",
-                    slug=self.slug,
-                    vendor_id=vendor_id,
-                    item_count=len(items),
-                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
-                )
-
-            return items
-
-        except Exception as e:
-            logger.debug(
-                "pdf parse failed",
-                vendor="civicweb",
-                slug=self.slug,
-                vendor_id=vendor_id,
-                error=str(e),
-            )
-            return []
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
 
     # ------------------------------------------------------------------
     # Utilities

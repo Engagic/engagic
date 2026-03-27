@@ -19,6 +19,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from config import get_logger
+from vendors.utils.attachments import classify_attachment_type
 from parsing.participation import parse_participation_info
 
 logger = get_logger(__name__).bind(component="vendor")
@@ -548,7 +549,7 @@ def parse_granicus_s3_html(html: str) -> Dict[str, Any]:
                         extra_attachments.append({
                             'name': link_text or 'Staff Report',
                             'url': href,
-                            'type': 'pdf' if '.pdf' in href.lower() else 'unknown',
+                            'type': classify_attachment_type(href),
                         })
                 text = sibling_div.get_text(strip=True)
                 if text and text != '\xa0' and len(text) > 5:
@@ -564,14 +565,11 @@ def parse_granicus_s3_html(html: str) -> Dict[str, Any]:
             }
 
             if attachment_url:
-                # Determine type from URL
-                url_lower = attachment_url.lower()
-                if '.pdf' in url_lower:
-                    att_type = 'pdf'
-                elif '.html' in url_lower or '.htm' in url_lower:
-                    att_type = 'html'
-                else:
-                    att_type = 'unknown'
+                att_type = classify_attachment_type(attachment_url)
+                if att_type == 'unknown':
+                    url_lower = attachment_url.lower()
+                    if '.html' in url_lower or '.htm' in url_lower:
+                        att_type = 'html'
                 item_dict['attachments'].append({
                     'name': title,
                     'url': attachment_url,
@@ -632,7 +630,7 @@ def parse_granicus_s3_html(html: str) -> Dict[str, Any]:
                         'attachments': [{
                             'name': section_title[:60],
                             'url': href,
-                            'type': 'pdf' if '.pdf' in href.lower() else 'unknown',
+                            'type': classify_attachment_type(href),
                         }] if href else [],
                     })
             elif letter_match:
@@ -649,7 +647,7 @@ def parse_granicus_s3_html(html: str) -> Dict[str, Any]:
                     'attachments': [{
                         'name': title[:60],
                         'url': href,
-                        'type': 'pdf' if '.pdf' in href.lower() else 'unknown',
+                        'type': classify_attachment_type(href),
                     }] if href else [],
                 }
                 if current_section:

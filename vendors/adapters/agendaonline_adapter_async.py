@@ -41,13 +41,7 @@ _DATE_RE = re.compile(r'(\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M)')
 
 
 def _load_config() -> Dict[str, Any]:
-    if not os.path.exists(AGENDAONLINE_CONFIG_FILE):
-        return {}
-    try:
-        with open(AGENDAONLINE_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return AsyncBaseAdapter._load_vendor_config(AGENDAONLINE_CONFIG_FILE)
 
 
 def _translate_downloadfile_to_viewdocument(url: str) -> str:

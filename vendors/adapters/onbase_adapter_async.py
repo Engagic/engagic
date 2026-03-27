@@ -57,11 +57,7 @@ def _translate_downloadfile_to_viewdocument(url: str) -> str:
 
 
 def _load_onbase_config() -> Dict[str, List[str]]:
-    """Load OnBase site mappings from config file."""
-    if not os.path.exists(ONBASE_CONFIG_FILE):
-        raise FileNotFoundError(f"OnBase config not found: {ONBASE_CONFIG_FILE}")
-    with open(ONBASE_CONFIG_FILE, "r") as f:
-        return json.load(f)
+    return AsyncBaseAdapter._load_vendor_config(ONBASE_CONFIG_FILE, required=True)
 
 
 class AsyncOnBaseAdapter(AsyncBaseAdapter):

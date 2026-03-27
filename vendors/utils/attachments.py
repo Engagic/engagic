@@ -14,6 +14,23 @@ Extracted from Legistar, generalized for other vendors
 from typing import List, Dict, Any, Optional
 
 
+def classify_attachment_type(url: str, name: str = "") -> str:
+    """Classify attachment file type from URL or name.
+
+    Returns: 'pdf', 'doc', 'spreadsheet', 'presentation', or 'unknown'.
+    """
+    combined = f"{name} {url}".lower()
+    if '.pdf' in combined:
+        return 'pdf'
+    if any(ext in combined for ext in ['.doc', '.docx']):
+        return 'doc'
+    if any(ext in combined for ext in ['.xls', '.xlsx']):
+        return 'spreadsheet'
+    if any(ext in combined for ext in ['.ppt', '.pptx']):
+        return 'presentation'
+    return 'unknown'
+
+
 def filter_version_attachments(
     attachments: List[Dict[str, Any]],
     version_patterns: Optional[List[str]] = None,

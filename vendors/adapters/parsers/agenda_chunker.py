@@ -422,16 +422,7 @@ def _is_attachment_url(url):
     return False
 
 
-def _attachment_type(url: str) -> str:
-    """Classify attachment type from URL for AttachmentSchema."""
-    url_lower = url.lower()
-    if '.pdf' in url_lower:
-        return 'pdf'
-    if any(ext in url_lower for ext in ['.doc', '.docx']):
-        return 'doc'
-    if any(ext in url_lower for ext in ['.xls', '.xlsx']):
-        return 'spreadsheet'
-    return 'unknown'
+from vendors.utils.attachments import classify_attachment_type as _attachment_type
 
 
 def _extract_matter_file(title: str, body: str) -> Optional[str]:
