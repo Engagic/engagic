@@ -198,8 +198,17 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
             existing = by_key.get(key)
             if existing:
-                # Keep the entry with the longer title (more descriptive)
-                if len(meeting.get("title", "")) > len(existing.get("title", "")):
+                # Prefer master agenda / packet over plain agenda --
+                # master agendas have the full packet PDF we can chunk.
+                new_title = meeting.get("title", "").lower()
+                old_title = existing.get("title", "").lower()
+                new_is_master = bool(re.search(r"master\s+agenda|agenda\s+packet|full\s+packet", new_title))
+                old_is_master = bool(re.search(r"master\s+agenda|agenda\s+packet|full\s+packet", old_title))
+                if new_is_master and not old_is_master:
+                    by_key[key] = meeting
+                elif not new_is_master and old_is_master:
+                    pass  # keep existing master
+                elif len(meeting.get("title", "")) > len(existing.get("title", "")):
                     by_key[key] = meeting
             else:
                 by_key[key] = meeting
@@ -226,6 +235,15 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             for cat_div in category_divs:
                 h2 = cat_div.find("h2")
                 body_name = h2.get_text(strip=True) if h2 else None
+
+                # Skip notice-only categories -- these are announcements,
+                # not meetings with agendas worth summarizing.
+                if body_name and re.search(
+                    r"public\s+notice|notice\s+of\s+(?:quorum|posting)|"
+                    r"legal\s+notice|press\s+release",
+                    body_name, re.IGNORECASE
+                ):
+                    continue
 
                 for row in cat_div.find_all("tr", class_="catAgendaRow"):
                     # Primary meeting link is in a <p> inside the first <td>

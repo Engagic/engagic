@@ -94,6 +94,13 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
 
         return found
 
+    def _find_packet_doc(self, document_list: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Find the compiled packet document for PDF chunking fallback."""
+        for doc in document_list:
+            if doc.get("compileOutputType"):
+                return doc
+        return None
+
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from PrimeGov API (upcoming + archived concurrently)."""
         today = datetime.now()
@@ -274,6 +281,20 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
                 count=len(merged_items),
                 sources=len([r for r in results if not isinstance(r, Exception)])
             )
+
+        # If HTML parsing yielded no items, try chunking the compiled packet PDF
+        if not merged_items:
+            packet_doc = self._find_packet_doc(meeting.get("documentList", []))
+            if packet_doc:
+                packet_url = self._build_packet_url(packet_doc)
+                chunked = await self._chunk_agenda_then_packet(
+                    packet_url=packet_url,
+                    vendor_id=str(meeting["id"]),
+                )
+                if chunked:
+                    result["items"] = chunked
+                    result["packet_url"] = packet_url
+
         if participation:
             result["participation"] = participation
         if meeting_status:

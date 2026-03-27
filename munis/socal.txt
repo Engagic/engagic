@@ -1,5 +1,5 @@
 # SoCal Cities
-# Last updated: 2026-01-30
+# Last updated: 2026-03-27
 
 # LA Metro
 losangelesCA
@@ -9,8 +9,24 @@ glendaleCA
 burbankCA
 torranceCA
 culvercityCA
+pasadenaCA
+santaclaritaCA
+azusaCA
+claremontCA
+paramountCA
+redondobeachCA
+southgateCA
+inglewoodCA
+downeyCA
+westcovinaCA
+whittierCA
+arcadiaCA
+alhambraCA
+westhollywoodCA
+hermosabeachCA
 
 # Orange County
+orangecountyCA
 anaheimCA
 irvineCA
 santaanaCA
@@ -19,8 +35,16 @@ costamesaCA
 newportbeachCA
 fullertonCA
 orangeCA
+lahabraCA
+lagunaniguelCA
+sanclementeCA
+danapointCA
+lagunabeachCA
+buenaparkCA
 
 # Inland Empire
+riversidecountyCA
+sanbernardinocountyCA
 riversideCA
 sanbernardinoCA
 ontarioCA
@@ -28,8 +52,33 @@ ranchocucamongaCA
 fontanaCA
 coronaCA
 pomonaCA
+chinoCA
+rialtoCA
+morenovalleyCA
+uplandCA
+indioCA
+
+# Ventura County
+venturacountyCA
+camarilloCA
+thousandoaksCA
+
+# Central Coast
+santabarbaracountyCA
+santabarbaraCA
 
 # San Diego
+sandiegocountyCA
 sandiegoCA
 chulavistaCA
 oceansideCA
+encinitasCA
+murrietaCA
+temeculaCA
+vistaCA
+escondidoCA
+carlsbadCA
+elcajonCA
+lamesaCA
+nationalcityCA
+santeeCA
