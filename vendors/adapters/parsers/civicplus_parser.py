@@ -17,7 +17,7 @@ Each item div contains:
 """
 
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
