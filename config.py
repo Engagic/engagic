@@ -82,14 +82,14 @@ class Config:
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Google Gemini API
         self.LLM_API_KEY = os.getenv("LLM_API_KEY")  # Fallback
 
-        # LLM concurrency for batch item processing (default 3 concurrent items)
-        # Gemini has built-in retry, so parallel processing within limits is safe
-        self.LLM_CONCURRENCY = int(os.getenv("ENGAGIC_LLM_CONCURRENCY", "3"))
+        # LLM concurrency for batch item processing (default 8 concurrent items)
+        # Flash Lite: 4K RPM / 4M TPM - plenty of headroom for parallel calls
+        self.LLM_CONCURRENCY = int(os.getenv("ENGAGIC_LLM_CONCURRENCY", "8"))
 
-        # Queue job concurrency: how many jobs process in parallel (default 2)
+        # Queue job concurrency: how many jobs process in parallel (default 4)
         # Most job time is network I/O (PDF downloads, LLM API calls),
         # so overlapping jobs helps even on single-core machines
-        self.JOB_CONCURRENCY = int(os.getenv("ENGAGIC_JOB_CONCURRENCY", "2"))
+        self.JOB_CONCURRENCY = int(os.getenv("ENGAGIC_JOB_CONCURRENCY", "4"))
 
         # Payment processing
         self.STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")

@@ -10,14 +10,11 @@ Item-level adapter that extracts structured agenda items with:
 """
 
 import asyncio
-import os
 import re
-import tempfile
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 
 
@@ -375,29 +372,6 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
 
         return result
 
-    def _strip_html(self, text: str) -> str:
-        """Remove HTML tags and normalize whitespace."""
-        if not text:
-            return ""
-
-        # Replace <br>, <br/>, <br /> with space
-        text = re.sub(r'<br\s*/?>', ' ', text, flags=re.IGNORECASE)
-
-        # Remove all other HTML tags
-        text = re.sub(r'<[^>]+>', '', text)
-
-        # Decode common HTML entities
-        text = text.replace("&amp;", "&")
-        text = text.replace("&lt;", "<")
-        text = text.replace("&gt;", ">")
-        text = text.replace("&quot;", '"')
-        text = text.replace("&#39;", "'")
-        text = text.replace("&nbsp;", " ")
-
-        # Normalize whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
-
-        return text
 
     def _parse_bill_number(self, html_title: str) -> Tuple[Optional[str], Optional[str]]:
         """Parse bill/resolution number from HTML title. Returns (matter_file, matter_type)."""
@@ -450,53 +424,3 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
                 return True
         return False
 
-    # ------------------------------------------------------------------
-    # PDF chunker
-    # ------------------------------------------------------------------
-
-    async def _parse_packet_pdf(
-        self, packet_url: str, vendor_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Download packet PDF and run agenda chunker. Returns items or []."""
-        tmp_path = None
-        try:
-            response = await self._get(packet_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                return []
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                logger.info(
-                    "chunker extracted items from packet pdf",
-                    vendor="civicclerk",
-                    slug=self.slug,
-                    vendor_id=vendor_id,
-                    item_count=len(items),
-                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
-                )
-
-            return items
-
-        except Exception as e:
-            logger.debug(
-                "pdf parse failed",
-                vendor="civicclerk",
-                slug=self.slug,
-                vendor_id=vendor_id,
-                error=str(e),
-            )
-            return []
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass

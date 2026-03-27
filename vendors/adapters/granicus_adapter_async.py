@@ -33,7 +33,6 @@ from vendors.adapters.parsers.granicus_parser import (
     parse_granicus_s3_html,
     parse_questys_html,
 )
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 
 
@@ -679,48 +678,10 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
     async def _parse_pdf_response(
         self, response, event_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Parse a PDF from an already-fetched response (e.g. DocumentViewer redirect).
-
-        Returns list of item dicts matching pipeline format, or empty list on failure.
-        """
-        tmp_path = None
+        """Parse a PDF from an already-fetched response (e.g. DocumentViewer redirect)."""
         try:
             pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                logger.debug("pdf too small", vendor="granicus", slug=self.slug, event_id=event_id, size=len(pdf_bytes))
-                return []
-
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                attachment_count = sum(len(item.get("attachments", [])) for item in items)
-                logger.info(
-                    "chunker extracted items from pdf redirect",
-                    vendor="granicus",
-                    slug=self.slug,
-                    event_id=event_id,
-                    item_count=len(items),
-                    attachment_count=attachment_count,
-                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
-                )
-            else:
-                logger.info(
-                    "chunker found no items in pdf redirect",
-                    vendor="granicus",
-                    slug=self.slug,
-                    event_id=event_id,
-                    page_count=parsed.get("metadata", {}).get("page_count", 0),
-                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
-                )
-
-            return items
-
+            return await self._parse_pdf_bytes(pdf_bytes, vendor_id=event_id)
         except Exception as e:
             logger.warning(
                 "pdf redirect parse failed",
@@ -730,64 +691,6 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 error=str(e),
             )
             return []
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-
-    async def _parse_packet_pdf(self, packet_url: str, event_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Download agenda packet PDF and parse it for structured items.
-
-        Returns list of item dicts matching pipeline format, or empty list on failure.
-        Falls back gracefully — any error just means we keep the monolithic packet_url.
-        """
-        tmp_path = None
-        try:
-            response = await self._get(packet_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                logger.debug("pdf too small, skipping parse", vendor="granicus", slug=self.slug, event_id=event_id, size=len(pdf_bytes))
-                return []
-
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                attachment_count = sum(len(item.get("attachments", [])) for item in items)
-                logger.debug(
-                    "agenda chunker extracted items",
-                    vendor="granicus",
-                    slug=self.slug,
-                    event_id=event_id,
-                    item_count=len(items),
-                    attachment_count=attachment_count,
-                    page_count=parsed.get("metadata", {}).get("page_count", 0),
-                )
-
-            return items
-
-        except Exception as e:
-            logger.debug(
-                "packet pdf parse failed",
-                vendor="granicus",
-                slug=self.slug,
-                event_id=event_id,
-                error=str(e),
-            )
-            return []
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
 
     def _find_agenda_and_packet_urls(self, html: str, base_url: str) -> tuple[Optional[str], Optional[str]]:
         """Find agenda PDF and packet PDF URLs from the HTML page.

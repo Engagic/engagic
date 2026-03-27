@@ -22,11 +22,9 @@ Both modes produce pages with ADID links:
 The adapter tries search mode first, falls back to AMID if no results.
 """
 
-import asyncio
 import re
 import json
 import os
-import tempfile
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin
@@ -34,10 +32,8 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 from config import config
-from exceptions import VendorHTTPError
 
 DEFAULT_CATEGORY_ID = 30  # City Council Agendas (common across CivicEngage sites)
 
@@ -71,44 +67,22 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
         self.base_url: Optional[str] = f"https://{domain_override}" if domain_override else None
 
     def _get_candidate_base_urls(self) -> List[str]:
-        """Return candidate base URLs to try, in priority order."""
-        slug = self.slug
-        candidates = [
-            f"https://{slug}.gov",
-            f"https://www.{slug}.gov",
-            f"https://{slug}.org",
-            f"https://www.{slug}.org",
-            f"https://{slug}.civicplus.com",
-        ]
-        # If slug already has a dot, it's a full domain — try it directly first
-        if "." in slug:
-            candidates.insert(0, f"https://{slug}")
+        """Extend base candidates with CivicPlus domain."""
+        candidates = super()._get_candidate_base_urls()
+        candidates.append(f"https://{self.slug}.civicplus.com")
+        if "." in self.slug:
+            candidates.insert(0, f"https://{self.slug}")
         return candidates
 
     async def _discover_base_url(self) -> Optional[str]:
-        """Discover working base URL by probing /Archive.aspx on candidate domains."""
-        for base_url in self._get_candidate_base_urls():
-            test_url = f"{base_url}/Archive.aspx"
-            try:
-                response = await self._get(test_url)
-                html = await response.text()
-                if response.status == 200 and "archive" in html.lower():
-                    logger.info(
-                        "discovered archive page",
-                        vendor="civicengage",
-                        slug=self.slug,
-                        base_url=base_url,
-                    )
-                    return base_url
-            except VendorHTTPError:
-                continue
+        async def _validate(response):
+            html = await response.text()
+            return response.status == 200 and "archive" in html.lower()
 
-        logger.warning(
-            "could not find archive page",
-            vendor="civicengage",
-            slug=self.slug,
+        return await super()._discover_base_url(
+            probe_path="/Archive.aspx",
+            validate=_validate,
         )
-        return None
 
     def _load_site_config(self) -> Dict[str, Any]:
         """Load site-specific config (category_id, domain override, etc)."""
@@ -227,13 +201,10 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
                     all_meetings.append(m)
 
         # Parse packet PDFs for structured items
-        semaphore = asyncio.Semaphore(3)
-
-        async def enrich(meeting: Dict[str, Any]) -> None:
-            async with semaphore:
-                await self._enrich_meeting_from_pdf(meeting)
-
-        await asyncio.gather(*[enrich(m) for m in all_meetings])
+        await self._bounded_gather(
+            [self._enrich_meeting_from_pdf(m) for m in all_meetings],
+            max_concurrent=3,
+        )
 
         logger.info(
             "parsed meetings from listing",
@@ -374,53 +345,6 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
         items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"))
         if items:
             meeting["items"] = items
-
-    async def _parse_packet_pdf(
-        self, packet_url: str, vendor_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Download agenda PDF and run chunker. Returns items or empty list."""
-        tmp_path = None
-        try:
-            response = await self._get(packet_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                return []
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                logger.debug(
-                    "chunker extracted items from pdf",
-                    vendor="civicengage",
-                    slug=self.slug,
-                    vendor_id=vendor_id,
-                    item_count=len(items),
-                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
-                )
-
-            return items
-
-        except Exception as e:
-            logger.debug(
-                "pdf parse failed",
-                vendor="civicengage",
-                slug=self.slug,
-                vendor_id=vendor_id,
-                error=str(e),
-            )
-            return []
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
 
     def _extract_date_from_title(self, title: str) -> Optional[str]:
         """Extract date from titles like 'City Council Agenda - February 24, 2026'.

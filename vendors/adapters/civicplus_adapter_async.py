@@ -19,7 +19,6 @@ import os
 import re
 import asyncio
 import hashlib
-import tempfile
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, urljoin, parse_qs
@@ -28,7 +27,6 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from vendors.adapters.parsers.civicplus_parser import parse_civicplus_html
 from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError
@@ -43,18 +41,11 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         self.base_url = None  # Discovered during fetch
 
     def _get_candidate_base_urls(self) -> List[str]:
-        """Return candidate base URLs to try, in priority order."""
-        slug = self.slug
-        candidates = [
-            f"https://{slug}.civicplus.com",
-            f"https://www.{slug}.gov",
-            f"https://{slug}.gov",
-            f"https://www.{slug}.org",
-            f"https://{slug}.org",
-        ]
-        # If slug already has a dot, it's a full domain - try it directly first
-        if "." in slug:
-            candidates.insert(0, f"https://{slug}")
+        """Extend base candidates with CivicPlus domain."""
+        candidates = [f"https://{self.slug}.civicplus.com"]
+        candidates.extend(super()._get_candidate_base_urls())
+        if "." in self.slug:
+            candidates.insert(0, f"https://{self.slug}")
         return candidates
 
     async def _find_agenda_url(self) -> Optional[str]:
@@ -667,52 +658,12 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
         Mutates meeting dict in-place if items are found.
         """
-        tmp_path = None
-        try:
-            # For ViewFile URLs, use the bare URL (no query params) for the PDF
-            if '/ViewFile/Agenda/' in packet_url:
-                pdf_url = packet_url.split('?')[0]
-            else:
-                pdf_url = packet_url
+        # For ViewFile URLs, use the bare URL (no query params) for the PDF
+        if '/ViewFile/Agenda/' in packet_url:
+            pdf_url = packet_url.split('?')[0]
+        else:
+            pdf_url = packet_url
 
-            response = await self._get(pdf_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                logger.debug("pdf too small, skipping parse", vendor="civicplus", slug=self.slug, vendor_id=vendor_id, size=len(pdf_bytes))
-                return
-
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                meeting["items"] = items
-                attachment_count = sum(len(item.get("attachments", [])) for item in items)
-                logger.info(
-                    "parsed items from packet pdf",
-                    vendor="civicplus",
-                    slug=self.slug,
-                    vendor_id=vendor_id,
-                    item_count=len(items),
-                    attachment_count=attachment_count,
-                    page_count=parsed.get("metadata", {}).get("page_count", 0),
-                )
-
-        except Exception as e:
-            logger.debug(
-                "packet pdf parse failed",
-                vendor="civicplus",
-                slug=self.slug,
-                vendor_id=vendor_id,
-                error=str(e),
-            )
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
+        items = await self._parse_packet_pdf(pdf_url, vendor_id)
+        if items:
+            meeting["items"] = items

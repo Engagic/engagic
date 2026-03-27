@@ -21,8 +21,6 @@ slug overrides.
 """
 
 import asyncio
-import json
-import os
 import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
@@ -63,11 +61,7 @@ _TITLE_DATE_RE = re.compile(
 
 
 def _load_wp_events_config() -> Dict[str, Any]:
-    """Load optional per-site config (domain overrides, CPT slug, etc)."""
-    if not os.path.exists(WP_EVENTS_CONFIG_FILE):
-        return {}
-    with open(WP_EVENTS_CONFIG_FILE, "r") as f:
-        return json.load(f)
+    return AsyncBaseAdapter._load_vendor_config(WP_EVENTS_CONFIG_FILE)
 
 
 def _slug_to_title(slug: str) -> str:
@@ -103,39 +97,15 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
         # CPT slug: most sites use 'events', some register 'meetings' etc.
         self.cpt_slug = site_config.get("cpt_slug", "events")
 
-    def _get_candidate_base_urls(self) -> List[str]:
-        """Return candidate base URLs to probe."""
-        slug = self.slug
-        candidates = [
-            f"https://www.{slug}.gov",
-            f"https://www.{slug}.org",
-            f"https://{slug}.gov",
-            f"https://{slug}.org",
-        ]
-        if "." in slug:
-            candidates.insert(0, f"https://www.{slug}.gov")
-            candidates.insert(1, f"https://{slug}.gov")
-        return candidates
-
     async def _discover_base_url(self) -> Optional[str]:
-        """Discover working base URL by probing /wp-json/wp/v2/{cpt}."""
-        for base_url in self._get_candidate_base_urls():
-            test_url = f"{base_url}/wp-json/wp/v2/{self.cpt_slug}?per_page=1"
-            try:
-                response = await self._get(test_url)
-                data = await response.json()
-                if isinstance(data, list):
-                    logger.info(
-                        "discovered wp_events site",
-                        slug=self.slug,
-                        base_url=base_url,
-                    )
-                    return base_url
-            except (VendorHTTPError, ValueError):
-                continue
+        async def _validate(response):
+            data = await response.json()
+            return isinstance(data, list)
 
-        logger.error("could not discover wp_events domain", slug=self.slug)
-        return None
+        return await super()._discover_base_url(
+            probe_path=f"/wp-json/wp/v2/{self.cpt_slug}?per_page=1",
+            validate=_validate,
+        )
 
     # ------------------------------------------------------------------
     # Main fetch
@@ -487,17 +457,7 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
             raw = field
         else:
             return ""
-
-        text = re.sub(r"<[^>]+>", "", raw)
-        text = text.replace("&amp;", "&")
-        text = text.replace("&#8211;", "\u2013")
-        text = text.replace("&#8212;", "\u2014")
-        text = text.replace("&#8217;", "\u2019")
-        text = text.replace("&#038;", "&")
-        text = text.replace("&nbsp;", " ")
-        text = text.replace("&lt;", "<")
-        text = text.replace("&gt;", ">")
-        return text.strip()
+        return self._strip_html(raw)
 
     def _extract_date_from_title(self, title: str) -> Optional[str]:
         """Extract meeting date from event title as ISO string.

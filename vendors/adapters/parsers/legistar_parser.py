@@ -8,6 +8,7 @@ Two main functions:
 
 import re
 from typing import Dict, Any, List
+from vendors.utils.attachments import classify_attachment_type
 from bs4 import BeautifulSoup
 
 from config import get_logger
@@ -73,16 +74,9 @@ def parse_legislation_attachments(html: str, base_url: str) -> List[Dict[str, An
         # Build absolute URL
         attachment_url = urljoin(base_url, href)
 
-        # Determine file type from URL or name
-        url_lower = attachment_url.lower()
-        name_lower = name.lower()
-
-        if '.pdf' in url_lower or 'pdf' in name_lower:
-            file_type = 'pdf'
-        elif '.doc' in url_lower or 'doc' in name_lower:
-            file_type = 'doc'
-        else:
-            # Default to PDF for View.ashx links (most are PDFs)
+        file_type = classify_attachment_type(attachment_url, name)
+        # Legistar View.ashx links are almost always PDFs
+        if file_type == 'unknown':
             file_type = 'pdf'
 
         attachments.append({

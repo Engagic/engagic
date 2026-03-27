@@ -32,6 +32,7 @@ from typing import Dict, Any, List, Optional
 from bs4 import BeautifulSoup, Tag
 
 from config import get_logger
+from vendors.utils.attachments import classify_attachment_type
 from parsing.participation import parse_participation_info
 
 logger = get_logger(__name__).bind(component="vendor")
@@ -187,16 +188,7 @@ def _extract_attachments(attachment_ul: Tag) -> List[Dict[str, Any]]:
         if not href or not name:
             continue
 
-        # Determine file type from extension
-        href_lower = href.lower()
-        if '.pdf' in href_lower:
-            file_type = 'pdf'
-        elif '.doc' in href_lower:
-            file_type = 'doc'
-        elif '.xls' in href_lower:
-            file_type = 'spreadsheet'
-        else:
-            file_type = 'unknown'
+        file_type = classify_attachment_type(href, name)
 
         attachments.append({
             'name': name,

@@ -14,9 +14,7 @@ Confidence: 8/10 - Tested against Raleigh NC, may need adjustments for other cit
 """
 
 import asyncio
-import os
 import re
-import tempfile
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
@@ -24,7 +22,6 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 
 
@@ -443,60 +440,8 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
 
         return attachments
 
-    async def _parse_packet_pdf(
-        self, packet_url: str, vendor_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Download packet PDF and run chunker. Returns items or empty list."""
-        tmp_path = None
-        try:
-            response = await self._get(packet_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                return []
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                logger.info(
-                    "chunker extracted items from pdf",
-                    vendor="escribe",
-                    slug=self.slug,
-                    vendor_id=vendor_id,
-                    item_count=len(items),
-                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
-                )
-
-            return items
-
-        except Exception as e:
-            logger.debug(
-                "pdf parse failed",
-                vendor="escribe",
-                slug=self.slug,
-                vendor_id=vendor_id,
-                error=str(e),
-            )
-            return []
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-
     def _detect_file_type(self, name: str, href: str) -> str:
         """Detect file type from name or URL. Defaults to pdf."""
-        combined = f"{name} {href}".lower()
-        if ".doc" in combined:
-            return "doc"
-        if ".xls" in combined:
-            return "xls"
-        if ".ppt" in combined:
-            return "ppt"
-        return "pdf"
+        from vendors.utils.attachments import classify_attachment_type
+        result = classify_attachment_type(href, name)
+        return result if result != 'unknown' else 'pdf'

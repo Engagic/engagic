@@ -482,9 +482,9 @@ class GeminiSummarizer:
                 )
 
         # Chunk items to respect TPM (tokens-per-minute) limits
-        # Gemini Flash: 1M TPM limit - large PDFs can use 50K+ tokens each
-        # Conservative chunk size prevents RESOURCE_EXHAUSTED errors
-        chunk_size = 5  # Reduced from 15 -> 8 -> 5 due to TPM quota exhaustion
+        # Flash Lite models: 4M TPM limit - large PDFs can use 50K+ tokens each
+        # At 4M TPM, 15 items × 50K tokens = 750K tokens per chunk (well within limit)
+        chunk_size = 15
         chunks = [
             item_requests[i : i + chunk_size]
             for i in range(0, total_items, chunk_size)
@@ -531,7 +531,7 @@ class GeminiSummarizer:
 
                 # Delay between chunks (except after last chunk)
                 if chunk_idx < len(chunks) - 1:
-                    delay = 120  # 120 seconds between chunks (increased from 90s to prevent quota exhaustion)
+                    delay = 30  # 30s between chunks (Flash Lite: 4M TPM refills fast)
                     logger.info(
                         "waiting before next chunk for quota refill",
                         delay_seconds=delay
@@ -829,7 +829,7 @@ class GeminiSummarizer:
             List of results for this chunk
         """
         max_retries = 3
-        retry_delay = 60  # Start with 60s delay
+        retry_delay = 30  # Start with 30s delay (Flash Lite: 4M TPM)
 
         for attempt in range(max_retries):
             temp_path = None

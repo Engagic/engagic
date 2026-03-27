@@ -189,9 +189,6 @@ class AsyncRossAdapter(AsyncBaseAdapter):
         if not date_span:
             return None
         date_content = date_span.get("content", "")
-        if isinstance(date_content, list):
-            date_content = date_content[0] if date_content else ""
-        # "2026-03-12T18:00:00-07:00" -> keep as ISO
         date_str = str(date_content) if date_content else ""
 
         # Meeting title

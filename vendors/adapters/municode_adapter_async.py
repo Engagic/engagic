@@ -44,11 +44,7 @@ MUNICODE_CONFIG_FILE = "data/municode_sites.json"
 
 
 def _load_municode_config() -> Dict[str, Any]:
-    """Load Municode site-specific config (ppid overrides, etc)."""
-    if not os.path.exists(MUNICODE_CONFIG_FILE):
-        return {}
-    with open(MUNICODE_CONFIG_FILE, "r") as f:
-        return json.load(f)
+    return AsyncBaseAdapter._load_vendor_config(MUNICODE_CONFIG_FILE)
 
 
 _BLOB_GUID_RE = re.compile(r'MEET-(?:Agenda|Packet|Minutes)-([a-f0-9-]{32,36})\.pdf', re.IGNORECASE)
@@ -231,14 +227,11 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         logger.info("municode meetings retrieved", vendor="municode", slug=self.slug, count=len(meetings))
 
         # Process meetings concurrently (with limit)
-        semaphore = asyncio.Semaphore(5)
-
-        async def process_with_limit(meeting: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-            async with semaphore:
-                return await self._process_meeting(meeting)
-
-        tasks = [process_with_limit(m) for m in meetings]
-        results = await asyncio.gather(*tasks)
+        results = await self._bounded_gather(
+            [self._process_meeting(m) for m in meetings],
+            max_concurrent=5,
+            return_exceptions=False,
+        )
 
         processed = [r for r in results if r is not None]
         logger.info("municode meetings processed", vendor="municode", slug=self.slug, processed=len(processed), total=len(meetings))

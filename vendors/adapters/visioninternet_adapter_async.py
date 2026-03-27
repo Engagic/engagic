@@ -28,10 +28,8 @@ Per-site config in data/visioninternet_sites.json for base URL and calendar path
 """
 
 import asyncio
-import json
 import os
 import re
-import tempfile
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urljoin
@@ -40,7 +38,6 @@ from bs4 import BeautifulSoup
 from bs4.element import NavigableString
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
 from pipeline.protocols import MetricsCollector
 from config import config
 from exceptions import VendorHTTPError
@@ -56,14 +53,7 @@ _VISIBLE_DATE_RE = re.compile(r'(\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}\s+[AP]M)'
 
 
 def _load_config() -> Dict[str, Any]:
-    """Load per-site config (base URL, calendar paths)."""
-    if not os.path.exists(VISIONINTERNET_CONFIG_FILE):
-        return {}
-    try:
-        with open(VISIONINTERNET_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return AsyncBaseAdapter._load_vendor_config(VISIONINTERNET_CONFIG_FILE)
 
 
 class AsyncVisionInternetAdapter(AsyncBaseAdapter):
@@ -123,14 +113,10 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
                 all_meetings.extend(result)
 
         # Enrich meetings that have packet PDFs (concurrent, bounded)
-        semaphore = asyncio.Semaphore(5)
-
-        async def enrich(meeting: Dict[str, Any]) -> None:
-            async with semaphore:
-                await self._enrich_meeting_from_pdf(meeting)
-
-        enrich_tasks = [enrich(m) for m in all_meetings]
-        enrich_results = await asyncio.gather(*enrich_tasks, return_exceptions=True)
+        enrich_results = await self._bounded_gather(
+            [self._enrich_meeting_from_pdf(m) for m in all_meetings],
+            max_concurrent=5,
+        )
         for idx, result in enumerate(enrich_results):
             if isinstance(result, Exception):
                 logger.warning(
@@ -349,53 +335,6 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
         items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"))
         if items:
             meeting["items"] = items
-
-    async def _parse_packet_pdf(
-        self, packet_url: str, vendor_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Download agenda PDF and run chunker. Returns items or empty list."""
-        tmp_path = None
-        try:
-            response = await self._get(packet_url)
-            pdf_bytes = await response.read()
-
-            if len(pdf_bytes) < 500:
-                return []
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp_path = tmp.name
-                tmp.write(pdf_bytes)
-
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
-            items = parsed.get("items", [])
-
-            if items:
-                logger.debug(
-                    "chunker extracted items from pdf",
-                    vendor="visioninternet",
-                    slug=self.slug,
-                    vendor_id=vendor_id,
-                    item_count=len(items),
-                    parse_method=parsed.get("metadata", {}).get("parse_method", ""),
-                )
-
-            return items
-
-        except Exception as e:
-            logger.debug(
-                "pdf parse failed",
-                vendor="visioninternet",
-                slug=self.slug,
-                vendor_id=vendor_id,
-                error=str(e),
-            )
-            return []
-        finally:
-            if tmp_path:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
 
     # ------------------------------------------------------------------
     # Cell extraction helpers
