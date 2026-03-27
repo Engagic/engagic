@@ -512,21 +512,3 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
             return "video"
         return "unknown"
 
-    def _parse_meeting_status(
-        self, title: str, date_str: Optional[str] = None
-    ) -> Optional[str]:
-        """Detect meeting status from title."""
-        status = super()._parse_meeting_status(title, date_str)
-        if status:
-            return status
-
-        if not title:
-            return None
-
-        lower = title.lower()
-        if "cancelled" in lower or "canceled" in lower:
-            return "cancelled"
-        if "rescheduled" in lower:
-            return "rescheduled"
-
-        return None

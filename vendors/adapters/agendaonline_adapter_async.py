@@ -20,12 +20,10 @@ Per-site config in data/agendaonline_sites.json, keyed by banana.
 """
 
 import asyncio
-import json
-import os
 import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from urllib.parse import urljoin, unquote
+from urllib.parse import unquote
 
 from bs4 import BeautifulSoup
 
