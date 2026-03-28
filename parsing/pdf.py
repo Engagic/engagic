@@ -1,6 +1,8 @@
-"""PDF extractor using PyMuPDF with OCR fallback
+"""Document extractor using PyMuPDF with OCR fallback
 
 Moved from: infocore/processing/pdf_extractor.py
+
+Supports: PDF, DOCX (via PyMuPDF), legacy .doc (via antiword), RTF (via striprtf).
 
 Legislative formatting detection (strikethrough/underline):
 - Detects thin filled rectangles (MS Word/LibreOffice export format)
@@ -12,6 +14,8 @@ Legislative formatting detection (strikethrough/underline):
 import io
 import os
 import re
+import subprocess
+import tempfile
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,6 +45,69 @@ DEFAULT_HEADERS = {
 # Convert PIL warnings to errors to catch decompression bombs
 Image.MAX_IMAGE_PIXELS = 100000000
 warnings.simplefilter('error', Image.DecompressionBombWarning)
+
+# Magic bytes for file format detection
+_OLE2_MAGIC = b'\xd0\xcf\x11\xe0'    # Legacy .doc, .xls, .ppt (OLE2 Compound)
+_ZIP_MAGIC = b'PK\x03\x04'           # .docx, .xlsx, .pptx (OOXML/ZIP)
+_PDF_MAGIC = b'%PDF-'
+_RTF_MAGIC = b'{\\rtf'
+
+
+def _detect_format(data: bytes) -> str:
+    """Detect document format from magic bytes. Returns 'pdf', 'docx', 'doc', 'rtf', or 'unknown'."""
+    if data[:5] == _PDF_MAGIC:
+        return "pdf"
+    if data[:4] == _ZIP_MAGIC:
+        return "docx"
+    if data[:4] == _OLE2_MAGIC:
+        return "doc"
+    if data[:5] == _RTF_MAGIC:
+        return "rtf"
+    return "unknown"
+
+
+def _extract_legacy_doc(data: bytes) -> Optional[str]:
+    """Extract text from legacy .doc (OLE2) using antiword. Returns text or None."""
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
+            tmp_path = tmp.name
+            tmp.write(data)
+        result = subprocess.run(
+            ["antiword", tmp_path],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout
+        logger.debug("antiword returned no text", exit_code=result.returncode, stderr=result.stderr[:200])
+        return None
+    except FileNotFoundError:
+        logger.warning("antiword not installed, cannot extract legacy .doc")
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("antiword timed out")
+        return None
+    except Exception as e:
+        logger.debug("antiword extraction failed", error=str(e))
+        return None
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+def _extract_rtf(data: bytes) -> Optional[str]:
+    """Extract text from RTF using striprtf. Returns text or None."""
+    try:
+        from striprtf.striprtf import rtf_to_text
+        rtf_str = data.decode("utf-8", errors="replace")
+        text = rtf_to_text(rtf_str)
+        return text if text and text.strip() else None
+    except Exception as e:
+        logger.debug("rtf extraction failed", error=str(e))
+        return None
 
 
 def _detect_horizontal_lines(page: fitz.Page) -> List[Tuple[float, float, float]]:
@@ -640,26 +707,61 @@ class PdfExtractor:
             ) from e
 
     def extract_from_bytes(self, pdf_bytes: bytes, extract_links: bool = False) -> Dict[str, Any]:
-        """Extract text and optionally links from PDF bytes
+        """Extract text from document bytes (PDF, DOCX, legacy .doc, RTF).
+
+        Detects format from magic bytes and routes to the appropriate extractor.
+        PDF and DOCX go through PyMuPDF; legacy .doc uses antiword; RTF uses striprtf.
 
         Args:
-            pdf_bytes: PDF file content as bytes
-            extract_links: If True, also extract hyperlinks from PDF
+            pdf_bytes: Document content as bytes
+            extract_links: If True, also extract hyperlinks (PDF/DOCX only)
 
         Returns dict with extraction results (same format as extract_from_url)
         """
         start_time = time.time()
+        fmt = _detect_format(pdf_bytes)
 
+        # Legacy .doc (OLE2) -- fitz can't handle this format
+        if fmt == "doc":
+            text = _extract_legacy_doc(pdf_bytes)
+            if text:
+                extraction_time = time.time() - start_time
+                logger.info("extracted legacy .doc via antiword", chars=len(text), extraction_time=round(extraction_time, 2))
+                return {
+                    "success": True,
+                    "text": text,
+                    "method": "antiword",
+                    "page_count": 0,
+                    "extraction_time": extraction_time,
+                }
+            raise ExtractionError("Legacy .doc extraction failed (antiword unavailable or returned no text)", document_type="doc")
+
+        # RTF
+        if fmt == "rtf":
+            text = _extract_rtf(pdf_bytes)
+            if text:
+                extraction_time = time.time() - start_time
+                logger.info("extracted rtf", chars=len(text), extraction_time=round(extraction_time, 2))
+                return {
+                    "success": True,
+                    "text": text,
+                    "method": "striprtf",
+                    "page_count": 0,
+                    "extraction_time": extraction_time,
+                }
+            raise ExtractionError("RTF extraction failed", document_type="rtf")
+
+        # PDF, DOCX, and unknown formats -- PyMuPDF handles all of these
         try:
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                 return self._extract_from_document(doc, extract_links, start_time)
 
         except Exception as e:  # Intentionally broad: API boundary, convert to typed error
             extraction_time = time.time() - start_time
-            logger.error("[PyMuPDF] extraction from bytes failed", error=str(e), error_type=type(e).__name__, extraction_time=round(extraction_time, 2))
+            logger.error("[PyMuPDF] extraction from bytes failed", format=fmt, error=str(e), error_type=type(e).__name__, extraction_time=round(extraction_time, 2))
             raise ExtractionError(
-                f"PDF extraction from bytes failed after {extraction_time:.1f}s",
-                document_type="pdf",
+                f"Document extraction failed after {extraction_time:.1f}s",
+                document_type=fmt,
                 original_error=e
             ) from e
 

@@ -57,6 +57,8 @@ dependencies = [
     "scikit-learn>=1.6.0",
     "mcp>=1.26.0",
     "ruff>=0.15.4",
+    "python-docx>=1.2.0",
+    "striprtf>=0.0.29",
 ]
 
 [project.scripts]

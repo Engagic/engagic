@@ -92,12 +92,17 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
             elif isinstance(meeting, dict):
                 results.append(meeting)
 
-        # Parse packet PDFs for structured items
+        # Parse PDFs for structured items: try agenda (URL-based) then packet (TOC-based)
         async def _parse_pdf(meeting: Dict[str, Any]) -> None:
             packet_url = meeting.get("packet_url")
-            if not packet_url:
+            agenda_url = meeting.pop("_agenda_pdf_url", None)
+            if not packet_url and not agenda_url:
                 return
-            items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"))
+            items = await self._chunk_agenda_then_packet(
+                agenda_url=agenda_url,
+                packet_url=packet_url,
+                vendor_id=meeting.get("vendor_id"),
+            )
             if items:
                 meeting["items"] = items
 
@@ -247,6 +252,16 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
         if doc_match:
             pdf_url = urljoin(self.base_url, doc_match.group(0))
             meeting["packet_url"] = pdf_url
+
+            # CivicWeb stores agenda HTML at document_id + 1 relative to the
+            # packet PDF. The printPdf version is a proper PDF with hyperlinks
+            # to per-item staff report PDFs -- ideal for URL-based chunking.
+            # The packet PDF is a compiled 100-600 page document better suited
+            # for TOC-based parsing or monolithic processing.
+            doc_id_match = re.search(r'/document/(\d+)/', pdf_url)
+            if doc_id_match:
+                agenda_doc_id = int(doc_id_match.group(1)) + 1
+                meeting["_agenda_pdf_url"] = f"{self.base_url}/document/{agenda_doc_id}/?printPdf=true"
 
         return meeting
 
