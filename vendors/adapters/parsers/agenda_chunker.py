@@ -101,6 +101,8 @@ ITEM_NUM_RE = re.compile(
     r'|\d{1,2}(?:\.\d{1,2}){1,3}'   # 4.3, 6.1.2, 1.2.3.4
     r'|\d{1,2}\.[a-z]'              # 2.a, 3.b (Legistar sub-items)
     r'|[A-Z]\.\d{1,2}'              # H.1, F.1 (CivicPlus letter-dot-digit sub-items)
+    r'|\(\d{1,2}\)'                  # (1) (2) (3) (parenthesized numbers)
+    r'|\([a-z]\)'                    # (a) (b) (c) (parenthesized letters)
     r'|\d{1,2}\.'                    # 1. 2.
     r'|[A-Z]\.'                      # A. B. C.
     r'|[a-z]\.'                      # a. b. c.
@@ -323,11 +325,13 @@ def _is_likely_item_header(line, lines_context=None):
     if num is None:
         return False, None, None, 0
 
-    # Sub-items (4.1, 6.1, 2.a) are almost always agenda items
-    if '.' in num:
+    # Sub-items (4.1, 6.1, 2.a) and parenthesized items ((a), (1)) are
+    # almost always agenda items -- accept with minimal filtering.
+    is_sub_item = '.' in num or (num.startswith('(') and num.endswith(')'))
+    if is_sub_item:
         if remainder:
             return True, num, remainder, 0
-        # Standalone sub-item number (e.g. "2.a" on its own line) — look ahead for title
+        # Standalone sub-item number (e.g. "2.a" or "(a)" on its own line) — look ahead for title
         if lines_context is not None:
             line_idx, all_lines, _ = lines_context
             for j in range(line_idx + 1, min(line_idx + 3, len(all_lines))):
@@ -1313,17 +1317,32 @@ def _build_items_from_toc_entries(doc, toc, toc_entries_beyond, agenda_end, resu
 # URL-based parsing
 # ---------------------------------------------------------------------------
 
+# Text-based item detection is reliable on short agenda documents (1-20 pages)
+# where numbered items are genuine agenda entries. On compiled packet PDFs
+# (100+ pages of staff reports, legal text, exhibits), statute citations,
+# section numbers, and exhibit headers all match ITEM_NUM_RE, producing
+# hundreds of garbage items. Cap text parsing to the agenda pages.
+_MAX_PAGES_FOR_TEXT_ITEMS = 20
+
+
 def _parse_url_based(doc, result):
     result.metadata.parse_method = "url"
 
     all_lines = []
     all_links = []
+    agenda_lines = []  # lines from first N pages only (for item detection)
     for page in doc:
-        all_lines.extend(_extract_page_text_with_positions(page))
+        page_lines = _extract_page_text_with_positions(page)
+        all_lines.extend(page_lines)
         all_links.extend(_extract_links(page))
+        if page.number < _MAX_PAGES_FOR_TEXT_ITEMS:
+            agenda_lines.extend(page_lines)
 
     _extract_meeting_metadata(all_lines, result.metadata)
-    items, item_boundaries = _parse_agenda_items(all_lines, all_links, result)
+    # Parse item boundaries from agenda pages only, not the full packet.
+    # Links are extracted from ALL pages so attachments deep in the packet
+    # still get assigned to items found on the agenda pages.
+    items, item_boundaries = _parse_agenda_items(agenda_lines, all_links, result)
     _assign_links_to_items(all_links, items, item_boundaries, result)
     result.items = items
 
@@ -1345,7 +1364,7 @@ def _parse_agenda_items(all_lines, all_links, result):
 
         # Try item detection first for numbered lines to prevent
         # section regex from eating items like "4. PUBLIC HEARING"
-        has_num = bool(re.match(r'^\s*(?:\d{4}-\d{1,4}|\d{1,2}\.[a-z]|[A-Z]\.\d|\d{1,2}\.|[A-Z]\.)', text))
+        has_num = bool(re.match(r'^\s*(?:\d{4}-\d{1,4}|\d{1,2}\.[a-z]|[A-Z]\.\d|\(\d{1,2}\)|\([a-z]\)|\d{1,2}\.|[A-Z]\.)', text))
 
         if has_num:
             is_item, num, title_text, lines_consumed = _is_likely_item_header(

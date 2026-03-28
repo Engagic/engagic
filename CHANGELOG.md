@@ -6,6 +6,81 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-03-28] Fetch Quality Fixes -- CivicWeb, Legistar, Granicus, CivicPlus
+
+### CivicWeb Agenda PDF Discovery (civicweb_adapter_async.py)
+
+CivicWeb compiles agenda + all staff reports into a single 100-600 page packet PDF with no TOC and no hyperlinks. The chunker was running text-based item detection across the entire packet, matching statute numbers and exhibit headers as items (Hemet: 728 garbage items, Pasco: 389).
+
+CivicWeb stores the agenda-only HTML at `document/{packet_id + 1}`, and `?printPdf=true` serves it as a proper PDF with hyperlinks to per-item staff report PDFs. The adapter now discovers this agenda PDF and uses `_chunk_agenda_then_packet` -- URL-based parsing on the agenda first, TOC-based on the packet as fallback.
+
+- **Hemet**: 728 garbage items -> 25 real items with 12 staff report attachments
+- **Pasco**: 389 garbage items -> 23 items (4 via TOC on other meetings)
+
+### Chunker Page Cap for Text-Based Item Detection (agenda_chunker.py)
+
+`_parse_url_based` now limits text-based item boundary detection to the first 20 pages. Links are still extracted from ALL pages so attachments deep in a packet get assigned to agenda items. Prevents statute citations (`82.02`, `35.10`) and section references in compiled packet PDFs from being matched as agenda item numbers.
+
+### Legistar Garbage Detection Tightened (legistar_adapter_async.py)
+
+Westminster CA's Legistar API returned 70 items that were page chrome ("AGENDA", section dividers `___`, Vietnamese/Spanish translations). The garbage detector missed it: `useless_ratio=0.56` was under the 0.60 threshold.
+
+- Lowered useless-item threshold from 60% to 50%
+- Added boilerplate title detection: literal "AGENDA", "MEETINGS", underscore dividers, empty titles
+- Either signal (useless_ratio > 0.50 OR boilerplate_ratio > 0.15) with page_break present triggers HTML fallback
+- **Westminster**: 70 garbage items -> falls back to HTML scraping, gets 20 real items from Granicus packet
+
+### CivicPlus Dedup by packet_url (civicplus_adapter_async.py)
+
+Antioch CA had two meetings with different titles ("City Council Special and Regular Meeting Materials (PDF)" vs "Meeting - March 24, 2026") pointing to the same packet URL. The dedup keyed on `date|title` and missed it.
+
+- Added `packet_url` as the highest-priority dedup key -- same packet = same meeting regardless of title
+- **Antioch**: 2 x 693 items -> 1 meeting, 49 items (TOC-based, correct)
+
+### Granicus ViewPublisher Listing Dedup (granicus_parser.py)
+
+Falls Church VA meetings appeared in both "Recent Meetings" and "Archived Meetings" sections on the ViewPublisher page, causing duplicate fetching and PDF parsing.
+
+- `parse_viewpublisher_listing` now deduplicates by `event_id` before returning
+
+---
+
+## [2026-03-28] Deep Content Pipeline Audit -- Silent Content Loss Fixes
+
+Four fixes addressing content that was silently dropped or degraded across the pipeline. Discovered via live example: Florence AL had 0 items despite a 4-page agenda PDF with 35 hyperlinked staff reports, each containing embedded Legistar S3 attachment links.
+
+### HTML Attachment Page Resolution (analyzer_async.py)
+
+When an attachment URL serves an HTML page instead of a PDF, PyMuPDF would silently open it as `format: 'HTML5'`, extract the page chrome text (link labels, nav elements), and discard all hyperlinks to actual documents. The LLM then summarized garbage.
+
+- `download_pdf_async` now checks response Content-Type and PDF magic bytes. If HTML is detected, `_extract_best_pdf_link` parses the page for `.pdf` hrefs and vendor document viewer patterns (`/ViewFile/`, `/DocumentCenter/View/`, `/MetaViewer.php`, CloudFront, S3), follows through to the actual PDF (depth=1 guard prevents loops). Generic safety net for all vendors.
+
+### Sub-Attachment Resolution from Staff Report Cover Sheets (base_adapter_async.py)
+
+Many Granicus cities (Florence AL, Bozeman MT, etc.) use a two-level attachment structure: agenda PDF links to 1-page CloudFront staff report cover sheets, which themselves contain hyperlinks to the actual documents (contracts, exhibits, resolutions) on Legistar S3. URL-based chunking correctly assigned the CloudFront links to items, but the processor only extracted text from the cover sheet -- never following through to the real documents.
+
+- `_resolve_sub_attachments` added to base adapter (generic, not vendor-specific). After URL-based chunking in `_chunk_agenda_then_packet`, downloads each item's primary PDF attachment, extracts embedded document links via PyMuPDF, and appends them as additional attachments. The Granicus-specific `_fetch_s3_pdf_attachments` already did this for S3 HTML-parsed items; this generalizes it to all URL-chunked items across all vendors.
+- **Florence AL item 11.c**: 1 attachment (cover sheet) -> 4 attachments (cover sheet + MSA + business license + contract).
+
+### Parenthesized Item Numbers in Agenda Chunker (agenda_chunker.py)
+
+Agendas using `(a)`, `(b)`, `(c)` or `(1)`, `(2)`, `(3)` sub-item numbering (common in Alabama, some Texas cities) produced 0 items with all links orphaned, because the item detection regex and heuristics didn't recognize the format.
+
+- Added `\([a-z]\)` and `\(\d{1,2}\)` patterns to `ITEM_NUM_RE`.
+- Added same patterns to the `has_num` fast-path gate in `_parse_agenda_items`.
+- Parenthesized items treated as sub-items in `_is_likely_item_header` (bypasses bold/uppercase heuristics, same as `2.a` or `4.1`).
+- **Florence AL**: 0 items / 35 orphan links -> 30 items / 0 orphan links.
+
+### Legacy .doc and RTF Extraction (parsing/pdf.py)
+
+1,825 legacy `.doc` (OLE2 format) and 92 `.rtf` attachments were silently failing extraction. The processor accepted them (`att_type "doc"` passes the filter), downloaded the bytes, and fed them to `fitz.open(stream=bytes, filetype="pdf")` which threw an exception caught as a generic `ExtractionError`. Items with only `.doc` attachments got no extracted text. Note: `.docx` (ZIP/OOXML format, 19,297 attachments) was already handled correctly by PyMuPDF.
+
+- `_detect_format` reads magic bytes: `%PDF-` (pdf), `PK\x03\x04` (docx), `\xd0\xcf\x11\xe0` (legacy doc), `{\rtf` (rtf).
+- `extract_from_bytes` routes by format: legacy `.doc` -> antiword (subprocess), `.rtf` -> striprtf, everything else -> PyMuPDF (unchanged).
+- New dependencies: `python-docx`, `striprtf` (pip), `antiword` (apt).
+
+---
+
 ## [2026-03-20] Agenda Chunker TOC Path + Adapter PDF Escalation
 
 ### Agenda Chunker: TOC-Based Chunking

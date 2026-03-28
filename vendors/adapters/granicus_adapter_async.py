@@ -242,6 +242,19 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         event_id = meeting_data.get("event_id")
 
         if not agenda_viewer_url:
+            # No AgendaViewer link -- try direct packet PDF if available
+            packet_url = meeting_data.get("packet_url")
+            if packet_url:
+                meeting = {
+                    "vendor_id": event_id,
+                    "title": meeting_data.get("title", ""),
+                    "start": meeting_data.get("start", ""),
+                    "packet_url": packet_url,
+                }
+                items = await self._chunk_agenda_then_packet(packet_url=packet_url, vendor_id=event_id)
+                if items:
+                    meeting["items"] = items
+                return meeting
             logger.debug(
                 "no agenda viewer url",
                 vendor="granicus",
