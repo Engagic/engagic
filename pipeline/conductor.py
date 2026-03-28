@@ -227,6 +227,9 @@ class Conductor:
     async def process_cities(self, city_bananas: List[str]) -> AsyncGenerator[Dict[str, Any], None]:
         """Process queued meetings for multiple cities, yielding results as they complete.
 
+        Runs up to CITY_PROCESS_CONCURRENCY cities in parallel. Each city's jobs
+        already run with JOB_CONCURRENCY parallelism internally.
+
         Args:
             city_bananas: List of city banana identifiers
 
@@ -239,23 +242,29 @@ class Conductor:
             logger.warning("analyzer not available - cannot process meetings")
             return  # Generator yields nothing if analyzer unavailable
 
-        with self.enable_processing():
-            for banana in city_bananas:
-                if not self.is_running:
-                    break
+        # Process multiple cities concurrently (each city runs JOB_CONCURRENCY jobs internally)
+        city_concurrency = 3
+        semaphore = asyncio.Semaphore(city_concurrency)
+        results_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
 
-                logger.info("processing jobs for city", city=banana)
-                try:
-                    stats = await self.processor.process_city_jobs(banana)
-                except Exception as e:
-                    logger.error("city processing failed", city=banana,
-                                 error=str(e), error_type=type(e).__name__)
-                    stats = {"processed_count": 0, "failed_count": 1,
+        async def process_one_city(banana: str):
+            async with semaphore:
+                if not self.is_running:
+                    stats = {"processed_count": 0, "failed_count": 0,
                              "items_processed": 0, "items_new": 0,
                              "items_skipped": 0, "items_failed": 0}
+                else:
+                    logger.info("processing jobs for city", city=banana)
+                    try:
+                        stats = await self.processor.process_city_jobs(banana)
+                    except Exception as e:
+                        logger.error("city processing failed", city=banana,
+                                     error=str(e), error_type=type(e).__name__)
+                        stats = {"processed_count": 0, "failed_count": 1,
+                                 "items_processed": 0, "items_new": 0,
+                                 "items_skipped": 0, "items_failed": 0}
 
-                # Yield immediately - don't accumulate results in memory
-                yield {
+                await results_queue.put({
                     "city_banana": banana,
                     "processed": stats["processed_count"],
                     "failed": stats["failed_count"],
@@ -263,7 +272,16 @@ class Conductor:
                     "items_new": stats.get("items_new", 0),
                     "items_skipped": stats.get("items_skipped", 0),
                     "items_failed": stats.get("items_failed", 0),
-                }
+                })
+
+        with self.enable_processing():
+            tasks = [asyncio.create_task(process_one_city(b)) for b in city_bananas]
+            completed = 0
+            total = len(city_bananas)
+            while completed < total:
+                result = await results_queue.get()
+                completed += 1
+                yield result
 
     async def sync_and_process_cities(self, city_bananas: List[str]) -> AsyncGenerator[Dict[str, Any], None]:
         """Sync multiple cities and immediately process all their meetings.

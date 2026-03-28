@@ -80,6 +80,10 @@ class Processor:
         self._shutdown_event = asyncio.Event()
         self._running = True  # Internal state, use property for access
 
+        # Global PDF extraction semaphore — shared across all concurrent meetings
+        # Cap at 6 subprocesses total (each may run OCR on 3 vCPU / 4GB box)
+        self._pdf_semaphore = asyncio.Semaphore(6)
+
         if analyzer is not None:
             self.analyzer = analyzer
         else:
@@ -361,9 +365,8 @@ class Processor:
 
             attachments_to_extract.append((att_url, att_name))
 
-        # Concurrent PDF extraction (capped separately from LLM — each is a subprocess)
-        pdf_concurrency = min(config.LLM_CONCURRENCY, 6)
-        semaphore = asyncio.Semaphore(pdf_concurrency)
+        # Concurrent PDF extraction (global semaphore caps total across all meetings)
+        semaphore = self._pdf_semaphore
 
         async def extract_attachment(att_url: str, att_name: Optional[str]) -> Optional[tuple[str, str, int]]:
             async with semaphore:
@@ -679,10 +682,8 @@ class Processor:
                 continue
             urls_to_extract.append((att_url, att_name))
 
-        # Concurrent PDF extraction with semaphore
-        # Uses same concurrency as LLM to balance throughput and resource usage
-        pdf_concurrency = config.LLM_CONCURRENCY
-        semaphore = asyncio.Semaphore(pdf_concurrency)
+        # Concurrent PDF extraction (global semaphore caps total across all meetings)
+        semaphore = self._pdf_semaphore
 
         async def extract_with_limit(att_url: str, att_name: str) -> tuple[str, Optional[Dict]]:
             async with semaphore:
@@ -700,7 +701,7 @@ class Processor:
 
         # Run extractions concurrently
         if urls_to_extract:
-            logger.info("extracting documents concurrently", count=len(urls_to_extract), concurrency=pdf_concurrency)
+            logger.info("extracting documents concurrently", count=len(urls_to_extract))
             extraction_results = await asyncio.gather(
                 *[extract_with_limit(url, name) for url, name in urls_to_extract],
                 return_exceptions=True
