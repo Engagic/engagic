@@ -16,9 +16,12 @@ Rate limiting is handled by the summarizer via Gemini's retry instructions.
 """
 
 import asyncio
+import html as html_module
 import multiprocessing
+import re
 import time
 from typing import List, Dict, Any, Optional, Tuple
+from urllib.parse import urljoin
 
 import aiohttp
 
@@ -34,6 +37,47 @@ logger = get_logger(__name__).bind(component="pipeline")
 
 # Pre-warm forkserver once at import time so subprocess spawns are fast
 _forkserver_ctx = multiprocessing.get_context("forkserver")
+
+# Patterns for extracting PDF links from HTML attachment pages.
+# Ordered by specificity: direct .pdf links first, then vendor-specific patterns.
+_PDF_HREF_RE = re.compile(
+    r'href=["\']([^"\']*\.pdf(?:\?[^"\']*)?)["\']',
+    re.IGNORECASE,
+)
+_VENDOR_DOC_HREF_RE = re.compile(
+    r'href=["\']([^"\']*(?:'
+    r'/ViewFile/|/DocumentCenter/View/|/LinkClick\.aspx'
+    r'|/MetaViewer\.php|cloudfront\.net|s3\.amazonaws\.com'
+    r')[^"\']*)["\']',
+    re.IGNORECASE,
+)
+
+
+def _extract_best_pdf_link(html_bytes: bytes, base_url: str) -> Optional[str]:
+    """Parse an HTML attachment page for the best PDF download link.
+
+    Handles the generic case where a URL serves an HTML detail page
+    instead of the actual PDF. Looks for direct .pdf hrefs first,
+    then vendor-specific document viewer patterns.
+
+    Returns absolute URL or None.
+    """
+    try:
+        text = html_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        return None
+
+    # Direct .pdf links -- strongest signal
+    pdf_matches = _PDF_HREF_RE.findall(text)
+    if pdf_matches:
+        return urljoin(base_url, html_module.unescape(pdf_matches[0]))
+
+    # Vendor document viewer URLs (ViewFile, DocumentCenter, MetaViewer, etc.)
+    vendor_matches = _VENDOR_DOC_HREF_RE.findall(text)
+    if vendor_matches:
+        return urljoin(base_url, html_module.unescape(vendor_matches[0]))
+
+    return None
 
 
 def _extract_pdf_worker(result_queue, pdf_bytes, ocr_threshold, ocr_dpi,
@@ -176,18 +220,23 @@ class AsyncAnalyzer:
         await self.close()
         return False  # Don't suppress exceptions
 
-    async def download_pdf_async(self, url: str) -> bytes:
+    async def download_pdf_async(self, url: str, _depth: int = 0) -> bytes:
         """
         Download PDF asynchronously (non-blocking).
 
+        If the URL serves HTML instead of a PDF, parses the page for PDF links
+        and follows through to the actual document (generic 2nd-pass resolution).
+        This handles intermediate "attachment detail" pages across vendors.
+
         Args:
-            url: PDF URL
+            url: PDF or attachment-page URL
+            _depth: recursion guard (internal)
 
         Returns:
             PDF bytes
 
         Raises:
-            ExtractionError: If download fails
+            ExtractionError: If download fails or no PDF can be resolved
         """
         # Acquire session with recycle check (serialized, but quick)
         async with self._recycle_lock:
@@ -204,9 +253,36 @@ class AsyncAnalyzer:
                 if resp.status != 200:
                     raise ExtractionError(f"HTTP {resp.status} downloading PDF from {url}")
 
-                pdf_bytes = await resp.read()
-                logger.debug("pdf downloaded", url=url, size_mb=round(len(pdf_bytes) / 1024 / 1024, 2))
-                return pdf_bytes
+                content_type = resp.headers.get("Content-Type", "")
+                raw_bytes = await resp.read()
+
+                # Happy path: response is a PDF
+                if raw_bytes[:5] == b"%PDF-" or "application/pdf" in content_type:
+                    logger.debug("pdf downloaded", url=url, size_mb=round(len(raw_bytes) / 1024 / 1024, 2))
+                    return raw_bytes
+
+                # HTML response -- intermediate attachment page. Parse for PDF links.
+                if _depth >= 1:
+                    # Already followed one redirect; don't chase further.
+                    logger.debug("html attachment page returned non-pdf after resolve, giving up", url=url[:120])
+                    raise ExtractionError(f"Resolved URL still not a PDF: {url[:120]}")
+
+                if "text/html" in content_type or raw_bytes[:15].lstrip().lower().startswith((b"<!doctype", b"<html")):
+                    pdf_url = _extract_best_pdf_link(raw_bytes, url)
+                    if pdf_url:
+                        logger.info(
+                            "html attachment page resolved to pdf",
+                            original_url=url[:120],
+                            resolved_url=pdf_url[:120],
+                        )
+                        return await self.download_pdf_async(pdf_url, _depth=_depth + 1)
+                    else:
+                        logger.debug("html attachment page had no pdf links", url=url[:120])
+                        raise ExtractionError(f"Attachment page contained no PDF links: {url[:120]}")
+
+                # Unknown content type -- try using it as-is (could be octet-stream)
+                logger.debug("pdf downloaded", url=url, size_mb=round(len(raw_bytes) / 1024 / 1024, 2))
+                return raw_bytes
 
         except aiohttp.ClientError as e:
             logger.error("pdf download failed", url=url, error=str(e))

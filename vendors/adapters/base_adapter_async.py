@@ -23,6 +23,28 @@ from exceptions import VendorHTTPError
 logger = get_logger(__name__).bind(component="vendor")
 
 
+def _get_pdf_link_display_text(page, link_rect) -> str:
+    """Extract display text for a hyperlink by intersecting span bboxes."""
+    import fitz
+    td = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+    parts = []
+    for block in td.get("blocks", []):
+        if block["type"] != 0:
+            continue
+        for line in block["lines"]:
+            for span in line["spans"]:
+                span_rect = fitz.Rect(span["bbox"])
+                intersection = span_rect & link_rect
+                if intersection.is_empty or intersection.width < 1:
+                    continue
+                span_y_center = (span_rect.y0 + span_rect.y1) / 2
+                if link_rect.y0 <= span_y_center <= link_rect.y1:
+                    text = span["text"].strip()
+                    if text:
+                        parts.append(text)
+    return " ".join(parts) if parts else ""
+
+
 @dataclass
 class FetchResult:
     """Result of fetch_meetings() - distinguishes success from failure.
@@ -375,10 +397,15 @@ class AsyncBaseAdapter:
         parsing extracts those links as attachments.  Packet PDFs are compiled
         documents with bookmark trees -- TOC parsing splits by page ranges and
         extracts embedded memo content.
+
+        For URL-parsed items, runs a 2nd pass: downloads each attachment PDF
+        and extracts embedded links (e.g. staff report cover sheets that link
+        to the actual contracts/exhibits on Legistar S3).
         """
         if agenda_url:
             items = await self._parse_packet_pdf(agenda_url, vendor_id, force_method="url")
             if items:
+                items = await self._resolve_sub_attachments(items, vendor_id)
                 return items
 
         if packet_url:
@@ -456,6 +483,112 @@ class AsyncBaseAdapter:
                 error=str(e),
             )
             return []
+
+    # ------------------------------------------------------------------
+    # 2nd-pass: resolve sub-attachments from staff report cover PDFs
+    # ------------------------------------------------------------------
+
+    # URL patterns that indicate a real document link (not navigation/chrome)
+    _ATTACHMENT_URL_PATTERNS = [
+        "s3.amazonaws.com", ".pdf", "/uploads/attachment",
+        "/attachments/", "cloudfront.net", "/ViewFile/",
+        "/DocumentCenter/View/", "/LinkClick.aspx",
+    ]
+
+    async def _resolve_sub_attachments(
+        self,
+        items: List[Dict[str, Any]],
+        vendor_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Download attachment PDFs and extract embedded document links.
+
+        After URL-based chunking, each item may have a single attachment
+        that is a staff report cover sheet (1-2 pages) containing hyperlinks
+        to the actual documents (contracts, exhibits, etc. on Legistar S3 or
+        similar). This method follows those links.
+
+        The original attachment (staff report) is kept; extracted links are
+        appended after it. Items without PDF attachments are returned as-is.
+        """
+        import fitz
+
+        semaphore = asyncio.Semaphore(5)
+
+        async def _resolve_item(item: Dict[str, Any]) -> Dict[str, Any]:
+            pdf_atts = [
+                a for a in item.get("attachments", [])
+                if a.get("url") and a.get("type") in ("pdf", "unknown")
+            ]
+            if not pdf_atts:
+                return item
+
+            # Only inspect the first (primary) attachment per item
+            primary_url = pdf_atts[0]["url"]
+            tmp_path = None
+            async with semaphore:
+                try:
+                    response = await self._get(primary_url)
+                    pdf_bytes = await response.read()
+                    if len(pdf_bytes) < 500:
+                        return item
+
+                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                        tmp_path = tmp.name
+                        tmp.write(pdf_bytes)
+
+                    def _extract_links():
+                        doc = fitz.open(tmp_path)
+                        links = []
+                        seen = set()
+                        for page in doc:
+                            for link in page.get_links():
+                                if link.get("kind") != 2:
+                                    continue
+                                uri = link.get("uri", "")
+                                if not uri or uri in seen or uri == primary_url:
+                                    continue
+                                if not any(p in uri.lower() for p in self._ATTACHMENT_URL_PATTERNS):
+                                    continue
+                                seen.add(uri)
+                                bbox = link.get("from", fitz.Rect())
+                                name = _get_pdf_link_display_text(page, fitz.Rect(bbox))
+                                links.append({
+                                    "name": name or "Attachment",
+                                    "url": uri,
+                                    "type": "pdf" if ".pdf" in uri.lower() else "unknown",
+                                })
+                        doc.close()
+                        return links
+
+                    embedded = await asyncio.to_thread(_extract_links)
+                    if embedded:
+                        item["attachments"] = item["attachments"] + embedded
+                        logger.info(
+                            "resolved sub-attachments from staff report",
+                            vendor=self.vendor,
+                            slug=self.slug,
+                            vendor_id=vendor_id,
+                            item=item.get("agenda_number") or item.get("vendor_item_id"),
+                            sub_attachment_count=len(embedded),
+                        )
+
+                except Exception as e:
+                    logger.debug(
+                        "sub-attachment resolution failed",
+                        vendor=self.vendor,
+                        slug=self.slug,
+                        item=item.get("agenda_number") or item.get("vendor_item_id"),
+                        error=str(e),
+                    )
+                finally:
+                    if tmp_path:
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
+            return item
+
+        return list(await asyncio.gather(*[_resolve_item(i) for i in items]))
 
     async def fetch_meetings(self, days_back: int = 7, days_forward: int = 14) -> FetchResult:
         """Fetch meetings, validate, return FetchResult.

@@ -83,6 +83,12 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         total_items = 0
         useless_items = 0
         has_page_break = False
+        boilerplate_items = 0
+
+        # Titles that are clearly page chrome, not agenda items
+        _BOILERPLATE = {
+            "page break", "agenda", "meetings", "attendance and participation by the public",
+        }
 
         for meeting in meetings:
             for item in meeting.get("items", []):
@@ -91,25 +97,35 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 has_matter = bool(item.get("matter_id") or item.get("matter_file"))
                 if not has_number and not has_matter:
                     useless_items += 1
-                title = (item.get("title") or "").strip().lower()
-                if title == "page break":
+                title = (item.get("title") or "").strip()
+                title_lower = title.lower()
+                if title_lower == "page break":
                     has_page_break = True
+                # Section dividers, boilerplate headings, and empty titles
+                if (title_lower in _BOILERPLATE
+                        or title.startswith("___")
+                        or not title
+                        or (len(title) < 3 and not has_number)):
+                    boilerplate_items += 1
 
         if total_items == 0:
             return False
 
         useless_ratio = useless_items / total_items
-        # If >60% of items have neither agenda number nor matter ID
+        boilerplate_ratio = boilerplate_items / total_items
+        # If >50% of items have neither agenda number nor matter ID
         # AND we see literal "page break" items, the API is garbage.
         # Page breaks alone don't indicate garbage -- some cities (Riverside)
         # use them as structural separators alongside real items.
-        if has_page_break and useless_ratio > 0.6:
+        if has_page_break and (useless_ratio > 0.5 or boilerplate_ratio > 0.15):
             logger.debug(
                 "garbage detection triggered",
                 slug=self.slug,
                 total_items=total_items,
                 useless_items=useless_items,
                 useless_ratio=round(useless_ratio, 2),
+                boilerplate_items=boilerplate_items,
+                boilerplate_ratio=round(boilerplate_ratio, 2),
                 has_page_break=has_page_break,
             )
             return True

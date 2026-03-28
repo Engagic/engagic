@@ -167,25 +167,36 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         """Dedupe meetings, keeping one per logical meeting.
 
         Dedup hierarchy:
-        1. vendor_id — same vendor_id means same meeting regardless of title
-        2. date + body_name — same committee on same date is one meeting
-        3. date + title — fallback for meetings without body_name
+        1. packet_url — same packet PDF means same meeting regardless of title
+        2. vendor_id — same vendor_id means same meeting regardless of title
+        3. date + body_name — same committee on same date is one meeting
+        4. date + title — fallback for meetings without body_name
 
         Multiple committees can meet on the same date — those are distinct.
         """
         by_key: Dict[str, Dict[str, Any]] = {}
+        # Track packet URLs separately for cross-key dedup
+        seen_packet_urls: Dict[str, str] = {}  # packet_url -> key
+
         for meeting in meetings:
             vendor_id = meeting.get("vendor_id")
             date = meeting.get("start", "unknown")
             body_name = meeting.get("body_name")
+            packet_url = meeting.get("packet_url", "")
 
-            if vendor_id:
+            # Same packet URL = same meeting, strongest signal
+            if packet_url and packet_url in seen_packet_urls:
+                key = seen_packet_urls[packet_url]
+            elif vendor_id:
                 key = f"vid|{vendor_id}"
             elif body_name:
                 key = f"{date}|{body_name}"
             else:
                 title = meeting.get("title", "unknown")
                 key = f"{date}|{title}"
+
+            if packet_url:
+                seen_packet_urls[packet_url] = key
 
             existing = by_key.get(key)
             if existing:

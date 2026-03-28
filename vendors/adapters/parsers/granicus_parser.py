@@ -53,11 +53,28 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
                 start = swapped
                 title = date_text if date_text.lower() != "agenda" else ""
 
+        # Find AgendaViewer link: try <a> tags first, then <option> tags
+        # inside <select> dropdowns (Grand Island style)
         agenda_link = row.find('a', href=lambda x: x and 'AgendaViewer' in x if x else False)
-        if not agenda_link:
+        agenda_href = None
+        packet_href = None
+
+        if agenda_link:
+            agenda_href = agenda_link['href']
+        else:
+            option = row.find('option', value=lambda x: x and 'AgendaViewer' in x if x else False)
+            if option:
+                agenda_href = option['value']
+
+        # Also grab direct packet PDF links (CloudFront-hosted packets)
+        packet_link = row.find('a', href=lambda x: x and '.pdf' in x.lower() if x else False)
+        if packet_link:
+            packet_href = packet_link['href']
+
+        if not agenda_href and not packet_href:
             continue
 
-        href = agenda_link['href']
+        href = agenda_href or packet_href
         if href.startswith('//'):
             href = 'https:' + href
         elif not href.startswith('http'):
@@ -67,23 +84,47 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
         id_match = re.search(r'(?:event_id|clip_id)=(\d+)', href)
         event_id = id_match.group(1) if id_match else None
 
+        if not event_id and packet_href:
+            # For direct packet links, generate a stable ID from the URL
+            event_id = re.search(r'[a-f0-9-]{36}', packet_href)
+            event_id = event_id.group(0).replace('-', '')[:12] if event_id else None
+
         if not event_id:
             continue
 
-        meetings.append({
+        meeting = {
             'event_id': event_id,
             'title': title,
             'start': start,
-            'agenda_viewer_url': href,
-        })
+        }
+        if agenda_href:
+            if agenda_href.startswith('//'):
+                agenda_href = 'https:' + agenda_href
+            meeting['agenda_viewer_url'] = agenda_href
+        if packet_href:
+            meeting['packet_url'] = packet_href
+
+        meetings.append(meeting)
+
+    # Dedup: same event appears in both "Recent" and "Archived" sections
+    seen_ids = set()
+    deduped = []
+    for m in meetings:
+        eid = m.get("event_id")
+        if eid and eid in seen_ids:
+            continue
+        if eid:
+            seen_ids.add(eid)
+        deduped.append(m)
 
     logger.debug(
         "parsed viewpublisher listing",
         vendor="granicus",
-        meeting_count=len(meetings)
+        meeting_count=len(deduped),
+        before_dedup=len(meetings),
     )
 
-    return meetings
+    return deduped
 
 
 def _parse_granicus_date(date_text: str) -> Optional[str]:
