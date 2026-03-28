@@ -23,16 +23,27 @@ class AsyncRateLimiter:
     async def wait_if_needed(self, vendor: str):
         """Enforce minimum delay between requests to same vendor (async)"""
         delays = {
-            "primegov": 3.0,  # PrimeGov cities
-            "granicus": 4.0,  # Granicus/Legistar cities
-            "civicclerk": 3.0,  # CivicClerk cities
-            "legistar": 3.0,  # Direct Legistar
-            "civicplus": 8.0,  # CivicPlus cities - aggressive blocking, need longer delays
-            "civicengage": 5.0,  # CivicEngage Archive Center (.gov sites)
-            "novusagenda": 4.0,  # NovusAgenda cities
-            "iqm2": 3.0,  # IQM2 cities
-            "escribe": 3.0,  # eScribe cities
-            "unknown": 5.0,  # Unknown vendors get longest delay
+            "primegov": 2.7,  # PrimeGov cities
+            "granicus": 3.6,  # Granicus/Legistar cities
+            "civicclerk": 2.7,  # CivicClerk cities
+            "legistar": 2.7,  # Direct Legistar
+            "civicplus": 7.2,  # CivicPlus cities - aggressive blocking, need longer delays
+            "civicengage": 4.5,  # CivicEngage Archive Center (.gov sites)
+            "novusagenda": 3.6,  # NovusAgenda cities
+            "iqm2": 2.7,  # IQM2 cities
+            "escribe": 2.7,  # eScribe cities
+            "municode": 2.7,  # Municode cities
+            "onbase": 2.7,  # OnBase cities
+            "civicweb": 2.7,  # CivicWeb cities
+            "visioninternet": 2.7,  # VisionInternet cities
+            "agendaonline": 2.7,  # AgendaOnline cities
+            "proudcity": 2.7,  # ProudCity cities
+            "wp_events": 2.7,  # WordPress Events cities
+            "berkeley": 2.7,  # Custom: Berkeley
+            "menlopark": 2.7,  # Custom: Menlo Park
+            "chicago": 2.7,  # Custom: Chicago
+            "ross": 2.7,  # Custom: Ross
+            "unknown": 4.5,  # Unknown vendors get longest delay
         }
 
         min_delay = delays.get(vendor, 5.0)
