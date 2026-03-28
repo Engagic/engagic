@@ -126,7 +126,7 @@ class AsyncAnalyzer:
             metrics: Metrics collector for LLM call tracking (uses NullMetrics if not provided)
         """
         self.metrics = metrics or NullMetrics()
-        self.pdf_extractor = PdfExtractor()  # Sync extractor, we'll wrap calls
+        self.pdf_extractor = PdfExtractor(ocr_dpi=150)  # 150 DPI sufficient for meeting agendas
         self.summarizer = GeminiSummarizer(api_key=api_key, metrics=self.metrics)
         self.http_session: Optional[aiohttp.ClientSession] = None
         self._request_count = 0
@@ -242,7 +242,7 @@ class AsyncAnalyzer:
                     self.pdf_extractor.ocr_threshold,
                     self.pdf_extractor.ocr_dpi,
                     self.pdf_extractor.detect_legislative_formatting,
-                    self.pdf_extractor.max_ocr_workers,
+                    self.pdf_extractor.max_ocr_workers,  # Global semaphore caps total extractions
                 ),
                 timeout=620
             )
