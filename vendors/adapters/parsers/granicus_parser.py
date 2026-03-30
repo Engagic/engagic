@@ -54,12 +54,21 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
         start = _parse_granicus_date(date_text)
 
         # Some Granicus sites (e.g. Oakley) have swapped columns:
-        # date in title cell, "Agenda" in date cell. Detect and correct.
+        # date in cell[0], "Agenda" in cell[1]. Detect and correct.
+        # These sites use CollapsiblePanelTab divs as section headers
+        # (e.g. "City Council", "Planning Commission") instead of per-row titles.
         if not start:
             swapped = _parse_granicus_date(title)
             if swapped:
                 start = swapped
                 title = date_text if date_text.lower() != "agenda" else ""
+
+        if not title:
+            panel_tab = row.find_parent("div", class_="CollapsiblePanelContent")
+            if panel_tab:
+                tab_div = panel_tab.find_previous_sibling("div", class_="CollapsiblePanelTab")
+                if tab_div:
+                    title = tab_div.get_text(strip=True)
 
         # Find AgendaViewer link: try <a> tags first, then <option> tags
         # inside <select> dropdowns (Grand Island style)

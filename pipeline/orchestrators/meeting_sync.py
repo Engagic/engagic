@@ -62,7 +62,7 @@ class MeetingSyncOrchestrator:
 
         try:
             meeting_date = self._parse_meeting_date(meeting_dict)
-            title = meeting_dict.get("title", "Meeting")
+            title = meeting_dict.get("title") or "Meeting"
 
             vendor_id = meeting_dict.get("vendor_id")
 
