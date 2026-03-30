@@ -30,6 +30,8 @@ from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from exceptions import VendorHTTPError
 from pipeline.protocols import MetricsCollector
 
+CIVICWEB_CONFIG_FILE = "data/civicweb_sites.json"
+
 
 # Date in meeting title -- two formats across CivicWeb sites:
 #   Sonoma:    "18 Mar 2026" (day month year)
@@ -45,11 +47,13 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
     """Async adapter for cities on the CivicWeb portal platform.
 
     Slug is the civicweb subdomain: 'sonomacity', 'calistoga', etc.
+    Non-standard domains (e.g. highbond.com) configured in data/civicweb_sites.json.
     """
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="civicweb", metrics=metrics)
-        self.base_url = f"https://{self.slug}.civicweb.net"
+        site_config = self._load_vendor_config(CIVICWEB_CONFIG_FILE).get(self.slug, {})
+        self.base_url = site_config.get("base_url", f"https://{self.slug}.civicweb.net")
 
     # ------------------------------------------------------------------
     # Main fetch

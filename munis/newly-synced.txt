@@ -1,2 +1,2 @@
-# Awaiting next batch
-# Updated 2026-03-21 (0 cities)
+# Staging area for newly synced cities before reclassification
+# Updated 2026-03-28 (0 cities)
