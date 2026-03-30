@@ -1,0 +1,801 @@
+"""
+Agenda PDF Chunker v2 -- anchor-first ("leaf to root") extraction
+
+Two paths, both starting from invariant anchors instead of regex item patterns:
+
+1. URL path: Find hyperlinks first, cluster by vertical proximity,
+   walk backwards to find the heading above each cluster.
+2. TOC path: Use PDF bookmark page boundaries as slicing points.
+   Each bookmark range is an item. No title format requirements.
+
+The v1 chunker works root-to-leaf: find item headers by regex, then look for
+content below them. This inverts that: find the anchors (links, page boundaries)
+and discover structure from there.
+
+Dependencies: PyMuPDF (fitz)
+"""
+
+import fitz
+import re
+from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional, Tuple
+
+from config import get_logger
+
+from vendors.adapters.parsers.agenda_chunker import (
+    _Attachment,
+    _MemoContent,
+    _AgendaItem,
+    _AgendaMetadata,
+    _ParsedAgenda,
+    _extract_page_text_with_positions,
+    _extract_links,
+    _extract_meeting_metadata,
+    _extract_memo_content,
+    _extract_matter_file,
+    _is_attachment_url,
+    _attachment_type,
+    _is_section_header,
+    _extract_section_name,
+)
+
+logger = get_logger(__name__).bind(component="vendor")
+
+
+# ---------------------------------------------------------------------------
+# Permissive item number extraction
+# ---------------------------------------------------------------------------
+
+_ITEM_PREFIX_RE = re.compile(
+    r'^(?:Item|No\.?|#)\s*',
+    re.IGNORECASE,
+)
+
+def _extract_item_number_permissive(title: str) -> Tuple[str, str]:
+    """Best-effort extraction of an item number prefix from a title string.
+
+    Returns (number, remainder). Number may be "" if none found.
+    Accepts any leading token that contains a digit or is a single letter,
+    without requiring a specific format like A.1 or D.4.
+    """
+    cleaned = _ITEM_PREFIX_RE.sub('', title.strip())
+
+    # Tab-separated: "A.1\tSome Title" or "Item A.\tApprove Minutes"
+    if '\t' in cleaned:
+        parts = cleaned.split('\t', 1)
+        candidate = parts[0].strip().rstrip('.')
+        remainder = parts[1].strip()
+        if candidate and len(candidate) <= 15:
+            if re.search(r'\d', candidate) or (len(candidate) <= 2 and candidate[0].isalpha()):
+                return candidate, remainder or title.strip()
+
+    # Space/colon/period separated: "4.3 Site Plan Review", "A: Budget"
+    m = re.match(r'^([A-Za-z0-9().\-/]{1,15})[:\s.\t]+(.+)', cleaned)
+    if m:
+        candidate = m.group(1).rstrip('.')
+        remainder = m.group(2).strip()
+        if re.search(r'\d', candidate) or (len(candidate) <= 2 and candidate[0].isalpha()):
+            return candidate, remainder
+
+    return "", title.strip()
+
+
+# ---------------------------------------------------------------------------
+# Detection
+# ---------------------------------------------------------------------------
+
+def _detect_parse_path(doc) -> str:
+    """Determine extraction path: 'toc', 'url', or 'empty'."""
+    toc = doc.get_toc()
+    real_entries = [e for e in toc if e[2] > 0]
+    distinct_pages = set(e[2] for e in real_entries)
+
+    if len(real_entries) >= 3 and len(distinct_pages) >= 2:
+        return "toc"
+
+    for page in doc:
+        for link in page.get_links():
+            if link.get("kind") == 2 and _is_attachment_url(link.get("uri", "")):
+                return "url"
+
+    return "empty"
+
+
+# ---------------------------------------------------------------------------
+# URL path: cluster links, walk backwards to headings
+# ---------------------------------------------------------------------------
+
+def _collect_all_links(doc) -> List[dict]:
+    """Extract all attachment-like links from the document."""
+    all_links = []
+    for page in doc:
+        page_links = _extract_links(page)
+        for link in page_links:
+            if _is_attachment_url(link["url"]):
+                all_links.append(link)
+    return all_links
+
+
+def _collect_all_lines(doc) -> List[dict]:
+    """Extract all text lines with position metadata from the document."""
+    all_lines = []
+    for page in doc:
+        all_lines.extend(_extract_page_text_with_positions(page))
+    return all_lines
+
+
+def _cluster_links_by_position(
+    links: List[dict],
+    median_line_height: float = 14.0,
+) -> List[List[dict]]:
+    """Group links that are vertically close on the same page.
+
+    Each cluster represents the attachment block for one agenda item.
+    A new cluster starts when the page changes or the vertical gap
+    exceeds 2.5x the median line height.
+    """
+    if not links:
+        return []
+
+    sorted_links = sorted(links, key=lambda l: (l["page"], l["y_center"]))
+    gap_threshold = median_line_height * 2.5
+
+    clusters = [[sorted_links[0]]]
+    for link in sorted_links[1:]:
+        prev = clusters[-1][-1]
+        if link["page"] != prev["page"] or (link["y_center"] - prev["y_center"]) > gap_threshold:
+            clusters.append([link])
+        else:
+            clusters[-1].append(link)
+
+    return clusters
+
+
+def _estimate_median_line_height(lines: List[dict]) -> float:
+    """Estimate median line height from first page text lines."""
+    if not lines:
+        return 14.0
+    heights = [l["y1"] - l["y0"] for l in lines[:50] if l["y1"] - l["y0"] > 2]
+    if not heights:
+        return 14.0
+    heights.sort()
+    return heights[len(heights) // 2]
+
+
+def _line_overlaps_any_link(line: dict, links: List[dict], tolerance: float = 8.0) -> bool:
+    """Check if a text line vertically overlaps with any link in the list."""
+    for link in links:
+        if link["page"] == line["page"] and abs(link["y_center"] - (line["y0"] + line["y1"]) / 2) < tolerance:
+            return True
+    return False
+
+
+def _find_heading_above_cluster(
+    cluster: List[dict],
+    all_lines: List[dict],
+    search_floor_page: int,
+    search_floor_y: float,
+) -> Optional[dict]:
+    """Walk backwards from a URL cluster to find the item heading above it.
+
+    Searches between (search_floor_page, search_floor_y) and the top of the
+    first link in the cluster.
+
+    Returns dict with title, number, page, y0 or None.
+    """
+    first_link = min(cluster, key=lambda l: (l["page"], l["y_center"]))
+    ceiling_page = first_link["page"]
+    ceiling_y = first_link["y_center"]
+
+    # Collect candidate lines in the search zone
+    candidates = []
+    for line in all_lines:
+        # Must be on or between floor and ceiling pages
+        if line["page"] < search_floor_page or line["page"] > ceiling_page:
+            continue
+        if line["page"] == search_floor_page and line["y0"] < search_floor_y:
+            continue
+        if line["page"] == ceiling_page and line["y0"] >= ceiling_y:
+            continue
+        # Skip lines that overlap with links in this cluster
+        if _line_overlaps_any_link(line, cluster):
+            continue
+        candidates.append(line)
+
+    if not candidates:
+        return None
+
+    # Walk backwards from the bottom of the zone (closest to links)
+    candidates.sort(key=lambda l: (l["page"], l["y0"]), reverse=True)
+
+    heading_lines = []
+    section = ""
+
+    for line in candidates:
+        text = line["text"].strip()
+        if not text:
+            continue
+
+        # Check if this is a section header (CONSENT CALENDAR, PUBLIC HEARINGS, etc.)
+        if _is_section_header(text) and not heading_lines:
+            section = _extract_section_name(text)
+            continue
+
+        # Long lines (>200 chars) are body paragraphs, not headings
+        if len(text) > 200:
+            if heading_lines:
+                break
+            continue
+
+        heading_lines.append(line)
+
+        # Stop after accumulating 3 lines or hitting a gap
+        if len(heading_lines) >= 3:
+            break
+        if len(heading_lines) >= 2:
+            prev = heading_lines[-2]
+            curr = heading_lines[-1]
+            # If lines are on different pages or far apart, stop
+            if prev["page"] != curr["page"] or abs(prev["y0"] - curr["y0"]) > 40:
+                break
+
+    if not heading_lines:
+        return None
+
+    # Heading lines were collected bottom-up, reverse for natural order
+    heading_lines.reverse()
+    full_title = " ".join(l["text"].strip() for l in heading_lines)
+    number, title_text = _extract_item_number_permissive(full_title)
+
+    # Collect body text: everything between heading and links that isn't the heading itself
+    heading_y_top = min(l["y0"] for l in heading_lines)
+    heading_page = min(l["page"] for l in heading_lines)
+    body_parts = []
+    for line in all_lines:
+        if line["page"] < heading_page or line["page"] > ceiling_page:
+            continue
+        if line["page"] == heading_page and line["y0"] <= heading_y_top:
+            continue
+        if line["page"] == ceiling_page and line["y0"] >= ceiling_y:
+            continue
+        if _line_overlaps_any_link(line, cluster):
+            continue
+        if line in heading_lines:
+            continue
+        body_parts.append(line["text"].strip())
+
+    return {
+        "title": title_text,
+        "number": number,
+        "section": section,
+        "page": heading_lines[0]["page"] + 1,
+        "y0": heading_lines[0]["y0"],
+        "body": "\n".join(body_parts) if body_parts else "",
+    }
+
+
+def _parse_url_v2(doc, result: _ParsedAgenda):
+    """URL-based extraction: cluster links, walk backwards to headings."""
+    result.metadata.parse_method = "v2_url"
+
+    all_links = _collect_all_links(doc)
+    all_lines = _collect_all_lines(doc)
+
+    if not all_links:
+        return
+
+    median_lh = _estimate_median_line_height(all_lines)
+    clusters = _cluster_links_by_position(all_links, median_lh)
+
+    # Track the bottom of the previous cluster for search floor
+    prev_floor_page = 0
+    prev_floor_y = 0.0
+    current_section = ""
+
+    for cluster in clusters:
+        heading = _find_heading_above_cluster(
+            cluster, all_lines, prev_floor_page, prev_floor_y,
+        )
+
+        if heading:
+            if heading["section"]:
+                current_section = heading["section"]
+
+            attachments = [
+                _Attachment(
+                    label=link["label"],
+                    url=link["url"],
+                    page_start=link["page"] + 1,
+                    page_end=link["page"] + 1,
+                    bbox=link["bbox"],
+                )
+                for link in cluster
+            ]
+
+            item = _AgendaItem(
+                number=heading["number"],
+                title=heading["title"],
+                section=heading.get("section") or current_section,
+                body=heading.get("body", ""),
+                recommended_action="",
+                attachments=attachments,
+                page_start=heading["page"],
+                page_end=cluster[-1]["page"] + 1,
+            )
+            result.items.append(item)
+        else:
+            # Orphan links -- couldn't find a heading
+            for link in cluster:
+                result.orphan_links.append(_Attachment(
+                    label=link["label"],
+                    url=link["url"],
+                    page_start=link["page"] + 1,
+                    page_end=link["page"] + 1,
+                    bbox=link["bbox"],
+                ))
+
+        # Update floor for next cluster
+        last_link = max(cluster, key=lambda l: (l["page"], l["y_center"]))
+        prev_floor_page = last_link["page"]
+        prev_floor_y = last_link["y_center"]
+
+
+# ---------------------------------------------------------------------------
+# TOC path: page-range slicing
+# ---------------------------------------------------------------------------
+
+_SKIP_TOC_TITLES = {"top", "bottom", "end", "back"}
+
+
+def _parse_toc_v2(doc, result: _ParsedAgenda):
+    """TOC-based extraction: slice by page boundaries, no title format requirements."""
+    result.metadata.parse_method = "v2_toc"
+
+    toc = doc.get_toc()
+    if not toc:
+        return
+
+    # Filter noise entries
+    entries = [
+        (level, title.strip(), page)
+        for level, title, page in toc
+        if page > 0 and title.strip().lower() not in _SKIP_TOC_TITLES
+    ]
+    if len(entries) < 2:
+        return
+
+    # Determine the item level.
+    # Strategy: prefer the shallowest level that has 3+ entries.
+    # If the shallowest level has only 1-2 entries (document/section containers),
+    # descend to the next level for items.
+    level_counts = {}
+    for level, title, page in entries:
+        level_counts.setdefault(level, []).append(page)
+
+    sorted_levels = sorted(level_counts.keys())
+    item_level = sorted_levels[0]
+
+    # Walk from shallowest to deepest, pick the first level with 3+ entries
+    for level in sorted_levels:
+        if len(level_counts[level]) >= 3:
+            item_level = level
+            break
+
+    # If shallowest has 3+ entries AND has children, it's the item level
+    # (e.g. Burleson: 5 L1 items with L2 exhibits)
+    # If shallowest has 1-2 entries, those are document/section containers.
+    # Check if their children look like individual pages/slides (many L2 entries)
+    # or like actual items (moderate number of L2 entries).
+    # Document bundles (Alhambra: 2 L1 docs with 32 L2 slides) should keep L1 as items.
+    # Walk from shallowest: if a level has few entries (<=5) but the next
+    # level has significantly more, the current level is a section container
+    # and the next level holds the actual items.
+    # Exception: if the next level has 8x+ entries per parent entry,
+    # those are likely granular (slides/pages), not items -- stay at parent.
+    shallowest = sorted_levels[0]
+    item_level = shallowest
+
+    for i, level in enumerate(sorted_levels):
+        count = len(level_counts[level])
+        if i + 1 < len(sorted_levels):
+            next_level = sorted_levels[i + 1]
+            next_pages = level_counts[next_level]
+            next_count = len(next_pages)
+            ratio = next_count / max(count, 1)
+
+            if count <= 5 and next_count > count:
+                # Current level has few entries, next has more.
+                # Decide: are the next-level entries real items (multi-page)
+                # or slides/pages (one per page)?
+                next_distinct = len(set(next_pages))
+                next_span = max(next_pages) - min(next_pages) if next_pages else 0
+                avg_gap = next_span / max(next_count, 1)
+
+                if avg_gap >= 2.0:
+                    # Next level entries span multiple pages each --
+                    # these are real items with content, not slides
+                    # (e.g. Martinez: 72 L2 items, avg 4.8 pages each)
+                    continue
+                else:
+                    # Next level is one-per-page (slides, presentation pages)
+                    # Current level is the right grouping
+                    # (e.g. Alhambra: 32 L2 slides, ~1 page each)
+                    item_level = level
+                    break
+            else:
+                # Current level has enough entries -- use it
+                item_level = level
+                break
+        else:
+            # Deepest level -- use it
+            item_level = level
+
+    child_levels = [l for l in level_counts.keys() if l > item_level]
+
+    # Build items from entries at the item level
+    item_entries = [(t, p) for l, t, p in entries if l == item_level]
+    child_entries = [(l, t, p) for l, t, p in entries if l in child_levels]
+
+    # Determine agenda vs content pages:
+    # Agenda pages are where multiple item-level entries cluster on the same page
+    page_density = {}
+    for title, page in item_entries:
+        page_density[page] = page_density.get(page, 0) + 1
+    agenda_pages = {p for p, count in page_density.items() if count >= 2}
+
+    # If no clear agenda page cluster, treat first entry's page as agenda
+    if not agenda_pages and item_entries:
+        agenda_pages = {item_entries[0][1]}
+
+    current_section = ""
+
+    for i, (title, page) in enumerate(item_entries):
+        # Compute page range for this item
+        page_0 = page - 1  # 0-indexed
+        if i + 1 < len(item_entries):
+            next_page_0 = item_entries[i + 1][1] - 1
+            page_end_0 = next_page_0 - 1
+        else:
+            page_end_0 = doc.page_count - 1
+
+        # Ensure non-negative range
+        page_end_0 = max(page_end_0, page_0)
+
+        # Extract item number and title
+        number, title_text = _extract_item_number_permissive(title)
+
+        # Check if this entry looks like a section header rather than an item
+        if _is_section_header(title_text) or _is_section_header(title):
+            current_section = _extract_section_name(title)
+            continue
+
+        # Find child entries within this item's page range
+        item_children = [
+            (l, t, p) for l, t, p in child_entries
+            if p >= page and (i + 1 >= len(item_entries) or p < item_entries[i + 1][1])
+        ]
+
+        # Build memos from child entries (these are embedded attachments)
+        memos = []
+        for j, (cl, ct, cp) in enumerate(item_children):
+            cp_0 = cp - 1
+            if j + 1 < len(item_children):
+                child_end_0 = item_children[j + 1][2] - 2
+            else:
+                child_end_0 = page_end_0
+            child_end_0 = max(child_end_0, cp_0)
+
+            memo = _extract_memo_content(doc, cp_0, child_end_0)
+            if not memo.full_text.strip():
+                continue
+            memos.append(memo)
+
+        # Extract body text from the item's own page (if it's an agenda page)
+        body = ""
+        if page in agenda_pages:
+            body = _extract_body_from_agenda_page(doc, page_0, title)
+
+        # If no child memos but item spans multiple pages, extract as single memo
+        if not memos and page_end_0 > page_0 and page not in agenda_pages:
+            memo = _extract_memo_content(doc, page_0, page_end_0)
+            if memo.full_text.strip():
+                memos.append(memo)
+
+        item = _AgendaItem(
+            number=number,
+            title=title_text,
+            section=current_section,
+            body=body,
+            recommended_action="",
+            memos=memos,
+            page_start=page,
+            page_end=page_end_0 + 1,
+        )
+
+        # Extract recommended action from memo if available
+        for memo in memos:
+            if memo.recommended_action:
+                item.recommended_action = memo.recommended_action
+                break
+
+        result.items.append(item)
+
+    logger.debug(
+        "v2 toc parsed",
+        item_count=len(result.items),
+        item_level=item_level,
+        total_memos=sum(len(it.memos) for it in result.items),
+    )
+
+
+def _extract_body_from_agenda_page(doc, page_0: int, toc_title: str) -> str:
+    """Extract body text for an item from its agenda page.
+
+    Looks for the item's title on the page and captures text below it
+    until the next item-like break.
+    """
+    text = doc[page_0].get_text("text")
+    lines = text.split("\n")
+
+    # Find the line that best matches the TOC title
+    title_lower = toc_title.lower().strip()
+    best_idx = -1
+    for idx, line in enumerate(lines):
+        if title_lower[:30] in line.lower():
+            best_idx = idx
+            break
+
+    if best_idx < 0:
+        return ""
+
+    # Capture lines after the title until a gap or next section
+    body_lines = []
+    for line in lines[best_idx + 1:]:
+        stripped = line.strip()
+        if not stripped:
+            if body_lines:
+                body_lines.append("")
+            continue
+        body_lines.append(stripped)
+
+    return "\n".join(body_lines).strip()[:2000]
+
+
+# ---------------------------------------------------------------------------
+# Internal parse orchestrator
+# ---------------------------------------------------------------------------
+
+def _parse_v2_internal(pdf_path: str, force_method: Optional[str] = None) -> _ParsedAgenda:
+    """Core v2 parse logic. Returns internal _ParsedAgenda structure."""
+    doc = fitz.open(pdf_path)
+    result = _ParsedAgenda()
+    result.metadata.page_count = doc.page_count
+
+    # Extract metadata from first page
+    if doc.page_count > 0:
+        first_page_lines = _extract_page_text_with_positions(doc[0])
+        _extract_meeting_metadata(first_page_lines, result.metadata)
+
+    # Detect and dispatch
+    if force_method == "toc":
+        _parse_toc_v2(doc, result)
+    elif force_method == "url":
+        _parse_url_v2(doc, result)
+    else:
+        path = _detect_parse_path(doc)
+        if path == "toc":
+            _parse_toc_v2(doc, result)
+        elif path == "url":
+            _parse_url_v2(doc, result)
+        # "empty" -> no items, monolithic fallback
+
+    doc.close()
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Public API -- same contract as parse_agenda_pdf
+# ---------------------------------------------------------------------------
+
+def parse_agenda_pdf_v2(
+    pdf_path: str,
+    force_method: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Parse a municipal agenda PDF using anchor-first strategy.
+
+    Same input/output contract as parse_agenda_pdf (v1).
+    """
+    parsed = _parse_v2_internal(pdf_path, force_method=force_method)
+
+    pipeline_items: List[Dict[str, Any]] = []
+    for idx, item in enumerate(parsed.items):
+        pipeline_item: Dict[str, Any] = {
+            "vendor_item_id": item.number,
+            "title": item.title,
+            "sequence": idx + 1,
+            "agenda_number": item.number,
+            "attachments": [
+                {
+                    "name": att.label or "Attachment",
+                    "url": att.url,
+                    "type": _attachment_type(att.url) if att.url else "embedded",
+                }
+                for att in item.attachments
+                if att.url or att.label
+            ],
+        }
+
+        body_text_parts = []
+        if item.memos:
+            for memo in item.memos:
+                if memo.full_text:
+                    body_text_parts.append(memo.full_text)
+        if item.body and not body_text_parts:
+            body_text_parts.append(item.body)
+        elif item.body and body_text_parts:
+            body_text_parts.insert(0, item.body)
+
+        if body_text_parts:
+            pipeline_item["body_text"] = "\n\n".join(body_text_parts)
+
+        all_text = item.body
+        if item.memos:
+            all_text += " " + " ".join(m.subject for m in item.memos if m.subject)
+        matter_file = _extract_matter_file(item.title, all_text)
+        if matter_file:
+            pipeline_item["matter_file"] = matter_file
+
+        item_metadata: Dict[str, Any] = {}
+        if item.section:
+            item_metadata["section"] = item.section
+        if item.recommended_action:
+            item_metadata["recommended_action"] = item.recommended_action
+        if item.page_start:
+            item_metadata["page_start"] = item.page_start
+            item_metadata["page_end"] = item.page_end
+        if parsed.metadata.parse_method:
+            item_metadata["parse_method"] = parsed.metadata.parse_method
+        if item.memos:
+            item_metadata["memo_count"] = len(item.memos)
+            item_metadata["memo_pages"] = sum(
+                (m.page_end - m.page_start + 1) for m in item.memos
+            )
+        if item_metadata:
+            pipeline_item["metadata"] = item_metadata
+
+        pipeline_items.append(pipeline_item)
+
+    result = {
+        "items": pipeline_items,
+        "metadata": {
+            "body_name": parsed.metadata.body_name,
+            "meeting_date": parsed.metadata.meeting_date,
+            "meeting_type": parsed.metadata.meeting_type,
+            "page_count": parsed.metadata.page_count,
+            "parse_method": parsed.metadata.parse_method,
+        },
+    }
+
+    if parsed.orphan_links:
+        result["orphan_links"] = [
+            {"name": att.label, "url": att.url, "type": _attachment_type(att.url)}
+            for att in parsed.orphan_links
+        ]
+
+    if parsed.orphan_memos:
+        result["orphan_memos"] = [
+            {"subject": m.subject, "page_start": m.page_start, "page_end": m.page_end}
+            for m in parsed.orphan_memos
+        ]
+
+    logger.debug(
+        "v2 parsed agenda pdf",
+        parse_method=parsed.metadata.parse_method,
+        item_count=len(pipeline_items),
+        orphan_links=len(parsed.orphan_links),
+        orphan_memos=len(parsed.orphan_memos),
+        page_count=parsed.metadata.page_count,
+    )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# CLI for comparison testing
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import sys
+    import json
+
+    if len(sys.argv) < 2:
+        print("Usage: python -m vendors.adapters.parsers.agenda_chunker_v2 <path_to_pdf> [--json] [--force-toc] [--force-url] [--compare]")
+        sys.exit(1)
+
+    pdf_path = sys.argv[1]
+    as_json = "--json" in sys.argv
+    compare = "--compare" in sys.argv
+    force = None
+    if "--force-toc" in sys.argv:
+        force = "toc"
+    elif "--force-url" in sys.argv:
+        force = "url"
+
+    result_v2 = parse_agenda_pdf_v2(pdf_path, force_method=force)
+    items_v2 = result_v2["items"]
+    meta_v2 = result_v2["metadata"]
+
+    if compare:
+        from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
+        result_v1 = parse_agenda_pdf(pdf_path, force_method=force)
+        items_v1 = result_v1["items"]
+        meta_v1 = result_v1["metadata"]
+
+        print(f"{'=' * 70}")
+        print(f"COMPARISON: {pdf_path}")
+        print(f"{'=' * 70}")
+        print(f"  v1: {len(items_v1):3d} items | method: {meta_v1.get('parse_method', '?')}")
+        print(f"  v2: {len(items_v2):3d} items | method: {meta_v2.get('parse_method', '?')}")
+        print()
+
+        if items_v1:
+            print("  v1 items:")
+            for item in items_v1[:10]:
+                atts = len(item.get("attachments", []))
+                bt = len(item.get("body_text", ""))
+                print(f"    {item.get('agenda_number', '?'):<8} {item['title'][:60]}")
+                if atts or bt:
+                    print(f"             atts={atts} body={bt}ch")
+        else:
+            print("  v1: (no items)")
+
+        print()
+
+        if items_v2:
+            print("  v2 items:")
+            for item in items_v2[:10]:
+                atts = len(item.get("attachments", []))
+                bt = len(item.get("body_text", ""))
+                print(f"    {item.get('agenda_number', '?'):<8} {item['title'][:60]}")
+                if atts or bt:
+                    print(f"             atts={atts} body={bt}ch")
+        else:
+            print("  v2: (no items)")
+
+    elif as_json:
+        print(json.dumps(result_v2, indent=2, ensure_ascii=False))
+    else:
+        print(f"{'=' * 60}")
+        print(f"{meta_v2.get('body_name', '')} | {meta_v2.get('meeting_type', '')} | {meta_v2.get('meeting_date', '')}")
+        print(f"{meta_v2.get('page_count', 0)} pages | {len(items_v2)} items | method: {meta_v2.get('parse_method', '?')}")
+        print(f"{'=' * 60}")
+
+        for item in items_v2:
+            print(f"\n{'_' * 60}")
+            section = (item.get("metadata") or {}).get("section", "")
+            print(f"[{section}] {item.get('agenda_number', '')}  {item['title']}")
+            if item.get("matter_file"):
+                print(f"  Matter: {item['matter_file']}")
+            rec = (item.get("metadata") or {}).get("recommended_action", "")
+            if rec:
+                print(f"  Rec. Action: {rec[:120]}{'...' if len(rec) > 120 else ''}")
+            memo_count = (item.get("metadata") or {}).get("memo_count", 0)
+            if memo_count:
+                memo_pages = (item.get("metadata") or {}).get("memo_pages", 0)
+                print(f"  Embedded Memos: {memo_count} ({memo_pages} pages)")
+            body_text = item.get("body_text", "")
+            if body_text:
+                preview = body_text[:150].replace('\n', ' ')
+                print(f"  Body text: {len(body_text)} chars - {preview}{'...' if len(body_text) > 150 else ''}")
+            atts = item.get("attachments", [])
+            if atts:
+                print(f"  Attachments ({len(atts)}):")
+                for att in atts:
+                    print(f"    - {att['name']}")
+                    print(f"      {att['url']}")
+
+        orphans = result_v2.get("orphan_links", [])
+        if orphans:
+            print(f"\nORPHAN LINKS ({len(orphans)}):")
+            for att in orphans:
+                print(f"  {att['name']} -> {att['url']}")

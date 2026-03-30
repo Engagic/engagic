@@ -1,20 +1,34 @@
-# Cities that legitimately only publish monolithic agenda packets
+# Cities that only produce monolithic meeting-level summaries
 # No item-level data to extract -- this is their ceiling
-# Updated 2026-03-21 (17 cities)
+# Updated 2026-03-28 (31 cities)
+belmontCA
+beniciaCA
 beverlyMA
-cathedralcityCA
-cherryhillNJ
-dothanAL
+corsicanaTX
+dunnellonFL
 everettWA
 fairfaxVA
+gainesvilleFL
+goosecreekSC
+huntsvilleTX
+janesvilleWI
 miamisburgOH
+missouricityTX
+monroeLA
 morristownNJ
 mountairyNC
-oakharborWA
+nationalcityCA
+newportricheyFL
+orangeTX
 palmettoFL
-parkridgeIL
+pasadenaTX
+queencreekAZ
 sanbenitoTX
 spokaneWA
+suisuncityCA
 trentonNJ
 valparaisoIN
 whiteplainsNY
+winderGA
+winterspringsFL
+yakimaWA
