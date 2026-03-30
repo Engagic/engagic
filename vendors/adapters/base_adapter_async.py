@@ -17,6 +17,7 @@ import aiohttp
 from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
 from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
+from vendors.adapters.parsers.agenda_chunker_v2 import parse_agenda_pdf_v2
 from vendors.session_manager_async import AsyncSessionManager
 from exceptions import VendorHTTPError
 
@@ -431,7 +432,18 @@ class AsyncBaseAdapter:
                 tmp_path = tmp.name
                 tmp.write(pdf_bytes)
 
-            parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path, force_method=force_method)
+            # URL path (thin agendas): v1 regex-based chunker
+            # TOC path (thick packets): v2 anchor-based chunker
+            # Auto: try v1 first, fall back to v2 if v1 returns nothing
+            if force_method == "toc":
+                parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path, force_method="toc")
+            elif force_method == "url":
+                parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path, force_method="url")
+            else:
+                parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+                if not parsed.get("items"):
+                    parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path)
+
             items = parsed.get("items", [])
 
             if items:

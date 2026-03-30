@@ -32,8 +32,16 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
     # Some Granicus sites use 'odd'/'even', others use 'listingRow'
     rows = soup.find_all('tr', class_=['odd', 'even', 'listingRow'])
 
+    # Fallback: Blacksburg-style sites use unclassed <tr> with td.listedItem
+    if not rows:
+        for listing_table in soup.find_all('table', class_='listingTable'):
+            rows.extend(
+                tr for tr in listing_table.find_all('tr')
+                if tr.find('td', class_='listedItem')
+            )
+
     for row in rows:
-        cells = row.find_all('td', class_='listItem')
+        cells = row.find_all('td', class_=['listItem', 'listedItem'])
         if len(cells) < 2:
             continue
 
@@ -149,6 +157,18 @@ def _parse_granicus_date(date_text: str) -> Optional[str]:
     # Collapse internal whitespace (date and time may be split across lines)
     date_text = " ".join(date_text.split())
 
+    # Strip leading day-of-week prefix (e.g. "Tuesday, March 31, 2026" -> "March 31, 2026")
+    # Many Granicus sites include the day name (Draper UT, Boynton Beach FL, etc.)
+    date_text = re.sub(
+        r'^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'
+        r'|Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s*',
+        '', date_text, flags=re.IGNORECASE,
+    )
+
+    # Normalize spaces around slashes (e.g. "03 / 31 / 2026" -> "03/31/2026")
+    # Queen Creek AZ and others use spaced slashes in dates
+    date_text = re.sub(r'\s*/\s*', '/', date_text)
+
     formats = [
         "%B %d, %Y - %I:%M %p",  # December 22, 2025 - 06:00 PM
         "%B %d, %Y %I:%M %p",    # December 22, 2025 06:00 PM
@@ -156,6 +176,9 @@ def _parse_granicus_date(date_text: str) -> Optional[str]:
         "%b %d, %Y - %I:%M %p",  # Dec 22, 2025 - 06:00 PM
         "%b %d, %Y %I:%M %p",    # Dec 22, 2025 06:00 PM
         "%b %d, %Y",             # Dec 22, 2025
+        "%b %d, %y - %I:%M %p",  # Mar 17, 26 - 06:00 PM (2-digit year, abbrev month)
+        "%b %d, %y %I:%M %p",    # Mar 17, 26 06:00 PM
+        "%b %d, %y",             # Mar 17, 26
         "%m/%d/%Y - %I:%M %p",   # 12/22/2025 - 06:00 PM
         "%m/%d/%Y %I:%M %p",     # 12/22/2025 06:00 PM
         "%m/%d/%Y",              # 12/22/2025
