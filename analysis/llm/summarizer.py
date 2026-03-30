@@ -1073,66 +1073,75 @@ class GeminiSummarizer:
     ) -> types.GenerateContentConfig:
         """Get thinking configuration based on document complexity
 
+        Gemini 3.x models use thinking_level (MINIMAL/LOW/MEDIUM/HIGH).
+        Gemini 2.5 models use thinking_budget (token count, 0=off, -1=dynamic).
+        Mixing the two in one request causes an error.
+
         Args:
             page_count: Number of pages
             text_size: Character count
             model_name: Model being used
 
         Returns:
-            GenerateContentConfig with appropriate thinking budget
+            GenerateContentConfig with appropriate thinking settings
         """
-        # Confidence: 9/10 - Gemini's large context handles everything in one pass
-        # Adaptive thinking based on document complexity
+        is_gemini3 = "3." in model_name or "3-" in model_name
 
         if page_count <= 10 and text_size <= 30000:
-            # Easy task: Simple agendas, disable thinking for speed
+            # Easy task: Simple agendas, minimal thinking for speed
             logger.info(
-                "simple document disabling thinking for speed",
-                page_count=page_count
+                "simple document minimal thinking",
+                page_count=page_count,
+                model=model_name
             )
+            if is_gemini3:
+                thinking = types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel.MINIMAL
+                )
+            else:
+                thinking = types.ThinkingConfig(thinking_budget=0)
             return types.GenerateContentConfig(
                 temperature=0.3,
                 max_output_tokens=8192,
-                thinking_config=types.ThinkingConfig(
-                    thinking_budget=0
-                ),  # No thinking needed
+                thinking_config=thinking,
             )
 
         elif page_count <= 50 and text_size <= 150000:
-            # Medium task: Standard agendas, use moderate thinking
+            # Medium task: Standard agendas, moderate thinking
             logger.info(
-                "medium document using moderate thinking",
-                page_count=page_count
+                "medium document moderate thinking",
+                page_count=page_count,
+                model=model_name
             )
-            if model_name == self.flash_lite_model_name:
-                # Flash-Lite needs explicit budget since it doesn't think by default
-                return types.GenerateContentConfig(
-                    temperature=0.3,
-                    max_output_tokens=8192,
-                    thinking_config=types.ThinkingConfig(
-                        thinking_budget=2048
-                    ),  # Moderate thinking
+            if is_gemini3:
+                thinking = types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel.MEDIUM
                 )
             else:
-                # Flash uses dynamic thinking by default
-                return types.GenerateContentConfig(
-                    temperature=0.3,
-                    max_output_tokens=8192,
-                    # Let model decide thinking budget dynamically
-                )
-
-        else:
-            # Hard task: Complex documents, use dynamic thinking for best quality
-            logger.info(
-                "complex document using dynamic thinking",
-                page_count=page_count
-            )
+                thinking = types.ThinkingConfig(thinking_budget=2048)
             return types.GenerateContentConfig(
                 temperature=0.3,
                 max_output_tokens=8192,
-                thinking_config=types.ThinkingConfig(
-                    thinking_budget=-1
-                ),  # Dynamic thinking
+                thinking_config=thinking,
+            )
+
+        else:
+            # Hard task: Complex documents, full thinking for best quality
+            logger.info(
+                "complex document full thinking",
+                page_count=page_count,
+                model=model_name
+            )
+            if is_gemini3:
+                thinking = types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel.HIGH
+                )
+            else:
+                thinking = types.ThinkingConfig(thinking_budget=-1)
+            return types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=8192,
+                thinking_config=thinking,
             )
 
     def _parse_item_response(self, response_text: str) -> Tuple[str, List[str]]:
