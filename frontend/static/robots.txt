@@ -6,5 +6,6 @@ Disallow: /signup
 Disallow: /auth/
 Disallow: /dashboard
 Disallow: /funnel
+Disallow: /about/metrics
 
 Sitemap: https://engagic.org/sitemap.xml
