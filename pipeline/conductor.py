@@ -386,6 +386,28 @@ def _parse_city_list(arg: str) -> List[str]:
     return [c.strip() for c in arg.split(",") if c.strip()]
 
 
+async def _resolve_city_list(arg: str, db: "Database") -> List[str]:
+    """Resolve city list argument, with support for two-letter state codes.
+
+    Accepted formats:
+      - Two-letter state code (e.g. "CA") -> all active jurisdictions in that state
+      - @file path (e.g. "@munis/bay-area.txt") -> lines from file
+      - Comma-separated bananas (e.g. "paloaltoCA,oaklandCA")
+    """
+    bare = arg.strip()
+    if len(bare) == 2 and bare.isalpha() and not bare.startswith("@"):
+        state_code = bare.upper()
+        async with db.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT banana FROM jurisdictions WHERE state = $1 AND status = 'active' ORDER BY name",
+                state_code,
+            )
+        if rows:
+            return [row["banana"] for row in rows]
+        # Not a known state -- fall through to normal parsing
+    return _parse_city_list(arg)
+
+
 def main():
     """Entry point for engagic-conductor and engagic-daemon CLI"""
     import click
@@ -438,13 +460,13 @@ def main():
     @cli.command("sync-cities")
     @click.argument("cities")
     def sync_cities(cities):
-        """Sync multiple cities (comma-separated bananas or @file path)"""
-        city_list = _parse_city_list(cities)
-        click.echo(f"Syncing {len(city_list)} cities: {', '.join(city_list)}")
+        """Sync multiple cities (comma-separated bananas, @file path, or two-letter state code)"""
 
         async def run():
             db = await Database.create()
             try:
+                city_list = await _resolve_city_list(cities, db)
+                click.echo(f"Syncing {len(city_list)} cities: {', '.join(city_list)}")
                 async with Conductor(db) as conductor:
                     return await conductor.sync_cities(city_list)
             finally:
@@ -456,14 +478,14 @@ def main():
     @cli.command("process-cities")
     @click.argument("cities")
     def process_cities(cities):
-        """Process queued jobs for multiple cities (comma-separated bananas or @file path)"""
-        city_list = _parse_city_list(cities)
-        click.echo(f"Processing queued jobs for {len(city_list)} cities: {', '.join(city_list)}")
+        """Process queued jobs for multiple cities (comma-separated bananas, @file path, or two-letter state code)"""
 
         async def run():
             db = await Database.create()
             totals = {"processed": 0, "failed": 0, "items_processed": 0, "items_new": 0}
             try:
+                city_list = await _resolve_city_list(cities, db)
+                click.echo(f"Processing queued jobs for {len(city_list)} cities: {', '.join(city_list)}")
                 async with Conductor(db) as conductor:
                     async for result in conductor.process_cities(city_list):
                         # Stream results - log each city as it completes
@@ -489,14 +511,14 @@ def main():
     @cli.command("sync-and-process-cities")
     @click.argument("cities")
     def sync_and_process_cities(cities):
-        """Sync and process multiple cities (comma-separated bananas or @file path)"""
-        city_list = _parse_city_list(cities)
-        click.echo(f"Syncing and processing {len(city_list)} cities: {', '.join(city_list)}")
+        """Sync and process multiple cities (comma-separated bananas, @file path, or two-letter state code)"""
 
         async def run():
             db = await Database.create()
             totals = {"processed": 0, "failed": 0, "items_processed": 0, "items_new": 0, "meetings_found": 0}
             try:
+                city_list = await _resolve_city_list(cities, db)
+                click.echo(f"Syncing and processing {len(city_list)} cities: {', '.join(city_list)}")
                 async with Conductor(db) as conductor:
                     async for result in conductor.sync_and_process_cities(city_list):
                         if result.get("phase") == "sync_complete":

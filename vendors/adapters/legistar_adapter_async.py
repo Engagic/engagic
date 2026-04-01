@@ -6,7 +6,7 @@ API-first with HTML fallback. Cities: Seattle WA, NYC, Cambridge MA, and many ot
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 import json
 from json import JSONDecodeError
 import re
@@ -771,8 +771,41 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             logger.warning("XML parsing error for sponsors", error=str(e))
             return []
 
+    @staticmethod
+    def _extract_response_cookies(response) -> Dict[str, str]:
+        """Extract Set-Cookie name=value pairs from response headers.
+
+        Legistar uses cookie names with spaces (e.g. 'Setting-952-Calendar Year')
+        which aiohttp's CookieJar rejects. We handle them as raw strings instead.
+        """
+        cookies: Dict[str, str] = {}
+        for header_name, header_val in response.raw_headers:
+            if header_name.lower() == b"set-cookie":
+                pair = header_val.split(b";", 1)[0].decode("utf-8", errors="replace")
+                if "=" in pair:
+                    name, val = pair.split("=", 1)
+                    cookies[name.strip()] = val.strip()
+        return cookies
+
+    @staticmethod
+    def _build_cookie_header(cookies: Dict[str, str]) -> str:
+        return "; ".join(f"{k}={v}" for k, v in cookies.items())
+
     async def _fetch_meetings_html(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Fetch meetings by scraping HTML calendar (fallback)."""
+        """Fetch meetings by scraping HTML calendar (fallback).
+
+        Default Calendar.aspx shows only the current month/week. We widen
+        the date range to "This Year" via a three-step ASP.NET postback:
+          1. GET  -- load page, collect viewstate and session cookies
+          2. POST -- submit the year combo change (sets server-side cookie;
+                     the response itself is an error page we discard)
+          3. GET  -- re-fetch with the updated session; server now returns
+                     the full year of meetings
+
+        Legistar cookies have spaces in names (Setting-{id}-Calendar Year)
+        which aiohttp's CookieJar cannot handle, so we manage cookies via
+        raw Cookie headers.
+        """
         # Try common Legistar calendar URL patterns
         calendar_urls = [
             f"https://{self.slug}.legistar.com/Calendar.aspx",
@@ -783,10 +816,67 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         calendar_url = None
         for url in calendar_urls:
             try:
-                response = await self._get(url)
-                html = await response.text()
-                # Parse HTML in thread pool (BeautifulSoup is CPU-bound)
-                soup = await asyncio.to_thread(self._parse_html, html)
+                # Use a dedicated session with an empty cookie jar so the
+                # shared session's jar doesn't interfere with our manual
+                # Cookie headers (Legistar cookie names contain spaces
+                # which aiohttp's CookieJar silently drops).
+                timeout = aiohttp.ClientTimeout(total=30)
+                dedicated = aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar())
+                try:
+                    # Step 1: GET default page for viewstate + session cookies
+                    async with dedicated.get(url, timeout=timeout) as resp:
+                        if resp.status >= 400:
+                            continue
+                        html = await resp.text()
+                        cookies = self._extract_response_cookies(resp)
+
+                    page_soup = await asyncio.to_thread(self._parse_html, html)
+
+                    # Step 2: POST to flip the year filter cookie
+                    form_data: Dict[str, str] = {}
+                    for inp in page_soup.find_all("input"):
+                        name = inp.get("name")
+                        if name:
+                            form_data[name] = inp.get("value", "")
+
+                    form_data["__EVENTTARGET"] = "ctl00$ContentPlaceHolder1$lstYears"
+                    form_data["__EVENTARGUMENT"] = ""
+                    form_data["ctl00$ContentPlaceHolder1$lstYears"] = "This Year"
+                    form_data["ctl00_ContentPlaceHolder1_lstYears_ClientState"] = (
+                        '{"logEntries":[],"value":"This Year","text":"This Year",'
+                        '"enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}'
+                    )
+
+                    post_headers = {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Origin": url.rsplit("/", 1)[0],
+                        "Referer": url,
+                        "Cookie": self._build_cookie_header(cookies),
+                    }
+                    # allow_redirects=False: the POST returns 302 -> /Error.aspx.
+                    # The Set-Cookie with the year change is on the 302, not the
+                    # final error page. We only need the cookie side-effect.
+                    encoded_body = urlencode(form_data)
+                    async with dedicated.post(
+                        url, data=encoded_body, headers=post_headers,
+                        timeout=timeout, allow_redirects=False,
+                    ) as post_resp:
+                        cookies.update(self._extract_response_cookies(post_resp))
+
+                    logger.debug(
+                        "legistar year filter POST completed",
+                        slug=self.slug,
+                    )
+
+                    # Step 3: GET with merged cookies (session + updated year)
+                    get_headers = {"Cookie": self._build_cookie_header(cookies)}
+                    async with dedicated.get(url, headers=get_headers, timeout=timeout) as resp:
+                        html = await resp.text()
+
+                    soup = await asyncio.to_thread(self._parse_html, html)
+                finally:
+                    await dedicated.close()
+
                 calendar_url = url
                 logger.info("legistar found HTML calendar", slug=self.slug, url=url)
                 break

@@ -123,6 +123,44 @@ def parse_viewpublisher_listing(html: str, base_url: str) -> List[Dict[str, Any]
 
         meetings.append(meeting)
 
+    # Fallback: div-based responsive-table layout (e.g. Windsor)
+    # Meetings are <li class="table-row"> with <div class="table-cell"> children
+    if not meetings:
+        for li in soup.find_all('li', class_='table-row'):
+            agenda_link = li.find('a', href=lambda x: x and 'AgendaViewer' in x if x else False)
+            if not agenda_link:
+                continue
+
+            # Title: first table-cell text
+            cells = li.find_all('div', class_='table-cell')
+            title = cells[0].get_text(strip=True) if cells else ""
+
+            # Date: look for a cell with parseable date text
+            start = None
+            for cell in cells[1:]:
+                cell_text = cell.get_text(strip=True)
+                parsed = _parse_granicus_date(cell_text)
+                if parsed:
+                    start = parsed
+                    break
+
+            href = agenda_link['href']
+            if href.startswith('//'):
+                href = 'https:' + href
+            elif not href.startswith('http'):
+                href = urljoin(base_url, href)
+
+            id_match = re.search(r'(?:event_id|clip_id)=(\d+)', href)
+            if not id_match:
+                continue
+
+            meetings.append({
+                'event_id': id_match.group(1),
+                'title': title,
+                'start': start,
+                'agenda_viewer_url': href,
+            })
+
     # Dedup: same event appears in both "Recent" and "Archived" sections
     seen_ids = set()
     deduped = []
@@ -955,6 +993,65 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
             item_dict['metadata'] = {'section': current_section}
 
         items.append(item_dict)
+
+    # Fallback: if body-level walk found nothing, the page may have malformed
+    # nesting (e.g. WeHo wraps everything inside a single <div>). Search the
+    # entire document for item tables identified by td.numberspace or td[width].
+    if not items:
+        all_item_tables = [
+            t for t in soup.find_all('table')
+            if t.find('td', class_='numberspace') or t.find('td', width='40')
+        ]
+        if all_item_tables:
+            current_section = ""
+            for table in all_item_tables:
+                item_data = _process_item_table(table)
+                if not item_data:
+                    continue
+
+                number = item_data['number']
+                title = item_data['title']
+
+                title_stripped = re.sub(r'\s*\(.*\)\s*$', '', title).strip()
+                title_stripped = re.sub(r'[\s.:,\-\u2013\u2014]+$', '', title_stripped).strip()
+                title_upper = title_stripped.upper()
+                section_keywords = {
+                    'CONSENT AGENDA', 'CONSENT CALENDAR', 'PUBLIC HEARINGS',
+                    'NEW BUSINESS', 'UNFINISHED BUSINESS', 'BUSINESS', 'OLD BUSINESS',
+                    'LEGISLATIVE', 'PUBLIC COMMENT',
+                }
+                is_section = (
+                    '.' not in number
+                    and (
+                        re.match(r'^[A-Z]$', number)  # single letter = section header
+                        or title.rstrip('.').endswith(':')
+                        or title_upper in section_keywords
+                        or not title
+                    )
+                )
+
+                if is_section:
+                    current_section = title_stripped
+                    continue
+
+                if title.rstrip('.').lower() in procedural:
+                    continue
+
+                # Attachments: look in the next sibling blockquote after this table
+                att_bq = table.find_next_sibling('blockquote')
+                attachments = _extract_attachments(att_bq)
+
+                sequence_counter += 1
+                item_dict = {
+                    'vendor_item_id': number,
+                    'title': title,
+                    'sequence': sequence_counter,
+                    'agenda_number': number,
+                    'attachments': attachments,
+                }
+                if current_section:
+                    item_dict['metadata'] = {'section': current_section}
+                items.append(item_dict)
 
     logger.debug(
         "parsed generated agendaviewer html",

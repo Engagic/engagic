@@ -450,7 +450,7 @@ daemon_status() {
 
 sync_cities() {
     if [ -z "$1" ]; then
-        error "Cities required (comma-separated bananas or @file path)"
+        error "Cities required (comma-separated bananas, @file path, or state code e.g. CA)"
     fi
 
     log "Syncing cities: $1"
@@ -460,7 +460,7 @@ sync_cities() {
 
 process_cities() {
     if [ -z "$1" ]; then
-        error "Cities required (comma-separated bananas or @file path)"
+        error "Cities required (comma-separated bananas, @file path, or state code e.g. CA)"
     fi
 
     local SCREEN_NAME="engagic-process"
@@ -531,7 +531,7 @@ kill_process() {
 
 sync_and_process_cities() {
     if [ -z "$1" ]; then
-        error "Cities required (comma-separated bananas or @file path)"
+        error "Cities required (comma-separated bananas, @file path, or state code e.g. CA)"
     fi
 
     log "Syncing and processing cities: $1"
@@ -539,19 +539,9 @@ sync_and_process_cities() {
     uv run engagic-conductor sync-and-process-cities "$1"
 }
 
-process_unprocessed() {
-    load_env
-    uv run engagic-conductor full-sync
-}
-
 preview_queue() {
     load_env
     uv run engagic-conductor preview-queue "${1:-}"
-}
-
-preview_watchlist() {
-    load_env
-    uv run engagic-conductor preview-watchlist
 }
 
 users() {
@@ -624,16 +614,6 @@ LIMIT 20;
     journalctl -u engagic-api --no-pager --since "2024-01-01" 2>/dev/null \
         | grep -oP 'POST /api/search "\K[^"]+' \
         | sort | uniq -c | sort -rn | head -20
-}
-
-sync_watchlist() {
-    load_env
-    uv run engagic-conductor sync-watchlist
-}
-
-process_watchlist() {
-    load_env
-    uv run engagic-conductor process-watchlist
 }
 
 extract_text() {
@@ -800,7 +780,7 @@ show_help() {
     echo "  update                    - Quick update (git pull + restart)"
     echo "  deploy                    - Full deployment"
     echo "  test                      - Test API endpoints"
-    echo "  sync                      - Sync dependencies"
+    echo "  deps                      - Sync dependencies (uv sync)"
     echo ""
     echo "Prometheus:"
     echo "  start-prometheus, stop-prometheus, restart-prometheus"
@@ -818,17 +798,11 @@ show_help() {
     echo "  map-all                   - Full map pipeline"
     echo ""
     echo "Data Operations:"
-    echo "    sync-cities CITIES             - Fetch meetings (single city or comma-separated or @file)"
+    echo "    sync-cities CITIES             - Fetch meetings (banana, @file, or state code e.g. CA)"
     echo "    process-cities CITIES          - Process in screen (survives SSH disconnect)"
     echo "    sync-and-process-cities CITIES - Fetch + process cities"
     echo "    attach                         - Reattach to running process-cities"
     echo "    kill-process                   - Stop running process-cities"
-    echo "    process-unprocessed            - Process all unprocessed meetings in queue"
-    echo ""
-    echo "  Watchlist:"
-    echo "    preview-watchlist              - Show cities users are watching"
-    echo "    sync-watchlist                 - Fetch + process watchlist cities"
-    echo "    process-watchlist              - Process queued jobs for watchlist cities"
     echo ""
     echo "  Preview & Inspection:"
     echo "    preview-queue [CITY]           - Show queued jobs (no processing)"
@@ -840,8 +814,9 @@ show_help() {
     echo "  $0 status                                  # Check what's running"
     echo "  $0 sync-cities paloaltoCA                  # Fetch single city"
     echo "  $0 sync-cities @regions/bay-area.txt       # Fetch region (free)"
+    echo "  $0 sync-cities CA                          # All active CA jurisdictions"
     echo "  $0 process-cities paloaltoCA               # Process in screen"
-    echo "  $0 sync-and-process-cities paloaltoCA      # Fetch + process"
+    echo "  $0 sync-and-process-cities TX              # Fetch + process entire state"
     echo "  $0 users                                   # Show user activity"
 }
 
@@ -909,7 +884,7 @@ case "$COMMAND" in
     # Deployment
     update)         quick_update ;;
     deploy)         deploy_full ;;
-    sync)           sync_deps ;;
+    deps|sync)      sync_deps ;;
 
     # Prometheus
     start-prometheus)   cmd_start_prometheus ;;
@@ -935,12 +910,8 @@ case "$COMMAND" in
     sync-and-process-cities) sync_and_process_cities "$2" ;;
     attach)              attach_process ;;
     kill-process)        kill_process ;;
-    process-unprocessed) process_unprocessed ;;
 
-    # Watchlist and users
-    preview-watchlist)   preview_watchlist ;;
-    sync-watchlist)      sync_watchlist ;;
-    process-watchlist)   process_watchlist ;;
+    # Users
     users)               users ;;
 
     # Preview and inspection

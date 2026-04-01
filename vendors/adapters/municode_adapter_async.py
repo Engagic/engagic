@@ -173,8 +173,8 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
 
     def _build_pdf_packet_url(self, meeting_guid: str) -> str:
         """Build PDF packet URL as fallback."""
-        slug_clean = self.slug.replace('-', '')
-        return f"https://mccmeetings.blob.core.usgovcloudapi.net/{slug_clean}-pubu/MEET-Packet-{meeting_guid}.pdf"
+        blob_prefix = self._site_config.get("blob_prefix") or self.slug.replace('-', '')
+        return f"https://mccmeetings.blob.core.usgovcloudapi.net/{blob_prefix}-pubu/MEET-Packet-{meeting_guid}.pdf"
 
     def _parse_calendar_date(self, calendar_date: list[Any]) -> Optional[datetime]:
         """Parse CalendarDate which varies by city.
