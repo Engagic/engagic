@@ -85,6 +85,9 @@ PUBLIC_COMMENT_PATTERNS = [
     r'board pkt',  # Board packets (SF compilation format)
     r'co-?sponsor(ship)?\s*(request|ltr|letter)',  # "Co-Sponsor Request Chen 122525"
     r'sponsor(ship)?\s*request',
+    r'communications?\s+from\s+public',  # LA: "Communication(s) from Public_03-18-2026"
+    r'community impact statement',  # LA: neighborhood council public comment
+    r'speaker card',  # LA: "Speaker Card(s)_02-24-2026"
 ]
 
 # Massive PDFs with no policy content (property lists, parcel tables)
