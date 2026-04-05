@@ -274,7 +274,7 @@ def _extract_text_with_formatting(page: fitz.Page, page_num: int) -> str:
 
     if not lines:
         # No formatting detected, return plain text
-        return page.get_text()  # type: ignore[attr-defined]
+        return page.get_text(sort=True)  # type: ignore[attr-defined]
 
     # Match lines to text
     matched = _match_lines_to_text(page, lines)
@@ -587,7 +587,7 @@ class PdfExtractor:
             if use_formatting:
                 page_text = _extract_text_with_formatting(page, page_num + 1)
             else:
-                page_text = page.get_text()  # type: ignore[attr-defined]
+                page_text = page.get_text(sort=True)  # type: ignore[attr-defined]
 
             initial_char_count = len(page_text.strip())
 
