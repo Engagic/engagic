@@ -74,7 +74,7 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
                 f"Add entry to {ONBASE_CONFIG_FILE}"
             )
 
-        self.site_urls = [f"https://{path}" for path in config[self.slug]]
+        self.site_urls = [f"https://{path.rstrip('/')}/" for path in config[self.slug]]
         logger.info(
             "initialized async adapter",
             component="vendor",
@@ -83,7 +83,7 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
             site_count=len(self.site_urls)
         )
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from all configured OnBase sites."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)

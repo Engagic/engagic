@@ -101,7 +101,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
                 return doc
         return None
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from PrimeGov API (upcoming + archived concurrently)."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)

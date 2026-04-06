@@ -3,18 +3,17 @@ Async CivicPlus Adapter - Discovery and scraping for CivicPlus sites
 
 CivicPlus cities use varied hosting:
 - *.civicplus.com (standard)
-- *.gov / *.org (custom domains like cityofithacany.gov)
+- *.gov / *.org (custom domains)
+- Arbitrary domains (e.g., www.kingcity.com)
 
-This adapter auto-discovers the working domain by trying candidates in order:
-1. {slug}.civicplus.com
-2. www.{slug}.gov
-3. {slug}.gov
-4. www.{slug}.org
-5. {slug}.org
-
-Use clean slugs (e.g., "cityofithacany" not "www.cityofithacany.gov").
+Domain resolution order:
+1. Config override from data/civicplus_sites.json (if present)
+2. {slug}.civicplus.com
+3. www.{slug}.gov / .org
+4. {slug}.gov / .org
 """
 
+import json
 import os
 import re
 import asyncio
@@ -30,15 +29,29 @@ from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from vendors.adapters.parsers.civicplus_parser import parse_civicplus_html
 from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError
+from config import config
 
 
 class AsyncCivicPlusAdapter(AsyncBaseAdapter):
     """Async adapter for cities using CivicPlus CMS (often with external agenda systems)"""
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
-        """city_slug is clean city identifier (e.g., "cityofithacany")"""
         super().__init__(city_slug, vendor="civicplus", metrics=metrics)
-        self.base_url = None  # Discovered during fetch
+        self._site_config = self._load_site_config()
+        domain_override = self._site_config.get("domain")
+        self.base_url = f"https://{domain_override}" if domain_override else None
+
+    def _load_site_config(self) -> Dict[str, Any]:
+        """Load site-specific config (domain override, etc) from civicplus_sites.json."""
+        config_file = os.path.join(config.DB_DIR, "civicplus_sites.json")
+        if os.path.exists(config_file):
+            try:
+                with open(config_file) as f:
+                    sites = json.load(f)
+                    return sites.get(self.slug, {})
+            except Exception:
+                pass
+        return {}
 
     def _get_candidate_base_urls(self) -> List[str]:
         """Extend base candidates with CivicPlus domain."""
@@ -58,7 +71,13 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             "/agendas",
         ]
 
-        for base_url in self._get_candidate_base_urls():
+        # Config override narrows search to just the configured domain
+        if self.base_url:
+            candidates = [self.base_url]
+        else:
+            candidates = self._get_candidate_base_urls()
+
+        for base_url in candidates:
             for pattern in patterns:
                 test_url = f"{base_url}{pattern}"
                 try:
@@ -68,7 +87,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                         "agenda" in html.lower()
                         or "meeting" in html.lower()
                     ):
-                        self.base_url = base_url  # Store discovered base URL
+                        self.base_url = base_url
                         logger.info("found agenda page", vendor="civicplus", slug=self.slug, base_url=base_url, pattern=pattern)
                         return test_url
                 except VendorHTTPError:
@@ -77,7 +96,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         logger.warning("could not find agenda page", vendor="civicplus", slug=self.slug)
         return None
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Scrape AgendaCenter HTML and filter meetings by date range."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)

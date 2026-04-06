@@ -75,7 +75,7 @@ class AsyncAgendaOnlineAdapter(AsyncBaseAdapter):
     # ------------------------------------------------------------------
 
     async def _fetch_meetings_impl(
-        self, days_back: int = 7, days_forward: int = 14
+        self, days_back: int = 14, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         today = datetime.now()
         start_date = today - timedelta(days=days_back)

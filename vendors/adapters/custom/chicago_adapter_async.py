@@ -139,7 +139,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             })
         return attachments
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings in moving window from Chicago's REST API."""
         self._reset_stats()
 

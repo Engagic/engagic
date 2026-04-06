@@ -2,6 +2,7 @@
 
 import hashlib
 import ipaddress
+import re
 import time
 import random
 import sqlite3
@@ -50,6 +51,39 @@ class TierLimits:
 # Endpoint-specific rate limits (overrides tier defaults)
 # Note: /api/events and /api/analytics are fully exempt in middleware
 ENDPOINT_LIMITS: Dict[str, Dict[str, int]] = {}
+
+
+def classify_route(path: str) -> Optional[str]:
+    """Map an API path to a route category for per-route rate limiting.
+    Returns None for uncategorized paths (use global limits only)."""
+    if not path:
+        return None
+    if re.match(r'/api/matters/[^/]+/(?:timeline|votes|sponsors)', path):
+        return "matters_detail"
+    if re.match(r'/api/meetings?/[^/]+', path):
+        return "meeting_detail"
+    if re.match(r'/api/state/[^/]+/(?:meetings|matters)', path):
+        return "state_listing"
+    if path in ('/api/search', '/api/search/by-topic'):
+        return "search"
+    if path.startswith('/api/v1/deliberations/'):
+        return "deliberation"
+    if re.match(r'/api/city/[^/]+/(?:matters|meetings|committees|council-members|happening|search)', path):
+        return "city_listing"
+    return None
+
+
+# Per-route limits -- tighter than global, scoped to route category.
+# A normal user hits maybe 3-5 matter timelines per session (browsing a meeting),
+# not 3,000 per day. These limits match realistic browsing, not scraping.
+ROUTE_LIMITS: Dict[str, Dict[str, int]] = {
+    "matters_detail":  {"minute_limit": 10, "hour_limit": 100, "day_limit": 500},
+    "meeting_detail":  {"minute_limit": 10, "hour_limit": 100, "day_limit": 500},
+    "state_listing":   {"minute_limit": 3,  "hour_limit": 15,  "day_limit": 100},
+    "search":          {"minute_limit": 5,  "hour_limit": 30,  "day_limit": 200},
+    "deliberation":    {"minute_limit": 10, "hour_limit": 100, "day_limit": 500},
+    "city_listing":    {"minute_limit": 5,  "hour_limit": 50,  "day_limit": 300},
+}
 
 
 class SQLiteRateLimiter:
@@ -513,88 +547,120 @@ class SQLiteRateLimiter:
         # Get client tier and limits
         tier = self.get_client_tier(client_ip, api_key)
         limits = TierLimits.get_limits(tier)
-
-        # Check for endpoint-specific limits (overrides tier defaults)
-        if endpoint and endpoint in ENDPOINT_LIMITS:
-            endpoint_limits = ENDPOINT_LIMITS[endpoint]
-            minute_limit = endpoint_limits.get("minute_limit", limits["minute_limit"])
-            hour_limit = endpoint_limits.get("hour_limit", limits["hour_limit"])
-            day_limit = endpoint_limits.get("day_limit", limits["day_limit"])
-        else:
-            minute_limit = limits["minute_limit"]
-            hour_limit = limits["hour_limit"]
-            day_limit = limits["day_limit"]
+        minute_limit = limits["minute_limit"]
+        hour_limit = limits["hour_limit"]
+        day_limit = limits["day_limit"]
 
         # Periodic cleanup to prevent database bloat
         if current_time - self._last_cleanup > self._cleanup_interval:
             self._cleanup_old_entries(window_start)
             self._last_cleanup = current_time
 
-        with sqlite3.connect(self.db_path) as conn:
-            # WAL mode set at init time in _init_db()
+        # --- Per-route checks (tighter, scoped to route category) ---
+        route = classify_route(endpoint) if endpoint else None
+        if route and route in ROUTE_LIMITS:
+            route_key = f"{client_ip}::r::{route}"
+            rl = ROUTE_LIMITS[route]
+            route_info = {"route": route, "tier": tier.value}
 
-            # Count requests in current window
+            # Route per-minute
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM rate_limits WHERE client_ip = ? AND timestamp > ?",
+                    (route_key, window_start),
+                )
+                route_minute_count = cursor.fetchone()[0]
+                if route_minute_count >= rl["minute_limit"]:
+                    self.record_violation(client_ip, f"route_minute:{route}", real_ip)
+                    return False, 0, {
+                        **route_info, "limit_type": "route_minute",
+                        "route_limit": rl["minute_limit"],
+                        "minute_limit": minute_limit, "hour_limit": hour_limit, "day_limit": day_limit,
+                    }
+
+            # Route per-hour
+            is_ok, _ = self.check_hourly_limit(route_key, tier, rl["hour_limit"])
+            if not is_ok:
+                self.record_violation(client_ip, f"route_hourly:{route}", real_ip)
+                return False, 0, {
+                    **route_info, "limit_type": "route_hourly",
+                    "route_limit": rl["hour_limit"],
+                    "minute_limit": minute_limit, "hour_limit": hour_limit, "day_limit": day_limit,
+                }
+
+            # Route per-day
+            is_ok, _ = self.check_daily_limit(route_key, tier, rl["day_limit"])
+            if not is_ok:
+                self.record_violation(client_ip, f"route_daily:{route}", real_ip)
+                return False, 0, {
+                    **route_info, "limit_type": "route_daily",
+                    "route_limit": rl["day_limit"],
+                    "minute_limit": minute_limit, "hour_limit": hour_limit, "day_limit": day_limit,
+                }
+
+            # Record route-scoped minute timestamp
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute(
+                        "INSERT INTO rate_limits (client_ip, timestamp) VALUES (?, ?)",
+                        (route_key, current_time),
+                    )
+                    conn.commit()
+            except sqlite3.IntegrityError:
+                pass
+
+        # --- Global checks (all non-whitelisted endpoints combined) ---
+        with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT COUNT(*) FROM rate_limits WHERE client_ip = ? AND timestamp > ?",
                 (client_ip, window_start),
             )
             request_count = cursor.fetchone()[0]
 
-            # Check minute limit
             if request_count >= minute_limit:
                 self.record_violation(client_ip, "minute", real_ip)
                 return False, 0, {
-                    "tier": tier.value,
-                    "limit_type": "minute",
-                    "minute_limit": minute_limit,
-                    "hour_limit": hour_limit,
-                    "day_limit": day_limit
+                    "tier": tier.value, "limit_type": "minute",
+                    "minute_limit": minute_limit, "hour_limit": hour_limit, "day_limit": day_limit,
                 }
 
-            # Check hourly limit
-            is_allowed_hourly, remaining_hourly = self.check_hourly_limit(client_ip, tier, hour_limit)
-            if not is_allowed_hourly:
-                self.record_violation(client_ip, "hourly", real_ip)
-                return False, 0, {
-                    "tier": tier.value,
-                    "limit_type": "hourly",
-                    "minute_limit": minute_limit,
-                    "hour_limit": hour_limit,
-                    "day_limit": day_limit
-                }
+        is_allowed_hourly, remaining_hourly = self.check_hourly_limit(client_ip, tier, hour_limit)
+        if not is_allowed_hourly:
+            self.record_violation(client_ip, "hourly", real_ip)
+            return False, 0, {
+                "tier": tier.value, "limit_type": "hourly",
+                "minute_limit": minute_limit, "hour_limit": hour_limit, "day_limit": day_limit,
+            }
 
-            # Check daily limit
-            is_allowed_daily, remaining_daily = self.check_daily_limit(client_ip, tier, day_limit)
-            if not is_allowed_daily:
-                self.record_violation(client_ip, "daily", real_ip)
-                return False, 0, {
-                    "tier": tier.value,
-                    "limit_type": "daily",
-                    "minute_limit": minute_limit,
-                    "hour_limit": hour_limit,
-                    "day_limit": day_limit
-                }
+        is_allowed_daily, remaining_daily = self.check_daily_limit(client_ip, tier, day_limit)
+        if not is_allowed_daily:
+            self.record_violation(client_ip, "daily", real_ip)
+            return False, 0, {
+                "tier": tier.value, "limit_type": "daily",
+                "minute_limit": minute_limit, "hour_limit": hour_limit, "day_limit": day_limit,
+            }
 
-            # Add current request to minute tracker
-            try:
+        # Record global minute timestamp
+        try:
+            with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     "INSERT INTO rate_limits (client_ip, timestamp) VALUES (?, ?)",
                     (client_ip, current_time),
                 )
                 conn.commit()
-            except sqlite3.IntegrityError:
-                logger.debug("duplicate rate limit timestamp ignored", client_ip=client_ip[:16])
+        except sqlite3.IntegrityError:
+            logger.debug("duplicate rate limit timestamp ignored", client_ip=client_ip[:16])
 
-            remaining_minute = minute_limit - request_count - 1
-            return True, max(0, remaining_minute), {
-                "tier": tier.value,
-                "remaining_minute": remaining_minute,
-                "remaining_hourly": remaining_hourly,
-                "remaining_daily": remaining_daily,
-                "minute_limit": minute_limit,
-                "hour_limit": hour_limit,
-                "day_limit": day_limit
-            }
+        remaining_minute = minute_limit - request_count - 1
+        return True, max(0, remaining_minute), {
+            "tier": tier.value,
+            "remaining_minute": remaining_minute,
+            "remaining_hourly": remaining_hourly,
+            "remaining_daily": remaining_daily,
+            "minute_limit": minute_limit,
+            "hour_limit": hour_limit,
+            "day_limit": day_limit,
+        }
 
     def _cleanup_old_entries(self, cutoff_time: float):
         """Remove entries older than cutoff time"""

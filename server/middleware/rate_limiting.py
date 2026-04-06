@@ -118,7 +118,13 @@ async def rate_limit_middleware(
             )
 
         # Rate limit response
-        if limit_type == "daily":
+        if limit_type.startswith("route_"):
+            route = limit_info.get("route", "unknown")
+            route_limit = limit_info.get("route_limit", 0)
+            window = limit_type.replace("route_", "")
+            message = f"Rate limit for {route} ({route_limit}/{window}). Slow down on this endpoint."
+            retry_after = "60" if "minute" in limit_type else "900"
+        elif limit_type == "daily":
             message = f"Daily limit reached ({limit_info['day_limit']}/day). Resets at midnight UTC."
             retry_after = "3600"
         elif limit_type == "hourly":

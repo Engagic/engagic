@@ -42,7 +42,7 @@ class AsyncDestinyAdapter(AsyncBaseAdapter):
         self.base_url = "https://public.destinyhosted.com"
         self.site_id = city_slug  # slug IS the numeric site ID
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings across relevant months, extract items from agenda pages."""
         today = datetime.now().date()
         start_date = today - timedelta(days=days_back)
