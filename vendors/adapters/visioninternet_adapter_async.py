@@ -30,6 +30,7 @@ Per-site config in data/visioninternet_sites.json for base URL and calendar path
 import asyncio
 import os
 import re
+import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urljoin
@@ -41,6 +42,24 @@ from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from pipeline.protocols import MetricsCollector
 from config import config
 from exceptions import VendorHTTPError
+
+
+class _CurlCffiResponse:
+    """Wraps curl_cffi response to match aiohttp.ClientResponse interface."""
+
+    def __init__(self, resp):
+        self._resp = resp
+        self.status = resp.status_code
+        self.headers = resp.headers
+
+    async def text(self):
+        return self._resp.text
+
+    async def read(self):
+        return self._resp.content
+
+    async def json(self):
+        return self._resp.json()
 
 
 VISIONINTERNET_CONFIG_FILE = os.path.join(config.DB_DIR, "visioninternet_sites.json")
@@ -79,6 +98,62 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
             raise ValueError(
                 f"No calendar_paths configured for visioninternet slug '{self.slug}'"
             )
+
+        # Residential proxy for Akamai bypass (curl_cffi with Chrome TLS fingerprint)
+        self._proxy = config.RESIDENTIAL_PROXY
+        self._curl_session = None
+
+    async def _get_curl_session(self):
+        """Lazy-init a reusable curl_cffi async session."""
+        if self._curl_session is None:
+            from curl_cffi.requests import AsyncSession
+            self._curl_session = AsyncSession(impersonate="chrome")
+        return self._curl_session
+
+    async def _request(self, method: str, url: str, **kwargs):
+        """Route through residential proxy via curl_cffi when configured."""
+        if not self._proxy:
+            return await super()._request(method, url, **kwargs)
+
+        session = await self._get_curl_session()
+        start_time = time.time()
+
+        try:
+            logger.debug("vendor request (curl_cffi)", vendor=self.vendor, slug=self.slug, method=method, url=url[:100])
+            resp = await session.request(
+                method, url,
+                proxies={"https": self._proxy, "http": self._proxy},
+                timeout=config.VENDOR_HTTP_TIMEOUT,
+            )
+            duration = time.time() - start_time
+
+            logger.debug(
+                "vendor response (curl_cffi)",
+                vendor=self.vendor, slug=self.slug,
+                status_code=resp.status_code,
+                content_length=len(resp.content),
+                duration_seconds=round(duration, 2),
+            )
+
+            if resp.status_code >= 400:
+                self.metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{resp.status_code}").inc()
+                raise VendorHTTPError(
+                    f"HTTP {resp.status_code} error",
+                    vendor=self.vendor, status_code=resp.status_code,
+                    url=url, city_slug=self.slug,
+                )
+
+            self.metrics.vendor_requests.labels(vendor=self.vendor, status="success").inc()
+            self.metrics.vendor_request_duration.labels(vendor=self.vendor).observe(duration)
+            return _CurlCffiResponse(resp)
+
+        except VendorHTTPError:
+            raise
+        except Exception as e:
+            duration = time.time() - start_time
+            self.metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
+            logger.error("vendor request failed (curl_cffi)", vendor=self.vendor, slug=self.slug, url=url[:100], error=str(e), duration_seconds=round(duration, 2))
+            raise VendorHTTPError(f"Request failed: {e}", vendor=self.vendor, url=url, city_slug=self.slug) from e
 
     # ------------------------------------------------------------------
     # Main fetch
