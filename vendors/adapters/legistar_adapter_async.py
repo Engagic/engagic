@@ -34,7 +34,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         self.api_token = api_token
         self.base_url = f"https://webapi.legistar.com/v1/{self.slug}"
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings via API, falling back to HTML if needed."""
         meetings = []
         try:
@@ -131,7 +131,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             return True
         return False
 
-    async def _fetch_meetings_api(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_api(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from Legistar Web API."""
         # Build date range
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -797,7 +797,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             logger.warning("XML parsing error for sponsors", error=str(e))
             return []
 
-    async def _fetch_meetings_html(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_html(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings by scraping HTML calendar (fallback)."""
         # Try common Legistar calendar URL patterns
         calendar_urls = [

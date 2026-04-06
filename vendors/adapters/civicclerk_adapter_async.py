@@ -31,7 +31,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
         file_id = doc.get("fileId")
         return f"{self.base_url}/v1/Meetings/GetMeetingFileStream(fileId={file_id},plainText=false)"
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings with item-level extraction via OData API."""
         today = datetime.now()
         start_date = today - timedelta(days=days_back)

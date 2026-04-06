@@ -186,7 +186,7 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
     # ------------------------------------------------------------------
 
     async def _fetch_meetings_impl(
-        self, days_back: int = 7, days_forward: int = 14
+        self, days_back: int = 14, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         """Scrape calendar pages for all configured bodies, then enrich with chunker."""
         self._tunnel_down = False  # Reset for each sync cycle

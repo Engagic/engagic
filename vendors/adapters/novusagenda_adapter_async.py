@@ -50,7 +50,7 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                 return layout
         return None
 
-    async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
+    async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Scrape meetings from NovusAgenda /agendapublic page."""
         response = await self._get(f"{self.base_url}/agendapublic")
         html = await response.text()
