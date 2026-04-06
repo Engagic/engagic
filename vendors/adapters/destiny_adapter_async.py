@@ -192,15 +192,18 @@ class AsyncDestinyAdapter(AsyncBaseAdapter):
         return result
 
     def _parse_agenda_items(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Parse structured items from agenda detail page.
+        """Parse items from Destiny's multi-column agenda table.
 
-        The agenda is a 7-column table. Section headers have a letter (A., B., etc.)
-        in col 1 with bold text.  Items have an anchor in col 1, a number in col 2,
-        and an a.ai_link title link in the last cell.
+        Two known column layouts:
+        - [letter | item# | ... | content]  (Newark: sections use letters)
+        - [anchor | section# | letter | sub# | spacer | content]  (Pacific Grove: sections use digits)
+
+        Items: rows with a.ai_link (with href) in the content cell.
+        Sections: rows with a letter or digit in an early cell + bold text in content.
         """
         items: List[Dict[str, Any]] = []
         current_section = ""
-        current_section_letter = ""
+        current_section_id = ""
         sequence = 0
 
         for row in soup.find_all('tr', class_=lambda c: c and 'top' in c):
@@ -210,34 +213,41 @@ class AsyncDestinyAdapter(AsyncBaseAdapter):
             if len(cells) < 2:
                 continue
 
-            first_text = cells[0].get_text(strip=True)
-
-            # Section header: letter like "D." with bold content, no item link
-            if re.match(r'^[A-Z]\.$', first_text):
-                content_cell = cells[-1]
-                strong = content_cell.find('strong')
-                if strong:
-                    current_section = strong.get_text(strip=True)
-                    current_section_letter = first_text.rstrip('.')
-                continue
-
-            # Item: has a.ai_link in the content cell
             content_cell = cells[-1]
             item_link = content_cell.find('a', class_='ai_link')
-            if not item_link:
+            if not item_link or not item_link.get('href'):
+                # Not an item -- check for section header (letter/digit + bold)
+                for cell in cells[:-1]:
+                    t = cell.get_text(strip=True).rstrip('.')
+                    if t.isdigit() or re.match(r'^[A-Z]$', t):
+                        strong = content_cell.find('strong')
+                        if strong:
+                            current_section_id = t
+                            current_section = strong.get_text(strip=True)
+                        break
                 continue
 
-            # Item number from second cell
-            item_num_text = cells[1].get_text(strip=True).rstrip('.') if len(cells) > 1 else ""
-            if not item_num_text or not item_num_text.isdigit():
-                continue
-
-            sequence += 1
             title = item_link.get_text(strip=True)
+            if not title:
+                continue
+
             memo_href = item_link.get('href', '')
 
-            # Build item ID: section letter + number (e.g., "D.1", "F.2")
-            agenda_number = f"{current_section_letter}.{item_num_text}" if current_section_letter else item_num_text
+            # Collect numbering from cells before content
+            num_parts = []
+            for cell in cells[:-1]:
+                t = cell.get_text(strip=True).rstrip('.')
+                if not t or t == '\xa0':
+                    continue
+                if t.isdigit() or re.match(r'^[A-Z]$', t):
+                    num_parts.append(t)
+
+            # Prepend section ID if not already present in parts
+            if current_section_id and current_section_id not in num_parts:
+                num_parts.insert(0, current_section_id)
+
+            agenda_number = '.'.join(num_parts) if num_parts else str(sequence + 1)
+            sequence += 1
 
             item: Dict[str, Any] = {
                 'vendor_item_id': agenda_number,

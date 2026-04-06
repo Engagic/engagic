@@ -321,6 +321,25 @@ class JurisdictionRepository(BaseRepository):
         )
         return [row["name"] for row in rows]
 
+    async def get_county_jurisdictions(self, county_banana: str) -> List[str]:
+        """Get all bananas linked to a county (the county itself + all cities with county_banana FK).
+
+        Args:
+            county_banana: The county's banana identifier
+
+        Returns:
+            List of bananas: [county_banana, city1, city2, ...]
+        """
+        rows = await self._fetch(
+            """
+            SELECT banana FROM jurisdictions
+            WHERE banana = $1 OR county_banana = $1
+            ORDER BY type DESC, name
+            """,
+            county_banana,
+        )
+        return [row["banana"] for row in rows]
+
     async def get_city_meeting_frequency(self, banana: str, days: int = 30) -> int:
         """Get count of meetings for a jurisdiction in the last N days
 

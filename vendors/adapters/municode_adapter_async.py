@@ -23,9 +23,8 @@ Three integration modes:
 """
 
 import asyncio
-import json
-import os
 import re
+import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin
@@ -33,7 +32,8 @@ from urllib.parse import urljoin
 import aiohttp
 from bs4 import BeautifulSoup
 
-from config import get_logger
+from config import config, get_logger
+from exceptions import VendorHTTPError
 from pipeline.protocols import MetricsCollector
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter
 from vendors.adapters.parsers.municode_parser import parse_html_agenda
@@ -49,6 +49,26 @@ def _load_municode_config() -> Dict[str, Any]:
 
 _BLOB_GUID_RE = re.compile(r'MEET-(?:Agenda|Packet|Minutes)-([a-f0-9-]{32,36})\.pdf', re.IGNORECASE)
 
+# Extract meeting GUID from adaHtmlDocument me= parameter
+_ADA_ME_RE = re.compile(r'[?&]me=([a-f0-9-]{32,36})', re.IGNORECASE)
+
+
+class _CurlCffiResponse:
+    """Wraps curl_cffi response to match aiohttp.ClientResponse interface."""
+
+    def __init__(self, resp):
+        self._resp = resp
+        self.status = resp.status_code
+
+    async def text(self):
+        return self._resp.text
+
+    async def json(self, **kwargs):
+        return self._resp.json(**kwargs)
+
+    async def read(self):
+        return self._resp.content
+
 
 class AsyncMunicodeAdapter(AsyncBaseAdapter):
     """Async adapter for cities using Municode platform."""
@@ -58,15 +78,30 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
 
         self._all_config = _load_municode_config()
         self._discovered_city_code: Optional[str] = None
+        self._is_drupal = False
+        self._drupal_url: Optional[str] = None
+        self._proxy: Optional[str] = None
+        self._curl_session = None
+        self._tunnel_down = False
 
         # Check config for this slug (try slug directly, then uppercase variant)
         slug_config = self._all_config.get(self.slug, self._all_config.get(self.slug.upper(), {}))
 
-        # Three modes, checked in priority order:
-        # 1. Self-hosted API: city runs Municode REST API on their own domain (base_url in config)
-        # 2. Subdomain API: slug has hyphens -> {slug}.municodemeetings.com
-        # 3. PublishPage: short city code slug -> meetings.municode.com/PublishPage/
-        if slug_config.get("base_url"):
+        # Four modes, checked in priority order:
+        # 1. Drupal listing: CivicPlus Drupal 10 site hosts meeting listings (Cloudflare-protected)
+        #    Municode still hosts HTML agendas at meetings.municode.com/adaHtmlDocument
+        # 2. Self-hosted API: city runs Municode REST API on their own domain (base_url in config)
+        # 3. Subdomain API: slug has hyphens -> {slug}.municodemeetings.com
+        # 4. PublishPage: short city code slug -> meetings.municode.com/PublishPage/
+        if slug_config.get("drupal_url"):
+            # Drupal mode: scrape city's Drupal meeting listing, enrich via meetings.municode.com
+            self._is_publish_page = False
+            self._is_drupal = True
+            self._drupal_url = slug_config["drupal_url"].rstrip("/")
+            self.base_url = "https://meetings.municode.com"
+            self._city_code_override = city_code or slug_config.get("city_code") or self.slug.upper()
+            self._proxy = config.RESIDENTIAL_PROXY
+        elif slug_config.get("base_url"):
             # Self-hosted API mode: same REST API as subdomain, different domain
             self._is_publish_page = False
             self.base_url = slug_config["base_url"].rstrip("/")
@@ -167,6 +202,326 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                 if isinstance(item, dict):
                     self._try_discover_city_code(item)
 
+    # -- Drupal mode: curl_cffi + residential proxy for Cloudflare bypass --
+    # Routes ALL requests to the Drupal domain through the proxy (listing pages,
+    # /media/ PDFs, etc.). Requests to other domains (meetings.municode.com,
+    # mccmeetings.blob) go through normal aiohttp.
+
+    async def _get_curl_session(self):
+        """Lazy-init a reusable curl_cffi async session."""
+        if self._curl_session is None:
+            from curl_cffi.requests import AsyncSession
+            self._curl_session = AsyncSession(impersonate="chrome")
+        return self._curl_session
+
+    def _is_drupal_domain(self, url: str) -> bool:
+        """Check if URL is on the Drupal site (needs proxy)."""
+        return bool(self._drupal_url and self._drupal_url in url)
+
+    async def _request(self, method: str, url: str, **kwargs):
+        """Route Drupal domain requests through residential proxy.
+
+        Requests to the city's Drupal site (listings, /media/ PDFs) go through
+        curl_cffi with Chrome TLS fingerprint to bypass Cloudflare.
+        Everything else (meetings.municode.com, blob storage) uses normal aiohttp.
+        """
+        if not self._is_drupal or not self._is_drupal_domain(url) or not self._proxy:
+            return await super()._request(method, url, **kwargs)
+
+        if self._tunnel_down:
+            raise VendorHTTPError(
+                "Residential proxy tunnel is down, skipping",
+                vendor=self.vendor, url=url, city_slug=self.slug,
+            )
+
+        session = await self._get_curl_session()
+        start_time = time.time()
+
+        try:
+            resp = await session.request(
+                method, url,
+                proxies={"https": self._proxy, "http": self._proxy},
+                timeout=300,  # 5 min -- large PDFs (25MB+) through residential proxy
+            )
+            duration = time.time() - start_time
+
+            logger.debug(
+                "drupal request (curl_cffi)",
+                vendor="municode", slug=self.slug,
+                status_code=resp.status_code,
+                duration_seconds=round(duration, 2),
+            )
+
+            if resp.status_code >= 400:
+                raise VendorHTTPError(
+                    f"HTTP {resp.status_code}",
+                    vendor=self.vendor, status_code=resp.status_code,
+                    url=url, city_slug=self.slug,
+                )
+
+            return _CurlCffiResponse(resp)
+
+        except VendorHTTPError:
+            raise
+        except Exception as e:
+            err_str = str(e).lower()
+            if "connection refused" in err_str or "socks" in err_str or "proxy" in err_str:
+                self._tunnel_down = True
+                logger.warning("residential proxy tunnel down", vendor="municode", slug=self.slug, error=str(e))
+            raise VendorHTTPError(
+                f"Drupal fetch failed: {e}",
+                vendor=self.vendor, url=url, city_slug=self.slug,
+            ) from e
+
+    async def _fetch_drupal_meetings(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
+        """Fetch meetings from CivicPlus Drupal site, then enrich with HTML agenda items.
+
+        Scrapes the Drupal Views table at /meetings/recent (paginated, newest-first).
+        Extracts meeting GUIDs from municode/blob URLs in the table, then enriches
+        through the standard meetings.municode.com/adaHtmlDocument pipeline.
+        """
+        today = datetime.now()
+        start_date = today - timedelta(days=days_back)
+
+        all_meetings: List[Dict[str, Any]] = []
+
+        # Scrape /meetings/recent with pagination (newest-first)
+        page = 0
+        while page < 50:
+            url = f"{self._drupal_url}/meetings/recent?page={page}"
+            try:
+                response = await self._get(url)
+                html = await response.text()
+            except Exception as e:
+                logger.warning("drupal page fetch failed", vendor="municode", slug=self.slug, page=page, error=str(e))
+                break
+
+            page_meetings = await asyncio.to_thread(self._parse_drupal_table, html)
+            if not page_meetings:
+                break
+
+            all_meetings.extend(page_meetings)
+
+            # Stop paginating when oldest meeting on page is before our window
+            dates = [m["_parsed_date"] for m in page_meetings if m.get("_parsed_date")]
+            if dates and min(dates) < start_date:
+                break
+
+            page += 1
+
+        # Also grab upcoming meetings (usually just 1 page)
+        try:
+            response = await self._get(f"{self._drupal_url}/meetings")
+            html = await response.text()
+            upcoming = await asyncio.to_thread(self._parse_drupal_table, html)
+            all_meetings.extend(upcoming)
+        except Exception as e:
+            logger.debug("upcoming meetings page failed", vendor="municode", slug=self.slug, error=str(e))
+
+        # Deduplicate by vendor_id
+        seen: set[str] = set()
+        unique: List[Dict[str, Any]] = []
+        for m in all_meetings:
+            vid = m["vendor_id"]
+            if vid not in seen:
+                seen.add(vid)
+                unique.append(m)
+
+        # Filter by date range
+        end_date = today + timedelta(days=days_forward)
+        filtered: List[Dict[str, Any]] = []
+        for meeting in unique:
+            meeting_date = meeting.get("_parsed_date")
+            if meeting_date:
+                if start_date <= meeting_date <= end_date:
+                    filtered.append(meeting)
+            else:
+                # Include meetings with unparseable dates
+                filtered.append(meeting)
+
+        logger.info(
+            "drupal meetings fetched",
+            vendor="municode", slug=self.slug,
+            total_scraped=len(unique),
+            in_range=len(filtered),
+            pages_scraped=page + 1,
+        )
+
+        # Enrich meetings with HTML agenda items (same path as PublishPage)
+        semaphore = asyncio.Semaphore(5)
+
+        async def enrich_meeting(meeting: Dict[str, Any]) -> None:
+            if meeting.get("meeting_status") in ("cancelled", "postponed", "deferred"):
+                return
+            guid = meeting.get("_meeting_guid")
+            async with semaphore:
+                # Path 1: GUID available -- fetch structured HTML agenda from meetings.municode.com
+                if guid:
+                    html_url = self._build_html_packet_url(guid)
+                    items_data = None
+                    try:
+                        items_data = await self._fetch_html_agenda_items(html_url)
+                    except Exception as e:
+                        logger.debug("HTML agenda fetch failed, trying PDF",
+                                     vendor="municode", slug=self.slug, error=str(e))
+
+                    if items_data and items_data.get("items"):
+                        meeting["items"] = items_data["items"]
+                        if items_data.get("participation"):
+                            meeting["participation"] = items_data["participation"]
+                        meeting["agenda_url"] = html_url
+                        logger.info(
+                            "found agenda items",
+                            vendor="municode", slug=self.slug,
+                            title=meeting.get("title", "")[:50],
+                            count=len(items_data["items"]),
+                        )
+                        return
+
+                # Path 2: no GUID or HTML agenda empty -- chunk the PDF packet
+                if meeting.get("packet_url"):
+                    chunked = await self._chunk_agenda_then_packet(
+                        packet_url=meeting["packet_url"],
+                        vendor_id=guid or meeting["vendor_id"],
+                    )
+                    if chunked:
+                        meeting["items"] = chunked
+
+        await asyncio.gather(*[enrich_meeting(m) for m in filtered])
+
+        # Clean up internal fields
+        for meeting in filtered:
+            meeting.pop("_parsed_date", None)
+            meeting.pop("_meeting_guid", None)
+
+        return filtered
+
+    def _parse_drupal_table(self, html: str) -> List[Dict[str, Any]]:
+        """Parse CivicPlus Drupal Views meeting table.
+
+        7-column table with consistent CSS classes on each td:
+          views-field-field-smart-date, views-field-title, views-field-nothing (agendas),
+          views-field-nothing-1 (packets), views-field-nothing-2 (minutes),
+          views-field-nothing-3 (video), views-field-view-node (details link)
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        meetings: List[Dict[str, Any]] = []
+
+        table = soup.find("table", class_="views-table")
+        if not table:
+            return []
+
+        for row in table.find_all("tr"):
+            cells = row.find_all("td")
+            if not cells:
+                continue
+
+            # Map cells by CSS class prefix
+            cell_map: Dict[str, Any] = {}
+            for cell in cells:
+                for cls in cell.get("class", []):
+                    if cls.startswith("views-field-"):
+                        cell_map[cls] = cell
+                        break
+
+            date_cell = cell_map.get("views-field-field-smart-date")
+            title_cell = cell_map.get("views-field-title")
+            if not date_cell or not title_cell:
+                continue
+
+            title = title_cell.get_text(strip=True)
+            parsed_date = self._parse_drupal_date(date_cell.get_text(strip=True))
+
+            # Collect links from agenda and packet columns
+            agenda_cell = cell_map.get("views-field-nothing")
+            packet_cell = cell_map.get("views-field-nothing-1")
+
+            meeting_guid = None
+            agenda_url = None
+            packet_url = None
+
+            for cell in [agenda_cell, packet_cell]:
+                if not cell:
+                    continue
+                for link in cell.find_all("a", href=True):
+                    href = link["href"]
+
+                    # HTML agenda on meetings.municode.com
+                    if "adaHtmlDocument" in href:
+                        me_match = _ADA_ME_RE.search(href)
+                        if me_match:
+                            meeting_guid = me_match.group(1).replace("-", "")
+                        if not agenda_url:
+                            agenda_url = href
+
+                    # PDF on Municode blob storage
+                    elif "mccmeetings.blob" in href:
+                        guid = self._extract_guid_from_blob_url(href)
+                        if guid:
+                            meeting_guid = meeting_guid or guid
+                        if not packet_url:
+                            packet_url = href
+
+                    # Local Drupal media (Planning Commission, committees)
+                    elif href.startswith("/media/"):
+                        if not packet_url:
+                            packet_url = f"{self._drupal_url}{href}"
+
+            vendor_id = meeting_guid or (
+                f"{parsed_date.strftime('%Y%m%d') if parsed_date else 'nodate'}_"
+                f"{title[:30].replace(' ', '_')}"
+            )
+
+            meeting: Dict[str, Any] = {
+                "vendor_id": vendor_id,
+                "title": title,
+                "start": parsed_date.isoformat() if parsed_date else None,
+                "_parsed_date": parsed_date,
+                "_meeting_guid": meeting_guid,
+            }
+
+            if agenda_url:
+                meeting["agenda_url"] = agenda_url
+            if packet_url:
+                meeting["packet_url"] = packet_url
+
+            meeting_status = self._parse_meeting_status(title)
+            if meeting_status:
+                meeting["meeting_status"] = meeting_status
+
+            meetings.append(meeting)
+
+        return meetings
+
+    def _parse_drupal_date(self, date_text: str) -> Optional[datetime]:
+        """Parse Drupal smart_date field: 'Mar 24, 2026 | 6pm' or 'Mar 18, 2026 | 2pm - 3pm'."""
+        if not date_text:
+            return None
+
+        parts = date_text.split("|")
+        date_part = parts[0].strip()
+        time_part = parts[1].strip() if len(parts) > 1 else ""
+
+        try:
+            parsed = datetime.strptime(date_part, "%b %d, %Y")
+        except ValueError:
+            return None
+
+        if time_part:
+            start_time = time_part.split(" - ")[0].strip()
+            time_match = re.match(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", start_time, re.I)
+            if time_match:
+                hour = int(time_match.group(1))
+                minute = int(time_match.group(2) or "0")
+                ampm = time_match.group(3).lower()
+                if ampm == "pm" and hour != 12:
+                    hour += 12
+                elif ampm == "am" and hour == 12:
+                    hour = 0
+                parsed = parsed.replace(hour=hour, minute=minute)
+
+        return parsed
+
     def _build_html_packet_url(self, meeting_guid: str) -> str:
         """Build HTML agenda packet URL with full attachments (ip=True)."""
         return f"https://meetings.municode.com/adaHtmlDocument/index?cc={self.city_code}&me={meeting_guid}&ip=True"
@@ -217,7 +572,9 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
             return None
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Fetch meetings from Municode API or PublishPage HTML."""
+        """Fetch meetings from Municode API, PublishPage HTML, or Drupal listing."""
+        if self._is_drupal:
+            return await self._fetch_drupal_meetings(days_back, days_forward)
         if self._is_publish_page:
             return await self._fetch_publish_page_meetings(days_back, days_forward)
 
