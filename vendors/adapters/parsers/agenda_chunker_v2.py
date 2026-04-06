@@ -433,8 +433,27 @@ def _parse_toc_v2(doc, result: _ParsedAgenda):
     child_levels = [l for l in level_counts.keys() if l > item_level]
 
     # Build items from entries at the item level
-    item_entries = [(t, p) for l, t, p in entries if l == item_level]
+    raw_item_entries = [(t, p) for l, t, p in entries if l == item_level]
     child_entries = [(l, t, p) for l, t, p in entries if l in child_levels]
+
+    # Group flat TOC entries that share the same item number prefix.
+    # e.g. Portola Valley: multiple L1 entries "Item 7.a - Cover Page",
+    # "Item 7.a - Minutes" should become one item with child memos.
+    # First entry becomes the item, subsequent entries become synthetic children.
+    item_entries = []
+    _synthetic_children: Dict[int, List[Tuple[str, int]]] = {}  # index -> [(title, page)]
+    if raw_item_entries:
+        seen_numbers: Dict[str, int] = {}  # number -> index in item_entries
+        for title, page in raw_item_entries:
+            number, _ = _extract_item_number_permissive(title)
+            if number and number in seen_numbers:
+                idx = seen_numbers[number]
+                _synthetic_children.setdefault(idx, []).append((title, page))
+            else:
+                idx = len(item_entries)
+                item_entries.append((title, page))
+                if number:
+                    seen_numbers[number] = idx
 
     # Determine agenda vs content pages:
     # Agenda pages are where multiple item-level entries cluster on the same page
@@ -450,7 +469,9 @@ def _parse_toc_v2(doc, result: _ParsedAgenda):
     current_section = ""
 
     for i, (title, page) in enumerate(item_entries):
-        # Compute page range for this item
+        # Compute page range for this item (account for synthetic children)
+        # The page range extends to cover all synthetic children too
+        synth = _synthetic_children.get(i, [])
         page_0 = page - 1  # 0-indexed
         if i + 1 < len(item_entries):
             next_page_0 = item_entries[i + 1][1] - 1
@@ -474,6 +495,12 @@ def _parse_toc_v2(doc, result: _ParsedAgenda):
             (l, t, p) for l, t, p in child_entries
             if p >= page and (i + 1 >= len(item_entries) or p < item_entries[i + 1][1])
         ]
+
+        # Merge synthetic children (same-numbered flat TOC entries) into children
+        if synth:
+            for st, sp in synth:
+                item_children.append((item_level + 1, st, sp))
+            item_children.sort(key=lambda x: x[2])
 
         # Build memos from child entries (these are embedded attachments)
         memos = []
