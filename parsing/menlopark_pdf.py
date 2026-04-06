@@ -12,7 +12,7 @@ Confidence: 8/10 - Pattern is consistent across meetings
 """
 
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 
 def _is_valid_agenda_item_title(title: str) -> bool:
@@ -73,24 +73,17 @@ def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Di
     # Split by pages to map items to pages
     page_texts = pdf_text.split('--- PAGE')
 
-    # Track current page for link mapping
-    current_page = 0
-
     # Pattern to match item IDs: A1., B1., H1., I1., J1., K1., etc.
-    # Strategy: Find item ID, then capture text until next item or section
-    # Filter out form field garbage via title validation below
-    item_id_pattern = re.compile(r'^([A-Z]\d+)\.\s*$', re.MULTILINE)
+    # Items appear inline with their title: "H1.    Proclamation: Autism Acceptance Month"
+    # Also match section headers: "H.    Presentations and Proclamations"
+    item_id_pattern = re.compile(r'^([A-Z]\d+)\.\s+', re.MULTILINE)
+    section_pattern = re.compile(r'^[A-Z]\.\s+', re.MULTILINE)
 
     # Find all items across all pages
     for page_idx, page_text in enumerate(page_texts):
         if page_idx == 0:
             # First split is before any page marker
             continue
-
-        # Extract page number from header
-        page_match = re.match(r'^\s*(\d+)\s*---', page_text)
-        if page_match:
-            current_page = int(page_match.group(1))
 
         # Find all item IDs on this page
         for match in item_id_pattern.finditer(page_text):
@@ -99,17 +92,19 @@ def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Di
 
             # Find the next item or section marker to determine end
             next_item = item_id_pattern.search(page_text, start_pos)
-            next_section = re.search(r'^[A-Z]\.\s*$', page_text[start_pos:], re.MULTILINE)
+            next_section = section_pattern.search(page_text, start_pos)
 
             # Determine end position
-            if next_item:
+            if next_item and next_section:
+                end_pos = min(next_item.start(), next_section.start())
+            elif next_item:
                 end_pos = next_item.start()
             elif next_section:
-                end_pos = start_pos + next_section.start()
+                end_pos = next_section.start()
             else:
                 end_pos = len(page_text)
 
-            # Extract text block for this item
+            # Extract text block for this item (title is on the same line as item ID)
             item_text = page_text[start_pos:end_pos].strip()
 
             # Parse title (first line, cleaned up)
@@ -120,23 +115,12 @@ def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Di
             if not _is_valid_agenda_item_title(title):
                 continue
 
-            # Look for attachment marker in the full item text
-            attachment_marker = None
-            if '(Attachment)' in item_text:
-                attachment_marker = 'Attachment'
-            elif match := re.search(r'\(Staff Report #([\d-]+(?:-CC)?)\)', item_text):
-                attachment_marker = f'Staff Report #{match.group(1)}'
-            elif '(Presentation)' in item_text:
-                attachment_marker = 'Presentation'
-
             # Parse sequence from item_id (e.g., "H1" -> 1, "J5" -> 5)
             sequence_match = re.search(r'(\d+)$', item_id)
             sequence = int(sequence_match.group(1)) if sequence_match else 0
 
             # Find links on the same page (attachments)
-            attachments = _find_attachments_for_item(
-                item_id, title, current_page, links, attachment_marker
-            )
+            attachments = _find_attachments_for_item(item_id, links)
 
             item_data = {
                 'item_id': item_id,
@@ -150,33 +134,34 @@ def parse_menlopark_pdf_agenda(pdf_text: str, links: List[Dict[str, Any]]) -> Di
     return {'items': items}
 
 
+def _filename_to_label(filename: str, item_id_lower: str) -> str:
+    """Derive a readable label from a Menlo Park attachment filename.
+
+    Examples:
+      "j1-20260324-cc-general-plan-apr-2025.pdf"  -> "General Plan Apr 2025"
+      "k1-aquatics-study-session.pdf"             -> "Aquatics Study Session"
+      "j1-20260324-cc-general-plan-apr-2025_es.pdf" -> "General Plan Apr 2025 Es"
+    """
+    # Strip extension and item-id prefix
+    stem = re.sub(r'\.\w+$', '', filename)  # remove .pdf/.doc
+    stem = stem[len(item_id_lower):].lstrip('-')  # remove "j1-"
+
+    # Strip date-body prefix if present (e.g. "20260324-cc-")
+    stem = re.sub(r'^\d{8}-[a-z]{2,4}-', '', stem)
+
+    # Convert hyphens/underscores to spaces and title-case
+    label = stem.replace('-', ' ').replace('_', ' ').strip()
+    return label.title() if label else "Attachment"
+
+
 def _find_attachments_for_item(
     item_id: str,
-    title: str,
-    page: int,
     all_links: List[Dict[str, Any]],
-    attachment_marker: Optional[str] = None
 ) -> List[Dict[str, Any]]:
-    """
-    Find attachment links for a specific item.
+    """Find attachment links for a specific item by matching filename prefixes.
 
-    Strategy: Filter document links from navigation/utility links.
-    Problem: Multiple items share pages, and we can't reliably map links to specific items
-    without position data.
-
-    Solution: Only attach links when there's a clear marker (Attachment, Staff Report, etc.)
-    indicating an attachment exists. Without position data, we can't determine which
-    specific PDF link belongs to which item.
-
-    Args:
-        item_id: Item identifier (e.g., "H1")
-        title: Item title
-        page: Page number where item appears
-        all_links: All links extracted from PDF
-        attachment_marker: Type hint from text (e.g., "Attachment", "Staff Report #25-155-CC")
-
-    Returns:
-        List of attachment dictionaries
+    Menlo Park encodes item IDs in filenames (e.g. h1-20260324-cc-autism-acceptance.pdf),
+    so we match all document links whose filename starts with the item ID.
     """
     attachments = []
 
@@ -207,19 +192,9 @@ def _find_attachments_for_item(
             elif url.endswith(('.doc', '.docx')):
                 attachment_type = 'doc'
 
-            # Determine name from marker or use filename
-            if attachment_marker:
-                if 'Staff Report' in attachment_marker:
-                    name = attachment_marker
-                elif attachment_marker == 'Presentation':
-                    name = f"{item_id} - Presentation"
-                elif attachment_marker == 'Attachment':
-                    name = f"{item_id} - Attachment"
-                else:
-                    name = f"{item_id} - Document"
-            else:
-                # Use filename as name (cleaned up)
-                name = filename.replace('.pdf', '').replace('-', ' ').title()
+            # Derive a readable name from the filename
+            # e.g. "j1-20260324-cc-general-plan-apr-2025.pdf" -> "General Plan Apr 2025"
+            name = _filename_to_label(filename, item_id_lower)
 
             attachments.append({
                 'name': name,
