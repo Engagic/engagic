@@ -292,6 +292,8 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                 guid = meeting.get("_meeting_guid")
                 if not guid:
                     return
+                if meeting.get("meeting_status") in ("cancelled", "postponed", "deferred"):
+                    return
                 async with semaphore:
                     html_url = self._build_html_packet_url(guid)
                     items_data = None
@@ -313,15 +315,13 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                             title=meeting.get("title", "")[:50],
                             count=len(items_data["items"]),
                         )
-                    else:
-                        # HTML failed or empty -- try chunking the PDF packet
-                        pdf_url = self._build_pdf_packet_url(guid)
+                    elif meeting.get("packet_url"):
+                        # Use the actual packet_url scraped from the page
                         chunked = await self._chunk_agenda_then_packet(
-                            packet_url=pdf_url, vendor_id=guid
+                            packet_url=meeting["packet_url"], vendor_id=guid
                         )
                         if chunked:
                             meeting["items"] = chunked
-                            meeting["packet_url"] = pdf_url
 
             await asyncio.gather(*[enrich_meeting(m) for m in filtered])
 
@@ -538,25 +538,29 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         if meeting_status:
             result["meeting_status"] = meeting_status
 
-        # Get meeting GUID for URL construction
+        # Use URLs from API response — these are the real URLs from the site
+        packet_url = meeting.get("PacketLinksURL") or meeting.get("PacketLinksHtmlURL")
+        agenda_api_url = meeting.get("AgendaLinksHtmlURL") or meeting.get("AgendaLinksURL")
+
+        # Get meeting GUID for HTML agenda construction
         meeting_guid = self._extract_meeting_guid(meeting)
 
         if meeting_guid:
-            # Build HTML packet URL
-            html_url = self._build_html_packet_url(meeting_guid)
+            html_url = agenda_api_url or self._build_html_packet_url(meeting_guid)
             result["agenda_url"] = html_url
 
-            # Fetch and parse HTML agenda
-            items_data = await self._fetch_html_agenda_items(html_url)
-            if items_data and items_data.get("items"):
-                result["items"] = items_data["items"]
-                if items_data.get("participation"):
-                    result["participation"] = items_data["participation"]
+            # Skip enrichment for cancelled meetings
+            if meeting_status not in ("cancelled", "postponed", "deferred"):
+                items_data = await self._fetch_html_agenda_items(html_url)
+                if items_data and items_data.get("items"):
+                    result["items"] = items_data["items"]
+                    if items_data.get("participation"):
+                        result["participation"] = items_data["participation"]
+                    logger.info("found agenda items", vendor="municode", slug=self.slug, title=full_title[:50], count=len(items_data["items"]))
 
-                logger.info("found agenda items", vendor="municode", slug=self.slug, title=full_title[:50], count=len(items_data["items"]))
-
-            # Add PDF fallback URL
-            result["packet_url"] = self._build_pdf_packet_url(meeting_guid)
+            # Use packet_url from API if available, not a constructed one
+            if packet_url:
+                result["packet_url"] = packet_url
         else:
             logger.debug("meeting has no GUID", vendor="municode", slug=self.slug, meeting_id=meeting_id)
 
@@ -570,6 +574,12 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
 
             # Parse in thread to avoid blocking
             parsed = await asyncio.to_thread(parse_html_agenda, html)
+
+            # Stamp portal_url on attachments so users get a stable link
+            for item in parsed.get("items", []):
+                for att in item.get("attachments", []):
+                    if not att.get("portal_url"):
+                        att["portal_url"] = html_url
 
             # Fallback: discover city code from attachment URLs
             if not self._discovered_city_code:

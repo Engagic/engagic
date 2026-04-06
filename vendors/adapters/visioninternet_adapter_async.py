@@ -454,7 +454,7 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
         if not packet_url:
             return
 
-        items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"))
+        items = await self._parse_packet_pdf(packet_url, meeting.get("vendor_id"), force_method="toc")
         if items:
             meeting["items"] = items
 
