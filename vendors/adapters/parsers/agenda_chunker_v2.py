@@ -84,19 +84,45 @@ def _extract_item_number_permissive(title: str) -> Tuple[str, str]:
 # Detection
 # ---------------------------------------------------------------------------
 
+_MAX_AGENDA_PAGES = 10
+
+
+def _has_agenda_links(doc) -> bool:
+    """Check if the first 10 pages contain attachment-like links."""
+    for page in doc:
+        if page.number >= _MAX_AGENDA_PAGES:
+            break
+        for link in page.get_links():
+            if link.get("kind") == 2 and _is_attachment_url(link.get("uri", "")):
+                return True
+    return False
+
+
 def _detect_parse_path(doc) -> str:
-    """Determine extraction path: 'toc', 'url', or 'empty'."""
+    """Determine extraction path: 'toc', 'url', or 'empty'.
+
+    Mirrors v1 logic: large documents (>10 pages) with a TOC are packet
+    PDFs where the TOC represents embedded staff reports, not agenda items.
+    If the first 10 pages also carry attachment links, prefer URL path —
+    those links are the real agenda structure.
+    """
     toc = doc.get_toc()
     real_entries = [e for e in toc if e[2] > 0]
     distinct_pages = set(e[2] for e in real_entries)
+    has_toc = len(real_entries) >= 3 and len(distinct_pages) >= 2
 
-    if len(real_entries) >= 3 and len(distinct_pages) >= 2:
+    has_links = _has_agenda_links(doc)
+
+    if has_links and doc.page_count > _MAX_AGENDA_PAGES:
+        # Large packet with links on the agenda pages — try URL first,
+        # fall back to TOC if it produces nothing.
+        return "url_then_toc" if has_toc else "url"
+
+    if has_toc:
         return "toc"
 
-    for page in doc:
-        for link in page.get_links():
-            if link.get("kind") == 2 and _is_attachment_url(link.get("uri", "")):
-                return "url"
+    if has_links:
+        return "url"
 
     return "empty"
 
@@ -105,10 +131,17 @@ def _detect_parse_path(doc) -> str:
 # URL path: cluster links, walk backwards to headings
 # ---------------------------------------------------------------------------
 
-def _collect_all_links(doc) -> List[dict]:
-    """Extract all attachment-like links from the document."""
+def _collect_all_links(doc, max_pages: int = 0) -> List[dict]:
+    """Extract all attachment-like links from the document.
+
+    Args:
+        max_pages: If >0, only scan the first N pages. Prevents picking up
+                   links from embedded staff reports deep in a packet PDF.
+    """
     all_links = []
     for page in doc:
+        if max_pages and page.number >= max_pages:
+            break
         page_links = _extract_links(page)
         for link in page_links:
             if _is_attachment_url(link["url"]):
@@ -116,10 +149,16 @@ def _collect_all_links(doc) -> List[dict]:
     return all_links
 
 
-def _collect_all_lines(doc) -> List[dict]:
-    """Extract all text lines with position metadata from the document."""
+def _collect_all_lines(doc, max_pages: int = 0) -> List[dict]:
+    """Extract all text lines with position metadata from the document.
+
+    Args:
+        max_pages: If >0, only scan the first N pages.
+    """
     all_lines = []
     for page in doc:
+        if max_pages and page.number >= max_pages:
+            break
         all_lines.extend(_extract_page_text_with_positions(page))
     return all_lines
 
@@ -148,7 +187,23 @@ def _cluster_links_by_position(
         else:
             clusters[-1].append(link)
 
-    return clusters
+    # Dedup links by URL within each cluster. Wrapped titles produce
+    # multiple link elements (one per line) all pointing to the same URL.
+    # Merge them into a single link with the concatenated label.
+    deduped_clusters = []
+    for cluster in clusters:
+        seen: Dict[str, dict] = {}
+        order: List[str] = []
+        for link in cluster:
+            url = link["url"]
+            if url in seen:
+                seen[url]["label"] += " " + link["label"]
+            else:
+                seen[url] = dict(link)
+                order.append(url)
+        deduped_clusters.append([seen[url] for url in order])
+
+    return deduped_clusters
 
 
 def _estimate_median_line_height(lines: List[dict]) -> float:
@@ -278,8 +333,10 @@ def _parse_url_v2(doc, result: _ParsedAgenda):
     """URL-based extraction: cluster links, walk backwards to headings."""
     result.metadata.parse_method = "v2_url"
 
-    all_links = _collect_all_links(doc)
-    all_lines = _collect_all_lines(doc)
+    # For large packets, restrict to agenda pages only.
+    max_pages = _MAX_AGENDA_PAGES if doc.page_count > _MAX_AGENDA_PAGES else 0
+    all_links = _collect_all_links(doc, max_pages=max_pages)
+    all_lines = _collect_all_lines(doc, max_pages=max_pages)
 
     if not all_links:
         return
@@ -614,6 +671,11 @@ def _parse_v2_internal(pdf_path: str, force_method: Optional[str] = None) -> _Pa
             _parse_toc_v2(doc, result)
         elif path == "url":
             _parse_url_v2(doc, result)
+        elif path == "url_then_toc":
+            _parse_url_v2(doc, result)
+            if not result.items:
+                result.orphan_links.clear()
+                _parse_toc_v2(doc, result)
         # "empty" -> no items, monolithic fallback
 
     doc.close()

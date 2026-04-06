@@ -198,6 +198,7 @@ ATTACHMENT_URL_PATTERNS = [
     r'/showdocument\?',          # sanjoseca.gov, other .gov CMS hosting
     r'/DocumentCenter/View/',
     r'cloudfront\.net',
+    r'\.sharepoint\.com/',
 ]
 ATTACHMENT_URL_RE = re.compile('|'.join(ATTACHMENT_URL_PATTERNS), re.IGNORECASE)
 
