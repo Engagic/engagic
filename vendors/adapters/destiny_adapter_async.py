@@ -271,22 +271,33 @@ class AsyncDestinyAdapter(AsyncBaseAdapter):
 
         soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
-        # Extract body text from known sections
+        # Extract header metadata (DATE, TO, FROM, SUBJECT fields)
         body_parts = []
+        for strong in soup.find_all('strong'):
+            label = strong.get_text(strip=True)
+            if label in ('DATE', 'TO', 'FROM', 'SUBJECT'):
+                cell = strong.find_parent('td')
+                if not cell:
+                    continue
+                value_cell = cell.find_next_sibling('td')
+                if value_cell:
+                    value = value_cell.get_text(strip=True)
+                    if value:
+                        body_parts.append(f"{label}: {value}")
+
+        # Extract all bold mediumText sections and their content
         for td in soup.find_all('td', class_=lambda c: c and 'bold' in c and 'mediumText' in c):
             section_name = td.get_text(strip=True)
-            if section_name in (
-                'SUMMARY AND RECOMMENDATION', 'BACKGROUND',
-                'DISCUSSION/ANALYSIS', 'FISCAL IMPACT',
-            ):
-                parent_tr = td.find_parent('tr')
-                if not parent_tr:
-                    continue
-                next_tr = parent_tr.find_next_sibling('tr')
-                if next_tr:
-                    text = next_tr.get_text(separator='\n', strip=True)
-                    if text:
-                        body_parts.append(f"{section_name}\n{text}")
+            if section_name == 'Attachments':
+                continue  # attachments handled separately
+            parent_tr = td.find_parent('tr')
+            if not parent_tr:
+                continue
+            next_tr = parent_tr.find_next_sibling('tr')
+            if next_tr:
+                text = next_tr.get_text(separator='\n', strip=True)
+                if text:
+                    body_parts.append(f"{section_name}\n{text}")
 
         if body_parts:
             item['body_text'] = '\n\n'.join(body_parts)[:8000]
