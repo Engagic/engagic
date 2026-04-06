@@ -1,37 +1,28 @@
 """
-Async Menlo Park City Council Adapter - Custom table-based website with PDF item extraction
+Async Menlo Park Adapter - All commissions via table-based website with PDF item extraction
 
-URL patterns:
-- Meetings list: https://menlopark.gov/Agendas-and-minutes
-- PDF packet: https://menlopark.gov/files/sharedassets/public/v/1/agendas-and-minutes/...pdf
+Scrapes https://menlopark.gov/Agendas-and-minutes which lists 8 bodies:
+  City Council (#section-2), Complete Streets (#section-3), Environmental Quality (#section-4),
+  Finance and Audit (#section-5), Housing (#section-6), Library (#section-7),
+  Parks and Recreation (#section-8), Planning Commission (#section-9).
 
-HTML structure:
-- Simple <table> with <tr> rows
-- Columns: Date | Agenda packet (PDF) | Minutes | Video
-- Date format: "Nov. 4, 2025"
-- PDF link: <a href="/files/sharedassets/..." class="document ext-pdf">Agenda packet</a>
+Each section has a table: Date | Agenda packet (PDF) | Minutes | Video.
+Sections are delimited by <h2> headings.
 
-PDF agenda structure:
-- Letter-based sections: H. (Presentations), I. (Appointments), J. (Consent), K. (Regular Business)
-- Items: H1., I1., J1., K1. format
-- Hyperlinked attachments: (Attachment), (Staff Report #XX-XXX-CC), (Presentation)
-- Example: "J1. Waive the second reading and adopt an ordinance... (Staff Report #25-167-CC)"
+Chunking strategy per body:
+- City Council: thin agenda PDFs with hyperlinks -> v1 URL (custom parser)
+- All other commissions: compiled packet PDFs with bookmark TOC -> v2 TOC
 
-Async version with:
-- aiohttp for async HTTP requests
-- asyncio.to_thread for CPU-bound PDF parsing
-- Non-blocking I/O for concurrent fetching
-
-Confidence: 8/10 - PDF parsing reliable, link mapping based on page proximity
+Confidence: 8/10 - Consistent table structure across all commissions
 """
 
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
 import aiohttp
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
 from parsing.pdf import PdfExtractor
@@ -39,8 +30,23 @@ from parsing.menlopark_pdf import parse_menlopark_pdf_agenda
 from pipeline.protocols import MetricsCollector
 
 
+# Body definitions: (h2 heading text, body_name for committee tracking, parse method)
+# City Council agendas are thin PDFs with hyperlinked staff reports -> v1 URL (custom parser)
+# All other commissions publish compiled packet PDFs with bookmark trees -> v2 TOC
+_BODIES: List[Tuple[str, str, str]] = [
+    ("City Council", "City Council", "url"),
+    ("Complete Streets Commission", "Complete Streets Commission", "toc"),
+    ("Environmental Quality Commission", "Environmental Quality Commission", "toc"),
+    ("Finance and Audit Commission", "Finance and Audit Commission", "toc"),
+    ("Housing Commission", "Housing Commission", "toc"),
+    ("Library Commission", "Library Commission", "toc"),
+    ("Parks and Recreation Commission", "Parks and Recreation Commission", "toc"),
+    ("Planning Commission", "Planning Commission", "toc"),
+]
+
+
 class AsyncMenloParkAdapter(AsyncBaseAdapter):
-    """Async Menlo Park City Council - PDF agenda with item extraction"""
+    """Async Menlo Park - all commissions with PDF agenda/packet extraction"""
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="menlopark", metrics=metrics)
@@ -48,7 +54,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
         self.pdf_extractor = PdfExtractor()
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
-        """Fetch meetings from Menlo Park's table-based website, extracting items from PDFs."""
+        """Fetch meetings from all Menlo Park commissions, extracting items from PDFs."""
         today = datetime.now().date()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
@@ -64,112 +70,160 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
             logger.error("failed to fetch meetings list", vendor="menlopark", slug=self.slug, error=str(e))
             return []
 
-        # Parse HTML (CPU-bound, run in thread pool)
         soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
 
-        # Find all table rows
-        rows = soup.find_all('tr')
+        # Map h2 heading text -> first table following it (the current-year table)
+        body_tables = self._find_body_tables(soup)
 
         results = []
-        for row in rows:
-            cells = row.find_all('td')
-            if len(cells) < 2:
+        for heading_text, body_name, parse_method in _BODIES:
+            table = body_tables.get(heading_text)
+            if not table:
+                logger.debug("no table found for body", vendor="menlopark", slug=self.slug, body=heading_text)
                 continue
 
-            # Cell 0: Date text (e.g., "Nov. 4, 2025")
-            date_text = cells[0].get_text(strip=True)
-            if not date_text:
-                continue
-
-            # Parse date
-            meeting_date = self._parse_menlopark_date(date_text)
-            if not meeting_date:
-                logger.debug("could not parse date", vendor="menlopark", slug=self.slug, date_text=date_text)
-                continue
-
-            # Filter to meetings within date range
-            meeting_date_only = meeting_date.date()
-
-            if meeting_date_only < start_date or meeting_date_only > end_date:
-                logger.debug("skipping meeting outside date window", vendor="menlopark", slug=self.slug, date=date_text)
-                continue
-
-            # Cell 1: Agenda packet PDF link
-            link = cells[1].find('a', href=True, class_='document')
-            pdf_link = urljoin(self.base_url, link.get('href', '')) if link else None
-
-            # Skip if no PDF packet
-            if not pdf_link:
-                logger.debug("no PDF packet", vendor="menlopark", slug=self.slug, date=date_text)
-                continue
-
-            # Generate unique vendor_id using hash (date-only IDs collide on same-day meetings)
-            # Use PDF URL path as unique identifier
-            url_path = pdf_link.replace(self.base_url, '').strip('/')
-            vendor_id = self._generate_fallback_vendor_id(title=url_path, date=meeting_date)
-
-            meeting_data = {
-                'vendor_id': vendor_id,
-                'start': meeting_date.isoformat(),
-                'title': "City Council Meeting",
-                'agenda_url': pdf_link,  # PDF is the source document
-            }
-
-            # Extract items from PDF (sync PDF extraction wrapped in to_thread)
-            try:
-                logger.info("extracting items from PDF", vendor="menlopark", slug=self.slug, url=pdf_link)
-
-                # Run sync PDF extraction in thread pool
-                pdf_result = await asyncio.to_thread(
-                    self.pdf_extractor.extract_from_url,
-                    pdf_link,
-                    extract_links=True
+            for row in table.find_all('tr'):
+                if not isinstance(row, Tag):
+                    continue
+                meeting = await self._parse_table_row(
+                    row, body_name, parse_method, start_date, end_date
                 )
-
-                if pdf_result['success']:
-                    # Parse PDF text (also CPU-bound)
-                    parsed = await asyncio.to_thread(
-                        parse_menlopark_pdf_agenda,
-                        pdf_result['text'],
-                        pdf_result.get('links', [])
-                    )
-
-                    if parsed['items']:
-                        meeting_data['items'] = parsed['items']
-                        item_count = len(parsed['items'])
-                        attachment_count = sum(len(item.get('attachments', [])) for item in parsed['items'])
-                        logger.info(
-                            "extracted items from PDF",
-                            vendor="menlopark",
-                            slug=self.slug,
-                            item_count=item_count,
-                            attachment_count=attachment_count,
-                            date=meeting_date.strftime('%Y-%m-%d')
-                        )
-                    else:
-                        logger.warning(
-                            "no items extracted from PDF",
-                            vendor="menlopark",
-                            slug=self.slug,
-                            vendor_id=vendor_id
-                        )
-                else:
-                    logger.error(
-                        "PDF extraction failed",
-                        vendor="menlopark",
-                        slug=self.slug,
-                        vendor_id=vendor_id,
-                        error=pdf_result.get('error', 'unknown error')
-                    )
-                    # Continue anyway - we have basic meeting data
-
-            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
-                logger.warning("failed to parse PDF items", vendor="menlopark", slug=self.slug, vendor_id=vendor_id, error=str(e))
-                # Continue anyway - we have basic meeting data
-
-            results.append(meeting_data)
+                if meeting:
+                    results.append(meeting)
 
         return results
+
+    def _find_body_tables(self, soup: BeautifulSoup) -> Dict[str, Tag]:
+        """Map each <h2> heading text to the first non-empty <table> that follows it.
+
+        The Menlo Park page has an empty placeholder table right after each <h2>,
+        then an <h3>2026</h3>, then the populated data table.  We skip empty
+        tables and stop at the next <h2> to avoid crossing into another section.
+        """
+        body_tables: Dict[str, Tag] = {}
+        known_headings = {heading for heading, _, _ in _BODIES}
+        for h2 in soup.find_all('h2'):
+            heading_text = h2.get_text(strip=True)
+            if heading_text not in known_headings:
+                continue
+
+            # Search for the first table with data rows between this h2 and the next
+            elem = h2.find_next()
+            while elem:
+                if isinstance(elem, Tag) and elem.name == 'h2':
+                    break  # crossed into next section
+                if isinstance(elem, Tag) and elem.name == 'table':
+                    if elem.find('tr'):  # has at least one row (skip empty placeholders)
+                        body_tables[heading_text] = elem
+                        break
+                elem = elem.find_next()
+
+        return body_tables
+
+    async def _parse_table_row(
+        self,
+        row: Tag,
+        body_name: str,
+        parse_method: str,
+        start_date,
+        end_date,
+    ) -> Optional[Dict[str, Any]]:
+        """Parse a single table row into a meeting dict, extracting items from the PDF."""
+        cells = row.find_all('td')
+        if len(cells) < 2:
+            return None
+
+        date_text = cells[0].get_text(strip=True)
+        if not date_text:
+            return None
+
+        meeting_date = self._parse_menlopark_date(date_text)
+        if not meeting_date:
+            return None
+
+        meeting_date_only = meeting_date.date()
+        if meeting_date_only < start_date or meeting_date_only > end_date:
+            return None
+
+        # Cell 1: Agenda packet PDF link
+        link = cells[1].find('a', href=True, class_='document')
+        pdf_link = urljoin(self.base_url, link.get('href', '')) if link else None
+        if not pdf_link:
+            return None
+
+        url_path = pdf_link.replace(self.base_url, '').strip('/')
+        vendor_id = self._generate_fallback_vendor_id(title=url_path, date=meeting_date)
+
+        meeting_title = f"{body_name} Meeting"
+
+        meeting_data: Dict[str, Any] = {
+            'vendor_id': vendor_id,
+            'start': meeting_date.isoformat(),
+            'title': meeting_title,
+            'body_name': body_name,
+            'agenda_url': pdf_link,
+        }
+
+        # Extract items using the appropriate chunking strategy
+        try:
+            if parse_method == "url":
+                items = await self._extract_items_url(pdf_link, vendor_id)
+            else:
+                items = await self._extract_items_toc(pdf_link, vendor_id)
+
+            if items:
+                meeting_data['items'] = items
+                logger.info(
+                    "extracted items from PDF",
+                    vendor="menlopark", slug=self.slug,
+                    body=body_name, item_count=len(items),
+                    date=meeting_date.strftime('%Y-%m-%d'),
+                    method=parse_method,
+                )
+            else:
+                logger.warning(
+                    "no items extracted from PDF",
+                    vendor="menlopark", slug=self.slug,
+                    body=body_name, vendor_id=vendor_id,
+                    method=parse_method,
+                )
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
+            logger.warning(
+                "failed to parse PDF items",
+                vendor="menlopark", slug=self.slug,
+                body=body_name, vendor_id=vendor_id, error=str(e),
+            )
+
+        return meeting_data
+
+    async def _extract_items_url(self, pdf_link: str, vendor_id: str) -> List[Dict[str, Any]]:
+        """City Council: custom parser for thin agendas with hyperlinked staff reports (v1 URL)."""
+        logger.info("extracting items via URL parser", vendor="menlopark", slug=self.slug, url=pdf_link)
+
+        pdf_result = await asyncio.to_thread(
+            self.pdf_extractor.extract_from_url,
+            pdf_link,
+            extract_links=True,
+        )
+
+        if not pdf_result['success']:
+            logger.error(
+                "PDF extraction failed", vendor="menlopark", slug=self.slug,
+                vendor_id=vendor_id, error=pdf_result.get('error', 'unknown'),
+            )
+            return []
+
+        parsed = await asyncio.to_thread(
+            parse_menlopark_pdf_agenda,
+            pdf_result['text'],
+            pdf_result.get('links', []),
+        )
+        return parsed.get('items', [])
+
+    async def _extract_items_toc(self, pdf_link: str, vendor_id: str) -> List[Dict[str, Any]]:
+        """Other commissions: v2 TOC chunker for compiled packet PDFs with bookmarks."""
+        logger.info("extracting items via TOC parser", vendor="menlopark", slug=self.slug, url=pdf_link)
+        return await self._parse_packet_pdf(pdf_link, vendor_id, force_method="toc")
 
     def _parse_menlopark_date(self, date_str: str) -> Optional[datetime]:
         """Parse Menlo Park date formats: 'Nov. 4, 2025', 'October 21, 2025'."""

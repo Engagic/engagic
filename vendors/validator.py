@@ -66,6 +66,7 @@ class MeetingValidator:
         "menlopark": lambda slug: ["menlopark.gov"],
         "berkeley": lambda slug: ["berkeleyca.gov"],
         "chicago": lambda slug: ["occprodstoragev1.blob.core.usgovcloudapi.net"],
+        "destiny": lambda slug: ["public.destinyhosted.com", "destinyhosted.com"],
     }
 
     @classmethod

@@ -43,6 +43,7 @@ class AsyncRateLimiter:
             "menlopark": 2.7,  # Custom: Menlo Park
             "chicago": 2.7,  # Custom: Chicago
             "ross": 2.7,  # Custom: Ross
+            "destiny": 2.7,  # Destiny/AgendaQuick
             "unknown": 4.5,  # Unknown vendors get longest delay
         }
 

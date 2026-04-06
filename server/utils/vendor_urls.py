@@ -144,6 +144,7 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
         "berkeley": "https://berkeleyca.gov/your-government/city-council/city-council-agendas",
         "chicago": "https://chicityclerkelms.chicago.gov/Meetings/",
         "menlopark": "https://menlopark.gov/Agendas-and-minutes",
+        "destiny": f"https://public.destinyhosted.com/agenda_publish.cfm?id={slug}",
     }
 
     return vendor_patterns.get(vendor)
@@ -198,6 +199,7 @@ def get_vendor_display_name(vendor: str) -> str:
         "chicago": "City of Chicago",
         "menlopark": "City of Menlo Park",
         "ross": "Town of Ross",
+        "destiny": "Destiny AgendaQuick",
     }
 
     return display_names.get(vendor, vendor.title())
