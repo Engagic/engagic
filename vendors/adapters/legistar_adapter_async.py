@@ -280,27 +280,39 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if meeting_status:
                 meeting["meeting_status"] = meeting_status
 
-            # Fetch agenda items for this event (concurrent with packet URL discovery)
+            # Fetch agenda items for this event (concurrent)
             items_task = asyncio.create_task(self._fetch_event_items_api(event_id))
 
             # Try to get agenda PDF URL from API
             agenda_url = event.get("EventAgendaFile")
             packet_url = event.get("EventMinutesFile")  # Sometimes agenda is in minutes field
 
-            # If API didn't provide URLs, try to discover from HTML detail page
-            if not agenda_url and event_guid:
-                html_url = f"https://{self.slug}.legistar.com/MeetingDetail.aspx?GUID={event_guid}"
-                try:
-                    response = await self._get(html_url)
-                    html = await response.text()
+            # If API didn't provide agenda URL, discover from HTML detail page.
+            # Try two URL formats: GUID-based (common) then InSiteURL/LEGID (San Jose).
+            if not agenda_url:
+                detail_urls = []
+                if event_guid:
+                    detail_urls.append(
+                        f"https://{self.slug}.legistar.com/MeetingDetail.aspx?GUID={event_guid}"
+                    )
+                in_site_url = event.get("EventInSiteURL")
+                if in_site_url and in_site_url not in detail_urls:
+                    detail_urls.append(in_site_url)
 
-                    # Find agenda PDF link
-                    if "Agenda.pdf" in html or "agenda.pdf" in html:
-                        agenda_match = re.search(r'href="([^"]*Agenda\.pdf[^"]*)"', html, re.IGNORECASE)
+                for detail_url in detail_urls:
+                    try:
+                        response = await self._get(detail_url)
+                        html = await response.text()
+
+                        # Find agenda PDF link (View.ashx?M=A)
+                        agenda_match = re.search(
+                            r'href="([^"]*View\.ashx\?M=A[^"]*)"', html, re.IGNORECASE
+                        )
                         if agenda_match:
-                            agenda_url = f"https://{self.slug}.legistar.com/{agenda_match.group(1)}"
-                except (AttributeError, IndexError, VendorHTTPError, aiohttp.ClientError):
-                    pass
+                            agenda_url = urljoin(detail_url, agenda_match.group(1))
+                            break
+                    except (AttributeError, IndexError, VendorHTTPError, aiohttp.ClientError):
+                        continue
 
             # Wait for items to finish fetching
             items = await items_task
@@ -309,9 +321,23 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 meeting["items"] = items
                 if agenda_url:
                     meeting["agenda_url"] = agenda_url
-            elif agenda_url or packet_url:
-                # Monolithic fallback
-                meeting["packet_url"] = agenda_url or packet_url
+            elif agenda_url:
+                # No API items — try parsing the agenda PDF for items
+                # (some cities like San Jose have thin URL agendas with hyperlinked staff reports)
+                chunked_items = await self._chunk_agenda_then_packet(
+                    agenda_url=agenda_url,
+                    vendor_id=str(event_id),
+                )
+                if chunked_items:
+                    meeting["items"] = chunked_items
+                    logger.info(
+                        "legistar chunked items from agenda PDF",
+                        slug=self.slug, event_id=event_id,
+                        item_count=len(chunked_items),
+                    )
+                meeting["agenda_url"] = agenda_url
+            if packet_url and "agenda_url" not in meeting:
+                meeting["packet_url"] = packet_url
 
             return meeting
 
@@ -828,10 +854,16 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
 
         processed_meetings = await asyncio.gather(*meeting_tasks, return_exceptions=True)
 
-        # Filter out None and errors
+        # Filter out None, errors, and duplicates (calendar has upcoming + all sections)
+        seen_ids = set()
         meetings = []
         for meeting in processed_meetings:
             if isinstance(meeting, dict):
+                vid = meeting.get("vendor_id")
+                if vid and vid in seen_ids:
+                    continue
+                if vid:
+                    seen_ids.add(vid)
                 meetings.append(meeting)
 
         logger.info("legistar yielded meetings from HTML", slug=self.slug, count=len(meetings))
