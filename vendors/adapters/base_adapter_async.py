@@ -438,9 +438,8 @@ class AsyncBaseAdapter:
                 tmp_path = tmp.name
                 tmp.write(pdf_bytes)
 
-            # URL path (thin agendas): v1 regex-based chunker
-            # TOC path (thick packets): v2 anchor-based chunker
-            # Auto: try v1 first, fall back to v2 if v1 returns nothing
+            # TOC → v2 (strictly superior). URL → v1 (or v2_url for edge cases).
+            # Auto: v2 first (better TOC grouping), v1 fallback.
             if force_method == "toc":
                 parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path, force_method="toc")
             elif force_method == "v2_url":
@@ -448,9 +447,9 @@ class AsyncBaseAdapter:
             elif force_method == "url":
                 parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path, force_method="url")
             else:
-                parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
+                parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path)
                 if not parsed.get("items"):
-                    parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path)
+                    parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path)
 
             items = parsed.get("items", [])
 
