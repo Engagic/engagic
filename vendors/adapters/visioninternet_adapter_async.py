@@ -102,6 +102,7 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
         # Residential proxy for Akamai bypass (curl_cffi with Chrome TLS fingerprint)
         self._proxy = config.RESIDENTIAL_PROXY
         self._curl_session = None
+        self._tunnel_down = False
 
     async def _get_curl_session(self):
         """Lazy-init a reusable curl_cffi async session."""
@@ -110,10 +111,42 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
             self._curl_session = AsyncSession(impersonate="chrome")
         return self._curl_session
 
+    async def _check_tunnel(self) -> bool:
+        """Quick check if the SOCKS tunnel is reachable."""
+        import socket
+        host, port = "127.0.0.1", 9050
+        try:
+            # Parse port from proxy URL if non-default
+            if self._proxy:
+                parts = self._proxy.rsplit(":", 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    port = int(parts[1])
+                    host_part = parts[0].split("//")[-1]
+                    if host_part:
+                        host = host_part
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            sock.connect((host, port))
+            sock.close()
+            return True
+        except (OSError, socket.timeout):
+            return False
+
     async def _request(self, method: str, url: str, **kwargs):
-        """Route through residential proxy via curl_cffi when configured."""
+        """Route through residential proxy via curl_cffi when configured.
+
+        Degrades gracefully when the tunnel is down — logs a warning once
+        per sync cycle instead of spamming errors on every request.
+        """
         if not self._proxy:
             return await super()._request(method, url, **kwargs)
+
+        # Fast-fail if we already know the tunnel is down this cycle
+        if self._tunnel_down:
+            raise VendorHTTPError(
+                "Residential proxy tunnel is down, skipping",
+                vendor=self.vendor, url=url, city_slug=self.slug,
+            )
 
         session = await self._get_curl_session()
         start_time = time.time()
@@ -151,6 +184,20 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
             raise
         except Exception as e:
             duration = time.time() - start_time
+
+            # Detect tunnel-down errors (connection refused, SOCKS handshake fail)
+            err_str = str(e).lower()
+            if "connect" in err_str or "socks" in err_str or "proxy" in err_str or "refused" in err_str:
+                self._tunnel_down = True
+                logger.warning(
+                    "residential proxy tunnel unreachable, skipping vendor this cycle",
+                    vendor=self.vendor, slug=self.slug, proxy=self._proxy,
+                )
+                raise VendorHTTPError(
+                    "Residential proxy tunnel is down",
+                    vendor=self.vendor, url=url, city_slug=self.slug,
+                ) from e
+
             self.metrics.vendor_requests.labels(vendor=self.vendor, status="error").inc()
             logger.error("vendor request failed (curl_cffi)", vendor=self.vendor, slug=self.slug, url=url[:100], error=str(e), duration_seconds=round(duration, 2))
             raise VendorHTTPError(f"Request failed: {e}", vendor=self.vendor, url=url, city_slug=self.slug) from e
