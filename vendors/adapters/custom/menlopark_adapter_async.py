@@ -51,7 +51,7 @@ class AsyncMenloParkAdapter(AsyncBaseAdapter):
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="menlopark", metrics=metrics)
         self.base_url = "https://menlopark.gov"
-        self.pdf_extractor = PdfExtractor()
+        self.pdf_extractor = PdfExtractor.shared()
 
     async def _fetch_meetings_impl(self, days_back: int = 7, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from all Menlo Park commissions, extracting items from PDFs."""
