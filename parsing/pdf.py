@@ -314,6 +314,15 @@ def _extract_text_with_formatting(page: fitz.Page, page_num: int) -> str:
 class PdfExtractor:
     """PDF extractor using PyMuPDF with OCR fallback"""
 
+    _instance: "PdfExtractor | None" = None
+
+    @classmethod
+    def shared(cls) -> "PdfExtractor":
+        """Return a shared singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
     def __init__(self, ocr_threshold: int = 100, ocr_dpi: int = 200, detect_legislative_formatting: bool = True, max_ocr_workers: int | None = None):
         """Initialize PDF extractor
 

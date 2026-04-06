@@ -71,7 +71,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None):
         super().__init__(city_slug, vendor="chicago", metrics=metrics)
         self.base_url = "https://api.chicityclerkelms.chicago.gov"
-        self.pdf_extractor = PdfExtractor()
+        self.pdf_extractor = PdfExtractor.shared()
         self._sync_stats: Dict[str, int] = {}
 
     def _reset_stats(self) -> None:

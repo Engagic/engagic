@@ -111,27 +111,6 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
             self._curl_session = AsyncSession(impersonate="chrome")
         return self._curl_session
 
-    async def _check_tunnel(self) -> bool:
-        """Quick check if the SOCKS tunnel is reachable."""
-        import socket
-        host, port = "127.0.0.1", 9050
-        try:
-            # Parse port from proxy URL if non-default
-            if self._proxy:
-                parts = self._proxy.rsplit(":", 1)
-                if len(parts) == 2 and parts[1].isdigit():
-                    port = int(parts[1])
-                    host_part = parts[0].split("//")[-1]
-                    if host_part:
-                        host = host_part
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            sock.connect((host, port))
-            sock.close()
-            return True
-        except (OSError, socket.timeout):
-            return False
-
     async def _request(self, method: str, url: str, **kwargs):
         """Route through residential proxy via curl_cffi when configured.
 
@@ -187,7 +166,7 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
 
             # Detect tunnel-down errors (connection refused, SOCKS handshake fail)
             err_str = str(e).lower()
-            if "connect" in err_str or "socks" in err_str or "proxy" in err_str or "refused" in err_str:
+            if "connection refused" in err_str or "socks" in err_str or "proxy" in err_str:
                 self._tunnel_down = True
                 logger.warning(
                     "residential proxy tunnel unreachable, skipping vendor this cycle",
@@ -210,6 +189,7 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
         self, days_back: int = 7, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         """Scrape calendar pages for all configured bodies, then enrich with chunker."""
+        self._tunnel_down = False  # Reset for each sync cycle
         today = datetime.now()
         start_date = today - timedelta(days=days_back)
         end_date = today + timedelta(days=days_forward)
