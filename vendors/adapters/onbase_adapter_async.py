@@ -263,15 +263,32 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
         return None
 
     async def _fetch_meeting_detail(self, meeting_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Fetch and parse individual meeting detail page."""
+        """Fetch and parse individual meeting detail page.
+
+        OnBase SPA architecture: the ViewMeeting page loads an agenda outline via
+        AJAX (ViewAgenda), then each item's attachments load via AJAX (ViewMeetingAgendaItem).
+        Both AJAX endpoints require:
+          - ASP.NET session cookies (established by visiting ViewMeeting first)
+          - X-Requested-With: XMLHttpRequest header
+        Without these, the server returns empty page shells.
+        """
         meeting_id = meeting_data.get("id")
         if not meeting_id:
             return None
         base_url = meeting_data.get("_base_url", self.site_urls[0])
 
+        # Step 1: Visit the ViewMeeting page to establish ASP.NET session.
+        # The session cookies propagate via the shared aiohttp session for this vendor.
+        view_meeting_url = f"{base_url}/Meetings/ViewMeeting?id={meeting_id}&doctype=1"
+        try:
+            await self._get(view_meeting_url)
+        except Exception as e:
+            logger.debug("failed to establish session", vendor="onbase", slug=self.slug, meeting_id=meeting_id, error=str(e))
+
+        # Step 2: Fetch the agenda outline via the same AJAX endpoint the page JS uses
+        xhr_headers = {"X-Requested-With": "XMLHttpRequest"}
+
         # Try multiple URL formats - different OnBase instances use different endpoints
-        # Tampa: Documents/ViewAgenda works, accessible view errors
-        # San Diego: Documents/ViewAgenda returns unparseable PDF, accessible view works
         urls_to_try = [
             f"{base_url}/Documents/ViewAgenda?meetingId={meeting_id}&type=agenda&doctype=1",
             f"{base_url}/Meetings/ViewMeetingAgenda?meetingId={meeting_id}&type=agenda",
@@ -283,7 +300,7 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
 
         for url in urls_to_try:
             try:
-                response = await self._get(url)
+                response = await self._get(url, headers=xhr_headers)
                 content = await response.text()
 
                 # Skip error pages
@@ -315,12 +332,9 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
         final_url = best_url
 
         try:
-            # Use already-parsed items
-            parsed = {"items": best_items}
+            items = best_items
 
-            items = parsed.get("items", [])
-
-            # Fetch attachments for items
+            # Step 3: Fetch attachments for items (uses same session + XHR header)
             if items:
                 items = await self._fetch_item_attachments(items, meeting_id, base_url)
 
@@ -369,7 +383,13 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
     async def _fetch_item_attachments(
         self, items: List[Dict[str, Any]], meeting_id: str, base_url: str
     ) -> List[Dict[str, Any]]:
-        """Fetch attachments for each item from detail pages."""
+        """Fetch attachments for each item from detail pages.
+
+        Uses X-Requested-With header so the server returns the partial HTML
+        fragment with DownloadFile attachment links (same as browser AJAX).
+        Relies on ASP.NET session cookies established by _fetch_meeting_detail.
+        """
+        xhr_headers = {"X-Requested-With": "XMLHttpRequest"}
 
         async def fetch_item(item: Dict[str, Any]) -> Dict[str, Any]:
             item_id = item.get("vendor_item_id")
@@ -382,7 +402,7 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
             )
 
             try:
-                response = await self._get(detail_url)
+                response = await self._get(detail_url, headers=xhr_headers)
                 html = await response.text()
                 attachments = self._parse_attachments(html, base_url)
                 if attachments:
@@ -401,29 +421,34 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
         return list(await asyncio.gather(*[fetch_item(item) for item in items]))
 
     def _parse_attachments(self, html: str, base_url: str) -> List[Dict[str, Any]]:
-        """Parse attachment links from item detail page."""
+        """Parse attachment links from item detail page.
+
+        The ViewMeetingAgendaItem AJAX response contains DownloadFile links
+        that serve the actual document (PDF-converted via the .pdf suffix).
+        Keep these URLs as-is -- they are direct download links.
+        """
         soup = BeautifulSoup(html, "html.parser")
         attachments = []
 
-        # Extract domain from base_url
-        parsed = urlparse(base_url)
-        domain = f"{parsed.scheme}://{parsed.netloc}"
+        parsed_url = urlparse(base_url)
+        domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-        # Find DownloadFile links with isAttachment=True
-        for link in soup.find_all("a", href=lambda x: x and "DownloadFile" in x and "isAttachment=True" in x):
+        for link in soup.find_all("a", href=True):
             href = link.get("href", "")
+            if "DownloadFile" not in href:
+                continue
+
             name = link.get_text(strip=True)
 
-            # Build full URL
+            # DownloadFile returns a JS redirect page; DownloadFileBytes serves the actual file.
+            # DownloadFileBytes works without session cookies when all params are correct.
+            href = href.replace("/DownloadFile/", "/DownloadFileBytes/")
+
             if href.startswith("/"):
                 full_url = f"{domain}{href}"
             else:
                 full_url = href
 
-            # Translate to ViewDocument for direct access
-            full_url = _translate_downloadfile_to_viewdocument(full_url)
-
-            # Extract name from path if not in link text
             if not name:
                 match = re.search(r'/DownloadFile/([^?]+)', href)
                 if match:
@@ -432,7 +457,7 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
             attachments.append({
                 "name": name or "Attachment",
                 "url": full_url,
-                "type": "pdf" if ".pdf" in href.lower() else "unknown",
+                "type": "pdf",  # OnBase appends .pdf to all DownloadFile URLs
             })
 
         return attachments
