@@ -140,6 +140,10 @@ class Config:
             os.getenv("ENGAGIC_VENDOR_HTTP_TIMEOUT", "30")
         )
 
+        # Residential SOCKS proxy for Akamai-protected vendors (e.g. socks5://localhost:9050)
+        # Used by vendors like visioninternet where datacenter ASNs are blocked
+        self.RESIDENTIAL_PROXY = os.getenv("ENGAGIC_RESIDENTIAL_PROXY", "")
+
         # Logging
         self.LOG_LEVEL = os.getenv("ENGAGIC_LOG_LEVEL", "INFO").upper()
         # Log format: "json" (default for prod) or "dev" (human-readable key=value)
