@@ -121,6 +121,9 @@ async def rate_limit_middleware(
         if limit_type == "daily":
             message = f"Daily limit reached ({limit_info['day_limit']}/day). Resets at midnight UTC."
             retry_after = "3600"
+        elif limit_type == "hourly":
+            message = f"Hourly limit reached ({limit_info['hour_limit']}/hour). Wait for the next hour."
+            retry_after = "900"
         else:
             message = f"Rate limit exceeded ({limit_info['minute_limit']}/min). Wait a moment."
             retry_after = "60"
@@ -150,5 +153,6 @@ async def rate_limit_middleware(
     # Success - add rate limit headers
     response = await call_next(request)
     response.headers["X-RateLimit-Remaining-Minute"] = str(limit_info.get("remaining_minute", 0))
+    response.headers["X-RateLimit-Remaining-Hourly"] = str(limit_info.get("remaining_hourly", 0))
     response.headers["X-RateLimit-Remaining-Daily"] = str(limit_info.get("remaining_daily", 0))
     return response

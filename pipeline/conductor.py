@@ -386,6 +386,32 @@ def _parse_city_list(arg: str) -> List[str]:
     return [c.strip() for c in arg.split(",") if c.strip()]
 
 
+async def _expand_jurisdictions(db: Database, bananas: List[str]) -> List[str]:
+    """Expand county bananas into county + all linked cities.
+
+    Any banana whose jurisdiction type is 'county' gets replaced with
+    the county itself plus all cities that reference it via county_banana.
+    Non-county bananas pass through unchanged. Preserves order, deduplicates.
+    """
+    expanded = []
+    seen = set()
+    for banana in bananas:
+        if banana in seen:
+            continue
+        city = await db.cities.get_city(banana)
+        if city and city.type == "county":
+            county_bananas = await db.cities.get_county_jurisdictions(banana)
+            logger.info("expanded county", county=banana, jurisdictions=len(county_bananas))
+            for b in county_bananas:
+                if b not in seen:
+                    seen.add(b)
+                    expanded.append(b)
+        else:
+            seen.add(banana)
+            expanded.append(banana)
+    return expanded
+
+
 def main():
     """Entry point for engagic-conductor and engagic-daemon CLI"""
     import click
@@ -438,15 +464,17 @@ def main():
     @cli.command("sync-cities")
     @click.argument("cities")
     def sync_cities(cities):
-        """Sync multiple cities (comma-separated bananas or @file path)"""
+        """Sync multiple cities (comma-separated bananas or @file path).
+        County bananas auto-expand to include all linked cities."""
         city_list = _parse_city_list(cities)
-        click.echo(f"Syncing {len(city_list)} cities: {', '.join(city_list)}")
 
         async def run():
             db = await Database.create()
             try:
+                expanded = await _expand_jurisdictions(db, city_list)
+                click.echo(f"Syncing {len(expanded)} jurisdictions: {', '.join(expanded)}")
                 async with Conductor(db) as conductor:
-                    return await conductor.sync_cities(city_list)
+                    return await conductor.sync_cities(expanded)
             finally:
                 await db.close()
 
@@ -456,16 +484,18 @@ def main():
     @cli.command("process-cities")
     @click.argument("cities")
     def process_cities(cities):
-        """Process queued jobs for multiple cities (comma-separated bananas or @file path)"""
+        """Process queued jobs for multiple cities (comma-separated bananas or @file path).
+        County bananas auto-expand to include all linked cities."""
         city_list = _parse_city_list(cities)
-        click.echo(f"Processing queued jobs for {len(city_list)} cities: {', '.join(city_list)}")
 
         async def run():
             db = await Database.create()
             totals = {"processed": 0, "failed": 0, "items_processed": 0, "items_new": 0}
             try:
+                expanded = await _expand_jurisdictions(db, city_list)
+                click.echo(f"Processing queued jobs for {len(expanded)} jurisdictions: {', '.join(expanded)}")
                 async with Conductor(db) as conductor:
-                    async for result in conductor.process_cities(city_list):
+                    async for result in conductor.process_cities(expanded):
                         # Stream results - log each city as it completes
                         city = result.get("city_banana", "unknown")
                         logger.info("city complete",
@@ -489,16 +519,18 @@ def main():
     @cli.command("sync-and-process-cities")
     @click.argument("cities")
     def sync_and_process_cities(cities):
-        """Sync and process multiple cities (comma-separated bananas or @file path)"""
+        """Sync and process multiple cities (comma-separated bananas or @file path).
+        County bananas auto-expand to include all linked cities."""
         city_list = _parse_city_list(cities)
-        click.echo(f"Syncing and processing {len(city_list)} cities: {', '.join(city_list)}")
 
         async def run():
             db = await Database.create()
             totals = {"processed": 0, "failed": 0, "items_processed": 0, "items_new": 0, "meetings_found": 0}
             try:
+                expanded = await _expand_jurisdictions(db, city_list)
+                click.echo(f"Syncing and processing {len(expanded)} jurisdictions: {', '.join(expanded)}")
                 async with Conductor(db) as conductor:
-                    async for result in conductor.sync_and_process_cities(city_list):
+                    async for result in conductor.sync_and_process_cities(expanded):
                         if result.get("phase") == "sync_complete":
                             # Sync phase complete
                             totals["meetings_found"] = result.get("total_meetings_found", 0)
