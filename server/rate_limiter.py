@@ -25,12 +25,14 @@ class RateLimitTier(str, Enum):
 class TierLimits:
     """Rate limit configuration - one tier for everyone"""
     STANDARD = {
-        "minute_limit": 60,
-        "day_limit": 2000,
+        "minute_limit": 40,
+        "hour_limit": 500,
+        "day_limit": 1000,
         "description": "Standard tier - generous for casual use"
     }
     ENTERPRISE = {
         "minute_limit": 1000,
+        "hour_limit": 10000,
         "day_limit": 100000,
         "description": "Commercial tier - paid access"
     }
@@ -99,6 +101,19 @@ class SQLiteRateLimiter:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_rate_limits_time ON rate_limits(timestamp)"
+            )
+
+            # Per-hour tracking
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS hourly_rate_limits (
+                    client_ip TEXT NOT NULL,
+                    hour_key TEXT NOT NULL,
+                    request_count INTEGER DEFAULT 0,
+                    PRIMARY KEY (client_ip, hour_key)
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_hourly_rate_limits_hour ON hourly_rate_limits(hour_key)"
             )
 
             # Per-day tracking
@@ -300,20 +315,46 @@ class SQLiteRateLimiter:
             )
             conn.commit()
 
+    def check_hourly_limit(
+        self, client_ip: str, tier: RateLimitTier, hour_limit: Optional[int] = None
+    ) -> Tuple[bool, int]:
+        """Check if client has exceeded hourly limit."""
+        from datetime import datetime, timezone
+        hour_key = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H")
+        if hour_limit is None:
+            limits = TierLimits.get_limits(tier)
+            hour_limit = limits["hour_limit"]
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT request_count FROM hourly_rate_limits WHERE client_ip = ? AND hour_key = ?",
+                (client_ip, hour_key)
+            )
+            result = cursor.fetchone()
+
+            if result:
+                current_count = result[0]
+                if current_count >= hour_limit:
+                    return False, 0
+                conn.execute(
+                    "UPDATE hourly_rate_limits SET request_count = request_count + 1 WHERE client_ip = ? AND hour_key = ?",
+                    (client_ip, hour_key)
+                )
+            else:
+                current_count = 0
+                conn.execute(
+                    "INSERT INTO hourly_rate_limits (client_ip, hour_key, request_count) VALUES (?, ?, 1)",
+                    (client_ip, hour_key)
+                )
+
+            conn.commit()
+            remaining = hour_limit - current_count - 1
+            return True, max(0, remaining)
+
     def check_daily_limit(
         self, client_ip: str, tier: RateLimitTier, day_limit: Optional[int] = None
     ) -> Tuple[bool, int]:
-        """
-        Check if client has exceeded daily limit.
-
-        Args:
-            client_ip: Client IP address
-            tier: Rate limit tier
-            day_limit: Optional override for daily limit (for endpoint-specific limits)
-
-        Returns:
-            (is_allowed, remaining_requests)
-        """
+        """Check if client has exceeded daily limit."""
         from datetime import datetime, timezone
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if day_limit is None:
@@ -321,9 +362,6 @@ class SQLiteRateLimiter:
             day_limit = limits["day_limit"]
 
         with sqlite3.connect(self.db_path) as conn:
-            # WAL mode set at init time in _init_db()
-
-            # Get or create daily counter
             cursor = conn.execute(
                 "SELECT request_count FROM daily_rate_limits WHERE client_ip = ? AND date = ?",
                 (client_ip, today)
@@ -334,14 +372,11 @@ class SQLiteRateLimiter:
                 current_count = result[0]
                 if current_count >= day_limit:
                     return False, 0
-
-                # Increment counter
                 conn.execute(
                     "UPDATE daily_rate_limits SET request_count = request_count + 1 WHERE client_ip = ? AND date = ?",
                     (client_ip, today)
                 )
             else:
-                # Create new daily counter
                 current_count = 0
                 conn.execute(
                     "INSERT INTO daily_rate_limits (client_ip, date, request_count, tier) VALUES (?, ?, 1, ?)",
@@ -483,9 +518,11 @@ class SQLiteRateLimiter:
         if endpoint and endpoint in ENDPOINT_LIMITS:
             endpoint_limits = ENDPOINT_LIMITS[endpoint]
             minute_limit = endpoint_limits.get("minute_limit", limits["minute_limit"])
+            hour_limit = endpoint_limits.get("hour_limit", limits["hour_limit"])
             day_limit = endpoint_limits.get("day_limit", limits["day_limit"])
         else:
             minute_limit = limits["minute_limit"]
+            hour_limit = limits["hour_limit"]
             day_limit = limits["day_limit"]
 
         # Periodic cleanup to prevent database bloat
@@ -510,10 +547,23 @@ class SQLiteRateLimiter:
                     "tier": tier.value,
                     "limit_type": "minute",
                     "minute_limit": minute_limit,
+                    "hour_limit": hour_limit,
                     "day_limit": day_limit
                 }
 
-            # Check daily limit (uses tier limits, not endpoint overrides)
+            # Check hourly limit
+            is_allowed_hourly, remaining_hourly = self.check_hourly_limit(client_ip, tier, hour_limit)
+            if not is_allowed_hourly:
+                self.record_violation(client_ip, "hourly", real_ip)
+                return False, 0, {
+                    "tier": tier.value,
+                    "limit_type": "hourly",
+                    "minute_limit": minute_limit,
+                    "hour_limit": hour_limit,
+                    "day_limit": day_limit
+                }
+
+            # Check daily limit
             is_allowed_daily, remaining_daily = self.check_daily_limit(client_ip, tier, day_limit)
             if not is_allowed_daily:
                 self.record_violation(client_ip, "daily", real_ip)
@@ -521,6 +571,7 @@ class SQLiteRateLimiter:
                     "tier": tier.value,
                     "limit_type": "daily",
                     "minute_limit": minute_limit,
+                    "hour_limit": hour_limit,
                     "day_limit": day_limit
                 }
 
@@ -538,17 +589,25 @@ class SQLiteRateLimiter:
             return True, max(0, remaining_minute), {
                 "tier": tier.value,
                 "remaining_minute": remaining_minute,
+                "remaining_hourly": remaining_hourly,
                 "remaining_daily": remaining_daily,
                 "minute_limit": minute_limit,
+                "hour_limit": hour_limit,
                 "day_limit": day_limit
             }
 
     def _cleanup_old_entries(self, cutoff_time: float):
         """Remove entries older than cutoff time"""
         try:
+            from datetime import datetime, timezone, timedelta
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     "DELETE FROM rate_limits WHERE timestamp < ?", (cutoff_time,)
+                )
+                # Clean up hourly counters older than 2 hours
+                two_hours_ago = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%d-%H")
+                conn.execute(
+                    "DELETE FROM hourly_rate_limits WHERE hour_key < ?", (two_hours_ago,)
                 )
                 deleted = conn.total_changes
                 conn.commit()

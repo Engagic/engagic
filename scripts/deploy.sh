@@ -539,6 +539,69 @@ sync_and_process_cities() {
     uv run engagic-conductor sync-and-process-cities "$1"
 }
 
+sync_county() {
+    if [ -z "$1" ]; then
+        error "County banana required (e.g. montereycountyCA)"
+    fi
+
+    log "Syncing county: $1 (auto-expands to all linked cities)"
+    load_env
+    uv run engagic-conductor sync-cities "$1"
+}
+
+process_county() {
+    if [ -z "$1" ]; then
+        error "County banana required (e.g. montereycountyCA)"
+    fi
+
+    local SCREEN_NAME="engagic-process"
+
+    if screen -list | grep -q "$SCREEN_NAME"; then
+        warn "Process session already running!"
+        echo "  Attach with: $0 attach"
+        echo "  Or kill it:  $0 kill-process"
+        return 1
+    fi
+
+    log "Starting process-county in detachable screen session..."
+    log "County: $1 (auto-expands to all linked cities)"
+    echo ""
+    info "Commands:"
+    echo "  Ctrl-A D     - Detach (process keeps running)"
+    echo "  $0 attach    - Reattach to view logs"
+    echo "  $0 kill-process - Stop processing"
+    echo ""
+    sleep 2
+
+    load_env
+
+    screen -dmS "$SCREEN_NAME" bash -c "
+        cd $APP_DIR
+        source $VENV_DIR/bin/activate
+        if [ -f $APP_DIR/.env ]; then set -a; source $APP_DIR/.env; set +a; fi
+        if [ -f $APP_DIR/.llm_secrets ]; then set -a; source $APP_DIR/.llm_secrets; set +a; fi
+        export ENGAGIC_LOG_FORMAT=dev
+        echo 'Starting process-county (auto-expanding to linked cities)...'
+        echo ''
+        uv run engagic-conductor process-cities '$1'
+        echo ''
+        echo 'Processing complete. Press Enter to close.'
+        read
+    "
+
+    screen -r "$SCREEN_NAME"
+}
+
+sync_and_process_county() {
+    if [ -z "$1" ]; then
+        error "County banana required (e.g. montereycountyCA)"
+    fi
+
+    log "Syncing and processing county: $1 (auto-expands to all linked cities)"
+    load_env
+    uv run engagic-conductor sync-and-process-cities "$1"
+}
+
 process_unprocessed() {
     load_env
     uv run engagic-conductor full-sync
@@ -821,6 +884,9 @@ show_help() {
     echo "    sync-cities CITIES             - Fetch meetings (single city or comma-separated or @file)"
     echo "    process-cities CITIES          - Process in screen (survives SSH disconnect)"
     echo "    sync-and-process-cities CITIES - Fetch + process cities"
+    echo "    sync-county COUNTY             - Fetch county + all linked cities (e.g. montereycountyCA)"
+    echo "    process-county COUNTY          - Process county + linked cities in screen"
+    echo "    sync-and-process-county COUNTY - Fetch + process county + linked cities"
     echo "    attach                         - Reattach to running process-cities"
     echo "    kill-process                   - Stop running process-cities"
     echo "    process-unprocessed            - Process all unprocessed meetings in queue"
@@ -839,8 +905,10 @@ show_help() {
     echo "Examples:"
     echo "  $0 status                                  # Check what's running"
     echo "  $0 sync-cities paloaltoCA                  # Fetch single city"
-    echo "  $0 sync-cities @regions/bay-area.txt       # Fetch region (free)"
+    echo "  $0 sync-cities @munis/bay-area.txt         # Fetch region (free)"
+    echo "  $0 sync-county montereycountyCA            # Fetch county + all linked cities"
     echo "  $0 process-cities paloaltoCA               # Process in screen"
+    echo "  $0 process-county montereycountyCA         # Process county + linked cities"
     echo "  $0 sync-and-process-cities paloaltoCA      # Fetch + process"
     echo "  $0 users                                   # Show user activity"
 }
@@ -933,6 +1001,9 @@ case "$COMMAND" in
     sync-cities)         sync_cities "$2" ;;
     process-cities)      process_cities "$2" ;;
     sync-and-process-cities) sync_and_process_cities "$2" ;;
+    sync-county)         sync_county "$2" ;;
+    process-county)      process_county "$2" ;;
+    sync-and-process-county) sync_and_process_county "$2" ;;
     attach)              attach_process ;;
     kill-process)        kill_process ;;
     process-unprocessed) process_unprocessed ;;

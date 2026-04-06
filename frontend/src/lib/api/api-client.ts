@@ -62,6 +62,9 @@ export function buildRequestHeaders(context?: RequestContext): Record<string, st
 	const headers: Record<string, string> = {};
 	if (context?.clientIp) {
 		headers['X-Forwarded-Client-IP'] = context.clientIp;
+		// Forward as CF-Connecting-IP so nginx real_ip module and rate limiting
+		// see the actual client IP, not the Cloudflare Worker edge IP
+		headers['CF-Connecting-IP'] = context.clientIp;
 		if (context.ssrAuthSecret) {
 			headers['X-SSR-Auth'] = context.ssrAuthSecret;
 		}
