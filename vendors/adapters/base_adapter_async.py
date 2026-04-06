@@ -404,10 +404,16 @@ class AsyncBaseAdapter:
         to the actual contracts/exhibits on Legistar S3).
         """
         if agenda_url:
-            items = await self._parse_packet_pdf(agenda_url, vendor_id, force_method="url")
+            items = await self._parse_packet_pdf(agenda_url, vendor_id, force_method="v2_url")
+            if not items:
+                items = await self._parse_packet_pdf(agenda_url, vendor_id, force_method="url")
             if items:
+                # Only keep chunked items if at least one has attachments —
+                # items without attachments from a thin agenda are just text noise
                 items = await self._resolve_sub_attachments(items, vendor_id)
-                return items
+                if any(it.get("attachments") for it in items):
+                    items = [it for it in items if it.get("attachments")]
+                    return items
 
         if packet_url:
             items = await self._parse_packet_pdf(packet_url, vendor_id, force_method="toc")
@@ -437,6 +443,8 @@ class AsyncBaseAdapter:
             # Auto: try v1 first, fall back to v2 if v1 returns nothing
             if force_method == "toc":
                 parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path, force_method="toc")
+            elif force_method == "v2_url":
+                parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path, force_method="url")
             elif force_method == "url":
                 parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path, force_method="url")
             else:
@@ -505,6 +513,7 @@ class AsyncBaseAdapter:
         "s3.amazonaws.com", ".pdf", "/uploads/attachment",
         "/attachments/", "cloudfront.net", "/ViewFile/",
         "/DocumentCenter/View/", "/LinkClick.aspx",
+        "/showdocument?",
     ]
 
     async def _resolve_sub_attachments(
@@ -574,14 +583,17 @@ class AsyncBaseAdapter:
 
                     embedded = await asyncio.to_thread(_extract_links)
                     if embedded:
-                        item["attachments"] = item["attachments"] + embedded
+                        existing_urls = {a.get("url") for a in item.get("attachments", [])}
+                        new_atts = [a for a in embedded if a.get("url") not in existing_urls]
+                        if new_atts:
+                            item["attachments"] = item["attachments"] + new_atts
                         logger.info(
                             "resolved sub-attachments from staff report",
                             vendor=self.vendor,
                             slug=self.slug,
                             vendor_id=vendor_id,
                             item=item.get("agenda_number") or item.get("vendor_item_id"),
-                            sub_attachment_count=len(embedded),
+                            sub_attachment_count=len(new_atts),
                         )
 
                 except Exception as e:
