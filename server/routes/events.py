@@ -128,7 +128,7 @@ async def track_event(
 
 @router.get("/funnel/journeys")
 async def get_journeys(
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=100),
     hours: int = Query(default=24, ge=1, le=168),
     db: Database = Depends(get_db),
     _: bool = Depends(verify_admin_token)

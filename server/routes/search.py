@@ -1,5 +1,6 @@
 """Search API routes."""
 
+from server.utils.validation import capped_limit
 from fastapi import APIRouter, HTTPException, Depends, Request
 
 from config import get_logger
@@ -74,7 +75,7 @@ async def search_meetings(search_request: SearchRequest, request: Request, db: D
 async def search_city_meetings(
     banana: str,
     q: str,
-    limit: int = 50,
+    limit: int = capped_limit(),
     db: Database = Depends(get_db)
 ):
     """Full-text search items within a city using PostgreSQL FTS.

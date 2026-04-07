@@ -22,6 +22,10 @@ from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback, committees
 from server.routes import deliberation, happening, events
+try:
+    from server.routes import duckling
+except ImportError:
+    duckling = None
 from userland.auth import init_jwt
 
 logger = get_logger(__name__)
@@ -133,7 +137,9 @@ async def metrics_middleware_wrapper(request, call_next):
     return await metrics_middleware(request, call_next)
 
 
-# Mount routers
+# Mount routers (duckling first -- must match before parametric routes)
+if duckling is not None:
+    app.include_router(duckling.router)
 app.include_router(monitoring.router)  # Root and monitoring endpoints
 app.include_router(search.router)      # Search endpoints
 app.include_router(meetings.router)    # Meeting endpoints

@@ -1,5 +1,6 @@
 """Vote API routes - handles vote records, tallies, and council member voting history."""
 
+from server.utils.validation import capped_limit
 from fastapi import APIRouter, Depends
 
 from database.db_postgres import Database
@@ -149,7 +150,7 @@ async def get_meeting_votes(meeting_id: str, db: Database = Depends(get_db)):
 @router.get("/council-members/{member_id}/votes")
 async def get_member_votes(
     member_id: str,
-    limit: int = 100,
+    limit: int = capped_limit(100),
     db: Database = Depends(get_db)
 ):
     """Get voting record for a council member.

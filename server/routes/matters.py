@@ -1,6 +1,7 @@
 """Matter API routes - handles matter tracking, timelines, and cross-meeting aggregation."""
 
 import random
+from server.utils.validation import capped_limit
 from fastapi import APIRouter, HTTPException, Depends
 from server.metrics import metrics
 from server.dependencies import get_db
@@ -129,7 +130,7 @@ async def get_matter_sponsors(matter_id: str, db: Database = Depends(get_db)):
 @router.get("/city/{banana}/matters")
 async def get_city_matters(
     banana: str,
-    limit: int = 50,
+    limit: int = capped_limit(),
     offset: int = 0,
     db: Database = Depends(get_db)
 ):
@@ -261,7 +262,7 @@ async def get_city_matters(
 async def search_city_matters(
     banana: str,
     q: str,
-    limit: int = 50,
+    limit: int = capped_limit(),
     db: Database = Depends(get_db)
 ):
     """Full-text search matters within a city using PostgreSQL FTS.
@@ -310,7 +311,7 @@ async def search_city_matters(
 async def get_state_matters(
     state_code: str,
     topic: str | None = None,
-    limit: int = 100,
+    limit: int = capped_limit(100),
     db: Database = Depends(get_db)
 ):
     """Get matters across all cities in a state
@@ -514,7 +515,7 @@ async def get_state_matters(
 @router.get("/state/{state_code}/meetings")
 async def get_state_meetings(
     state_code: str,
-    limit: int = 50,
+    limit: int = capped_limit(),
     include_past: bool = False,
     db: Database = Depends(get_db)
 ):
