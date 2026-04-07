@@ -127,7 +127,7 @@ async def get_committee_members(
 @router.get("/committees/{committee_id}/votes")
 async def get_committee_votes(
     committee_id: str,
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=100),
     db: Database = Depends(get_db)
 ):
     """Get voting history for a committee.

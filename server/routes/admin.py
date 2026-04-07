@@ -6,6 +6,7 @@ import asyncio
 import secrets
 import time
 import httpx
+from server.utils.validation import capped_limit
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Depends
 
@@ -213,7 +214,7 @@ async def prometheus_query(
 
 @router.get("/activity-feed")
 async def get_activity_feed(
-    limit: int = 100,
+    limit: int = capped_limit(100),
     is_admin: bool = Depends(verify_admin_token)
 ):
     """Get recent user activity from API logs

@@ -5,6 +5,7 @@ Real-time dashboard data for authenticated users.
 Simplified UX: Watch 1 city, track 1-3 keywords, get weekly digest.
 """
 
+from server.utils.validation import capped_limit
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
@@ -168,7 +169,7 @@ async def get_dashboard_stats(
 
 @router.get("/activity")
 async def get_recent_activity(
-    limit: int = 10,
+    limit: int = capped_limit(10),
     user: User = Depends(get_current_user),
     db: Database = Depends(get_db),
 ):

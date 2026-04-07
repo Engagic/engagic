@@ -7,6 +7,7 @@ User feedback endpoints for the closed loop architecture:
 - Admin: review and resolve issues
 """
 
+from server.utils.validation import capped_limit
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
@@ -199,7 +200,7 @@ async def get_entity_issues(
 
 @router.get("/admin/issues")
 async def get_open_issues(
-    limit: int = 100,
+    limit: int = capped_limit(100),
     user: User = Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
