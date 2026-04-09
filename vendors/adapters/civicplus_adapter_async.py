@@ -98,9 +98,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
 
     async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Scrape AgendaCenter HTML and filter meetings by date range."""
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         agenda_url = await self._find_agenda_url()
 

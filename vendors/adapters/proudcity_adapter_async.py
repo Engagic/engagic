@@ -133,9 +133,7 @@ class AsyncProudCityAdapter(AsyncBaseAdapter):
             logger.error("no base url, cannot fetch", vendor="proudcity", slug=self.slug)
             return []
 
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         meetings_raw = await self._fetch_meetings_rest_api(start_date, end_date)
 
@@ -195,9 +193,6 @@ class AsyncProudCityAdapter(AsyncBaseAdapter):
         page = 1
         per_page = 100
         max_pages = 20  # Safety cap to prevent unbounded pagination
-        # Posts published more than this many days ago are unlikely to contain
-        # meetings in our forward window. Safety margin for pre-scheduled posts.
-        cutoff_pub_date = datetime.now() - timedelta(days=90)
         api_url = f"{self.base_url}/wp-json/wp/v2"
 
         while True:
@@ -231,15 +226,31 @@ class AsyncProudCityAdapter(AsyncBaseAdapter):
             if not data:
                 break
 
+            page_meetings = []
             for post in data:
                 meeting = self._rest_post_to_meeting(post)
                 if meeting:
-                    all_meetings.append(meeting)
+                    page_meetings.append(meeting)
+            all_meetings.extend(page_meetings)
 
-            # Stop paginating when posts are too old to matter
-            last_post_date = self._parse_date(data[-1].get("date", ""))
-            if last_post_date and last_post_date < cutoff_pub_date:
+            # Stop paginating when all meeting dates on this page are
+            # before our window. Uses meeting date from title, not pub date,
+            # since some cities bulk-create events months in advance.
+            page_meeting_dates = []
+            for m in page_meetings:
+                parsed = self._parse_date(m.get("start", ""))
+                if parsed:
+                    page_meeting_dates.append(parsed)
+
+            if page_meeting_dates and max(page_meeting_dates) < start_date:
                 break
+
+            # Fallback: if no meeting dates parseable, use publication date
+            if not page_meeting_dates:
+                cutoff = datetime.now() - timedelta(days=180)
+                last_pub = self._parse_date(data[-1].get("date", ""))
+                if last_pub and last_pub < cutoff:
+                    break
 
             try:
                 total_pages = int(response.headers.get("X-WP-TotalPages", "1"))

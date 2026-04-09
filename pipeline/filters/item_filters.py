@@ -19,6 +19,7 @@ PROCEDURAL_PATTERNS = [
     r'roll call',
     r'invocation',
     r'pledge of allegiance',
+    r'flag salute',  # Regional variant of pledge
     r'approval of\b.*\b(minutes|agenda)',  # "Approval of Draft Raleigh Board of Adjustment Minutes"
     r'approve\b.*\bminutes',  # "Approve the minutes of...", "Approve the Liquor Commission meeting minutes of..."
     r'adopt minutes',
@@ -26,6 +27,9 @@ PROCEDURAL_PATTERNS = [
     r'^minutes of',  # Standalone minutes items
     r'draft.*minutes',  # Draft minutes items
     r'adjourn',
+    r'call to order',
+    r'\brecess\b',  # Meeting recess (\b prevents matching "recession")
+    r'moment of silence',
     r'public comment',  # The period itself, not the content
     r'communications',  # Generic communications period
     r'time fixed for next',
@@ -35,10 +39,15 @@ PROCEDURAL_PATTERNS = [
 
 # Ceremonial — searchable names, no policy substance
 CEREMONIAL_PATTERNS = [
-    r'\bproclamation\b(?!.{0,30}\b(emergency|disaster|local emergency|state of emergency))',
+    r'\bproclamations?(?!.{0,30}\b(emergency|disaster|local emergency|state of emergency))',
     r'\bcommendation\b',
     r'\brecognition\b',
     r'\bceremonial\b',
+    r'\bbenediction\b',
+    r'\boath of office\b',
+    r'\bswearing[ -]in\b',
+    r'\bin memoriam\b',
+    r'\bopening remarks?\b',
     r'(?i)congratulations (to|extended to|for)',
     r'(?i)tribute to (late|the late)',
     r'(?i)\bon (his|her|their) retirement\b',

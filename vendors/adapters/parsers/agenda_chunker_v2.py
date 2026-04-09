@@ -98,13 +98,40 @@ def _has_agenda_links(doc) -> bool:
     return False
 
 
+def _count_internal_page_links(doc) -> int:
+    """Count kind=4 internal links on first pages that point deep into the doc.
+
+    These are "Page XX" references in agenda text that jump to staff reports.
+    Returns count of qualifying links (target page beyond agenda pages).
+    """
+    count = 0
+    for page in doc:
+        if page.number >= _MAX_AGENDA_PAGES:
+            break
+        for link in page.get_links():
+            if link.get("kind") == 4:
+                try:
+                    target = int(link.get("page", -1))
+                except (ValueError, TypeError):
+                    continue
+                if target >= _MAX_AGENDA_PAGES:
+                    count += 1
+    return count
+
+
 def _detect_parse_path(doc) -> str:
-    """Determine extraction path: 'toc', 'url', or 'empty'.
+    """Determine extraction path: 'toc', 'url', 'pageref', or 'empty'.
 
     Mirrors v1 logic: large documents (>10 pages) with a TOC are packet
     PDFs where the TOC represents embedded staff reports, not agenda items.
     If the first 10 pages also carry attachment links, prefer URL path —
     those links are the real agenda structure.
+
+    New: if the agenda pages have internal page links (kind=4) pointing deep
+    into the document, those are "Page XX" references and define item
+    boundaries just like URL links do. Prefer this over TOC since the TOC
+    in these packets usually contains attachment-internal bookmarks (slide
+    titles, memo sections), not agenda items.
     """
     toc = doc.get_toc()
     real_entries = [e for e in toc if e[2] > 0]
@@ -113,10 +140,19 @@ def _detect_parse_path(doc) -> str:
 
     has_links = _has_agenda_links(doc)
 
+    # Internal page links: agenda text with "Page XX" jumps to staff reports
+    internal_link_count = _count_internal_page_links(doc)
+    has_pagerefs = internal_link_count >= 3
+
     if has_links and doc.page_count > _MAX_AGENDA_PAGES:
-        # Large packet with links on the agenda pages — try URL first,
+        # Large packet with URL links on the agenda pages — try URL first,
         # fall back to TOC if it produces nothing.
         return "url_then_toc" if has_toc else "url"
+
+    if has_pagerefs and doc.page_count > _MAX_AGENDA_PAGES:
+        # Large packet with internal page references — these define item
+        # boundaries more accurately than attachment-level TOC bookmarks.
+        return "pageref"
 
     if has_toc:
         return "toc"
@@ -398,6 +434,122 @@ def _parse_url_v2(doc, result: _ParsedAgenda):
 
 
 # ---------------------------------------------------------------------------
+# Page-reference path: internal links as item boundaries
+# ---------------------------------------------------------------------------
+
+def _collect_internal_page_links(doc) -> List[dict]:
+    """Collect kind=4 internal links from agenda pages that point deep into the doc.
+
+    Returns list of dicts with keys: source_page (0-indexed), target_page (0-indexed),
+    rect (fitz.Rect), text (extracted from the link rect on the source page).
+    """
+    links = []
+    for page in doc:
+        if page.number >= _MAX_AGENDA_PAGES:
+            break
+        for link in page.get_links():
+            if link.get("kind") != 4:
+                continue
+            try:
+                target = int(link.get("page", -1))
+            except (ValueError, TypeError):
+                continue
+            # Accept any forward-pointing link beyond the current agenda page.
+            # The detection gate (_count_internal_page_links) is strict (target >= 10),
+            # but once we're on this path, collect all forward refs including
+            # early attachments (e.g. warrants on page 5).
+            if target <= page.number:
+                continue
+            rect = link.get("from")
+            if not rect:
+                continue
+            rect = fitz.Rect(rect)
+            text = page.get_text("text", clip=rect).strip()
+            if not text:
+                continue
+            links.append({
+                "source_page": page.number,
+                "target_page": int(target),
+                "rect": rect,
+                "text": " ".join(text.split()),
+            })
+    # Sort by position on the agenda pages
+    links.sort(key=lambda l: (l["source_page"], l["rect"].y0))
+    return links
+
+
+def _parse_pageref_v2(doc, result: _ParsedAgenda):
+    """Page-reference extraction: use internal page links as item anchors.
+
+    CivicPlus packet PDFs have agenda text on the first few pages with
+    "Page XX" references that are internal links (kind=4) pointing to the
+    staff report pages. The link rects cover the full item description text.
+    The TOC in these PDFs only contains attachment-internal bookmarks
+    (slide titles, memo headings) and is useless for item extraction.
+    """
+    result.metadata.parse_method = "v2_pageref"
+
+    links = _collect_internal_page_links(doc)
+    if not links:
+        return
+
+    current_section = ""
+
+    for i, link in enumerate(links):
+        # The link text is the full item description from the agenda page
+        title_text = link["text"]
+
+        # Strip trailing "Page XX" or "- Page XX" reference
+        title_text = re.sub(r'\s*[-\u2013\u2014]?\s*Page\s+\d+\s*$', '', title_text)
+
+        number, title_text = _extract_item_number_permissive(title_text)
+
+        # Detect section headers (rare in page-ref links but possible)
+        if _is_section_header(title_text):
+            current_section = _extract_section_name(title_text)
+            continue
+
+        # Page range: from this link's target to the next link's target (or end of doc)
+        page_start_0 = link["target_page"]
+        if i + 1 < len(links):
+            page_end_0 = links[i + 1]["target_page"] - 1
+        else:
+            page_end_0 = doc.page_count - 1
+        page_end_0 = max(page_end_0, page_start_0)
+
+        # Extract body text from the staff report pages
+        memo = _extract_memo_content(doc, page_start_0, page_end_0)
+
+        memos = []
+        if memo.full_text.strip():
+            memos.append(memo)
+
+        item = _AgendaItem(
+            number=number,
+            title=title_text,
+            section=current_section,
+            body="",
+            recommended_action="",
+            memos=memos,
+            page_start=page_start_0 + 1,
+            page_end=page_end_0 + 1,
+        )
+
+        for m in memos:
+            if m.recommended_action:
+                item.recommended_action = m.recommended_action
+                break
+
+        result.items.append(item)
+
+    logger.debug(
+        "v2 pageref parsed",
+        item_count=len(result.items),
+        link_count=len(links),
+    )
+
+
+# ---------------------------------------------------------------------------
 # TOC path: page-range slicing
 # ---------------------------------------------------------------------------
 
@@ -497,11 +649,25 @@ def _parse_toc_v2(doc, result: _ParsedAgenda):
     # e.g. Portola Valley: multiple L1 entries "Item 7.a - Cover Page",
     # "Item 7.a - Minutes" should become one item with child memos.
     # First entry becomes the item, subsequent entries become synthetic children.
+    #
+    # Also handles "Item N_..." / "Att. N_..." pattern (Hillsborough ADRB):
+    # items and their attachments are at the same TOC level, with attachment
+    # entries following the item entry they belong to.
+    _ATT_PREFIX_RE = re.compile(r'^Att(?:achment)?\.?\s*\d', re.IGNORECASE)
+
     item_entries = []
     _synthetic_children: Dict[int, List[Tuple[str, int]]] = {}  # index -> [(title, page)]
     if raw_item_entries:
         seen_numbers: Dict[str, int] = {}  # number -> index in item_entries
+        last_real_item_idx: Optional[int] = None
+
         for title, page in raw_item_entries:
+            # Attachment entries ("Att. 1_...", "Attachment 2_...") get folded
+            # into the most recent real item as synthetic children.
+            if _ATT_PREFIX_RE.match(title) and last_real_item_idx is not None:
+                _synthetic_children.setdefault(last_real_item_idx, []).append((title, page))
+                continue
+
             number, _ = _extract_item_number_permissive(title)
             if number and number in seen_numbers:
                 idx = seen_numbers[number]
@@ -511,6 +677,7 @@ def _parse_toc_v2(doc, result: _ParsedAgenda):
                 item_entries.append((title, page))
                 if number:
                     seen_numbers[number] = idx
+                last_real_item_idx = idx
 
     # Determine agenda vs content pages:
     # Agenda pages are where multiple item-level entries cluster on the same page
@@ -665,6 +832,8 @@ def _parse_v2_internal(pdf_path: str, force_method: Optional[str] = None) -> _Pa
         _parse_toc_v2(doc, result)
     elif force_method == "url":
         _parse_url_v2(doc, result)
+    elif force_method == "pageref":
+        _parse_pageref_v2(doc, result)
     else:
         path = _detect_parse_path(doc)
         if path == "toc":
@@ -676,6 +845,8 @@ def _parse_v2_internal(pdf_path: str, force_method: Optional[str] = None) -> _Pa
             if not result.items:
                 result.orphan_links.clear()
                 _parse_toc_v2(doc, result)
+        elif path == "pageref":
+            _parse_pageref_v2(doc, result)
         # "empty" -> no items, monolithic fallback
 
     doc.close()

@@ -136,9 +136,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
     async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from all configured view_ids, then fetch detail pages."""
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         # Fetch listings from all views concurrently
         listing_tasks = [self._fetch_view_listing(v) for v in self.views]

@@ -103,13 +103,11 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
 
     async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from PrimeGov API (upcoming + archived concurrently)."""
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         upcoming_url = f"{self.base_url}/api/v2/PublicPortal/ListUpcomingMeetings"
         upcoming_task = asyncio.create_task(self._fetch_upcoming_meetings(upcoming_url))
-        archived_task = asyncio.create_task(self._fetch_archived_meetings(start_date, today))
+        archived_task = asyncio.create_task(self._fetch_archived_meetings(start_date, end_date))
 
         upcoming_meetings, archived_meetings = await asyncio.gather(upcoming_task, archived_task)
 

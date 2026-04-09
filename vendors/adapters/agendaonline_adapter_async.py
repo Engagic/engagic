@@ -77,9 +77,7 @@ class AsyncAgendaOnlineAdapter(AsyncBaseAdapter):
     async def _fetch_meetings_impl(
         self, days_back: int = 14, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         # Scrape meeting listing
         listing_url = self._site_url(f"/Meetings/Search?{self.listing_params}")

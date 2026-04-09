@@ -492,6 +492,11 @@ def main():
             db = await Database.create()
             totals = {"processed": 0, "failed": 0, "items_processed": 0, "items_new": 0}
             try:
+                # Recovery: reset jobs stuck in 'processing' from previous crash/OOM
+                stale_count = await db.queue.reset_stale_processing_jobs()
+                if stale_count:
+                    click.echo(f"Recovered {stale_count} stale jobs from previous crash")
+
                 expanded = await _expand_jurisdictions(db, city_list)
                 click.echo(f"Processing queued jobs for {len(expanded)} jurisdictions: {', '.join(expanded)}")
                 async with Conductor(db) as conductor:

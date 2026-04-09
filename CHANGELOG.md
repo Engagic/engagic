@@ -6,6 +6,58 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-04-08] OOM Protection for PDF Extraction
+
+### Forkserver Child Memory Cap (analyzer_async.py)
+
+`_extract_pdf_worker` now sets `RLIMIT_AS = 1GB` before extraction. On 2026-04-07, a bay-area-all.txt process-cities run was OOM-killed at 23:43:28 -- a 2,155-page PDF with 107 OCR pages pushed a forkserver child past 1GB RSS, total system memory exhausted (3.8GB RAM + 6GB swap fully consumed), kernel killed the parent conductor (609MB RSS, pid 3060011). Forkserver children survived as orphans, 2 jobs stuck in `processing`, 14 SF jobs never started.
+
+Each child now gets MemoryError before it can threaten the parent. Since extraction is per-attachment, other attachments for the same item keep processing normally. Budget: 6 concurrent children (pdf_semaphore) * 1GB = 6GB ceiling, leaves ~4GB for parent + postgres + system. Normal PDFs use 200-350MB.
+
+### Crash Recovery for process-cities (conductor.py)
+
+`process-cities` now calls `reset_stale_processing_jobs()` on startup, same as `run-processor` already did. Zombie `processing` jobs from a prior crash or OOM get flipped back to `pending` before the run begins.
+
+---
+
+## [2026-04-08] Chunker, Adapter, and Pipeline Fixes
+
+### Pageref Chunker Path (agenda_chunker_v2.py)
+
+New `v2_pageref` extraction path for packet PDFs where the agenda pages (1-4) have internal page links (kind=4) pointing to staff reports deeper in the document. These "Page XX" references define item boundaries more accurately than the PDF's embedded TOC, which in these packets only contains attachment-internal bookmarks (slide titles, memo sections).
+
+Detection: 3+ internal links from first 10 pages pointing beyond page 10 triggers the path. Collection is more permissive -- gathers all forward-pointing links so early attachments (e.g. warrants on page 6) aren't missed.
+
+- **Greenfield CA**: 0 items (TOC produced slide titles) -> 14 real items (I-1 through L-6)
+
+### TOC Attachment Grouping (agenda_chunker_v2.py)
+
+TOC entries starting with "Att." or "Attachment" followed by a digit are now folded into the preceding item as synthetic children. Handles packet PDFs where items and their attachments are at the same TOC level (e.g. Hillsborough ADRB: `Item 1_...`, `Att. 1_...`, `Att. 2_...` all at L1).
+
+- **Hillsborough CA**: 16 items (every attachment a separate "item") -> 4 real items with memos
+
+### Date Range Midnight Normalization (base_adapter_async.py, all adapters)
+
+`datetime.now()` includes time-of-day, so `start_date = now - 14 days` at 10:39 PM excludes meetings at midnight on the boundary day. Added `_date_range()` on the base adapter that strips time to midnight. All 16 adapters now use it instead of computing the range locally.
+
+- **Greenfield CA**: March 24 meeting excluded when syncing on March 24 evening
+
+### SharePoint URL Resolver (base_adapter_async.py)
+
+SharePoint sharing links (`/:b:/g/...`, `/:w:/g/...`) serve HTML viewer pages, not PDFs. New `_resolve_sharepoint_urls()` on the base adapter fetches each sharing link, extracts the `.downloadUrl` from the embedded JSON (or `download.aspx?UniqueId=` for Word docs), and replaces the attachment URL before storage. Uses `requests.Session` (not aiohttp) because SharePoint's anonymous cookie/redirect chain requires proper cookie jar handling.
+
+Runs automatically in `fetch_meetings()` when any item attachment matches the SharePoint sharing URL pattern. DB stores clean direct download URLs.
+
+- **Marina CA**: 8 failed attachments -> 0 (12/12 SharePoint URLs resolved, including 1 Word doc)
+
+### WP Events / ProudCity Pagination Fix (wp_events_adapter_async.py, proudcity_adapter_async.py)
+
+Pagination stop condition used publication date (90-day cutoff). Cities that bulk-create events months in advance (Sebastopol created April 2026 meetings in Sept 2025) had their events buried on page 2+, never fetched. Now stops when all meeting dates on a page (parsed from titles) are before the lookback window. Falls back to 180-day publication date cutoff when titles aren't parseable.
+
+- **Sebastopol CA**: April 7 City Council meeting (42 PDFs, 13 agenda items) was completely missing from DB
+
+---
+
 ## [2026-03-28] Fetch Quality Fixes -- CivicWeb, Legistar, Granicus, CivicPlus
 
 ### CivicWeb Agenda PDF Discovery (civicweb_adapter_async.py)

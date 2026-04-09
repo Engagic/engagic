@@ -56,9 +56,7 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
         html = await response.text()
         soup = BeautifulSoup(html, 'html.parser')
 
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         meeting_rows = soup.find_all("tr", class_=["rgRow", "rgAltRow"])
         logger.info("found meeting rows", vendor="novusagenda", slug=self.slug, count=len(meeting_rows))
