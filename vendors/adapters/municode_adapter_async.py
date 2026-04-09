@@ -280,8 +280,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         Extracts meeting GUIDs from municode/blob URLs in the table, then enriches
         through the standard meetings.municode.com/adaHtmlDocument pipeline.
         """
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         all_meetings: List[Dict[str, Any]] = []
 
@@ -328,7 +327,6 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                 unique.append(m)
 
         # Filter by date range
-        end_date = today + timedelta(days=days_forward)
         filtered: List[Dict[str, Any]] = []
         for meeting in unique:
             meeting_date = meeting.get("_parsed_date")
@@ -597,9 +595,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
 
     async def _fetch_publish_page_meetings(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
         """Fetch meetings from PublishPage HTML table, then enrich with HTML agenda items."""
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         # PublishPage URL: cid=CITYCODE, ppid for page ID (0 default, some cities need specific UUID)
         # p=-1 fetches all meetings, but some sites 500 on it — fall back to p=1

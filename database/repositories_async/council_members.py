@@ -77,6 +77,11 @@ class CouncilMemberRepository(BaseRepository):
                         appeared_at,
                     )
 
+                raw_meta = row["metadata"]
+                if raw_meta is not None and not isinstance(raw_meta, dict):
+                    logger.warning("corrupted council member metadata, coercing to dict", member_id=row["id"], raw_type=type(raw_meta).__name__)
+                    raw_meta = {} if not isinstance(raw_meta, dict) else raw_meta
+
                 return CouncilMember(
                     id=row["id"],
                     banana=row["banana"],
@@ -89,7 +94,7 @@ class CouncilMemberRepository(BaseRepository):
                     last_seen=appeared_at or row["last_seen"],
                     sponsorship_count=row["sponsorship_count"],
                     vote_count=row["vote_count"],
-                    metadata=row["metadata"],
+                    metadata=raw_meta,
                 )
 
             # Create new member
@@ -166,6 +171,8 @@ class CouncilMemberRepository(BaseRepository):
                 param_idx += 1
 
             if metadata is not None:
+                if isinstance(metadata, str):
+                    metadata = json.loads(metadata)
                 # Use JSONB merge to preserve existing keys while adding new ones
                 updates.append(f"metadata = COALESCE(metadata, '{{}}'::jsonb) || ${param_idx}::jsonb")
                 params.append(json.dumps(metadata))

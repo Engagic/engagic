@@ -18,7 +18,10 @@ Rate limiting is handled by the summarizer via Gemini's retry instructions.
 import asyncio
 import html as html_module
 import multiprocessing
+import os
+import resource
 import re
+import tempfile
 import time
 from typing import List, Dict, Any, Optional, Tuple
 from urllib.parse import urljoin
@@ -80,25 +83,51 @@ def _extract_best_pdf_link(html_bytes: bytes, base_url: str) -> Optional[str]:
     return None
 
 
-def _extract_pdf_worker(result_queue, pdf_bytes, ocr_threshold, ocr_dpi,
+def _extract_pdf_worker(result_queue, pdf_path, ocr_threshold, ocr_dpi,
                         detect_legislative_formatting, max_ocr_workers):
-    """Worker target for subprocess PDF extraction. Runs in child process."""
+    """Worker target for subprocess PDF extraction. Runs in child process.
+
+    Reads PDF from a temp file (written by parent) instead of receiving bytes
+    via pipe. This avoids doubling memory: parent writes to disk and releases
+    bytes before the child starts extracting.
+
+    Sets RLIMIT_AS to cap virtual memory at 1GB. If a single PDF (e.g. 2000+
+    page packet with OCR) exceeds this, the child gets MemoryError and dies
+    cleanly. The parent catches it as ExtractionError. Other attachments for
+    the same item are unaffected -- each attachment gets its own child.
+
+    1.5GB budget rationale (3.8GB RAM + 6GB swap box):
+    - Parent no longer holds PDF bytes during extraction (tempfile handoff)
+    - Up to 6 concurrent children (pdf_semaphore=6)
+    - 6 * 1.5GB = 9GB child ceiling
+    - Parent (~200-300MB) + postgres (~700MB) + system (~200MB) = ~1.2GB
+    - Total: ~10.2GB vs ~9.7GB available -- safe because not all 6 hit ceiling
+    - Normal PDFs use 200-350MB; only monster 1000+ page OCR jobs hit the cap
+    """
+    # Cap virtual address space at 1.5GB to prevent OOM-killing the parent
+    _limit = int(1.5 * 1024 * 1024 * 1024)
+    resource.setrlimit(resource.RLIMIT_AS, (_limit, _limit))
     try:
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
         from parsing.pdf import PdfExtractor
         extractor = PdfExtractor(ocr_threshold, ocr_dpi, detect_legislative_formatting, max_ocr_workers)
         result = extractor.extract_from_bytes(pdf_bytes)
         result_queue.put(("ok", result))
     except Exception as e:
-        result_queue.put(("error", str(e), type(e).__name__))
+        result_queue.put(("error", str(e) or type(e).__name__, type(e).__name__))
 
 
-def _extract_pdf_in_subprocess(pdf_bytes, ocr_threshold, ocr_dpi,
+def _extract_pdf_in_subprocess(pdf_path, ocr_threshold, ocr_dpi,
                                detect_legislative_formatting, max_ocr_workers):
     """Run PDF extraction in an isolated subprocess. Segfault-safe.
 
     PyMuPDF is a C extension that can segfault on malformed PDFs.
     Running in a subprocess means a segfault kills only the child,
     not the main process.
+
+    Receives a temp file path (not bytes) so the forkserver pipe doesn't
+    serialize the full PDF. The child reads from disk instead.
 
     IMPORTANT: We must drain the result queue BEFORE calling proc.join().
     The queue uses a pipe (64KB buffer on Linux). If the result exceeds
@@ -109,7 +138,7 @@ def _extract_pdf_in_subprocess(pdf_bytes, ocr_threshold, ocr_dpi,
     result_queue = _forkserver_ctx.Queue()
     proc = _forkserver_ctx.Process(
         target=_extract_pdf_worker,
-        args=(result_queue, pdf_bytes, ocr_threshold, ocr_dpi,
+        args=(result_queue, pdf_path, ocr_threshold, ocr_dpi,
               detect_legislative_formatting, max_ocr_workers),
     )
     proc.start()
@@ -294,8 +323,9 @@ class AsyncAnalyzer:
         """
         Extract text from PDF asynchronously.
 
-        Downloads PDF with async HTTP, runs extraction in isolated subprocess.
-        Subprocess isolation protects against PyMuPDF C-level segfaults on malformed PDFs.
+        Downloads PDF with async HTTP, writes to temp file, runs extraction
+        in isolated subprocess. Temp file avoids doubling memory: parent
+        releases PDF bytes before the child starts extracting.
 
         Args:
             url: PDF URL
@@ -308,23 +338,36 @@ class AsyncAnalyzer:
         """
         pdf_bytes = await self.download_pdf_async(url)
 
+        # Write to temp file and release bytes before subprocess starts.
+        # Without this, parent holds bytes for the full extraction duration
+        # (asyncio.to_thread keeps a reference to all args).
+        fd, pdf_path = tempfile.mkstemp(suffix=".pdf")
+        os.write(fd, pdf_bytes)
+        os.close(fd)
+        del pdf_bytes
+
         # Run in subprocess via thread (proc.join is blocking)
         # Subprocess isolates against PyMuPDF segfaults on malformed PDFs
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(
                     _extract_pdf_in_subprocess,
-                    pdf_bytes,
+                    pdf_path,
                     self.pdf_extractor.ocr_threshold,
                     self.pdf_extractor.ocr_dpi,
                     self.pdf_extractor.detect_legislative_formatting,
-                    self.pdf_extractor.max_ocr_workers,  # Global semaphore caps total extractions
+                    self.pdf_extractor.max_ocr_workers,
                 ),
                 timeout=620
             )
         except asyncio.TimeoutError:
             logger.error("PDF extraction timed out", url=url[:100])
             raise ExtractionError(f"PDF extraction timed out: {url[:100]}")
+        finally:
+            try:
+                os.unlink(pdf_path)
+            except OSError:
+                pass
 
         if not result.get("success"):
             raise ExtractionError(f"PDF extraction failed: {result.get('error', 'Unknown error')}")

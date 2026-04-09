@@ -72,9 +72,7 @@ class AsyncEscribeAdapter(AsyncBaseAdapter):
 
     async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings via calendar API with item-level extraction."""
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         # Use calendar API to get ALL meetings (upcoming + past, all types)
         calendar_url = f"{self.base_url}/MeetingsCalendarView.aspx/GetCalendarMeetings"

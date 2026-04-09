@@ -120,9 +120,7 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
         if not self.base_url:
             return []
 
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         events = await self._fetch_events(start_date, end_date)
 
@@ -160,13 +158,16 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
     async def _fetch_events(
         self, start_date: datetime, end_date: datetime
     ) -> List[Dict[str, Any]]:
-        """Fetch events with pagination. Filters by meeting date from title."""
+        """Fetch events with pagination. Filters by meeting date from title.
+
+        Some cities bulk-create events months in advance (publication date
+        in Sept for April meetings). Pagination cutoff uses meeting dates
+        from titles, not publication dates, so pre-created events are found.
+        """
         all_events: List[Dict[str, Any]] = []
         page = 1
         per_page = 100
         max_pages = 20  # Safety cap to prevent unbounded pagination
-        # Same publication-date cutoff strategy as ProudCity
-        cutoff_pub_date = datetime.now() - timedelta(days=90)
         api_url = f"{self.base_url}/wp-json/wp/v2"
 
         while True:
@@ -201,9 +202,27 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
 
             all_events.extend(data)
 
-            last_post_date = self._parse_date(data[-1].get("date", ""))
-            if last_post_date and last_post_date < cutoff_pub_date:
+            # Stop paginating when the most recent page's events all have
+            # meeting dates before our window. Parse meeting dates from
+            # titles (not publication dates) since some cities bulk-create
+            # events far in advance.
+            page_meeting_dates = []
+            for event in data:
+                title = self._extract_rendered_text(event.get("title", {}))
+                md = self._extract_date_from_title(title)
+                parsed = self._parse_date(md) if md else None
+                if parsed:
+                    page_meeting_dates.append(parsed)
+
+            if page_meeting_dates and max(page_meeting_dates) < start_date:
                 break
+
+            # Fallback: if no meeting dates parseable, use publication date
+            if not page_meeting_dates:
+                cutoff = datetime.now() - timedelta(days=180)
+                last_pub = self._parse_date(data[-1].get("date", ""))
+                if last_pub and last_pub < cutoff:
+                    break
 
             try:
                 total_pages = int(response.headers.get("X-WP-TotalPages", "1"))

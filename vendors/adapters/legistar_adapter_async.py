@@ -134,9 +134,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
     async def _fetch_meetings_api(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings from Legistar Web API."""
         # Build date range
-        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date_dt = today - timedelta(days=days_back)
-        end_date_dt = today + timedelta(days=days_forward)
+        start_date_dt, end_date_dt = self._date_range(days_back, days_forward)
 
         # Format dates for OData filter
         start_date = start_date_dt.strftime("%Y-%m-%d")
@@ -828,9 +826,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         html_base_url = calendar_url.rsplit('/', 1)[0]
 
         # Date range filter
-        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         # Find meeting rows in RadGrid calendar table
         meeting_rows = soup.find_all("tr", class_=["rgRow", "rgAltRow"])

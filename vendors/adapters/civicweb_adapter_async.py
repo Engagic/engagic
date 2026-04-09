@@ -63,9 +63,7 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
         self, days_back: int = 14, days_forward: int = 14
     ) -> List[Dict[str, Any]]:
         """Scrape MeetingTypeList for meetings, fetch packet PDFs."""
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         meetings = await self._scrape_meeting_type_list(start_date, end_date)
 

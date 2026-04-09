@@ -2,7 +2,8 @@
 
 Moved from: infocore/processing/pdf_extractor.py
 
-Supports: PDF, DOCX (via PyMuPDF), legacy .doc (via antiword), RTF (via striprtf).
+Supports: PDF, DOCX (via PyMuPDF), legacy .doc (via antiword), RTF (via striprtf),
+PPTX (via python-pptx).
 
 Legislative formatting detection (strikethrough/underline):
 - Detects thin filled rectangles (MS Word/LibreOffice export format)
@@ -18,6 +19,7 @@ import subprocess
 import tempfile
 import time
 import warnings
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, Tuple, Optional
 
@@ -54,10 +56,22 @@ _RTF_MAGIC = b'{\\rtf'
 
 
 def _detect_format(data: bytes) -> str:
-    """Detect document format from magic bytes. Returns 'pdf', 'docx', 'doc', 'rtf', or 'unknown'."""
+    """Detect document format from magic bytes.
+
+    Returns 'pdf', 'docx', 'pptx', 'doc', 'rtf', or 'unknown'.
+    For ZIP-based OOXML, peeks at [Content_Types].xml to distinguish
+    PPTX (presentationml) from DOCX (wordprocessingml).
+    """
     if data[:5] == _PDF_MAGIC:
         return "pdf"
     if data[:4] == _ZIP_MAGIC:
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                ct = zf.read("[Content_Types].xml").decode("utf-8", errors="ignore")
+                if "presentationml" in ct:
+                    return "pptx"
+        except Exception:
+            pass
         return "docx"
     if data[:4] == _OLE2_MAGIC:
         return "doc"
@@ -107,6 +121,30 @@ def _extract_rtf(data: bytes) -> Optional[str]:
         return text if text and text.strip() else None
     except Exception as e:
         logger.debug("rtf extraction failed", error=str(e))
+        return None
+
+
+def _extract_pptx(data: bytes) -> Optional[str]:
+    """Extract text from PPTX using python-pptx. Returns text or None."""
+    try:
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(data))
+        parts = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        text = para.text.strip()
+                        if text:
+                            parts.append(text)
+                if shape.has_table:
+                    for row in shape.table.rows:
+                        cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                        if cells:
+                            parts.append(" | ".join(cells))
+        return "\n".join(parts) if parts else None
+    except Exception as e:
+        logger.debug("pptx extraction failed", error=str(e))
         return None
 
 
@@ -498,7 +536,7 @@ class PdfExtractor:
                         logger.warning("OCR timeout on page", page_num=page_num)
                         results[page_num] = original_text
                     except Exception as e:  # Intentionally broad: catch any thread exception
-                        logger.error("parallel OCR failed", page_num=page_num, error=str(e))
+                        logger.error("parallel OCR failed", page_num=page_num, error=str(e) or type(e).__name__)
                         results[page_num] = original_text
 
             except TimeoutError:
@@ -759,6 +797,21 @@ class PdfExtractor:
                     "extraction_time": extraction_time,
                 }
             raise ExtractionError("RTF extraction failed", document_type="rtf")
+
+        # PPTX
+        if fmt == "pptx":
+            text = _extract_pptx(pdf_bytes)
+            if text:
+                extraction_time = time.time() - start_time
+                logger.info("extracted pptx via python-pptx", chars=len(text), extraction_time=round(extraction_time, 2))
+                return {
+                    "success": True,
+                    "text": text,
+                    "method": "python-pptx",
+                    "page_count": 0,
+                    "extraction_time": extraction_time,
+                }
+            raise ExtractionError("PPTX extraction failed", document_type="pptx")
 
         # PDF, DOCX, and unknown formats -- PyMuPDF handles all of these
         try:

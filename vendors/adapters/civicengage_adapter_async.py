@@ -182,9 +182,7 @@ class AsyncCivicEngageAdapter(AsyncBaseAdapter):
             archive_html = await (await self._get(f"{self.base_url}/Archive.aspx")).text()
             self.category_ids = await self._discover_category_ids(archive_html)
 
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         all_meetings = []
         seen_adids = set()

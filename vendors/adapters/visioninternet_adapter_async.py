@@ -190,9 +190,7 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
     ) -> List[Dict[str, Any]]:
         """Scrape calendar pages for all configured bodies, then enrich with chunker."""
         self._tunnel_down = False  # Reset for each sync cycle
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         # Scrape all body calendars concurrently
         tasks = [

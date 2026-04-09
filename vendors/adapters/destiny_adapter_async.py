@@ -44,9 +44,7 @@ class AsyncDestinyAdapter(AsyncBaseAdapter):
 
     async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings across relevant months, extract items from agenda pages."""
-        today = datetime.now().date()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         # Determine which months to fetch (may span 2-3 months)
         months = set()
@@ -108,7 +106,7 @@ class AsyncDestinyAdapter(AsyncBaseAdapter):
             if not meeting_date:
                 continue
 
-            if meeting_date.date() < start_date or meeting_date.date() > end_date:
+            if meeting_date < start_date or meeting_date > end_date:
                 continue
 
             # Extract seq from link href

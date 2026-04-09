@@ -8,8 +8,8 @@ import re
 import tempfile
 import time
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from typing import Optional, List, Dict, Any, Tuple
+from datetime import datetime, timedelta
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import aiohttp
@@ -613,6 +613,99 @@ class AsyncBaseAdapter:
 
         return list(await asyncio.gather(*[_resolve_item(i) for i in items]))
 
+    # SharePoint sharing URL patterns: /:b:/ (binary), /:w:/ (word), /:x:/ (excel), /:p:/ (ppt)
+    _SHAREPOINT_SHARING_RE = re.compile(
+        r'https?://[^/]+\.sharepoint\.com/:[bwxp]:/[gsr]/'
+    )
+
+    async def _resolve_sharepoint_urls(
+        self,
+        items: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Resolve SharePoint sharing URLs to direct download URLs.
+
+        SharePoint sharing links (/:b:/g/...) serve HTML viewer pages, not PDFs.
+        This fetches each link with a session, extracts the .downloadUrl from the
+        embedded JSON, and replaces the attachment URL with the direct download URL.
+        Items without SharePoint URLs are returned unchanged.
+        """
+        # Collect all unique SharePoint URLs across all items
+        sp_urls = set()
+        for item in items:
+            for att in item.get("attachments", []):
+                url = att.get("url", "")
+                if self._SHAREPOINT_SHARING_RE.match(url):
+                    sp_urls.add(url)
+
+        if not sp_urls:
+            return items
+
+        # Resolve all unique SharePoint URLs concurrently
+        resolved: Dict[str, Optional[str]] = {}
+        semaphore = asyncio.Semaphore(3)
+
+        # SharePoint's anonymous sharing flow requires proper cookie handling
+        # through a redirect chain. aiohttp doesn't handle this correctly,
+        # so we use requests.Session which natively follows the auth flow.
+        import requests as sync_requests
+
+        def _resolve_one_sync(sp_url: str) -> Optional[str]:
+            try:
+                session = sync_requests.Session()
+                session.headers["User-Agent"] = (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                )
+                resp = session.get(sp_url, timeout=15)
+                if resp.status_code != 200:
+                    return None
+                # PDF sharing pages embed .downloadUrl in ListData JSON.
+                # Word/Excel pages use a different structure but still have
+                # download.aspx URLs with UniqueId + tempauth tokens.
+                m = re.search(r'"\.downloadUrl"\s*:\s*"([^"]+)"', resp.text)
+                if not m:
+                    m = re.search(
+                        r'"(https?://[^"]+/_layouts/15/download\.aspx\?UniqueId=[^"]+)"',
+                        resp.text,
+                    )
+                if m:
+                    return m.group(1).replace("\\u002f", "/").replace("\\u0026", "&")
+                return None
+            except Exception:
+                return None
+
+        async def _resolve_one(sp_url: str):
+            async with semaphore:
+                dl_url = await asyncio.to_thread(_resolve_one_sync, sp_url)
+                resolved[sp_url] = dl_url
+                if dl_url:
+                    logger.info(
+                        "resolved sharepoint url",
+                        vendor=self.vendor,
+                        slug=self.slug,
+                        original=sp_url[:80],
+                    )
+
+        await asyncio.gather(*[_resolve_one(url) for url in sp_urls])
+
+        # Replace SharePoint URLs in attachments with resolved direct URLs
+        for item in items:
+            for att in item.get("attachments", []):
+                url = att.get("url", "")
+                if url in resolved and resolved[url]:
+                    att["url"] = resolved[url]
+
+        resolved_count = sum(1 for v in resolved.values() if v)
+        if resolved_count:
+            logger.info(
+                "sharepoint urls resolved",
+                vendor=self.vendor,
+                slug=self.slug,
+                resolved=resolved_count,
+                total=len(sp_urls),
+            )
+
+        return items
+
     async def fetch_meetings(self, days_back: int = 14, days_forward: int = 14) -> FetchResult:
         """Fetch meetings, validate, return FetchResult.
 
@@ -625,12 +718,29 @@ class AsyncBaseAdapter:
             valid = [m for m in meetings if self._validate_meeting(m)]
             if len(valid) < len(meetings):
                 logger.warning("filtered invalid meetings", vendor=self.vendor, slug=self.slug, total=len(meetings), valid=len(valid))
+
+            # Resolve SharePoint sharing URLs to direct download URLs
+            # across all items in all meetings before returning.
+            all_items = [item for m in valid for item in m.get("items", [])]
+            if any(self._SHAREPOINT_SHARING_RE.match(att.get("url", ""))
+                   for item in all_items for att in item.get("attachments", [])):
+                await self._resolve_sharepoint_urls(all_items)
+
             return FetchResult(meetings=valid, success=True)
         except NotImplementedError:
             raise
         except Exception as e:
             logger.error("fetch_meetings failed", vendor=self.vendor, slug=self.slug, error=str(e), error_type=type(e).__name__)
             return FetchResult(meetings=[], success=False, error=str(e), error_type=type(e).__name__)
+
+    def _date_range(self, days_back: int, days_forward: int) -> Tuple[datetime, datetime]:
+        """Compute inclusive date range for meeting filtering.
+
+        Returns (start, end) as midnight datetimes so boundary-day meetings
+        (stored as midnight) are never excluded by time-of-day comparison.
+        """
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return today - timedelta(days=days_back), today + timedelta(days=days_forward)
 
     async def _fetch_meetings_impl(self, days_back: int, days_forward: int) -> List[Dict[str, Any]]:
         """Subclass must implement. Return raw meeting dicts."""

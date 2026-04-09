@@ -111,9 +111,7 @@ class AsyncIQM2Adapter(AsyncBaseAdapter):
             return []
 
         # Date range filter
-        today = datetime.now()
-        start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=days_forward)
+        start_date, end_date = self._date_range(days_back, days_forward)
 
         meetings = []
 
