@@ -13,7 +13,7 @@ import re
 import asyncio
 import xml.etree.ElementTree as ET
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.legistar_parser import parse_html_agenda, parse_legislation_attachments
+from vendors.adapters.parsers.legistar_parser import parse_html_agenda, parse_legislation_attachments, parse_aada_html
 from pipeline.filters import should_skip_meeting, should_skip_processing
 from pipeline.utils import combine_date_time
 from pipeline.protocols import MetricsCollector
@@ -302,9 +302,9 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                         response = await self._get(detail_url)
                         html = await response.text()
 
-                        # Find agenda PDF link (View.ashx?M=A)
+                        # Find agenda PDF link (View.ashx?M=A, not M=AADA)
                         agenda_match = re.search(
-                            r'href="([^"]*View\.ashx\?M=A[^"]*)"', html, re.IGNORECASE
+                            r'href="([^"]*View\.ashx\?M=A&[^"]*)"', html, re.IGNORECASE
                         )
                         if agenda_match:
                             agenda_url = urljoin(detail_url, agenda_match.group(1))
@@ -879,18 +879,29 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if len(cells) < 6:
                 return None
 
-            # Extract meeting detail link
+            # Extract meeting detail link (primary path)
             detail_link = row.find("a", href=lambda x: x and "MeetingDetail.aspx" in x)
-            if not detail_link:
-                return None
+            aada_link = None
+            detail_url = None
+            aada_url = None
 
-            # Extract full detail URL (includes GUID)
-            detail_url = urljoin(html_base_url, detail_link["href"])
-            meeting_id_match = re.search(r"ID=(\d+)", detail_url)
-            if not meeting_id_match:
-                return None
-
-            meeting_id = meeting_id_match.group(1)
+            if detail_link:
+                detail_url = urljoin(html_base_url, detail_link["href"])
+                meeting_id_match = re.search(r"ID=(\d+)", detail_url)
+                if not meeting_id_match:
+                    return None
+                meeting_id = meeting_id_match.group(1)
+            else:
+                # Fallback: AADA (Accessible Agenda) link for sites where
+                # MeetingDetail is "Not viewable by the public" (e.g. LA County)
+                aada_link = row.find("a", href=lambda x: x and "View.ashx" in x and "M=AADA" in x)
+                if not aada_link:
+                    return None
+                aada_url = urljoin(html_base_url, aada_link["href"])
+                meeting_id_match = re.search(r"ID=(\d+)", aada_url)
+                if not meeting_id_match:
+                    return None
+                meeting_id = meeting_id_match.group(1)
 
             # Skip video clip IDs
             if meeting_id.startswith('clip_'):
@@ -906,7 +917,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 if first_link:
                     title = first_link.get_text(strip=True)
 
-            if not title:
+            if not title and detail_link:
                 title = detail_link.get_text(strip=True)
             if not title or title == "Details":
                 title = "Meeting"
@@ -956,16 +967,24 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if not (start_date <= meeting_dt <= end_date):
                 return None
 
-            # Extract agenda PDF from calendar row
+            # Extract agenda PDF from calendar row (M=A only, not M=AADA)
             packet_url = None
-            agenda_link = row.find("a", href=lambda x: x and "View.ashx" in x and ("M=A" in x or "agenda" in x.lower()))
+            agenda_link = row.find("a", href=lambda x: x and "View.ashx" in x and (
+                re.search(r'M=A(&|$)', x) or "agenda" in x.lower()
+            ))
             if agenda_link:
                 packet_url = urljoin(html_base_url, agenda_link["href"])
 
-            # Fetch meeting detail page for items
-            meeting_data = await self._fetch_meeting_detail_html_async(
-                meeting_id, meeting_dt, title, detail_url, packet_url
-            )
+            if detail_url:
+                # Normal path: fetch meeting detail page for items
+                meeting_data = await self._fetch_meeting_detail_html_async(
+                    meeting_id, meeting_dt, title, detail_url, packet_url
+                )
+            else:
+                # AADA fallback: parse accessible agenda HTML for items
+                meeting_data = await self._fetch_aada_agenda_async(
+                    meeting_id, meeting_dt, title, aada_url, packet_url
+                )
 
             return meeting_data
 
@@ -1053,6 +1072,55 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             meeting_data["packet_url"] = packet_url
         else:
             # No items and no packet - skip this meeting
+            return None
+
+        return meeting_data
+
+    async def _fetch_aada_agenda_async(
+        self,
+        meeting_id: str,
+        meeting_dt: datetime,
+        title: str,
+        aada_url: str,
+        calendar_packet_url: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch and parse AADA (Accessible Agenda) page for items.
+
+        Fallback for sites where MeetingDetail.aspx is not publicly viewable
+        but an accessible HTML agenda is available (e.g. LA County).
+        """
+        items = []
+        packet_url = calendar_packet_url
+
+        try:
+            response = await self._get(aada_url)
+            html = await response.text()
+            parsed_data = await asyncio.to_thread(
+                parse_aada_html, html, meeting_id, aada_url
+            )
+            items = parsed_data.get('items', [])
+            logger.info(
+                "parsed AADA agenda",
+                slug=self.slug,
+                meeting_id=meeting_id,
+                item_count=len(items),
+            )
+        except (VendorHTTPError, aiohttp.ClientError, VendorParsingError) as e:
+            logger.debug("AADA page unavailable", slug=self.slug, meeting_id=meeting_id, error=str(e))
+
+        meeting_data = {
+            "vendor_id": str(meeting_id),
+            "title": title,
+            "start": meeting_dt.isoformat(),
+        }
+
+        if items:
+            if packet_url:
+                meeting_data["agenda_url"] = packet_url
+            meeting_data["items"] = items
+        elif packet_url:
+            meeting_data["packet_url"] = packet_url
+        else:
             return None
 
         return meeting_data

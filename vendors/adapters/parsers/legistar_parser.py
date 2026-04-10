@@ -1,13 +1,15 @@
 """
 Legistar HTML Parser - Extract attachments and agenda items from Legistar HTML pages
 
-Two main functions:
+Three main functions:
 1. parse_legislation_attachments() - Extract attachments from LegislationDetail.aspx
 2. parse_html_agenda() - Extract agenda items from MeetingDetail.aspx (HTML fallback)
+3. parse_aada_html() - Extract agenda items from AADA (Accessible Agenda) HTML pages
 """
 
 import re
 from typing import Dict, Any, List
+from urllib.parse import urljoin
 from vendors.utils.attachments import classify_attachment_type
 from bs4 import BeautifulSoup
 
@@ -33,7 +35,7 @@ def parse_legislation_attachments(html: str, base_url: str) -> List[Dict[str, An
     Returns:
         List of attachment dictionaries: [{'name': str, 'url': str, 'type': str}]
     """
-    from urllib.parse import urljoin
+
 
     soup = BeautifulSoup(html, 'html.parser')
     attachments = []
@@ -221,7 +223,7 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
             ]
         }
     """
-    from urllib.parse import urljoin
+
 
     soup = BeautifulSoup(html, 'html.parser')
     items = []
@@ -372,3 +374,162 @@ def parse_html_agenda(html: str, meeting_id: str, base_url: str) -> Dict[str, An
 # Confidence: 8/10
 # Works with PrimeGov's current HTML structure.
 # May need adjustments if they change class names or div IDs.
+
+
+# Confidence: 7/10
+# Tested against LA County AADA pages. The CSS-positioned div structure
+# varies by Legistar instance; other AADA pages may need adjustments.
+_ITEM_NUM_RE = re.compile(r'^(\d+)\.\s*$')
+_MATTER_ID_RE = re.compile(r'\((\d{2}-\d{4,})\)')
+
+
+def parse_aada_html(html: str, meeting_id: str, base_url: str) -> Dict[str, Any]:
+    """
+    Parse Legistar AADA (Accessible Agenda) HTML page to extract agenda items.
+
+    AADA pages are CSS-positioned HTML renderings of agenda PDFs, used by
+    jurisdictions like LA County where MeetingDetail.aspx is not publicly viewable.
+
+    Structure: divs with CSS absolute positioning, items identified by numbered
+    bold text (1., 2., 3...), matter IDs in parens like (26-2275), and attachment
+    links (often to file.lacounty.gov PDFs).
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+
+    # Collect all relevant elements in document order.
+    # AADA pages use spans with stl_XX classes for formatting; bold item numbers
+    # use a different class than body text. We look for spans/divs containing
+    # text and any anchor links.
+    all_spans = soup.find_all('span')
+
+    # First pass: find item number positions by scanning spans for "N." pattern.
+    # Bold item numbers appear in specific spans (typically stl_17 on LA County).
+    # We detect the bold class dynamically: the class used for the first "1." span.
+    item_boundaries = []  # (sequence_number, span_element)
+    bold_class = None
+
+    for span in all_spans:
+        text = span.get_text(strip=True)
+        match = _ITEM_NUM_RE.match(text)
+        if not match:
+            continue
+
+        # Confirm this looks like an item number by checking if it shares a class
+        # with known bold/title elements, or if we haven't locked in a bold class yet
+        span_classes = span.get('class', [])
+        if bold_class is None:
+            # First item number found -- lock in its class as the bold class
+            bold_class = span_classes[0] if span_classes else None
+            item_boundaries.append((int(match.group(1)), span))
+        elif bold_class in span_classes:
+            item_boundaries.append((int(match.group(1)), span))
+
+    if not item_boundaries:
+        logger.debug("no item numbers found in AADA HTML", meeting_id=meeting_id)
+        return {'participation': {}, 'items': []}
+
+    # Get the title class: bold_class is used for both item numbers and titles.
+    # Body text uses a different class (typically stl_18).
+
+    # Build a position-ordered list of all spans and links for slicing.
+    # BeautifulSoup iterates in document order, so we use source position.
+    # Use find_all instead of descendants to get only top-level span/a elements,
+    # and check get_text() instead of .string (which returns None for mixed content).
+    all_elements = []
+    for elem in soup.find_all(['span', 'a']):
+        if elem.name == 'span':
+            # Skip parent spans that contain child spans (avoid double-counting)
+            if elem.find('span'):
+                continue
+            if elem.get_text(strip=True):
+                all_elements.append(elem)
+        elif elem.name == 'a' and elem.get('href'):
+            all_elements.append(elem)
+
+    # Map boundary spans to their index in all_elements
+    boundary_indices = []
+    for seq, boundary_span in item_boundaries:
+        for i, elem in enumerate(all_elements):
+            if elem is boundary_span:
+                boundary_indices.append((seq, i))
+                break
+
+    # Parse each item by slicing between boundaries
+    items = []
+    for idx, (seq, start_idx) in enumerate(boundary_indices):
+        end_idx = boundary_indices[idx + 1][1] if idx + 1 < len(boundary_indices) else len(all_elements)
+
+        title_parts = []
+        body_parts = []
+        attachments = []
+        matter_file = None
+        in_attachments_section = False
+
+        for elem in all_elements[start_idx + 1 : end_idx]:
+            text = (elem.get_text(strip=True) or '').replace('\xa0', ' ').strip()
+            if not text:
+                continue
+
+            # Check for matter ID anywhere in text
+            if not matter_file:
+                matter_match = _MATTER_ID_RE.search(text)
+                if matter_match:
+                    matter_file = matter_match.group(1)
+
+            # Detect "Attachments:" header
+            if re.match(r'^Attachments?\s*:?\s*$', text, re.IGNORECASE):
+                in_attachments_section = True
+                continue
+
+            # Collect attachment links
+            if elem.name == 'a':
+                href = elem['href']
+                link_name = text or 'Attachment'
+                if in_attachments_section or '.pdf' in href.lower():
+                    abs_url = href if href.startswith('http') else urljoin(base_url, href)
+                    file_type = classify_attachment_type(abs_url, link_name)
+                    attachments.append({
+                        'name': link_name,
+                        'url': abs_url,
+                        'type': file_type if file_type != 'unknown' else 'pdf',
+                    })
+                continue
+
+            # Title: bold-class text after item number.
+            # Check own classes and parent span classes (leaf spans inside
+            # bold parents inherit the bold role but may only have stl_10 etc.)
+            elem_classes = set(elem.get('class', []))
+            parent = elem.parent
+            if parent and parent.name == 'span':
+                elem_classes.update(parent.get('class', []))
+            is_bold = bold_class and bold_class in elem_classes
+
+            if is_bold and not in_attachments_section:
+                title_parts.append(text)
+            else:
+                body_parts.append(text)
+
+        title = ' '.join(title_parts) if title_parts else f"Item {seq}"
+
+        item_data = {
+            'vendor_item_id': f"{meeting_id}-{seq}",
+            'title': title,
+            'sequence': seq,
+            'attachments': attachments,
+        }
+        if matter_file:
+            item_data['matter_file'] = matter_file
+
+        items.append(item_data)
+
+    logger.info(
+        "parsed AADA accessible agenda",
+        meeting_id=meeting_id,
+        item_count=len(items),
+        attachment_count=sum(len(i.get('attachments', [])) for i in items),
+    )
+
+    return {
+        'participation': {},
+        'items': items,
+    }
