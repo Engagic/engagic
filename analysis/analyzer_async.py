@@ -107,6 +107,17 @@ def _extract_pdf_worker(result_queue, pdf_path, ocr_threshold, ocr_dpi,
     # Cap virtual address space at 1.5GB to prevent OOM-killing the parent
     _limit = int(1.5 * 1024 * 1024 * 1024)
     resource.setrlimit(resource.RLIMIT_AS, (_limit, _limit))
+
+    # Mark this child as a preferred OOM victim. Parent sets itself to -500 in
+    # conductor.main(); we override here to +500 so under system-wide memory
+    # pressure the kernel kills these PDF/OCR workers (the actual memory hogs)
+    # instead of orphaning the conductor. Always permitted -- raising your own
+    # oom_score_adj toward more-killable never requires capabilities.
+    try:
+        with open("/proc/self/oom_score_adj", "w") as f:
+            f.write("500")
+    except OSError:
+        pass  # Non-Linux or restricted /proc -- worker still functions, just less protected
     try:
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()

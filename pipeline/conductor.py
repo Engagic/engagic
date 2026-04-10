@@ -424,6 +424,18 @@ def main():
         handlers=[logging.StreamHandler()],
     )
 
+    # Bias the OOM killer away from the conductor parent. Forkserver children
+    # (which actually consume the memory during PDF/OCR work) override this to
+    # +500 in _extract_pdf_worker, so under memory pressure the kernel picks
+    # the actual hogs first instead of orphaning the whole pipeline.
+    # -500 (not -1000) keeps us still killable as a last resort, so we can't
+    # lock the box out by starving postgres or sshd.
+    try:
+        with open("/proc/self/oom_score_adj", "w") as f:
+            f.write("-500")
+    except (PermissionError, OSError) as e:
+        logger.warning("could not set oom_score_adj on conductor parent", error=str(e))
+
     @click.group(invoke_without_command=True)
     @click.pass_context
     def cli(ctx):
