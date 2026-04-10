@@ -141,6 +141,7 @@ SF_PROCEDURAL_PATTERNS = [
     r'committee report request',
     r'referral.*pc\b',  # Referral to Planning Commission - routing form
     r'hearing notice',  # Notice that hearing will occur - no content
+    r'notice of (?:public )?hearing',  # "Notice of Public Hearing" - same thing, different phrasing
 ]
 
 # Environmental Impact Reports - massive technical documents (200-500+ pages)
