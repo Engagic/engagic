@@ -1,6 +1,8 @@
 """Pipeline Processor - Queue processing and item assembly"""
 
 import asyncio
+import ctypes
+import ctypes.util
 import time
 from collections import Counter
 from typing import List, Optional, Dict, Any
@@ -24,6 +26,31 @@ QUEUE_POLL_INTERVAL = 5
 QUEUE_FATAL_ERROR_BACKOFF = 10
 
 PUBLIC_COMMENT_SIGNATURE_THRESHOLD = 20
+
+# Per-attachment extracted text cap. Monster OCR packets can produce 3MB+ of text
+# per document, and a single meeting may cache 50+ documents. Truncating keeps the
+# document_cache bounded regardless of packet size -- summaries rarely need >500KB
+# of raw text from any single source, and Gemini has its own input token limit.
+MAX_EXTRACTED_TEXT_CHARS = 500_000
+
+# Cache libc handle for malloc_trim. glibc retains freed heap arenas by default;
+# malloc_trim(0) forces release back to the kernel after large transient allocations.
+# None on non-glibc platforms (macOS dev, musl) -- feature is a no-op there.
+try:
+    _libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6")
+    _libc.malloc_trim(0)  # Probe -- raises AttributeError if unavailable
+    _MALLOC_TRIM: Optional[ctypes.CDLL] = _libc
+except (OSError, AttributeError):
+    _MALLOC_TRIM = None
+
+
+def _release_memory_to_os() -> None:
+    """Return freed glibc heap arenas to the kernel. No-op on non-glibc."""
+    if _MALLOC_TRIM is not None:
+        try:
+            _MALLOC_TRIM.malloc_trim(0)
+        except OSError:
+            pass
 
 MEETING_SPECIFIC_PARTICIPATION_KEYS = (
     'virtual_url', 'meeting_id', 'streaming_urls', 'is_hybrid', 'is_virtual_only'
@@ -523,6 +550,9 @@ class Processor:
         await self.db.items.bulk_update_item_summaries(item_ids=item_ids, summary=summary, topics=topics)
 
         logger.info("stored canonical summary and backfilled items", matter_id=matter_id, item_count=len(items))
+        # Release any transient extracted-text arenas held during _process_single_item.
+        # Big matters with many attachments can balloon peak RSS; this returns it promptly.
+        _release_memory_to_os()
         return {"items_processed": len(items), "items_new": len(items), "items_skipped": 0, "items_failed": 0}
 
     async def process_meeting(self, meeting: Meeting):
@@ -916,6 +946,10 @@ class Processor:
 
             # Free memory immediately - document_cache can be 100MB+ for meetings with many large PDFs
             document_cache.clear()
+            # Force glibc to release the now-empty arenas back to the kernel.
+            # Without this, Python's peak RSS stays pinned at whatever the largest
+            # meeting needed, and the parent conductor grows monotonically.
+            _release_memory_to_os()
 
         if processed_items and self.analyzer:
             meeting_topics = self._aggregate_meeting_topics(processed_items)

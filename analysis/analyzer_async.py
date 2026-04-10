@@ -152,33 +152,45 @@ def _extract_pdf_in_subprocess(pdf_path, ocr_threshold, ocr_dpi,
         args=(result_queue, pdf_path, ocr_threshold, ocr_dpi,
               detect_legislative_formatting, max_ocr_workers),
     )
-    proc.start()
-
-    # Drain queue BEFORE join -- prevents deadlock when result > 64KB pipe buffer
     try:
-        result_msg = result_queue.get(timeout=600)
-    except Exception:
-        # Timeout or empty queue -- child is stuck or crashed
+        proc.start()
+
+        # Drain queue BEFORE join -- prevents deadlock when result > 64KB pipe buffer
+        try:
+            result_msg = result_queue.get(timeout=600)
+        except Exception:
+            # Timeout or empty queue -- child is stuck or crashed
+            if proc.is_alive():
+                proc.kill()
+            proc.join(timeout=10)
+            raise ExtractionError("PDF extraction subprocess timed out after 600s")
+
+        proc.join(timeout=30)
         if proc.is_alive():
             proc.kill()
-        proc.join(timeout=10)
-        raise ExtractionError("PDF extraction subprocess timed out after 600s")
+            proc.join()
 
-    proc.join(timeout=30)
-    if proc.is_alive():
-        proc.kill()
-        proc.join()
+        if proc.exitcode != 0 and proc.exitcode is not None:
+            raise ExtractionError(
+                f"PDF extraction subprocess crashed (exit code {proc.exitcode}, likely segfault on malformed PDF)"
+            )
 
-    if proc.exitcode != 0 and proc.exitcode is not None:
-        raise ExtractionError(
-            f"PDF extraction subprocess crashed (exit code {proc.exitcode}, likely segfault on malformed PDF)"
-        )
+        status, *data = result_msg
+        if status == "error":
+            raise ExtractionError(f"PDF extraction failed: {data[0]} ({data[1]})")
 
-    status, *data = result_msg
-    if status == "error":
-        raise ExtractionError(f"PDF extraction failed: {data[0]} ({data[1]})")
-
-    return data[0]
+        return data[0]
+    finally:
+        # Release Queue pipe fds, lock/condition semaphores, and stop the feeder thread.
+        # Without explicit close, each extraction leaks ~4 fds and 2 semaphores until
+        # non-deterministic GC runs. Over thousands of extractions in a long process-cities
+        # run, the accumulated resource and memory footprint is a significant contributor
+        # to the parent conductor's RSS bloat observed in 2026-04-10 OOM.
+        try:
+            result_queue.close()
+            result_queue.join_thread()
+        except Exception:
+            pass
 
 
 class AnalysisError(Exception):
@@ -243,13 +255,20 @@ class AsyncAnalyzer:
             await self.http_session.close()
             logger.debug("http session closed")
 
-    async def recycle_session(self):
-        """Close and recreate HTTP session to free accumulated memory."""
-        previous = self._request_count
-        await self.close()
-        self.http_session = None
-        self._request_count = 0
-        logger.info("http session recycled", previous_requests=previous)
+    async def _drain_and_close_session(self, session: aiohttp.ClientSession) -> None:
+        """Close a rotated session after a grace period for in-flight requests.
+
+        When rotating sessions under load, we drop our reference but callers that
+        already grabbed a pointer to the old session keep using it. A grace period
+        lets their requests complete naturally before we force-close the connector.
+        """
+        try:
+            await asyncio.sleep(60)
+            if not session.closed:
+                await session.close()
+                logger.debug("rotated http session closed after grace period")
+        except (aiohttp.ClientError, asyncio.CancelledError, OSError) as e:
+            logger.warning("failed to close rotated session", error=str(e))
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -278,12 +297,20 @@ class AsyncAnalyzer:
         Raises:
             ExtractionError: If download fails or no PDF can be resolved
         """
-        # Acquire session with recycle check (serialized, but quick)
+        # Acquire session with rotation check (serialized, but quick).
+        # Rotation drops the old session reference and creates a new one -- in-flight
+        # requests on the old session keep working because they already hold a local
+        # reference, and the old session is scheduled for close after a grace period.
+        # This avoids the previous deadlock where _in_flight never hit 0 under load.
         async with self._recycle_lock:
             self._request_count += 1
-            # Only recycle when no downloads in flight
-            if self._request_count >= self._recycle_after and self._in_flight == 0:
-                await self.recycle_session()
+            if self._request_count >= self._recycle_after:
+                old_session = self.http_session
+                self.http_session = None
+                self._request_count = 0
+                logger.info("http session rotating", after_requests=self._recycle_after)
+                if old_session and not old_session.closed:
+                    asyncio.create_task(self._drain_and_close_session(old_session))
             session = await self._get_session()
             self._in_flight += 1
 
