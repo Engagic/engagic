@@ -86,10 +86,12 @@ class Config:
         # Flash Lite: 4K RPM / 4M TPM - plenty of headroom for parallel calls
         self.LLM_CONCURRENCY = int(os.getenv("ENGAGIC_LLM_CONCURRENCY", "15"))
 
-        # Queue job concurrency: how many jobs process in parallel (default 4)
-        # Most job time is network I/O (PDF downloads, LLM API calls),
-        # so overlapping jobs helps even on single-core machines
-        self.JOB_CONCURRENCY = int(os.getenv("ENGAGIC_JOB_CONCURRENCY", "4"))
+        # Queue job concurrency: how many jobs process in parallel (default 3)
+        # Lowered from 4 -> 3 after 2026-04-10 OOM. Combined with city_concurrency=3,
+        # peak goes from 12 concurrent meetings to 9 -- throughput stays close to
+        # original but gives the Queue leak + session rotation + malloc_trim fixes
+        # headroom to prevent a rerun of the crash.
+        self.JOB_CONCURRENCY = int(os.getenv("ENGAGIC_JOB_CONCURRENCY", "3"))
 
         # Payment processing
         self.STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")

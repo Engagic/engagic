@@ -242,7 +242,10 @@ class Conductor:
             logger.warning("analyzer not available - cannot process meetings")
             return  # Generator yields nothing if analyzer unavailable
 
-        # Process multiple cities concurrently (each city runs JOB_CONCURRENCY jobs internally)
+        # Process multiple cities concurrently (each city runs JOB_CONCURRENCY jobs internally).
+        # Kept at 3 with JOB_CONCURRENCY lowered from 4 -> 3: peak goes from 12 to 9.
+        # Modest reduction preserves throughput while the other 2026-04-10 memory fixes
+        # (Queue close, session rotation, malloc_trim) do the heavy lifting on RSS.
         city_concurrency = 3
         semaphore = asyncio.Semaphore(city_concurrency)
         results_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
