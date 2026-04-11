@@ -120,6 +120,13 @@ class ItemRepository(BaseRepository):
                 for item in items
             ]
 
+            # Freeze-on-summary invariant: once items.summary is set, the row
+            # becomes a temporal snapshot of that appearance. Re-syncs of the
+            # same meeting must not silently mutate attachments, body_text, or
+            # ordering on a snapshotted row -- otherwise legislative-timeline
+            # reads would drift away from the state that was actually summarized.
+            # matter_id / matter_file / matter_type stay mutable so that a later,
+            # better matter-link can be attached without reprocessing.
             await c.executemany(
                 """
                 INSERT INTO items (
@@ -129,18 +136,26 @@ class ItemRepository(BaseRepository):
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT (id) DO UPDATE SET
-                    title = EXCLUDED.title,
-                    sequence = EXCLUDED.sequence,
-                    attachments = EXCLUDED.attachments,
-                    attachment_hash = EXCLUDED.attachment_hash,
-                    body_text = COALESCE(EXCLUDED.body_text, items.body_text),
+                    title = CASE WHEN items.summary IS NOT NULL
+                        THEN items.title ELSE EXCLUDED.title END,
+                    sequence = CASE WHEN items.summary IS NOT NULL
+                        THEN items.sequence ELSE EXCLUDED.sequence END,
+                    attachments = CASE WHEN items.summary IS NOT NULL
+                        THEN items.attachments ELSE EXCLUDED.attachments END,
+                    attachment_hash = CASE WHEN items.summary IS NOT NULL
+                        THEN items.attachment_hash ELSE EXCLUDED.attachment_hash END,
+                    body_text = CASE WHEN items.summary IS NOT NULL
+                        THEN items.body_text
+                        ELSE COALESCE(EXCLUDED.body_text, items.body_text) END,
                     matter_id = EXCLUDED.matter_id,
                     matter_file = EXCLUDED.matter_file,
                     matter_type = EXCLUDED.matter_type,
-                    agenda_number = EXCLUDED.agenda_number,
-                    sponsors = EXCLUDED.sponsors,
-                    summary = COALESCE(EXCLUDED.summary, items.summary),
-                    topics = COALESCE(EXCLUDED.topics, items.topics),
+                    agenda_number = CASE WHEN items.summary IS NOT NULL
+                        THEN items.agenda_number ELSE EXCLUDED.agenda_number END,
+                    sponsors = CASE WHEN items.summary IS NOT NULL
+                        THEN items.sponsors ELSE EXCLUDED.sponsors END,
+                    summary = items.summary,
+                    topics = items.topics,
                     filter_reason = COALESCE(EXCLUDED.filter_reason, items.filter_reason)
                 """,
                 item_records,
@@ -372,35 +387,131 @@ class ItemRepository(BaseRepository):
                 for row in rows
             ]
 
-    async def bulk_update_item_summaries(
+    async def bulk_fill_null_item_summaries(
         self, item_ids: List[str], summary: str, topics: List[str]
     ) -> int:
-        """Bulk update multiple agenda items with canonical summary and topics."""
+        """Fill in item summaries for items that do not yet have one.
+
+        Temporal-snapshot semantics: items that already have a summary are
+        frozen per-appearance records and must not be touched. This helper
+        writes the supplied (canonical) summary only to rows in item_ids
+        whose summary IS NULL. Used by process_matter so a freshly-computed
+        canonical fills any unsnapshotted appearances in the payload without
+        clobbering appearances that were already summarized by meeting jobs
+        or by prior matter runs.
+
+        Returns the number of rows actually updated.
+        """
         if not item_ids:
             return 0
 
         async with self.transaction() as conn:
-            # Bulk update items (single query)
             result = await conn.execute(
                 """
                 UPDATE items
                 SET summary = $1, topics = $2
                 WHERE id = ANY($3::text[])
+                  AND summary IS NULL
                 """,
                 summary,
                 topics,
                 item_ids,
             )
 
-            if topics:
-                entity_topics = {item_id: topics for item_id in item_ids}
-                await replace_entity_topics_batch(
-                    conn, "item_topics", "item_id", entity_topics
+            updated_count = self._parse_row_count(result)
+
+            if topics and updated_count > 0:
+                # Refresh topics only for the rows we actually touched.
+                touched_rows = await conn.fetch(
+                    """
+                    SELECT id FROM items
+                    WHERE id = ANY($1::text[])
+                      AND summary = $2
+                    """,
+                    item_ids,
+                    summary,
+                )
+                touched_ids = [r["id"] for r in touched_rows]
+                if touched_ids:
+                    entity_topics = {item_id: topics for item_id in touched_ids}
+                    await replace_entity_topics_batch(
+                        conn, "item_topics", "item_id", entity_topics
+                    )
+
+        logger.debug("bulk filled null item summaries", count=updated_count)
+        return updated_count
+
+    async def copy_summary_from_prior_appearance(
+        self,
+        matter_id: str,
+        target_item_id: str,
+        before_meeting_id: str,
+        conn=None,
+    ) -> bool:
+        """Copy the latest prior non-null item summary for this matter onto a
+        target item row. Used when MatterEnqueueDecider determines that a new
+        appearance's substantive attachments are unchanged and reprocessing is
+        unnecessary -- the prior appearance's summary is still the correct
+        point-in-time description of this appearance's content.
+
+        "Prior" is defined by meeting date: find the latest items.summary for
+        this matter whose meeting's date is <= the target meeting's date (and
+        excluding the target item itself, so idempotent on retry).
+
+        Returns True if a summary was copied, False if nothing was found.
+        """
+        async with self._ensure_conn(conn) as c:
+            row = await c.fetchrow(
+                """
+                SELECT i.summary, i.topics
+                FROM items i
+                JOIN meetings m ON m.id = i.meeting_id
+                JOIN meetings target_m ON target_m.id = $3
+                WHERE i.matter_id = $1
+                  AND i.id <> $2
+                  AND i.summary IS NOT NULL
+                  AND i.summary <> ''
+                  AND (
+                      m.date IS NULL
+                      OR target_m.date IS NULL
+                      OR m.date <= target_m.date
+                  )
+                ORDER BY m.date DESC NULLS LAST, i.meeting_id DESC
+                LIMIT 1
+                """,
+                matter_id,
+                target_item_id,
+                before_meeting_id,
+            )
+
+            if not row or not row["summary"]:
+                return False
+
+            prior_summary = row["summary"]
+            prior_topics = row["topics"] or []
+
+            await c.execute(
+                """
+                UPDATE items
+                SET summary = $1, topics = $2
+                WHERE id = $3 AND summary IS NULL
+                """,
+                prior_summary,
+                prior_topics,
+                target_item_id,
+            )
+
+            if prior_topics:
+                await replace_entity_topics(
+                    c, "item_topics", "item_id", target_item_id, prior_topics
                 )
 
-        updated_count = self._parse_row_count(result)
-        logger.debug("bulk updated items with canonical summary", count=updated_count)
-        return updated_count
+        logger.debug(
+            "copied prior-appearance summary",
+            matter_id=matter_id,
+            target_item_id=target_item_id,
+        )
+        return True
 
     async def get_items_by_topic(self, meeting_id: str, topic: str) -> List[AgendaItem]:
         """Get agenda items for a meeting filtered by topic."""

@@ -132,43 +132,6 @@ async def check_orphaned_queue_jobs(db: Database) -> dict:
         }
 
 
-async def check_summary_desync(db: Database) -> dict:
-    """Find items with summaries where matter has no canonical_summary."""
-    async with db.pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT
-                i.id as item_id,
-                i.matter_id,
-                i.title,
-                LEFT(i.summary, 100) as item_summary_preview,
-                cm.canonical_summary IS NULL as matter_missing_summary
-            FROM items i
-            JOIN city_matters cm ON cm.id = i.matter_id
-            WHERE i.summary IS NOT NULL AND cm.canonical_summary IS NULL
-            LIMIT 100
-            """
-        )
-
-        desynced = [dict(row) for row in rows]
-
-        total = await conn.fetchval(
-            """
-            SELECT COUNT(*) FROM items i
-            JOIN city_matters cm ON cm.id = i.matter_id
-            WHERE i.summary IS NOT NULL AND cm.canonical_summary IS NULL
-            """
-        )
-
-        return {
-            "name": "summary_desync",
-            "description": "Items have summary but matter lacks canonical_summary",
-            "count": total,
-            "samples": desynced[:10],
-            "severity": "MEDIUM" if total > 0 else "OK"
-        }
-
-
 async def check_duplicate_matters_by_file(db: Database) -> dict:
     """Find potential duplicate matters (same matter_file, different IDs)."""
     async with db.pool.acquire() as conn:
@@ -307,7 +270,6 @@ async def run_all_checks(db: Database) -> list:
         check_orphaned_matters,
         check_orphaned_happening_items,
         check_orphaned_queue_jobs,
-        check_summary_desync,
         check_duplicate_matters_by_file,
         check_items_missing_meetings,
         check_matter_appearances_integrity,

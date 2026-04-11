@@ -10,7 +10,7 @@ from typing import List, Optional, Dict, Any
 from database.db_postgres import Database
 from database.models import Meeting, Matter, MatterMetadata, ParticipationInfo
 from database.id_generation import validate_matter_id, extract_banana_from_matter_id
-from pipeline.utils import hash_attachments
+from pipeline.utils import hash_substantive_attachments
 from exceptions import ProcessingError, ExtractionError, LLMError
 from analysis.analyzer_async import AsyncAnalyzer
 from analysis.topics.normalizer import get_normalizer
@@ -524,7 +524,7 @@ class Processor:
             logger.warning("no summary generated for matter", matter_id=matter_id)
             return {"items_processed": len(items), "items_new": 0, "items_skipped": 0, "items_failed": len(items)}
 
-        attachment_hash = hash_attachments(representative_item.attachments)
+        attachment_hash = hash_substantive_attachments(representative_item.attachments)
         existing_matter = await self.db.matters.get_matter(matter_id)
 
         matter_obj = Matter(
@@ -546,14 +546,33 @@ class Processor:
 
         await self.db.matters.store_matter(matter_obj)
 
+        # Temporal-snapshot invariant: each items row is the point-in-time
+        # snapshot of one appearance of this matter. items.summary is frozen
+        # once set. The matter's canonical summary lives on city_matters and
+        # reflects the latest aggregated-attachment run.
+        #
+        # We DO fill items.summary for any appearance in the payload that
+        # does not yet have one -- that covers the common case where a new
+        # meeting introduced this matter with fresh attachments and this
+        # matter job is the first thing to summarize it. Appearances that
+        # already have a summary (from a meeting job, sync-time copy, or a
+        # prior matter run) are left untouched.
         item_ids = [item.id for item in items]
-        await self.db.items.bulk_update_item_summaries(item_ids=item_ids, summary=summary, topics=topics)
+        filled = await self.db.items.bulk_fill_null_item_summaries(
+            item_ids=item_ids, summary=summary, topics=topics
+        )
 
-        logger.info("stored canonical summary and backfilled items", matter_id=matter_id, item_count=len(items))
+        logger.info(
+            "stored canonical summary",
+            matter_id=matter_id,
+            total_appearances=len(items),
+            snapshots_filled=filled,
+            snapshots_preserved=len(items) - filled,
+        )
         # Release any transient extracted-text arenas held during _process_single_item.
         # Big matters with many attachments can balloon peak RSS; this returns it promptly.
         _release_memory_to_os()
-        return {"items_processed": len(items), "items_new": len(items), "items_skipped": 0, "items_failed": 0}
+        return {"items_processed": len(items), "items_new": filled, "items_skipped": len(items) - filled, "items_failed": 0}
 
     async def process_meeting(self, meeting: Meeting):
         """Process summary for a single meeting (items > packet fallback)."""
@@ -641,7 +660,17 @@ class Processor:
         return {}
 
     async def _filter_processed_items(self, agenda_items: List) -> tuple[List[Dict], List]:
-        """Separate already-processed items from items needing processing."""
+        """Separate already-processed items from items needing processing.
+
+        Under the temporal-snapshot model, an item is "already processed" iff
+        its own items.summary column is populated -- there is no longer a
+        read-through to matter.canonical_summary at this layer. Items with
+        unchanged substantive attachments relative to a prior appearance get
+        their snapshot filled at sync-time via copy_summary_from_prior_appearance;
+        items whose attachments changed are handled by process_matter filling
+        nulls via bulk_fill_null_item_summaries. Anything still null here is
+        a genuine new appearance that needs its own LLM call.
+        """
         already_processed = []
         need_processing = []
 
@@ -655,15 +684,6 @@ class Processor:
             if not item.attachments and not item.body_text:
                 logger.debug("skipping item without attachments or body text", title=item.title[:50])
                 continue
-
-            if item.matter_id:
-                matter = await self.db.matters.get_matter(item.matter_id)
-                if matter and matter.canonical_summary:
-                    logger.debug("reusing canonical summary from matter", title=item.title[:50])
-                    if not item.summary:
-                        await self.db.items.update_agenda_item(item_id=item.id, summary=matter.canonical_summary, topics=matter.canonical_topics or [])
-                    already_processed.append({"sequence": item.sequence, "title": item.title, "summary": matter.canonical_summary, "topics": matter.canonical_topics or []})
-                    continue
 
             if item.summary:
                 logger.debug("item already processed", title=item.title[:50])
@@ -884,7 +904,7 @@ class Processor:
             canonical_summary=summary,
             canonical_topics=topics,
             attachments=item.attachments,
-            metadata=MatterMetadata(attachment_hash=hash_attachments(item.attachments or [])),
+            metadata=MatterMetadata(attachment_hash=hash_substantive_attachments(item.attachments or [])),
             first_seen=existing_matter.first_seen if existing_matter else None,
             last_seen=existing_matter.last_seen if existing_matter else None,
             appearance_count=existing_matter.appearance_count if existing_matter else 1,

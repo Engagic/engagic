@@ -10,7 +10,7 @@ from database.id_generation import generate_meeting_id, generate_matter_id, gene
 from database.models import City, Meeting, AgendaItem, Matter, MatterMetadata
 from database.repositories_async.helpers import deserialize_attachments
 from exceptions import DatabaseError, ValidationError
-from pipeline.utils import hash_attachments
+from pipeline.utils import hash_substantive_attachments
 from pipeline.orchestrators.matter_filter import MatterFilter
 from pipeline.orchestrators.enqueue_decider import EnqueueDecider, MatterEnqueueDecider
 from pipeline.orchestrators.vote_processor import VoteProcessor
@@ -368,7 +368,7 @@ class MeetingSyncOrchestrator:
                 logger.debug("procedural matter - will track but skip queue", matter=agenda_item.matter_file or raw_vendor_matter_id, matter_type=matter_type)
 
             existing_matter = await self.db.matters.get_matter(agenda_item.matter_id)
-            attachment_hash = hash_attachments(agenda_item.attachments or [])
+            attachment_hash = hash_substantive_attachments(agenda_item.attachments or [])
 
             if existing_matter:
                 appearance_exists = await self.db.matters.has_appearance(agenda_item.matter_id, meeting.id)
@@ -388,7 +388,7 @@ class MeetingSyncOrchestrator:
                 if is_procedural:
                     continue
 
-                should_enqueue, _ = self.matter_enqueue_decider.should_enqueue_matter(
+                should_enqueue, skip_reason = self.matter_enqueue_decider.should_enqueue_matter(
                     existing_matter=existing_matter,
                     current_attachment_hash=attachment_hash,
                     has_attachments=bool(agenda_item.attachments)
@@ -402,6 +402,23 @@ class MeetingSyncOrchestrator:
                         'banana': meeting.banana,
                         'meeting_date': meeting.date
                     })
+                elif skip_reason == "attachments_unchanged":
+                    # Substantive attachments are identical to a prior processed
+                    # appearance of this matter. Copy that appearance's summary
+                    # onto this item so the legislative-timeline read finds a
+                    # correct point-in-time snapshot without a new LLM call.
+                    # The canonical on city_matters stays untouched.
+                    copied = await self.db.items.copy_summary_from_prior_appearance(
+                        matter_id=agenda_item.matter_id,
+                        target_item_id=agenda_item.id,
+                        before_meeting_id=meeting.id,
+                        conn=conn,
+                    )
+                    if copied:
+                        logger.debug(
+                            "reused prior-appearance summary (attachments unchanged)",
+                            matter=agenda_item.matter_file or raw_vendor_matter_id,
+                        )
             else:
                 if not agenda_item.matter_file and not raw_vendor_matter_id and not agenda_item.title:
                     continue
