@@ -1,7 +1,11 @@
 import { createServerApiClient } from '$lib/api/server';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ setHeaders, locals }) => {
+	setHeaders({
+		'cache-control': 'public, max-age=300'
+	});
+
 	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
 	try {
 		const [analytics, platformMetrics, cityCoverage] = await Promise.all([
