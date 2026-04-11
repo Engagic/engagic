@@ -33,9 +33,13 @@ class MatterJob:
     """Process a matter across all its appearances (matters-first)
 
     When a matter appears in multiple meetings, this job:
-    1. Checks if attachments changed (hash comparison)
-    2. If unchanged, reuses canonical_summary
-    3. If changed, re-processes and updates canonical_summary
+    1. Runs only when MatterEnqueueDecider saw a substantive attachment
+       hash change (unchanged-hash case is handled at sync-time via a
+       prior-appearance copy onto the new item, no LLM call)
+    2. Calls the LLM on the aggregated attachment set across appearances
+    3. Writes the fresh summary to city_matters.canonical_summary
+    4. Fills items.summary for any appearance in the payload that has no
+       snapshot yet (temporal snapshots already set stay frozen)
     """
     matter_id: str  # Composite ID: {banana}_{matter_key}
     meeting_id: str  # Representative meeting where matter appears

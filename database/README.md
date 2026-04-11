@@ -848,8 +848,11 @@ item = await db.items.get_agenda_item(item_id)
 # Update item summary and topics
 await db.items.update_agenda_item(item_id, summary="...", topics=["housing"])
 
-# Bulk update summaries
-await db.items.bulk_update_item_summaries(items_list)
+# Fill item summaries for unsnapshotted appearances (frozen-on-summary)
+await db.items.bulk_fill_null_item_summaries(item_ids, summary, topics)
+
+# Copy prior appearance's summary onto a new item when attachments unchanged
+await db.items.copy_summary_from_prior_appearance(matter_id, target_item_id, before_meeting_id)
 
 # Check which meetings have summarized items (lightweight for listings)
 has_summaries = await db.items.get_has_summarized_items(meeting_ids)

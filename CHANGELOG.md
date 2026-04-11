@@ -6,6 +6,120 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-04-11] Temporal Item Snapshots
+
+Each `items` row is now a frozen point-in-time snapshot of one appearance of a matter. The previous behavior stamped the latest canonical summary onto every appearance via `bulk_update_item_summaries`, destroying any per-appearance differences and making legislative-timeline views lie about history -- clicking a January appearance could show text that described attachments only added in March. The LA police/CAO budget matter (`losangelesCA_eb32b14d02c4a2e2`) happened to show three distinct summaries across its Jan/Feb appearances only because matter jobs had incomplete `item_ids` payloads and couldn't reach all the older rows. That was incidental, not by design. This change makes the per-appearance snapshot explicit and load-bearing.
+
+The canonical summary now lives exclusively on `city_matters.canonical_summary`, reflecting the latest aggregated-attachment run. Items are temporal: `items.summary` is written once (at meeting-job time, matter-job fill-null time, or sync-time copy) and then frozen. The legislative timeline reads `items.summary` joined to `meetings.date` for point-in-time truth; the matter detail page reads `city_matters.canonical_summary` for the latest state.
+
+### Freeze-on-Summary Upsert Guard (database/repositories_async/items.py)
+
+The items upsert ON CONFLICT clause now guards mutable columns with `CASE WHEN items.summary IS NOT NULL THEN items.{col} ELSE EXCLUDED.{col} END` for `title`, `sequence`, `attachments`, `attachment_hash`, `body_text`, `agenda_number`, `sponsors`. `summary` and `topics` are unconditionally preserved (`items.summary`, `items.topics`) -- never mutated via upsert. `matter_id`, `matter_file`, `matter_type` stay mutable so later relinks still work.
+
+`body_text` gets a split guard: when `summary IS NULL` (still staging), keeps the existing `COALESCE(EXCLUDED.body_text, items.body_text)` protective-merge semantics so re-syncs don't null out previously-fetched content. Once `summary IS NOT NULL`, fully frozen -- the body_text that was actually fed to the LLM is the version that must be preserved.
+
+This closes a silent drift path where re-scrapes of the same meeting (common during the staging-to-finalized agenda window) were overwriting already-summarized rows with newer attachment lists.
+
+### bulk_update_item_summaries Rewritten as bulk_fill_null_item_summaries
+
+The old method was unconditional: `UPDATE items SET summary = $1, topics = $2 WHERE id = ANY($3)`. Under the new invariant this is wrong -- it clobbers snapshots. Replaced with `bulk_fill_null_item_summaries` which adds `AND summary IS NULL` to the WHERE clause. Topics replacement only runs for rows that were actually updated (verified by a follow-up SELECT before calling `replace_entity_topics_batch`).
+
+`process_matter` now calls the new method with all item_ids from the payload. Rows already carrying a snapshot are preserved; rows without one (typically the freshest appearance that triggered the enqueue) get the canonical as their initial snapshot. The log line now reports `snapshots_filled` and `snapshots_preserved` so operators can see when matter reprocessing is leaving history alone vs. stamping a brand-new appearance.
+
+### Prior-Summary Copy at Sync Time
+
+New method `copy_summary_from_prior_appearance(matter_id, target_item_id, before_meeting_id)` in `ItemRepository`. Finds the latest prior non-null `items.summary` for the matter whose `meetings.date <= target meeting's date`, writes it onto the target row (only if target summary is still NULL, so idempotent on retry).
+
+Wired into `meeting_sync.track_matters_and_collect_pending_jobs`: when `MatterEnqueueDecider.should_enqueue_matter` returns `(False, "attachments_unchanged")`, the sync path copies the prior summary in the same transaction as the item upsert. No LLM call, no queue entry, no canonical update -- just a clean cross-appearance link for what's demonstrably the same content. Saves a summary call in the common "matter recurs with same documents across multiple meetings" case (ordinance readings, continued items, etc.).
+
+### Substantive Attachment Hashing
+
+New `hash_substantive_attachments` in `pipeline/utils.py`. Filters via `pipeline.filters.item_filters.is_public_comment_attachment` before delegating to the existing order-independent `hash_attachments`. Speaker cards, public comments, correspondence received, community impact statements, comment letters, and other ceremonial attachment patterns are excluded from the hash input. Two appearances with identical substantive documents now produce the same hash even if one added a fresh batch of speaker cards between meetings.
+
+Replaces `hash_attachments` at `meeting_sync.py:371`, `processor.py:527`, and `processor.py:887`. Expect a one-time reprocess wave on the first sync pass after deploy: existing `matter.metadata.attachment_hash` values were computed from the raw (unfiltered) attachment list, so every matter will look "changed" once and trigger reprocessing before settling into the new hash space.
+
+### \_filter\_processed\_items Simplified
+
+`processor._filter_processed_items` no longer reads through to `matter.canonical_summary` to decide whether an item is already processed. Under the temporal-snapshot model, an item is already processed iff its own `items.summary` column is populated. The sync-time copy path handles the "unchanged attachments, reuse prior summary" case; the matter job fill-null path handles the "changed attachments, write fresh canonical and stamp onto blank appearances" case; anything still null at meeting-process time is a genuine new appearance that needs its own LLM call.
+
+The old read-through was the last place that could resurrect a stale canonical onto a new item row without respecting temporal intent.
+
+### Diagnostic Removed
+
+`scripts/diagnostics.check_summary_desync` is deleted. Its premise -- "items with summary where matter has no canonical" is a bug -- is now explicitly false. Under the temporal model, items carry snapshots that are independent of canonical state: an item can legitimately have a summary while its matter's canonical is still null (e.g., matter job hasn't fired yet, or the matter is new and only has meeting-job-sourced item summaries). Removing the check prevents false-positive alarms.
+
+### Verified
+
+All 6 Python modules parse and import cleanly. `test_validator.py` passes (15/15). Confirmed via DB query that the LA CAO/police budget matter with 3 distinct summary hashes is exactly the shape the new architecture makes explicit rather than incidental. Deploy will cause a one-time matter reprocess wave from the hash-space shift; steady-state cost is unchanged for common flows and reduced in the "unchanged substantive attachments" case.
+
+---
+
+## [2026-04-10] Conductor Memory Leak Fixes
+
+On 2026-04-10 at 03:33 and again at 06:06, the process-cities conductor was OOM-killed during a multi-metro run. The 2026-04-08 RLIMIT_AS cap on forkserver children worked as intended (the kernel OOM dump showed tesseract children correctly killed first with `oom_score_adj=500`, inherited from the 2026-04-09 oom_score patch), but the parent conductor itself grew to **2.8GB RSS + 2.7GB in swap** -- far beyond the docstring's "200-300MB" expectation. Post-mortem found four distinct contributors.
+
+### Multiprocessing Queue Leak (analyzer_async.py)
+
+`_extract_pdf_in_subprocess` created a new `_forkserver_ctx.Queue()` for every PDF extraction and never closed it. Each Queue holds two pipe fds, a lock semaphore, a condition semaphore, an internal buffer, and a background feeder thread. Python's garbage collector eventually reclaims these, but not deterministically -- the feeder thread can keep the Queue alive long after the function returns. The `resource_tracker: There appear to be N leaked semaphore objects` warning at shutdown was pointing directly at this.
+
+Over a 6+ hour run with thousands of extractions, this accumulates into real fd and memory bloat in the parent.
+
+Fix: wrap the extraction body in `try/finally` that calls `result_queue.close()` and `result_queue.join_thread()`. Every extraction now releases its resources synchronously.
+
+### Aiohttp Session Rotation Gated on Impossible Condition (analyzer_async.py)
+
+The session rotation check was `if self._request_count >= self._recycle_after and self._in_flight == 0`. Under sustained load with 9+ concurrent downloads, `_in_flight` essentially never hit 0, so after the first 100 requests the rotation never fired. The session's connection pool, response buffers, and internal state grew unbounded for the rest of the run.
+
+Fix: drop the `_in_flight == 0` gate. When the request count hits the threshold, create a new session and drop the old reference. In-flight requests on the old session keep working via their local reference. A background task closes the old session after a 60-second grace period, long enough for any in-progress download to complete. `recycle_session()` removed, replaced with `_drain_and_close_session()`.
+
+### No Active Memory Release After Processing (processor.py)
+
+Python's pymalloc allocator keeps 256KB arenas in its pool after GC instead of returning them to the kernel. For a long-running process with big transient allocations (a meeting's `document_cache` can hold 100MB+ of extracted text), peak RSS monotonically grows across jobs -- memory is reused inside Python but never given back to the OS.
+
+Fix: added `_release_memory_to_os()` that calls `libc.malloc_trim(0)` to force glibc to return freed heap chunks. Called after `document_cache.clear()` in `_process_meeting_with_items` and at the end of `process_matter`. No-op on non-glibc platforms (macOS dev, musl).
+
+### Concurrency Tuned for Box Size (config.py, conductor.py)
+
+`JOB_CONCURRENCY` lowered from 4 to 3. With `city_concurrency=3` in `conductor.process_cities`, peak concurrent meetings drops from 12 to 9. Each concurrent meeting holds its own `document_cache` (can be 50-200MB for big packets), so the previous peak could reach ~1-2GB of transient extracted text on top of everything else. Modest reduction preserves throughput while the other three fixes do the structural work.
+
+---
+
+## [2026-04-10] Conductor OOM Score Adjustment
+
+Added parent/child `oom_score_adj` biasing so the kernel prefers killing PDF extraction workers over the conductor parent under memory pressure.
+
+### Parent Bias to -500 (conductor.py)
+
+`main()` writes `-500` to `/proc/self/oom_score_adj` immediately after logging setup. Strongly disfavored as an OOM victim but still killable as an absolute last resort (avoids `-1000` which would risk starving postgres or sshd instead). Logs a warning and continues if the write fails (non-Linux, unprivileged, or `/proc` restricted).
+
+### Child Bias to +500 (analyzer_async.py)
+
+`_extract_pdf_worker` writes `+500` to its own `oom_score_adj` at the very start. Since raising your own score toward more-killable never requires CAP_SYS_RESOURCE, this always works. The 1000-point spread means the kernel will almost always pick a child over the parent. Silent fallback on non-Linux.
+
+Stacks with the existing 1.5GB RLIMIT_AS per child and `reset_stale_processing_jobs()` on startup. Verified the spread works via a standalone forkserver test: parent stays at -500, child sees +500 in its own `/proc/self/oom_score_adj`.
+
+Evidence that the fix is working arrived via the 06:06:16 OOM dump: the kernel first killed a tesseract child (`oom_score_adj=500`, inherited from the worker) before eventually having to take the conductor parent as well. The worker-first kill order is exactly what the bias was designed to produce -- the parent only went down because it had grown to 2.8GB RSS, which the 2026-04-10 memory leak fixes above address directly.
+
+---
+
+## [2026-04-10] Item Filter Ceremonial Leak Fixes
+
+Added and tightened patterns in `pipeline/filters/item_filters.py` to catch procedural and ceremonial items that were leaking past the filter and getting sent to the LLM.
+
+### Pattern Fixes
+
+- **Proclamations (plural)**: `\bproclamation\b` didn't match "Proclamations" because the trailing `\b` doesn't fire between `n` and `s` (both word chars). Changed to `\bproclamations?` so the singular/plural form catches both, including pathological vendor concatenations like `ProclamationsFair Housing Month`. Emergency proclamation exception still applies via the existing negative lookahead.
+- **Moment of silence**, **flag salute**, **call to order**, **\brecess\b** added to PROCEDURAL_PATTERNS. `\brecess` uses word boundaries to avoid matching "recession".
+- **Benediction**, **oath of office**, **swearing-in** (`\bswearing[ -]in\b`), **in memoriam**, **opening remarks** added to CEREMONIAL_PATTERNS.
+
+### Impact
+
+Database audit found 60+ items with summaries that the new patterns would have caught (21 proclamations plural, 25 call to order, 7 oath of office, 4 swearing in, 2 recess, 1 opening remarks). Going forward, prevents future LLM spend on 311 proclamations, 184 recess items, 113 moment-of-silence items, 82 swearing-in items, and the others sitting in the DB that could otherwise be re-queued.
+
+Tests: 18/18 known leak titles now caught, including substantive items like "Presentation and Discussion on Budget" correctly passing through, and emergency proclamations still exempted.
+
+---
+
 ## [2026-04-08] OOM Protection for PDF Extraction
 
 ### Forkserver Child Memory Cap (analyzer_async.py)

@@ -93,6 +93,37 @@ def hash_attachments(
     return hash_attachments_fast(attachments)
 
 
+def hash_substantive_attachments(
+    attachments: List[Any],
+    include_metadata: bool = False,
+    timeout: int = 3
+) -> str:
+    """
+    Hash only substantive attachments, excluding ceremonial ones.
+
+    Filters out public comments, speaker cards, correspondence, community impact
+    statements, and similar low-signal attachments before hashing. Used for
+    change-detection on matter appearances: two appearances with identical
+    substantive attachments should produce the same hash even if one added
+    speaker cards between meetings.
+
+    Order-independent like hash_attachments (delegates after filtering).
+
+    Confidence: 8/10 - filter coverage depends on is_public_comment_attachment
+    being kept current as new ceremonial patterns emerge.
+    """
+    from pipeline.filters.item_filters import is_public_comment_attachment
+
+    if not attachments:
+        return ""
+
+    substantive = [
+        att for att in attachments
+        if not is_public_comment_attachment(att.name or "")
+    ]
+    return hash_attachments(substantive, include_metadata=include_metadata, timeout=timeout)
+
+
 def _fetch_attachment_metadata(url: str, timeout: int = 3) -> Dict[str, str]:
     """
     Fetch content-length and last-modified headers via HEAD request.

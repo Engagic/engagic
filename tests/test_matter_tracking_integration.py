@@ -105,10 +105,13 @@ class TestMatterFileFallbackFlow:
             assert generated_id == expected_id, "Matter ID should be consistent across readings"
 
         # After ingestion:
-        # - 1 matter record in city_matters
+        # - 1 matter record in city_matters (canonical_summary on matter row)
         # - 3 appearance records in matter_appearances
         # - 3 item records in items (all linked to same matter_id)
-        # - canonical_summary used for all 3 items (same attachment hash)
+        # - First reading: items.summary filled by matter job / meeting job
+        # - Second and third readings: substantive attachment hash unchanged,
+        #   sync-time copies prior item.summary onto each new appearance
+        #   (temporal snapshot, frozen once set)
 
     def test_ordinance_amended_between_readings_reprocesses(self):
         """Ordinance PDF changes between readings - should reprocess"""
@@ -194,7 +197,8 @@ class TestMatterIdFallbackFlow:
         # After ingestion:
         # - 1 matter record (matter_id based)
         # - 2 appearances
-        # - canonical_summary reused for second appearance
+        # - Second appearance: unchanged attachment hash, sync copies prior
+        #   item.summary as the temporal snapshot
 
 
 class TestTitleNormalizationFallbackFlow:
@@ -244,7 +248,8 @@ class TestTitleNormalizationFallbackFlow:
         # After ingestion:
         # - 1 matter record (title-based)
         # - 3 appearances (ordinance lifecycle tracked!)
-        # - canonical_summary reused across all 3
+        # - Unchanged substantive attachments across readings -> sync-time
+        #   copies prior items.summary onto each new appearance
 
     def test_generic_title_no_deduplication(self):
         """Generic titles (Public Comment) should NOT deduplicate"""
