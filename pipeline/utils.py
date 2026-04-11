@@ -111,6 +111,12 @@ def hash_substantive_attachments(
 
     Confidence: 8/10 - filter coverage depends on is_public_comment_attachment
     being kept current as new ceremonial patterns emerge.
+
+    WARNING: any change to is_public_comment_attachment silently invalidates
+    every stored matter.metadata.attachment_hash, causing a full reprocess
+    wave on next sync. If you tune the filter, expect and plan for the burst.
+    Alternative: version-tag the hash output (e.g. "sv1:<hash>") so future
+    filter changes can be rolled out explicitly. Not implemented yet.
     """
     from pipeline.filters.item_filters import is_public_comment_attachment
 

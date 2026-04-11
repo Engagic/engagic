@@ -445,7 +445,7 @@ class ItemRepository(BaseRepository):
         self,
         matter_id: str,
         target_item_id: str,
-        before_meeting_id: str,
+        target_meeting_id: str,
         conn=None,
     ) -> bool:
         """Copy the latest prior non-null item summary for this matter onto a
@@ -458,7 +458,9 @@ class ItemRepository(BaseRepository):
         this matter whose meeting's date is <= the target meeting's date (and
         excluding the target item itself, so idempotent on retry).
 
-        Returns True if a summary was copied, False if nothing was found.
+        Returns True only if the target row existed with summary IS NULL and
+        was actually updated. Returns False if no prior summary was found,
+        the target row does not yet exist, or the target already had a summary.
         """
         async with self._ensure_conn(conn) as c:
             row = await c.fetchrow(
@@ -481,7 +483,7 @@ class ItemRepository(BaseRepository):
                 """,
                 matter_id,
                 target_item_id,
-                before_meeting_id,
+                target_meeting_id,
             )
 
             if not row or not row["summary"]:
@@ -490,7 +492,7 @@ class ItemRepository(BaseRepository):
             prior_summary = row["summary"]
             prior_topics = row["topics"] or []
 
-            await c.execute(
+            result = await c.execute(
                 """
                 UPDATE items
                 SET summary = $1, topics = $2
@@ -501,17 +503,23 @@ class ItemRepository(BaseRepository):
                 target_item_id,
             )
 
+            if self._parse_row_count(result) == 0:
+                # Target row didn't exist, or already had a summary. Don't
+                # touch item_topics -- inserting would FK-violate if the
+                # items row is absent.
+                return False
+
             if prior_topics:
                 await replace_entity_topics(
                     c, "item_topics", "item_id", target_item_id, prior_topics
                 )
 
-        logger.debug(
-            "copied prior-appearance summary",
-            matter_id=matter_id,
-            target_item_id=target_item_id,
-        )
-        return True
+            logger.debug(
+                "copied prior-appearance summary",
+                matter_id=matter_id,
+                target_item_id=target_item_id,
+            )
+            return True
 
     async def get_items_by_topic(self, meeting_id: str, topic: str) -> List[AgendaItem]:
         """Get agenda items for a meeting filtered by topic."""

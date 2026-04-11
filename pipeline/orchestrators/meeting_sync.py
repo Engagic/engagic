@@ -145,6 +145,23 @@ class MeetingSyncOrchestrator:
                         )
                         stats['items_stored'] = stored_count
 
+                        # Deferred from _track_matters: copy prior-appearance
+                        # summaries onto unchanged-attachment appearances. Must
+                        # run AFTER store_agenda_items so the target item row
+                        # exists for the UPDATE to match.
+                        for pending in matters_stats.get('pending_copies', []):
+                            copied = await self.db.items.copy_summary_from_prior_appearance(
+                                matter_id=pending['matter_id'],
+                                target_item_id=pending['target_item_id'],
+                                target_meeting_id=pending['target_meeting_id'],
+                                conn=conn,
+                            )
+                            if copied:
+                                logger.debug(
+                                    "reused prior-appearance summary (attachments unchanged)",
+                                    matter=pending['matter_label'],
+                                )
+
                         appearances_count = await self._create_matter_appearances(
                             meeting_obj, agenda_items, conn=conn
                         )
@@ -339,7 +356,7 @@ class MeetingSyncOrchestrator:
         conn: Connection
     ) -> Dict[str, Any]:
         """Track matters and return stats with pending jobs to enqueue after commit."""
-        stats: Dict[str, Any] = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0, 'skipped_item_ids': set(), 'pending_jobs': []}
+        stats: Dict[str, Any] = {'tracked': 0, 'duplicate': 0, 'skipped_procedural': 0, 'skipped_item_ids': set(), 'pending_jobs': [], 'pending_copies': []}
 
         if not items_data or not agenda_items:
             return stats
@@ -403,22 +420,16 @@ class MeetingSyncOrchestrator:
                         'meeting_date': meeting.date
                     })
                 elif skip_reason == "attachments_unchanged":
-                    # Substantive attachments are identical to a prior processed
-                    # appearance of this matter. Copy that appearance's summary
-                    # onto this item so the legislative-timeline read finds a
-                    # correct point-in-time snapshot without a new LLM call.
-                    # The canonical on city_matters stays untouched.
-                    copied = await self.db.items.copy_summary_from_prior_appearance(
-                        matter_id=agenda_item.matter_id,
-                        target_item_id=agenda_item.id,
-                        before_meeting_id=meeting.id,
-                        conn=conn,
-                    )
-                    if copied:
-                        logger.debug(
-                            "reused prior-appearance summary (attachments unchanged)",
-                            matter=agenda_item.matter_file or raw_vendor_matter_id,
-                        )
+                    # Defer the copy: the target items row does not exist yet
+                    # (store_agenda_items runs later in the same transaction).
+                    # The caller executes these after store_agenda_items so the
+                    # UPDATE inside copy_summary_from_prior_appearance matches.
+                    stats['pending_copies'].append({
+                        'matter_id': agenda_item.matter_id,
+                        'target_item_id': agenda_item.id,
+                        'target_meeting_id': meeting.id,
+                        'matter_label': agenda_item.matter_file or raw_vendor_matter_id,
+                    })
             else:
                 if not agenda_item.matter_file and not raw_vendor_matter_id and not agenda_item.title:
                     continue

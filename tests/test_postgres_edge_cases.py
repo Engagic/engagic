@@ -381,6 +381,382 @@ class EdgeCaseTests:
         except Exception as e:
             self._log_test(test_name, False, f"Exception: {e}")
 
+    async def _seed_temporal_snapshot_fixture(self, banana: str):
+        """Seed a jurisdiction + prior meeting + prior item with summary.
+        Shared setup for the temporal-snapshot tests.
+        Returns (matter_id, prior_item_id, prior_attachments, substantive_hash).
+        """
+        from database.id_generation import generate_matter_id
+        from database.models import Matter, MatterMetadata, AttachmentInfo
+        from pipeline.utils import hash_substantive_attachments
+
+        async with self.db.pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO jurisdictions (banana, name, state, vendor, slug) "
+                "VALUES ($1, $2, $3, $4, $5) ON CONFLICT (banana) DO NOTHING",
+                banana, "Test Snapshot City", "CA", "granicus", f"{banana}-slug"
+            )
+
+        prior_meeting_id = f"test_snap_meeting_a_{banana}"
+        prior_meeting = Meeting(
+            id=prior_meeting_id,
+            banana=banana,
+            title="Prior Meeting",
+            date=datetime(2026, 1, 1),
+        )
+        await self.db.meetings.store_meeting(prior_meeting)
+
+        prior_attachments = [
+            AttachmentInfo(name="ordinance_v1.pdf", url="https://test.com/ord1.pdf", type="pdf")
+        ]
+        substantive_hash = hash_substantive_attachments(prior_attachments)
+
+        matter_id = generate_matter_id(banana=banana, matter_file="ORD-2026-SNAP")
+        assert matter_id is not None, "generate_matter_id returned None for valid matter_file"
+        matter = Matter(
+            id=matter_id,
+            banana=banana,
+            matter_file="ORD-2026-SNAP",
+            title="Snapshot Test Ordinance",
+            canonical_summary="Original canonical summary from matter job",
+            canonical_topics=["housing"],
+            attachments=prior_attachments,
+            metadata=MatterMetadata(attachment_hash=substantive_hash),
+            first_seen=datetime(2026, 1, 1),
+            last_seen=datetime(2026, 1, 1),
+            appearance_count=1,
+        )
+        await self.db.matters.store_matter(matter)
+
+        prior_item_id = f"test_snap_item_a_{banana}"
+        prior_item = AgendaItem(
+            id=prior_item_id,
+            meeting_id=prior_meeting_id,
+            title="First Reading - Snapshot Ordinance",
+            sequence=1,
+            matter_id=matter_id,
+            matter_file="ORD-2026-SNAP",
+            attachments=prior_attachments,
+            summary="First-reading frozen snapshot summary",
+            topics=["housing"],
+        )
+        await self.db.items.store_agenda_items(prior_meeting_id, [prior_item])
+
+        return matter_id, prior_item_id, prior_attachments, substantive_hash
+
+    async def test_copy_summary_unit_returns_true_on_success(self):
+        """Test A1: copy_summary_from_prior_appearance copies summary when target row exists with NULL."""
+        test_name = "copy_summary unit: success returns True"
+        banana = "testsnapaCA"
+        try:
+            matter_id, _, prior_attachments, _ = await self._seed_temporal_snapshot_fixture(banana)
+
+            target_meeting_id = f"test_snap_meeting_b_{banana}"
+            target_meeting = Meeting(
+                id=target_meeting_id,
+                banana=banana,
+                title="Target Meeting",
+                date=datetime(2026, 2, 1),
+            )
+            await self.db.meetings.store_meeting(target_meeting)
+
+            target_item_id = f"test_snap_item_b_{banana}"
+            target_item = AgendaItem(
+                id=target_item_id,
+                meeting_id=target_meeting_id,
+                title="Second Reading - Snapshot Ordinance",
+                sequence=1,
+                matter_id=matter_id,
+                matter_file="ORD-2026-SNAP",
+                attachments=prior_attachments,
+                summary=None,  # the row we expect to be filled
+                topics=None,
+            )
+            await self.db.items.store_agenda_items(target_meeting_id, [target_item])
+
+            copied = await self.db.items.copy_summary_from_prior_appearance(
+                matter_id=matter_id,
+                target_item_id=target_item_id,
+                target_meeting_id=target_meeting_id,
+            )
+
+            retrieved = await self.db.items.get_agenda_item(target_item_id)
+            if copied and retrieved and retrieved.summary == "First-reading frozen snapshot summary":
+                self._log_test(test_name, True, "Summary copied onto target item")
+            else:
+                self._log_test(test_name, False, f"copied={copied}, summary={retrieved.summary if retrieved else 'None'}")
+        except Exception as e:
+            self._log_test(test_name, False, f"Exception: {e}")
+
+    async def test_copy_summary_unit_idempotent_returns_false(self):
+        """Test A2: Second call on an already-filled row returns False (WHERE summary IS NULL)."""
+        test_name = "copy_summary unit: idempotent returns False"
+        banana = "testsnapbCA"
+        try:
+            matter_id, _, prior_attachments, _ = await self._seed_temporal_snapshot_fixture(banana)
+
+            target_meeting_id = f"test_snap_meeting_b_{banana}"
+            await self.db.meetings.store_meeting(Meeting(
+                id=target_meeting_id, banana=banana, title="Target", date=datetime(2026, 2, 1),
+            ))
+            target_item_id = f"test_snap_item_b_{banana}"
+            await self.db.items.store_agenda_items(target_meeting_id, [AgendaItem(
+                id=target_item_id, meeting_id=target_meeting_id, title="Second Reading",
+                sequence=1, matter_id=matter_id, matter_file="ORD-2026-SNAP",
+                attachments=prior_attachments, summary=None, topics=None,
+            )])
+
+            first = await self.db.items.copy_summary_from_prior_appearance(
+                matter_id=matter_id, target_item_id=target_item_id, target_meeting_id=target_meeting_id,
+            )
+            second = await self.db.items.copy_summary_from_prior_appearance(
+                matter_id=matter_id, target_item_id=target_item_id, target_meeting_id=target_meeting_id,
+            )
+
+            if first is True and second is False:
+                self._log_test(test_name, True, "Second call correctly returned False")
+            else:
+                self._log_test(test_name, False, f"first={first}, second={second} (expected True, False)")
+        except Exception as e:
+            self._log_test(test_name, False, f"Exception: {e}")
+
+    async def test_copy_summary_unit_missing_target_returns_false(self):
+        """Test A3: Nonexistent target_item_id returns False without FK violation.
+        This is the scenario that the Fix 1 bug triggered in production."""
+        test_name = "copy_summary unit: missing target returns False"
+        banana = "testsnapcCA"
+        try:
+            matter_id, _, _, _ = await self._seed_temporal_snapshot_fixture(banana)
+
+            # Target meeting exists but target item does NOT -- mimics pre-Fix-1
+            # ordering where copy runs before store_agenda_items.
+            target_meeting_id = f"test_snap_meeting_b_{banana}"
+            await self.db.meetings.store_meeting(Meeting(
+                id=target_meeting_id, banana=banana, title="Target", date=datetime(2026, 2, 1),
+            ))
+
+            result = await self.db.items.copy_summary_from_prior_appearance(
+                matter_id=matter_id,
+                target_item_id=f"test_snap_nonexistent_{banana}",
+                target_meeting_id=target_meeting_id,
+            )
+
+            # Must return False cleanly, NOT raise FK violation on item_topics insert
+            if result is False:
+                self._log_test(test_name, True, "Missing target returned False without FK error")
+            else:
+                self._log_test(test_name, False, f"Expected False, got {result}")
+        except Exception as e:
+            # If this raises a FK violation, Fix 2 is broken
+            self._log_test(test_name, False, f"Raised exception (Fix 2 regression?): {e}")
+
+    async def test_copy_summary_unit_no_prior_returns_false(self):
+        """Test A4: If no prior appearance exists, returns False without writing anything."""
+        test_name = "copy_summary unit: no prior returns False"
+        banana = "testsnapdCA"
+        try:
+            async with self.db.pool.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO jurisdictions (banana, name, state, vendor, slug) "
+                    "VALUES ($1, $2, $3, $4, $5) ON CONFLICT (banana) DO NOTHING",
+                    banana, "Test D", "CA", "granicus", f"{banana}-slug"
+                )
+
+            from database.id_generation import generate_matter_id
+            from database.models import MatterMetadata
+            matter_id = generate_matter_id(banana=banana, matter_file="ORD-LONELY")
+            assert matter_id is not None
+            # Matter exists but no prior summarized item
+            await self.db.matters.store_matter(Matter(
+                id=matter_id, banana=banana, matter_file="ORD-LONELY", title="Lonely",
+                metadata=MatterMetadata(attachment_hash="deadbeef"),
+            ))
+
+            target_meeting_id = f"test_snap_meeting_d_{banana}"
+            await self.db.meetings.store_meeting(Meeting(
+                id=target_meeting_id, banana=banana, title="Target", date=datetime(2026, 2, 1),
+            ))
+            target_item_id = f"test_snap_item_d_{banana}"
+            await self.db.items.store_agenda_items(target_meeting_id, [AgendaItem(
+                id=target_item_id, meeting_id=target_meeting_id, title="First Appearance",
+                sequence=1, matter_id=matter_id, matter_file="ORD-LONELY",
+                attachments=[], summary=None, topics=None,
+            )])
+
+            result = await self.db.items.copy_summary_from_prior_appearance(
+                matter_id=matter_id, target_item_id=target_item_id, target_meeting_id=target_meeting_id,
+            )
+
+            retrieved = await self.db.items.get_agenda_item(target_item_id)
+            if result is False and retrieved and retrieved.summary is None:
+                self._log_test(test_name, True, "No prior found, returned False without modification")
+            else:
+                self._log_test(test_name, False, f"result={result}, summary={retrieved.summary if retrieved else 'None'}")
+        except Exception as e:
+            self._log_test(test_name, False, f"Exception: {e}")
+
+    async def test_track_matters_flow_unchanged_attachments(self):
+        """Test B: Full transaction flow with unchanged substantive attachments.
+        This is the test that would have caught the Fix 1 ordering bug.
+        Simulates: store_meeting -> _track_matters (collects pending_copies) ->
+        store_agenda_items -> execute pending_copies. Asserts the target item
+        row ends up with the copied prior-appearance summary, without FK violation."""
+        test_name = "Flow test: unchanged attachments -> copy summary"
+        banana = "testsnapeCA"
+        try:
+            from pipeline.orchestrators.meeting_sync import MeetingSyncOrchestrator
+
+            matter_id, _, prior_attachments, _ = await self._seed_temporal_snapshot_fixture(banana)
+
+            orchestrator = MeetingSyncOrchestrator(self.db)
+
+            target_meeting_id = f"test_snap_meeting_b_{banana}"
+            target_meeting = Meeting(
+                id=target_meeting_id,
+                banana=banana,
+                title="Target Meeting",
+                date=datetime(2026, 2, 1),
+            )
+            target_item_id = f"test_snap_item_b_{banana}"
+            target_item = AgendaItem(
+                id=target_item_id,
+                meeting_id=target_meeting_id,
+                title="Second Reading - Snapshot Ordinance",
+                sequence=1,
+                matter_id=matter_id,
+                matter_file="ORD-2026-SNAP",
+                attachments=prior_attachments,  # Same as prior -> hash matches
+                summary=None,
+                topics=None,
+            )
+
+            items_data = [{
+                "sequence": 1,
+                "matter_file": "ORD-2026-SNAP",
+                "matter_id": None,
+                "matter_type": None,
+                "sponsors": [],
+                "votes": [],
+            }]
+
+            # Execute the exact transaction flow that sync_meeting performs.
+            async with self.db.pool.acquire() as conn:
+                async with conn.transaction():
+                    await self.db.meetings.store_meeting(target_meeting, conn=conn)
+                    matters_stats = await orchestrator._track_matters(
+                        target_meeting, items_data, [target_item], conn=conn
+                    )
+                    await self.db.items.store_agenda_items(
+                        target_meeting_id, [target_item], conn=conn
+                    )
+                    # Fix 1: execute deferred copies after items are stored
+                    for pending in matters_stats.get('pending_copies', []):
+                        await self.db.items.copy_summary_from_prior_appearance(
+                            matter_id=pending['matter_id'],
+                            target_item_id=pending['target_item_id'],
+                            target_meeting_id=pending['target_meeting_id'],
+                            conn=conn,
+                        )
+
+            retrieved = await self.db.items.get_agenda_item(target_item_id)
+
+            # Assertions:
+            # 1. Transaction did not roll back (we got here without exception)
+            # 2. pending_copies was populated (attachments_unchanged path fired)
+            # 3. Target item now carries the prior appearance's summary
+            # 4. No new matter job was enqueued (pending_jobs empty)
+            checks = [
+                (len(matters_stats.get('pending_copies', [])) == 1, "pending_copies has 1 entry"),
+                (len(matters_stats.get('pending_jobs', [])) == 0, "pending_jobs empty"),
+                (retrieved is not None, "target item exists"),
+                (retrieved and retrieved.summary == "First-reading frozen snapshot summary", "summary copied from prior"),
+            ]
+            failed = [msg for ok, msg in checks if not ok]
+            if not failed:
+                self._log_test(test_name, True, "Ordering fix works: summary copied in-transaction, no LLM enqueue")
+            else:
+                self._log_test(test_name, False, f"Failed checks: {failed}; got summary={retrieved.summary if retrieved else 'None'}")
+        except Exception as e:
+            self._log_test(test_name, False, f"Exception (likely FK violation from pre-Fix-1 ordering): {e}")
+
+    async def test_track_matters_flow_changed_attachments(self):
+        """Test C: Full transaction flow with changed substantive attachments.
+        Asserts that the enqueue path fires (not the copy path) when attachments differ."""
+        test_name = "Flow test: changed attachments -> enqueue matter job"
+        banana = "testsnapfCA"
+        try:
+            from pipeline.orchestrators.meeting_sync import MeetingSyncOrchestrator
+            from database.models import AttachmentInfo
+
+            matter_id, _, _, _ = await self._seed_temporal_snapshot_fixture(banana)
+
+            orchestrator = MeetingSyncOrchestrator(self.db)
+
+            target_meeting_id = f"test_snap_meeting_b_{banana}"
+            target_meeting = Meeting(
+                id=target_meeting_id,
+                banana=banana,
+                title="Target Meeting",
+                date=datetime(2026, 2, 1),
+            )
+            # Different attachment -> different substantive hash
+            changed_attachments = [
+                AttachmentInfo(name="ordinance_v2_amended.pdf", url="https://test.com/ord2.pdf", type="pdf")
+            ]
+            target_item_id = f"test_snap_item_b_{banana}"
+            target_item = AgendaItem(
+                id=target_item_id,
+                meeting_id=target_meeting_id,
+                title="Second Reading (Amended)",
+                sequence=1,
+                matter_id=matter_id,
+                matter_file="ORD-2026-SNAP",
+                attachments=changed_attachments,
+                summary=None,
+                topics=None,
+            )
+            items_data = [{
+                "sequence": 1,
+                "matter_file": "ORD-2026-SNAP",
+                "matter_id": None,
+                "matter_type": None,
+                "sponsors": [],
+                "votes": [],
+            }]
+
+            async with self.db.pool.acquire() as conn:
+                async with conn.transaction():
+                    await self.db.meetings.store_meeting(target_meeting, conn=conn)
+                    matters_stats = await orchestrator._track_matters(
+                        target_meeting, items_data, [target_item], conn=conn
+                    )
+                    await self.db.items.store_agenda_items(
+                        target_meeting_id, [target_item], conn=conn
+                    )
+                    for pending in matters_stats.get('pending_copies', []):
+                        await self.db.items.copy_summary_from_prior_appearance(
+                            matter_id=pending['matter_id'],
+                            target_item_id=pending['target_item_id'],
+                            target_meeting_id=pending['target_meeting_id'],
+                            conn=conn,
+                        )
+
+            retrieved = await self.db.items.get_agenda_item(target_item_id)
+
+            checks = [
+                (len(matters_stats.get('pending_jobs', [])) == 1, "pending_jobs has 1 entry"),
+                (len(matters_stats.get('pending_copies', [])) == 0, "pending_copies empty"),
+                (retrieved is not None, "target item exists"),
+                (retrieved and retrieved.summary is None, "summary left NULL for matter job to fill"),
+            ]
+            failed = [msg for ok, msg in checks if not ok]
+            if not failed:
+                self._log_test(test_name, True, "Enqueue path fires on changed hash, item left unsummarized")
+            else:
+                self._log_test(test_name, False, f"Failed checks: {failed}")
+        except Exception as e:
+            self._log_test(test_name, False, f"Exception: {e}")
+
     async def cleanup(self):
         """Clean up test data"""
         try:
@@ -389,7 +765,7 @@ class EdgeCaseTests:
                 await conn.execute("DELETE FROM meetings WHERE id LIKE 'test_%'")
                 await conn.execute("DELETE FROM jurisdictions WHERE banana LIKE 'test%' OR banana LIKE 'city%'")
                 await conn.execute("DELETE FROM queue WHERE source_url LIKE 'https://test.com%'")
-                await conn.execute("DELETE FROM city_matters WHERE id LIKE 'test_%'")
+                await conn.execute("DELETE FROM city_matters WHERE id LIKE 'test_%' OR banana LIKE 'testsnap%'")
             logger.info("cleaned up test data")
         except Exception as e:
             logger.warning("cleanup failed", error=str(e))
@@ -410,6 +786,14 @@ class EdgeCaseTests:
         await self.test_jsonb_structure_validation()
         await self.test_queue_duplicate_source_url()
         await self.test_cross_city_matter_isolation()
+
+        # Temporal snapshot regression tests (2026-04-10 ordering fix)
+        await self.test_copy_summary_unit_returns_true_on_success()
+        await self.test_copy_summary_unit_idempotent_returns_false()
+        await self.test_copy_summary_unit_missing_target_returns_false()
+        await self.test_copy_summary_unit_no_prior_returns_false()
+        await self.test_track_matters_flow_unchanged_attachments()
+        await self.test_track_matters_flow_changed_attachments()
 
         # Cleanup
         await self.cleanup()
