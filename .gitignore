@@ -1,6 +1,12 @@
 .db
 workers/
 server/routes/duckling.py
+server/rate_limiter.py
+server/turnstile.py
+server/routes/turnstile.py
+server/middleware/turnstile.py
+server/middleware/rate_limiting.py
+server/middleware/logging.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
