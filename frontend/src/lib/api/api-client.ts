@@ -60,7 +60,9 @@ export interface RequestContext {
 }
 
 export function buildRequestHeaders(context?: RequestContext): Record<string, string> {
-	const headers: Record<string, string> = {};
+	const headers: Record<string, string> = {
+		'User-Agent': 'engagic-ssr/1.0'
+	};
 	if (context?.clientIp) {
 		headers['X-Forwarded-Client-IP'] = context.clientIp;
 		// Forward as CF-Connecting-IP so nginx real_ip module and rate limiting
