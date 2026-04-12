@@ -55,7 +55,10 @@ function renderWidget(): void {
 	if (!container) {
 		container = document.createElement('div');
 		container.id = 'turnstile-container';
-		container.style.display = 'none';
+		container.style.position = 'fixed';
+		container.style.bottom = '0';
+		container.style.right = '0';
+		container.style.zIndex = '-1';
 		document.body.appendChild(container);
 	}
 
@@ -65,7 +68,8 @@ function renderWidget(): void {
 
 	widgetId = window.turnstile.render(container, {
 		sitekey: SITE_KEY,
-		size: 'invisible' as unknown,
+		size: 'compact',
+		appearance: 'interaction-only',
 		callback: (token: string) => {
 			currentToken = token;
 			if (resolveToken) {
