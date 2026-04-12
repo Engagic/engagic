@@ -38,7 +38,7 @@ function loadScript(): Promise<void> {
 	return new Promise((resolve) => {
 		const script = document.createElement('script');
 		script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-		script.defer = true;
+		script.async = false;
 		script.onload = () => {
 			scriptLoaded = true;
 			resolve();
@@ -122,10 +122,7 @@ export async function initTurnstile(): Promise<void> {
 	initialized = true;
 
 	await loadScript();
-
-	window.turnstile!.ready(() => {
-		renderWidget();
-	});
+	renderWidget();
 
 	// Get initial session token
 	const token = await waitForToken();
