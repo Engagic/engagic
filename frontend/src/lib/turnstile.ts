@@ -23,7 +23,7 @@ declare global {
 	}
 }
 
-const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+const SITE_KEY = '0x4AAAAAAC8k9WNTYMFPIDOj';
 const VERIFY_URL = `${config.apiBaseUrl}/api/turnstile/verify`;
 
 let widgetId: string | null = null;
