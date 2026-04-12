@@ -4,6 +4,7 @@
 	import { navigating, page } from '$app/stores';
 	import { authState } from '$lib/stores/auth.svelte';
 	import { logger } from '$lib/services/logger';
+	import { initTurnstile } from '$lib/turnstile';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 	import type { Snippet } from 'svelte';
@@ -39,6 +40,11 @@
 		if (typeof document !== 'undefined') {
 			document.body.classList.toggle('bg-topo', isTopoPage());
 		}
+	});
+
+	// Initialize Turnstile bot verification on client
+	$effect(() => {
+		initTurnstile();
 	});
 
 	// Track page views on navigation

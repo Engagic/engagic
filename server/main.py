@@ -21,7 +21,7 @@ from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
 from server.routes import search, meetings, topics, admin, monitoring, flyer, matters, donate, auth, dashboard, votes, engagement, feedback, committees
-from server.routes import deliberation, happening, events
+from server.routes import deliberation, happening, events, turnstile
 try:
     from server.routes import duckling
 except ImportError:
@@ -86,7 +86,7 @@ app.add_middleware(  # type: ignore[arg-type]
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID", "X-Turnstile-Token"],
     allow_credentials=True,
 )
 
@@ -127,6 +127,12 @@ async def log_requests_middleware(request, call_next):
 
 
 @app.middleware("http")
+async def turnstile_middleware_wrapper(request, call_next):
+    from server.middleware.turnstile import turnstile_middleware
+    return await turnstile_middleware(request, call_next)
+
+
+@app.middleware("http")
 async def rate_limit_middleware_wrapper(request, call_next):
     from server.middleware.rate_limiting import rate_limit_middleware
     return await rate_limit_middleware(request, call_next, rate_limiter)
@@ -157,6 +163,7 @@ app.include_router(dashboard.router)   # User dashboard and alerts (userland)
 app.include_router(deliberation.router)  # Community deliberation and opinion clustering
 app.include_router(happening.router)     # Happening This Week (Claude-analyzed important items)
 app.include_router(events.router)        # Frontend analytics events
+app.include_router(turnstile.router)     # Turnstile bot verification
 
 
 if __name__ == "__main__":

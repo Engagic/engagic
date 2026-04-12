@@ -35,6 +35,7 @@ import type {
 	CivicInfrastructureResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
+import { reverify } from '$lib/turnstile';
 
 const inflightRequests = new Map<string, Promise<any>>();
 
@@ -96,6 +97,17 @@ async function fetchWithRetry(
 
 		if (response.ok) {
 			return response;
+		}
+
+		// Turnstile session expired or missing -- re-verify and retry once
+		if (response.status === 403) {
+			const body = await response.json().catch(() => null);
+			if (body?.error === 'turnstile_required' && retries > 0) {
+				const ok = await reverify();
+				if (ok) {
+					return fetchWithRetry(url, options, retries - 1, requestHeaders);
+				}
+			}
 		}
 
 		if (response.status === 429) {

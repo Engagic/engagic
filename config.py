@@ -109,6 +109,9 @@ class Config:
         self.COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
         self.COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")
 
+        # Turnstile bot protection
+        self.TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "")
+
         # Frontend URL for payment redirects
         self.FRONTEND_URL = os.getenv(
             "ENGAGIC_FRONTEND_URL",

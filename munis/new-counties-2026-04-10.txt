@@ -1,0 +1,83 @@
+# New counties added 2026-04-09 and 2026-04-10
+# 41 county jurisdictions across 22 states
+
+# Alabama
+jeffersoncountyAL
+
+# California
+imperialcountyCA
+losangelescountyCA
+
+# Florida
+browardcountyFL
+pinellascountyFL
+seminolecountyFL
+
+# Georgia
+chathamcountyGA
+cobbcountyGA
+dekalbcountyGA
+fultoncountyGA
+
+# Illinois
+cookcountyIL
+
+# Kansas
+douglascountyKS
+johnsoncountyKS
+
+# Maryland
+annearundelcountyMD
+montgomerycountyMD
+
+# Michigan
+kentcountyMI
+oaklandcountyMI
+washtenawcountyMI
+
+# Minnesota
+hennepincountyMN
+ramseycountyMN
+
+# Missouri
+stlouiscountyMO
+
+# North Carolina
+buncombecountyNC
+durhamcountyNC
+forsythcountyNC
+guilfordcountyNC
+mecklenburgcountyNC
+wakecountyNC
+
+# New Jersey
+bergencountyNJ
+middlesexcountyNJ
+
+# Nevada
+clarkcountyNV
+
+# New York
+westchestercountyNY
+
+# Ohio
+hamiltoncountyOH
+
+# Pennsylvania
+alleghenycountyPA
+buckscountyPA
+chestercountyPA
+delawarecountyPA
+
+# Tennessee
+shelbycountyTN
+
+# Texas
+traviscountyTX
+
+# Washington
+kingcountyWA
+
+# Wisconsin
+danecountyWI
+milwaukeecountyWI
