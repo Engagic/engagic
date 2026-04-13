@@ -365,7 +365,9 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
             if items:
                 meeting["items"] = items
-                meeting["agenda_url"] = final_url
+                # Store the durable AgendaViewer.php URL, not the S3/CloudFront
+                # redirect destination which can expire
+                meeting["agenda_url"] = agenda_viewer_url
                 attachment_count = sum(len(item.get("attachments", [])) for item in items)
                 logger.debug(
                     "parsed meeting with items",

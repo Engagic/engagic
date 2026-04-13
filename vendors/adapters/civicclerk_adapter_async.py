@@ -27,9 +27,20 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
         self.base_url = f"https://{self.slug}.api.civicclerk.com"
 
     def _build_packet_url(self, doc: Dict[str, Any]) -> str:
-        """Build packet URL from document dict containing fileId."""
+        """Build API download URL from document dict containing fileId."""
         file_id = doc.get("fileId")
         return f"{self.base_url}/v1/Meetings/GetMeetingFileStream(fileId={file_id},plainText=false)"
+
+    def _build_portal_agenda_url(self, event_id: Optional[int], doc: Dict[str, Any]) -> Optional[str]:
+        """Build persistent portal URL for a meeting document.
+
+        Portal URLs render the document inside the CivicClerk viewer with
+        full meeting context (sidebar attachments, metadata, etc.).
+        """
+        file_id = doc.get("fileId")
+        if file_id and event_id:
+            return f"https://{self.slug}.portal.civicclerk.com/event/{event_id}/files/agenda/{file_id}"
+        return None
 
     async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings with item-level extraction via OData API."""
@@ -166,7 +177,10 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
                 None
             )
             if agenda_doc:
-                result["agenda_url"] = self._build_packet_url(agenda_doc)
+                result["agenda_url"] = (
+                    self._build_portal_agenda_url(event_id, agenda_doc)
+                    or self._build_packet_url(agenda_doc)
+                )
         else:
             # No usable structured items — try chunking published PDFs.
             # Strategy: agenda PDF first (for hyperlinked attachments),
@@ -183,9 +197,9 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
 
             # Pass 1: thin agenda PDF — may have hyperlinked attachment URLs
             if agenda_doc:
-                agenda_url = self._build_packet_url(agenda_doc)
+                agenda_fetch_url = self._build_packet_url(agenda_doc)
                 chunked_items = await self._parse_packet_pdf(
-                    agenda_url, str(event_id)
+                    agenda_fetch_url, str(event_id)
                 )
                 has_attachments = any(
                     item.get("attachments") for item in chunked_items
@@ -193,24 +207,33 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
                 # If the agenda gave us items with real attachments, use them
                 if chunked_items and has_attachments:
                     result["items"] = chunked_items
-                    result["agenda_url"] = agenda_url
+                    result["agenda_url"] = (
+                        self._build_portal_agenda_url(event_id, agenda_doc)
+                        or agenda_fetch_url
+                    )
 
             # Pass 2: full packet PDF — TOC-based extraction with body text
             if not result.get("items") and packet_doc:
-                packet_url = self._build_packet_url(packet_doc)
+                packet_fetch_url = self._build_packet_url(packet_doc)
                 packet_items = await self._parse_packet_pdf(
-                    packet_url, str(event_id)
+                    packet_fetch_url, str(event_id)
                 )
                 if packet_items:
                     chunked_items = packet_items
                     result["items"] = packet_items
-                    result["agenda_url"] = packet_url
+                    result["agenda_url"] = (
+                        self._build_portal_agenda_url(event_id, packet_doc)
+                        or packet_fetch_url
+                    )
 
             # Pass 3: if only thin-agenda items (no attachments), still use them
             if not result.get("items") and chunked_items:
                 result["items"] = chunked_items
                 if agenda_doc:
-                    result["agenda_url"] = self._build_packet_url(agenda_doc)
+                    result["agenda_url"] = (
+                        self._build_portal_agenda_url(event_id, agenda_doc)
+                        or self._build_packet_url(agenda_doc)
+                    )
 
             # Nothing worked — store monolithic reference
             if not result.get("items"):
