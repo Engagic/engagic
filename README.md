@@ -240,7 +240,7 @@ npm run dev  # localhost:5173
 | [docs/API.md](docs/API.md) | Complete API endpoint reference |
 | [docs/SCHEMA.md](docs/SCHEMA.md) | Database schema quick reference |
 | [docs/MATTERS_ARCHITECTURE.md](docs/MATTERS_ARCHITECTURE.md) | Legislative matter tracking design |
-| [docs/ARCHITECTURE_REVIEW.md](docs/ARCHITECTURE_REVIEW.md) | Architecture priorities |
+| [docs/ARCHITECTURE_REVIEW.md](docs/ARCHITECTURE_REVIEW.md) | Code health audit with end-to-end flow tracing (Apr 2026) |
 | [docs/TERMS_OF_SERVICE.md](docs/TERMS_OF_SERVICE.md) | API rate tiers and usage policies |
 | [docs/DELIBERATION_LOCAL_FIRST.md](docs/DELIBERATION_LOCAL_FIRST.md) | PWA local-first deliberation plan |
 | [CHANGELOG.md](CHANGELOG.md) | Version history and recent changes |

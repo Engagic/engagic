@@ -2,18 +2,65 @@
 
 Architectural opportunities identified but deferred. Review when modifying related code.
 
-Last audit: 2025-12-12
+Last audit: 2026-04-12
 
 ---
 
 ## High Priority (Address When Touching)
 
-### parsing/participation.py returns dicts, not models
-- **File:** `parsing/participation.py`
-- **Issue:** Returns `Dict[str, Any]` when `ParticipationInfo` already exists in `database/models.py`
-- **Fix:** Import and return `ParticipationInfo` objects
-- **Effort:** Low (wiring change)
-- **Trigger:** Next time participation extraction is modified
+### Sync cycle wastes 10-14 minutes sleeping unconditionally
+- **File:** `pipeline/fetcher.py:141-144`
+- **Issue:** After every vendor's cities finish, the fetcher sleeps 30-40 seconds unconditionally (`30 + random.uniform(0, 10)`), regardless of whether rate limiting was actually engaged. With 21 vendors, this is 10-14 minutes of pure sleeping per sync cycle.
+- **Fix:** Only sleep if the rate limiter actually delayed during that vendor's sync. Track whether `wait_if_needed()` fired, and skip the inter-vendor sleep if it didn't.
+- **Effort:** Low (10 min)
+- **Trigger:** Immediate -- free performance win
+
+### City prioritization is sequential and double-queries the DB
+- **File:** `pipeline/fetcher.py:328-367`
+- **Issue:** Two problems in one:
+  1. `_prioritize_cities()` at line 365 uses `[(await get_priority(city), city) for city in cities]` -- sequential awaits. With 100 cities at ~300ms per DB round-trip pair, this takes 30s when `asyncio.gather()` could do it in 300ms.
+  2. `_prioritize_cities()` calls `get_city_meeting_frequency()` + `get_city_last_sync()` per city, then `_should_sync_city()` calls the exact same two queries again. 4 DB round-trips per city where 2 would do (400 wasted queries per sync with 200 cities).
+- **Fix:** (a) Replace sequential comprehension with `asyncio.gather()`. (b) Compute priority and sync eligibility in one pass -- return `(priority, should_sync)` from a single function that queries once.
+- **Effort:** Low-Medium (30 min)
+- **Trigger:** Immediate -- 30-120 seconds of sync latency eliminated
+
+### N+1 item fetches in process_matter
+- **File:** `pipeline/processor.py:480-486`
+- **Issue:** When `metadata["item_ids"]` contains N item IDs, makes N separate `get_agenda_item()` database calls instead of a single batch query. Typical matters have 3-20 items.
+- **Fix:** Add `get_agenda_items_by_ids(item_ids: List[str])` method using `WHERE id = ANY($1::text[])`. Call it once instead of N times.
+- **Effort:** Low (20 min)
+- **Trigger:** Immediate -- eliminates 3-20 queries per matter processing job
+
+### Legistar fetches matter details and sponsors sequentially
+- **File:** `vendors/adapters/legistar_adapter_async.py:478-523`
+- **Issue:** `_fetch_matter_metadata_async()` fetches matter details (HTTP call), waits for response, then fetches sponsors (second HTTP call). These are independent requests to different endpoints.
+- **Fix:** `asyncio.gather(matter_task, sponsors_task)` instead of sequential awaits.
+- **Effort:** Low (10 min)
+- **Trigger:** When touching Legistar adapter -- saves ~500ms per item for Legistar cities
+
+### ~~parsing/participation.py returns dicts, not models~~ RESOLVED
+Now returns `ParticipationInfo` models directly (`parsing/participation.py:20,155`).
+
+### Temporal snapshot freeze has no DB-level enforcement
+- **Files:** `database/repositories_async/items.py` (UPSERT CASE), `pipeline/orchestrators/meeting_sync.py:148-163`
+- **Issue:** The invariant "once an item has a summary, it is frozen" is enforced only by a SQL `CASE WHEN items.summary IS NOT NULL` in the UPSERT. No trigger, no CHECK constraint. Any code path that writes `summary = NULL` to an item silently breaks the freeze -- the item gets re-processed on next sync, potentially with different LLM output.
+- **Fix:** Add a trigger or partial index/constraint that prevents clearing a non-NULL summary, or add a `frozen_at` timestamp column.
+- **Effort:** Low (trigger) to Medium (schema change + backfill)
+- **Trigger:** Any change to item update paths or the temporal snapshot model
+
+### Adapter output has no schema validation
+- **Files:** `vendors/adapters/*.py` -> `pipeline/orchestrators/meeting_sync.py:46`
+- **Issue:** All adapters return `List[Dict[str, Any]]`. The orchestrator accesses keys by convention (`meeting_dict.get("title")`, `.get("items")`, `.get("vendor_id")`). If an adapter returns the wrong shape, it fails deep in `sync_meeting()`, not at the adapter boundary. Dec 2025 review proposed `MeetingSchema` -- never implemented.
+- **Fix:** TypedDict or Pydantic model for adapter output, validated at the `fetch_meetings()` return boundary.
+- **Effort:** Medium (define schema + update 21 adapters)
+- **Trigger:** Next time an adapter is added or an orchestrator crash is debugged
+
+### Fetcher retry logic is effectively dead code
+- **File:** `pipeline/fetcher.py:294-326`
+- **Issue:** `_sync_city_with_retry(max_retries=1)` -- the loop runs once, meaning zero retries. The `wait_times = [5, 20]` array is never indexed. Transient network failures cause a city to be marked failed until the next 24h sync cycle.
+- **Fix:** Change default to `max_retries=2` or `3`. Or remove the misleading retry wrapper and add proper exponential backoff.
+- **Effort:** Low
+- **Trigger:** Any investigation into city sync reliability
 
 ### SQL Query Duplication in SearchRepository
 - **File:** `database/repositories_async/search.py:48-81, 117-134`
@@ -95,19 +142,29 @@ def extract_legislative_with_vision(image_bytes: bytes) -> str:
 
 ## Medium Priority (Note for Future)
 
-### Raw console.* Calls in Frontend
-- **Files:** 9 files with 11 instances
-  - `routes/login/+page.svelte:42`
-  - `routes/funnel/+page.svelte:120`
-  - `routes/deliberate/[matter_id]/+page.svelte:38`
-  - `routes/deliberate/[matter_id]/+page.server.ts:56`
-  - `routes/[city_url]/[meeting_slug]/+page.svelte:62,78,256`
-  - `routes/matter/[matter_id]/+page.svelte:39,48,299`
-  - `routes/[city_url]/committees/[committee_id]/+page.svelte:37`
-  - `lib/components/ReportIssue.svelte:71`
-  - `routes/signup/+page.svelte:56`
-  - `routes/[city_url]/+page.svelte:89`
-- **Issue:** Using raw `console.error/warn/debug` instead of structured logger service
+### Rate limiter opens new SQLite connection per request
+- **File:** `server/rate_limiter.py:214-663`
+- **Issue:** `check_rate_limit()` opens 4-6 separate `sqlite3.connect()` calls per API request (ban check, tier lookup, hourly/daily/minute tracking). At moderate traffic (500+ req/min) this becomes the bottleneck -- synchronous file system lock negotiation on every request.
+- **Fix:** Keep a persistent in-process connection or use an in-memory cache with periodic SQLite flush (e.g., write every 100 requests or 60s). Alternative: replace with Redis if horizontal scaling is needed.
+- **Effort:** Medium (2-3 hours)
+- **Trigger:** When API traffic exceeds ~500 req/min, or when profiling shows rate limiter latency
+
+### Dashboard makes N+1 queries per watched city
+- **File:** `server/routes/dashboard.py:85-123`
+- **Issue:** For each watched city (up to 5), makes separate `get_happening_items()` + `get_upcoming_meetings()` calls. 10 DB queries where 2 batch queries (`WHERE banana = ANY($1)`) would work.
+- **Fix:** Add `get_happening_items_batch(bananas)` and `get_upcoming_meetings_batch(bananas)` methods, group results by banana in Python.
+- **Effort:** Low (30 min)
+- **Trigger:** When touching dashboard or optimizing user-facing latency
+
+### Engagement stats make 2 queries per entity
+- **File:** `server/routes/engagement.py:85-134`
+- **Issue:** `get_watch_count()` + `is_watching()` are separate DB calls for the same entity. Could be one query: `SELECT COUNT(*), SUM(CASE WHEN user_id = $1 THEN 1 ELSE 0 END) FROM watches WHERE entity_type = $2 AND entity_id = $3`.
+- **Effort:** Low (15 min)
+- **Trigger:** When touching engagement routes
+
+### Raw console.* Calls in Frontend (worsened)
+- **Files:** 17 files with 22 instances (was 9 files / 11 instances in Dec 2025)
+- **Issue:** Using raw `console.error/warn/debug` instead of structured logger service. Count has doubled since last audit -- new server-side routes added without using the logger service.
 - **Fix:** Replace with `logger.error()`, `logger.warn()`, `logger.debug()` from `$lib/services/logger`
 - **Effort:** Low (mechanical replacement)
 - **Trigger:** When touching any of these files
@@ -144,34 +201,74 @@ def extract_legislative_with_vision(image_bytes: bytes) -> str:
 
 ## Low Priority (Long-Term)
 
-### Documentation Drift: vendors/README.md
-- **File:** `vendors/README.md`
-- **Issue:** Claims "11 adapters" but Municode (12th) is fully implemented
-- **Fix:** Add Municode to adapter list, update count
-- **Effort:** Trivial
-- **Trigger:** When updating vendor documentation
+### ~~Two agenda chunkers with unclear canonical status~~ RESOLVED (documented)
+Both are active by design. v2 (leaf-to-root: hyperlinks + position clustering) is preferred; v1 (root-to-leaf: regex per page) is fallback. Base adapter dispatches: `v2 auto -> v2 toc -> v2 url -> v1 fallback`. Different PDFs need different approaches. Not dead code; not consolidation candidates.
 
-### Documentation Drift: server/README.md
-- **File:** `server/README.md`
-- **Issue:** Claims "15 route modules" but there are 18
-- **Fix:** Update route module count
-- **Effort:** Trivial
-- **Trigger:** When updating server documentation
+### MCP SQL validator allows dangerous function calls
+- **File:** `mcp_server.py:49-61`
+- **Issue:** `validate_readonly_sql()` blocks write keywords (`INSERT`, `UPDATE`, `DELETE`, `DROP`) and requires `SELECT` prefix. But it doesn't filter function calls. `SELECT pg_sleep(3600)` (DoS) and `SELECT pg_read_file('/etc/passwd')` (file read, requires superuser) pass validation.
+- **Fix:** Add function call detection (blocklist `pg_sleep`, `pg_read_file`, `pg_write_file`, `lo_import`, etc.) or parse the SQL AST with a lightweight parser.
+- **Effort:** Low (blocklist) to Medium (AST parsing)
+- **Trigger:** If MCP is ever exposed to less-trusted clients. Currently behind bearer token auth.
 
-### parsing/pdf.py monolith (28K lines)
-- **File:** `parsing/pdf.py`
-- **Issue:** Single file handles extraction, OCR fallback, participation parsing, format detection. Changes require understanding the whole file.
-- **Fix:** Split into `Document`, `Page`, `OCRProcessor`, `FeatureDetector` classes
-- **Effort:** High (significant refactor)
-- **Trigger:** When PDF extraction becomes a development bottleneck
-- **Note:** Works fine currently; refactor only if modification friction becomes blocking
+### Queue retries lack time-based backoff
+- **File:** `database/repositories_async/queue.py:333-335`
+- **Issue:** Failed jobs move back to `pending` immediately with lower priority (`-(20 * retry_count)`) but no delay. A transient issue that resolves in 30s can cause a job to exhaust all 3 retries in 3 seconds and land in dead letter.
+- **Fix:** Add `retry_at TIMESTAMP` column. On failure, set `retry_at = NOW() + interval * 2^retry_count`. Modify `get_next_for_processing()` to add `AND (retry_at IS NULL OR retry_at <= NOW())`.
+- **Effort:** Low-Medium (schema change + query update)
+- **Trigger:** Any investigation into premature dead letter arrivals
 
-### Base adapter contains vendor-specific logic
+### Vendor-specific logic in base adapter
 - **File:** `vendors/adapters/base_adapter_async.py`
-- **Issue:** SSL cert handling, header preferences live in base class rather than subclass overrides
-- **Fix:** Move vendor-specific behavior to adapter subclasses
-- **Effort:** Low-Medium
-- **Trigger:** When adding new vendor that doesn't fit current patterns
+- **Issue:** Base class contains Legistar JSON Accept header preference in `_request()` and Granicus SSL bypass (`if self.vendor == "granicus" or "granicus.com" in url`). The base class should not know about specific vendors.
+- **Fix:** Move vendor-specific behavior to subclass overrides (e.g., `_request_headers()` hook, `_ssl_context()` hook).
+- **Effort:** Low
+- **Trigger:** When adding a new vendor that needs different HTTP behavior
+
+### is_running property pattern duplicated 3x
+- **Files:** `pipeline/conductor.py:63-75`, `pipeline/fetcher.py:64-76`, `pipeline/processor.py:124-136`
+- **Issue:** Identical 12-line `is_running` property + setter + `_shutdown_event` + `_running` pattern copy-pasted across three classes.
+- **Fix:** Extract to a `ShutdownMixin` or shared base class.
+- **Effort:** Low
+- **Trigger:** Any change to shutdown signaling or lifecycle management
+
+### Gemini pricing hardcoded (stale)
+- **File:** `analysis/llm/summarizer.py:83-99`
+- **Issue:** Cost calculation hardcodes Gemini pricing with comment "as of Nov 2025". Model names also hardcoded at lines 67-68. Both silently drift as Google updates pricing/models.
+- **Fix:** Move pricing to config or a constants file with a "last verified" date. Or just delete the cost calculation -- it's only used for logging.
+- **Effort:** Low
+- **Trigger:** Any model upgrade or cost anomaly investigation
+
+### Documentation Drift: README.md and module READMEs
+- **Files:** `README.md`, `vendors/README.md`, `server/README.md`
+- **Issue:** README claims "~41,000 lines" (actual: 58K), "19 adapters" (actual: 21). vendors/README adapter count and server/README route module count are stale.
+- **Fix:** Update counts. Consider generating from code.
+- **Effort:** Trivial
+- **Trigger:** When updating any project documentation
+
+### ~~parsing/pdf.py monolith (28K lines)~~ OUTDATED
+File is now 841 lines (not 28K as previously recorded). Either the original measurement was wrong or the file was significantly refactored. At 841 lines it's manageable; this is no longer a high-priority decomposition target.
+
+### MCP bearer token not constant-time
+- **File:** `mcp_server.py:184`
+- **Issue:** Bearer token comparison uses string equality, not `secrets.compare_digest()`. Theoretically vulnerable to timing attacks that leak token length/characters.
+- **Fix:** Replace `auth_value != f"Bearer {self.token}"` with `secrets.compare_digest()`.
+- **Effort:** Trivial
+- **Trigger:** Any MCP auth change
+
+### Magic link tokens accumulate without cleanup
+- **File:** `database/schema_userland.sql:78-86`
+- **Issue:** `userland.used_magic_links` stores hashed tokens for replay protection but has no TTL or cleanup. Rows accumulate indefinitely after expiry.
+- **Fix:** Add periodic cleanup job: `DELETE FROM userland.used_magic_links WHERE expires_at < NOW()`.
+- **Effort:** Trivial
+- **Trigger:** When userland table sizes become noticeable
+
+### Dead letter queue accumulates without TTL
+- **File:** `database/repositories_async/queue.py:273-286`
+- **Issue:** Permanently failed jobs moved to `dead_letter` status with error messages preserved. No cleanup mechanism -- rows grow indefinitely.
+- **Fix:** Add periodic cleanup: `DELETE FROM queue WHERE status = 'dead_letter' AND failed_at < NOW() - INTERVAL '30 days'`.
+- **Effort:** Trivial
+- **Trigger:** When queue table size becomes noticeable
 
 ---
 
@@ -256,7 +353,8 @@ Council ratifies (authority_level='legislative')
 
 - **Repository pattern** in `database/` - clear separation, async pooling, typed models
 - **Discriminated union jobs** in `pipeline/models.py` - type-safe job dispatch
-- **Adapter pattern** in `vendors/` - clean interface, shared HTTP/rate-limit logic
+- **Adapter pattern** in `vendors/` - clean interface, shared HTTP/rate-limit logic, genuinely useful base class
+- **Queue system** - `FOR UPDATE SKIP LOCKED`, dead letter queue, stale recovery, priority ordering
 - **Pydantic validation at boundaries** - `vendors/schemas.py`, `server/models/requests.py`
 - **`city_banana` canonical identifier** - vendor-agnostic, well-documented
 

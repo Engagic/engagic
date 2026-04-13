@@ -122,26 +122,31 @@ vendors/
 
 ---
 
-## Future Work
+## Future Work (Stalled)
 
-### Full Database Decomposition
-Extract remaining methods from `database/db_postgres.py`:
-- `store_meeting_from_sync()` -> `MeetingSyncOrchestrator.sync_meeting()`
-- `_process_agenda_items_async()` -> orchestrator method
-- `_track_matters_async()` -> orchestrator method
-- `_create_matter_appearances_async()` -> orchestrator method
-- `_enqueue_if_needed_async()` -> orchestrator method
+Status as of 2026-04-11: These decompositions were planned in Dec 2025 but never pursued.
+The codebase grew in features instead -- temporal snapshots, matter processing, participation
+extraction were all added to the existing Processor class rather than extracted into workers.
 
-Target: Database class under 400 lines (currently ~800 lines of orchestration)
+### Full Database Decomposition -- PARTIALLY DONE
+`MeetingSyncOrchestrator` was extracted from `db_postgres.py`, bringing it from ~800 to 486 lines.
+The remaining orchestration methods were moved. Original target was <400 lines -- close enough
+that this is no longer a priority.
 
-### Full Processor Decomposition
-Extract workers from `pipeline/processor.py`:
+### Full Processor Decomposition -- NOT STARTED
+Original plan: extract 5 workers from `pipeline/processor.py`:
 - `QueueProcessor` - Queue polling and dispatch
 - `DocumentExtractor` - PDF extraction and caching
 - `ItemBatchProcessor` - LLM batch assembly
 - `MatterProcessor` - Matter-first deduplication
 
-Target: Processor class under 150 lines (currently 1351 lines)
+Only `pipeline/workers/meeting_metadata.py` was created as a "demonstration."
+The remaining 4 workers were never built.
+
+Original target: Processor under 150 lines.
+Current state: **1009 lines** (was 1351 at time of plan).
+The file shrank by ~340 lines through other refactoring, but the fundamental structure
+is unchanged -- all processing logic lives as methods on one class.
 
 ---
 
